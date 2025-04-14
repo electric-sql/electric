@@ -50,6 +50,7 @@ defmodule Electric.Config do
     listen_on_ipv6?: false,
     stack_ready_timeout: 5_000,
     send_cache_headers?: true,
+    max_shapes: nil,
     ## Storage
     storage_dir: "./persistent",
     storage: &Electric.Config.Defaults.storage/0,
@@ -149,12 +150,18 @@ defmodule Electric.Config do
     Application.fetch_env!(:electric, key)
   end
 
+  def persistent_kv do
+    with {m, f, a} <- get_env(:persistent_kv) do
+      apply(m, f, [a])
+    end
+  end
+
   @doc ~S"""
   Parse a PostgreSQL URI into a keyword list.
 
   ## Examples
 
-      iex> parse_postgresql_uri("postgresql://postgres:password@example.com/app-db")
+      iex> parse_postgresql_uri("postgresql://postgres:password@example.com/app-db") |> deobfuscate()
       {:ok, [
         hostname: "example.com",
         port: 5432,
@@ -187,7 +194,7 @@ defmodule Electric.Config do
         username: "user"
       ]}
 
-      iex> parse_postgresql_uri("postgresql://user%2Btesting%40gmail.com:weird%2Fpassword@localhost:5433/my%2Bdb%2Bname")
+      iex> parse_postgresql_uri("postgresql://user%2Btesting%40gmail.com:weird%2Fpassword@localhost:5433/my%2Bdb%2Bname") |> deobfuscate()
       {:ok, [
         hostname: "localhost",
         port: 5433,
@@ -260,7 +267,7 @@ defmodule Electric.Config do
             port: port || 5432,
             database: parse_database(path, username) |> URI.decode(),
             username: URI.decode(username),
-            password: if(password, do: URI.decode(password))
+            password: if(password, do: password |> URI.decode() |> Electric.Utils.wrap_in_fun())
           ] ++ options,
           fn {_key, val} -> is_nil(val) end
         )
@@ -396,4 +403,30 @@ defmodule Electric.Config do
       {:error, message} -> raise Dotenvy.Error, message: message
     end
   end
+
+  def validate_security_config!(secret, insecure) do
+    cond do
+      insecure && secret != nil ->
+        raise "You cannot set both ELECTRIC_SECRET and ELECTRIC_INSECURE=true"
+
+      !insecure && secret == nil ->
+        raise "You must set ELECTRIC_SECRET unless ELECTRIC_INSECURE=true. Setting ELECTRIC_INSECURE=true risks exposing your database, only use insecure mode in development or you've otherwise secured the Electric API"
+
+      true ->
+        if insecure do
+          Logger.warning(
+            "Electric is running in insecure mode — this risks exposing your database — only use insecure mode in development or if you've otherwise secured the Electric API."
+          )
+        end
+
+        :ok
+    end
+  end
+
+  @doc false
+  # helper function for use in doc tests
+  def deobfuscate({:ok, connection_opts}),
+    do: {:ok, Electric.Utils.deobfuscate_password(connection_opts)}
+
+  def deobfuscate(other), do: other
 end

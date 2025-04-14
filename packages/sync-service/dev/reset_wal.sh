@@ -1,0 +1,1 @@
+../../../scripts/reset_wal.sh

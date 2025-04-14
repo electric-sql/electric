@@ -6,6 +6,21 @@ defmodule Electric.Shapes.Api.Response do
 
   require Logger
 
+  @electric_cursor_header "electric-cursor"
+  @electric_handle_header "electric-handle"
+  @electric_offset_header "electric-offset"
+  @electric_schema_header "electric-schema"
+  @electric_up_to_date_header "electric-up-to-date"
+
+  # List of all Electric-specific headers that may be included in API responses
+  @electric_headers [
+    @electric_cursor_header,
+    @electric_handle_header,
+    @electric_offset_header,
+    @electric_schema_header,
+    @electric_up_to_date_header
+  ]
+
   defstruct [
     :handle,
     :offset,
@@ -54,6 +69,7 @@ defmodule Electric.Shapes.Api.Response do
       args
       |> Keyword.put_new(:status, 400)
       |> Keyword.put(:body, error_body(api, message, args))
+      |> Keyword.put(:api, api)
 
     struct(__MODULE__, opts)
   end
@@ -64,6 +80,7 @@ defmodule Electric.Shapes.Api.Response do
       |> Keyword.put_new(:status, 400)
       |> Keyword.put(:body, error_body(request, message, args))
       |> Keyword.put(:shape_definition, request.params.shape_definition)
+      |> Keyword.put(:api, request.api)
 
     struct(__MODULE__, opts)
   end
@@ -120,7 +137,7 @@ defmodule Electric.Shapes.Api.Response do
       |> Map.delete("live")
       |> Map.delete("cursor")
 
-    query = URI.encode_query(params)
+    query = Plug.Conn.Query.encode(params)
 
     Plug.Conn.put_resp_header(
       conn,
@@ -138,19 +155,43 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   defp put_shape_handle_header(conn, %__MODULE__{} = response) do
-    Plug.Conn.put_resp_header(conn, "electric-handle", response.handle)
+    Plug.Conn.put_resp_header(conn, @electric_handle_header, response.handle)
   end
 
   defp put_schema_header(conn, %__MODULE__{params: %{live: false}} = response) do
     Plug.Conn.put_resp_header(
       conn,
-      "electric-schema",
+      @electric_schema_header,
       response |> Api.schema() |> Jason.encode!()
     )
   end
 
   defp put_schema_header(conn, _response) do
     conn
+  end
+
+  # Do not cache responses for any methods other then GET and OPTIONS
+  defp put_cache_headers(%Plug.Conn{method: method} = conn, %__MODULE__{api: api})
+       when method not in ["GET", "OPTIONS"] do
+    conn
+    |> put_cache_header("cache-control", "no-cache", api)
+  end
+
+  # Briefly cache 409s as they act as shape redirects, when the requested shape
+  # is either invalidated or does not match the requested definition, and thus
+  # can benefit from persisting this cache for a brief period of time to avoid
+  # surges of traffic hitting the server whenever a shape is invalidated
+  defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
+       when status in [409] do
+    conn
+    |> put_cache_header("cache-control", "public, max-age=60, must-revalidate", api)
+  end
+
+  # All other 4xx and 5xx responses should never be cached
+  defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
+       when status >= 400 do
+    conn
+    |> put_cache_header("cache-control", "no-cache", api)
   end
 
   defp put_cache_headers(conn, %__MODULE__{api: api} = response) do
@@ -201,7 +242,7 @@ defmodule Electric.Shapes.Api.Response do
       %{params: %{live: true}, api: api} ->
         conn
         |> Plug.Conn.put_resp_header(
-          "electric-cursor",
+          @electric_cursor_header,
           api.long_poll_timeout
           |> Utils.get_next_interval_timestamp(conn.query_params["cursor"])
           |> Integer.to_string()
@@ -222,11 +263,11 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   defp put_up_to_date_header(conn, %__MODULE__{up_to_date: true}) do
-    Plug.Conn.put_resp_header(conn, "electric-up-to-date", "")
+    Plug.Conn.put_resp_header(conn, @electric_up_to_date_header, "")
   end
 
   defp put_up_to_date_header(conn, %__MODULE__{up_to_date: false}) do
-    Plug.Conn.delete_resp_header(conn, "electric-up-to-date")
+    Plug.Conn.delete_resp_header(conn, @electric_up_to_date_header)
   end
 
   defp put_offset_header(conn, %__MODULE__{offset: nil}) do
@@ -234,7 +275,7 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   defp put_offset_header(conn, %__MODULE__{offset: offset}) do
-    Plug.Conn.put_resp_header(conn, "electric-offset", "#{offset}")
+    Plug.Conn.put_resp_header(conn, @electric_offset_header, "#{offset}")
   end
 
   defp send_stream(%Plug.Conn{} = conn, %__MODULE__{body: stream, status: status} = response) do
@@ -281,4 +322,6 @@ defmodule Electric.Shapes.Api.Response do
       etag
     end
   end
+
+  def electric_headers, do: @electric_headers
 end

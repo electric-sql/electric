@@ -85,7 +85,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
           cores: processors,
           ram: total_mem,
           electric_instance_id: Electric.instance_id(),
-          electric_installation_id: Map.fetch!(opts, :installation_id)
+          electric_installation_id: Map.get(opts, :installation_id, "electric_default")
         }
       }
     end
@@ -231,7 +231,8 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     end
 
     def memory_by_process_type(%{top_process_count: process_count}) do
-      for %{type: type, memory: memory} <- Debug.Process.top_memory_by_type(process_count) do
+      for %{type: type, memory: memory} <-
+            Electric.Debug.Process.top_memory_by_type(process_count) do
         :telemetry.execute([:vm, :memory], %{processes_by_type: memory}, %{
           process_type: to_string(type)
         })

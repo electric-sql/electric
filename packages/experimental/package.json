@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/experimental",
   "description": "Experimental TypeScript features for ElectricSQL.",
-  "version": "0.1.2-beta.4",
+  "version": "1.0.3",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
@@ -51,7 +51,7 @@
     "src"
   ],
   "homepage": "https://electric-sql.com",
-  "license": "Apache-2",
+  "license": "Apache-2.0",
   "main": "dist/cjs/index.cjs",
   "module": "dist/index.legacy-esm.js",
   "optionalDependencies": {

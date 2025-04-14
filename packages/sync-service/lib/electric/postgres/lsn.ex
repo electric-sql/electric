@@ -156,6 +156,11 @@ defmodule Electric.Postgres.Lsn do
     iex> is_larger(lsn1, lsn2)
     true
 
+    iex> lsn1 = Lsn.from_string("FFFFFFFB/91FDFDE8")
+    iex> lsn2 = Lsn.from_string("FFFFFFFA/FFFFFCC8")
+    iex> is_larger(lsn1, lsn2)
+    true
+
     iex> lsn1 = %{segment: 2, offset: 100}
     iex> lsn2 = %{segment: 2, offset: 200}
     iex> is_larger(lsn1, lsn2)
@@ -223,6 +228,26 @@ defmodule Electric.Postgres.Lsn do
     |> max(0)
     |> from_integer()
   end
+
+  @doc """
+  Returns the highest Lsn from the given list of Lsns.
+
+  When the list is empty, it returns #Lsn<0/0>.
+
+  ## Examples
+      iex> max([%#{Lsn}{segment: 0, offset: 1}, %#{Lsn}{segment: 0, offset: 2}])
+      %#{Lsn}{segment: 0, offset: 2}
+
+      iex> max([%#{Lsn}{segment: 1, offset: 1}, %#{Lsn}{segment: 0, offset: 2}])
+      %#{Lsn}{segment: 1, offset: 1}
+
+      iex> max([])
+      %#{Lsn}{segment: 0, offset: 0}
+
+  """
+  @spec max(Enumerable.t(t())) :: t()
+  def max([]), do: from_integer(0)
+  def max(lsns) when is_list(lsns), do: Enum.max_by(lsns, &to_integer/1)
 
   defimpl Inspect do
     def inspect(lsn, _opts) do

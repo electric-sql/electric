@@ -87,14 +87,14 @@
     "slug": "oleksii",
     "name": "Oleksii Sholik",
     "job_title": "Founding Engineer",
-    "short_bio": "Elixir core team. Backend engineering, distributed systems, algorithms, observability, reliability.",
+    "short_bio": "Backend engineer. Open source enthusiast.",
     "image": "/img/team/oleksii.jpg",
     "profile_uri": "https://www.linkedin.com/in/oleksii-sholik/",
     "profile_display_uri": "in/oleksii-sholik",
     "profile_icon": "social-linkedin",
-    "location": "Kyiv",
-    "country": "Ukraine",
-    "flag": "ua",
+    "location": "Lucca",
+    "country": "Italy",
+    "flag": "it",
     "published": true
   },
   {

@@ -1,0 +1,115 @@
+[doc Verify that health checks remain responsive and Electric can eventually proceed with its normal operation after getting delayed by a pending database transaction]
+
+[include _macros.luxinc]
+
+[global pg_container_name=pending-transaction__pg]
+
+###
+
+## Start a new Postgres cluster
+[invoke setup_pg "" ""]
+
+## Start a pending transaction that will block Electric's initialization
+[invoke start_psql]
+[shell psql]
+  !BEGIN;
+  ??BEGIN
+
+  !SELECT pg_current_xact_id();
+  ??pg_current_xact_id
+  ??(1 row)
+
+## Start the first sync service.
+[invoke setup_electric_shell_with_tenant "electric_1" "3000"]
+
+[shell electric_1]
+  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[info] Lock acquired from postgres with name electric_slot_integration
+
+  # Set the failure match pattern such that we can prove that replication does not start since
+  # it's blocked by the pending transaction.
+  -Starting replication from postgres|$fail_pattern
+
+  ??[debug] Starting replication client for stack single_stack
+  ??[debug] ReplicationClient step: create_slot
+
+## Verify that Electric's health check can report that the service is starting
+[shell client]
+  # Give the sync service some time before querying its health. Just to make sure it hasn't
+  # started replicating within that time period.
+  [sleep 5]
+
+  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
+  ??{"status":"starting"}
+
+[shell electric_1]
+  ??[warning] Waiting for the replication connection setup to complete... \
+    Check that you don't have pending transactions in the database. \
+    Electric has to wait for all pending transactions to commit or rollback \
+    before it can create the replication slot.
+
+## Start the second sync service.
+[invoke setup_electric_shell_with_tenant "electric_2" "3001"]
+
+## Assert that the lock is not acquired and replication does not start
+## in the second Electric
+[shell electric_2]
+  -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
+  ??[info] Acquiring lock from postgres with name electric_slot_integration
+
+# The 2nd service should be in waiting state, ready to take over
+[shell client]
+  [sleep 5]
+
+  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
+  ??{"status":"starting"}
+  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
+  ??{"status":"waiting"}
+
+## Commit the pending transaction to unblock the 1st Electric, then immediately start a new one.
+[shell psql]
+  !COMMIT;
+  ??COMMIT
+
+  !BEGIN;
+  ??BEGIN
+
+  !SELECT pg_current_xact_id();
+  ??pg_current_xact_id
+  ??(1 row)
+
+## Verify that the 1st Electric has successfully initialized
+[shell electric_1]
+  # Reset the failure pattern before the next match
+  -$fail_pattern
+
+  ??[info] Starting replication from postgres
+
+## The 2nd Electric is still waiting
+[shell client]
+  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
+  ??{"status":"waiting"}
+
+## Terminate the 1st Electric
+[shell electric_1]
+  !System.halt()
+
+  # Confirm Electric process exit.
+  ??$PS1
+
+## The lock should now be acquired by the 2nd Electric. Since the replication slot has already
+## been created, the pending transaction does not hinder the 2nd Electric from starting streaming
+## replication.
+[shell electric_2]
+  -$fail_pattern
+
+  ??[info] Lock acquired from postgres with name electric_slot_integration
+  ??[info] Starting replication from postgres
+
+# The 2nd Electric is now healthy and active
+[shell client]
+  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
+  ??{"status":"active"}
+
+[cleanup]
+  [invoke teardown]

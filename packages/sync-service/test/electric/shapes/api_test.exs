@@ -10,20 +10,16 @@ defmodule Electric.Shapes.ApiTest do
   alias Support.Mock
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
   import Mox
 
   @test_shape %Shape{
     root_table: {"public", "users"},
     root_table_id: :erlang.phash2({"public", "users"}),
-    table_info: %{
-      {"public", "users"} => %{
-        columns: [
-          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
-          %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
-        ],
-        pk: ["id"]
-      }
-    }
+    root_column_count: 2,
+    root_pk: ["id"],
+    selected_columns: ["id", "value"],
+    flags: %{selects_all_columns: true}
   }
   @registry __MODULE__.Registry
   @test_shape_handle "test-shape-handle"
@@ -38,7 +34,25 @@ defmodule Electric.Shapes.ApiTest do
   @receive_timeout 1000
 
   def load_column_info({"public", "users"}, _) do
-    {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+    {:ok,
+     [
+       %{
+         name: "id",
+         type: "int8",
+         type_id: {20, 1},
+         pk_position: 0,
+         array_dimensions: 0,
+         is_generated: false
+       },
+       %{
+         name: "value",
+         type: "text",
+         type_id: {28, 1},
+         pk_position: nil,
+         array_dimensions: 0,
+         is_generated: false
+       }
+     ]}
   end
 
   def load_column_info(_, _),
@@ -71,7 +85,8 @@ defmodule Electric.Shapes.ApiTest do
     {:via, _, {registry_name, registry_key}} = Electric.Replication.Supervisor.name(ctx)
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
-    :ok
+    Electric.LsnTracker.init(Lsn.from_integer(0), ctx.stack_id)
+    set_status_to_active(ctx)
   end
 
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
@@ -87,10 +102,10 @@ defmodule Electric.Shapes.ApiTest do
     :ok
   end
 
-  setup :with_persistent_kv
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
 
   describe "validate/2" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     test "returns 400 for invalid table", ctx do
       assert {:error, %{status: 400} = response} =
@@ -209,11 +224,11 @@ defmodule Electric.Shapes.ApiTest do
       |> expect(:get_shape, fn @test_shape, _opts ->
         nil
       end)
-      |> expect(:has_shape?, fn ^request_handle, _opts ->
-        true
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
       end)
 
-      assert {:error, %{status: 400} = response} =
+      assert {:error, %{status: 409} = response} =
                Api.validate(
                  ctx.api,
                  %{
@@ -223,9 +238,8 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert %{
-               message: "The specified shape definition and handle do not match" <> _
-             } = response_body(response)
+      assert response.handle == @test_shape_handle
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
     end
 
     test "shape for handle does not match the shape definition", ctx do
@@ -235,11 +249,8 @@ defmodule Electric.Shapes.ApiTest do
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_handle, @before_all_offset}
       end)
-      |> expect(:has_shape?, fn ^request_handle, _opts ->
-        true
-      end)
 
-      assert {:error, %{status: 400} = response} =
+      assert {:error, %{status: 409} = response} =
                Api.validate(
                  ctx.api,
                  %{
@@ -249,9 +260,8 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert %{
-               message: "The specified shape definition and handle do not match" <> _
-             } = response_body(response)
+      assert response.handle == @test_shape_handle
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
     end
 
     test "returns a 409 error when requested shape handle does not exist", ctx do
@@ -260,9 +270,6 @@ defmodule Electric.Shapes.ApiTest do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
         {@test_shape_handle, @before_all_offset}
-      end)
-      |> expect(:has_shape?, fn ^request_handle, _opts ->
-        false
       end)
 
       assert {:error, %{status: 409} = response} =
@@ -452,7 +459,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "validate_for_delete/2" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     setup do
       admin_shape =
@@ -559,7 +566,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "serve/1" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     # test "hold_conn_until_stack_ready"
 
@@ -730,12 +737,137 @@ defmodule Electric.Shapes.ApiTest do
                %{
                  headers: %{
                    control: "up-to-date",
-                   global_last_seen_lsn: next_offset.tx_offset
+                   global_last_seen_lsn: to_string(next_offset.tx_offset)
                  }
                }
              ]
 
       assert response.offset == next_offset
+      assert response.up_to_date
+    end
+
+    test "returns correct global_last_seen_lsn on non-live responses during data race", ctx do
+      next_offset = LogOffset.increment(@start_offset_50)
+      next_offset_lsn = next_offset.tx_offset
+      last_minute_next_offset = %LogOffset{tx_offset: next_offset.tx_offset + 1, op_offset: 0}
+      last_minute_next_offset_lsn = last_minute_next_offset.tx_offset
+
+      # Initially set the last_processed_lsn to next_offset_lsn, with this being
+      # the last seen log entry at the start of the request
+      Electric.LsnTracker.set_last_processed_lsn(
+        next_offset_lsn,
+        ctx.stack_id
+      )
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, next_offset}
+      end)
+      |> stub(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, last_minute_next_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
+        # Set last_seen_lsn to last_minute_next_offset immediately after retrieving
+        # the chunk end log offset, simulating the race where the next log entry
+        # arrives in between determining the the end point of the log to read
+        # and serving the log.
+        Electric.LsnTracker.set_last_processed_lsn(
+          last_minute_next_offset_lsn,
+          ctx.stack_id
+        )
+
+        next_offset
+      end)
+      |> stub(:get_chunk_end_log_offset, fn @start_offset_50, _ -> last_minute_next_offset end)
+      |> expect(:get_log_stream, fn @start_offset_50, ^next_offset, @test_opts ->
+        [
+          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
+        ]
+      end)
+      |> stub(:get_log_stream, fn @start_offset_50, _, @test_opts ->
+        [
+          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+          Jason.encode!(%{
+            key: "log2",
+            value: "bar",
+            headers: %{},
+            offset: last_minute_next_offset
+          })
+        ]
+      end)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@start_offset_50}",
+                   handle: @test_shape_handle
+                 }
+               )
+
+      assert response = Api.serve_shape_log(request)
+      assert response.status == 200
+
+      # Should see the last seen log entry at the start of the request
+      assert response_body(response) == [
+               %{
+                 "key" => "log1",
+                 "value" => "foo",
+                 "headers" => %{},
+                 "offset" => "#{next_offset}"
+               },
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: "#{next_offset_lsn}"
+                 }
+               }
+             ]
+
+      assert response.offset == next_offset
+      assert response.up_to_date
+
+      # Subsequent request should see the last minute update as well
+      {:ok, request} =
+        Api.validate(
+          ctx.api,
+          %{
+            table: "public.users",
+            offset: "#{@start_offset_50}",
+            handle: @test_shape_handle
+          }
+        )
+
+      response = Api.serve_shape_log(request)
+
+      assert response_body(response) == [
+               %{
+                 "key" => "log1",
+                 "value" => "foo",
+                 "headers" => %{},
+                 "offset" => "#{next_offset}"
+               },
+               %{
+                 "key" => "log2",
+                 "value" => "bar",
+                 "headers" => %{},
+                 "offset" => "#{last_minute_next_offset}"
+               },
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: "#{last_minute_next_offset_lsn}"
+                 }
+               }
+             ]
+
+      assert response.offset == last_minute_next_offset
       assert response.up_to_date
     end
 
@@ -784,10 +916,9 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response = Task.await(task)
 
-      assert response.status == 204
+      assert response.status == 409
       refute response.chunked
-      assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
-      assert response.up_to_date
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
     end
 
     @tag long_poll_timeout: 100
@@ -821,7 +952,7 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response = Api.serve_shape_log(request)
 
-      assert response.status == 204
+      assert response.status == 200
       refute response.chunked
 
       assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
@@ -830,7 +961,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "Pre-defined shape API" do
-    setup [:with_stack_id_from_test, :ready_stack, :configure_request]
+    setup [:ready_stack, :configure_request]
 
     setup(ctx) do
       admin_shape =
@@ -910,7 +1041,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   describe "stack not ready" do
-    setup [:with_stack_id_from_test, :configure_request]
+    setup [:configure_request]
 
     test "returns 503", ctx do
       assert {:error, response} =
@@ -931,27 +1062,11 @@ defmodule Electric.Shapes.ApiTest do
           )
         end)
 
-      # Wait for the task process to subscribe to stack events
-      wait_until_subscribed(ctx.stack_id, 50, 4)
-
-      Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
+      set_status_to_active(ctx)
 
       {:error, response} = Task.await(task)
 
       assert response.status == 400
-    end
-  end
-
-  defp wait_until_subscribed(stack_id, _sleep, 0) do
-    raise "Timed out waiting for a process to subscribe to stack events in stack \"#{stack_id}\""
-  end
-
-  defp wait_until_subscribed(stack_id, sleep, num_attempts) do
-    if Registry.lookup(Electric.stack_events_registry(), {:stack_status, stack_id}) != [] do
-      :ok
-    else
-      Process.sleep(sleep)
-      wait_until_subscribed(stack_id, sleep, num_attempts - 1)
     end
   end
 end

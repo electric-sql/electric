@@ -5,6 +5,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
   alias Support.Mock
 
   import Mox
@@ -17,18 +18,17 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   @test_shape %Shape{
     root_table: {"public", "users"},
     root_table_id: :erlang.phash2({"public", "users"}),
-    table_info: %{
-      {"public", "users"} => %{
-        columns: [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}}],
-        pk: ["id"]
-      }
-    }
+    root_pk: ["id"],
+    root_column_count: 1,
+    selected_columns: ["id"],
+    flags: %{selects_all_columns: true}
   }
   @test_shape_handle "test-shape-handle"
   @test_pg_id "12345"
 
   def load_column_info({"public", "users"}, _),
-    do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+    do:
+      {:ok, [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}, is_generated: false}]}
 
   def load_relation(tbl, _),
     do: Support.StubInspector.load_relation(tbl, nil)
@@ -61,7 +61,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   setup :with_persistent_kv
 
   describe "DeleteShapePlug" do
-    setup :with_stack_id_from_test
+    setup [:with_stack_id_from_test, :with_status_monitor]
 
     setup ctx do
       start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -70,6 +70,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         Electric.Replication.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
 
       :ok
     end
@@ -94,6 +95,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 400
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
 
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
@@ -112,6 +114,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 400
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
 
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
@@ -134,6 +137,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-cache"]
     end
 
     test "should clean shape based only on shape_handle", ctx do
@@ -151,7 +155,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   end
 
   describe "stack not ready" do
-    setup :with_stack_id_from_test
+    setup [:with_stack_id_from_test, :with_status_monitor]
 
     test "returns 503", ctx do
       conn =

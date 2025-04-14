@@ -105,14 +105,14 @@ defmodule Electric.Postgres.ReplicationClient do
     # one test process exiting and the next one starting.
     start_opts =
       [
-        # TODO: the name is not necessary
         name: name(config.stack_id),
-        auto_reconnect: false
-      ] ++ Electric.Utils.deobfuscate_password(config.connection_opts)
+        auto_reconnect: false,
+        sync_connect: false
+      ] ++ Electric.Utils.deobfuscate_password(config.replication_opts[:connection_opts])
 
     Postgrex.ReplicationConnection.start_link(
       __MODULE__,
-      config.replication_opts,
+      Keyword.delete(config.replication_opts, :connection_opts),
       start_opts
     )
   end
@@ -135,10 +135,10 @@ defmodule Electric.Postgres.ReplicationClient do
   # from its `init()` callback.
   #
   # The callbacks `init()`, `handle_connect()` and `handle_result()` defined in this module
-  # below are all invoked inside the connection process' `init()` callback. Once any of our
-  # callbacks return `{:stream, ...}`, the connection process finishes its initialization and
-  # switches into the logical streaming mode to start receiving logical messages from Postgres,
-  # invoking the `handle_data()` callback for each one.
+  # would all be invoked inside the connection process' `init()` callback in that case. Once
+  # any of the callbacks return `{:stream, ...}`, the connection process finishes its
+  # initialization and switches into the logical streaming mode to start receiving logical
+  # messages from Postgres, invoking the `handle_data()` callback for each one.
   #
   # TODO(alco): this needs additional info about :noreply and :query return tuples.
   @impl true
@@ -168,12 +168,19 @@ defmodule Electric.Postgres.ReplicationClient do
   @impl true
   def handle_connect(state) do
     %State{state | step: :connected}
+    |> notify_connection_open()
     |> ConnectionSetup.start()
   end
 
   @impl true
   def handle_result(result_list_or_error, state) do
-    ConnectionSetup.process_query_result(result_list_or_error, state)
+    {step, return_val} = ConnectionSetup.process_query_result(result_list_or_error, state)
+
+    if step in [:ready_to_stream, :streaming] do
+      notify_connection_ready_for_streaming(state)
+    end
+
+    return_val
   end
 
   @impl true
@@ -341,4 +348,19 @@ defmodule Electric.Postgres.ReplicationClient do
     do: %State{state | applied_wal: wal}
 
   defp update_applied_wal(state, wal) when is_number(wal), do: state
+
+  defp notify_connection_open(%State{connection_manager: connection_manager} = state) do
+    :ok =
+      Electric.Connection.Manager.replication_connection_initializing(connection_manager)
+
+    state
+  end
+
+  defp notify_connection_ready_for_streaming(
+         %State{connection_manager: connection_manager} = state
+       ) do
+    Electric.StatusMonitor.mark_replication_client_ready(state.stack_id, self())
+    :ok = Electric.Connection.Manager.replication_connection_established(connection_manager)
+    state
+  end
 end

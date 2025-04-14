@@ -9,6 +9,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [set_status_to_active: 1]
 
   alias Support.Mock
 
@@ -23,15 +24,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @test_shape %Shape{
     root_table: {"public", "users"},
     root_table_id: :erlang.phash2({"public", "users"}),
-    table_info: %{
-      {"public", "users"} => %{
-        columns: [
-          %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0, array_dimensions: 0},
-          %{name: "value", type: "text", type_id: {28, 1}, pk_position: nil, array_dimensions: 0}
-        ],
-        pk: ["id"]
-      }
-    }
+    root_column_count: 2,
+    root_pk: ["id"],
+    selected_columns: ["id", "value"],
+    flags: %{selects_all_columns: true}
   }
   @test_shape_handle "test-shape-handle"
   @test_opts %{foo: "bar"}
@@ -45,7 +41,26 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @receive_timeout 2000
 
   def load_column_info({"public", "users"}, _),
-    do: {:ok, @test_shape.table_info[{"public", "users"}][:columns]}
+    do:
+      {:ok,
+       [
+         %{
+           name: "id",
+           type: "int8",
+           type_id: {20, 1},
+           pk_position: 0,
+           array_dimensions: 0,
+           is_generated: false
+         },
+         %{
+           name: "value",
+           type: "text",
+           type_id: {28, 1},
+           pk_position: nil,
+           array_dimensions: 0,
+           is_generated: false
+         }
+       ]}
 
   def load_column_info(_, _),
     do: :table_not_found
@@ -58,7 +73,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     :ok
   end
 
-  setup :with_persistent_kv
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
 
   def conn(_ctx, method, params, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string, params)
@@ -85,13 +100,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
   end
 
   describe "serving shape" do
-    setup :with_stack_id_from_test
+    setup :with_lsn_tracker
 
     setup ctx do
       {:via, _, {registry_name, registry_key}} =
         Electric.Replication.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
       :ok
     end
 
@@ -261,11 +277,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "etag") == [
+      assert get_resp_header(conn, "etag") == [
                ~s|"#{@test_shape_handle}:-1:#{@first_offset}"|
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+      assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
     end
 
     test "snapshot has correct cache control headers", ctx do
@@ -302,9 +318,51 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 200
 
-      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+      assert get_resp_header(conn, "cache-control") == [
                "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746"
              ]
+    end
+
+    test "sets correct CORS headers for Access-Control-Expose-Headers", ctx do
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
+        @first_offset
+      end)
+      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
+        []
+      end)
+
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        # Apply the CORS headers manually since we're not going through the router
+        |> Electric.Plug.Router.put_cors_headers([])
+        |> call_serve_shape_plug(ctx)
+
+      # Verify that all Electric headers are included in the response
+      assert [expose_header] = get_resp_header(conn, "access-control-expose-headers")
+      exposed_headers_in_response = String.split(expose_header, ",")
+
+      assert Enum.sort(exposed_headers_in_response) ==
+               Enum.sort(Electric.Shapes.Api.Response.electric_headers())
+    end
+
+    test "invalid response specifies it should not be cached", ctx do
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=bababa")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert get_resp_header(conn, "cache-control") == ["no-cache"]
     end
 
     test "response has correct schema header", ctx do
@@ -331,7 +389,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
         |> call_serve_shape_plug(ctx)
 
-      assert Plug.Conn.get_resp_header(conn, "electric-schema") == [
+      assert get_resp_header(conn, "electric-schema") == [
                ~s|{"id":{"type":"int8","pk_index":0},"value":{"type":"text"}}|
              ]
     end
@@ -385,17 +443,17 @@ defmodule Electric.Plug.ServeShapePlugTest do
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "etag") == [
+      assert get_resp_header(conn, "etag") == [
                ~s|"#{@test_shape_handle}:#{@start_offset_50}:#{next_next_offset}"|
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+      assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-offset") == [
+      assert get_resp_header(conn, "electric-offset") == [
                "#{next_next_offset}"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == []
+      assert get_resp_header(conn, "electric-up-to-date") == []
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
@@ -506,18 +564,18 @@ defmodule Electric.Plug.ServeShapePlugTest do
                %{
                  "headers" => %{
                    "control" => "up-to-date",
-                   "global_last_seen_lsn" => next_offset.tx_offset
+                   "global_last_seen_lsn" => to_string(next_offset.tx_offset)
                  }
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+      assert get_resp_header(conn, "cache-control") == [
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-offset") == [next_offset_str]
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
-      assert Plug.Conn.get_resp_header(conn, "electric-schema") == []
+      assert get_resp_header(conn, "electric-offset") == [next_offset_str]
+      assert get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-schema") == []
 
       expected_cursor =
         Electric.Plug.Utils.get_next_interval_timestamp(long_poll_timeout(ctx), nil)
@@ -569,9 +627,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       # The conn process should exit after sending the response
       refute Process.alive?(conn.owner)
 
-      assert conn.status == 204
-      assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
+      assert conn.status == 409
+      assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
     end
 
     test "sends an up-to-date response after a timeout if no changes are observed",
@@ -603,15 +660,15 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> call_serve_shape_plug(ctx)
 
-      assert conn.status == 204
+      assert conn.status == 200
 
       assert [%{"headers" => %{"control" => "up-to-date"}}] = Jason.decode!(conn.resp_body)
 
-      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+      assert get_resp_header(conn, "cache-control") == [
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",
@@ -638,6 +695,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
       assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=60, must-revalidate"]
 
       assert get_resp_header(conn, "location") == [
                "/?handle=#{@test_shape_handle}&offset=-1&table=public.users"
@@ -677,15 +735,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
     end
 
-    test "sends 400 when shape handle does not match shape definition",
+    test "sends 409 when shape handle does not match shape definition",
          ctx do
+      new_shape_handle = "new-shape-handle"
+
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts -> nil end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, opts ->
-        {@test_shape_handle, opts}
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {new_shape_handle, @test_offset}
       end)
 
       conn =
@@ -697,13 +754,51 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> call_serve_shape_plug(ctx)
 
-      assert conn.status == 400
+      assert conn.status == 409
+      assert get_resp_header(conn, "cache-control") == ["public, max-age=60, must-revalidate"]
 
-      assert Jason.decode!(conn.resp_body) == %{
-               "message" =>
-                 "The specified shape definition and handle do not match." <>
-                   " Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one."
-             }
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+      assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
+
+      assert get_resp_header(conn, "location") == [
+               "/?handle=#{new_shape_handle}&offset=-1&table=public.users"
+             ]
+    end
+
+    test "correctly encodes shape params in the location header of a 409 response", ctx do
+      new_shape_handle = "new-shape-handle"
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn test_shape, _opts ->
+        "value = 'just-a-user'::text" = test_shape.where.query
+        nil
+      end)
+      |> expect(:get_or_create_shape_handle, fn test_shape, _opts ->
+        "value = 'just-a-user'::text" = test_shape.where.query
+        {new_shape_handle, @test_offset}
+      end)
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{
+            "table" => "public.users",
+            "where" => "value = $1",
+            "params" => %{"1" => "just-a-user"}
+          },
+          "?offset=-1&handle=#{@test_shape_handle}"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 409
+
+      assert Jason.decode!(conn.resp_body) == [%{"headers" => %{"control" => "must-refetch"}}]
+      assert get_resp_header(conn, "electric-handle") == [new_shape_handle]
+
+      assert get_resp_header(conn, "location") == [
+               "/?handle=#{new_shape_handle}&offset=-1&params[1]=just-a-user&table=public.users&where=value+%3D+%241"
+             ]
     end
 
     test "sends 400 when omitting primary key columns in selection", ctx do
@@ -775,17 +870,15 @@ defmodule Electric.Plug.ServeShapePlugTest do
                }
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "etag") == [
+      assert get_resp_header(conn, "etag") == [
                ~s|"#{test_shape_handle}:-1:#{next_offset}"|
              ]
 
-      assert Plug.Conn.get_resp_header(conn, "electric-handle") == [test_shape_handle]
+      assert get_resp_header(conn, "electric-handle") == [test_shape_handle]
     end
   end
 
   describe "stack not ready" do
-    setup :with_stack_id_from_test
-
     test "returns 503", ctx do
       conn =
         ctx
@@ -806,14 +899,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
           |> call_serve_shape_plug(ctx)
         end)
 
-      # Wait for the task process to subscribe to stack events
-      wait_until_subscribed(ctx.stack_id, 50, 4)
-
-      Electric.StackSupervisor.dispatch_stack_event(ctx.stack_id, :ready)
+      set_status_to_active(ctx)
 
       conn = Task.await(conn_task)
 
       assert conn.status == 400
+      assert get_resp_header(conn, "cache-control") == ["no-cache"]
     end
   end
 
@@ -833,17 +924,4 @@ defmodule Electric.Plug.ServeShapePlugTest do
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
   defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
   defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
-
-  defp wait_until_subscribed(stack_id, _sleep, 0) do
-    raise "Timed out waiting for a process to subscribe to stack events in stack \"#{stack_id}\""
-  end
-
-  defp wait_until_subscribed(stack_id, sleep, num_attempts) do
-    if Registry.lookup(Electric.stack_events_registry(), {:stack_status, stack_id}) != [] do
-      :ok
-    else
-      Process.sleep(sleep)
-      wait_until_subscribed(stack_id, sleep, num_attempts - 1)
-    end
-  end
 end

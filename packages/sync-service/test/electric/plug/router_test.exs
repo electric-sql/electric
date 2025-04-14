@@ -42,9 +42,10 @@ defmodule Electric.Plug.RouterTest do
 
     setup :with_complete_stack
 
-    setup(ctx,
-      do: %{opts: Router.init(build_router_opts(ctx, get_service_status: fn -> :active end))}
-    )
+    setup(ctx) do
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      %{opts: Router.init(build_router_opts(ctx))}
+    end
 
     test "GET returns health status of service", %{opts: opts} do
       conn =
@@ -61,7 +62,10 @@ defmodule Electric.Plug.RouterTest do
 
     setup :with_complete_stack
 
-    setup(ctx, do: %{opts: Router.init(build_router_opts(ctx))})
+    setup(ctx) do
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      %{opts: Router.init(build_router_opts(ctx))}
+    end
 
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
@@ -149,7 +153,7 @@ defmodule Electric.Plug.RouterTest do
         conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_0&live")
         |> Router.call(opts)
 
-      assert length(Jason.decode!(conn.resp_body)) == 11
+      assert length(Jason.decode!(conn.resp_body)) == 10
       {:ok, offset} = LogOffset.from_string(get_resp_header(conn, "electric-offset"))
 
       # Force compaction
@@ -162,6 +166,34 @@ defmodule Electric.Plug.RouterTest do
 
       assert [%{"value" => %{"value" => "test value 10"}}, _] = Jason.decode!(conn.resp_body)
       assert LogOffset.from_string(get_resp_header(conn, "electric-offset")) == {:ok, offset}
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'terrible')"
+         ]
+    test "GET with parameters avoids SQL-injection-like behaviour", %{opts: opts} do
+      # Given this sql injection "request"
+      value = ~S|'nonexistent' OR TRUE|
+
+      # Requesting without escaping leads to all rows shown despie
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=-1", %{where: "value = #{value}"})
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      # Unfortunately, returns rows
+      refute Jason.decode!(conn.resp_body) == []
+
+      # Requesting with param makes it work
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=-1", %{
+          where: "value = $1",
+          params: %{1 => value}
+        })
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      assert Jason.decode!(conn.resp_body) == []
     end
 
     @tag with_sql: [
@@ -373,6 +405,274 @@ defmodule Electric.Plug.RouterTest do
                },
                @up_to_date
              ] = Jason.decode!(conn.resp_body)
+    end
+
+    @all_types_table_name "all_types_table"
+    @tag with_sql: [
+           "CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy')",
+           "CREATE TYPE complex AS (r double precision, i double precision)",
+           "CREATE DOMAIN posint AS integer CHECK (VALUE > 0)",
+           "CREATE TABLE #{@all_types_table_name} (
+              txt VARCHAR,
+              i2 INT2 PRIMARY KEY,
+              i4 INT4,
+              i8 INT8,
+              f8 FLOAT8,
+              b  BOOLEAN,
+              json JSON,
+              jsonb JSONB,
+              blob BYTEA,
+              ints INT8[],
+              ints2 INT8[][],
+              int4s INT4[],
+              doubles FLOAT8[],
+              bools BOOLEAN[],
+              moods mood[],
+              moods2 mood[][],
+              complexes complex[],
+              posints posint[],
+              jsons JSONB[],
+              txts TEXT[]
+            )"
+         ]
+    test "can sync all data types", %{opts: opts, db_conn: db_conn} do
+      Postgrex.query!(db_conn, "
+        INSERT INTO #{@all_types_table_name} (txt, i2, i4, i8, f8, b, json, jsonb, blob, ints, ints2, int4s, doubles, bools, moods, moods2, complexes, posints, jsons, txts)
+        VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20 )
+        ", [
+        "test",
+        1,
+        2_147_483_647,
+        9_223_372_036_854_775_807,
+        4.5,
+        true,
+        %{foo: "bar"},
+        %{foo: "bar"},
+        <<0, 1, 255, 254>>,
+        [1, 2, 3],
+        [
+          [1, 2, 3],
+          [4, 5, 6]
+        ],
+        [1, 2, 3],
+        [1.2, -3.2, :inf, :"-inf", :NaN],
+        [true, false, true],
+        ["sad", "ok", "happy"],
+        [
+          ["sad", "ok"],
+          ["ok", "happy"]
+        ],
+        [{1.1, 2.2}, {3.3, 4.4}],
+        [5, 9, 2],
+        [%{foo: "bar"}, %{bar: "baz"}],
+        ["foo", "bar", "baz"]
+      ])
+
+      conn =
+        conn("GET", "/v1/shape?table=#{@all_types_table_name}&offset=-1") |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      latest_offset = get_resp_last_offset(conn)
+
+      assert [
+               %{
+                 "value" => %{
+                   "txt" => "test",
+                   "i2" => "1",
+                   "i4" => "2147483647",
+                   "i8" => "9223372036854775807",
+                   "f8" => "4.5",
+                   "b" => "true",
+                   "json" => "{\"foo\":\"bar\"}",
+                   "jsonb" => "{\"foo\": \"bar\"}",
+                   "blob" => "\\x0001fffe",
+                   "ints" => "{1,2,3}",
+                   "ints2" => "{{1,2,3},{4,5,6}}",
+                   "int4s" => "{1,2,3}",
+                   "doubles" => "{1.2,-3.2,Infinity,-Infinity,NaN}",
+                   "bools" => "{t,f,t}",
+                   "moods" => "{sad,ok,happy}",
+                   "moods2" => "{{sad,ok},{ok,happy}}",
+                   "posints" => "{5,9,2}",
+                   "complexes" => "{\"(1.1,2.2)\",\"(3.3,4.4)\"}",
+                   "jsons" => "{\"{\\\"foo\\\": \\\"bar\\\"}\",\"{\\\"bar\\\": \\\"baz\\\"}\"}",
+                   "txts" => "{foo,bar,baz}"
+                 },
+                 "key" => key
+               }
+             ] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=#{@all_types_table_name}&offset=#{latest_offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "UPDATE #{@all_types_table_name} SET
+        txt = $1, i4 = $2, i8 = $3, f8 = $4, b = $5, json = $6,
+        jsonb = $7, blob = $8, ints = $9, ints2 = $10, int4s = $11,
+        doubles = $12, bools = $13, moods = $14, moods2 = $15,
+        complexes = $16, posints = $17, jsons = $18, txts = $19
+        WHERE i2 = 1
+      ", [
+        "changed",
+        20,
+        30,
+        40.5,
+        false,
+        %{bar: "foo"},
+        %{bar: "foo"},
+        <<255, 254, 0, 1>>,
+        [4, 5, 6],
+        [
+          [4, 5, 6],
+          [7, 8, 9]
+        ],
+        [4, 5, 6],
+        [-100.2, :"-inf", :NaN, 3.2],
+        [false, true, false],
+        ["sad", "happy"],
+        [
+          ["sad", "happy"],
+          ["happy", "ok"]
+        ],
+        [{2.2, 3.3}, {4.4, 5.5}],
+        [6, 10, 3],
+        [%{bar: "baz"}],
+        ["new", "values"]
+      ])
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [
+               %{
+                 "key" => ^key,
+                 "value" => %{
+                   "txt" => "changed",
+                   "i2" => "1",
+                   "i4" => "20",
+                   "i8" => "30",
+                   "f8" => "40.5",
+                   "b" => "f",
+                   "json" => "{\"bar\":\"foo\"}",
+                   "jsonb" => "{\"bar\": \"foo\"}",
+                   "blob" => "\\xfffe0001",
+                   "ints" => "{4,5,6}",
+                   "ints2" => "{{4,5,6},{7,8,9}}",
+                   "int4s" => "{4,5,6}",
+                   "doubles" => "{-100.2,-Infinity,NaN,3.2}",
+                   "bools" => "{f,t,f}",
+                   "moods" => "{sad,happy}",
+                   "moods2" => "{{sad,happy},{happy,ok}}",
+                   "posints" => "{6,10,3}",
+                   "complexes" => "{\"(2.2,3.3)\",\"(4.4,5.5)\"}",
+                   "jsons" => "{\"{\\\"bar\\\": \\\"baz\\\"}\"}",
+                   "txts" => "{new,values}"
+                 }
+               },
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
+    end
+
+    @large_binary_table "large_binary_table"
+    @tag with_sql: ["CREATE TABLE #{@large_binary_table} (id INT PRIMARY KEY, blob BYTEA)"]
+    test "can sync large binaries", %{opts: opts, db_conn: db_conn} do
+      # 10 MB
+      blob_size = 10_000_000
+
+      # ensure initial sync works
+      blob = :rand.bytes(blob_size)
+      hex_blob = "\\x" <> Base.encode16(blob, case: :lower)
+
+      Postgrex.query!(db_conn, "INSERT INTO #{@large_binary_table} (id, blob) VALUES (1, $1)", [
+        blob
+      ])
+
+      conn =
+        conn("GET", "/v1/shape?table=#{@large_binary_table}&offset=-1") |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      latest_offset = get_resp_last_offset(conn)
+      assert [%{"value" => %{"id" => "1", "blob" => ^hex_blob}}] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=#{@large_binary_table}&offset=#{latest_offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      # ensure that updates also work
+      blob = :rand.bytes(blob_size)
+      hex_blob = "\\x" <> Base.encode16(blob, case: :lower)
+
+      Postgrex.query!(db_conn, "UPDATE #{@large_binary_table} SET blob = $1 WHERE id = 1", [
+        blob
+      ])
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [
+               %{"value" => %{"id" => "1", "blob" => ^hex_blob}},
+               @up_to_date
+             ] = Jason.decode!(conn.resp_body)
+    end
+
+    @generated_pk_table "generated_pk_table"
+    @tag with_sql: [
+           "CREATE TABLE #{@generated_pk_table} (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
+         ]
+    test "returns an error when trying to select a generated column", %{opts: opts} do
+      # When selecting all columns
+      conn = conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
+      assert %{status: 400} = conn
+
+      assert Jason.decode!(conn.resp_body) ==
+               %{
+                 "errors" => %{
+                   "columns" => [
+                     "The following columns are generated and cannot be included in replication: id"
+                   ]
+                 },
+                 "message" => "Invalid request"
+               }
+
+      # When selecting a single column but PK is generated
+      conn =
+        conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=val")
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+
+      assert Jason.decode!(conn.resp_body) ==
+               %{
+                 "errors" => %{"columns" => ["Must include all primary key columns, missing: id"]},
+                 "message" => "Invalid request"
+               }
+
+      # When selecting a generated column explicitly
+      conn =
+        conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=id,val")
+        |> Router.call(opts)
+
+      assert %{status: 400} = conn
+
+      assert Jason.decode!(conn.resp_body) ==
+               %{
+                 "errors" => %{
+                   "columns" => [
+                     "The following columns are generated and cannot be included in replication: id"
+                   ]
+                 },
+                 "message" => "Invalid request"
+               }
     end
 
     @tag with_sql: [
@@ -773,8 +1073,8 @@ defmodule Electric.Plug.RouterTest do
 
       # Verify that both ops share the same tx offset and differ in their op offset by a known
       # amount.
-      op1_log_offset = LogOffset.new(op1_lsn, op1_op_position)
-      op2_log_offset = LogOffset.new(op2_lsn, op2_op_position)
+      op1_log_offset = LogOffset.new(String.to_integer(op1_lsn), op1_op_position)
+      op2_log_offset = LogOffset.new(String.to_integer(op2_lsn), op2_op_position)
 
       assert op2_log_offset == last_log_offset
 
@@ -860,8 +1160,8 @@ defmodule Electric.Plug.RouterTest do
 
       # Verify that both ops share the same tx offset and differ in their op offset by a known
       # amount.
-      op1_log_offset = LogOffset.new(op1_lsn, op1_op_position)
-      op2_log_offset = LogOffset.new(op2_lsn, op2_op_position)
+      op1_log_offset = LogOffset.new(String.to_integer(op1_lsn), op1_op_position)
+      op2_log_offset = LogOffset.new(String.to_integer(op2_lsn), op2_op_position)
 
       assert op2_log_offset == last_log_offset
 
@@ -953,7 +1253,7 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
-    test "GET receives 400 when shape handle does not match shape definition", %{
+    test "GET receives 409 when shape handle does not match shape definition", %{
       opts: opts
     } do
       where = "value ILIKE 'yes%'"
@@ -975,13 +1275,17 @@ defmodule Electric.Plug.RouterTest do
         conn("GET", "/v1/shape?table=items", %{offset: next_offset, handle: shape_handle})
         |> Router.call(opts)
 
-      assert %{status: 400} = conn
+      assert %{status: 409} = conn
 
-      assert conn.resp_body ==
-               Jason.encode!(%{
-                 message:
-                   "The specified shape definition and handle do not match. Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one."
-               })
+      assert Jason.decode!(conn.resp_body) == [
+               %{"headers" => %{"control" => "must-refetch"}}
+             ]
+
+      new_shape_handle = get_resp_header(conn, "electric-handle")
+      assert new_shape_handle != shape_handle
+
+      assert get_resp_header(conn, "location") ==
+               "/v1/shape?handle=#{new_shape_handle}&offset=-1&table=items"
     end
 
     test "GET receives 409 to a newly created shape when shape handle is not found and no shape matches the shape definition",
@@ -1071,12 +1375,7 @@ defmodule Electric.Plug.RouterTest do
         end)
 
       Postgrex.query!(db_conn, "TRUNCATE TABLE items", [])
-      assert %{status: 204} = Task.await(task)
-
-      conn =
-        Router.call(conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{handle}"), opts)
-
-      assert %{status: 409} = conn
+      assert %{status: 409} = conn = Task.await(task)
       assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
 
       conn =
@@ -1153,6 +1452,132 @@ defmodule Electric.Plug.RouterTest do
 
       assert allowed_methods == MapSet.new(["GET", "HEAD", "OPTIONS", "DELETE"])
     end
+
+    @tag slow: true
+    test "GET with a concurrent transaction doesn't crash irrecoverably", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Start a transaction that has a lock on `items`.
+      %{pid: child} =
+        Task.async(fn ->
+          Postgrex.transaction(db_conn, fn tx_conn ->
+            Postgrex.query!(
+              tx_conn,
+              "INSERT INTO items VALUES (gen_random_uuid(), 'test value')",
+              []
+            )
+
+            receive do
+              :continue -> :ok
+            end
+          end)
+        end)
+
+      # This can't alter the publication, so crashes
+      assert %{status: 500, resp_body: body} =
+               conn("GET", "/v1/shape?table=items&offset=-1")
+               |> Router.call(opts)
+
+      assert %{"message" => "Unable to retrieve shape log" <> _} = Jason.decode!(body)
+
+      # Now we can continue
+      send(child, :continue)
+
+      # This should work now
+      assert %{status: 200, resp_body: body} =
+               conn("GET", "/v1/shape?table=items&offset=-1")
+               |> Router.call(opts)
+
+      assert [_] = Jason.decode!(body)
+
+      # And the identity should be correctly set too
+      assert %{rows: [["f"]]} =
+               Postgrex.query!(
+                 db_conn,
+                 """
+                 SELECT relreplident
+                 FROM pg_class
+                 JOIN pg_namespace ON relnamespace = pg_namespace.oid
+                 WHERE relname = $2 AND nspname = $1
+                 """,
+                 ["public", "items"]
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE nullability_test (id INT PRIMARY KEY, value TEXT NOT NULL)"
+         ]
+    test "GET returns updated schema in header after column nullability changes", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Initial request to create the shape and get the schema
+      conn =
+        conn("GET", "/v1/shape?table=nullability_test&offset=-1")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      offset = get_resp_last_offset(conn)
+      initial_schema = get_resp_schema(conn)
+
+      assert initial_schema["value"]["not_null"]
+
+      # Make a write to trigger relation message processing
+      # Use a live request first to ensure the change propagates and cache is cleaned
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO nullability_test (id, value) VALUES (1, 'test')", [])
+      assert %{status: 200} = Task.await(task)
+
+      assert %{status: 200} =
+               conn =
+               conn(
+                 "GET",
+                 "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}"
+               )
+               |> Router.call(opts)
+
+      assert get_resp_schema(conn)["value"]["not_null"]
+
+      # Alter table to make 'value' nullable
+      Postgrex.query!(
+        db_conn,
+        "ALTER TABLE nullability_test ALTER COLUMN value DROP NOT NULL",
+        []
+      )
+
+      # Make a write to trigger relation message processing
+      # Use a live request first to ensure the change propagates and cache is cleaned
+      task =
+        Task.async(fn ->
+          conn(
+            "GET",
+            "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}&live"
+          )
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO nullability_test (id, value) VALUES (2, NULL)", [])
+      assert %{status: 200} = Task.await(task)
+
+      # Make a non-live request to get the updated schema header
+      conn =
+        conn("GET", "/v1/shape?table=nullability_test&offset=#{offset}&handle=#{shape_handle}")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+      updated_schema = get_resp_schema(conn)
+      refute updated_schema["value"]["not_null"]
+    end
   end
 
   describe "404" do
@@ -1175,11 +1600,108 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
+  describe "secure mode" do
+    setup [:with_unique_db, :with_basic_tables]
+
+    setup :with_complete_stack
+    setup :secure_mode
+
+    setup(ctx, do: %{opts: Router.init(build_router_opts(ctx))})
+
+    setup(ctx) do
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+
+      %{
+        api_opts:
+          Electric.Shapes.Api.plug_opts(
+            stack_id: ctx.stack_id,
+            pg_id: "12345",
+            stack_events_registry: Electric.stack_events_registry(),
+            stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
+            shape_cache: {Mock.ShapeCache, []},
+            storage: {Mock.Storage, []},
+            inspector: {__MODULE__, []},
+            registry: Registry.ServeShapePlugTest,
+            long_poll_timeout: 20_000,
+            max_age: 60,
+            stale_age: 300,
+            persistent_kv: ctx.persistent_kv,
+            allow_shape_deletion: true
+          )
+      }
+    end
+
+    test "allows access to / without secret", %{secret: secret} do
+      assert %{status: 200} = Router.call(conn("GET", "/"), secret: secret)
+    end
+
+    test "allows access to /nonexistent without secret", %{secret: secret} do
+      assert %{status: 404} = Router.call(conn("GET", "/nonexistent"), secret: secret)
+    end
+
+    test "allows access to /v1/health without secret", %{opts: opts} do
+      assert %{status: 200} = Router.call(conn("GET", "/v1/health"), opts)
+    end
+
+    test "allows OPTIONS requests to /v1/shape without secret", %{secret: secret} do
+      # No secret provided
+      assert %{status: 204} = Router.call(conn("OPTIONS", "/v1/shape"), secret: secret)
+    end
+
+    test "requires secret for /v1/shape", %{secret: secret, api_opts: api_opts} do
+      # No secret provided
+      assert %{status: 401} = Router.call(conn("GET", "/v1/shape"), secret: secret)
+
+      # Wrong secret
+      assert %{status: 401} =
+               Router.call(conn("GET", "/v1/shape?secret=wrong_secret"), secret: secret)
+
+      # Correct secret
+      assert %{status: 400} =
+               Router.call(
+                 conn("GET", "/v1/shape?secret=#{secret}"),
+                 Keyword.merge([secret: secret], api_opts)
+               )
+    end
+
+    test "also supports old api_secret parameter", %{secret: secret, api_opts: api_opts} do
+      assert %{status: 400} =
+               Router.call(
+                 conn("GET", "/v1/shape?api_secret=#{secret}"),
+                 Keyword.merge([secret: secret], api_opts)
+               )
+    end
+
+    test "requires secret for /v1/shape deletion", %{secret: secret, api_opts: api_opts} do
+      # No secret provided
+      assert %{status: 401} = Router.call(conn("DELETE", "/v1/shape"), secret: secret)
+
+      # Wrong secret
+      assert %{status: 401} =
+               Router.call(conn("DELETE", "/v1/shape?secret=wrong_secret"), secret: secret)
+
+      # Correct secret
+      assert %{status: 400} =
+               Router.call(
+                 conn("DELETE", "/v1/shape?secret=#{secret}"),
+                 Keyword.merge([secret: secret], api_opts)
+               )
+
+      # Note: Returns 400 because shape params are required, but authentication passed
+    end
+  end
+
   defp get_resp_shape_handle(conn), do: get_resp_header(conn, "electric-handle")
   defp get_resp_last_offset(conn), do: get_resp_header(conn, "electric-offset")
 
   defp get_resp_header(conn, header) do
     assert [val] = Plug.Conn.get_resp_header(conn, header)
     val
+  end
+
+  defp get_resp_schema(conn) do
+    conn
+    |> get_resp_header("electric-schema")
+    |> Jason.decode!()
   end
 end

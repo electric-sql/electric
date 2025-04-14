@@ -142,6 +142,11 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def with_lsn_tracker(ctx) do
+    Electric.LsnTracker.init(Electric.Postgres.Lsn.from_integer(0), ctx.stack_id)
+    %{}
+  end
+
   def with_shape_log_collector(ctx) do
     {:ok, _} =
       ShapeLogCollector.start_link(
@@ -175,6 +180,11 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def with_status_monitor(ctx) do
+    start_link_supervised!({Electric.StatusMonitor, ctx.stack_id})
+    %{}
+  end
+
   def with_complete_stack(ctx) do
     stack_id = full_test_name(ctx)
 
@@ -197,8 +207,9 @@ defmodule Support.ComponentSetup do
          stack_events_registry: stack_events_registry,
          persistent_kv: kv,
          storage: storage,
-         connection_opts: ctx.db_config,
+         connection_opts: ctx.pooled_db_config,
          replication_opts: [
+           connection_opts: ctx.db_config,
            slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
            publication_name: publication_name,
            try_creating_publication?: true,
@@ -231,12 +242,17 @@ defmodule Support.ComponentSetup do
     }
   end
 
+  def secure_mode(_ctx) do
+    %{secret: "test_secret_#{:erlang.unique_integer()}"}
+  end
+
   def build_router_opts(ctx, overrides \\ []) do
     [
       long_poll_timeout: 4_000,
       max_age: 60,
       stale_age: 300,
-      allow_shape_deletion: true
+      allow_shape_deletion: true,
+      secret: ctx[:secret]
     ]
     |> Keyword.merge(
       Electric.StackSupervisor.build_shared_opts(

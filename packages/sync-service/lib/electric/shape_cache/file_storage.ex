@@ -167,7 +167,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
           with {:ok, shape_def_encoded} <- File.read(shape_def_path),
                {:ok, shape_def_json} <- Jason.decode(shape_def_encoded),
-               shape = Electric.Shapes.Shape.from_json_safe!(shape_def_json) do
+               {:ok, shape} <- Electric.Shapes.Shape.from_json_safe(shape_def_json) do
             Map.put(acc, shape_handle, shape)
           else
             # if the shape definition file cannot be read/decoded, just ignore it
@@ -518,10 +518,10 @@ defmodule Electric.ShapeCache.FileStorage do
                 # First time we see eof after any valid lines, we store a timestamp
                 {[], {file, System.monotonic_time(:millisecond), incomplete_line}}
 
-              # If it's been 60s without any new lines, and also we've not seen <<4>>,
+              # If it's been 90s without any new lines, and also we've not seen <<4>>,
               # then likely something is wrong
-              System.monotonic_time(:millisecond) - eof_seen > 60_000 ->
-                raise "Snapshot hasn't updated in 60s"
+              System.monotonic_time(:millisecond) - eof_seen > 90_000 ->
+                raise "Snapshot hasn't updated in 90s"
 
               true ->
                 # Sleep a little and check for new lines
@@ -545,7 +545,8 @@ defmodule Electric.ShapeCache.FileStorage do
     )
   end
 
-  defp open_snapshot_chunk(opts, chunk_num, attempts_left \\ 100)
+  # Attempts enough for a 5s wait
+  defp open_snapshot_chunk(opts, chunk_num, attempts_left \\ 250)
   defp open_snapshot_chunk(_, _, 0), do: raise(IO.StreamError, reason: :enoent)
 
   defp open_snapshot_chunk(opts, chunk_num, attempts_left) do

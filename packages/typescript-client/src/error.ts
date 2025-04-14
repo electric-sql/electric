@@ -33,10 +33,12 @@ export class FetchError extends Error {
     let json: object | undefined = undefined
 
     const contentType = response.headers.get(`content-type`)
-    if (contentType && contentType.includes(`application/json`)) {
-      json = (await response.json()) as object
-    } else {
-      text = await response.text()
+    if (!response.bodyUsed) {
+      if (contentType && contentType.includes(`application/json`)) {
+        json = (await response.json()) as object
+      } else {
+        text = await response.text()
+      }
     }
 
     return new FetchError(status, text, json, headers, url)

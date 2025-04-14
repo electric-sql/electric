@@ -21,6 +21,7 @@ import {
   BackoffOptions,
   createFetchWithBackoff,
   createFetchWithChunkBuffer,
+  createFetchWithConsumedMessages,
   createFetchWithResponseHeadersCheck,
 } from './fetch'
 import {
@@ -34,6 +35,7 @@ import {
   SHAPE_HANDLE_QUERY_PARAM,
   SHAPE_SCHEMA_HEADER,
   WHERE_QUERY_PARAM,
+  WHERE_PARAMS_PARAM,
   TABLE_QUERY_PARAM,
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
@@ -66,6 +68,17 @@ export interface PostgresParams {
   where?: string
 
   /**
+   * Positional where clause paramater values. These will be passed to the server
+   * and will substitute `$i` parameters in the where clause.
+   *
+   * It can be an array (note that positional arguments start at 1, the array will be mapped
+   * accordingly), or an object with keys matching the used positional parameters in the where clause.
+   *
+   * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`, or be an array with length 2.
+   */
+  params?: Record<`${number}`, string> | string[]
+
+  /**
    * If `replica` is `default` (the default) then Electric will only send the
    * changed columns in an update.
    *
@@ -78,11 +91,10 @@ export interface PostgresParams {
    */
   replica?: Replica
 }
-
+type SerializableParamValue = string | string[] | Record<string, string>
 type ParamValue =
-  | string
-  | string[]
-  | (() => string | string[] | Promise<string | string[]>)
+  | SerializableParamValue
+  | (() => SerializableParamValue | Promise<SerializableParamValue>)
 
 /**
  * External params type - what users provide.
@@ -113,7 +125,9 @@ export type ExternalHeadersRecord = {
  * All values are converted to strings.
  */
 type InternalParamsRecord = {
-  [K in string as K extends ReservedParamKeys ? never : K]: string
+  [K in string as K extends ReservedParamKeys ? never : K]:
+    | string
+    | Record<string, string>
 }
 
 /**
@@ -357,8 +371,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       },
     })
 
-    this.#fetchClient = createFetchWithResponseHeadersCheck(
-      createFetchWithChunkBuffer(fetchWithBackoffClient)
+    this.#fetchClient = createFetchWithConsumedMessages(
+      createFetchWithResponseHeadersCheck(
+        createFetchWithChunkBuffer(fetchWithBackoffClient)
+      )
     )
 
     this.#subscribeToVisibilityChanges()
@@ -436,7 +452,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Resolve headers and params in parallel
     const [requestHeaders, params] = await Promise.all([
       resolveHeaders(this.options.headers),
-      this.options.params ? toInternalParams(this.options.params) : undefined,
+      this.options.params
+        ? toInternalParams(convertWhereParamsToObj(this.options.params))
+        : undefined,
     ])
 
     // Validate params after resolution
@@ -448,14 +466,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     // Add PostgreSQL-specific parameters
     if (params) {
-      if (params.table)
-        fetchUrl.searchParams.set(TABLE_QUERY_PARAM, params.table)
-      if (params.where)
-        fetchUrl.searchParams.set(WHERE_QUERY_PARAM, params.where)
+      if (params.table) setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
+      if (params.where) setQueryParam(fetchUrl, WHERE_QUERY_PARAM, params.where)
       if (params.columns)
-        fetchUrl.searchParams.set(COLUMNS_QUERY_PARAM, params.columns)
-      if (params.replica)
-        fetchUrl.searchParams.set(REPLICA_PARAM, params.replica)
+        setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
+      if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
+      if (params.params)
+        setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
 
       // Add any remaining custom parameters
       const customParams = { ...params }
@@ -463,9 +480,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       delete customParams.where
       delete customParams.columns
       delete customParams.replica
+      delete customParams.params
 
       for (const [key, value] of Object.entries(customParams)) {
-        fetchUrl.searchParams.set(key, value as string)
+        setQueryParam(fetchUrl, key, value)
       }
     }
 
@@ -546,12 +564,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#reset(newShapeHandle)
         await this.#publish(e.json as Message<T>[])
         return this.#requestShape()
-      } else if (e.status >= 400 && e.status < 500) {
+      } else {
         // Notify subscribers
         this.#sendErrorToSubscribers(e)
 
-        // 400 errors are not actionable without additional user input,
-        // so we exit the loop
+        // errors that have reached this point are not actionable without
+        // additional user input, such as 400s or failures to read the
+        // body of a response, so we exit the loop
         throw e
       }
     } finally {
@@ -583,13 +602,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
     this.#schema = this.#schema ?? getSchema()
 
-    const messages = status === 204 ? `[]` : await response.text()
-
+    // NOTE: 204s are deprecated, the Electric server should not
+    // send these in latest versions but this is here for backwards
+    // compatibility
     if (status === 204) {
       // There's no content so we are live and up to date
       this.#lastSyncedAt = Date.now()
     }
 
+    const messages = (await response.text()) || `[]`
     const batch = this.#messageParser.parse(messages, this.#schema)
 
     // Update isUpToDate
@@ -787,4 +808,35 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   validateParams(options.params)
 
   return
+}
+
+// `unknown` being in the value is a bit of defensive programming if user doesn't use TS
+function setQueryParam(
+  url: URL,
+  key: string,
+  value: Record<string, string> | string | unknown
+): void {
+  if (value === undefined || value == null) {
+    return
+  } else if (typeof value === `string`) {
+    url.searchParams.set(key, value)
+  } else if (typeof value === `object`) {
+    for (const [k, v] of Object.entries(value)) {
+      url.searchParams.set(`${key}[${k}]`, v)
+    }
+  } else {
+    url.searchParams.set(key, value.toString())
+  }
+}
+
+function convertWhereParamsToObj(
+  allPgParams: ExternalParamsRecord
+): ExternalParamsRecord {
+  if (Array.isArray(allPgParams.params)) {
+    return {
+      ...allPgParams,
+      params: Object.fromEntries(allPgParams.params.map((v, i) => [i + 1, v])),
+    }
+  }
+  return allPgParams
 }

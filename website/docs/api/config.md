@@ -53,6 +53,23 @@ For a secure connection, set the `sslmode` query parameter to `require`.
 
 </EnvVarConfig>
 
+### ELECTRIC_QUERY_DATABASE_URL
+
+<EnvVarConfig
+    name="ELECTRIC_QUERY_DATABASE_URL"
+    defaultValue="DATABASE_URL"
+    example="postgresql://user:password@example-pooled.com:54321/electric">
+
+Postgres connection string. Used to connect to the Postgres database for anything but the replication, will default to the same as `DATABASE_URL` if not provided.
+
+The connection string must be in the [libpg Connection URI format](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS) of `postgresql://[userspec@][hostspec][/dbname][?sslmode=<sslmode>]`.
+
+The `userspec` section of the connection string specifies the database user that Electric connects to Postgres as. This can point to a connection pooler and does not need a `REPLICATION` role as it does not handle the replication.
+
+For a secure connection, set the `sslmode` query parameter to `require`.
+
+</EnvVarConfig>
+
 ### ELECTRIC_DATABASE_USE_IPV6
 
 <EnvVarConfig
@@ -88,6 +105,34 @@ Suffix for the logical replication publication and slot name.
 
 ## Electric
 
+### ELECTRIC_SECRET
+
+<EnvVarConfig
+    name="ELECTRIC_SECRET"
+    required={true}
+    example="1U6ItbhoQb4kGUU5wXBLbxvNf">
+
+Secret for shape requests to the [HTTP API](/docs/api/http). This is required unless `ELECTRIC_INSECURE` is set to `true`.
+By default, the Electric API is public and authorises all shape requests against this secret.
+More details are available in the [security guide](/docs/guides/security).
+
+</EnvVarConfig>
+
+### ELECTRIC_INSECURE
+
+<EnvVarConfig
+    name="ELECTRIC_INSECURE"
+    defaultValue="false"
+    example="true">
+
+When set to `true`, runs Electric in insecure mode and does not require an `ELECTRIC_SECRET`.
+Use with caution.
+API requests are unprotected and may risk exposing your database.
+Good for development environments.
+If used in production, make sure to [lock down access](/docs/guides/security#network-security) to Electric.
+
+</EnvVarConfig>
+
 ### ELECTRIC_INSTANCE_ID
 
 <EnvVarConfig
@@ -118,7 +163,7 @@ Name of the electric service. Used as a resource identifier and namespace.
     example="true">
 
 Expose some unsafe operations that faciliate integration testing.
-Do not enable this production.
+Do not enable this in production.
 
 </EnvVarConfig>
 

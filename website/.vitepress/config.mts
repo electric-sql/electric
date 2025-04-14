@@ -29,7 +29,10 @@ const blogSidebarItems = await posts.map(post => ({
 export default defineConfig({
   lang: 'en',
   title: "ElectricSQL",
-  description: "Sync little subsets of your Postgres data into local apps and services.",
+  description: `
+    Electric is a Postgres sync engine. It solves the
+    hard problems of sync so that you don't have to.
+  `,
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
@@ -110,12 +113,7 @@ export default defineConfig({
           text: 'Product',
           items: [
             { text: 'Electric', link: '/product/electric' },
-            { text: 'Cloud', link: '/product/cloud', items: [
-                { text: 'Sign-up', link: '/product/cloud/sign-up' },
-                { text: 'Onboarding', link: '/product/cloud/onboarding' },
-                { text: 'Usage', link: '/product/cloud/usage' }
-              ]
-            },
+            { text: 'Cloud', link: '/product/cloud' },
             { text: 'PGlite', link: '/product/pglite' },
           ]
         }
@@ -308,7 +306,7 @@ export default defineConfig({
 
     const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
     const description = fm.description || siteData.description
-    const image = `https://electric-sql.com${fm.image || '/img/meta/why-fetch-when-you-can-sync.jpg'}`
+    const image = `https://electric-sql.com${fm.image || '/img/meta/sync-solved.jpg'}`
 
     head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
     head.push(['meta', { name: 'twitter:image', content: image }])

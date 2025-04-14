@@ -51,16 +51,11 @@ defmodule Electric.Shapes.Querying do
     end)
   end
 
-  defp json_like_select(
-         %Shape{
-           table_info: table_info,
-           root_table: root_table,
-           selected_columns: selected_columns
-         } = shape
-       ) do
-    pk_cols = Shape.pk(shape)
-    columns = get_column_names(table_info, root_table, selected_columns)
-
+  defp json_like_select(%Shape{
+         root_table: root_table,
+         selected_columns: columns,
+         root_pk: pk_cols
+       }) do
     key_part = build_key_part(root_table, pk_cols)
     value_part = build_value_part(columns)
     headers_part = build_headers_part(root_table)
@@ -81,17 +76,6 @@ defmodule Electric.Shapes.Querying do
       ~s['{' || #{key_part} || ',' || #{value_part} || ',' || #{headers_part} || '}']
 
     {query, []}
-  end
-
-  defp get_column_names(table_info, root_table, nil) do
-    table_info
-    |> Map.fetch!(root_table)
-    |> Map.fetch!(:columns)
-    |> Enum.map(& &1.name)
-  end
-
-  defp get_column_names(_table_info, _root_table, selected_columns) do
-    selected_columns
   end
 
   defp build_headers_part(root_table) do

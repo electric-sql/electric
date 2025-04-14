@@ -134,7 +134,7 @@ describe(`Shape`, () => {
     expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
-    await sleep(100)
+    await sleep(105)
     expect(shape.lastSynced()).toBeGreaterThanOrEqual(100)
 
     // FIXME: might get notified before all changes are submitted
@@ -171,6 +171,7 @@ describe(`Shape`, () => {
     issuesTableUrl,
     insertIssues,
     deleteIssue,
+    waitForIssues,
     clearIssuesShape,
     aborter,
   }) => {
@@ -194,23 +195,12 @@ describe(`Shape`, () => {
       },
     ]
 
-    let requestsMade = 0
     const start = Date.now()
     let rotationTime: number = Infinity
+    let fetchPausePromise = Promise.resolve()
     const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-      // clear the shape and modify the data after the initial request
-      if (requestsMade === 2) {
-        // new shape data should have just second issue and not first
-        await deleteIssue({ id: id1, title: `foo1` })
-        await insertIssues({ id: id2, title: `foo2` })
-        await clearIssuesShape(shapeStream.shapeHandle)
-
-        rotationTime = Date.now()
-      }
-
-      requestsMade++
-      const response = await fetch(...args)
-      return response
+      await fetchPausePromise
+      return await fetch(...args)
     }
 
     const shapeStream = new ShapeStream({
@@ -225,11 +215,21 @@ describe(`Shape`, () => {
     let dataUpdateCount = 0
     await new Promise<void>((resolve, reject) => {
       setTimeout(() => reject(`Timed out waiting for data changes`), 1000)
-      shape.subscribe(({ rows }) => {
+      shape.subscribe(async ({ rows }) => {
         dataUpdateCount++
         if (dataUpdateCount === 1) {
           expect(rows).toEqual(expectedValue1)
           expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
+
+          // clear the shape and modify the data after the initial request
+          fetchPausePromise = Promise.resolve().then(async () => {
+            await deleteIssue({ id: id1, title: `foo1` })
+            await insertIssues({ id: id2, title: `foo2` })
+            await waitForIssues({ numChangesExpected: 3 })
+            await clearIssuesShape(shapeStream.shapeHandle)
+          })
+
+          rotationTime = Date.now()
           return
         } else if (dataUpdateCount === 2) {
           expect(rows).toEqual(expectedValue2)
@@ -350,14 +350,18 @@ describe(`Shape`, () => {
             undefined
           )
         await sleep(50)
-        return new Response(undefined, {
-          status: 204,
+        return new Response(
+          JSON.stringify([{ headers: { control: `up-to-date` } }]),
+          {
+            status: 200,
           headers: new Headers({
             [`electric-offset`]: `0_0`,
             [`electric-handle`]: `foo`,
             [`electric-schema`]: ``,
+              [`electric-cursor`]: `123`,
           }),
-        })
+          }
+        )
       },
     })
 
@@ -532,7 +536,10 @@ describe(`Shape`, () => {
           })
         }
 
-        return new Response(`[]`, { status: 204 })
+        return new Response(
+          JSON.stringify([{ headers: { control: `up-to-date` } }]),
+          { status: 200 }
+        )
       },
       onError: mockErrorHandler,
     })
@@ -872,6 +879,7 @@ describe(`Shape`, () => {
   }) => {
     // Create initial data
     const [id] = await insertIssues({ title: `initial title` })
+    await waitForIssues({ numChangesExpected: 1 })
 
     // Track fetch requests
     const pendingRequests: Array<
@@ -896,6 +904,7 @@ describe(`Shape`, () => {
           },
           { once: true }
         )
+        console.log(input)
         pendingRequests.push([
           input,
           async () => {
@@ -979,6 +988,40 @@ describe(`Shape`, () => {
     // Verify we return to normal processing (long polling)
     await vi.waitFor(() => expect(pendingRequests.length).toBe(1)) // New long poll
     expect(pendingRequests[0][0].toString()).toContain(`live=true`)
+  })
+})
+
+describe(`Shape - backwards compatible`, () => {
+  it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
+    issuesTableUrl,
+  }) => {
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      fetchClient: async (_input, _init) => {
+        await sleep(20)
+        return new Response(null, {
+          status: 204,
+          headers: new Headers({
+            [`electric-offset`]: `0_0`,
+            [`electric-handle`]: `foo`,
+            [`electric-schema`]: ``,
+            [`electric-cursor`]: `123`,
+          }),
+        })
+      },
+    })
+
+    const unsubscribe = shapeStream.subscribe(() => unsubscribe())
+
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+    expect(shapeStream.lastSyncedAt()).closeTo(Date.now(), 200)
+
+    await sleep(400)
+
+    expect(shapeStream.lastSyncedAt()).closeTo(Date.now(), 200)
   })
 })
 

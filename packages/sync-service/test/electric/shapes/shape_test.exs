@@ -6,10 +6,12 @@ defmodule Electric.Shapes.ShapeTest do
   alias Electric.Replication.Changes
   alias Electric.Shapes.Shape
 
-  @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'", %{["value"] => :text})
-  @where_array Parser.parse_and_validate_expression!("data && '{1,2}'", %{
-                 ["data"] => {:array, :int4}
-               })
+  @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'",
+           refs: %{["value"] => :text}
+         )
+  @where_array Parser.parse_and_validate_expression!("data && '{1,2}'",
+                 refs: %{["data"] => {:array, :int4}}
+               )
   @relation_id 1
 
   describe "convert_change/2" do
@@ -365,6 +367,16 @@ defmodule Electric.Shapes.ShapeTest do
 
       assert {:error, _} = Shape.new("other_table", inspector: inspector, replica: :teapot)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS gen_col_table (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
+         ]
+    test "validates selected columns for generated columns", %{inspector: inspector} do
+      assert {:error,
+              {:columns,
+               ["The following columns are generated and cannot be included in replication: id"]}} =
+               Shape.new("gen_col_table", inspector: inspector)
+    end
   end
 
   describe "new!/2" do
@@ -436,69 +448,58 @@ defmodule Electric.Shapes.ShapeTest do
 
   describe "JSON" do
     test "should serialize shape with complex columns" do
-      shape = %Electric.Shapes.Shape{
+      shape = %Shape{
         root_table: {"public", "foo"},
         root_table_id: 1,
-        table_info: %{
-          {"public", "foo"} => %{
-            columns: [
-              %{
-                name: "second",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :base,
-                pk_position: 1,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: true,
-                array_type: nil
-              },
-              %{
-                name: "first",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :base,
-                pk_position: 0,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: true,
-                array_type: nil
-              },
-              %{
-                name: "fourth",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :base,
-                pk_position: nil,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: false,
-                array_type: nil
-              },
-              %{
-                name: "third",
-                type: :text,
-                formatted_type: "text",
-                type_mod: -1,
-                type_kind: :enum,
-                pk_position: 2,
-                type_id: {25, -1},
-                array_dimensions: 0,
-                not_null: true,
-                array_type: nil
-              }
-            ],
-            pk: ["first", "second", "third"]
-          }
-        },
+        root_pk: ["first", "second", "third"],
+        selected_columns: ["first", "second", "third", "fourth"],
+        flags: %{selects_all_columns: true, non_primitive_columns_in_where: true},
         where: nil
       }
 
       assert {:ok, json} = Jason.encode(shape)
-      assert ^shape = Jason.decode!(json) |> Shape.from_json_safe!()
+      assert {:ok, ^shape} = Jason.decode!(json) |> Shape.from_json_safe()
+    end
+
+    test "should serialize shape with complex columns with backwards compatibility" do
+      shape_old_json =
+        %{
+          root_table: ["public", "foo"],
+          root_table_id: 1,
+          selected_columns: nil,
+          where: nil,
+          table_info: [
+            [
+              ["public", "foo"],
+              %{
+                pk: ["first", "second", "third"],
+                columns: [
+                  %{name: "first", type: "text"},
+                  %{name: "second", type: "text"},
+                  %{name: "third", type: "text"},
+                  %{name: "fourth", type: "text"}
+                ]
+              }
+            ]
+          ]
+        }
+        |> Jason.encode!()
+        |> Jason.decode!()
+
+      shape_v1 =
+        %Shape{
+          root_table: {"public", "foo"},
+          root_table_id: 1,
+          root_pk: ["first", "second", "third"],
+          root_column_count: 4,
+          selected_columns: ["first", "second", "third", "fourth"],
+          flags: %{selects_all_columns: true},
+          where: nil
+        }
+
+      assert {:ok, shape_old_decoded} = Shape.from_json_safe(shape_old_json)
+
+      assert shape_old_decoded == shape_v1
     end
   end
 

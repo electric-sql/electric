@@ -85,6 +85,14 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                       consumer,
                       {:snapshot_failed, shape_handle, error, __STACKTRACE__}
                     )
+                catch
+                  :exit, {:timeout, {GenServer, :call, _}} ->
+                    GenServer.cast(
+                      consumer,
+                      {:snapshot_failed, shape_handle,
+                       %RuntimeError{message: "Timed out while waiting for a table lock"},
+                       __STACKTRACE__}
+                    )
                 end
               end
             )
@@ -175,9 +183,19 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               end
             )
 
-            stream = Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
-
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
+            stream =
+              Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
+              |> Stream.transform(
+                fn -> false end,
+                fn item, acc ->
+                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
+                  {[item], true}
+                end,
+                fn acc ->
+                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
+                  acc
+                end
+              )
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
             # that way it has the relation, but it is still missing the pk_cols

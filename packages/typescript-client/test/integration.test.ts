@@ -635,8 +635,8 @@ describe(`HTTP Sync`, () => {
     const shapeOffset = res.headers.get(`electric-offset`)!
     const fakeMidOffset = shapeOffset
       .split(`_`)
-      .map(Number)
-      .map((x, i) => (i === 0 ? x - 1 : x))
+      .map(BigInt)
+      .map((x, i) => (i === 0 ? x - BigInt(1) : x))
       .join(`_`)
     const etag = res.headers.get(`etag`)
     expect(etag, `Response should have etag header`).not.toBe(null)
@@ -818,8 +818,8 @@ describe(`HTTP Sync`, () => {
         const responseSize = responseSizes.shift()
         const isLastResponse = responseSizes.length === 0
         if (!isLastResponse) {
-          // expect chunks to be close to 10 kB +- some kB
-          expect(responseSize).closeTo(10 * 1e3, 1e3)
+          // expect chunks to be close to 10 kB +- 20%
+          expect(responseSize).closeTo(10 * 1e3, 2e3)
         } else {
           // expect last response to be ~ 10 kB or less
           expect(responseSize).toBeLessThan(11 * 1e3)
@@ -841,7 +841,7 @@ describe(`HTTP Sync`, () => {
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
-        where: `1=1`,
+        where: `1 x 1`, // invalid SQL
       },
       signal: aborter.signal,
       handle: streamState.handle,
@@ -858,8 +858,47 @@ describe(`HTTP Sync`, () => {
     expect(invalidIssueStream.error).instanceOf(FetchError)
     expect((invalidIssueStream.error! as FetchError).status).toBe(400)
     expect(invalidIssueStream.isConnected()).false
+    expect((error! as FetchError).json).toStrictEqual({
+      message: `Invalid request`,
+      errors: {
+        where: [`At location 17: syntax error at or near "x"`],
+      },
+    })
+  })
+
+  it(`should handle invalid requests by terminating stream`, async ({
+    expect,
+    issuesTableUrl,
+    aborter,
+  }) => {
+    let error: Error
+    const invalidIssueStream = new ShapeStream<IssueRow>({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        where: `1=1`,
+      },
+      signal: aborter.signal,
+      // handle: streamState.handle,
+      onError: (err) => {
+        error = err
+      },
+      fetchClient: async (...args) => {
+        const res = await fetch(...args)
+        await res.text()
+        return res
+      },
+    })
+
+    const errorSubscriberPromise = new Promise((_, reject) =>
+      invalidIssueStream.subscribe(() => {}, reject)
+    )
+
+    await expect(errorSubscriberPromise).rejects.toThrow(FetchError)
+    expect(invalidIssueStream.error).instanceOf(FetchError)
+    expect(invalidIssueStream.isConnected()).false
     expect(error!.message).contains(
-      `The specified shape definition and handle do not match. Please ensure the shape definition is correct or omit the shape handle from the request to obtain a new one.`
+      `Body is unusable: Body has already been read`
     )
   })
 
@@ -924,7 +963,7 @@ describe(`HTTP Sync`, () => {
           // the next up to date message should have had
           // a 409 interleaved before it that instructed the
           // client to go and fetch data from scratch
-          expect(statusCodesReceived).toHaveLength(5)
+          expect(statusCodesReceived.length).greaterThanOrEqual(5)
           expect(statusCodesReceived[2]).toBe(409)
           expect(statusCodesReceived[3]).toBe(200)
           return res()

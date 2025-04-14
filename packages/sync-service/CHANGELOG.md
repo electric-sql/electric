@@ -1,5 +1,147 @@
 # @core/sync-service
 
+## 1.0.6
+
+### Patch Changes
+
+- 5189825: Handle non existant DB as a fatal error.
+- 04feeea: Update otel_metric_exporter to fix protobuf encoding error
+- cb95ab5: Obfuscate database password during parsing to prevent its accidental leaking in logs.
+
+  When Electric is used in library mode, obfuscation by the parent application is
+  optional: Electric doesn't log the connection options until after it has
+  obfuscated the password.
+
+- e2a7008: Fix error generated when getting memory stats with dead processes
+- 68b0839: Fix a fatal bug in the encoding of WHERE query params when returning a 409 response from the server.
+- 787e363: Fix for initialization race condition that resulted in the error "the table identifier does not refer to an existing ETS table"
+- 3988f31: Update otel_metric_exporter to v0.3.5 for bugfixes
+- b65e70d: Set shape recovery timeout per-shape, not globally
+- c63c24b: Fix memory stats collection on dead processes
+
+## 1.0.5
+
+### Patch Changes
+
+- fd11e14: Improve error handling in case of failure to start shapes supervisor.
+- dea3e1b: fix: improve error handling in bad PG connectivity
+
+## 1.0.4
+
+### Patch Changes
+
+- d278b9f: fix!: Convert live responses with no changes from `204` to `200`.
+
+  BREAKING CHANGE: community clients relying on `204` alone for up-to-date logic might break - live responses now always return a `200` with a body/
+
+- d2c2342: Improved replication processing telemetry
+- 1c729fa: fix: refetch schema from DB when seeing a relation message to get recent info
+
+## 1.0.3
+
+### Patch Changes
+
+- e45d390: fix: disallow generated columns in shapes
+- 85b863a: Synchronously recover shapes and publication to ensure Electric boot is successfuly, and clear cache if it fails.
+- b8a71cd: Add experimental LRU shape expiry
+- a71686e: Never cache `>= 400` response codes, except `409` as effective redirects, and anything other than `GET` and `OPTIONS`.
+- 844a54f: fix: skip updates that don't change any columns
+- f810e82: Electric now also returns 409 instead of 400 when the shape handle and the shape definition do not match.
+- 15e6d1d: Fix backwards compatibility parsing of old shape definitions' flags
+
+## 1.0.2
+
+### Patch Changes
+
+- d222480: Fix where clause inclusion index to support array is null
+
+## 1.0.1
+
+### Patch Changes
+
+- 4c24123: Speed up replication processing by removing file writes from the main processing loop
+
+## 1.0.0
+
+### Minor Changes
+
+- f1a9247: feat!: change the wire protocol to remove `offset` and add an explicit `lsn` header. Only valid offset now is the one provided in headers
+
+### Patch Changes
+
+- 74e54e1: feat: add receive/replication lag to exposed metrics
+- 1255205: First beta release
+- c4473b0: feat: lower the per-shape memory usage, especially for very large tables
+- 8987142: Do not trap exits in `Electric.Shapes.Consumer` - not handled.
+- 519fc8a: Separate `ConnectionBackoff` logic for `Connection.Manager` to enhance `:bakckoff` functionality.
+- edfb9f3: feat: add compaction flag to Electric that allows `UPDATE` events within a shape to be compacted to save space and bandwidth
+- bd2d997: Make configuration easier and more accessible to external applications
+- f1a9247: feat: add a special header to last operation in transaction for a given shape
+- 9ed2ca3: Ensure request-scoped new changes listener is clenaed up when request ends.
+- 84eb729: Fix arithmetic bugs in system memory stat calculations.
+- 40dcfe8: Add support for casting enums to text in where clauses (e.g. `type::text = 'foo'`).
+- 5516d70: Fallback to IPv4 if `DATABASE_USE_IPV6` is enabled but an IPv6 address could not be resolved.
+- 9401491: Return chunked repsonses to live requesters if new changes large enough.
+- bbcc719: Drop transactions that have already been processed rather than reapplying them.
+- 0d71dc4: fix: don't expose information about columns that weren't selected
+- ccafe48: fix: Fix file corruption when concatenating files during compaction
+- b84cd5c: Expose globally last-seen LSN on up-to-date messages
+- f6a3265: Carry over full original shape query in 409 redirects.
+- 5da8f25: Only include telemetry in docker build
+- eb8167a: Implement `ELECTRIC_QUERY_DATABASE_URL` optional env var to perform queries with separate, potentially pooled connection string.
+- 3867309: Fix the startup failure problem caused by broken release packaging.
+- 49dd88f: fix: Fix file corruption when doing external sort during compaction
+- 3eb347b: Add optional telemetry to profile where clause filtering
+- 218b7d4: fix: truncates no longer cause a stop to an incoming replication stream
+- dcd8a9f: feat: add `old_value` to updates under replica mode `full`
+- 7cb4ccb: Electric as a library: Support multiple stacks
+- 309ac75: Do not await full setup for configuring replication slot drop.
+- eccdf9f: - Do not await for responses while recovering publication filters.
+  - Remove publication update debounce time - simply wait until end of current process message queue.
+- 2dd8ca0: Reset reconnection attempt backoff timer and add more information to connection failure events.
+- c649f8b: Electric now runs in Secure mode by default, requiring an `ELECTRIC_SECRET` to be set.
+
+  BREAKING CHANGE: Electric now needs to be started with an `ELECTRIC_SECRET` environment variable unless `ELECTRIC_INSECURE=true` is set.
+
+- f92d4b3: Fallback to replicating whole relations if publication row filtering cannot support given where clauses.
+- b48973b: Fix incorrect LSN comparisons leading to dropped transactions.
+- 54fb0ac: Avoid stopping the beam process when an unrecoverable error is encountered. Instead, stop the main OTP supervisor. Required for multi-tenancy.
+- 7caccbf: Return `202` for `waiting` and `starting` health status - accepts requests but will fail to service them.
+- c444072: Allow multiple conditions in a where clause to be optimised (not just one)
+- 7600746: Add option to send memory metrics per process type
+- 5f2cb99: fix: ensure correct JSON formating when reading concurrently written snapshot
+- 2f5b7d4: fix: ensure smooth upgrade for filesystem KV format change
+- 6ca47df: feat: introduce chunked snapshot generation
+- 329c428: Electric as a library: Telemetry config is now option parameters rather than application environemnt config
+- 2f6452c: Change stack_id to source_id in open telemetry export
+- 7f36cc1: Use `Storage.unsafe_cleanup!/1` to delete data after a shape has been removed
+- 0a95da1: Allow for accessing via an api that serves only a pre-configured shape, move all http logic into api
+- d22e363: Fix transaction ID comparison logic to use correct modulo-2^32 arithmetic.
+- 46a0d4e: fix: fixes file merging during compaction, which was very suboptimal due to a bug
+- f1a9247: feat: replace `txid` with `txids` header
+- 802680f: feat: make sure lines that underwent compaction don't reference any transaction id
+- ac9af08: Add configuration flag to disable HTTP cache headers
+- c4e4e75: Connect shape consumer spans to replication traces and add OTEL metrics
+- 108144e: fix: allow `traceparent` headers for OTel
+- e29724e: Fix bug with WHERE clauses with logical operators (AND, OR, etc.) with 3 or more conditions chained together
+- 8955a58: Refactor to use an internal api to provide the shape change stream
+- 07a767f: Add telemetry to time various parts of the WAL processing
+- 8ce1353: Add embedded mode to Elixir client using the new Shapes API
+- 9554498: Improve public APIs of Elixir client and core electric
+- 214435b: System metrics will now be sent to Honeycomb as well as traces
+- 4d7b8ba: Add support for shapes on partitioned tables
+- 78fdc21: Fix: Setting ELECTRIC_STORAGE_DIR wasn't changing where Electric was storing shape logs and its persistent state due to a bug.
+- 7c72c1e: Reduce memory footprint by hibernating idle shapes
+- 126317f: fix: ensure we correctly set globally processed lsn
+- 7496f9a: Fix race that caused the same `global_last_seen_lsn` to appear on two subsequent, but different, up-to-date responses by determining it at the start of the request processing pipeline.
+- c444072: Optimise where clauses that have a condition in the form 'array_field @> array_const'
+- 059a69a: Improve quoting logic in relation_to_sql/1 to handle reserved words and tables starting with a number
+- f8a94aa: chore: ensure proper trace span connection for snapshot creation
+- c2b01c1: Encode LSN as string in JSON responses for correct handling of large values (>53 bits) in Javascript.
+- 8a4b0d5: Ensure shape properties are added to OTEL spans in shape requests.
+- 214435b: Add metric publishing to Honeycomb when that exporter is enabled
+- d7e7c72: Introduced `PublicationManager` process to create and clean up publication filters.
+
 ## 1.0.0-beta.23
 
 ### Patch Changes

@@ -35,7 +35,7 @@ Electric is a [sync service](/product/electric) that runs in front of Postgres. 
   </a>
 </figure>
 
-This API is [public by default](#public-by-default). It should be secured in production using [network security](#network-security) and/or an [authorization proxy](#authorization).
+This API is [public by default](#public-by-default). It should be secured in production using an [API token](#api-token), [network security](#network-security) and/or an [authorization proxy](#authorization).
 
 ### Public by default
 
@@ -61,6 +61,12 @@ This approach is useful when you're using Electric to sync into trusted infrastr
 Electric is designed to run behind an [authorizing proxy](/docs/guides/auth#requests-can-be-proxied).
 
 This is the primary method for securing data access to clients and apps and is documented in detail, with examples, in the [Auth guide](/docs/guides/auth).
+
+### API token
+
+Access to Electric can be secured with an [API token](/docs/api/config#electric-secret). This is a secret string that can be set when starting Electric and will be used to authenticate requests to the Electric HTTP API. When an API token is set, Electric will require all requests to include the API token. 
+
+The token should *not* be sent from the client as it will be exposed in the HTTP requests. Instead, it should be added by the [authorizing proxy](/docs/guides/auth#requests-can-be-proxied) when proxying requests to Electric.
 
 ## Encryption
 

@@ -1,12 +1,15 @@
 {
   "name": "@electric-sql/docs",
   "private": true,
-  "version": "0.0.2-beta.3",
+  "version": "0.0.2",
   "scripts": {
-    "api:generate": "redocly build-docs ./electric-api.yaml --output=./public/openapi.html",
-    "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"*.yaml\"",
-    "build": "npm run api:generate && vitepress build .",
+    "api:build_docs": "redocly build-docs ./electric-api.yaml --output=./public/openapi.html",
+    "api:generate": "npm run api:build_docs && npm run api:patch_version",
+    "api:patch_version": "node ../scripts/patch_api_spec_version.js ./public/openapi.html",
+    "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"electric-api.yaml\"",
+    "build": "npm run api:generate && vitepress build . && npm run llms:generate",
     "dev": "vitepress dev .",
+    "llms:generate": "node ../scripts/llms.js",
     "preview": "vitepress preview ."
   },
   "engineManager": "^pnpm@9.15.0",

@@ -1,3 +1,4 @@
+import { bigIntCompare, bigIntMax, bigIntMin } from './bigint-utils'
 import {
   ShapeStream,
   isChangeMessage,
@@ -125,8 +126,8 @@ export class MultiShapeStream<
   // We keep track of the last lsn of data and up-to-date messages for each shape
   // so that we can skip checkForUpdates if the lsn of the up-to-date message is
   // greater than the last lsn of data.
-  #lastDataLsns: { [K in keyof TShapeRows]: number }
-  #lastUpToDateLsns: { [K in keyof TShapeRows]: number }
+  #lastDataLsns: { [K in keyof TShapeRows]: bigint }
+  #lastUpToDateLsns: { [K in keyof TShapeRows]: bigint }
 
   readonly #subscribers = new Map<
     number,
@@ -155,11 +156,11 @@ export class MultiShapeStream<
       ])
     ) as { [K in keyof TShapeRows]: ShapeStream<TShapeRows[K]> }
     this.#lastDataLsns = Object.fromEntries(
-      Object.entries(shapes).map(([key]) => [key, -Infinity])
-    ) as { [K in keyof TShapeRows]: number }
+      Object.entries(shapes).map(([key]) => [key, BigInt(-1)])
+    ) as { [K in keyof TShapeRows]: bigint }
     this.#lastUpToDateLsns = Object.fromEntries(
-      Object.entries(shapes).map(([key]) => [key, -Infinity])
-    ) as { [K in keyof TShapeRows]: number }
+      Object.entries(shapes).map(([key]) => [key, BigInt(-1)])
+    ) as { [K in keyof TShapeRows]: bigint }
     if (start) this.#start()
   }
 
@@ -176,9 +177,13 @@ export class MultiShapeStream<
           // Whats the max lsn of the up-to-date messages?
           const upToDateLsns = messages
             .filter(isControlMessage)
-            .map(({ headers }) => (headers.global_last_seen_lsn as number) ?? 0)
+            .map(({ headers }) =>
+              typeof headers.global_last_seen_lsn === `string`
+                ? BigInt(headers.global_last_seen_lsn)
+                : BigInt(0)
+            )
           if (upToDateLsns.length > 0) {
-            const maxUpToDateLsn = Math.max(...upToDateLsns)
+            const maxUpToDateLsn = bigIntMax(upToDateLsns)
             const lastMaxUpToDateLsn = this.#lastUpToDateLsns[key]
             if (maxUpToDateLsn > lastMaxUpToDateLsn) {
               this.#lastUpToDateLsns[key] = maxUpToDateLsn
@@ -188,9 +193,11 @@ export class MultiShapeStream<
           // Whats the max lsn of the data messages?
           const dataLsns = messages
             .filter(isChangeMessage)
-            .map(({ headers }) => (headers.lsn as number) ?? 0)
+            .map(({ headers }) =>
+              typeof headers.lsn === `string` ? BigInt(headers.lsn) : BigInt(0)
+            )
           if (dataLsns.length > 0) {
-            const maxDataLsn = Math.max(...dataLsns)
+            const maxDataLsn = bigIntMax(dataLsns)
             const lastMaxDataLsn = this.#lastDataLsns[key]
             if (maxDataLsn > lastMaxDataLsn) {
               this.#lastDataLsns[key] = maxDataLsn
@@ -224,7 +231,7 @@ export class MultiShapeStream<
   }
 
   async #checkForUpdates() {
-    const maxDataLsn = Math.max(...Object.values(this.#lastDataLsns))
+    const maxDataLsn = bigIntMax(Object.values(this.#lastDataLsns))
     const refreshPromises = this.#shapeEntries()
       .filter(([key]) => {
         // We only need to refresh shapes that have not seen an up-to-date message
@@ -303,11 +310,11 @@ export class MultiShapeStream<
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
   lastSyncedAt(): number | undefined {
     // Min of all the lastSyncedAt values
-    return Math.min(
-      ...this.#shapeEntries().map(
-        ([_, shape]) => shape.lastSyncedAt() ?? Infinity
-      )
-    )
+    const shapeEntries = this.#shapeEntries()
+    if (shapeEntries.length === 0) return
+    return shapeEntries.reduce((minLastSyncedAt, [_, shape]) => {
+      return Math.min(minLastSyncedAt, shape.lastSyncedAt() ?? Infinity)
+    }, Infinity)
   }
 
   /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
@@ -374,20 +381,20 @@ export class TransactionalMultiShapeStream<
     [K: string]: Row<unknown>
   },
 > extends MultiShapeStream<TShapeRows> {
-  #changeMessages = new Map<number, MultiShapeMessage<Row<unknown>, string>[]>()
+  #changeMessages = new Map<bigint, MultiShapeMessage<Row<unknown>, string>[]>()
   #completeLsns: {
-    [K in keyof TShapeRows]: number
+    [K in keyof TShapeRows]: bigint
   }
 
   constructor(options: MultiShapeStreamOptions<TShapeRows>) {
     super(options)
     this.#completeLsns = Object.fromEntries(
-      Object.entries(options.shapes).map(([key]) => [key, -Infinity])
-    ) as { [K in keyof TShapeRows]: number }
+      Object.entries(options.shapes).map(([key]) => [key, BigInt(-1)])
+    ) as { [K in keyof TShapeRows]: bigint }
   }
 
   #getLowestCompleteLsn() {
-    return Math.min(...Object.values(this.#completeLsns))
+    return bigIntMin(Object.values(this.#completeLsns))
   }
 
   protected async _publish(
@@ -399,7 +406,7 @@ export class TransactionalMultiShapeStream<
       (lsn) => lsn <= lowestCompleteLsn
     )
     const messagesToPublish = lsnsToPublish
-      .sort((a, b) => a - b)
+      .sort((a, b) => bigIntCompare(a, b))
       .map((lsn) =>
         this.#changeMessages.get(lsn)?.sort((a, b) => {
           const { headers: aHeaders } = a
@@ -429,7 +436,8 @@ export class TransactionalMultiShapeStream<
       const { shape, headers } = message
       if (isChangeMessage(message)) {
         // The snapshot message does not have an lsn, so we use 0
-        const lsn = typeof headers.lsn === `number` ? headers.lsn : 0
+        const lsn =
+          typeof headers.lsn === `string` ? BigInt(headers.lsn) : BigInt(0)
         if (!this.#changeMessages.has(lsn)) {
           this.#changeMessages.set(lsn, [])
         }
@@ -439,17 +447,20 @@ export class TransactionalMultiShapeStream<
           typeof headers.last === `boolean` &&
           headers.last === true
         ) {
-          this.#completeLsns[shape] = Math.max(this.#completeLsns[shape], lsn)
+          this.#completeLsns[shape] = bigIntMax([
+            this.#completeLsns[shape],
+            lsn,
+          ])
         }
       } else if (isControlMessage(message)) {
         if (headers.control === `up-to-date`) {
-          if (typeof headers.global_last_seen_lsn !== `number`) {
+          if (typeof headers.global_last_seen_lsn !== `string`) {
             throw new Error(`global_last_seen_lsn is not a number`)
           }
-          this.#completeLsns[shape] = Math.max(
+          this.#completeLsns[shape] = bigIntMax([
             this.#completeLsns[shape],
-            headers.global_last_seen_lsn
-          )
+            BigInt(headers.global_last_seen_lsn),
+          ])
         }
       }
     })

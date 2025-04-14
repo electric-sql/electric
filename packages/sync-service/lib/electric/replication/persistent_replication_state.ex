@@ -1,6 +1,6 @@
 defmodule Electric.Replication.PersistentReplicationState do
   alias Electric.PersistentKV
-  alias Electric.Postgres.Lsn
+  alias Electric.Replication.Changes
   require Logger
 
   @type opts() :: [
@@ -8,30 +8,32 @@ defmodule Electric.Replication.PersistentReplicationState do
           persistent_kv: Electric.PersistentKV.t()
         ]
 
-  @last_processed_lsn_key "last_processed_lsn"
+  @base_tracked_relations %{
+    table_to_id: %{},
+    id_to_table_info: %{}
+  }
 
-  @spec set_last_processed_lsn(Lsn.t() | non_neg_integer(), opts()) :: :ok
-  def set_last_processed_lsn(lsn, opts) when is_struct(lsn, Lsn) do
-    lsn |> Lsn.to_integer() |> set_last_processed_lsn(opts)
+  @type tracked_relations :: %{
+          table_to_id: %{{String.t(), String.t()} => Changes.relation_id()},
+          id_to_table_info: %{Changes.relation_id() => Changes.Relation.t()}
+        }
+
+  @spec set_tracked_relations(tracked_relations, opts()) :: :ok
+  def set_tracked_relations(tracked_relations, opts) do
+    set("tracked_relations", tracked_relations, opts)
   end
 
-  def set_last_processed_lsn(lsn, opts) when is_integer(lsn) do
-    Logger.debug("Updating last processed lsn to #{lsn}")
-    set(@last_processed_lsn_key, lsn, opts)
-  end
-
-  @spec get_last_processed_lsn(opts()) :: Lsn.t()
-  def get_last_processed_lsn(opts) do
-    case get(@last_processed_lsn_key, opts) do
-      {:ok, last_processed_lsn} -> last_processed_lsn
-      {:error, :not_found} -> 0
+  @spec get_tracked_relations(opts()) :: tracked_relations()
+  def get_tracked_relations(opts) do
+    case get("tracked_relations", opts) do
+      {:ok, tracked_relations} -> tracked_relations
+      {:error, :not_found} -> @base_tracked_relations
     end
-    |> Lsn.from_integer()
   end
 
   @spec reset(opts()) :: :ok
   def reset(opts) do
-    set(@last_processed_lsn_key, 0, opts)
+    set_tracked_relations(@base_tracked_relations, opts)
   end
 
   @spec set(String.t(), any(), opts()) :: :ok

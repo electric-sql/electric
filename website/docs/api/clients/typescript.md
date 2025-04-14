@@ -101,6 +101,17 @@ export interface ShapeStreamOptions<T = never> {
     where?: string
 
     /**
+     * Positional where clause paramater values. These will be passed to the server
+     * and will substitute `$i` parameters in the where clause. 
+     * 
+     * It can be an array (note that positional arguments start at 1, the array will be mapped
+     * accordingly), or an object with keys matching the used positional parameters in the where clause.
+     * 
+     * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`, or be an array with length 2.
+     */
+    params?: Record<`${number}`, string> | string[]
+
+    /**
      * The columns to include in the shape.
      * Must include primary keys, and can only include valid columns.
      */
@@ -111,7 +122,8 @@ export interface ShapeStreamOptions<T = never> {
      * changed columns in an update.
      *
      * If it's `full` Electric will send the entire row with both changed and
-     * unchanged values.
+     * unchanged values. `old_value` will also be present on update messages,
+     * containing the previous value for changed columns.
      *
      * Setting `replica` to `full` will obviously result in higher bandwidth
      * usage and so is not recommended.
@@ -130,7 +142,7 @@ export interface ShapeStreamOptions<T = never> {
    * will handle this automatically. A common scenario where you might pass an offset
    * is if you're maintaining a local cache of the log. If you've gone offline
    * and are re-starting a ShapeStream to catch-up to the latest state of the Shape,
-   * you'd pass in the last offset and shapeId you'd seen from the Electric server
+   * you'd pass in the last offset and shapeHandle you'd seen from the Electric server
    * so it knows at what point in the shape to catch you up from.
    */
   offset?: Offset
@@ -139,7 +151,7 @@ export interface ShapeStreamOptions<T = never> {
    * Similar to `offset`, this isn't typically used unless you're maintaining
    * a cache of the shape log.
    */
-  shapeId?: string
+  shapeHandle?: string
 
   /**
    * HTTP headers to attach to requests made by the client.
@@ -200,6 +212,7 @@ Note that certain parameter names are reserved for Electric's internal use and c
 The following PostgreSQL-specific parameters should be included within the `params` object:
 - `table` - The root table for the shape
 - `where` - SQL where clause for filtering rows
+- `params` - Values for positional parameters in the where clause (e.g. `$1`)
 - `columns` - List of columns to include
 - `replica` - Controls whether to send full or partial row updates
 
@@ -209,8 +222,9 @@ const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   params: {
     table: 'users',
-    where: 'age > 18',
+    where: 'age > $1',
     columns: ['id', 'name', 'email'],
+    params: ["18"],
     replica: 'full'
   }
 })
@@ -260,6 +274,7 @@ A `ShapeStream` consumes and emits a stream of messages. These messages can eith
 export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
+  old_value?: Partial<T> // Only provided for updates if `replica` is `full`
   headers: Header & { operation: `insert` | `update` | `delete` }
   offset: Offset
 }
@@ -316,7 +331,7 @@ By default Electric sends the modified columns in an update message, not the com
 - an `update` operation contains the primary key column(s) and the changed columns
 - a `delete` operation contains just the primary key column(s)
 
-If you'd like to recieve the full row value for updates and deletes, you can set the `replica` option of your `ShapeStream` to `full`:
+If you'd like to receive the full row value for updates and deletes, you can set the `replica` option of your `ShapeStream` to `full`:
 
 ```tsx
 import { ShapeStream } from "@electric-sql/client"
@@ -329,6 +344,12 @@ const stream = new ShapeStream({
   }
 })
 ```
+
+When using `replica=full`, the returned rows will include:
+
+- on `insert` the new value in `msg.value`
+- on `update` the new value in `msg.value` and the previous value in `msg.old_value` for any changed columns - the full previous state can be reconstructed by combining the two
+- on `delete` the full previous value in `msg.value`
 
 This is less efficient and will use more bandwidth for the same shape (especially for tables with large static column values). Note also that shapes with different `replica` settings are distinct, even for the same table and where clause combination.
 

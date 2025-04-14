@@ -201,16 +201,52 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_handle)
   end
 
+  describe "least_recently_used/2" do
+    test "returns last shape update_last_read_time_to_now was called on", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+      ShapeStatus.update_last_read_time_to_now(state, shape2)
+      ShapeStatus.update_last_read_time_to_now(state, shape1)
+
+      assert [%{shape_handle: ^shape2}] = ShapeStatus.least_recently_used(state, _count = 1)
+    end
+
+    test "returns shape first created if update_last_read_time_to_now has not been called", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      assert [%{shape_handle: ^shape1}] = ShapeStatus.least_recently_used(state, _count = 1)
+    end
+
+    test "returns empty list if no shapes have been added", ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      assert [] == ShapeStatus.least_recently_used(state, _count = 1)
+    end
+
+    test "returns empty list if all shapes have been deleted", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+      ShapeStatus.remove_shape(state, shape1)
+      ShapeStatus.remove_shape(state, shape2)
+
+      assert [] == ShapeStatus.least_recently_used(state, _count = 1)
+    end
+  end
+
   def load_column_info({"public", "other_table"}, _),
     do:
       {:ok,
        [
-         %{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0},
-         %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil}
+         %{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0, is_generated: false},
+         %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil, is_generated: false}
        ]}
 
   def load_column_info({"public", "table"}, _),
-    do: {:ok, [%{name: "id", type: :int8, pk_position: 0}]}
+    do: {:ok, [%{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0, is_generated: false}]}
 
   def load_relation(tbl, _),
     do: StubInspector.load_relation(tbl, nil)

@@ -107,6 +107,13 @@ defmodule Electric.ClientTest do
       assert {:error, _} = Client.new([])
     end
 
+    test "returns error if fetch opts are not valid for impl" do
+      endpoint = URI.new!("http://localhost:3000/some/random/path")
+
+      assert {:error, _} =
+               Client.new(endpoint: endpoint, fetch: {Electric.Client.Fetch.HTTP, invalid: true})
+    end
+
     test "params are appended to all requests" do
       params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
 
@@ -173,7 +180,6 @@ defmodule Electric.ClientTest do
             {Fetch.HTTP,
              [
                request: [
-                 retry_delay: fn _n -> 50 end,
                  retry_log_level: false,
                  max_retries: 3,
                  connect_options: [protocols: [:http1]]
@@ -583,7 +589,7 @@ defmodule Electric.ClientTest do
 
       # see https://hexdocs.pm/req/Req.Steps.html#retry/1 for the list of
       # "safe" responses that will be retried
-      retry_statuses = [408, 429, 500, 502, 503, 504]
+      retry_statuses = [408, 429, 500, 502, 503, 504, 530, 599]
 
       {:ok, responses} =
         start_supervised({Agent,
@@ -648,6 +654,22 @@ defmodule Electric.ClientTest do
           fun.(conn)
       end)
 
+      {:ok, client} =
+        Client.new(
+          base_url: "http://localhost:#{ctx.bypass.port}",
+          fetch:
+            {Fetch.HTTP,
+             [
+               is_transient_fun: &Fetch.HTTP.transient_response?(&1, retry_statuses),
+               request: [
+                 connect_options: [timeout: 100, protocols: [:http1]],
+                 retry_delay: fn _n -> 50 end,
+                 retry_log_level: false,
+                 max_retries: 10
+               ]
+             ]}
+        )
+
       assert [
                %ChangeMessage{
                  headers: @insert,
@@ -659,7 +681,7 @@ defmodule Electric.ClientTest do
                  value: %{"id" => "2222"}
                },
                up_to_date(9999)
-             ] = stream(ctx, 4)
+             ] = Client.stream(client, ctx.shape, []) |> Enum.take(4)
     end
 
     test "redirects to another shape id when given a 409", ctx do

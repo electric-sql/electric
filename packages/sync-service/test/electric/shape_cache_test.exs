@@ -24,15 +24,8 @@ defmodule Electric.ShapeCacheTest do
   @shape %Shape{
     root_table: {"public", "items"},
     root_table_id: 1,
-    table_info: %{
-      {"public", "items"} => %{
-        columns: [
-          %{name: "id", type: :text, type_id: {25, 1}},
-          %{name: "value", type: :text, type_id: {25, 1}}
-        ],
-        pk: ["id"]
-      }
-    }
+    root_pk: ["id"],
+    selected_columns: ["id", "value"]
   }
   @lsn Electric.Postgres.Lsn.from_integer(13)
   @change_offset LogOffset.new(@lsn, 2)
@@ -51,8 +44,14 @@ defmodule Electric.ShapeCacheTest do
   @zero_offset LogOffset.last_before_real_offsets()
 
   @stub_inspector StubInspector.new([
-                    %{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0},
-                    %{name: "value", type: "text", type_id: {25, 1}}
+                    %{
+                      name: "id",
+                      type: "int8",
+                      type_id: {20, 1},
+                      pk_position: 0,
+                      is_generated: false
+                    },
+                    %{name: "value", type: "text", type_id: {25, 1}, is_generated: false}
                   ])
 
   # {xmin, xmax, xip_list}
@@ -73,11 +72,10 @@ defmodule Electric.ShapeCacheTest do
     %{inspector: @stub_inspector, run_with_conn_fn: fn _, cb -> cb.(:connection) end}
   end
 
-  setup :with_persistent_kv
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
 
   describe "get_or_create_shape_handle/2" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_no_pool,
@@ -107,7 +105,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_handle/2 shape initialization" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -208,11 +205,68 @@ defmodule Electric.ShapeCacheTest do
 
       assert_received {:called, :create_snapshot_fn}
     end
+
+    test "expires shapes if shape count has gone over max_shapes", ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
+          run_with_conn_fn: &run_with_conn_noop/2,
+          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
+            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+            Storage.make_new_snapshot!([["test"]], storage)
+            GenServer.cast(parent, {:snapshot_started, shape_handle})
+          end,
+          max_shapes: 1
+        )
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      Process.sleep(50)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      Storage.append_to_log!(
+        changes_to_log_items([
+          %Electric.Replication.Changes.NewRecord{
+            relation: {"public", "items"},
+            record: %{"id" => "1", "value" => "Alice"},
+            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+          }
+        ]),
+        storage
+      )
+
+      assert Storage.snapshot_started?(storage)
+
+      assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
+               1
+
+      {module, _} = storage
+
+      ref =
+        Process.monitor(
+          module.name(ctx.stack_id, shape_handle)
+          |> GenServer.whereis()
+        )
+
+      {new_shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(%{@shape | where: "1 == 1"}, opts)
+
+      Process.sleep(50)
+      assert :started = ShapeCache.await_snapshot_start(new_shape_handle, opts)
+
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+
+      assert_raise ArgumentError,
+                   ~r"the table identifier does not refer to an existing ETS table",
+                   fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
+
+      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      assert shape_handle != shape_handle2
+    end
   end
 
   describe "get_or_create_shape_handle/2 against real db" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -268,18 +322,7 @@ defmodule Electric.ShapeCacheTest do
       storage: storage,
       shape_cache_opts: opts
     } do
-      shape =
-        update_in(
-          @shape.table_info[{"public", "items"}].columns,
-          &(&1 ++
-              [
-                %{name: "date", type: :date},
-                %{name: "timestamptz", type: :timestamptz},
-                %{name: "float", type: :float8},
-                %{name: "bytea", type: :bytea},
-                %{name: "interval", type: :interval}
-              ])
-        )
+      shape = %{@shape | selected_columns: ~w|id value date timestamptz float bytea interval|}
 
       Postgrex.query!(
         pool,
@@ -338,10 +381,7 @@ defmodule Electric.ShapeCacheTest do
       shape = %Shape{
         @shape
         | root_table: {"public", "nonexistent"},
-          root_table_id: 2,
-          table_info: %{
-            {"public", "nonexistent"} => Map.fetch!(@shape.table_info, @shape.root_table)
-          }
+          root_table_id: 2
       }
 
       {shape_handle, log} =
@@ -375,15 +415,8 @@ defmodule Electric.ShapeCacheTest do
       shape = %Shape{
         root_table: {"public", "partitioned_items"},
         root_table_id: 1,
-        table_info: %{
-          {"public", "partitioned_items"} => %{
-            columns: [
-              %{name: "a", type: "int4", type_id: {23, -1}, pk_position: 0},
-              %{name: "b", type: "int4", type_id: {23, -1}, pk_position: 1}
-            ],
-            pk: ["a", "b"]
-          }
-        }
+        root_pk: ["a", "b"],
+        selected_columns: ["a", "b"]
       }
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.shape_cache_opts)
@@ -407,7 +440,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "list_shapes/1" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -477,7 +509,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "has_shape?/2" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -518,7 +549,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "await_snapshot_start/4" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -690,7 +720,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_shape/2" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
@@ -771,7 +800,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_all_shapes/1" do
     setup [
-      :with_stack_id_from_test,
       :with_in_memory_storage,
       :with_tracing_storage,
       :with_log_chunking,
@@ -822,7 +850,6 @@ defmodule Electric.ShapeCacheTest do
     end
 
     setup [
-      :with_stack_id_from_test,
       :with_cub_db_storage,
       :with_log_chunking,
       :with_registry,
@@ -921,17 +948,80 @@ defmodule Electric.ShapeCacheTest do
       assert {^shape_handle, ^offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
     end
 
-    defp restart_shape_cache(context) do
-      stop_shape_cache(context)
-      # Wait 1 millisecond to ensure shape handles are not generated the same
-      Process.sleep(1)
+    test "invalidates shapes that we fail to restore", %{shape_cache_opts: opts} = context do
+      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
-      with_shape_cache(Map.put(context, :inspector, @stub_inspector),
-        create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
-          GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-          Storage.make_new_snapshot!([["test"]], storage)
-          GenServer.cast(parent, {:snapshot_started, shape_handle})
-        end
+      Mock.PublicationManager
+      |> stub(:remove_shape, fn _, _ -> :ok end)
+      |> expect(:recover_shape, 1, fn _, _ -> :ok end)
+      |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
+      |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
+      |> allow(self(), fn -> Process.whereis(opts[:server]) end)
+
+      # Should fail to start shape cache and clean up shapes
+      Process.flag(:trap_exit, true)
+
+      assert_raise MatchError, ~r/%RuntimeError{message: \"failed recovery\"/, fn ->
+        restart_shape_cache(%{
+          context
+          | publication_manager: {Mock.PublicationManager, []}
+        })
+      end
+
+      Process.flag(:trap_exit, false)
+
+      # Next restart should not recover shape
+      restart_shape_cache(context)
+      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
+      assert shape_handle1 != shape_handle2
+    end
+
+    defmodule SlowPublicationManager do
+      def refresh_publication(_), do: :ok
+      def remove_shape(_, _), do: :ok
+      def recover_shape(_, _), do: Process.sleep(100)
+    end
+
+    test "deletes shapes that fail to initialise within a timeout", ctx do
+      %{shape_cache_opts: opts} = ctx
+
+      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
+
+      Mock.Storage
+      |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, [{shape_handle1, @shape}]} end)
+      |> stub(:for_shape, fn handle, _opts -> {:storage, handle} end)
+      |> expect(:unsafe_cleanup!, 1, fn {:storage, ^shape_handle1} ->
+        :ok
+      end)
+      |> allow(self(), fn -> Process.whereis(opts[:server]) end)
+
+      restart_shape_cache(
+        %{
+          ctx
+          | publication_manager: {SlowPublicationManager, []},
+            storage: {Mock.Storage, []}
+        },
+        recover_shape_timeout: 10
+      )
+    end
+
+    defp restart_shape_cache(context, opts \\ []) do
+      stop_shape_cache(context)
+
+      context = Map.merge(context, with_shape_log_collector(context))
+
+      with_shape_cache(
+        Map.put(context, :inspector, @stub_inspector),
+        Keyword.merge(opts,
+          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
+            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+            Storage.make_new_snapshot!([["test"]], storage)
+            GenServer.cast(parent, {:snapshot_started, shape_handle})
+          end
+        )
       )
     end
 
@@ -944,18 +1034,24 @@ defmodule Electric.ShapeCacheTest do
           {pid, Process.monitor(pid)}
         end
 
-      Shapes.DynamicConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
+      if Enum.count(consumers) > 0 do
+        Shapes.DynamicConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
+      end
 
       for {pid, ref} <- consumers do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}
       end
 
-      stop_processes([shape_cache_opts[:server], ctx.consumer_supervisor])
+      stop_processes([
+        shape_cache_opts[:server],
+        ctx.shape_log_collector,
+        ctx.consumer_supervisor
+      ])
     end
 
     defp stop_processes(process_names) do
       processes =
-        for name <- process_names, pid = Process.whereis(name) do
+        for name <- process_names, pid = GenServer.whereis(name) do
           Process.unlink(pid)
           Process.monitor(pid)
           Process.exit(pid, :kill)

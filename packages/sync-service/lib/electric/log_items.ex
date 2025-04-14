@@ -35,7 +35,7 @@ defmodule Electric.LogItems do
            operation: :insert,
            txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
-           lsn: change.log_offset.tx_offset,
+           lsn: to_string(change.log_offset.tx_offset),
            op_position: change.log_offset.op_offset
          }
        }}
@@ -52,7 +52,7 @@ defmodule Electric.LogItems do
            operation: :delete,
            txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
-           lsn: change.log_offset.tx_offset,
+           lsn: to_string(change.log_offset.tx_offset),
            op_position: change.log_offset.op_offset
          }
        }}
@@ -69,7 +69,7 @@ defmodule Electric.LogItems do
            operation: :update,
            txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
-           lsn: change.log_offset.tx_offset,
+           lsn: to_string(change.log_offset.tx_offset),
            op_position: change.log_offset.op_offset
          }
        }
@@ -90,7 +90,7 @@ defmodule Electric.LogItems do
            txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
            key_change_to: change.key,
-           lsn: change.log_offset.tx_offset,
+           lsn: to_string(change.log_offset.tx_offset),
            op_position: change.log_offset.op_offset
          }
        }},
@@ -103,7 +103,7 @@ defmodule Electric.LogItems do
            txids: List.wrap(txids),
            relation: Tuple.to_list(change.relation),
            key_change_from: change.old_key,
-           lsn: new_offset.tx_offset,
+           lsn: to_string(new_offset.tx_offset),
            op_position: new_offset.op_offset
          }
        }}

@@ -9,8 +9,8 @@ outline: deep
 import { data as demosData } from '../data/demos.data.ts'
 const { demos } = demosData
 
+const aiChat = demos.find(x => x.link === '/demos/ai-chat')
 const linearlite = demos.find(x => x.link === '/demos/linearlite')
-const notes = demos.find(x => x.link === '/demos/notes')
 </script>
 
 <p class="intro-zap-container">
@@ -24,10 +24,10 @@ const notes = demos.find(x => x.link === '/demos/notes')
 
 Welcome to the ElectricSQL developer documentation!
 
-ElectricSQL is a Postgres sync engine. Use it to sync [little subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/data-sync), services and [environments](/use-cases/dev-and-test).
+ElectricSQL is a Postgres sync engine. Use it to sync [subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/data-sync), services and [environments](/use-cases/dev-and-test).
 
-> [!Tip] Electric BETA release
-> The Electric sync engine is now in BETA! See the [release post here](/blog/2024/12/10/electric-beta-release).
+> [!Warning] 🚀 Latest releases
+> Electric is [now 1.0](/blog/2025/03/17/electricsql-1.0-released) and Cloud is now [in public BETA](/blog/2025/04/07/electric-cloud-public-beta-release)!
 
 ## New to ElectricSQL?
 
@@ -45,8 +45,8 @@ The easiest way to use Electric in production is the [Electric Cloud](/product/c
 See the [Demos](/demos) section and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demo apps and examples, e.g.:
 
 <div class="demos-grid">
+  <DemoListing :demo="aiChat"/>
   <DemoListing :demo="linearlite"/>
-  <DemoListing :demo="notes"/>
 </div>
 
 The integration docs also illustrate common patterns, e.g. using Electric with frameworks like [TanStack](/docs/integrations/tanstack) and [Phoenix](/docs/integrations/phoenix) and platforms like [Supabase](/docs/integrations/supabase) and [Cloudflare](/docs/integrations/cloudflare).

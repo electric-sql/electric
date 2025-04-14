@@ -11,5 +11,6 @@ export const OFFSET_QUERY_PARAM = `offset`
 export const TABLE_QUERY_PARAM = `table`
 export const WHERE_QUERY_PARAM = `where`
 export const REPLICA_PARAM = `replica`
+export const WHERE_PARAMS_PARAM = `params`
 export const FORCE_DISCONNECT_AND_REFRESH = `force-disconnect-and-refresh`
 export const PAUSE_STREAM = `pause-stream`

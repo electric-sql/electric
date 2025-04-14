@@ -77,19 +77,23 @@ defmodule Electric.Shapes.Filter do
   @spec affected_shapes(Filter.t(), Transaction.t() | Relation.t()) :: MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
     OpenTelemetry.timed_fun("filter.affected_shapes.duration_µs", fn ->
-      shapes_affected_by_change(filter, change)
-    end)
-  rescue
-    error ->
-      Logger.error("""
-      Unexpected error in Filter.affected_shapes:
-      #{Exception.format(:error, error, __STACKTRACE__)}
-      """)
+      try do
+        shapes_affected_by_change(filter, change)
+      rescue
+        error ->
+          Logger.error("""
+          Unexpected error in Filter.affected_shapes:
+          #{Exception.format(:error, error, __STACKTRACE__)}
+          """)
 
-      # We can't tell which shapes are affected, the safest thing to do is return all shapes
-      filter
-      |> all_shapes()
-      |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
+          OpenTelemetry.record_exception(:error, error, __STACKTRACE__)
+
+          # We can't tell which shapes are affected, the safest thing to do is return all shapes
+          filter
+          |> all_shapes()
+          |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
+      end
+    end)
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %Relation{} = relation) do

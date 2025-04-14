@@ -78,4 +78,12 @@ defmodule Support.TestUtils do
       log_offset: offset
     )
   end
+
+  def set_status_to_active(%{stack_id: stack_id}) do
+    Electric.StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+    Electric.StatusMonitor.mark_replication_client_ready(stack_id, self())
+    Electric.StatusMonitor.mark_connection_pool_ready(stack_id, self())
+    Electric.StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+    Electric.StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+  end
 end

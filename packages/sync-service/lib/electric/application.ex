@@ -63,6 +63,7 @@ defmodule Electric.Application do
   end
 
   @doc false
+  # REQUIRED (but undocumented) public API for Phoenix.Sync
   def api_plug_opts(opts \\ []) do
     opts
     |> api_configuration()
@@ -71,7 +72,9 @@ defmodule Electric.Application do
 
   # Gets a complete configuration for the `StackSupervisor` based on the passed opts
   # plus the application configuration and the defaults.
-  defp configuration(opts \\ []) do
+  # REQUIRED (but undocumented) public API for Phoenix.Sync
+  @doc false
+  def configuration(opts \\ []) do
     instance_id = Electric.Config.ensure_instance_id()
 
     core_config = core_configuration(opts)
@@ -84,10 +87,14 @@ defmodule Electric.Application do
 
     slot_name = Keyword.get(opts, :slot_name, "electric_slot_#{replication_stream_id}")
 
+    replication_connection_opts = get_env!(opts, :replication_connection_opts)
+
     Keyword.merge(
       core_config,
-      connection_opts: get_env!(opts, :connection_opts),
+      connection_opts:
+        get_env_with_default(opts, :query_connection_opts, replication_connection_opts),
       replication_opts: [
+        connection_opts: replication_connection_opts,
         publication_name: publication_name,
         slot_name: slot_name,
         slot_temporary?: get_env(opts, :replication_slot_temporary?)
@@ -95,7 +102,8 @@ defmodule Electric.Application do
       pool_opts: get_env_with_default(opts, :pool_opts, pool_size: get_env(opts, :db_pool_size)),
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
       telemetry_opts:
-        telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts)
+        telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts),
+      max_shapes: get_env(opts, :max_shapes)
     )
   end
 
@@ -109,7 +117,8 @@ defmodule Electric.Application do
       stale_age: get_env(opts, :cache_stale_age),
       allow_shape_deletion: get_env(opts, :allow_shape_deletion?),
       stack_ready_timeout: get_env(opts, :stack_ready_timeout),
-      send_cache_headers?: get_env(opts, :send_cache_headers?)
+      send_cache_headers?: get_env(opts, :send_cache_headers?),
+      secret: Application.get_env(:electric, :secret)
     )
     |> Keyword.merge(Keyword.take(opts, [:encoder]))
   end
@@ -197,6 +206,7 @@ defmodule Electric.Application do
   end
 
   @doc false
+  # REQUIRED (but undocumented) public API for Phoenix.Sync
   def api_server do
     api_server(Bandit, [])
   end

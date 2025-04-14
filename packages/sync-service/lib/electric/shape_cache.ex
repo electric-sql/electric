@@ -23,10 +23,13 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
+  alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -59,7 +62,12 @@ defmodule Electric.ShapeCache do
               type: {:fun, 7},
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
             ],
-            purge_all_shapes?: [type: :boolean, required: false]
+            purge_all_shapes?: [type: :boolean, required: false],
+            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
+            recover_shape_timeout: [
+              type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
+              default: 5_000
+            ]
           )
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
@@ -139,6 +147,8 @@ defmodule Electric.ShapeCache do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
     stack_id = Access.fetch!(opts, :stack_id)
 
+    shape_status.update_last_read_time_to_now(table, shape_handle)
+
     cond do
       shape_status.snapshot_started?(table, shape_handle) ->
         :started
@@ -148,7 +158,20 @@ defmodule Electric.ShapeCache do
 
       true ->
         server = Electric.Shapes.Consumer.name(stack_id, shape_handle)
-        GenServer.call(server, :await_snapshot_start)
+
+        try do
+          GenServer.call(server, :await_snapshot_start, 15_000)
+        catch
+          :exit, {:timeout, {GenServer, :call, _}} ->
+            Logger.error("Failed to await snapshot start for shape #{shape_handle}: timeout")
+            {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
+
+          :exit, {:noproc, _} ->
+            # The fact that we got the shape handle means we know the shape exists, and the process should
+            # exist too. We can get here if registry didn't propagate registration across partitions yet, so
+            # we'll just retry.
+            await_snapshot_start(shape_handle, opts)
+        end
     end
   end
 
@@ -196,29 +219,49 @@ defmodule Electric.ShapeCache do
       log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
-      subscription: nil
+      subscription: nil,
+      max_shapes: opts.max_shapes
     }
 
-    if opts[:purge_all_shapes?] do
-      clean_up_all_shapes(state)
-    else
-      recover_shapes(state)
-    end
+    last_processed_lsn =
+      if opts[:purge_all_shapes?] do
+        clean_up_all_shapes(state)
+        Lsn.from_integer(0)
+      else
+        recover_shapes(state, opts[:recover_shape_timeout])
+      end
 
-    # ensure publication filters are in line with existing shapes
+    # ensure publication filters are in line with existing shapes,
+    # and clean up cache if publication fails to update
     {publication_manager, publication_manager_opts} = opts.publication_manager
-    publication_manager.refresh_publication(publication_manager_opts)
+
+    try do
+      :ok = publication_manager.refresh_publication(publication_manager_opts)
+    rescue
+      error ->
+        clean_up_all_shapes(state)
+        reraise error, __STACKTRACE__
+    catch
+      :exit, reason ->
+        clean_up_all_shapes(state)
+        exit(reason)
+    end
 
     # do this after finishing this function so that we're subscribed to the
     # producer before it starts forwarding its demand
-    send(self(), :consumers_ready)
+    send(self(), {:consumers_ready, last_processed_lsn})
 
     {:ok, state}
   end
 
   @impl GenServer
-  def handle_info(:consumers_ready, state) do
-    :ok = GenStage.demand(state.log_producer, :forward)
+  def handle_info({:consumers_ready, last_processed_lsn}, state) do
+    ShapeLogCollector.start_processing(state.log_producer, last_processed_lsn)
+    {:noreply, state}
+  end
+
+  def handle_info(:maybe_expire_shapes, state) do
+    maybe_expire_shapes(state)
     {:noreply, state}
   end
 
@@ -234,6 +277,7 @@ defmodule Electric.ShapeCache do
       else
         {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
         {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
+        send(self(), :maybe_expire_shapes)
         {{shape_handle, latest_offset}, state}
       end
 
@@ -265,16 +309,58 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, state}
   end
 
-  defp clean_up_shape(state, shape_handle) do
-    Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-      state.consumer_supervisor,
-      state.stack_id,
-      shape_handle
-    )
+  defp maybe_expire_shapes(%{max_shapes: max_shapes} = state) when max_shapes != nil do
+    shape_count = shape_count(state)
 
-    shape_handle
-    |> Electric.ShapeCache.Storage.for_shape(state.storage)
-    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+    if shape_count > max_shapes do
+      number_to_expire = shape_count - max_shapes
+
+      state.shape_status_state
+      |> state.shape_status.least_recently_used(number_to_expire)
+      |> Enum.each(fn shape ->
+        OpenTelemetry.with_span(
+          "expiring_shape",
+          [
+            shape_handle: shape.shape_handle,
+            max_shapes: max_shapes,
+            shape_count: shape_count,
+            elapsed_minutes_since_use: shape.elapsed_minutes_since_use
+          ],
+          fn ->
+            Logger.info(
+              "Expiring shape #{shape.shape_handle} as as the number of shapes " <>
+                "has exceeded the limit (#{state.max_shapes})"
+            )
+
+            clean_up_shape(state, shape.shape_handle)
+          end
+        )
+      end)
+    end
+  end
+
+  defp maybe_expire_shapes(_), do: :ok
+
+  defp shape_count(%{shape_status: shape_status, shape_status_state: shape_status_state}) do
+    shape_status_state
+    |> shape_status.list_shapes()
+    |> length()
+  end
+
+  defp clean_up_shape(state, shape_handle) do
+    try do
+      Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
+        state.consumer_supervisor,
+        state.stack_id,
+        shape_handle
+      )
+    after
+      # another failsafe for ensuring data is cleaned if consumer fails to
+      # clean itself - this is not guaranteed to run in case of an actual exit
+      # but provides an additional safeguard
+
+      unsafe_cleanup_shape!(shape_handle, state)
+    end
 
     :ok
   end
@@ -288,26 +374,59 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp recover_shapes(state) do
-    %{publication_manager: {publication_manager, publication_manager_opts}} = state
-
+  defp recover_shapes(state, timeout) do
     state.shape_status_state
     |> state.shape_status.list_shapes()
-    |> Enum.each(fn {shape_handle, shape} ->
-      try do
-        {:ok, _latest_offset} = start_shape(shape_handle, shape, state)
-
-        # recover publication filter state
-        publication_manager.recover_shape(shape, publication_manager_opts)
-      rescue
-        e ->
-          Logger.error("Failed to recover shape #{shape_handle}: #{inspect(e)}")
-
-          # clean up corrupted data to avoid persisting bad state
-          Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage)
-          |> Electric.ShapeCache.Storage.unsafe_cleanup!()
-      end
+    |> Enum.flat_map(fn {shape_handle, shape} ->
+      start_shape_with_timeout(shape_handle, shape, state, timeout)
     end)
+    |> Lsn.max()
+  end
+
+  # the shape cache loads existing shapes within its init/1 callback
+  # which is useful because we know that when the start_link call on the
+  # stack completes the system is fully booted and all shape consumers are
+  # running.
+  #
+  # rather than set a global timeout for the `init/1` function we leave the
+  # `start_link/1` timeout as `:infinity` and instead have a timeout for every
+  # shape
+  defp start_shape_with_timeout(shape_handle, shape, state, timeout) do
+    task = Task.async(fn -> start_and_recover_shape(shape_handle, shape, state) end)
+
+    # since we catch errors in the task we don't need to handle the error state here
+    case Task.yield(task, timeout) || Task.shutdown(task) do
+      {:ok, lsn} ->
+        lsn
+
+      nil ->
+        unsafe_cleanup_shape!(shape_handle, state)
+
+        Logger.error(
+          "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
+        )
+
+        []
+    end
+  end
+
+  defp start_and_recover_shape(shape_handle, shape, state) do
+    %{publication_manager: {publication_manager, publication_manager_opts}} = state
+
+    {:ok, latest_offset} = start_shape(shape_handle, shape, state)
+
+    # recover publication filter state
+    publication_manager.recover_shape(shape, publication_manager_opts)
+    [LogOffset.extract_lsn(latest_offset)]
+  catch
+    kind, reason when kind in [:exit, :error] ->
+      Logger.error(
+        "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
+      )
+
+      # clean up corrupted data to avoid persisting bad state
+      unsafe_cleanup_shape!(shape_handle, state)
+      []
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
@@ -333,6 +452,12 @@ defmodule Electric.ShapeCache do
       {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
       {:ok, latest_offset}
     end
+  end
+
+  defp unsafe_cleanup_shape!(shape_handle, state) do
+    shape_handle
+    |> Electric.ShapeCache.Storage.for_shape(state.storage)
+    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
   end
 
   def get_shape_meta_table(opts),

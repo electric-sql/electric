@@ -9,12 +9,25 @@ info:
 
     See the [Electric documentation](https://electric-sql.com/docs/intro)
     for more information.
-  # FIXME: set version dynamically
-  # version: 0.0.1
+  version: __PLACEHOLDER_SYNC_SERVICE_VERSION__
 
 servers:
   - url: http://localhost:3000
     description: Local server
+
+components:
+  parameters:
+    secret:
+      name: secret
+      in: query
+      schema:
+        type: string
+      example: 1U6ItbhoQb4kGUU5wXBLbxvNf
+      description: |-
+        Secret defined by the [ELECTRIC_SECRET](https://electric-sql.com/docs/api/config#electric-secret)
+        configuration variable. This is required unless
+        `ELECTRIC_INSECURE` is set to `true`. More details are
+        available in the [security guide](https://electric-sql.com/docs/guides/security).
 
 paths:
   /v1/shape:
@@ -46,7 +59,6 @@ paths:
             Can be just a tablename, or can be prefixed by the database schema
             using a `.` delimiter, such as `foo.issues`. If you don't provide
             a schema prefix, then the table is assumed to be in the `public.` schema.
-        # Query parameters
         - name: offset
           in: query
           schema:
@@ -116,6 +128,9 @@ paths:
 
             For more details on what is supported and what is optimal,
             see the [where clause documentation](https://electric-sql.com/docs/guides/shapes#where-clause).
+
+            If this where clause uses a positional parameter, it's value must be provided under `params[n]=`
+            query parameter.
           examples:
             title_filter:
               value: '"title=''Electric''"'
@@ -123,7 +138,28 @@ paths:
             status_filter:
               value: '"status IN (''backlog'', ''todo'')"'
               summary: Only include rows whose status is either 'backlog' or 'todo'.
+        - name: params
+          in: query
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            pattenProperties:
+              '^\d+$':
+                type: string
+          description: |-
+            Optional params to replace inside the where clause. Uses an "exploded object" syntax (see examples).
 
+            These values will be safely interpolated inside the where clause, so you don't need to worry about
+            escaping user input when building a where clause.
+
+            If where clause mentions a posisional parameter, it becomes required to provide it.
+          examples:
+            params:
+              value:
+                1: value1
+              summary: replace placeholder `$1` inside the where clause with `value1`
+              
         - name: columns
           in: query
           schema:
@@ -149,7 +185,7 @@ paths:
             type: string
             enum:
               - default
-              - all
+              - full
           description: |-
             Modifies the data sent in update and delete change messages.
 
@@ -158,10 +194,12 @@ paths:
             keys are sent for a delete.
 
             When set to `full` the entire row will be sent for updates and
-            deletes.
+            deletes. `old_value` will also be present on update messages,
+            containing the previous value for changed columns.
 
             Note that insert operations always include the full row,
             in either mode.
+        - $ref: '#/components/parameters/secret'
         # Headers
         - name: If-None-Match
           in: header
@@ -331,6 +369,12 @@ paths:
                         - `TimeZone = 'UTC'`
                         - `IntervalStyle = 'iso_8601'`
                         - `extra_float_digits = 1`
+                    old_value:
+                      type: object
+                      description: |-
+                        The previous value for changed columns on an update.
+
+                        Only present on update messages when `replica=full`.
                 example:
                   - headers:
                       operation: insert
@@ -352,21 +396,6 @@ paths:
                       status: backlog
                   - headers:
                       control: up-to-date
-        "204":
-          description: >-
-            No content. The `live=true` polling request timed out without
-            any new content to process.
-          headers:
-            electric-cursor:
-              schema:
-                type: string
-              example: "1674440"
-              description: |-
-                Provides a cursor to use as the value of the `cursor` parameter
-                in the next long polling request.
-
-                This works around some inconsistent request coalescing behaviour
-                with different CDNs.
         "400":
           description: Bad request.
         "404":
@@ -452,7 +481,6 @@ paths:
             The name of the table for which to delete the shape.
 
             Can be qualified by the schema name.
-        # Query parameters
         - name: source_id
           in: query
           schema:
@@ -468,6 +496,7 @@ paths:
           description:
             Optional, deletes the current shape if it matches the `handle` provided.
             If not provided, deletes the current shape.
+        - $ref: '#/components/parameters/secret'
       responses:
         "202":
           description: |-

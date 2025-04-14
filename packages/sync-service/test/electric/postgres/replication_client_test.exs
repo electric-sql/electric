@@ -1,12 +1,14 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
 
-  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+  import Support.ComponentSetup, only: [with_stack_id_from_test: 1, with_status_monitor: 1]
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
 
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
+  alias Electric.StatusMonitor
 
   alias Electric.Replication.Changes.{
     DeletedRecord,
@@ -19,34 +21,53 @@ defmodule Electric.Postgres.ReplicationClientTest do
   @publication_name "test_electric_publication"
   @slot_name "test_electric_slot"
 
+  # Larger than average timeout for assertions that require
+  # seeing changes back from the database, as it can be especially
+  # slow on CI/Docker etc
+  @assert_receive_db_timeout 1000
+
+  defmodule MockConnectionManager do
+    def receive_casts(test_pid) do
+      receive do
+        message ->
+          if response = process_message(message) do
+            send(test_pid, response)
+          end
+
+          receive_casts(test_pid)
+      end
+    end
+
+    defp process_message({:"$gen_cast", :replication_connection_initializing}), do: nil
+    defp process_message({:"$gen_cast", {:pg_info_looked_up, _}}), do: nil
+
+    defp process_message({:"$gen_cast", :replication_connection_established}),
+      do: {self(), :ready_to_stream}
+  end
+
   setup do
     # Spawn a dummy process to serve as the black hole for the messages that
     # ReplicationClient normally sends to Connection.Manager.
-    pid =
-      spawn_link(fn ->
-        receive do
-          _ -> :ok
-        end
-      end)
-
-    %{dummy_pid: pid}
+    pid = spawn_link(MockConnectionManager, :receive_casts, [self()])
+    %{connection_manager: pid}
   end
 
   setup :with_stack_id_from_test
 
   describe "ReplicationClient init" do
-    setup [:with_unique_db, :with_basic_tables]
+    setup [:with_unique_db, :with_basic_tables, :with_status_monitor]
 
     test "creates an empty publication on startup if requested",
-         %{db_conn: conn, dummy_pid: dummy_pid} = ctx do
+         %{db_conn: conn, connection_manager: connection_manager} = ctx do
       replication_opts = [
+        connection_opts: ctx.db_config,
         stack_id: ctx.stack_id,
         publication_name: @publication_name,
         try_creating_publication?: true,
         slot_name: @slot_name,
         transaction_received: nil,
         relation_received: nil,
-        connection_manager: dummy_pid
+        connection_manager: connection_manager
       ]
 
       start_client(ctx, replication_opts: replication_opts)
@@ -59,7 +80,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   describe "ReplicationClient against real db" do
-    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_replication_opts,
+      :with_status_monitor
+    ]
 
     test "calls a provided function when receiving it from the PG", %{db_conn: conn} = ctx do
       start_client(ctx)
@@ -82,13 +109,29 @@ defmodule Electric.Postgres.ReplicationClientTest do
       log =~ "Started replication from postgres"
     end
 
+    test "notifies the StatusMonitor when it is ready", ctx do
+      Repatch.patch(StatusMonitor, :mark_replication_client_ready, [mode: :shared], fn _, _ ->
+        :ok
+      end)
+
+      client_pid = start_client(ctx)
+      Repatch.allow(self(), client_pid)
+
+      assert Repatch.called?(
+               StatusMonitor,
+               :mark_replication_client_ready,
+               [ctx.stack_id, client_pid],
+               by: :any
+             )
+    end
+
     test "works with an existing publication", %{replication_opts: replication_opts} = ctx do
       replication_opts = Keyword.put(replication_opts, :try_creating_publication?, true)
       start_client(ctx, replication_opts: replication_opts)
     end
 
     test "works with an existing replication slot", %{db_conn: conn} = ctx do
-      {:ok, pid} = start_client(ctx)
+      pid = start_client(ctx)
 
       assert %{
                "slot_name" => @slot_name,
@@ -111,7 +154,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     test "can replay already seen transaction", %{db_conn: conn} = ctx do
-      {:ok, pid} = start_client(ctx)
+      pid = start_client(ctx)
 
       insert_item(conn, "test value")
       assert %NewRecord{record: %{"value" => "test value"}} = receive_tx_change()
@@ -123,16 +166,20 @@ defmodule Electric.Postgres.ReplicationClientTest do
       monitor = Process.monitor(pid)
       Process.unlink(pid)
 
+      on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
+
       interrupt_val = "interrupt #{inspect(pid)}"
       insert_item(conn, interrupt_val)
 
       assert_receive {
-        :DOWN,
-        ^monitor,
-        :process,
-        ^pid,
-        {%RuntimeError{message: "Interrupting transaction processing abnormally"}, _stacktrace}
-      }
+                       :DOWN,
+                       ^monitor,
+                       :process,
+                       ^pid,
+                       {%RuntimeError{message: "Interrupting transaction processing abnormally"},
+                        _stacktrace}
+                     },
+                     @assert_receive_db_timeout
 
       refute_received _
 
@@ -154,7 +201,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       num_txn = 2
       num_ops = 8
       max_sleep = 20
-      receive_timeout = (num_txn + num_ops) * max_sleep * 2
+      receive_timeout = max((num_txn + num_ops) * max_sleep * 2, @assert_receive_db_timeout)
 
       # Insert `num_txn` transactions, each in a separate process. Every transaction has
       # `num_ops` INSERTs with a random delay between each operation.
@@ -244,7 +291,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   describe "ReplicationClient against real db (toast)" do
-    setup [:with_unique_db, :with_basic_tables, :with_publication, :with_replication_opts]
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_replication_opts,
+      :with_status_monitor
+    ]
 
     setup %{db_conn: conn} = ctx do
       Postgrex.query!(
@@ -326,7 +379,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: "",
         try_creating_publication?: false,
         slot_name: "",
-        connection_manager: ctx.dummy_pid
+        connection_manager: ctx.connection_manager
       )
 
     state = %{state | applied_wal: lsn_to_wal("0/0")}
@@ -347,13 +400,14 @@ defmodule Electric.Postgres.ReplicationClientTest do
   defp with_replication_opts(ctx) do
     %{
       replication_opts: [
+        connection_opts: ctx.db_config,
         stack_id: ctx.stack_id,
         publication_name: @publication_name,
         try_creating_publication?: false,
         slot_name: @slot_name,
         transaction_received: {__MODULE__, :test_transaction_received, [self()]},
         relation_received: {__MODULE__, :test_relation_received, [self()]},
-        connection_manager: ctx.dummy_pid
+        connection_manager: ctx.connection_manager
       ]
     }
   end
@@ -425,18 +479,25 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   defp receive_tx_change do
-    assert_receive {:from_replication, %Transaction{changes: [change]}}
+    assert_receive {:from_replication, %Transaction{changes: [change]}},
+                   @assert_receive_db_timeout
+
     change
   end
 
   defp start_client(ctx, overrides \\ []) do
     ctx = Enum.into(overrides, ctx)
 
-    {:ok, _pid} =
+    {:ok, client_pid} =
       ReplicationClient.start_link(
         stack_id: ctx.stack_id,
-        connection_opts: ctx.db_config,
         replication_opts: ctx.replication_opts
       )
+
+    conn_mgr = ctx.connection_manager
+    assert_receive {^conn_mgr, :ready_to_stream}, @assert_receive_db_timeout
+    ReplicationClient.start_streaming(client_pid)
+
+    client_pid
   end
 end

@@ -4,14 +4,7 @@ defmodule Electric do
     port: [type: :integer, required: true, doc: "Server port"],
     database: [type: :string, required: true, doc: "Database"],
     username: [type: :string, required: true, doc: "Username"],
-    password: [
-      type: {:fun, 0},
-      required: true,
-      doc:
-        "User password. To prevent leaking of the Pg password in logs and stack traces, you **must** wrap the password with a function." <>
-          " We provide `Electric.Utils.obfuscate_password/1` which will return the `connection_opts` with a wrapped password value.\n\n" <>
-          "    config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)"
-    ],
+    password: [type: {:or, [:string, {:fun, 0}]}, required: true, doc: "User password"],
     sslmode: [
       type: {:in, [:disable, :allow, :prefer, :require]},
       required: false,
@@ -68,7 +61,9 @@ defmodule Electric do
 
   ### Database
 
-  - `connection_opts` - **Required**
+  - `replication_connection_opts` - **Required**
+     #{NimbleOptions.docs(opts_schema, nest_level: 1)}.
+  - `query_connection_opts` - Optional separate connection string that can use a pooler for non-replication queries (default: nil)
      #{NimbleOptions.docs(opts_schema, nest_level: 1)}.
   - `db_pool_size` - How many connections Electric opens as a pool for handling shape queries (default: `#{default.(:db_pool_size)}`)
   - `replication_stream_id` - Suffix for the logical replication publication and slot name (default: `#{default.(:replication_stream_id)}`)

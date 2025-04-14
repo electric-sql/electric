@@ -1,4 +1,5 @@
 defmodule Electric.Shapes.Api do
+  alias Electric.Postgres.Inspector
   alias Electric.Replication.LogOffset
   alias Electric.Shapes
   alias Electric.Telemetry.OpenTelemetry
@@ -104,7 +105,9 @@ defmodule Electric.Shapes.Api do
   def plug_opts(opts) do
     {api, config} = configure(opts)
 
-    Keyword.put(config, :api, api)
+    config
+    |> Keyword.put(:api, api)
+    |> Keyword.put(:stack_id, api.stack_id)
   end
 
   defp validate_encoder!(%Api{} = api) do
@@ -230,6 +233,7 @@ defmodule Electric.Shapes.Api do
   defp seek(%Request{} = request) do
     request
     |> listen_for_new_changes()
+    |> determine_global_last_seen_lsn()
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
   end
@@ -257,23 +261,14 @@ defmodule Electric.Shapes.Api do
   end
 
   defp handle_shape_info(nil, %Request{} = request) do
-    %{params: %{shape_definition: shape, handle: shape_handle}, api: api} = request
-    # There is no shape that matches the shape definition (because shape info is `nil`)
-    if shape_handle != nil && Shapes.has_shape?(api, shape_handle) do
-      # but there is a shape that matches the shape handle
-      # thus the shape handle does not match the shape definition
-      # and we return a 400 bad request status code
-      {:error, Response.shape_definition_mismatch(request)}
-    else
-      # The shape handle does not exist or no longer exists
-      # e.g. it may have been deleted.
-      # Hence, create a new shape for this shape definition
-      # and return a 409 with a redirect to the newly created shape.
-      # (will be done by the recursive `handle_shape_info` call)
-      api
-      |> Shapes.get_or_create_shape_handle(shape)
-      |> handle_shape_info(request)
-    end
+    %{params: %{shape_definition: shape}, api: api} = request
+    # There is no shape that matches the shape definition (because shape info is `nil`).
+    # Hence, create a new shape for this shape definition
+    # and return a 409 with a redirect to the newly created shape.
+    # (will be done by the recursive `handle_shape_info` call)
+    api
+    |> Shapes.get_or_create_shape_handle(shape)
+    |> handle_shape_info(request)
   end
 
   defp handle_shape_info(
@@ -301,47 +296,41 @@ defmodule Electric.Shapes.Api do
 
   defp handle_shape_info(
          {active_shape_handle, _},
-         %Request{params: %{handle: shape_handle}} = request
+         %Request{} = request
        ) do
-    if Shapes.has_shape?(request.api, shape_handle) do
-      # The shape with the provided ID exists but does not match the shape definition
-      # otherwise we would have found it and it would have matched the previous function clause
-      {:error, Response.shape_definition_mismatch(request)}
-    else
-      # The requested shape_handle is not found, returns 409 along with a location redirect for clients to
-      # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
-      # e.g. GET /v1/shape?table={root_table}&handle={new_shape_handle}&offset=-1
+    # Either the requested shape handle exists or does not exist.
+    # If it exists there is a mismatch between the shape definition and the shape handle
+    # (otherwise we would have matched the previous function clause).
+    # The mismatch may occur because the shape definition has changed,
+    # which happens frequently when working with dependent shapes
+    # where a shape's WHERE clause is constructed based on the values of another shape
+    # (e.g. to load all children pointed at by a FK in a parent table).
 
-      # TODO: discuss returning a 307 redirect rather than a 409, the client
-      # will have to detect this and throw out old data
+    # If the shape handle does not exist, it may have never existed or it may have been deleted.
+    # In either case we return a 409 with a location redirect for clients to
+    # re-request the shape from scratch with the new shape id which acts as a consistent cache buster
+    # e.g. GET /v1/shape?table={root_table}&handle={new_shape_handle}&offset=-1
 
-      {:error,
-       Response.error(request, @must_refetch,
-         handle: active_shape_handle,
-         status: 409
-       )}
-    end
+    # TODO: discuss returning a 307 redirect rather than a 409, the client
+    # will have to detect this and throw out old data
+    {:error,
+     Response.error(request, @must_refetch,
+       handle: active_shape_handle,
+       status: 409
+     )}
   end
 
   defp hold_until_stack_ready(%Api{} = api) do
-    stack_id = stack_id(api)
+    api
+    |> stack_id()
+    |> Electric.StatusMonitor.wait_until_active(api.stack_ready_timeout)
+    |> case do
+      :ok ->
+        :ok
 
-    ref =
-      Electric.StackSupervisor.subscribe_to_stack_events(
-        api.stack_events_registry,
-        stack_id
-      )
-
-    if Electric.ProcessRegistry.alive?(stack_id, Electric.Replication.Supervisor) do
-      :ok
-    else
-      receive do
-        {:stack_status, ^ref, :ready} ->
-          :ok
-      after
-        api.stack_ready_timeout ->
-          {:error, Response.error(api, "Stack not ready", status: 503)}
-      end
+      {:error, :timeout} ->
+        Logger.warning("Stack not ready after #{api.stack_ready_timeout}ms")
+        {:error, Response.error(api, "Stack not ready", status: 503)}
     end
   end
 
@@ -370,6 +359,10 @@ defmodule Electric.Shapes.Api do
     else
       request
     end
+  end
+
+  defp determine_global_last_seen_lsn(%Request{} = request) do
+    %Request{request | global_last_seen_lsn: get_global_last_seen_lsn(request)}
   end
 
   # If chunk offsets are available, use those instead of the latest available
@@ -472,6 +465,7 @@ defmodule Electric.Shapes.Api do
     %{
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
+      global_last_seen_lsn: global_last_seen_lsn,
       params: %{offset: offset, live: live?},
       api: api,
       response: response
@@ -484,11 +478,9 @@ defmodule Electric.Shapes.Api do
           |> update_attrs(%{ot_is_immediate_response: false})
           |> hold_until_change()
         else
-          global_last_seen_lsn = get_global_last_seen_lsn(request)
-
           up_to_date_lsn =
             if live? do
-              # In live mode, if we've gotten an actual update and are here and not in `empty_response`,
+              # In live mode, if we've gotten an actual update and are here and not in `no_change_response`,
               # then for this shape and this request we trust the locally last seen LSN.
               chunk_end_offset.tx_offset
             else
@@ -507,7 +499,7 @@ defmodule Electric.Shapes.Api do
 
         Response.error(
           request,
-          "Unable retrieve shape log: #{Exception.format(:error, error, [])}",
+          "Unable to retrieve shape log: #{Exception.format(:error, error, [])}",
           status: 500
         )
     end
@@ -526,23 +518,23 @@ defmodule Electric.Shapes.Api do
       {^ref, :new_changes, latest_log_offset} ->
         # Stream new log since currently "held" offset
         %{request | last_offset: latest_log_offset}
+        |> determine_global_last_seen_lsn()
         |> determine_log_chunk_offset()
         |> determine_up_to_date()
         |> do_serve_shape_log()
 
       {^ref, :shape_rotation} ->
-        # We may want to notify the client better that the shape handle had
-        # changed, but just closing the response and letting the client handle
-        # it on reconnection is good enough.
-        request
-        |> update_attrs(%{ot_is_shape_rotated: true})
-        |> empty_response()
+        Response.error(request, @must_refetch,
+          handle: shape_handle,
+          status: 409
+        )
     after
-      # If we timeout, return an empty body and 204 as there's no response body.
+      # If we timeout, return an up-to-date message
       long_poll_timeout ->
         request
         |> update_attrs(%{ot_is_long_poll_timeout: true})
-        |> empty_response()
+        |> determine_global_last_seen_lsn()
+        |> no_change_response()
     end
   end
 
@@ -555,21 +547,19 @@ defmodule Electric.Shapes.Api do
 
   defp clean_up_change_listener(%Request{} = request), do: request
 
-  defp empty_response(%Request{} = request) do
-    %{response: response} = update_attrs(request, %{ot_is_empty_response: true})
+  defp no_change_response(%Request{} = request) do
+    %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
+      update_attrs(request, %{ot_is_empty_response: true})
 
     %{
       response
-      | status: 204,
-        body: encode_log(request, [up_to_date_ctl(get_global_last_seen_lsn(request))])
+      | status: 200,
+        body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)])
     }
   end
 
   defp get_global_last_seen_lsn(%Request{} = request) do
-    Electric.Replication.PersistentReplicationState.get_last_processed_lsn(
-      persistent_kv: request.api.persistent_kv,
-      stack_id: request.api.stack_id
-    )
+    Electric.LsnTracker.get_last_processed_lsn(request.api.stack_id)
     |> Electric.Postgres.Lsn.to_integer()
   end
 
@@ -588,7 +578,7 @@ defmodule Electric.Shapes.Api do
   end
 
   defp up_to_date_ctl(up_to_date_lsn) do
-    %{headers: %{control: "up-to-date", global_last_seen_lsn: up_to_date_lsn}}
+    %{headers: %{control: "up-to-date", global_last_seen_lsn: to_string(up_to_date_lsn)}}
   end
 
   defp with_span(%Request{} = request, name, attributes \\ [], fun) do
@@ -616,18 +606,25 @@ defmodule Electric.Shapes.Api do
     apply(encoder, type, [message])
   end
 
-  def schema(%Request{params: params}) do
-    schema(params)
+  def schema(%Response{
+        api: %Api{inspector: inspector},
+        shape_definition: %Shapes.Shape{} = shape
+      }) do
+    # This technically does double work because we've already fetched this info to build the shape,
+    # but that's not a big deal as it's all ETS backed. This also has an added benefit that
+    # if table schema changes in a way that doesn't invalidate the shape or we can't detect
+    # (e.g. column nullability changes but the type remains the same), we might return the new
+    # version if it's invalidated in ETS or server is restarted.
+    case Inspector.load_column_info(shape.root_table, inspector) do
+      {:ok, columns} ->
+        Electric.Schema.from_column_info(columns, shape.selected_columns)
+
+      :table_not_found ->
+        nil
+    end
   end
 
-  def schema(%{shape_definition: %Shapes.Shape{} = shape}) do
-    shape.table_info
-    |> Map.fetch!(shape.root_table)
-    |> Map.fetch!(:columns)
-    |> Electric.Schema.from_column_info(shape.selected_columns)
-  end
-
-  def schema(_) do
+  def schema(_req) do
     nil
   end
 

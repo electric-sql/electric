@@ -107,8 +107,7 @@ defmodule Electric.Replication.PublicationManager do
   @spec recover_shape(Shape.t(), Keyword.t()) :: :ok
   def recover_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.cast(server, {:recover_shape, shape})
-    :ok
+    GenServer.call(server, {:recover_shape, shape})
   end
 
   @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
@@ -124,8 +123,12 @@ defmodule Electric.Replication.PublicationManager do
   @spec refresh_publication(Keyword.t()) :: :ok
   def refresh_publication(opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.cast(server, :refresh_publication)
-    :ok
+    timeout = Access.get(opts, :timeout, 10_000)
+
+    case GenServer.call(server, :refresh_publication, timeout) do
+      :ok -> :ok
+      {:error, err} -> raise err
+    end
   end
 
   def start_link(opts) do
@@ -150,6 +153,9 @@ defmodule Electric.Replication.PublicationManager do
 
   @impl true
   def init(opts) do
+    Logger.metadata(stack_id: Access.fetch!(opts, :stack_id))
+    Process.set_label({:publication_manager, Access.fetch!(opts, :stack_id)})
+
     state = %__MODULE__{
       relation_filter_counters: %{},
       prepared_relation_filters: %{},
@@ -191,15 +197,15 @@ defmodule Electric.Replication.PublicationManager do
     {:noreply, state}
   end
 
-  @impl true
-  def handle_cast({:recover_shape, shape}, state) do
-    state = update_relation_filters_for_shape(shape, :add, state)
+  def handle_call(:refresh_publication, from, state) do
+    state = add_waiter(from, state)
+    state = schedule_update_publication(state.update_debounce_timeout, state)
     {:noreply, state}
   end
 
-  def handle_cast(:refresh_publication, state) do
-    state = schedule_update_publication(state.update_debounce_timeout, state)
-    {:noreply, state}
+  def handle_call({:recover_shape, shape}, _from, state) do
+    state = update_relation_filters_for_shape(shape, :add, state)
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -437,7 +443,7 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @spec get_selected_columns_for_shape(Shape.t()) :: MapSet.t(String.t() | nil)
-  defp get_selected_columns_for_shape(%Shape{where: _, selected_columns: nil}),
+  defp get_selected_columns_for_shape(%Shape{where: _, flags: %{selects_all_columns: true}}),
     do: MapSet.new([nil])
 
   defp get_selected_columns_for_shape(%Shape{where: nil, selected_columns: columns}),
@@ -453,20 +459,8 @@ defmodule Electric.Replication.PublicationManager do
           MapSet.t(Electric.Replication.Eval.Expr.t() | nil)
   defp get_where_clauses_for_shape(%Shape{where: nil}), do: MapSet.new([nil])
   # TODO: flatten where clauses by splitting top level ANDs
-  defp get_where_clauses_for_shape(%Shape{
-         where: where,
-         table_info: table_info,
-         root_table: root_table
-       }) do
-    unqualified_refs = Expr.unqualified_refs(where)
-
-    table_info[root_table].columns
-    |> Enum.filter(&(&1.name in unqualified_refs))
-    |> Enum.any?(fn
-      %{type_kind: kind} when kind in [:enum, :domain, :composite] -> true
-      _ -> false
-    end)
-    |> if do
+  defp get_where_clauses_for_shape(%Shape{where: where, flags: flags}) do
+    if Map.get(flags, :non_primitive_columns_in_where, false) do
       MapSet.new([nil])
     else
       MapSet.new([where])

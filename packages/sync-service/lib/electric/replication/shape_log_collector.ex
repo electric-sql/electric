@@ -6,6 +6,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   use GenStage
 
   require Electric.Postgres.Lsn
+  alias Electric.LsnTracker
+  alias Electric.Replication.ShapeLogCollector.AffectedColumns
   alias Electric.Postgres.Lsn
   alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
@@ -18,9 +20,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
-            persistent_kv: [type: :any, required: true],
-            # see https://hexdocs.pm/gen_stage/GenStage.html#c:init/1-options
-            demand: [type: {:in, [:forward, :accumulate]}, default: :accumulate]
+            persistent_kv: [type: :any, required: true]
           )
 
   def start_link(opts) do
@@ -31,6 +31,10 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  end
+
+  def start_processing(server, last_processed_lsn) do
+    GenStage.call(server, {:start_processing, last_processed_lsn})
   end
 
   # use `GenStage.call/2` here to make the event processing synchronous.
@@ -49,7 +53,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
     trace_context = OpenTelemetry.get_current_context()
-    GenStage.call(server, {:new_txn, txn, trace_context}, :infinity)
+    call_time = :erlang.monotonic_time(:microsecond)
+    GenStage.call(server, {:new_txn, txn, trace_context, call_time}, :infinity)
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
@@ -67,19 +72,23 @@ defmodule Electric.Replication.ShapeLogCollector do
       persistent_kv: opts.persistent_kv
     ]
 
+    {:ok, tracker_state} =
+      persistent_replication_data_opts
+      |> PersistentReplicationState.get_tracked_relations()
+      |> AffectedColumns.init()
+
     state =
       Map.merge(opts, %{
         producer: nil,
         subscriptions: {0, MapSet.new()},
         persistent_replication_data_opts: persistent_replication_data_opts,
-        last_seen_lsn:
-          PersistentReplicationState.get_last_processed_lsn(persistent_replication_data_opts)
+        tracked_relations: tracker_state
       })
 
     # start in demand: :accumulate mode so that the ShapeCache is able to start
     # all active consumers before we start sending transactions
     {:producer, state,
-     dispatcher: {Electric.Shapes.Dispatcher, inspector: state.inspector}, demand: opts.demand}
+     dispatcher: {Electric.Shapes.Dispatcher, inspector: state.inspector}, demand: :accumulate}
   end
 
   def handle_subscribe(:consumer, _opts, from, state) do
@@ -102,13 +111,12 @@ defmodule Electric.Replication.ShapeLogCollector do
   # last transaction and we can reply to the call and unblock the replication
   # client.
   def handle_demand(_demand, %{producer: producer} = state) do
-    GenServer.reply(producer, :ok)
+    LsnTracker.set_last_processed_lsn(
+      state.last_processed_lsn,
+      state.stack_id
+    )
 
-    :ok =
-      PersistentReplicationState.set_last_processed_lsn(
-        state.last_seen_lsn,
-        state.persistent_replication_data_opts
-      )
+    GenServer.reply(producer, :ok)
 
     {:noreply, [], %{state | producer: nil}}
   end
@@ -121,8 +129,25 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_call({:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context}, from, state) do
+  def handle_call({:start_processing, lsn}, _from, state) do
+    LsnTracker.init(lsn, state.stack_id)
+    GenStage.demand(self(), :forward)
+    Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
+    {:reply, :ok, [], Map.put(state, :last_processed_lsn, lsn)}
+  end
+
+  def handle_call(
+        {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, call_time},
+        from,
+        state
+      ) do
+    receive_time = :erlang.monotonic_time(:microsecond) - call_time
+
     OpenTelemetry.set_current_context(trace_context)
+
+    OpenTelemetry.add_span_attributes(
+      "shape_log_collector.transaction_message.duration_µs": receive_time
+    )
 
     Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
@@ -148,17 +173,17 @@ defmodule Electric.Replication.ShapeLogCollector do
   # will prompt the `GenServer.reply/2` call.
   defp handle_transaction(txn, _from, %{subscriptions: {0, _}} = state) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
-    drop_transaction(txn, state)
+    drop_transaction(state)
   end
 
   # If we've already processed a transaction, then drop it without processing
-  defp handle_transaction(txn, _from, %{last_seen_lsn: last_seen_lsn} = state)
-       when not Lsn.is_larger(txn.lsn, last_seen_lsn) do
+  defp handle_transaction(txn, _from, %{last_processed_lsn: last_processed_lsn} = state)
+       when not Lsn.is_larger(txn.lsn, last_processed_lsn) do
     Logger.debug(fn ->
-      "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_seen_lsn}"
+      "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_processed_lsn}"
     end)
 
-    drop_transaction(txn, state)
+    drop_transaction(state)
   end
 
   defp handle_transaction(txn, from, state) do
@@ -178,40 +203,44 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     # we don't reply to this call. we only reply when we receive demand from
     # the consumers, signifying that every one has processed this txn
-    {:noreply, [txn], %{state | producer: from} |> put_last_seen_lsn(txn.lsn)}
-  end
-
-  defp handle_relation(rel, _from, %{subscriptions: {0, _}} = state) do
-    Logger.debug(fn ->
-      "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
-    end)
-
-    OpenTelemetry.add_span_attributes("rel.is_dropped": true)
-
-    {:reply, :ok, [], state}
+    {:noreply, [txn], %{state | producer: from} |> put_last_processed_lsn(txn.lsn)}
   end
 
   defp handle_relation(rel, from, state) do
     OpenTelemetry.add_span_attributes("rel.is_dropped": false)
-    {:noreply, [rel], %{state | producer: from}}
+
+    {updated_rel, tracker_state} =
+      AffectedColumns.transform_relation(rel, state.tracked_relations)
+
+    # PG doesn't send all the details in the relation message (in particular, nullability), but
+    # it will send a message even if the relation is unchanged. So if we see a relation message that's not
+    # changed, it might be after a reconnection, or it might be because something actually changed.
+    # In either case, we need to clean the inspector cache so we get the latest info.
+    if rel == updated_rel do
+      Inspector.clean({updated_rel.schema, updated_rel.table}, state.inspector)
+    end
+
+    :ok =
+      PersistentReplicationState.set_tracked_relations(
+        tracker_state,
+        state.persistent_replication_data_opts
+      )
+
+    case state do
+      %{subscriptions: {0, _}} ->
+        Logger.debug(fn ->
+          "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
+        end)
+
+        {:reply, :ok, [], %{state | tracked_relations: tracker_state}}
+
+      _ ->
+        {:noreply, [updated_rel], %{state | producer: from, tracked_relations: tracker_state}}
+    end
   end
 
-  defp drop_transaction(txn, state) do
+  defp drop_transaction(state) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-
-    state =
-      if Lsn.is_larger(txn.lsn, state.last_seen_lsn) do
-        :ok =
-          PersistentReplicationState.set_last_processed_lsn(
-            txn.lsn,
-            state.persistent_replication_data_opts
-          )
-
-        put_last_seen_lsn(state, txn.lsn)
-      else
-        state
-      end
-
     {:reply, :ok, [], state}
   end
 
@@ -238,9 +267,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     state
   end
 
-  defp put_last_seen_lsn(%{last_seen_lsn: last_seen_lsn} = state, lsn)
-       when Lsn.is_larger(lsn, last_seen_lsn),
-       do: %{state | last_seen_lsn: lsn}
+  defp put_last_processed_lsn(%{last_processed_lsn: last_processed_lsn} = state, lsn)
+       when Lsn.is_larger(lsn, last_processed_lsn),
+       do: %{state | last_processed_lsn: lsn}
 
-  defp put_last_seen_lsn(state, _lsn), do: state
+  defp put_last_processed_lsn(state, _lsn), do: state
 end

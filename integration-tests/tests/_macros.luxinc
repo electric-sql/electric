@@ -3,19 +3,26 @@
 
 [global pg_container_name=]
 [global pg_host_port=54331]
+[global pg_pooler_host_port=64331]
 [global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
+[global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/postgres?sslmode=disable]
 
 [macro setup_pg_with_name shell_name initdb_args config_opts]
   [shell $shell_name]
     -$fail_pattern
+
+    # Create network for given contianer to be able to attach pooler
+    !docker network ls | grep ${pg_container_name}-network || docker network create ${pg_container_name}-network
   
     !docker run \
       --name $pg_container_name \
+      --network ${pg_container_name}-network \
       -e POSTGRES_DB=electric \
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=password \
       -e POSTGRES_INITDB_ARGS=${initdb_args} \
       -p $pg_host_port:5432 \
+      -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
       postgres:14-alpine \
         -c wal_level=logical ${config_opts}
 
@@ -29,6 +36,27 @@
 
 [macro setup_pg initdb_args config_opts]
   [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+[endmacro]
+
+[macro setup_pg_with_pooler initdb_args config_opts]
+  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+  [shell "pg_pooler"]
+    -$fail_pattern
+
+    !docker run \
+      --name "${pg_container_name}-pooler" \
+      --network ${pg_container_name}-network \
+      -e PGBOUNCER_AUTH_TYPE=trust \
+      -e PGBOUNCER_DATABASE=* \
+      -e PGBOUNCER_POOL_MODE=transaction \
+      -e POSTGRESQL_HOST=$pg_container_name \
+      -e POSTGRESQL_DATABASE=electric \
+      -e POSTGRESQL_USERNAME=postgres \
+      -e POSTGRESQL_PASSWORD=password \
+      -p $pg_pooler_host_port:6432 \
+      bitnami/pgbouncer:latest
+
+    ??LOG process up: PgBouncer
 [endmacro]
 
 [macro stop_pg]
@@ -84,11 +112,19 @@
 [endmacro]
 
 [macro setup_electric]
-  [invoke setup_electric_with_env "DATABASE_URL=$database_url"]
+  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_INSECURE=true"]
+[endmacro]
+
+[macro setup_secure_electric secret]
+  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_INSECURE=false ELECTRIC_SECRET=$secret"]
+[endmacro]
+
+[macro setup_electric_with_pooler]
+  [invoke setup_electric_with_env "ELECTRIC_INSECURE=true DATABASE_URL=$database_url ELECTRIC_QUERY_DATABASE_URL=$pooled_database_url"]
 [endmacro]
 
 [macro setup_multi_tenant_electric]
-  [invoke setup_electric_with_env ""]
+  [invoke setup_electric_with_env "ELECTRIC_INSECURE=true"]
 [endmacro]
 
 [macro setup_electric_with_env env]
@@ -107,7 +143,7 @@
 [endmacro]
 
 [macro setup_electric_shell_with_tenant shell_name port]
-  [invoke setup_electric_shell $shell_name $port "DATABASE_URL=$database_url"]
+  [invoke setup_electric_shell $shell_name $port "DATABASE_URL=$database_url ELECTRIC_INSECURE=true"]
 [endmacro]
 
 [macro add_tenant tenant_id electric_port]
@@ -125,11 +161,12 @@
 
 [macro teardown_container container_name]
   -$fail_pattern
-  !docker rm -f -v $container_name
+  !docker rm -f -v $container_name 2>/dev/null || true
   ?$PS1
 [endmacro]
 
 [macro teardown]
+  [invoke teardown_container "${pg_container_name}-pooler"]
   [invoke teardown_container $pg_container_name]
   !../scripts/clean_up.sh
   ?$PS1

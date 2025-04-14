@@ -1,15 +1,19 @@
 defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: false
+  use Repatch.ExUnit
 
+  alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
   alias Electric.Replication.ShapeLogCollector
   alias Electric.Replication.Changes.{Transaction, Relation}
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Shape
+  alias Electric.StatusMonitor
 
   alias Support.Mock
   alias Support.StubInspector
+  alias Support.RepatchExt
 
   import Support.ComponentSetup,
     only: [
@@ -32,7 +36,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     :with_persistent_kv
   ]
 
-  setup(ctx) do
+  @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+  @shape Shape.new!("test_table", inspector: @inspector)
+
+  def setup_log_collector(ctx) do
     # Start a test Registry
     registry_name = Module.concat(__MODULE__, Registry)
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
@@ -41,11 +48,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     opts = [
       stack_id: ctx.stack_id,
       inspector: {Mock.Inspector, []},
-      persistent_kv: ctx.persistent_kv,
-      demand: :forward
+      persistent_kv: ctx.persistent_kv
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+
+    Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      :ok
+    end)
+
+    Repatch.allow(self(), pid)
 
     Mock.ShapeStatus
     |> expect(:initialise, 1, fn _opts -> {:ok, %{}} end)
@@ -74,8 +86,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   end
 
   describe "store_transaction/2" do
-    @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
-    @shape Shape.new!("test_table", where: "id = 2", inspector: @inspector)
+    setup :setup_log_collector
 
     setup ctx do
       parent = self()
@@ -115,7 +126,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
       end)
       |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
-        {:ok, [%{pk_position: 0, name: "id"}]}
+        {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
       end)
       |> allow(self(), ctx.server)
 
@@ -147,53 +158,66 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert xids == [xid]
     end
 
+    @transaction_timeout 5
+    @num_comparisons 10
     test "drops transactions if already processed", ctx do
-      xid = 150
-      prev_lsn = Lsn.from_string("1667/FFFFFCC8")
-      lsn = Lsn.from_string("166A/91FDFDE8")
-
       Mock.Inspector
       |> stub(:load_relation, fn
         {"public", "test_table"}, _ ->
           {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
       end)
       |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
-        {:ok, [%{pk_position: 0, name: "id"}]}
+        {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
       end)
       |> allow(self(), ctx.server)
 
-      txn =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
-        |> Transaction.prepend_change(%Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"}
-        })
+      change = %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: %{"id" => "2", "name" => "foo"}
+      }
 
-      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      1..@num_comparisons
+      |> Enum.reduce({1, 0, 1, 0}, fn _, {xid, prev_xid, lsn_int, prev_lsn_int} ->
+        # advance xid and lsn randomly along their potential values to simulate
+        # trnasactions coming in at different points in the DBs lifetime
+        xid = xid + (:rand.uniform(2 ** 32 - xid) - 1)
+        prev_xid = xid - (:rand.uniform(xid - prev_xid) + 1)
+        lsn_int = lsn_int + (:rand.uniform(2 ** 64 - lsn_int) - 1)
+        prev_lsn_int = lsn_int - (:rand.uniform(lsn_int - prev_lsn_int) + 1)
+        lsn = Lsn.from_integer(lsn_int)
+        prev_lsn = Lsn.from_integer(prev_lsn_int)
 
-      Support.TransactionConsumer.assert_consume(ctx.consumers, [txn])
+        txn =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
 
-      txn2 =
-        %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
-        |> Transaction.prepend_change(%Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"}
-        })
+        assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
 
-      txn3 =
-        %Transaction{xid: xid - 1, lsn: prev_lsn, last_log_offset: LogOffset.new(prev_lsn, 0)}
-        |> Transaction.prepend_change(%Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"}
-        })
+        Support.TransactionConsumer.assert_consume(ctx.consumers, [txn], @transaction_timeout)
 
-      assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
-      assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
-      Support.TransactionConsumer.refute_consume(ctx.consumers)
+        txn2 =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
+
+        txn3 =
+          %Transaction{
+            xid: prev_xid,
+            lsn: prev_lsn,
+            last_log_offset: LogOffset.new(prev_lsn, 0)
+          }
+          |> Transaction.prepend_change(change)
+
+        assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
+        assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
+        Support.TransactionConsumer.refute_consume(ctx.consumers, @transaction_timeout * 2)
+        {xid, prev_xid, lsn_int, prev_lsn_int}
+      end)
     end
   end
 
   describe "handle_relation_msg/2" do
+    setup :setup_log_collector
+
     setup ctx do
       parent = self()
 
@@ -223,6 +247,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       id = @shape.root_table_id
 
       Mock.Inspector
+      |> expect(:clean, 2, fn
+        {"public", "test_table"}, _ ->
+          :ok
+
+        {"public", "bar"}, _ ->
+          :ok
+      end)
       |> stub(:load_relation, fn
         {"public", "test_table"}, _ ->
           {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
@@ -245,6 +276,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   end
 
   test "closes the loop even with no active shapes", ctx do
+    ctx = setup_log_collector(ctx)
     xmin = 100
     lsn = Lsn.from_string("0/10")
     last_log_offset = LogOffset.new(lsn, 0)
@@ -258,5 +290,92 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     # this call should return immediately
     assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+  end
+
+  test "initializes with provided LSN", ctx do
+    # Start a test Registry
+    registry_name = Module.concat(__MODULE__, Registry)
+    start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
+
+    # Start the ShapeLogCollector process
+    opts = [
+      stack_id: ctx.stack_id,
+      inspector: {Mock.Inspector, []},
+      persistent_kv: ctx.persistent_kv
+    ]
+
+    {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+
+    Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      :ok
+    end)
+
+    Repatch.allow(self(), pid)
+
+    Mock.Inspector
+    |> stub(:load_relation, fn {"public", "test_table"}, _ ->
+      {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+    end)
+    |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
+      {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+    end)
+    |> allow(self(), pid)
+
+    consumer_id = "test_consumer"
+
+    {:ok, consumer} =
+      Support.TransactionConsumer.start_link(
+        id: consumer_id,
+        parent: self(),
+        producer: pid,
+        shape: @shape
+      )
+
+    consumers = [{consumer_id, consumer}]
+
+    start_lsn = Lsn.from_integer(100)
+    prev_lsn = Lsn.increment(start_lsn, -1)
+    next_lsn = Lsn.increment(start_lsn, +1)
+
+    ShapeLogCollector.start_processing(pid, start_lsn)
+
+    assert start_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
+
+    txn_to_drop =
+      %Transaction{xid: 99, lsn: prev_lsn, last_log_offset: LogOffset.new(prev_lsn, 0)}
+      |> Transaction.prepend_change(%Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: %{"id" => "1"}
+      })
+
+    # this call should return immediately
+    assert :ok = ShapeLogCollector.store_transaction(txn_to_drop, pid)
+
+    # should drop the transaction and not update the lsn
+    Support.TransactionConsumer.refute_consume(consumers)
+    assert start_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
+
+    # should accept a transaction with a higher LSN and update it
+    txn_to_process =
+      %Transaction{xid: 101, lsn: next_lsn, last_log_offset: LogOffset.new(next_lsn, 0)}
+      |> Transaction.prepend_change(%Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: %{"id" => "3"}
+      })
+
+    assert :ok = ShapeLogCollector.store_transaction(txn_to_process, pid)
+    Support.TransactionConsumer.assert_consume(consumers, [txn_to_process])
+    assert next_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
+  end
+
+  test "notifies the StatusMonitor when it's ready", ctx do
+    ctx = Map.merge(ctx, setup_log_collector(ctx))
+
+    assert RepatchExt.called_within_ms?(
+             StatusMonitor,
+             :mark_shape_log_collector_ready,
+             [ctx.stack_id, ctx.server],
+             100
+           )
   end
 end

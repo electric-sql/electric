@@ -161,6 +161,18 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   @impl Plug.ErrorHandler
+  def handle_errors(conn, %{kind: :error, reason: exception, stack: stack})
+      when is_exception(exception, DBConnection.ConnectionError) do
+    OpenTelemetry.record_exception(:error, exception, stack)
+
+    error_str = Exception.format(:error, exception)
+
+    conn
+    |> fetch_query_params()
+    |> assign(:error_str, error_str)
+    |> send_resp(503, Jason.encode!(%{error: "Database is unreachable"}))
+  end
+
   def handle_errors(conn, error) do
     OpenTelemetry.record_exception(error.kind, error.reason, error.stack)
 
@@ -169,11 +181,10 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> fetch_query_params()
     |> assign(:error_str, error_str)
+    |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
 
     # No end_telemetry_span() call here because by this point that stack of plugs has been
     # unwound to the point where the `conn` struct did not yet have any span-related properties
     # assigned to it.
-
-    conn
   end
 end

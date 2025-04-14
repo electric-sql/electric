@@ -50,7 +50,11 @@ instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 version = Electric.version()
 
 config :opentelemetry,
-  resource_detectors: [:otel_resource_env_var, :otel_resource_app_env],
+  resource_detectors: [
+    :otel_resource_env_var,
+    :otel_resource_app_env,
+    Electric.Telemetry.OpenTelemetry.ResourceDetector
+  ],
   resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
 
 otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
@@ -119,14 +123,20 @@ config :opentelemetry,
        local_parent_not_sampled: :always_off
      }}
 
-database_url_config = env!("DATABASE_URL", &Electric.Config.parse_postgresql_uri!/1)
+replication_database_url_config = env!("DATABASE_URL", &Electric.Config.parse_postgresql_uri!/1)
 
-database_ipv6_config =
-  env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
+query_database_url_config =
+  env!(
+    "ELECTRIC_QUERY_DATABASE_URL",
+    &Electric.Config.parse_postgresql_uri!/1,
+    replication_database_url_config
+  )
 
-connection_opts = database_url_config ++ [ipv6: database_ipv6_config]
+database_ipv6_config = env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
 
-config :electric, connection_opts: Electric.Utils.obfuscate_password(connection_opts)
+config :electric,
+  replication_connection_opts: replication_database_url_config ++ [ipv6: database_ipv6_config],
+  query_connection_opts: query_database_url_config ++ [ipv6: database_ipv6_config]
 
 enable_integration_testing? = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, nil)
 cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)
@@ -226,12 +236,22 @@ otel_export_period =
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
 provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, nil)
 
+# Handle authentication configuration
+insecure = env!("ELECTRIC_INSECURE", :boolean, false)
+secret = env!("ELECTRIC_SECRET", :string, nil)
+
+if config_env() != :test do
+  Electric.Config.validate_security_config!(secret, insecure)
+end
+
 config :electric,
   provided_database_id: provided_database_id,
   allow_shape_deletion?: enable_integration_testing?,
   cache_max_age: cache_max_age,
   cache_stale_age: cache_stale_age,
   chunk_bytes_threshold: chunk_bytes_threshold,
+  # The ELECTRIC_EXPERIMENTAL_MAX_SHAPES is undocumented and will be removed in future versions.
+  max_shapes: env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
   # Used in telemetry
   instance_id: instance_id,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
@@ -251,4 +271,5 @@ config :electric,
   storage: storage,
   profile_where_clauses?: env!("ELECTRIC_PROFILE_WHERE_CLAUSES", :boolean, false),
   persistent_kv: persistent_kv,
-  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil)
+  listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil),
+  secret: secret

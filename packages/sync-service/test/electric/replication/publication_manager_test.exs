@@ -16,30 +16,20 @@ defmodule Electric.Replication.PublicationManagerTest do
   }
 
   defp generate_shape(relation, where_clause \\ nil, selected_columns \\ nil) do
+    all_columns = Enum.uniq(["id", "value", "foo_enum"] ++ (selected_columns || []))
+    selected_columns = selected_columns || all_columns
+
     %Shape{
       root_table: relation,
       root_table_id: 1,
-      table_info: %{
-        relation => %{
-          columns:
-            [
-              %{name: "id", type: :text, type_kind: :base, type_id: {25, 1}},
-              %{name: "value", type: :text, type_kind: :base, type_id: {25, 1}},
-              %{
-                name: "foo_enum",
-                type: {:enum, "foo_enum"},
-                type_kind: :enum,
-                type_id: {2999, 1}
-              }
-            ] ++
-              Enum.map(selected_columns || [], fn col ->
-                %{name: col, type: :text, type_id: {25, 1}}
-              end),
-          pk: ["id"]
-        }
+      root_pk: ["id"],
+      selected_columns: selected_columns,
+      flags: %{
+        selects_all_columns: selected_columns == all_columns,
+        non_primitive_columns_in_where:
+          where_clause && is_map_key(where_clause.used_refs, ["foo_enum"])
       },
-      where: where_clause,
-      selected_columns: selected_columns
+      where: where_clause
     }
   end
 
