@@ -143,8 +143,9 @@ defmodule Electric.Postgres.ReplicationClient do
   # TODO(alco): this needs additional info about :noreply and :query return tuples.
   @impl true
   def init(replication_opts) do
-    Process.set_label(:replication_client)
     state = State.new(replication_opts)
+
+    Process.set_label({:replication_client, state.stack_id})
     Logger.metadata(stack_id: state.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: state.stack_id)
 
