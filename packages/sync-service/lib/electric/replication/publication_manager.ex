@@ -239,6 +239,8 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   defp sync_publication_with_existing_shapes(state) do
+    Logger.info("Syncing publication state to active shapes")
+
     # use a function to add logging of failures
     retry? = fn
       {:error, err} ->
