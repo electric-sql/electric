@@ -568,8 +568,6 @@ defmodule Electric.Shapes.ApiTest do
   describe "serve/1" do
     setup [:ready_stack, :configure_request]
 
-    # test "hold_conn_until_stack_ready"
-
     test "returns snapshot when offset is -1", ctx do
       Mock.ShapeCache
       |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
