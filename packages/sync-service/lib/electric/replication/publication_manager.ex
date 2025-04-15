@@ -250,7 +250,7 @@ defmodule Electric.Replication.PublicationManager do
     end
 
     retry with: constant_backoff(@retry_timeout) |> Stream.take(@max_retries), atoms: retry? do
-      update_publication(state)
+      do_update_publication(state)
     else
       {:error, err} = error ->
         Logger.error("Failed to configure publication: #{inspect(err)}")
@@ -279,13 +279,9 @@ defmodule Electric.Replication.PublicationManager do
 
   defp update_publication(
          %__MODULE__{
-           committed_relation_filters: committed_filters,
-           prepared_relation_filters: current_filters,
            row_filtering_enabled: false,
-           publication_name: publication_name,
-           db_pool: db_pool,
-           pg_version: pg_version,
-           configure_tables_for_replication_fn: configure_tables_for_replication_fn
+           committed_relation_filters: committed_filters,
+           prepared_relation_filters: current_filters
          } = state
        ) do
     # If row filtering is disabled, we only care about changes in actual relations
@@ -293,33 +289,50 @@ defmodule Electric.Replication.PublicationManager do
     if Map.keys(current_filters) == Map.keys(committed_filters) do
       {:ok, state}
     else
-      try do
-        configure_tables_for_replication_fn.(
-          db_pool,
-          Map.new(current_filters, fn {rel, filter} ->
-            {rel, RelationFilter.relation_only(filter)}
-          end),
-          pg_version,
-          publication_name
-        )
-
-        {:ok, state}
-      rescue
-        err -> {:error, err}
-      end
+      do_update_publication(state)
     end
   end
 
-  defp update_publication(
-         %__MODULE__{
-           prepared_relation_filters: relation_filters,
-           row_filtering_enabled: true,
-           publication_name: publication_name,
-           db_pool: db_pool,
-           pg_version: pg_version,
-           configure_tables_for_replication_fn: configure_tables_for_replication_fn
-         } = state
-       ) do
+  defp update_publication(%__MODULE__{} = state) do
+    do_update_publication(state)
+  end
+
+  defp do_update_publication(%__MODULE__{row_filtering_enabled: false} = state) do
+    %{
+      prepared_relation_filters: current_filters,
+      publication_name: publication_name,
+      db_pool: db_pool,
+      pg_version: pg_version,
+      configure_tables_for_replication_fn: configure_tables_for_replication_fn
+    } = state
+
+    # If row filtering is disabled, we only care about changes in actual relations
+    # included in the publication
+    try do
+      configure_tables_for_replication_fn.(
+        db_pool,
+        Map.new(current_filters, fn {rel, filter} ->
+          {rel, RelationFilter.relation_only(filter)}
+        end),
+        pg_version,
+        publication_name
+      )
+
+      {:ok, state}
+    rescue
+      err -> {:error, err}
+    end
+  end
+
+  defp do_update_publication(%__MODULE__{row_filtering_enabled: true} = state) do
+    %{
+      prepared_relation_filters: relation_filters,
+      publication_name: publication_name,
+      db_pool: db_pool,
+      pg_version: pg_version,
+      configure_tables_for_replication_fn: configure_tables_for_replication_fn
+    } = state
+
     configure_tables_for_replication_fn.(
       db_pool,
       relation_filters,

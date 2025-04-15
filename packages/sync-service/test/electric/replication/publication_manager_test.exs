@@ -321,5 +321,11 @@ defmodule Electric.Replication.PublicationManagerTest do
                         }
                       ]}
     end
+
+    test "should update publication if there are no shapes at all", %{opts: opts} do
+      assert :ok == PublicationManager.sync_publication(opts)
+
+      assert_receive {:filters, []}
+    end
   end
 end

@@ -226,7 +226,7 @@ defmodule Electric.ShapeCache do
     {last_processed_lsn, shapes} =
       if opts[:purge_all_shapes?] do
         clean_up_all_shapes(state)
-        Lsn.from_integer(0)
+        {Lsn.from_integer(0), []}
       else
         recover_shapes(state, opts[:recover_shape_timeout])
       end

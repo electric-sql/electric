@@ -430,6 +430,36 @@ defmodule Electric.Postgres.ConfigurationTest do
                  pg_version
                )
     end
+
+    test "empty filter list removes all clauses", %{
+      pool: conn,
+      publication_name: publication,
+      pg_version: pg_version
+    } do
+      Configuration.configure_tables_for_replication!(
+        conn,
+        %{
+          {"public", "items"} => %RelationFilter{
+            relation: {"public", "items"},
+            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
+          }
+        },
+        pg_version,
+        publication
+      )
+
+      assert list_tables_in_publication(conn, publication) ==
+               expected_filters(
+                 [
+                   {"public", "items", "(value ~~* 'yes%'::text)"}
+                 ],
+                 pg_version
+               )
+
+      Configuration.configure_tables_for_replication!(conn, %{}, pg_version, publication)
+
+      assert list_tables_in_publication(conn, publication) == []
+    end
   end
 
   defp get_table_identity(conn, {schema, table}) do
