@@ -28,6 +28,7 @@ defmodule Electric.Shapes.Api.Response do
     api: %Api{},
     chunked: false,
     up_to_date: false,
+    no_changes: false,
     params: %Api.Params{},
     status: 200,
     trace_attrs: %{},
@@ -44,6 +45,7 @@ defmodule Electric.Shapes.Api.Response do
           chunked: boolean(),
           params: Api.Params.t(),
           up_to_date: boolean(),
+          no_changes: boolean(),
           status: pos_integer(),
           trace_attrs: %{optional(atom()) => term()},
           body: Enum.t()
@@ -194,38 +196,33 @@ defmodule Electric.Shapes.Api.Response do
     |> put_cache_header("cache-control", "no-cache", api)
   end
 
-  defp put_cache_headers(conn, %__MODULE__{api: api} = response) do
-    case response do
-      # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
-      # and 1 month stale-while-revalidate We want private caches to cache the
-      # initial offset for a long time but for shared caches to frequently
-      # revalidate so they're serving a fairly fresh copy of the initials shape
-      # log.
-      %{params: %{offset: @before_all_offset}} ->
-        conn
-        |> put_cache_header(
-          "cache-control",
-          "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746",
-          api
-        )
+  # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
+  # and 1 month stale-while-revalidate We want private caches to cache the
+  # initial offset for a long time but for shared caches to frequently
+  # revalidate so they're serving a fairly fresh copy of the initials shape
+  # log.
+  defp put_cache_headers(conn, %__MODULE__{params: %{offset: @before_all_offset}, api: api}) do
+    conn
+    |> put_cache_header(
+      "cache-control",
+      "public, max-age=604800, s-maxage=3600, stale-while-revalidate=2629746",
+      api
+    )
+  end
 
-      # For live requests we want short cache lifetimes and to update the live cursor
-      %{params: %{live: true}, api: api} ->
-        conn
-        |> put_cache_header(
-          "cache-control",
-          "public, max-age=5, stale-while-revalidate=5",
-          api
-        )
+  # For live requests we want short cache lifetimes and to update the live cursor
+  defp put_cache_headers(conn, %__MODULE__{params: %{live: true}, api: api}) do
+    conn
+    |> put_cache_header("cache-control", "public, max-age=5, stale-while-revalidate=5", api)
+  end
 
-      %{params: %{live: false}, api: api} ->
-        conn
-        |> put_cache_header(
-          "cache-control",
-          "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}",
-          api
-        )
-    end
+  defp put_cache_headers(conn, %__MODULE__{params: %{live: false}, api: api}) do
+    conn
+    |> put_cache_header(
+      "cache-control",
+      "public, max-age=#{api.max_age}, stale-while-revalidate=#{api.stale_age}",
+      api
+    )
   end
 
   defp put_cache_header(conn, header, value, %{send_cache_headers?: true}) do
@@ -236,26 +233,24 @@ defmodule Electric.Shapes.Api.Response do
     conn
   end
 
-  defp put_cursor_headers(conn, %__MODULE__{} = response) do
-    case response do
-      # For live requests we want short cache lifetimes and to update the live cursor
-      %{params: %{live: true}, api: api} ->
-        conn
-        |> Plug.Conn.put_resp_header(
-          @electric_cursor_header,
-          api.long_poll_timeout
-          |> Utils.get_next_interval_timestamp(conn.query_params["cursor"])
-          |> Integer.to_string()
-        )
-
-      _response ->
-        conn
-    end
-  end
-
-  defp put_etag_headers(conn, %{handle: nil}) do
+  # For live requests we want short cache lifetimes and to update the live cursor
+  defp put_cursor_headers(
+         %{query_params: query_params} = conn,
+         %__MODULE__{params: %{live: true}, api: api} = _response
+       ) do
     conn
+    |> Plug.Conn.put_resp_header(
+      "electric-cursor",
+      api.long_poll_timeout
+      |> Utils.get_next_interval_timestamp(query_params["cursor"])
+      |> Integer.to_string()
+    )
   end
+
+  defp put_cursor_headers(conn, _), do: conn
+
+  # Responses that don't correspond to a shape should not be revalidateable
+  defp put_etag_headers(conn, %__MODULE__{handle: nil}), do: conn
 
   defp put_etag_headers(conn, %__MODULE__{} = response) do
     # etag values should be in double quotes: https://www.rfc-editor.org/rfc/rfc7232#section-2.3
@@ -313,14 +308,26 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
   end
 
-  def etag(%__MODULE__{handle: handle, offset: offset, params: params} = _response, opts \\ []) do
-    etag = "#{handle}:#{params.offset}:#{offset}"
+  def etag(response, opts \\ [])
 
-    if Keyword.get(opts, :quote, true) do
-      ~s|"#{etag}"|
-    else
-      etag
-    end
+  # When response contains no changes, in order to uniquely identify it and avoid
+  # infinite revalidations we add the current monotonic time to the etag.
+  # Any attempt by the CDN to revalidate an empty live response will fail and require
+  # actually holding and collapsing live requests.
+  def etag(%__MODULE__{handle: handle, offset: offset, params: params, no_changes: true}, opts) do
+    "#{handle}:#{params.offset}:#{offset}:#{System.monotonic_time()}"
+    |> format_etag(opts)
+  end
+
+  def etag(%__MODULE__{handle: handle, offset: offset, params: params}, opts) do
+    "#{handle}:#{params.offset}:#{offset}"
+    |> format_etag(opts)
+  end
+
+  defp format_etag(etag, opts) do
+    if Keyword.get(opts, :quote, true),
+      do: ~s|"#{etag}"|,
+      else: etag
   end
 
   def electric_headers, do: @electric_headers

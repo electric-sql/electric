@@ -551,9 +551,10 @@ defmodule Electric.Shapes.Api do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
       update_attrs(request, %{ot_is_empty_response: true})
 
-    %{
+    %Response{
       response
       | status: 200,
+        no_changes: true,
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)])
     }
   end

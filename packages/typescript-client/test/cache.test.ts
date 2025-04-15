@@ -4,6 +4,8 @@ import { exec } from 'child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable } from './support/test-context'
 import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
+import { ShapeStream } from '../src'
+import { isUpToDateMessage } from '../src/helpers'
 
 // FIXME: pull from environment?
 const maxAge = 1 // seconds
@@ -103,6 +105,79 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
     expect(cachedRes.status).toBe(200)
 
     expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
+  })
+
+  it(`should collapse requests in live mode`, async ({
+    insertIssues,
+    proxyCacheBaseUrl,
+    issuesTableUrl,
+    aborter,
+  }) => {
+    const numClients = 10
+    const eventTarget = new EventTarget()
+
+    let reqStats = {
+      reqs: 0,
+      cacheHits: 0,
+    }
+
+    const resetReqStats = () => {
+      reqStats = {
+        reqs: 0,
+        cacheHits: 0,
+      }
+    }
+
+    const fetchClient = async (...args: Parameters<typeof fetch>) => {
+      const resp = await fetch(...args)
+      reqStats.reqs++
+      if (getCacheStatus(resp) === CacheStatus.HIT) {
+        reqStats.cacheHits++
+      }
+
+      return resp
+    }
+
+    const waitForClients = () =>
+      new Promise<void>((res) => {
+        let ctr = 0
+        const listener = () => {
+          if (++ctr === numClients) {
+            eventTarget.removeEventListener(`up-to-date`, listener)
+            res()
+          }
+        }
+        eventTarget.addEventListener(`up-to-date`, listener)
+      })
+
+    for (let i = 0; i < numClients; i++) {
+      const stream = new ShapeStream({
+        url: `${proxyCacheBaseUrl}/v1/shape`,
+        signal: aborter.signal,
+        fetchClient,
+        params: {
+          table: issuesTableUrl,
+          foo: `cache-test`,
+        },
+      })
+
+      stream.subscribe((messages) => {
+        if (isUpToDateMessage(messages[messages.length - 1])) {
+          eventTarget.dispatchEvent(new Event(`up-to-date`))
+        }
+      })
+    }
+
+    // wait for clients to catch up
+    await waitForClients()
+
+    // add some data, should collapse requests and respond to
+    // all of them but one with cache hits
+    resetReqStats()
+    await insertIssues({ title: `foo` })
+    await waitForClients()
+    expect(reqStats.reqs).toBe(numClients)
+    expect(reqStats.cacheHits).toBe(numClients - 1)
   })
 
   it(`should get cached response on second request`, async ({

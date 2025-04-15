@@ -668,6 +668,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
                "public, max-age=5, stale-while-revalidate=5"
              ]
 
+      expected_etag_part = "\"#{@test_shape_handle}:#{@test_offset}:#{@test_offset}:"
+      assert [^expected_etag_part <> _rest] = get_resp_header(conn, "etag")
+
       assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
