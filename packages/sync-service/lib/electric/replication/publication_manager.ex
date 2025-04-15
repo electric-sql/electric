@@ -1,16 +1,18 @@
 defmodule Electric.Replication.PublicationManager do
-  require Logger
   use GenServer
+  use Retry
 
   alias Electric.Postgres.Configuration
   alias Electric.Replication.Eval.Expr
   alias Electric.Shapes.Shape
 
+  require Logger
+
   @callback name(binary() | Keyword.t()) :: atom()
   @callback recover_shape(Shape.t(), Keyword.t()) :: :ok
   @callback add_shape(Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(Shape.t(), Keyword.t()) :: :ok
-  @callback refresh_publication(Keyword.t()) :: :ok
+  @callback sync_publication(Keyword.t()) :: :ok
 
   defstruct [
     :relation_filter_counters,
@@ -120,12 +122,12 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @spec refresh_publication(Keyword.t()) :: :ok
-  def refresh_publication(opts \\ []) do
+  @spec sync_publication(Keyword.t()) :: :ok
+  def sync_publication(opts \\ []) do
     server = Access.get(opts, :server, name(opts))
     timeout = Access.get(opts, :timeout, 10_000)
 
-    case GenServer.call(server, :refresh_publication, timeout) do
+    case GenServer.call(server, :sync_publication, timeout) do
       :ok -> :ok
       {:error, err} -> raise err
     end
@@ -197,10 +199,14 @@ defmodule Electric.Replication.PublicationManager do
     {:noreply, state}
   end
 
-  def handle_call(:refresh_publication, from, state) do
-    state = add_waiter(from, state)
-    state = schedule_update_publication(state.update_debounce_timeout, state)
-    {:noreply, state}
+  def handle_call(:sync_publication, _from, state) do
+    case sync_publication_with_existing_shapes(state) do
+      {:ok, state} ->
+        {:reply, :ok, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
   end
 
   def handle_call({:recover_shape, shape}, _from, state) do
@@ -229,6 +235,26 @@ defmodule Electric.Replication.PublicationManager do
         Logger.error("Failed to configure publication: #{inspect(err)}")
         state = reply_to_waiters({:error, err}, state)
         {:noreply, state}
+    end
+  end
+
+  defp sync_publication_with_existing_shapes(state) do
+    # use a function to add logging of failures
+    retry? = fn
+      {:error, err} ->
+        Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
+        true
+
+      {:ok, _} ->
+        false
+    end
+
+    retry with: constant_backoff(@retry_timeout) |> Stream.take(@max_retries), atoms: retry? do
+      update_publication(state)
+    else
+      {:error, err} = error ->
+        Logger.error("Failed to configure publication: #{inspect(err)}")
+        error
     end
   end
 

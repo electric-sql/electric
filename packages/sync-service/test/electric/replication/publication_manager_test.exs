@@ -304,14 +304,14 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
   end
 
-  describe "refresh_publication/2" do
+  describe "sync_publication/2" do
     test "should update publication if there are changes to add", %{opts: opts} do
       shape = generate_shape({"public", "items"}, @where_clause_1)
       assert :ok == PublicationManager.recover_shape(shape, opts)
 
       refute_receive {:filters, _}, 500
 
-      assert :ok == PublicationManager.refresh_publication(opts)
+      assert :ok == PublicationManager.sync_publication(opts)
 
       assert_receive {:filters,
                       [
