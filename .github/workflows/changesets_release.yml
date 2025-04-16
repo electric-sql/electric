@@ -11,6 +11,8 @@ jobs:
   changesets:
     name: Make a PR or publish
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
     steps:
       - uses: actions/checkout@v4
         with:
