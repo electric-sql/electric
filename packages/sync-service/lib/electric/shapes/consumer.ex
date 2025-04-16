@@ -5,6 +5,7 @@ defmodule Electric.Shapes.Consumer do
 
   import Electric.Postgres.Xid, only: [compare: 2]
 
+  alias Electric.Shapes.Api
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
@@ -159,15 +160,30 @@ defmodule Electric.Shapes.Consumer do
         {:snapshot_failed, shape_handle, error, stacktrace},
         %{shape_handle: shape_handle} = state
       ) do
-    if match?(%DBConnection.ConnectionError{reason: :queue_timeout}, error),
-      do:
-        Logger.warning(
-          "Snapshot creation failed for #{shape_handle} because of a connection pool queue timeout"
-        ),
-      else:
-        Logger.error(
-          "Snapshot creation failed for #{shape_handle} because of:\n#{Exception.format(:error, error, stacktrace)}"
-        )
+    error =
+      case error do
+        %DBConnection.ConnectionError{reason: :queue_timeout} ->
+          Logger.warning(
+            "Snapshot creation failed for #{shape_handle} because of a connection pool queue timeout"
+          )
+
+          error
+
+        %Postgrex.Error{postgres: %{code: code}}
+        when code in ~w|undefined_function undefined_table undefined_column|a ->
+          # Schema changed while we were creating stuff, which means shape is functionally invalid.
+          # Return a 409 to trigger a fresh start with validation against the new schema.
+          %{shape: %{root_table: root_table}, inspector: inspector} = state
+          Inspector.clean(root_table, inspector)
+          Api.Error.must_refetch()
+
+        error ->
+          Logger.error(
+            "Snapshot creation failed for #{shape_handle} because of:\n#{Exception.format(:error, error, stacktrace)}"
+          )
+
+          error
+      end
 
     state = reply_to_snapshot_waiters(state, {:error, error})
     cleanup(state)
@@ -204,7 +220,9 @@ defmodule Electric.Shapes.Consumer do
     handle_event(event, state)
   end
 
-  defp handle_event(%Changes.Relation{id: id}, %{shape: %{root_table_id: id}} = state) do
+  # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
+  # is a signal that we need to terminate the shape.
+  defp handle_event(%Changes.Relation{}, state) do
     %{shape: %{root_table: root_table}, inspector: inspector} = state
 
     Logger.info(

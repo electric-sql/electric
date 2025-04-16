@@ -129,13 +129,14 @@ describe(`useShape`, () => {
     )
   })
 
-  it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
+  it(`should expose isLoading status`, async ({ issuesTableUrl, aborter }) => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
         params: {
           table: issuesTableUrl,
         },
+        signal: aborter.signal,
         fetchClient: async (input, init) => {
           await sleep(10)
           return fetch(input, init)
@@ -150,6 +151,7 @@ describe(`useShape`, () => {
 
   it(`should expose time at which we last synced`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     const { result } = renderHook(() =>
       useShape({
@@ -157,6 +159,7 @@ describe(`useShape`, () => {
         params: {
           table: issuesTableUrl,
         },
+        signal: aborter.signal,
         fetchClient: async (input, init) => {
           await sleep(50)
           return fetch(input, init)

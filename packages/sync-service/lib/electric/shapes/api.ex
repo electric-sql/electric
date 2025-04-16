@@ -494,6 +494,9 @@ defmodule Electric.Shapes.Api do
           %{response | chunked: true, body: encode_log(request, body)}
         end
 
+      {:error, %Api.Error{} = error} ->
+        Response.error(request, error.message, status: error.status)
+
       {:error, error} ->
         # Errors will be logged further up the stack
 

@@ -1,6 +1,5 @@
 defmodule Electric.Plug.UtilsTest do
   alias Electric.Plug.Utils
-  import Support.ComponentSetup
   use ExUnit.Case, async: true
   doctest Utils, import: true
 

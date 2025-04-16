@@ -254,12 +254,13 @@ describe(`Shape`, () => {
     shape.unsubscribeAll()
   })
 
-  it(`should support unsubscribe`, async ({ issuesTableUrl }) => {
+  it(`should support unsubscribe`, async ({ issuesTableUrl, aborter }) => {
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
     })
     await waitForFetch(shapeStream)
     const shape = new Shape(shapeStream)
@@ -589,12 +590,13 @@ describe(`Shape`, () => {
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
   })
 
-  it(`should expose isLoading status`, async ({ issuesTableUrl }) => {
+  it(`should expose isLoading status`, async ({ issuesTableUrl, aborter }) => {
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
       fetchClient: async (input, init) => {
         await sleep(20)
         return fetch(input, init)
@@ -608,7 +610,7 @@ describe(`Shape`, () => {
     expect(shapeStream.isLoading()).false
   })
 
-  it(`should expose lastOffset`, async ({ issuesTableUrl }) => {
+  it(`should expose lastOffset`, async ({ issuesTableUrl, aborter }) => {
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
@@ -618,6 +620,7 @@ describe(`Shape`, () => {
         await sleep(20)
         return fetch(input, init)
       },
+      signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
 
