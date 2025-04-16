@@ -50,14 +50,14 @@ jobs:
     steps:
       # Get the Electric version of the Docker image
       - name: Get Electric version
-        if: steps.changesets.outputs.published == 'true'
+        if: needs.changesets.outputs.published == 'true'
         id: sync_version
         run: |
           VERSION=$(jq -r '.version' packages/sync-service/package.json)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Trigger cloud update (on release)
         uses: peter-evans/repository-dispatch@v2
-        if: steps.changesets.outputs.published == 'true'
+        if: needs.changesets.outputs.published == 'true'
         with:
           token: ${{ secrets.CROSSREPO_PAT }}
           repository: electric-sql/stratovolt
@@ -70,7 +70,7 @@ jobs:
       # On commit, only update the commit SHA, not the Docker image version
       - name: Trigger cloud update (on commit)
         uses: peter-evans/repository-dispatch@v2
-        if: steps.changesets.outputs.published != 'true'
+        if: needs.changesets.outputs.published != 'true'
         with:
           token: ${{ secrets.CROSSREPO_PAT }}
           repository: electric-sql/stratovolt
