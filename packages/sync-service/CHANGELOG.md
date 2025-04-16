@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.8
+
+### Patch Changes
+
+- 056b1d4: fix: add a more explicit error handling in case periodic metric collection fails and make wal queries async
+
 ## 1.0.7
 
 ### Patch Changes
