@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 1.0.7
+
+### Patch Changes
+
+- 03e7f59: Always add invalid etag for empty live requests
+- c4ba869: Respond immediately to live requests with a 409 if shape invalidated/rotated
+- dc1582a: fix: correctly catch race conditions when the shape has been validated against old schema, but the underlying schema changed before we got to a snapshot query or publicaiton alteration
+- bb105ff: Add a process label for LockConnection and fix the process label for ReplicationClient.
+- 2dd3165: Clean up old connection holding logic for when the stack is not ready.
+
 ## 1.0.6
 
 ### Patch Changes
