@@ -59,7 +59,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v2
         if: steps.changesets.outputs.published == 'true'
         with:
-          token: ${{ secrets.CLOUD_REPO_TRIGGER_TOKEN }}
+          token: ${{ secrets.CROSSREPO_PAT }}
           repository: electric-sql/stratovolt
           event-type: update-electric
           client-payload: |
@@ -72,7 +72,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v2
         if: steps.changesets.outputs.published != 'true'
         with:
-          token: ${{ secrets.CLOUD_REPO_TRIGGER_TOKEN }}
+          token: ${{ secrets.CROSSREPO_PAT }}
           repository: electric-sql/stratovolt
           event-type: update-electric
           client-payload: |
