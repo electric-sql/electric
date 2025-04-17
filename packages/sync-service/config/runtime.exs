@@ -9,7 +9,7 @@ end
 
 test_log_level =
   if config_env() == :test,
-    do: env!("ELECTRIC_TEST_LOG_LEVEL", &Electric.Config.parse_log_level!/1, nil)
+    do: env!("ELECTRIC_TEST_LOG_LEVEL", &Electric.Config.parse_log_level!/1, :error)
 
 log_level =
   env!("ELECTRIC_LOG_LEVEL", &Electric.Config.parse_log_level!/1, test_log_level) || :info
