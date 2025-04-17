@@ -38,6 +38,7 @@ defmodule Electric.Config do
     db_pool_size: 20,
     replication_stream_id: "default",
     replication_slot_temporary?: false,
+    replication_slot_name: nil,
     ## HTTP API
     # set enable_http_api: false to turn off the HTTP server totally
     enable_http_api: true,
