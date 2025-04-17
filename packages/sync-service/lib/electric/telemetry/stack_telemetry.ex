@@ -19,7 +19,8 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
                    Electric.Telemetry.Opts.schema() ++
                      [
                        stack_id: [type: :string, required: true],
-                       storage: [type: :mod_arg, required: true]
+                       storage: [type: :mod_arg, required: true],
+                       slot_name: [type: :string, required: true]
                      ]
                  )
 
@@ -255,8 +256,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
       [
         {__MODULE__, :count_shapes, [opts.stack_id]},
         {__MODULE__, :get_total_disk_usage, [opts]},
-        {Electric.Connection.Manager, :report_retained_wal_size,
-         [Electric.Connection.Manager.name(opts.stack_id)]}
+        {__MODULE__, :report_retained_wal_size, [opts.stack_id, opts.slot_name]}
       ]
     end
 
@@ -289,6 +289,50 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
 
       fn metadata ->
         metadata[:stack_id] == stack_id
+      end
+    end
+
+    @retained_wal_size_query """
+    SELECT
+      pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8
+    FROM
+      pg_replication_slots
+    WHERE
+      slot_name = $1
+    """
+
+    @doc false
+    @spec report_retained_wal_size(atom() | binary(), any()) :: :ok
+    def report_retained_wal_size(stack_id, slot_name) do
+      with pid when is_pid(pid) <-
+             Electric.ProcessRegistry.name(stack_id, Electric.DbPool) |> GenServer.whereis() do
+        try do
+          %Postgrex.Result{rows: [[wal_size]]} =
+            Postgrex.query!(pid, @retained_wal_size_query, [slot_name],
+              timeout: 3_000,
+              deadline: 3_000
+            )
+
+          # The query above can return `-1` which I'm assuming means "up-to-date".
+          # This is a confusing stat if we're measuring in bytes, so normalise to
+          # [0, :infinity)
+
+          :telemetry.execute(
+            [:electric, :postgres, :replication],
+            %{wal_size: max(0, wal_size) |> dbg},
+            %{stack_id: stack_id}
+          )
+        catch
+          # catch all errors to not log them as errors, those are reporing issues at best
+          type, reason ->
+            Logger.warning(
+              "Failed to query retained WAL size\nError: #{Exception.format(type, reason)}",
+              stack_id: stack_id,
+              slot_name: slot_name
+            )
+        end
+      else
+        _ -> :ok
       end
     end
   end

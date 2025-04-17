@@ -143,19 +143,6 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(server, {:pg_info_looked_up, pg_info})
   end
 
-  def report_retained_wal_size(server) do
-    try do
-      GenServer.call(server, :report_retained_wal_size)
-    catch
-      :exit, exit_reason ->
-        Logger.warning(
-          "Failed to report retained WAL size: #{inspect(exit_reason)}. Current queue size for #{inspect(server)} is #{inspect(Process.info(server, :message_queue_len))}"
-        )
-
-        :ok
-    end
-  end
-
   @impl true
   def init(opts) do
     # Because child processes are started via `start_link()` functions and due to how Postgrex
@@ -232,20 +219,6 @@ defmodule Electric.Connection.Manager do
 
   def handle_call(:drop_replication_slot_on_stop, _from, state) do
     {:reply, :ok, %State{state | drop_slot_requested: true}}
-  end
-
-  def handle_call(:report_retained_wal_size, _from, %{pool_pid: pool, stack_id: stack_id} = state) do
-    if state.monitoring_started? do
-      slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
-
-      # We don't want to block the manager on a PG query in case the network connection
-      # is slow, so we run it in a separate task.
-      Task.start(fn ->
-        query_and_report_retained_wal_size(pool, slot_name, stack_id)
-      end)
-    end
-
-    {:reply, :ok, state}
   end
 
   @impl true
@@ -927,35 +900,6 @@ defmodule Electric.Connection.Manager do
       {:error, error} ->
         Logger.error("Failed to execute query: #{query}\nError: #{inspect(error)}")
     end
-  end
-
-  defp query_and_report_retained_wal_size(pool, slot_name, stack_id) do
-    query = """
-    SELECT
-      pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8
-    FROM
-      pg_replication_slots
-    WHERE
-      slot_name = $1
-    """
-
-    # We run this on a relatively strict timeout to avoid queueing up too many
-    # pending queries in case the network connection is slow. Worst case is we don't
-    # report the metric at all.
-    case Postgrex.query(pool, query, [slot_name], timeout: 3_000) do
-      # The query above can return `-1` which I'm assuming means "up-to-date".
-      # This is a confusing stat if we're measuring in bytes, so normalise to
-      # [0, :infinity)
-      {:ok, %Postgrex.Result{rows: [[wal_size]]}} ->
-        :telemetry.execute([:electric, :postgres, :replication], %{wal_size: max(0, wal_size)}, %{
-          stack_id: stack_id
-        })
-
-      {:error, error} ->
-        Logger.warning("Failed to query retained WAL size\nError: #{inspect(error)}")
-    end
-
-    :ok
   end
 
   defp schedule_periodic_connection_status_log(type) do
