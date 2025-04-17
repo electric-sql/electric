@@ -264,20 +264,6 @@ config :electric,
   prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
   replication_stream_id: replication_stream_id,
-  replication_slot_name:
-    env!(
-      "ELECTRIC_REPLICATION_SLOT_NAME",
-      fn str ->
-        if String.match?(str, ~r/electric_slot_[a-z0-9_]+/) do
-          str
-        else
-          raise Dotenvy.Error,
-            message:
-              "must contain only lowercase letters, numbers, and underscores and start with `electric_slot_`"
-        end
-      end,
-      nil
-    ),
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,

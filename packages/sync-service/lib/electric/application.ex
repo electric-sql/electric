@@ -85,7 +85,7 @@ defmodule Electric.Application do
     publication_name =
       Keyword.get(opts, :publication_name, "electric_publication_#{replication_stream_id}")
 
-    slot_name = get_env(opts, :replication_slot_name) || "electric_slot_#{replication_stream_id}"
+    slot_name = Keyword.get(opts, :slot_name, "electric_slot_#{replication_stream_id}")
 
     replication_connection_opts = get_env!(opts, :replication_connection_opts)
 

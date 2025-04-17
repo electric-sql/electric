@@ -103,17 +103,6 @@ Suffix for the logical replication publication and slot name.
 
 </EnvVarConfig>
 
-### ELECTRIC_REPLICATION_SLOT_NAME
-
-<EnvVarConfig
-    name="ELECTRIC_REPLICATION_SLOT_NAME"
-    defaultValue="derived from ELECTRIC_REPLICAIONT_STREAM_ID"
-    example="my-app">
-
-Explicit override for a slot name used by this Electric instance. Use with caution.
-
-</EnvVarConfig>
-
 ## Electric
 
 ### ELECTRIC_SECRET
