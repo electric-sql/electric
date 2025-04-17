@@ -63,7 +63,7 @@ defmodule Electric.ShapeCacheTest do
       send(opts[:test_pid], {:called, :prepare_tables_fn})
     end
 
-    def refresh_publication(_), do: :ok
+    def sync_publication(_), do: :ok
   end
 
   setup :verify_on_exit!
@@ -901,7 +901,7 @@ defmodule Electric.ShapeCacheTest do
 
       Mock.PublicationManager
       |> expect(:recover_shape, 1, fn _, _ -> :ok end)
-      |> expect(:refresh_publication, 1, fn _ -> :ok end)
+      |> expect(:sync_publication, 1, fn _ -> :ok end)
       |> allow(self(), fn -> Process.whereis(opts[:server]) end)
 
       restart_shape_cache(%{
@@ -955,7 +955,7 @@ defmodule Electric.ShapeCacheTest do
       Mock.PublicationManager
       |> stub(:remove_shape, fn _, _ -> :ok end)
       |> expect(:recover_shape, 1, fn _, _ -> :ok end)
-      |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
+      |> expect(:sync_publication, 1, fn _ -> raise "failed recovery" end)
       |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
       |> allow(self(), fn -> Process.whereis(opts[:server]) end)
 
@@ -979,7 +979,7 @@ defmodule Electric.ShapeCacheTest do
     end
 
     defmodule SlowPublicationManager do
-      def refresh_publication(_), do: :ok
+      def sync_publication(_), do: :ok
       def remove_shape(_, _), do: :ok
       def recover_shape(_, _), do: Process.sleep(100)
     end

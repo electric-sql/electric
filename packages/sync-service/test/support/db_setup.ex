@@ -159,8 +159,7 @@ defmodule Support.DbSetup do
       to_string(value)
       |> :erlang.phash2(64 ** 5)
       |> :binary.encode_unsigned()
-      |> Base.encode64()
-      |> String.replace_trailing("==", "")
+      |> Base.encode32(case: :lower, padding: false)
 
   defp start_db_pool(connection_opts) do
     start_opts =
