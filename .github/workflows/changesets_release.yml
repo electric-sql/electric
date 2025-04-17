@@ -50,6 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: changesets
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       # Get the Electric version of the Docker image
       - name: Get Electric version
         if: needs.changesets.outputs.published == 'true'
