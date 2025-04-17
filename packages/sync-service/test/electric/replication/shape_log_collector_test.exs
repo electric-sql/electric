@@ -25,8 +25,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   import Mox
 
-  @moduletag :capture_log
-
   setup :verify_on_exit!
 
   setup [

@@ -17,8 +17,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   setup :verify_on_exit!
 
-  @moduletag :capture_log
-
   @registry Registry.ServeShapePlugTest
 
   @test_shape %Shape{

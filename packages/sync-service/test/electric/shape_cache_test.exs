@@ -19,8 +19,6 @@ defmodule Electric.ShapeCacheTest do
   import Support.TestUtils
   alias Support.Mock
 
-  @moduletag :capture_log
-
   @shape %Shape{
     root_table: {"public", "items"},
     root_table_id: 1,
@@ -838,9 +836,6 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "after restart" do
-    # Capture the log to hide the GenServer exit messages
-    @describetag capture_log: true
-
     @describetag :tmp_dir
 
     setup do

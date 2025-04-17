@@ -17,7 +17,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
     UpdatedRecord
   }
 
-  @moduletag :capture_log
   @publication_name "test_electric_publication"
   @slot_name "test_electric_slot"
 
