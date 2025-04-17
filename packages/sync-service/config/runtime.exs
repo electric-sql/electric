@@ -7,14 +7,14 @@ if config_env() in [:dev, :test] do
   source!([".env.#{config_env()}", ".env.#{config_env()}.local", System.get_env()])
 end
 
-user_test_log_level =
+test_log_level =
   if config_env() == :test,
     do: env!("ELECTRIC_TEST_LOG_LEVEL", &Electric.Config.parse_log_level!/1, nil)
 
-user_log_level =
-  user_test_log_level || env!("ELECTRIC_LOG_LEVEL", &Electric.Config.parse_log_level!/1, :info)
+log_level =
+  env!("ELECTRIC_LOG_LEVEL", &Electric.Config.parse_log_level!/1, test_log_level) || :info
 
-config :logger, level: user_log_level
+config :logger, level: log_level
 
 config :logger, :default_formatter,
   # Doubled line breaks serve as long message boundaries
@@ -33,7 +33,7 @@ config :logger,
 
 if config_env() == :test do
   config :electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001)
-  config :logger, :default_handler, level: user_test_log_level
+  config :logger, :default_handler, level: test_log_level
 end
 
 config :sentry,
