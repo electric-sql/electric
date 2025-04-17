@@ -265,6 +265,8 @@ config :electric,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
+  replication_slot_temporary_random_name?:
+    env!("ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME", :boolean, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
   storage_dir: storage_dir,
