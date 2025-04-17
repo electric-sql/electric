@@ -1,8 +1,6 @@
 defmodule Electric.Client.EmbeddedTest do
   use ExUnit.Case, async: false
 
-  @moduletag :capture_log
-
   alias Electric.Client
   alias Electric.Client.Message.{ChangeMessage, ControlMessage}
   alias Electric.Client.ShapeDefinition

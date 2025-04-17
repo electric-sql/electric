@@ -16,7 +16,6 @@ defmodule Electric.Plug.RouterTest do
   alias Electric.Replication.LogOffset
 
   @moduletag :tmp_dir
-  @moduletag :capture_log
 
   @first_offset to_string(LogOffset.first())
   @up_to_date %{"headers" => %{"control" => "up-to-date"}}
