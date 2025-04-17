@@ -1,5 +1,6 @@
 defmodule Electric.Application do
   use Application
+  require Logger
 
   @impl true
   def start(_type, _args) do
@@ -85,7 +86,21 @@ defmodule Electric.Application do
     publication_name =
       Keyword.get(opts, :publication_name, "electric_publication_#{replication_stream_id}")
 
-    slot_name = get_env(opts, :replication_slot_name) || "electric_slot_#{replication_stream_id}"
+    slot_temporary? = get_env(opts, :replication_slot_temporary?)
+    slot_temporary_random_name? = get_env(opts, :replication_slot_temporary_random_name?)
+
+    slot_name =
+      if slot_temporary? and slot_temporary_random_name? do
+        name = "electric_slot_#{Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)}"
+
+        Logger.warning(
+          "Using a temporary replication slot with name: #{name}. This slot will be deleted on shutdown, so persistent storage should not outlive the Electric instance."
+        )
+
+        name
+      else
+        Keyword.get(opts, :slot_name, "electric_slot_#{replication_stream_id}")
+      end
 
     replication_connection_opts = get_env!(opts, :replication_connection_opts)
 
