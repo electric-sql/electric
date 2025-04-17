@@ -55,7 +55,7 @@ jobs:
         if: needs.changesets.outputs.published == 'true'
         id: sync_version
         run: |
-          VERSION=$(jq -r '.version' packages/sync-service/package.json)
+          VERSION=$(jq -r '.version' ./packages/sync-service/package.json)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Trigger cloud update (on release)
         uses: peter-evans/repository-dispatch@v2
