@@ -257,8 +257,6 @@ defmodule Electric.StackSupervisor do
 
     shape_changes_registry_name = registry_name(stack_id)
 
-    :ets.new(:"#{stack_id}:stack_meta", [:set, :public, :named_table])
-
     shape_cache_opts = [
       stack_id: stack_id,
       storage: storage,
