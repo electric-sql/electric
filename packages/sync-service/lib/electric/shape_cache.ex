@@ -82,20 +82,11 @@ defmodule Electric.ShapeCache do
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       stack_id = Keyword.fetch!(opts, :stack_id)
+
       name = Keyword.get(opts, :name, name(stack_id))
+      db_pool = Keyword.get(opts, :db_pool, Electric.Connection.Manager.pool_name(stack_id))
 
-      db_pool =
-        Keyword.get(
-          opts,
-          :db_pool,
-          Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
-        )
-
-      GenServer.start_link(
-        __MODULE__,
-        Map.new(opts) |> Map.put(:db_pool, db_pool) |> Map.put(:name, name),
-        name: name
-      )
+      GenServer.start_link(__MODULE__, [name: name, db_pool: db_pool] ++ opts, name: name)
     end
   end
 
@@ -190,7 +181,9 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def init(opts) do
-    stack_id = opts[:stack_id]
+    opts = Map.new(opts)
+
+    stack_id = opts.stack_id
     meta_table = :ets.new(:"#{stack_id}:shape_meta_table", [:named_table, :public, :ordered_set])
 
     Process.set_label({:shape_cache, stack_id})
@@ -228,7 +221,7 @@ defmodule Electric.ShapeCache do
         clean_up_all_shapes(state)
         Lsn.from_integer(0)
       else
-        recover_shapes(state, opts[:recover_shape_timeout])
+        recover_shapes(state, opts.recover_shape_timeout)
       end
 
     # ensure publication filters are in line with existing shapes,
