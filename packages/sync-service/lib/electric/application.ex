@@ -4,14 +4,15 @@ defmodule Electric.Application do
 
   @impl true
   def start(_type, _args) do
-    children =
-      if Application.get_env(:electric, :start_in_library_mode, true) do
-        children_library()
-      else
-        children_application()
-      end
+    supervisor_opts = [strategy: :one_for_one, name: Electric.Supervisor]
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: Electric.Supervisor)
+    if Application.get_env(:electric, :start_in_library_mode, true) do
+      Supervisor.start_link(children_library(), supervisor_opts)
+    else
+      app_vsn = Application.spec(:electric, :vsn)
+      Logger.info("Starting ElectricSQL #{app_vsn}")
+      Supervisor.start_link(children_application(), supervisor_opts)
+    end
   end
 
   def children_library do
