@@ -304,7 +304,6 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     @doc false
     @spec report_retained_wal_size(atom() | binary(), any()) :: :ok
     def report_retained_wal_size(stack_id, slot_name) do
-
       try do
         %Postgrex.Result{rows: [[wal_size]]} =
           Postgrex.query!(
