@@ -252,12 +252,9 @@ defmodule Electric.StackSupervisor do
     shape_log_collector =
       Electric.Replication.ShapeLogCollector.name(stack_id)
 
-    db_pool =
-      Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
+    db_pool = Electric.Connection.Manager.pool_name(stack_id)
 
     shape_changes_registry_name = registry_name(stack_id)
-
-    :ets.new(:"#{stack_id}:stack_meta", [:set, :public, :named_table])
 
     shape_cache_opts = [
       stack_id: stack_id,
