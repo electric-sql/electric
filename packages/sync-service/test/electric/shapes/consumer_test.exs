@@ -136,11 +136,7 @@ defmodule Electric.Shapes.ConsumerTest do
                stack_id: ctx.stack_id,
                inspector: {Mock.Inspector, []},
                log_producer: ShapeLogCollector.name(ctx.stack_id),
-               db_pool:
-                 Electric.ProcessRegistry.name(
-                   ctx.stack_id,
-                   Electric.DbPool
-                 ),
+               db_pool: Electric.Connection.Manager.pool_name(ctx.stack_id),
                registry: registry_name,
                shape_status: {Mock.ShapeStatus, []},
                publication_manager: {Mock.PublicationManager, []},

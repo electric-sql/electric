@@ -112,7 +112,17 @@ defmodule Electric.Connection.Manager do
   end
 
   def name(opts) do
-    name(Keyword.fetch!(opts, :stack_id))
+    name(Access.fetch!(opts, :stack_id))
+  end
+
+  @db_pool_ephemeral_module_name Electric.DbPool
+
+  def pool_name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, @db_pool_ephemeral_module_name)
+  end
+
+  def pool_name(opts) do
+    name(Access.fetch!(opts, :stack_id))
   end
 
   @doc """
