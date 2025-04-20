@@ -635,14 +635,6 @@ defmodule Electric.Connection.Manager do
   end
 
   defp handle_connection_error(
-         {:shutdown, {:failed_to_start_child, Electric.Postgres.ReplicationClient, error}},
-         state,
-         mode
-       ) do
-    handle_connection_error(error, state, mode)
-  end
-
-  defp handle_connection_error(
          %DBConnection.ConnectionError{severity: :error} = error,
          state,
          mode
