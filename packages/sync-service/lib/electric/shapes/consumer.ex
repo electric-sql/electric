@@ -4,6 +4,7 @@ defmodule Electric.Shapes.Consumer do
     significant: true
 
   import Electric.Postgres.Xid, only: [compare: 2]
+  import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
   alias Electric.Shapes.Api
   alias Electric.LogItems
@@ -78,17 +79,25 @@ defmodule Electric.Shapes.Consumer do
 
     {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
+    # When writing the snapshot initially, we don't know ahead of time the real last offset for the
+    # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
+    # however many there may be. That means the clients will be using that as the latest offset.
+    # In order to avoid confusing the clients, we make sure that we preserve that functionality
+    # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
+    normalized_latest_offset =
+      if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
+
     :ok =
       shape_status.initialise_shape(
         shape_status_state,
         config.shape_handle,
         pg_snapshot[:xmin],
-        latest_offset
+        normalized_latest_offset
       )
 
     state =
       Map.merge(config, %{
-        latest_offset: latest_offset,
+        latest_offset: normalized_latest_offset,
         pg_snapshot: pg_snapshot,
         log_state: @initial_log_state,
         inspector: config.inspector,
