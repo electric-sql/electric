@@ -9,8 +9,6 @@ defmodule Electric.Plug.HealthCheckPlugTest do
   alias Electric.Plug.HealthCheckPlug
   alias Electric.StatusMonitor
 
-  @moduletag :capture_log
-
   setup :with_stack_id_from_test
 
   def conn(ctx) do

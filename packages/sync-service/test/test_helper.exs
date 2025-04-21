@@ -4,5 +4,5 @@
 # supervision tree in the test environment.
 # Registry.start_link(name: Electric.Application.process_registry(), keys: :unique)
 
-ExUnit.start(assert_receive_timeout: 400, exclude: [slow: true])
+ExUnit.start(assert_receive_timeout: 400, exclude: [slow: true], capture_log: true)
 Repatch.setup()

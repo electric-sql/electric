@@ -11,7 +11,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   import Mox
 
   setup :verify_on_exit!
-  @moduletag :capture_log
 
   @registry Registry.DeleteShapePlugTest
 
