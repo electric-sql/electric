@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.10
+
+### Patch Changes
+
+- 0646255: Make Electric disable SSL when it fails to connect to Fly Postgres using SSL.
+- d946dd1: fix: make sure wal size reporting can't block anything
+- db9bfec: fix: shape cleanup should delete the shape handle too
+
 ## 1.0.9
 
 ### Patch Changes
