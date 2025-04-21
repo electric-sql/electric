@@ -60,13 +60,14 @@ export class ElectricProvider<
   private unsubscribeShapes?: () => void
   private exitHandler?: () => void
 
-  private onSendError: (error: unknown, context: string) => Promise<boolean>
+  private onSendError?: (error: unknown, context: string) => Promise<boolean>
 
   private fetchClient?: typeof fetch
 
-  // TODO:
-  // we currently track local changes that haven't been send, but if we track
-  // the shape state vector we can diff changes without actually storing them
+  // TODO: implement database provider for Electric
+  // - Keep document state in same place as shape resume state
+  // - Compute diff from local update state instead of persisting
+  //   the batch of pending changes
 
   /**
    * Creates a new ElectricProvider instance that connects YJS documents to Electric SQL.
@@ -79,8 +80,8 @@ export class ElectricProvider<
    * @param {AwarenessShapeOptions} options.awareness.options - Options for the awareness shape stream
    * @param {string} options.awareness.endpoint - URL endpoint for sending awareness states
    * @param {awarenessProtocol.Awareness} options.awareness.protocol - The awareness protocol implementation
-   * @param {ResumeState} [options.resumeState] - Initial resume state for synchronization
    * @param {ResumeStateProvider} [options.resumeStateProvider] - Alternatively, you can use a provider for loading/saving resume state
+   * @param {Observable<string>} [options.databaseProvider] - Observable for loading/saving document state (e.g. IndexeddbPersistence)
    * @param {boolean} [options.connect=true] - Whether to automatically connect upon initialization
    * @param {Function} [options.onSendError] - Error handler for sending operations/awareness changes
    * @param {Function} [options.fetchClient] - Custom fetch implementation to use for sending operations/awareness changes
@@ -89,12 +90,11 @@ export class ElectricProvider<
     doc,
     operations,
     awareness,
-    resumeState,
     resumeStateProvider,
+    databaseProvider,
     connect = true,
     onSendError,
     fetchClient,
-    storageProvider,
   }: {
     doc: Y.Doc
     operations: {
@@ -107,18 +107,19 @@ export class ElectricProvider<
       protocol: awarenessProtocol.Awareness
     }
     resumeStateProvider?: ResumeStateProvider
-    resumeState?: ResumeState
+    databaseProvider?: Observable<string>
     connect?: boolean
     onSendError?: (error: unknown, context: string) => Promise<boolean>
     fetchClient?: typeof fetch
-    storageProvider?: Observable<string> // compatible with IndexeddbPersistence
   }) {
     super()
 
     this.doc = doc
     this.operations = operations
 
-    this.onSendError = onSendError || (async () => false)
+    if (onSendError) {
+      this.onSendError = onSendError
+    }
     this.awareness = awareness
 
     this.fetchClient = fetchClient
@@ -128,11 +129,7 @@ export class ElectricProvider<
     this._connected = false
     this._synced = false
 
-    if (resumeState) {
-      this.resume = resumeState
-    } else {
-      this.resume = this.resumeStateProvider?.load() ?? {}
-    }
+    this.resume = this.resumeStateProvider?.load() ?? {}
 
     // recovery
     if (this.resume.batching || this.resume.sending) {
@@ -162,8 +159,8 @@ export class ElectricProvider<
       }
     }
 
-    if (storageProvider) {
-      storageProvider.once(`synced`, () => {
+    if (databaseProvider) {
+      databaseProvider.once(`synced`, () => {
         this.ready = true
         if (connect) {
           this.connect()
@@ -485,7 +482,8 @@ export class ElectricProvider<
       return true
     } catch (error) {
       if (!badResponse) {
-        const shouldRetry = await this.onSendError(error, endpointType)
+        const shouldRetry = await (this.onSendError?.(error, endpointType) ??
+          false)
         if (!shouldRetry) {
           this.disconnect()
         }

@@ -30,7 +30,7 @@ const user = usercolors[random.uint32() % usercolors.length]
 const ydoc = new Y.Doc()
 
 // use database provider
-const persistence = new IndexeddbPersistence(room, ydoc)
+const databaseProvider = new IndexeddbPersistence(room, ydoc)
 
 const awareness = new Awareness(ydoc)
 awareness.setLocalStateField(`user`, {
@@ -79,7 +79,7 @@ const network = new ElectricProvider({
     protocol: awareness!,
   },
   resumeStateProvider,
-  storageProvider: persistence,
+  databaseProvider,
 })
 
 export default function ElectricEditor() {

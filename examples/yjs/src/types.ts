@@ -31,11 +31,6 @@ export type ResumeState = {
   batching?: Uint8Array
   sending?: Uint8Array
 }
-
-/**
- * Interface for shape stream resume state providers
- * TODO: this needs to become async to be able to use Indexeddb and others
- */
 export interface ResumeStateProvider {
   /**
    * Save the current resume state
