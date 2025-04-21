@@ -307,7 +307,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
       try do
         %Postgrex.Result{rows: [[wal_size]]} =
           Postgrex.query!(
-            Electric.ProcessRegistry.name(stack_id, Electric.DbPool),
+            Electric.Connection.Manager.pool_name(stack_id),
             @retained_wal_size_query,
             [slot_name],
             timeout: 3_000,

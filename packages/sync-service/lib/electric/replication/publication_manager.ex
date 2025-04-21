@@ -134,20 +134,11 @@ defmodule Electric.Replication.PublicationManager do
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       stack_id = Keyword.fetch!(opts, :stack_id)
+
       name = Keyword.get(opts, :name, name(stack_id))
+      db_pool = Keyword.get(opts, :db_pool, Electric.Connection.Manager.pool_name(stack_id))
 
-      db_pool =
-        Keyword.get(
-          opts,
-          :db_pool,
-          Electric.ProcessRegistry.name(stack_id, Electric.DbPool)
-        )
-
-      GenServer.start_link(
-        __MODULE__,
-        Map.new(opts) |> Map.put(:db_pool, db_pool) |> Map.put(:name, name),
-        name: name
-      )
+      GenServer.start_link(__MODULE__, [name: name, db_pool: db_pool] ++ opts, name: name)
     end
   end
 
