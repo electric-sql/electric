@@ -706,7 +706,7 @@ defmodule Electric.Shapes.ConsumerTest do
     setup(ctx) do
       snapshot_delay = Map.get(ctx, :snapshot_delay, nil)
 
-      %{shape_cache_opts: shape_cache_opts} =
+      %{shape_cache_opts: shape_cache_opts, consumer_supervisor: consumer_supervisor} =
         Support.ComponentSetup.with_shape_cache(
           Map.merge(ctx, %{
             pool: nil,
@@ -725,7 +725,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       [
         producer: ctx.shape_log_collector,
-        shape_cache_opts: shape_cache_opts
+        shape_cache_opts: shape_cache_opts,
+        consumer_supervisor: consumer_supervisor
       ]
     end
 
@@ -848,6 +849,41 @@ defmodule Electric.Shapes.ConsumerTest do
       assert [_op1, _op2] =
                Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
                |> Enum.map(&Jason.decode!/1)
+    end
+
+    test "restarting a consumer doesn't lower the last known offset when only snapshot is present",
+         ctx do
+      %{
+        shape_cache_opts: shape_cache_opts
+      } = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, shape_cache_opts)
+
+      :started =
+        ShapeCache.await_snapshot_start(
+          shape_handle,
+          shape_cache_opts
+        )
+
+      assert {_, offset1} = ShapeCache.get_shape(shape_handle, shape_cache_opts)
+      assert offset1 == LogOffset.last_before_real_offsets()
+
+      # Stop the consumer and the shape cache server to simulate a restart
+      Supervisor.stop(ctx.consumer_supervisor)
+      GenServer.stop(shape_cache_opts[:server])
+
+      # Restart the shape cache and the consumers
+      Support.ComponentSetup.with_shape_cache(
+        Map.merge(ctx, %{
+          pool: nil,
+          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+        }),
+        log_producer: ctx.shape_log_collector,
+        run_with_conn_fn: &run_with_conn_noop/2
+      )
+
+      assert {_, offset2} = ShapeCache.get_shape(shape_handle, shape_cache_opts)
+      assert LogOffset.compare(offset2, offset1) != :lt
     end
   end
 end
