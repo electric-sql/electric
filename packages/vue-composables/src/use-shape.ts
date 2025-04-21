@@ -4,6 +4,7 @@ import {
   ShapeStreamOptions,
   Row,
   GetExtensions,
+  Offset
 } from '@electric-sql/client'
 import { Ref, onUnmounted, ref } from 'vue'
 
@@ -90,14 +91,36 @@ export function getShape<T extends Row<unknown>>(
   return newShape
 }
 
-export interface UseShapeOptions<T extends Row<unknown> = Row>
-  extends ShapeStreamOptions<GetExtensions<T>> {
+export interface UseShapeOptions<T extends Row<unknown> = Row> {
+  /**
+   * The full URL to where the Shape is served. This can either be the Electric server
+   * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
+   */
+  url: string
+
+  /**
+   * Shape parameters including table, columns, where, etc.
+   */
+  params: {
+    /** The root table for the shape */
+    table: string
+    /** The columns to include in the shape */
+    columns?: string[]
+    /** The where clauses for the shape */
+    where?: string
+    /** Positional where clause parameter values */
+    params?: Record<`${number}`, string> | string[]
+    /** Replica type (full or default) */
+    replica?: 'full' | 'default'
+    [key: string]: any
+  }
+  
   /**
    * Custom fetch client for making requests
    * @type {(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>}
    */
   fetchClient?: (
-    input: RequestInfo | URL,
+    input: string | URL | Request,
     init?: RequestInit
   ) => Promise<Response>
 
@@ -107,6 +130,26 @@ export interface UseShapeOptions<T extends Row<unknown> = Row>
    * @default true
    */
   subscribe?: boolean
+
+  /**
+   * The offset on the shape log
+   */
+  offset?: Offset
+  
+  /**
+   * Shape handle for caching
+   */
+  handle?: string
+  
+  /**
+   * HTTP headers to attach to requests
+   */
+  headers?: Record<string, string | (() => string | Promise<string>)>
+  
+  /**
+   * Signal to abort requests
+   */
+  signal?: AbortSignal
 }
 
 export interface UseShapeResult<T extends Row<unknown> = Row> {
@@ -153,8 +196,19 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
 export function useShape<T extends Row<unknown> = Row>(
   options: UseShapeOptions<T>
 ): UseShapeResult<T> {
-  // Extract fetchClient from options if provided
-  const { fetchClient, ...streamOptions } = options
+  // Extract options to create ShapeStreamOptions
+  const { fetchClient, url, params, subscribe, offset, handle, headers, signal } = options
+
+  // Convert to ShapeStreamOptions
+  const streamOptions: ShapeStreamOptions<GetExtensions<T>> = {
+    url,
+    params,
+    subscribe,
+    offset,
+    handle,
+    headers,
+    signal
+  }
 
   // Store original fetch to restore later
   let originalFetch: typeof fetch | undefined
@@ -163,7 +217,7 @@ export function useShape<T extends Row<unknown> = Row>(
   // We need to do this because Vue setup functions can be called multiple times
   if (fetchClient) {
     originalFetch = globalThis.fetch
-    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
       return fetchClient(input, init)
     }
   }
