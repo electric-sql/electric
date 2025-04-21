@@ -304,35 +304,36 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     @doc false
     @spec report_retained_wal_size(atom() | binary(), any()) :: :ok
     def report_retained_wal_size(stack_id, slot_name) do
-      with pid when is_pid(pid) <-
-             Electric.ProcessRegistry.name(stack_id, Electric.DbPool) |> GenServer.whereis() do
-        try do
-          %Postgrex.Result{rows: [[wal_size]]} =
-            Postgrex.query!(pid, @retained_wal_size_query, [slot_name],
-              timeout: 3_000,
-              deadline: 3_000
-            )
-
-          # The query above can return `-1` which I'm assuming means "up-to-date".
-          # This is a confusing stat if we're measuring in bytes, so normalise to
-          # [0, :infinity)
-
-          :telemetry.execute(
-            [:electric, :postgres, :replication],
-            %{wal_size: max(0, wal_size) |> dbg},
-            %{stack_id: stack_id}
+      try do
+        %Postgrex.Result{rows: [[wal_size]]} =
+          Postgrex.query!(
+            Electric.ProcessRegistry.name(stack_id, Electric.DbPool),
+            @retained_wal_size_query,
+            [slot_name],
+            timeout: 3_000,
+            deadline: 3_000
           )
-        catch
-          # catch all errors to not log them as errors, those are reporing issues at best
-          type, reason ->
-            Logger.warning(
-              "Failed to query retained WAL size\nError: #{Exception.format(type, reason)}",
-              stack_id: stack_id,
-              slot_name: slot_name
-            )
-        end
-      else
-        _ -> :ok
+
+        # The query above can return `-1` which I'm assuming means "up-to-date".
+        # This is a confusing stat if we're measuring in bytes, so normalise to
+        # [0, :infinity)
+
+        :telemetry.execute(
+          [:electric, :postgres, :replication],
+          %{wal_size: max(0, wal_size)},
+          %{stack_id: stack_id}
+        )
+      catch
+        :exit, {:noproc, _} ->
+          :ok
+
+        # catch all errors to not log them as errors, those are reporing issues at best
+        type, reason ->
+          Logger.warning(
+            "Failed to query retained WAL size\nError: #{Exception.format(type, reason)}",
+            stack_id: stack_id,
+            slot_name: slot_name
+          )
       end
     end
   end
