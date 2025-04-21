@@ -4,8 +4,8 @@
 [global pg_container_name=]
 [global pg_host_port=54331]
 [global pg_pooler_host_port=64331]
-[global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
-[global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/postgres?sslmode=disable]
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric?sslmode=disable]
+[global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/electric?sslmode=disable]
 
 [macro setup_pg_with_shell_name shell_name container_env_vars config_opts]
   [shell $shell_name]
@@ -79,7 +79,7 @@
 
 [macro start_psql_shell shell_name pg_container_name]
   [shell $shell_name]
-    !docker exec -u postgres -it $pg_container_name psql
+    !docker exec -u postgres -it $pg_container_name psql --dbname electric
 [endmacro]
 
 [macro start_psql]
@@ -88,7 +88,7 @@
 
 [macro seed_pg]
   [shell psql]
-    !docker exec -u postgres -it $pg_container_name psql
+    !docker exec -u postgres -it $pg_container_name psql --dbname electric
   
     """!
     CREATE TABLE items2 (
