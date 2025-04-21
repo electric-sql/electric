@@ -305,7 +305,12 @@ defmodule Electric.StackSupervisor do
       if Code.ensure_loaded?(Electric.Telemetry.StackTelemetry) do
         [
           {Electric.Telemetry.StackTelemetry,
-           config.telemetry_opts ++ [stack_id: stack_id, storage: config.storage]}
+           config.telemetry_opts ++
+             [
+               stack_id: stack_id,
+               storage: config.storage,
+               slot_name: config.replication_opts[:slot_name]
+             ]}
         ]
       else
         []
