@@ -13,31 +13,6 @@
 
 [my stack_id="single_stack"]
 
-###
-
-[macro capture_stack_supervisor_pid]
-  ?pid=(<\d+\.\d+\.\d+>) \[debug\] The single StackSupervisor is initializing...
-  # All interactive commands and matches are performed within a single IEx session,
-  # so we can assign local variables here which is less of a hassle than using lux variables.
-  !stack_supervisor_pid = :erlang.list_to_pid(~c"$1")
-  !stack_supervisor_mon = Process.monitor(stack_supervisor_pid)
-[endmacro]
-
-[macro verify_connection_and_stack_supervisors_shutdown stack_id invalidated_slot_error]
-  ??$invalidated_slot_error
-  ??[warning] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
-
-  !receive do \
-     {:DOWN, ^stack_supervisor_mon, :process, ^stack_supervisor_pid, _} -> IO.puts "stack supervisor is down" \
-   end
-  ??stack supervisor is down
-
-  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
-  ??Stack supervisor pid: nil
-[endmacro]
-
-###
-
 ## Start a new Postgres cluster configured for easy replication slot invalidation.
 [invoke setup_pg_with_shell_name \
   "pg" \
@@ -49,14 +24,7 @@
 
 [shell electric]
   [invoke capture_stack_supervisor_pid]
-
-  ??[info] Starting replication from postgres
-
-  # Verify that the stack supervisor is registered using regular process registration. If we
-  # change this at any point, the line below will catch it and we'll be able to correct the
-  # check further down that verifies that the stack supervisor is no longer running.
-  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
-  ??Stack supervisor pid: #PID<
+  [invoke wait_on_stack_supervisor_registration]
 
 ## Seed the database with enough data to exceed max_wal_size and force a checkpoint that
 ## will invalidate the replication slot.
@@ -71,17 +39,16 @@
   # Reset the failure pattern because we'll be matching on an error.
   -
 
-  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id $invalidated_slot_error]
+  ??$invalidated_slot_error
+  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id]
 
   # Restart the OTP application to verify that the supervisors shut down again due to the invalidated slot.
   !:ok = Application.stop(:electric)
   !:ok = Application.start(:electric)
 
   [invoke capture_stack_supervisor_pid]
-
-  ??[info] Starting replication from postgres
-
-  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id $invalidated_slot_error]
+  ??$invalidated_slot_error
+  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id]
 
 [cleanup]
   [invoke teardown]

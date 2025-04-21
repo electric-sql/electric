@@ -160,6 +160,34 @@
     [invoke wait-for "curl -X GET http://localhost:$electric_port/v1/health?database_id=$tenant_id" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
 [endmacro]
 
+[macro capture_stack_supervisor_pid]
+  ?pid=(<\d+\.\d+\.\d+>) \[debug\] The single StackSupervisor is initializing...
+  # All interactive commands and matches are performed within a single IEx session,
+  # so we can assign local variables here which is less of a hassle than using lux variables.
+  !stack_supervisor_pid = :erlang.list_to_pid(~c"$1")
+  !stack_supervisor_mon = Process.monitor(stack_supervisor_pid)
+[endmacro]
+
+[macro wait_on_stack_supervisor_registration]
+  # Verify that the stack supervisor is registered using regular process registration. If we
+  # change this at any point, the line below will catch it and we'll be able to correct the
+  # check further down that verifies that the stack supervisor is no longer running.
+  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
+  ??Stack supervisor pid: #PID<
+[endmacro]
+
+[macro verify_connection_and_stack_supervisors_shutdown stack_id]
+  ??[warning] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
+
+  !receive do \
+     {:DOWN, ^stack_supervisor_mon, :process, ^stack_supervisor_pid, _} -> IO.puts "stack supervisor is down" \
+   end
+  ??stack supervisor is down
+
+  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
+  ??Stack supervisor pid: nil
+[endmacro]
+
 [macro teardown_container container_name]
   -$fail_pattern
   !docker rm -f -v $container_name 2>/dev/null || true
