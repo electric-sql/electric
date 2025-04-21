@@ -874,11 +874,9 @@ defmodule Electric.Shapes.ConsumerTest do
       assert {_, offset1} = ShapeCache.get_shape(shape_handle, shape_cache_opts)
       assert offset1 == LogOffset.last_before_real_offsets()
 
-      # Kill the consumer and the shape cache server to simulate a restart
-      Process.flag(:trap_exit, true)
-      Process.exit(ctx.consumer_supervisor |> Process.whereis(), :kill)
-      Process.exit(shape_cache_opts[:server] |> Process.whereis(), :kill)
-      Process.sleep(100)
+      # Stop the consumer and the shape cache server to simulate a restart
+      Supervisor.stop(ctx.consumer_supervisor)
+      GenServer.stop(shape_cache_opts[:server])
 
       # Restart the shape cache and the consumers
       Support.ComponentSetup.with_shape_cache(
