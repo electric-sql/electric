@@ -7,11 +7,11 @@
 [global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
 [global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/postgres?sslmode=disable]
 
-[macro setup_pg_with_name shell_name initdb_args config_opts]
+[macro setup_pg_with_shell_name shell_name container_env_vars config_opts]
   [shell $shell_name]
     -$fail_pattern
 
-    # Create network for given contianer to be able to attach pooler
+    # Create a named network for the PG container to be able to attach pooler
     !docker network ls | grep ${pg_container_name}-network || docker network create ${pg_container_name}-network
   
     !docker run \
@@ -20,7 +20,7 @@
       -e POSTGRES_DB=electric \
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=password \
-      -e POSTGRES_INITDB_ARGS=${initdb_args} \
+      ${container_env_vars} \
       -p $pg_host_port:5432 \
       -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
       postgres:14-alpine \
@@ -34,12 +34,13 @@
     -
 [endmacro]
 
-[macro setup_pg initdb_args config_opts]
-  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+[macro setup_pg]
+  [invoke setup_pg_with_shell_name "pg" "" ""]
 [endmacro]
 
-[macro setup_pg_with_pooler initdb_args config_opts]
-  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+[macro setup_pg_with_pooler]
+  [invoke setup_pg]
+
   [shell "pg_pooler"]
     -$fail_pattern
 

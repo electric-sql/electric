@@ -7,7 +7,7 @@
 ###
 
 ## Start a new Postgres cluster
-[invoke setup_pg "" ""]
+[invoke setup_pg]
 
 ## Start the first sync service.
 [invoke setup_electric_shell_with_tenant "electric_1" "3000"]

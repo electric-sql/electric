@@ -6,26 +6,7 @@
 [global num_items_per_batch=10]
 
 [macro setup_pg_with_lsn lsn_pos]
-  [shell pg-$lsn_pos]
-    -$fail_pattern
-  
-    !docker run \
-      --name $pg_container_name \
-      -e POSTGRES_DB=electric \
-      -e POSTGRES_USER=postgres \
-      -e POSTGRES_PASSWORD=password \
-      -e ELECTRIC_PG_START_WAL="00000001$lsn_pos" \
-      -p $pg_host_port:5432 \
-      -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
-      postgres:14-alpine \
-        -c wal_level=logical
-
-    ??PostgreSQL init process complete; ready for start up.
-    ??database system is ready to accept connections
-  
-    # Reset the failure pattern to avoid false failures when Electric tries to create an already
-    # existing publication or replication slot.
-    -
+  [invoke setup_pg_with_shell_name "pg-$lsn_pos" "-e ELECTRIC_PG_START_WAL=00000001$lsn_pos" ""]
 [endmacro]
 
 

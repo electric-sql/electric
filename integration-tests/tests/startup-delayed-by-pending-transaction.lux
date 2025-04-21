@@ -7,7 +7,7 @@
 ###
 
 ## Start a new Postgres cluster
-[invoke setup_pg "" ""]
+[invoke setup_pg]
 
 ## Start a pending transaction that will block Electric's initialization
 [invoke start_psql]

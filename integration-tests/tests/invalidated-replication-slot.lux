@@ -39,8 +39,9 @@
 ###
 
 ## Start a new Postgres cluster configured for easy replication slot invalidation.
-[invoke setup_pg \
-  "--wal-segsize=1" \
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e POSTGRES_INITDB_ARGS=--wal-segsize=1" \
   "-c max_slot_wal_keep_size=1MB -c max_wal_size=2MB"]
 
 ## Start the sync service.
