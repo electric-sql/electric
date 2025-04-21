@@ -469,7 +469,7 @@ export class ElectricProvider<
 
     let badResponse = false
     try {
-      const response = await(this.fetchClient ?? fetch)(endpoint!, {
+      const response = await (this.fetchClient ?? fetch)(endpoint!, {
         method: `PUT`,
         headers: {
           "Content-Type": `application/octet-stream`,

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 
 import * as Y from "yjs"
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
-import { ElectricProvider } from "../lib/y-electric"
+import { ElectricProvider } from "../y-electric"
 import { Awareness } from "y-protocols/awareness"
 
 import { EditorState } from "@codemirror/state"
@@ -13,7 +13,7 @@ import { javascript } from "@codemirror/lang-javascript"
 import * as random from "lib0/random"
 import { IndexeddbPersistence } from "y-indexeddb"
 import { parseToDecoder } from "../common/utils"
-import { LocalStorageResumeStateProvider } from "../lib/local-storage-persistence"
+import { LocalStorageResumeStateProvider } from "../local-storage-persistence"
 
 const room = `electric-demo`
 

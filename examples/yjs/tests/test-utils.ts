@@ -1,8 +1,8 @@
 import { vi, Mock } from "vitest"
 import * as Y from "yjs"
-import { ElectricProvider } from "../src/lib/y-electric"
+import { ElectricProvider } from "../src/y-electric"
 import { Message, ShapeStream } from "@electric-sql/client"
-import { OperationMessage } from "../src/lib/types"
+import { OperationMessage } from "../src/types"
 import { parseToDecoder } from "../src/common/utils"
 
 // Mock the Electric client library
