@@ -400,6 +400,12 @@ defmodule Electric.ShapeCache do
         lsn
 
       nil ->
+        Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
+          state.consumer_supervisor,
+          state.stack_id,
+          shape_handle
+        )
+
         unsafe_cleanup_shape!(shape_handle, state)
 
         Logger.error(
@@ -455,6 +461,10 @@ defmodule Electric.ShapeCache do
   end
 
   defp unsafe_cleanup_shape!(shape_handle, state) do
+    # Remove the handle from the shape status
+    state.shape_status.remove_shape(state.shape_status_state, shape_handle)
+
+    # Cleanup the storage for the shape
     shape_handle
     |> Electric.ShapeCache.Storage.for_shape(state.storage)
     |> Electric.ShapeCache.Storage.unsafe_cleanup!()
