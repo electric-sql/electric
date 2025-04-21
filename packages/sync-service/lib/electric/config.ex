@@ -102,18 +102,15 @@ defmodule Electric.Config do
     Electric.Utils.uuid4()
   end
 
-  @spec ensure_installation_id(keyword, binary) :: :ok
   # the installation id is persisted to disk to remain the same between restarts of the sync service
-  def ensure_installation_id(config, instance_id)
-      when is_list(config) and is_binary(instance_id) do
-    kv = Keyword.fetch!(config, :persistent_kv)
-
-    case Electric.PersistentKV.get(kv, @installation_id_key) do
+  @spec persist_installation_id(term, binary) :: :ok
+  def persist_installation_id(persistent_kv, instance_id) when is_binary(instance_id) do
+    case Electric.PersistentKV.get(persistent_kv, @installation_id_key) do
       {:ok, id} when is_binary(id) ->
         id
 
       {:error, :not_found} ->
-        :ok = Electric.PersistentKV.set(kv, @installation_id_key, instance_id)
+        :ok = Electric.PersistentKV.set(persistent_kv, @installation_id_key, instance_id)
         instance_id
     end
   end
