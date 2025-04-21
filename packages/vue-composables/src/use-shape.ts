@@ -1,12 +1,12 @@
 import {
+  GetExtensions,
+  Offset,
+  Row,
   Shape,
   ShapeStream,
   ShapeStreamOptions,
-  Row,
-  GetExtensions,
-  Offset
 } from '@electric-sql/client'
-import { Ref, onUnmounted, ref } from 'vue'
+import { onUnmounted, reactive } from 'vue'
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
@@ -114,7 +114,7 @@ export interface UseShapeOptions<T extends Row<unknown> = Row> {
     replica?: 'full' | 'default'
     [key: string]: any
   }
-  
+
   /**
    * Custom fetch client for making requests
    * @type {(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>}
@@ -135,17 +135,17 @@ export interface UseShapeOptions<T extends Row<unknown> = Row> {
    * The offset on the shape log
    */
   offset?: Offset
-  
+
   /**
    * Shape handle for caching
    */
   handle?: string
-  
+
   /**
    * HTTP headers to attach to requests
    */
   headers?: Record<string, string | (() => string | Promise<string>)>
-  
+
   /**
    * Signal to abort requests
    */
@@ -154,10 +154,10 @@ export interface UseShapeOptions<T extends Row<unknown> = Row> {
 
 export interface UseShapeResult<T extends Row<unknown> = Row> {
   /**
-   * The ref containing array of rows that make up the Shape.
-   * @type {Ref<T[]>}
+   * Array of rows that make up the Shape.
+   * @type {T[]}
    */
-  data: Ref<T[]>
+  data: T[]
   /**
    * The Shape instance used by this useShape
    * @type {Shape<T>}
@@ -169,25 +169,25 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
    */
   stream: ShapeStream<T>
   /**
-   * Ref containing loading state. True during initial fetch. False afterwise.
-   * @type {Ref<boolean>}
+   * Loading state. True during initial fetch. False afterwise.
+   * @type {boolean}
    */
-  isLoading: Ref<boolean>
+  isLoading: boolean
   /**
-   * Ref containing Unix time at which we last synced. Undefined when `isLoading` is true.
-   * @type {Ref<number | undefined>}
+   * Unix time at which we last synced. Undefined when `isLoading` is true.
+   * @type {number | undefined}
    */
-  lastSyncedAt: Ref<number | undefined>
+  lastSyncedAt: number | undefined
   /**
-   * Ref containing the error state of the Shape
-   * @type {Ref<Shape<T>['error']>}
+   * The error state of the Shape
+   * @type {Shape<T>['error']}
    */
-  error: Ref<Shape<T>[`error`]>
+  error: Shape<T>[`error`]
   /**
-   * Ref indicating if there is an error
-   * @type {Ref<boolean>}
+   * Indicates if there is an error
+   * @type {boolean}
    */
-  isError: Ref<boolean>
+  isError: boolean
 }
 
 /**
@@ -197,7 +197,16 @@ export function useShape<T extends Row<unknown> = Row>(
   options: UseShapeOptions<T>
 ): UseShapeResult<T> {
   // Extract options to create ShapeStreamOptions
-  const { fetchClient, url, params, subscribe, offset, handle, headers, signal } = options
+  const {
+    fetchClient,
+    url,
+    params,
+    subscribe,
+    offset,
+    handle,
+    headers,
+    signal,
+  } = options
 
   // Convert to ShapeStreamOptions
   const streamOptions: ShapeStreamOptions<GetExtensions<T>> = {
@@ -207,17 +216,20 @@ export function useShape<T extends Row<unknown> = Row>(
     offset,
     handle,
     headers,
-    signal
+    signal,
   }
 
   // Store original fetch to restore later
   let originalFetch: typeof fetch | undefined
-  
+
   // Wrap the fetch logic to handle custom fetch client
   // We need to do this because Vue setup functions can be called multiple times
   if (fetchClient) {
     originalFetch = globalThis.fetch
-    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+    globalThis.fetch = async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
       return fetchClient(input, init)
     }
   }
@@ -227,31 +239,36 @@ export function useShape<T extends Row<unknown> = Row>(
     const shapeStream = getShapeStream<T>(streamOptions)
     const shape = getShape<T>(shapeStream)
 
-    // Create reactive references
-    const data = ref(shape.currentRows) as Ref<T[]>
-    const isLoading = ref(true) // Start with loading true
-    const lastSyncedAt = ref<number | undefined>(undefined)
-    const isError = ref(shape.error !== false)
-    const error = ref(shape.error)
+    // Create reactive object
+    const result = reactive<UseShapeResult<T>>({
+      data: shape.currentRows,
+      isLoading: true, // Start with loading true
+      lastSyncedAt: undefined,
+      isError: shape.error !== false,
+      error: shape.error,
+      shape,
+      stream: shapeStream,
+    })
 
     // Initial load
     shape.rows.then(() => {
-      data.value = shape.currentRows
-      isLoading.value = false
-      lastSyncedAt.value = shape.lastSyncedAt()
-      isError.value = shape.error !== false
-      error.value = shape.error
+      result.data = shape.currentRows
+      result.isLoading = false
+      result.lastSyncedAt = shape.lastSyncedAt()
+      result.isError = shape.error !== false
+      result.error = shape.error
     })
 
     // Only subscribe if subscribe option is true or undefined (default is true)
     if (options.subscribe !== false) {
       // Subscribe to shape changes
       const unsubscribe = shape.subscribe(() => {
-        data.value = shape.currentRows
-        isLoading.value = false
-        lastSyncedAt.value = shape.lastSyncedAt()
-        isError.value = shape.error !== false
-        error.value = shape.error
+        // Update reactive object with new values
+        result.data = shape.currentRows
+        result.isLoading = false
+        result.lastSyncedAt = shape.lastSyncedAt()
+        result.isError = shape.error !== false
+        result.error = shape.error
       })
 
       // Clean up subscription when component unmounts
@@ -260,15 +277,8 @@ export function useShape<T extends Row<unknown> = Row>(
       })
     }
 
-    return {
-      data,
-      isLoading,
-      lastSyncedAt,
-      isError,
-      error,
-      shape,
-      stream: shapeStream,
-    }
+    // Return the reactive result object
+    return result
   } finally {
     // Restore original fetch in any case (success or error)
     if (originalFetch) {
