@@ -735,6 +735,21 @@ defmodule Electric.Connection.Manager do
          %Postgrex.Error{
            postgres: %{
              code: :object_not_in_prerequisite_state,
+             message: msg,
+             pg_code: "55000"
+           }
+         } = error,
+         state
+       )
+       when msg == "logical decoding requires wal_level >= logical" or
+              msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
+    dispatch_fatal_error_and_shutdown({:wal_level_is_not_logical, %{error: error}}, state)
+  end
+
+  defp stop_if_fatal_error(
+         %Postgrex.Error{
+           postgres: %{
+             code: :object_not_in_prerequisite_state,
              detail: "This slot has been invalidated" <> _,
              pg_code: "55000"
            }
