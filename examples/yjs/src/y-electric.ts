@@ -55,8 +55,8 @@ export class ElectricProvider<
   private sendingAwarenessState: boolean = false
   private pendingAwarenessUpdate: AwarenessUpdate | null = null
 
-  private operationsHandler: (update: Uint8Array, origin: unknown) => void
-  private awarenessHandler: (update: AwarenessUpdate, origin: unknown) => void
+  private operationsHandler?: any
+  private awarenessHandler?: any
   private unsubscribeShapes?: () => void
   private exitHandler?: () => void
 
@@ -140,19 +140,6 @@ export class ElectricProvider<
       this.resumeStateProvider?.save(this.resume)
     }
 
-    this.operationsHandler = (update, origin) => {
-      // don't re-send updates from electric
-      if (origin === `server`) {
-        return
-      }
-
-      this.batch(update)
-      this.sendOperations()
-    }
-
-    this.awarenessHandler = (update, origin) =>
-      this.sendAwarenessState(update, origin)
-
     if (env.isNode && typeof process !== `undefined`) {
       this.exitHandler = () => {
         process.on(`exit`, () => this.destroy())
@@ -177,8 +164,14 @@ export class ElectricProvider<
   set ready(state: boolean) {
     if (state) {
       this._ready = true
-      this.doc.on(`update`, this.operationsHandler)
-      this.awareness?.protocol.on(`update`, this.awarenessHandler)
+      this.operationsHandler = this.doc.on(
+        `update`,
+        this.sendOperationsHandler.bind(this)
+      )
+      this.awarenessHandler = this.awareness?.protocol.on(
+        `update`,
+        this.sendAwarenessStateHandler.bind(this)
+      )
     } else {
       this.doc.off(`update`, this.operationsHandler)
       this.awareness?.protocol.off(`update`, this.awarenessHandler)
@@ -375,7 +368,17 @@ export class ElectricProvider<
     }
   }
 
-  private async sendAwarenessState(
+  private async sendOperationsHandler(update: Uint8Array, origin: unknown) {
+    // don't re-send updates from electric
+    if (origin === `server`) {
+      return
+    }
+
+    this.batch(update)
+    this.sendOperations()
+  }
+
+  private async sendAwarenessStateHandler(
     awarenessUpdate: AwarenessUpdate,
     origin: unknown
   ) {
