@@ -770,30 +770,15 @@ defmodule Electric.Connection.Manager do
 
   defp drop_slot_and_restart(_, _), do: false
 
-  defp stop_if_fatal_error(
-         %Postgrex.Error{
-           postgres: %{
-             code: :invalid_catalog_name,
-             pg_code: "3D000"
-           }
-         } = error,
-         state
-       ) do
-    if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
-      dispatch_fatal_error_and_shutdown(
-        %FatalError{
-          message: error.postgres.message,
-          type: :database_does_not_exist,
-          original_error: error
-        },
-        state
-      )
-    else
-      false
+  defp stop_if_fatal_error(error, state) do
+    case FatalError.from_error(error) do
+      {:ok, fatal_error} ->
+        dispatch_fatal_error_and_shutdown(fatal_error, state)
+
+      {:error, :not_fatal} ->
+        false
     end
   end
-
-  defp stop_if_fatal_error(_, _), do: false
 
   defp dispatch_fatal_error_and_shutdown(%FatalError{} = error, state) do
     Electric.StackSupervisor.dispatch_stack_event(
