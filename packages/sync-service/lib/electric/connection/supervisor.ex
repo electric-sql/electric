@@ -35,11 +35,18 @@ defmodule Electric.Connection.Supervisor do
     Supervisor.start_link(__MODULE__, opts, name: name(opts))
   end
 
-  def shutdown(stack_id, reason) do
-    Logger.warning(
-      "Stopping connection supervisor with stack_id=#{inspect(stack_id)} " <>
-        "due to an unrecoverable error: #{inspect(reason)}"
-    )
+  def shutdown(stack_id, %Electric.FatalError{} = reason) do
+    if Application.get_env(:electric, :start_in_library_mode, true) do
+      # Log a warning as these errors are to be expected if the stack has been
+      # misconfigured or if the database is not available.
+      Logger.warning(
+        "Stopping connection supervisor with stack_id=#{inspect(stack_id)} " <>
+          "due to an unrecoverable error: #{reason.message}"
+      )
+    else
+      # Log a critical error in the standalone mode, as the application cannot procede and will be shut down.
+      Logger.critical(reason.message)
+    end
 
     Supervisor.stop(name(stack_id: stack_id), {:shutdown, reason}, 1_000)
   end

@@ -77,6 +77,7 @@ defmodule Electric.Connection.Manager do
 
   use GenServer
   alias Electric.Connection.Manager.ConnectionBackoff
+  alias Electric.FatalError
 
   require Logger
 
@@ -772,37 +773,6 @@ defmodule Electric.Connection.Manager do
   defp stop_if_fatal_error(
          %Postgrex.Error{
            postgres: %{
-             code: :object_not_in_prerequisite_state,
-             message: msg,
-             pg_code: "55000"
-           }
-         } = error,
-         state
-       )
-       when msg == "logical decoding requires wal_level >= logical" or
-              msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
-    dispatch_fatal_error_and_shutdown({:wal_level_is_not_logical, %{error: error}}, state)
-  end
-
-  defp stop_if_fatal_error(
-         %Postgrex.Error{
-           postgres: %{
-             code: :internal_error,
-             pg_code: "XX000"
-           }
-         } = error,
-         state
-       ) do
-    if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
-      dispatch_fatal_error_and_shutdown({:database_does_not_exist, %{error: error}}, state)
-    else
-      false
-    end
-  end
-
-  defp stop_if_fatal_error(
-         %Postgrex.Error{
-           postgres: %{
              code: :invalid_catalog_name,
              pg_code: "3D000"
            }
@@ -810,7 +780,14 @@ defmodule Electric.Connection.Manager do
          state
        ) do
     if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
-      dispatch_fatal_error_and_shutdown({:database_does_not_exist, %{error: error}}, state)
+      dispatch_fatal_error_and_shutdown(
+        %FatalError{
+          message: error.postgres.message,
+          type: :database_does_not_exist,
+          original_error: error
+        },
+        state
+      )
     else
       false
     end
@@ -818,8 +795,12 @@ defmodule Electric.Connection.Manager do
 
   defp stop_if_fatal_error(_, _), do: false
 
-  defp dispatch_fatal_error_and_shutdown(error, state) do
-    dispatch_stack_event(error, state)
+  defp dispatch_fatal_error_and_shutdown(%FatalError{} = error, state) do
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      {error.type, %{error: error.original_error}}
+    )
 
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
     # process is waiting for the supervisor to shut down its children, one of which is the
