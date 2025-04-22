@@ -42,9 +42,9 @@ You see the problem already. The more components like this you generate, the mor
 
 It's a big ball of spaghetti.
 
-So what's the solution? Declarative data dependencies and sync engine. So that the network requests, the actual data fetching, can be delegated to a system that optimises data transfer and placement for you.
+So what's the solution? Declarative data dependencies and a sync engine. So that the network requests, the actual data fetching, can be delegated to a system that optimises data transfer and placement for you.
 
-Start with a logical data model. Your LLM understands that. It will generate and evolve a schema for you. Then, instead of generating code to imperatively fetch data, generate code that *declares* the data that your component needs.
+Start with a logical data model. Your LLM understands that &mdash; it has no problem generating and evolving a schema for you. Then, instead of telling the LLM to generate code that fetches data, tell it to use a sync engine and generate code that *declares* the data that your component needs.
 
 [GraphQL](https://relay.dev/docs/tutorial/fragments-1/) does it with fragments and an aggregated top-level fetch:
 
@@ -74,7 +74,7 @@ function TodoList() {
   const [todos, todosDetail] = useQuery(todoQuery)
 ```
 
-Local-first systems use a local store like [Valtio](https://valtio.dev) or an embedded database like [PGlite](https://pglite.dev), with a sync engine like [Electric](/) to keep the data in sync:
+In general, local-first systems use a local store like [Valtio](https://valtio.dev) or an embedded database like [PGlite](https://pglite.dev) and a sync engine like [Electric](/) to keep the data in sync:
 
 ```js
 const shape = await pg.electric.syncShapeToTable({
@@ -89,7 +89,7 @@ const shape = await pg.electric.syncShapeToTable({
 })
 ```
 
-Your components can then just declare what data they need and interface directly with the local store. For example with PGlite, you can use declarative [live queries](https://pglite.dev/docs/framework-hooks/react#uselivequery):
+Your components can then interface directly with the local store. For example with PGlite, you can use [live SQL queries](https://pglite.dev/docs/framework-hooks/react#uselivequery) to declare what data the component needs:
 
 ```js
 function TodoList() {
@@ -97,8 +97,8 @@ function TodoList() {
 }
 ```
 
-This still works perfectly with a platform like [Supabase](/docs/integrations/supabase) or [Neon](/docs/integrations/neon) powering the actual database hosting in the cloud. However, the network requests, the actual data fetching are managed by the sync engine behind the scenes. The LLM doesn't need to know how &mdash; and it certainly doesn't need to be writing code that fires off fetch requests at all angles and stages of your rendering pipeline.
+This works perfectly with a platform like [Supabase](/docs/integrations/supabase) or [Neon](/docs/integrations/neon) powering the database hosting in the cloud. However, the network requests, the actual data fetching, are managed by the sync engine behind the scenes. The LLM doesn't need to know how. It certainly doesn't need to be writing code that fires off fetch requests at all angles and stages of your rendering pipeline.
 
 This has always been the [endgame for state transfer](/blog/2022/12/16/evolution-state-transfer) and the [next evolution of cloud programming](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf). But it's even more important now LLMs are writing the code.
 
-Tell your LLM to stop writing code that does imperative data fetching. Start using declarative data bindings with a sync engine like [Electric](/) instead.
+Tell your LLM to stop writing code that does imperative data fetching. Tell it to start using declarative data bindings with a sync engine like [Electric](/) instead.
