@@ -156,7 +156,7 @@ storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
 shape_path = Path.join(storage_dir, "./shapes")
 persistent_state_path = Path.join(storage_dir, "./state")
 
-persistent_kv =
+persistent_kv_spec =
   env!(
     "ELECTRIC_PERSISTENT_STATE",
     fn storage ->
@@ -174,7 +174,13 @@ persistent_kv =
     nil
   )
 
-storage =
+if persistent_kv_spec do
+  {m, f, a} = persistent_kv_spec
+  persistent_kv = apply(m, f, [a])
+  Electric.Config.persist_installation_id(persistent_kv, instance_id)
+end
+
+storage_spec =
   env!(
     "ELECTRIC_STORAGE",
     fn storage ->
@@ -276,8 +282,8 @@ config :electric,
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
   storage_dir: storage_dir,
-  storage: storage,
+  storage: storage_spec,
   profile_where_clauses?: env!("ELECTRIC_PROFILE_WHERE_CLAUSES", :boolean, false),
-  persistent_kv: persistent_kv,
+  persistent_kv: persistent_kv_spec,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil),
   secret: secret

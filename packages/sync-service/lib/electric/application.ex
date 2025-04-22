@@ -79,7 +79,9 @@ defmodule Electric.Application do
     instance_id = Electric.Config.ensure_instance_id()
 
     core_config = core_configuration(opts)
-    installation_id = Electric.Config.ensure_installation_id(core_config, instance_id)
+
+    persistent_kv = Keyword.fetch!(core_config, :persistent_kv)
+    installation_id = Electric.Config.persist_installation_id(persistent_kv, instance_id)
 
     replication_stream_id = get_env(opts, :replication_stream_id)
 
