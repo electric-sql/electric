@@ -141,20 +141,47 @@ defmodule Electric.Postgres.Configuration do
   end
 
   defp set_replica_identity!(conn, relation_filters) do
-    for %RelationFilter{relation: relation} <- Map.values(relation_filters),
-        table = Utils.relation_to_sql(relation) do
-      %Postgrex.Result{rows: [[correct_identity?]]} =
-        Postgrex.query!(
-          conn,
-          "SELECT relreplident = 'f' FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE nspname = $1 AND relname = $2;",
-          Tuple.to_list(relation)
-        )
+    query_for_relations_without_full_identity = """
+    WITH input_relations AS (
+      SELECT
+        UNNEST($1::text[]) AS schemaname,
+        UNNEST($2::text[]) AS tablename
+    )
+    SELECT ir.schemaname, ir.tablename
+    FROM input_relations ir
+    JOIN pg_class pc ON pc.relname = ir.tablename
+    JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+    WHERE pn.nspname = ir.schemaname AND relreplident != 'f'
+    """
 
-      if not correct_identity? do
-        Logger.info("Altering identity of #{table} to FULL")
-        Postgrex.query!(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", [])
-        Logger.debug("Altered identity of #{table} to FULL")
-      end
+    params =
+      relation_filters
+      |> Map.keys()
+      |> Enum.unzip()
+      |> Tuple.to_list()
+
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(conn, query_for_relations_without_full_identity, params)
+
+    tables = for [schema, table] <- rows, do: Utils.relation_to_sql({schema, table})
+
+    if tables != [] do
+      Logger.info("Altering identity of #{Enum.join(tables, ", ")} to FULL")
+
+      queries = for table <- tables, do: "ALTER TABLE #{table} REPLICA IDENTITY FULL;"
+
+      Postgrex.query!(
+        conn,
+        """
+        DO $$
+        BEGIN
+        #{Enum.join(queries, "\n")}
+        END $$;
+        """,
+        []
+      )
+
+      Logger.info("Altered identity of #{Enum.join(tables, ", ")} to FULL")
     end
   end
 
