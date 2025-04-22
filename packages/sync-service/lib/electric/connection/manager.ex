@@ -799,7 +799,7 @@ defmodule Electric.Connection.Manager do
     Electric.StackSupervisor.dispatch_stack_event(
       state.stack_events_registry,
       state.stack_id,
-      {error.type, %{error: error.original_error, message: error.message}}
+      {:fatal_error, %{error: error.original_error, message: error.message, type: error.type}}
     )
 
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
