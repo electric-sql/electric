@@ -11,7 +11,11 @@ defmodule Electric.Application do
     else
       app_vsn = Application.spec(:electric, :vsn)
       Logger.info("Starting ElectricSQL #{app_vsn}")
-      Supervisor.start_link(children_application(), supervisor_opts)
+
+      Supervisor.start_link(
+        children_application(),
+        [auto_shutdown: :any_significant] ++ supervisor_opts
+      )
     end
   end
 
