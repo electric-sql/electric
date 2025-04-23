@@ -3,8 +3,21 @@ import { watch, onMounted } from "vue"
 import { useData, useRouter } from "vitepress"
 import { posthog } from "posthog-js"
 import { useSidebar } from "vitepress/theme"
-const router = useRouter()
 
+import DefaultTheme from "vitepress/theme-without-fonts"
+
+import BlogPostHeader from "../../src/components/BlogPostHeader.vue"
+import NavSignupButton from "../../src/components/NavSignupButton.vue"
+import SiteFooter from "../../src/components/SiteFooter.vue"
+import UseCaseHeader from "../../src/components/UseCaseHeader.vue"
+
+import ReleaseBanner from "../../src/components/home/ReleaseBanner.vue"
+
+import HomeFeaturesAfter from "../../src/partials/home-features-after.md"
+import HomeFeaturesBefore from "../../src/partials/home-features-before.md"
+
+// Posthog analytics
+const router = useRouter()
 onMounted(() => {
   // Only run PostHog tracking in production
   if (window.location.hostname === 'electric-sql.com') {
@@ -23,18 +36,6 @@ onMounted(() => {
     )
   }
 })
-
-import DefaultTheme from "vitepress/theme-without-fonts"
-
-import BlogPostHeader from "../../src/components/BlogPostHeader.vue"
-import NavSignupButton from "../../src/components/NavSignupButton.vue"
-import SiteFooter from "../../src/components/SiteFooter.vue"
-import UseCaseHeader from "../../src/components/UseCaseHeader.vue"
-
-import ReleaseBanner from "../../src/components/home/ReleaseBanner.vue"
-
-import HomeFeaturesAfter from "../../src/partials/home-features-after.md"
-import HomeFeaturesBefore from "../../src/partials/home-features-before.md"
 
 const { Layout } = DefaultTheme
 
