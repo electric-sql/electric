@@ -247,12 +247,7 @@ defmodule Electric.Connection.Manager do
           |> mark_connection_succeeded()
           |> update_connection_opts(connection_opts)
 
-        Electric.StackSupervisor.dispatch_stack_event(
-          state.stack_events_registry,
-          state.stack_id,
-          :waiting_for_connection_lock
-        )
-
+        dispatch_stack_event(:waiting_for_connection_lock, state)
         schedule_periodic_connection_status_log(:log_lock_connection_status)
 
         {:noreply, state}
@@ -693,14 +688,13 @@ defmodule Electric.Connection.Manager do
 
     Logger.warning("Database connection in #{mode} mode failed: #{message}")
 
-    Electric.StackSupervisor.dispatch_stack_event(
-      state.stack_events_registry,
-      state.stack_id,
+    dispatch_stack_event(
       {:database_connection_failed,
        %{
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
-       }}
+       }},
+      state
     )
 
     step = current_connection_step(state)
@@ -750,11 +744,7 @@ defmodule Electric.Connection.Manager do
         or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
     """)
 
-    Electric.StackSupervisor.dispatch_stack_event(
-      state.stack_events_registry,
-      state.stack_id,
-      {:database_slot_exceeded_max_size, %{error: error}}
-    )
+    dispatch_stack_event({:database_slot_exceeded_max_size, %{error: error}}, state)
 
     drop_slot(state)
 
@@ -815,11 +805,7 @@ defmodule Electric.Connection.Manager do
   defp stop_if_fatal_error(_, _), do: false
 
   defp dispatch_fatal_error_and_shutdown(error, state) do
-    Electric.StackSupervisor.dispatch_stack_event(
-      state.stack_events_registry,
-      state.stack_id,
-      error
-    )
+    dispatch_stack_event(error, state)
 
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
     # process is waiting for the supervisor to shut down its children, one of which is the
@@ -989,5 +975,13 @@ defmodule Electric.Connection.Manager do
       {reason, stacktrace} when is_list(stacktrace) -> reason
       reason -> reason
     end
+  end
+
+  defp dispatch_stack_event(event, state) do
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      event
+    )
   end
 end
