@@ -354,12 +354,12 @@ describe(`Shape`, () => {
           JSON.stringify([{ headers: { control: `up-to-date` } }]),
           {
             status: 200,
-          headers: new Headers({
-            [`electric-offset`]: `0_0`,
-            [`electric-handle`]: `foo`,
-            [`electric-schema`]: ``,
+            headers: new Headers({
+              [`electric-offset`]: `0_0`,
+              [`electric-handle`]: `foo`,
+              [`electric-schema`]: ``,
               [`electric-cursor`]: `123`,
-          }),
+            }),
           }
         )
       },
