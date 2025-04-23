@@ -43,5 +43,20 @@ defmodule Electric.FatalErrorTest do
                retry_may_fix?: false
              } == DbConnectionError.from_error(error)
     end
+
+    test "with a tcp timeout error" do
+      error = %DBConnection.ConnectionError{
+        message: "tcp recv: connection timed out - :etimedout",
+        severity: :error,
+        reason: :error
+      }
+
+      assert %DbConnectionError{
+               message: "connection timed out when trying to connect to the database",
+               type: :connection_timeout,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
   end
 end

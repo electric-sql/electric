@@ -3,6 +3,18 @@ defmodule Electric.DbConnectionError do
 
   alias Electric.DbConnectionError
 
+  def from_error(
+        %DBConnection.ConnectionError{message: "tcp recv: connection timed out - :etimedout"} =
+          error
+      ) do
+    %DbConnectionError{
+      message: "connection timed out when trying to connect to the database",
+      type: :connection_timeout,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error(%DBConnection.ConnectionError{} = error) do
     ~r/\((?<domain>[^:]+).*\): non-existing domain - :nxdomain/
     |> Regex.named_captures(error.message)
