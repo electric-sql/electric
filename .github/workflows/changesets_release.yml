@@ -71,7 +71,7 @@ jobs:
           client-payload: |
             {
               "electric_commit_sha": "${{ github.sha }}",
-              "electric_docker_version": "{{ steps.sync_version.outputs.version }}"
+              "electric_docker_version": "${{ steps.sync_version.outputs.version }}"
             }
       # On commit, only update the commit SHA, not the Docker image version
       - name: Trigger cloud update (on commit)
