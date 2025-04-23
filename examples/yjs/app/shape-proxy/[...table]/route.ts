@@ -14,7 +14,6 @@ export async function GET(request: Request) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
   }
 
-  const headers = new Headers()
   if (process.env.ELECTRIC_SOURCE_SECRET) {
     originUrl.searchParams.set(
       `source_secret`,
@@ -22,26 +21,20 @@ export async function GET(request: Request) {
     )
   }
 
-  const newRequest = new Request(originUrl.toString(), {
-    method: `GET`,
+  const response = await fetch(originUrl)
+
+  // Fetch decompresses the body but doesn't remove the
+  // content-encoding & content-length headers which would
+  // break decoding in the browser.
+  //
+  // See https://github.com/whatwg/fetch/issues/1729
+  const headers = new Headers(response.headers)
+  headers.delete(`content-encoding`)
+  headers.delete(`content-length`)
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
     headers,
   })
-
-  // When proxying long-polling requests, content-encoding & content-length are added
-  // erroneously (saying the body is gzipped when it's not) so we'll just remove
-  // them to avoid content decoding errors in the browser.
-  //
-  // Similar-ish problem to https://github.com/wintercg/fetch/issues/23
-  let resp = await fetch(newRequest)
-  if (resp.headers.get(`content-encoding`)) {
-    const headers = new Headers(resp.headers)
-    headers.delete(`content-encoding`)
-    headers.delete(`content-length`)
-    resp = new Response(resp.body, {
-      status: resp.status,
-      statusText: resp.statusText,
-      headers,
-    })
-  }
-  return resp
 }
