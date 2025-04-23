@@ -77,7 +77,7 @@ defmodule Electric.Connection.Manager do
 
   use GenServer
   alias Electric.Connection.Manager.ConnectionBackoff
-  alias Electric.FatalError
+  alias Electric.DbConnectionError
 
   require Logger
 
@@ -771,16 +771,16 @@ defmodule Electric.Connection.Manager do
   defp drop_slot_and_restart(_, _), do: false
 
   defp stop_if_fatal_error(error, state) do
-    case FatalError.from_error(error) do
-      {:ok, fatal_error} ->
-        dispatch_fatal_error_and_shutdown(fatal_error, state)
+    error = DbConnectionError.from_error(error)
 
-      {:error, :not_fatal} ->
-        false
+    if error.retry_may_fix? do
+      false
+    else
+      dispatch_fatal_error_and_shutdown(error, state)
     end
   end
 
-  defp dispatch_fatal_error_and_shutdown(%FatalError{} = error, state) do
+  defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
     Electric.StackSupervisor.dispatch_stack_event(
       state.stack_events_registry,
       state.stack_id,

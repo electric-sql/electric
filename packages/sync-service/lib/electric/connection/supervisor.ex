@@ -35,7 +35,7 @@ defmodule Electric.Connection.Supervisor do
     Supervisor.start_link(__MODULE__, opts, name: name(opts))
   end
 
-  def shutdown(stack_id, %Electric.FatalError{} = reason) do
+  def shutdown(stack_id, %Electric.DbConnectionError{} = reason) do
     if Application.get_env(:electric, :start_in_library_mode, true) do
       # Log a warning as these errors are to be expected if the stack has been
       # misconfigured or if the database is not available.
