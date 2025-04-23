@@ -72,6 +72,11 @@ defmodule Electric.StatusMonitor do
     else
       try do
         GenServer.call(name(stack_id), :wait_until_active, timeout)
+      rescue
+        ArgumentError ->
+          # This happens when the Process Registry has not been created yet
+          Process.sleep(10)
+          wait_until_active(stack_id, timeout - 10)
       catch
         :exit, {:timeout, _} ->
           {:error, :timeout}

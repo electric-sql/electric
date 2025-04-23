@@ -1,11 +1,12 @@
 defmodule Electric.StatusMonitorTest do
   use ExUnit.Case, async: true
 
+  import Support.TestUtils, only: [full_test_name: 1]
   alias Electric.StatusMonitor
 
-  setup {Support.ComponentSetup, :with_stack_id_from_test}
-
   describe "status/1" do
+    setup {Support.ComponentSetup, :with_stack_id_from_test}
+
     test "when not started, returns :waiting", %{stack_id: stack_id} do
       assert StatusMonitor.status(stack_id) == :waiting
     end
@@ -98,6 +99,10 @@ defmodule Electric.StatusMonitorTest do
   end
 
   describe "wait_until_active/2" do
+    setup ctx do
+      %{stack_id: full_test_name(ctx)}
+    end
+
     test "waits until all conditions are met", %{stack_id: stack_id} do
       test_process = self()
 
@@ -106,6 +111,7 @@ defmodule Electric.StatusMonitorTest do
         send(test_process, :active)
       end)
 
+      create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
@@ -117,12 +123,22 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "returns error on timeout", %{stack_id: stack_id} do
+      create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
       assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
     end
 
-    test "returns error on timeout when status monitor is not present", %{stack_id: stack_id} do
+    test "returns error on timeout when process registry is not present", %{stack_id: stack_id} do
       assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
     end
+
+    test "returns error on timeout when status monitor is not present", %{stack_id: stack_id} do
+      create_process_registry(stack_id)
+      assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, :timeout}
+    end
+  end
+
+  defp create_process_registry(stack_id) do
+    start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
   end
 end
