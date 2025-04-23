@@ -774,6 +774,7 @@ defmodule Electric.Connection.Manager do
     error = DbConnectionError.from_error(error)
 
     if error.retry_may_fix? do
+      Electric.StatusMonitor.set_timeout_message(state.stack_id, error.message)
       false
     else
       dispatch_fatal_error_and_shutdown(error, state)
