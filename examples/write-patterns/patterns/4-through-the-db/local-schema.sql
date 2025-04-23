@@ -82,6 +82,11 @@ AFTER INSERT OR UPDATE ON todos_synced
 FOR EACH ROW
 EXECUTE FUNCTION delete_local_on_synced_insert_and_update_trigger();
 
+CREATE OR REPLACE TRIGGER delete_local_on_synced_delete
+AFTER DELETE ON todos_synced
+FOR EACH ROW
+EXECUTE FUNCTION delete_local_on_synced_delete_trigger();
+
 -- The local `changes` table for capturing and persisting a log
 -- of local write operations that we want to sync to the server.
 CREATE TABLE IF NOT EXISTS changes (
