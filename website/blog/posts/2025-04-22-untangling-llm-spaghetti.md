@@ -107,7 +107,7 @@ Tell your LLM to stop writing code that does imperative data fetching. Tell it t
 
 The simplest way to generate code with Electric is to add our [llms.txt](/llms.txt) to your project context and just tell your LLM to use Electric.
 
-See our [LLMs guide](/docs/guides/llms) and [Building AI apps? You need sync](/blog/2025/04/09/building-ai-apps-on-sync) post for more information.
+See our [LLMs guide](/docs/guides/llms) and [Building AI apps? You need sync](/blog/2025/04/09/building-ai-apps-on-sync) post.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
