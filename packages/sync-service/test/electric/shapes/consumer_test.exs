@@ -188,7 +188,7 @@ defmodule Electric.Shapes.ConsumerTest do
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
-          log_offset: LogOffset.first()
+          log_offset: last_log_offset
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
@@ -196,7 +196,18 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
 
-      txn2 = %{txn | xid: xid, lsn: next_lsn, last_log_offset: next_log_offset}
+      txn2 =
+        %Transaction{
+          xid: xid,
+          lsn: next_lsn,
+          last_log_offset: next_log_offset,
+          commit_timestamp: DateTime.utc_now()
+        }
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"},
+          log_offset: next_log_offset
+        })
 
       assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.producer)
       assert_receive {^ref, :new_changes, ^next_log_offset}, @receive_timeout
@@ -205,15 +216,19 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     test "correctly writes only relevant changes to multiple shape logs", ctx do
-      last_log_offset = log_offset(@shape_handle1, ctx)
+      expected_log_offset = log_offset(@shape_handle1, ctx)
       lsn = lsn(@shape_handle1, ctx)
+
+      change1_offset = expected_log_offset
+      change2_offset = LogOffset.increment(expected_log_offset, 1)
+      change3_offset = LogOffset.increment(expected_log_offset, 2)
 
       xid = 150
 
       Mock.ShapeStatus
       |> expect(:set_latest_offset, 2, fn
-        _, @shape_handle1, ^last_log_offset -> :ok
-        _, @shape_handle2, ^last_log_offset -> :ok
+        _, @shape_handle1, ^change1_offset -> :ok
+        _, @shape_handle2, ^change2_offset -> :ok
       end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
@@ -228,29 +243,29 @@ defmodule Electric.Shapes.ConsumerTest do
         %Transaction{
           xid: xid,
           lsn: lsn,
-          last_log_offset: last_log_offset,
+          last_log_offset: expected_log_offset,
           commit_timestamp: DateTime.utc_now()
         }
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
-          log_offset: LogOffset.first()
+          log_offset: change1_offset
         })
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "other_table"},
           record: %{"id" => "2"},
-          log_offset: LogOffset.increment(LogOffset.first(), 1)
+          log_offset: change2_offset
         })
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "something else"},
           record: %{"id" => "3"},
-          log_offset: LogOffset.increment(LogOffset.first(), 2)
+          log_offset: change3_offset
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
-      assert_receive {^ref1, :new_changes, ^last_log_offset}, @receive_timeout
-      assert_receive {^ref2, :new_changes, ^last_log_offset}, @receive_timeout
+      assert_receive {^ref1, :new_changes, ^change1_offset}, @receive_timeout
+      assert_receive {^ref2, :new_changes, ^change2_offset}, @receive_timeout
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1,
                       [{_offset, _key, _type, serialized_record}]}
@@ -417,7 +432,7 @@ defmodule Electric.Shapes.ConsumerTest do
         |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
-          log_offset: LogOffset.first()
+          log_offset: last_log_offset
         })
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
