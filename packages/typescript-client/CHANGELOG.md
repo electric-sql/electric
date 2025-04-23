@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.4
+
+### Patch Changes
+
+- d12ff0f: Pause and resume shapestream on visibility changes.
+
 ## 1.0.3
 
 ### Patch Changes

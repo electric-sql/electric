@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.11
+
+### Patch Changes
+
+- c9bcd6b: Fix the 5-second delay at Electric's first launch caused by incorrect installation ID detection logic.
+- bbad9df: fix: check for table identities in one query instead of N when altering the publication
+- bb4a439: fix: make sure Electric restart doesn't cause requests with `0_inf` to fail
+
 ## 1.0.10
 
 ### Patch Changes
