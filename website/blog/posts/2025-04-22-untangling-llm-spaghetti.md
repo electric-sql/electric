@@ -99,6 +99,28 @@ function TodoList() {
 
 This works perfectly with a platform like [Supabase](/docs/integrations/supabase) or [Neon](/docs/integrations/neon) powering the database hosting in the cloud. However, the network requests, the actual data fetching, are managed by the sync engine behind the scenes. The LLM doesn't need to know how. It certainly doesn't need to be writing code that fires off fetch requests at all angles and stages of your rendering pipeline.
 
-This has always been the [endgame for state transfer](/blog/2022/12/16/evolution-state-transfer) and the [next evolution of cloud programming](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf). But it's even more important now LLMs are writing the code.
+This has always been the [endgame for state transfer](/blog/2022/12/16/evolution-state-transfer) and the [next evolution of cloud programming](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf). A key ingredient of Andrej Karpathy's [Software 2.0](https://karpathy.medium.com/software-2-0-a64152b37c35) and Rich Hickey's [Simple Made Easy](https://youtu.be/SxdOUGdseq4). But it's even more important now LLMs are writing the code.
 
 Tell your LLM to stop writing code that does imperative data fetching. Tell it to start using declarative data bindings with a sync engine like [Electric](/) instead.
+
+## Next steps
+
+The simplest way to generate code with Electric is to add our [llms.txt](/llms.txt) to your project context and just tell your LLM to use Electric.
+
+See our [LLMs guide](/docs/guides/llms) and [Building AI apps? You need sync](/blog/2025/04/09/building-ai-apps-on-sync) post for more information.
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action cloud-cta">
+    <VPButton
+        href="/docs/guides/llms"
+        text="LLMs guide"
+        theme="brand"
+    />
+    &nbsp;
+    <VPButton
+        href="/blog/2025/04/09/building-ai-apps-on-sync"
+        text="Building AI apps"
+        theme="alt"
+    />
+  </div>
+</div>
