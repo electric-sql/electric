@@ -8,7 +8,7 @@ defmodule Electric.DbConnectionError do
           error
       ) do
     %DbConnectionError{
-      message: "connection timed out when trying to connect to the database",
+      message: "connection timed out",
       type: :connection_timeout,
       original_error: error,
       retry_may_fix?: true
