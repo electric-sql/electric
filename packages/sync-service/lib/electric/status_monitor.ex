@@ -11,7 +11,7 @@ defmodule Electric.StatusMonitor do
     :shape_log_collector_ready
   ]
 
-  @default_results for condition <- @conditions, into: %{}, do: {condition, false}
+  @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
 
   def start_link(stack_id) do
     GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
@@ -29,23 +29,19 @@ defmodule Electric.StatusMonitor do
   @spec status(String.t()) :: status()
   def status(stack_id) do
     case results(stack_id) do
-      %{pg_lock_acquired: false} ->
+      %{pg_lock_acquired: {false, _}} ->
         :waiting
 
       %{
-        replication_client_ready: true,
-        connection_pool_ready: true,
-        shape_log_collector_ready: true
+        replication_client_ready: {true, _},
+        connection_pool_ready: {true, _},
+        shape_log_collector_ready: {true, _}
       } ->
         :active
 
       _ ->
         :starting
     end
-  end
-
-  def set_timeout_message(stack_id, message) when is_binary(message) do
-    GenServer.cast(name(stack_id), {:set_timeout_message, message})
   end
 
   def mark_pg_lock_acquired(stack_id, lock_pid) do
@@ -66,6 +62,26 @@ defmodule Electric.StatusMonitor do
 
   defp mark_condition_met(stack_id, condition, process) do
     GenServer.cast(name(stack_id), {:condition_met, condition, process})
+  end
+
+  def mark_pg_lock_as_errored(stack_id, message) when is_binary(message) do
+    mark_condition_as_errored(stack_id, :pg_lock_acquired, message)
+  end
+
+  def mark_replication_client_as_errored(stack_id, message) when is_binary(message) do
+    mark_condition_as_errored(stack_id, :replication_client_ready, message)
+  end
+
+  def mark_connection_pool_as_errored(stack_id, message) when is_binary(message) do
+    mark_condition_as_errored(stack_id, :connection_pool_ready, message)
+  end
+
+  def mark_shape_log_collector_as_errored(stack_id, message) when is_binary(message) do
+    mark_condition_as_errored(stack_id, :shape_log_collector_ready, message)
+  end
+
+  defp mark_condition_as_errored(stack_id, condition, error) do
+    GenServer.cast(name(stack_id), {:condition_errored, condition, error})
   end
 
   def wait_until_active(stack_id, timeout) do
@@ -113,12 +129,12 @@ defmodule Electric.StatusMonitor do
   def handle_cast({:condition_met, condition, process}, state)
       when condition in @conditions do
     Process.monitor(process)
-    :ets.insert(ets_table(state.stack_id), {condition, process})
+    :ets.insert(ets_table(state.stack_id), {condition, {true, %{process: process}}})
     {:noreply, maybe_reply_to_waiters(state)}
   end
 
-  def handle_cast({:set_timeout_message, message}, state) do
-    :ets.insert(ets_table(state.stack_id), {:timeout_message, message})
+  def handle_cast({:condition_errored, condition, error}, state) do
+    :ets.insert(ets_table(state.stack_id), {condition, {false, %{error: error}}})
     {:noreply, state}
   end
 
@@ -136,7 +152,7 @@ defmodule Electric.StatusMonitor do
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    :ets.match_delete(ets_table(state.stack_id), {:_, pid})
+    :ets.match_delete(ets_table(state.stack_id), {:_, {true, %{process: pid}}})
 
     {:noreply, state}
   end
@@ -171,10 +187,7 @@ defmodule Electric.StatusMonitor do
       stack_id
       |> ets_table()
       |> :ets.tab2list()
-      |> Map.new(fn
-        {:timeout_message, message} -> {:timeout_message, message}
-        {condition, _pid} -> {condition, true}
-      end)
+      |> Map.new()
 
     Map.merge(@default_results, results)
   rescue
@@ -189,19 +202,22 @@ defmodule Electric.StatusMonitor do
       %{timeout_message: message} when is_binary(message) ->
         message
 
-      %{pg_lock_acquired: false} ->
-        "Timeout waiting for Postgres lock acquisition"
+      %{pg_lock_acquired: {false, details}} ->
+        "Timeout waiting for Postgres lock acquisition" <> format_details(details)
 
-      %{replication_client_ready: false} ->
-        "Timeout waiting for replication client to be ready"
+      %{replication_client_ready: {false, details}} ->
+        "Timeout waiting for replication client to be ready" <> format_details(details)
 
-      %{connection_pool_ready: false} ->
-        "Timeout waiting for database connection pool to be ready"
+      %{connection_pool_ready: {false, details}} ->
+        "Timeout waiting for database connection pool to be ready" <> format_details(details)
 
-      %{shape_log_collector_ready: false} ->
-        "Timeout waiting for shape data to be loaded"
+      %{shape_log_collector_ready: {false, details}} ->
+        "Timeout waiting for shape data to be loaded" <> format_details(details)
     end
   end
+
+  defp format_details(%{error: error}), do: ": #{error}"
+  defp format_details(_), do: ""
 
   defp name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)

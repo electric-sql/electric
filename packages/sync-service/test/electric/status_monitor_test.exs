@@ -181,16 +181,18 @@ defmodule Electric.StatusMonitorTest do
     test "returns explicit error on timeout when supplied", %{
       stack_id: stack_id
     } do
-      timeout_message = "Some error message"
+      error_message = "Some error message"
 
       create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
-      StatusMonitor.set_timeout_message(stack_id, timeout_message)
+      StatusMonitor.mark_connection_pool_as_errored(stack_id, error_message)
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) == {:error, timeout_message}
+      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+               {:error,
+                "Timeout waiting for database connection pool to be ready: #{error_message}"}
     end
   end
 

@@ -78,6 +78,7 @@ defmodule Electric.Connection.Manager do
   use GenServer
   alias Electric.Connection.Manager.ConnectionBackoff
   alias Electric.DbConnectionError
+  alias Electric.StatusMonitor
 
   require Logger
 
@@ -94,6 +95,9 @@ defmodule Electric.Connection.Manager do
   @type options :: [option]
 
   @connection_status_logging_interval 10_000
+  @replication_mode "replication"
+  @regular_mode "regular"
+  @lock_mode "lock_connection"
 
   def child_spec(init_arg) do
     %{
@@ -254,7 +258,7 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        handle_connection_error(reason, state, "lock_connection")
+        handle_connection_error(reason, state, @lock_mode)
     end
   end
 
@@ -284,14 +288,14 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        handle_connection_error(reason, state, "replication")
+        handle_connection_error(reason, state, @replication_mode)
     end
   end
 
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(connection_opts(state), state.pool_opts) do
       {:ok, pool_pid} ->
-        Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
+        StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
 
         state = mark_connection_succeeded(state)
         # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -358,7 +362,7 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        handle_connection_error(reason, state, "regular")
+        handle_connection_error(reason, state, @regular_mode)
     end
   end
 
@@ -389,7 +393,7 @@ defmodule Electric.Connection.Manager do
         {:noreply, state, {:continue, :start_replication_client}}
 
       {:error, reason} ->
-        handle_connection_error(reason, state, "replication")
+        handle_connection_error(error, state, @replication_mode)
     end
   end
 
@@ -679,7 +683,7 @@ defmodule Electric.Connection.Manager do
   # This separate function is needed for `handle_connection_error()` not to get stuck in a
   # recursive function call loop.
   defp fail_on_error_or_reconnect(error, state, mode) do
-    with false <- stop_if_fatal_error(error, state) do
+    with false <- stop_if_fatal_error(error, state, mode) do
       state = schedule_reconnection_after_error(error, state, mode)
       {:noreply, state}
     end
@@ -770,15 +774,27 @@ defmodule Electric.Connection.Manager do
 
   defp drop_slot_and_restart(_, _), do: false
 
-  defp stop_if_fatal_error(error, state) do
+  defp stop_if_fatal_error(error, state, mode) do
     error = DbConnectionError.from_error(error)
 
     if error.retry_may_fix? do
-      Electric.StatusMonitor.set_timeout_message(state.stack_id, error.message)
+      mark_error_for_mode(mode, error.message, state.stack_id)
       false
     else
       dispatch_fatal_error_and_shutdown(error, state)
     end
+  end
+
+  defp mark_error_for_mode(@replication_mode, error, stack_id) do
+    StatusMonitor.mark_replication_client_as_errored(stack_id, error)
+  end
+
+  defp mark_error_for_mode(@regular_mode, error, stack_id) do
+    StatusMonitor.mark_connection_pool_as_errored(stack_id, error)
+  end
+
+  defp mark_error_for_mode(@lock_mode, error, stack_id) do
+    StatusMonitor.mark_pg_lock_as_errored(stack_id, error)
   end
 
   defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
