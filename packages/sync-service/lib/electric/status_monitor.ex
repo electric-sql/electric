@@ -60,10 +60,6 @@ defmodule Electric.StatusMonitor do
     mark_condition_met(stack_id, :shape_log_collector_ready, collector_pid)
   end
 
-  defp mark_condition_met(stack_id, condition, process) do
-    GenServer.cast(name(stack_id), {:condition_met, condition, process})
-  end
-
   def mark_pg_lock_as_errored(stack_id, message) when is_binary(message) do
     mark_condition_as_errored(stack_id, :pg_lock_acquired, message)
   end
@@ -76,12 +72,12 @@ defmodule Electric.StatusMonitor do
     mark_condition_as_errored(stack_id, :connection_pool_ready, message)
   end
 
-  def mark_shape_log_collector_as_errored(stack_id, message) when is_binary(message) do
-    mark_condition_as_errored(stack_id, :shape_log_collector_ready, message)
-  end
-
   defp mark_condition_as_errored(stack_id, condition, error) do
     GenServer.cast(name(stack_id), {:condition_errored, condition, error})
+  end
+
+  defp mark_condition_met(stack_id, condition, process) do
+    GenServer.cast(name(stack_id), {:condition_met, condition, process})
   end
 
   def wait_until_active(stack_id, timeout) do
