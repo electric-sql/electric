@@ -4,14 +4,14 @@
 [global pg_container_name=]
 [global pg_host_port=54331]
 [global pg_pooler_host_port=64331]
-[global database_url=postgresql://postgres:password@localhost:$pg_host_port/postgres?sslmode=disable]
-[global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/postgres?sslmode=disable]
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric?sslmode=disable]
+[global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/electric?sslmode=disable]
 
-[macro setup_pg_with_name shell_name initdb_args config_opts]
+[macro setup_pg_with_shell_name shell_name container_env_vars config_opts]
   [shell $shell_name]
     -$fail_pattern
 
-    # Create network for given contianer to be able to attach pooler
+    # Create a named network for the PG container to be able to attach pooler
     !docker network ls | grep ${pg_container_name}-network || docker network create ${pg_container_name}-network
   
     !docker run \
@@ -20,7 +20,7 @@
       -e POSTGRES_DB=electric \
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=password \
-      -e POSTGRES_INITDB_ARGS=${initdb_args} \
+      ${container_env_vars} \
       -p $pg_host_port:5432 \
       -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
       postgres:14-alpine \
@@ -34,12 +34,13 @@
     -
 [endmacro]
 
-[macro setup_pg initdb_args config_opts]
-  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+[macro setup_pg]
+  [invoke setup_pg_with_shell_name "pg" "" ""]
 [endmacro]
 
-[macro setup_pg_with_pooler initdb_args config_opts]
-  [invoke setup_pg_with_name "pg" $initdb_args $config_opts]
+[macro setup_pg_with_pooler]
+  [invoke setup_pg]
+
   [shell "pg_pooler"]
     -$fail_pattern
 
@@ -78,7 +79,7 @@
 
 [macro start_psql_shell shell_name pg_container_name]
   [shell $shell_name]
-    !docker exec -u postgres -it $pg_container_name psql
+    !docker exec -u postgres -it $pg_container_name psql --dbname electric
 [endmacro]
 
 [macro start_psql]
@@ -87,7 +88,7 @@
 
 [macro seed_pg]
   [shell psql]
-    !docker exec -u postgres -it $pg_container_name psql
+    !docker exec -u postgres -it $pg_container_name psql --dbname electric
   
     """!
     CREATE TABLE items2 (
@@ -157,6 +158,34 @@
 [macro check_tenant_status tenant_id expected_status electric_port]
   [shell $tenant_id]
     [invoke wait-for "curl -X GET http://localhost:$electric_port/v1/health?database_id=$tenant_id" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
+[endmacro]
+
+[macro capture_stack_supervisor_pid]
+  ?pid=(<\d+\.\d+\.\d+>) \[debug\] The single StackSupervisor is initializing...
+  # All interactive commands and matches are performed within a single IEx session,
+  # so we can assign local variables here which is less of a hassle than using lux variables.
+  !stack_supervisor_pid = :erlang.list_to_pid(~c"$1")
+  !stack_supervisor_mon = Process.monitor(stack_supervisor_pid)
+[endmacro]
+
+[macro wait_on_stack_supervisor_registration]
+  # Verify that the stack supervisor is registered using regular process registration. If we
+  # change this at any point, the line below will catch it and we'll be able to correct the
+  # check further down that verifies that the stack supervisor is no longer running.
+  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
+  ??Stack supervisor pid: #PID<
+[endmacro]
+
+[macro verify_connection_and_stack_supervisors_shutdown stack_id]
+  ??[warning] Stopping connection supervisor with stack_id=$stack_id due to an unrecoverable error
+
+  !receive do \
+     {:DOWN, ^stack_supervisor_mon, :process, ^stack_supervisor_pid, _} -> IO.puts "stack supervisor is down" \
+   end
+  ??stack supervisor is down
+
+  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
+  ??Stack supervisor pid: nil
 [endmacro]
 
 [macro teardown_container container_name]

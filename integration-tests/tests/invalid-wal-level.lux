@@ -1,0 +1,44 @@
+[doc Verify handling of the wal_level!=logical error]
+
+[include _macros.luxinc]
+
+[global pg_container_name=invalid-wal-level__pg]
+
+[my stack_id="single_stack"]
+
+# The error message is slightly different in older PG versions
+[my error_regex=\(Postgrex.Error\) ERROR 55000 \(object_not_in_prerequisite_state\) logical decoding requires wal_level >= logical|\(Postgrex.Error\) ERROR 55000 \(object_not_in_prerequisite_state\) logical decoding requires "wal_level" >= "logical"]
+
+## Start a new Postgres cluster with logical replication disabled
+[invoke setup_pg_with_shell_name "pg" "" "-c wal_level=replica"]
+
+## Start the sync service.
+[invoke setup_electric]
+
+## Observe the fatal connection error.
+[shell electric]
+  [invoke capture_stack_supervisor_pid]
+
+  # Verify that the stack supervisor is registered using regular process registration. If we
+  # change this at any point, the line below will catch it and we'll be able to correct the
+  # check further down that verifies that the stack supervisor is no longer running.
+  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
+  ??Stack supervisor pid: #PID<
+
+  # Reset the failure pattern because we'll be matching on an error.
+  -
+
+  ?$error_regex
+  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id]
+
+  # Restart the OTP application to verify that the supervisors shut down again due to the invalidated slot.
+  !:ok = Application.stop(:electric)
+  !:ok = Application.start(:electric)
+
+  [invoke capture_stack_supervisor_pid]
+  ?$error_regex
+  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id]
+
+[cleanup]
+  [invoke teardown]
+

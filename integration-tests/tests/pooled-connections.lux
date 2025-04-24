@@ -6,8 +6,8 @@
 
 ###
 
-## Start a new Postgres cluster
-[invoke setup_pg_with_pooler "" ""]
+## Start a new Postgres cluster with a PG bouncer pooler running alongside it
+[invoke setup_pg_with_pooler]
 
 ## Add some data
 [invoke start_psql]

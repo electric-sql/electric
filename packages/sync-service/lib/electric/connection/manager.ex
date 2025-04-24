@@ -372,19 +372,19 @@ defmodule Electric.Connection.Manager do
 
   # The replication client failed to establish its database connection.
   def handle_info(
-        {:EXIT, pid, reason},
+        {:EXIT, pid, signal},
         %State{replication_client_pid: pid, replication_connection_established: false} = state
       ) do
-    error = {:error, reason}
+    reason = strip_exit_signal_stacktrace(signal)
     conn_opts = Keyword.fetch!(replication_opts(state), :connection_opts)
 
-    case maybe_fallback_to_no_ssl(error, conn_opts) do
+    case maybe_fallback_to_no_ssl(reason, conn_opts) do
       {:ok, conn_opts} ->
         state = update_replication_connection_opts(state, conn_opts)
         {:noreply, state, {:continue, :start_replication_client}}
 
-      error ->
-        handle_connection_error(error, state, "replication")
+      {:error, reason} ->
+        handle_connection_error(reason, state, "replication")
     end
   end
 
@@ -392,7 +392,9 @@ defmodule Electric.Connection.Manager do
   # It can be restarted independently of the lock connection and the DB pool. If any of the
   # latter two shut down, Connection.Manager will itself terminate to be restarted by its
   # supervisor in a clean state.
-  def handle_info({:EXIT, pid, reason}, %State{replication_client_pid: pid} = state) do
+  def handle_info({:EXIT, pid, signal}, %State{replication_client_pid: pid} = state) do
+    reason = strip_exit_signal_stacktrace(signal)
+
     with false <- stop_if_fatal_error(reason, state) do
       Logger.debug(
         "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
@@ -412,7 +414,9 @@ defmodule Electric.Connection.Manager do
   # The most likely reason for the lock connection or the DB pool to exit is the database
   # server going offline or shutting down. Stop Connection.Manager to allow its supervisor to
   # restart it in the initial state.
-  def handle_info({:EXIT, pid, reason}, state) do
+  def handle_info({:EXIT, pid, signal}, state) do
+    reason = strip_exit_signal_stacktrace(signal)
+
     Logger.warning(
       "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
         inspect(reason, pretty: true) <> "\n\n" <> inspect(state, pretty: true)
@@ -544,8 +548,8 @@ defmodule Electric.Connection.Manager do
       {:ok, pid} ->
         {:ok, pid, opts[:connection_opts]}
 
-      error ->
-        with {:ok, connection_opts} <- maybe_fallback_to_no_ssl(error, opts[:connection_opts]) do
+      {:error, reason} ->
+        with {:ok, connection_opts} <- maybe_fallback_to_no_ssl(reason, opts[:connection_opts]) do
           opts = Keyword.put(opts, :connection_opts, connection_opts)
           start_lock_connection(opts)
         end
@@ -598,26 +602,26 @@ defmodule Electric.Connection.Manager do
 
   defp maybe_fallback_to_ipv4(error, _connection_opts), do: {:error, error}
 
-  defp maybe_fallback_to_no_ssl({:error, reason} = error, connection_opts) do
+  defp maybe_fallback_to_no_ssl(reason, connection_opts) do
+    error = {:error, reason}
+
     case reason do
       %Postgrex.Error{message: "ssl not available"} ->
-        do_fallback_to_no_ssl(error, connection_opts)
+        do_fallback_to_no_ssl(connection_opts) || error
 
       # Seen this when connecting to Fly Postgres
       %DBConnection.ConnectionError{message: "ssl connect: closed"} ->
-        do_fallback_to_no_ssl(error, connection_opts)
+        do_fallback_to_no_ssl(connection_opts) || error
 
       _ ->
         error
     end
   end
 
-  defp do_fallback_to_no_ssl(error, connection_opts) do
+  defp do_fallback_to_no_ssl(connection_opts) do
     sslmode = connection_opts[:sslmode]
 
-    if sslmode == :require do
-      error
-    else
+    if sslmode != :require do
       if not is_nil(sslmode) do
         # Only log a warning when there's an explicit sslmode parameter in the database
         # config, meaning the user has requested a certain sslmode.
@@ -628,14 +632,6 @@ defmodule Electric.Connection.Manager do
 
       {:ok, Keyword.put(connection_opts, :ssl, false)}
     end
-  end
-
-  defp handle_connection_error(
-         {:shutdown, {:failed_to_start_child, Electric.Postgres.ReplicationClient, error}},
-         state,
-         mode
-       ) do
-    handle_connection_error(error, state, mode)
   end
 
   defp handle_connection_error(
@@ -663,8 +659,8 @@ defmodule Electric.Connection.Manager do
         step = current_connection_step(state)
         handle_continue(step, state)
 
-      {:error, error} ->
-        fail_on_error_or_reconnect(error, state, mode)
+      {:error, reason} ->
+        fail_on_error_or_reconnect(reason, state, mode)
     end
   end
 
@@ -733,6 +729,21 @@ defmodule Electric.Connection.Manager do
     else
       ""
     end
+  end
+
+  defp stop_if_fatal_error(
+         %Postgrex.Error{
+           postgres: %{
+             code: :object_not_in_prerequisite_state,
+             message: msg,
+             pg_code: "55000"
+           }
+         } = error,
+         state
+       )
+       when msg == "logical decoding requires wal_level >= logical" or
+              msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
+    dispatch_fatal_error_and_shutdown({:wal_level_is_not_logical, %{error: error}}, state)
   end
 
   defp stop_if_fatal_error(
@@ -932,4 +943,14 @@ defmodule Electric.Connection.Manager do
 
   defp replication_opts(%State{shared_connection_opts: conn_opts} = state),
     do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
+
+  # It's possible that the exit signal received from the replication client process includes a
+  # stacktrace. I haven't found the rule that would describe when the stacktrace is to be
+  # expected or not. This implementation is based on empirical evidence.
+  defp strip_exit_signal_stacktrace(signal) do
+    case signal do
+      {reason, stacktrace} when is_list(stacktrace) -> reason
+      reason -> reason
+    end
+  end
 end

@@ -7,7 +7,7 @@
 ###
 
 ## Start a new Postgres cluster
-[invoke setup_pg "" ""]
+[invoke setup_pg]
 
 ## Add some data
 [invoke start_psql]
