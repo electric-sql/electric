@@ -3,7 +3,7 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
 
   @doc false
   @impl Electric.Postgres.Inspector
-  def list_diverged_relations(_opts), do: :error
+  def list_relations_with_stale_cache(_opts), do: :error
 
   @doc """
   Returns the PG relation from the table name.
@@ -18,8 +18,9 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, []} ->
         {:error, "No relation found"}
 
-      {:ok, relations} ->
-        {:ok, hd(relations)}
+      # We're matching for a unique regclass here, can't be more than one
+      {:ok, [relation]} ->
+        {:ok, relation}
 
       {:error, err} ->
         {:error, err}
@@ -33,8 +34,9 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
       {:ok, []} ->
         {:error, "No relation found"}
 
-      {:ok, relations} ->
-        {:ok, hd(relations)}
+      # We're matching for a unique regclass here, can't be more than one
+      {:ok, [relation]} ->
+        {:ok, relation}
 
       {:error, err} ->
         {:error, err}

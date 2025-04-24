@@ -278,6 +278,10 @@ defmodule Electric.Replication.PublicationManager do
        ),
        do: %{state | next_update_forced?: forced? or state.next_update_forced?}
 
+  # Updates are forced when we're doing periodic checks: we expect no changes to the filters,
+  # but we'll write them anyway because that'll verify that no tables have been dropped/renamed
+  # since the last update. Useful when we're not altering the publication often to catch changes
+  # to the DB.
   @spec update_publication(state()) ::
           {:ok, state(), [Electric.oid_relation()]} | {:error, term()}
   defp update_publication(

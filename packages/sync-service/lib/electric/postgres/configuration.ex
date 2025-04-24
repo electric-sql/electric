@@ -13,10 +13,10 @@ defmodule Electric.Postgres.Configuration do
 
   @doc """
   Configure the publication to include all relevant tables, also setting table identity to `FULL`
-  if necessary.
+  if necessary. Return a list of tables that could not be configured.
 
   Any tables that were previously configured but were either renamed or dropped will *not* be automatically
-  re-added to the publication.
+  re-added to the publication. Mentioned tables that have been renamed or dropped will be returned as a list.
 
   `previous_relations` argument is used to figure out renamed/dropped table based on table OIDs.
 
@@ -31,7 +31,8 @@ defmodule Electric.Postgres.Configuration do
           filters(),
           non_neg_integer(),
           String.t()
-        ) :: [Electric.oid_relation()]
+        ) :: relations_failed_to_configure
+        when relations_failed_to_configure: [Electric.oid_relation()]
   def configure_publication!(
         conn,
         previous_relations,
@@ -45,7 +46,7 @@ defmodule Electric.Postgres.Configuration do
       changed_relations =
         (previous_relations ++ Map.keys(new_filters))
         |> Enum.uniq()
-        |> list_missing_relations(conn)
+        |> list_changed_relations(conn)
 
       used_filters = Map.drop(new_filters, changed_relations)
 
@@ -71,12 +72,12 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  defp list_missing_relations(previous_relations, conn) do
+  defp list_changed_relations(known_relations, conn) do
     # We're checking whether the table has been renamed (same oid, different name) or
     # dropped (maybe same name exists, but different oid). If either is true, we need to update
     # the new filters and maybe notify existing shapes.
 
-    {oids, relations} = Enum.unzip(previous_relations)
+    {oids, relations} = Enum.unzip(known_relations)
     {schemas, tables} = Enum.unzip(relations)
 
     result =

@@ -71,7 +71,7 @@ defmodule Electric.Replication.SchemaReconciler do
 
     # We essentially never want to fail here, as this is a periodic task.
     # If it fails, we'll just try again next time, so no additional retries are implemented
-    with {:ok, diverged_relations} <- Inspector.list_diverged_relations(state.inspector),
+    with {:ok, diverged_relations} <- Inspector.list_relations_with_stale_cache(state.inspector),
          :ok <-
            shape_cache_mod.clean_all_shapes_for_relations(diverged_relations, shape_cache_args),
          :ok <-

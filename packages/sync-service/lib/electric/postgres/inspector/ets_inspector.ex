@@ -93,8 +93,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   @impl Electric.Postgres.Inspector
-  def list_diverged_relations(opts) do
-    GenServer.call(opts[:server], :list_diverged_relations, :infinity)
+  def list_relations_with_stale_cache(opts) do
+    GenServer.call(opts[:server], :list_relations_with_stale_cache, :infinity)
   end
 
   ## Internal API
@@ -181,7 +181,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
   end
 
-  def handle_call(:list_diverged_relations, _from, state) do
+  def handle_call(:list_relations_with_stale_cache, _from, state) do
     known_schema = known_schema(state)
     known_schema_oids = known_schema |> Enum.map(& &1.relation_id)
 
