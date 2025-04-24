@@ -23,7 +23,7 @@ defmodule Electric.StatusMonitor do
 
     :ets.new(ets_table(stack_id), [:named_table, :protected])
 
-    {:ok, %{stack_id: stack_id, waiters: []}}
+    {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
   end
 
   @spec status(String.t()) :: status()
@@ -127,7 +127,7 @@ defmodule Electric.StatusMonitor do
       {:reply, :ok, state}
     else
       Process.send_after(self(), {:timeout_waiter, from}, timeout)
-      {:noreply, %{state | waiters: [from | waiters]}}
+      {:noreply, %{state | waiters: MapSet.put(waiters, from)}}
     end
   end
 
@@ -142,11 +142,15 @@ defmodule Electric.StatusMonitor do
   end
 
   def handle_info({:timeout_waiter, waiter}, state) do
-    GenServer.reply(waiter, {:error, timeout_message(state.stack_id)})
-    {:noreply, %{state | waiters: state.waiters -- [waiter]}}
+    if MapSet.member?(state.waiters, waiter) do
+      GenServer.reply(waiter, {:error, timeout_message(state.stack_id)})
+      {:noreply, %{state | waiters: MapSet.delete(state.waiters, waiter)}}
+    else
+      {:noreply, state}
+    end
   end
 
-  defp maybe_reply_to_waiters(%{waiters: []} = state), do: state
+  defp maybe_reply_to_waiters(%{waiters: waiters} = state) when map_size(waiters) == 0, do: state
 
   defp maybe_reply_to_waiters(%{waiters: waiters} = state) do
     case status(state.stack_id) do
@@ -155,7 +159,7 @@ defmodule Electric.StatusMonitor do
           GenServer.reply(waiter, :ok)
         end)
 
-        %{state | waiters: []}
+        %{state | waiters: MapSet.new()}
 
       _ ->
         state
