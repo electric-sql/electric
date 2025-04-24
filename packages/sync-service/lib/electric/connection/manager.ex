@@ -310,6 +310,15 @@ defmodule Electric.Connection.Manager do
             stack_id: state.stack_id,
             persistent_kv: state.persistent_kv
           )
+
+          dispatch_stack_event(
+            {:database_id_or_timeline_changed,
+             %{
+               message:
+                 "Purging shape logs from disk. Clients will refetch shape data automatically."
+             }},
+            state
+          )
         end
 
         shapes_sup_pid =
@@ -417,6 +426,8 @@ defmodule Electric.Connection.Manager do
       "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
         inspect(reason, pretty: true) <> "\n\n" <> inspect(state, pretty: true)
     )
+
+    dispatch_stack_event({:database_connection_severed, format_exit_reason(reason)}, state)
 
     {:stop, {:shutdown, reason}, state}
   end
@@ -974,6 +985,16 @@ defmodule Electric.Connection.Manager do
     case signal do
       {reason, stacktrace} when is_list(stacktrace) -> reason
       reason -> reason
+    end
+  end
+
+  defp format_exit_reason(error) do
+    if is_exception(error) do
+      Exception.format(:error, error)
+    else
+      error
+      |> strip_exit_signal_stacktrace()
+      |> inspect()
     end
   end
 
