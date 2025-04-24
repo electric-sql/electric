@@ -1,6 +1,5 @@
 defmodule Electric.Replication.SchemaReconciler do
-  @moduledoc false
-  _ = """
+  @moduledoc """
   Takes care of periodically reconciling the schema of the database with
   the inspector caches and active shapes.
 
