@@ -216,20 +216,22 @@ defmodule Electric.ShapeCache do
       max_shapes: opts.max_shapes
     }
 
-    last_processed_lsn =
+    {last_processed_lsn, shapes} =
       if opts[:purge_all_shapes?] do
         clean_up_all_shapes(state)
-        Lsn.from_integer(0)
+        {Lsn.from_integer(0), []}
       else
         recover_shapes(state, opts.recover_shape_timeout)
       end
+
+    Logger.info("Recovered #{length(shapes)} shapes")
 
     # ensure publication filters are in line with existing shapes,
     # and clean up cache if publication fails to update
     {publication_manager, publication_manager_opts} = opts.publication_manager
 
     try do
-      :ok = publication_manager.refresh_publication(publication_manager_opts)
+      :ok = publication_manager.sync_publication(publication_manager_opts)
     rescue
       error ->
         clean_up_all_shapes(state)
@@ -373,7 +375,10 @@ defmodule Electric.ShapeCache do
     |> Enum.flat_map(fn {shape_handle, shape} ->
       start_shape_with_timeout(shape_handle, shape, state, timeout)
     end)
-    |> Lsn.max()
+    |> Enum.unzip()
+    |> then(fn {lsns, shapes} ->
+      {Lsn.max(lsns), shapes}
+    end)
   end
 
   # the shape cache loads existing shapes within its init/1 callback
@@ -416,7 +421,7 @@ defmodule Electric.ShapeCache do
 
     # recover publication filter state
     publication_manager.recover_shape(shape, publication_manager_opts)
-    [LogOffset.extract_lsn(latest_offset)]
+    [{LogOffset.extract_lsn(latest_offset), shape}]
   catch
     kind, reason when kind in [:exit, :error] ->
       Logger.error(

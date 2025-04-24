@@ -37,8 +37,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       shape_handle: shape_handle,
       shape: shape,
       stack_id: stack_id
-    } =
-      state
+    } = state
 
     ctx_token = if not is_nil(state[:otel_ctx]), do: :otel_ctx.attach(state[:otel_ctx])
 
