@@ -81,6 +81,12 @@ defmodule Electric.Connection.Supervisor do
       {Electric.Replication.ShapeLogCollector,
        stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv}
 
+    schema_reconciler_spec =
+      {Electric.Replication.SchemaReconciler,
+       stack_id: stack_id,
+       inspector: inspector,
+       shape_cache: {Electric.ShapeCache, stack_id: stack_id}}
+
     child_spec =
       Supervisor.child_spec(
         {
@@ -88,7 +94,8 @@ defmodule Electric.Connection.Supervisor do
           stack_id: stack_id,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,
-          log_collector: shape_log_collector_spec
+          log_collector: shape_log_collector_spec,
+          schema_reconciler: schema_reconciler_spec
         },
         restart: :temporary
       )

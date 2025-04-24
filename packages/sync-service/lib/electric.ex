@@ -123,6 +123,7 @@ defmodule Electric do
 
   @type relation :: {schema :: String.t(), table :: String.t()}
   @type relation_id :: non_neg_integer()
+  @type oid_relation :: {oid :: relation_id(), relation :: relation()}
 
   @current_vsn Mix.Project.config()[:version]
   def version do

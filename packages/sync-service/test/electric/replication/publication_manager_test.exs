@@ -33,13 +33,18 @@ defmodule Electric.Replication.PublicationManagerTest do
     }
   end
 
+  def clean_all_shapes_for_relations(relations, [parent_pid]) do
+    send(parent_pid, {:clean_all_shapes_for_relations, relations})
+  end
+
   setup :with_stack_id_from_test
 
   setup ctx do
     test_pid = self()
 
-    configure_tables_fn = fn _, filters, _, _ ->
+    configure_tables_fn = fn _, _, filters, _, _ ->
       send(test_pid, {:filters, Map.values(filters)})
+      Map.get(ctx, :returned_relations, [])
     end
 
     %{publication_manager: {_, publication_manager_opts}} =
@@ -48,6 +53,7 @@ defmodule Electric.Replication.PublicationManagerTest do
         test: ctx.test,
         stack_id: ctx.stack_id,
         update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
+        shape_cache: {__MODULE__, [self()]},
         publication_name: "pub_#{ctx.stack_id}",
         pool: :no_pool,
         pg_version: 150_001,
@@ -219,13 +225,14 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       test_id = self()
 
-      configure_tables_fn = fn _, filters, _, _ ->
+      configure_tables_fn = fn _, _old_relations, filters, _, _ ->
         if filters |> Map.values() |> Enum.any?(&(&1.where_clauses != nil)) do
           send(test_id, {:got_filters, :with_where_clauses})
           raise %Postgrex.Error{postgres: %{code: :feature_not_supported}}
         end
 
         send(test_id, {:got_filters, :without_where_clauses})
+        []
       end
 
       %{publication_manager: {_, publication_manager_opts}} =
@@ -258,6 +265,22 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.add_shape(shape3, publication_manager_opts)
       assert_receive {:got_filters, :without_where_clauses}
       refute_receive {:got_filters, _}, 50
+    end
+
+    @tag returned_relations: [{10, {"public", "another_table"}}]
+    test "should broadcast clean_all_shapes_for_relations/2 to shape cache", %{opts: opts} do
+      shape = generate_shape({"public", "items"}, @where_clause_1)
+      assert :ok == PublicationManager.add_shape(shape, opts)
+
+      assert_receive {:filters,
+                      [
+                        %RelationFilter{
+                          relation: {"public", "items"},
+                          where_clauses: [@where_clause_1]
+                        }
+                      ]}
+
+      assert_receive {:clean_all_shapes_for_relations, [{10, {"public", "another_table"}}]}
     end
   end
 

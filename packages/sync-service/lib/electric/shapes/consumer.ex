@@ -121,8 +121,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_call(:clean_and_stop, _from, state) do
+    # Waiter will receive this response if the snapshot wasn't done yet, but
+    # given that this is definitely a cleanup call, a 409 is appropriate
+    # as old shape handle is no longer valid
     state =
-      reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot completed"})
+      reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
 
     # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
     # any race conditions and leftover data

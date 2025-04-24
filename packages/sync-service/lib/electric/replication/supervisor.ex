@@ -25,6 +25,7 @@ defmodule Electric.Replication.Supervisor do
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     log_collector = Keyword.fetch!(opts, :log_collector)
+    schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
     stack_id = Keyword.fetch!(opts, :stack_id)
 
     consumer_supervisor =
@@ -34,7 +35,14 @@ defmodule Electric.Replication.Supervisor do
         {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
       )
 
-    children = [consumer_supervisor, publication_manager, log_collector, shape_cache]
+    children = [
+      consumer_supervisor,
+      publication_manager,
+      log_collector,
+      schema_reconciler,
+      shape_cache
+    ]
+
     Supervisor.init(children, strategy: :one_for_all)
   end
 end

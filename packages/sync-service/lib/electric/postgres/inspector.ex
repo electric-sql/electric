@@ -35,6 +35,9 @@ defmodule Electric.Postgres.Inspector do
 
   @callback clean(relation(), opts :: term()) :: true
 
+  @callback list_relations_with_stale_cache(opts :: term()) ::
+              {:ok, [Electric.oid_relation()]} | :error
+
   @type inspector :: {module(), opts :: term()}
 
   @doc """
@@ -102,6 +105,16 @@ defmodule Electric.Postgres.Inspector do
       %{name: name, type: type} ->
         {[name], atom_type(type)}
     end)
+  end
+
+  @doc """
+  List relations that have stale cache. Doesn't clean the cache immediately,
+  that's left to the caller. Inspectors without cache will return an `:error`.
+  """
+  @spec list_relations_with_stale_cache(inspector()) ::
+          {:ok, [Electric.oid_relation()]} | :error
+  def list_relations_with_stale_cache({module, opts}) do
+    module.list_relations_with_stale_cache(opts)
   end
 
   defp atom_type(type) when is_binary(type), do: String.to_atom(type)

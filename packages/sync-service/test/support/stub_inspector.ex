@@ -1,6 +1,9 @@
 defmodule Support.StubInspector do
   @behaviour Electric.Postgres.Inspector
 
+  @impl Electric.Postgres.Inspector
+  def list_relations_with_stale_cache(opts), do: {:ok, Access.get(opts, :diverged_relations, [])}
+
   # the opts is either a list of column details which will be applied to every table
   # or a map of %{{schema, name} => [columns: column_info, relation: relation_info]}
   def new(opts), do: {__MODULE__, opts}

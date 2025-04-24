@@ -16,6 +16,8 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback await_snapshot_start(shape_handle(), opts :: Access.t()) ::
               :started | {:error, term()}
   @callback clean_shape(shape_handle(), Access.t()) :: :ok
+  @callback clean_all_shapes_for_relations(list(Electric.oid_relation()), opts :: Access.t()) ::
+              :ok
   @callback clean_all_shapes(Access.t()) :: :ok
   @callback has_shape?(shape_handle(), Access.t()) :: boolean()
 end
@@ -129,6 +131,15 @@ defmodule Electric.ShapeCache do
   def clean_all_shapes(opts) do
     server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:clean_all})
+  end
+
+  @impl Electric.ShapeCacheBehaviour
+  @spec clean_all_shapes_for_relations(list(Electric.oid_relation()), Access.t()) :: :ok
+  def clean_all_shapes_for_relations(relations, opts) do
+    server = Access.get(opts, :server, name(opts))
+    # We don't want for this call to be blocking because it will be called in `PublicationManager`
+    # if it notices a discrepancy in the schema
+    GenServer.cast(server, {:clean_all_shapes_for_relations, relations})
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -300,6 +311,23 @@ defmodule Electric.ShapeCache do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
     {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_cast({:clean_all_shapes_for_relations, relations}, state) do
+    affected_shapes =
+      state.shape_status_state
+      |> state.shape_status.list_shape_handles_for_relations(relations)
+
+    Logger.info(fn ->
+      "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
+    end)
+
+    Enum.each(affected_shapes, fn shape_handle ->
+      clean_up_shape(state, shape_handle)
+    end)
+
+    {:noreply, state}
   end
 
   defp maybe_expire_shapes(%{max_shapes: max_shapes} = state) when max_shapes != nil do

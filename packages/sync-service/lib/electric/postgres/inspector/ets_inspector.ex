@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.Inspector.EtsInspector do
   use GenServer
 
+  require Logger
   alias Electric.Postgres.Inspector.DirectInspector
 
   @behaviour Electric.Postgres.Inspector
@@ -41,6 +42,18 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   end
 
+  defp known_schema(opts) do
+    :ets.tab2list(get_column_info_table(opts))
+    |> Enum.reduce(%{}, fn
+      {{rel, :table_to_relation}, %{relation_id: relation_id}}, acc ->
+        Map.update(acc, rel, %{relation_id: relation_id}, &Map.put(&1, :relation_id, relation_id))
+
+      {{rel, :columns}, columns}, acc ->
+        Map.update(acc, rel, %{columns: columns}, &Map.put(&1, :columns, columns))
+    end)
+    |> Enum.map(fn {rel, data} -> Map.put(data, :relation, rel) end)
+  end
+
   defp clean_relation(rel, opts_or_state) do
     pg_relation_ets_table = get_relation_table(opts_or_state)
     pg_info_ets_table = get_column_info_table(opts_or_state)
@@ -77,6 +90,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   def clean(relation, opts_or_state) do
     clean_column_info(relation, opts_or_state)
     clean_relation(relation, opts_or_state)
+  end
+
+  @impl Electric.Postgres.Inspector
+  def list_relations_with_stale_cache(opts) do
+    GenServer.call(opts[:server], :list_relations_with_stale_cache, :infinity)
   end
 
   ## Internal API
@@ -161,6 +179,52 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end
   rescue
     e -> {:reply, {:error, e, __STACKTRACE__}, state}
+  end
+
+  def handle_call(:list_relations_with_stale_cache, _from, state) do
+    known_schema = known_schema(state)
+    known_schema_oids = known_schema |> Enum.map(& &1.relation_id)
+
+    {:ok, diverged_relations} =
+      Postgrex.transaction(
+        state.pg_pool,
+        fn conn ->
+          {:ok, found_relations} =
+            DirectInspector.load_relations_by_oids(known_schema_oids, conn)
+
+          found_relation_identities =
+            MapSet.new(found_relations, fn %{relation: rel, relation_id: oid} -> {oid, rel} end)
+
+          {present_relations, missing_relations} =
+            Enum.split_with(known_schema, fn %{relation_id: oid, relation: rel} ->
+              MapSet.member?(found_relation_identities, {oid, rel})
+            end)
+
+          found_relations_columns =
+            present_relations
+            |> Enum.map(& &1.relation_id)
+            |> Electric.Postgres.Inspector.DirectInspector.load_column_info_by_oids(conn)
+
+          diverged_relations =
+            present_relations
+            |> Enum.filter(fn %{relation_id: oid, columns: known_columns} ->
+              found_relations_columns[oid] != known_columns
+            end)
+
+          (diverged_relations ++ missing_relations)
+          |> Enum.map(fn %{relation: rel, relation_id: oid} -> {oid, rel} end)
+        end,
+        timeout: 5_000
+      )
+
+    {:reply, {:ok, diverged_relations}, state}
+  catch
+    kind, err ->
+      Logger.warning(
+        "Could not load diverged relations: #{Exception.format(kind, err, __STACKTRACE__)}"
+      )
+
+      {:reply, :error, state}
   end
 
   @pg_rel_position 2

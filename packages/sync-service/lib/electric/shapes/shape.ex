@@ -69,6 +69,14 @@ defmodule Electric.Shapes.Shape do
     {hash, "#{hash}-#{DateTime.utc_now() |> DateTime.to_unix(:millisecond)}"}
   end
 
+  @doc """
+  List all relations that are a part of this shape, as oid-name tuples.
+  """
+  @spec list_relations(t()) :: [Electric.oid_relation()]
+  def list_relations(%__MODULE__{} = shape) do
+    [{shape.root_table_id, shape.root_table}]
+  end
+
   def new!(table, opts \\ []) do
     case new(table, opts) do
       {:ok, shape} -> shape

@@ -1693,6 +1693,72 @@ defmodule Electric.Plug.RouterTest do
                })
                |> Router.call(opts)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE droppability_test (id INT PRIMARY KEY, value INTEGER NOT NULL)",
+           "CREATE TABLE droppability_test_2 (id INT PRIMARY KEY, value INTEGER NOT NULL)"
+         ]
+
+    test "dropping and creating the table (same structure) causes a 409 after poller had noticed it",
+         %{
+           opts: opts,
+           db_conn: db_conn,
+           stack_id: stack_id
+         } do
+      assert %{status: 200} =
+               conn1 =
+               conn("GET", "/v1/shape", %{table: "droppability_test", offset: "-1"})
+               |> Router.call(opts)
+
+      assert %{status: 200} =
+               conn2 =
+               conn("GET", "/v1/shape", %{table: "droppability_test_2", offset: "-1"})
+               |> Router.call(opts)
+
+      shape_handle1 = get_resp_shape_handle(conn1)
+      shape_handle2 = get_resp_shape_handle(conn2)
+
+      Postgrex.query!(db_conn, "DROP TABLE droppability_test", [])
+
+      Postgrex.query!(
+        db_conn,
+        "CREATE TABLE droppability_test (id INT PRIMARY KEY, value INTEGER NOT NULL)",
+        []
+      )
+
+      Postgrex.query!(
+        db_conn,
+        "ALTER TABLE droppability_test_2 DROP COLUMN value",
+        []
+      )
+
+      ref1 = Process.monitor(Electric.Shapes.Consumer.whereis(stack_id, shape_handle1))
+      ref2 = Process.monitor(Electric.Shapes.Consumer.whereis(stack_id, shape_handle2))
+
+      # Trigger the reconciler to notice the dropped/created table (OID change)
+      Electric.Replication.SchemaReconciler.name(stack_id)
+      |> Electric.Replication.SchemaReconciler.reconcile_now()
+
+      assert_receive {:DOWN, ^ref1, :process, _, _}
+      assert_receive {:DOWN, ^ref2, :process, _, _}
+
+      # Now we should get a 409 when trying to continue reading
+      assert %{status: 409} =
+               conn("GET", "/v1/shape", %{
+                 table: "droppability_test",
+                 offset: "0_0",
+                 handle: shape_handle1
+               })
+               |> Router.call(opts)
+
+      assert %{status: 409} =
+               conn("GET", "/v1/shape", %{
+                 table: "droppability_test_2",
+                 offset: "0_0",
+                 handle: shape_handle2
+               })
+               |> Router.call(opts)
+    end
   end
 
   describe "404" do

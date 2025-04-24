@@ -109,11 +109,9 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           {:stop, :normal, state}
 
         nil ->
-          Logger.error(
-            "Unable to start snapshot - invalid ShapeCache reference #{inspect(state.shape_cache)}"
-          )
+          Logger.error("Unable to start snapshot - consumer not found for shape #{shape_handle}")
 
-          {:stop, {:error, "shape cache server invalid"}, state}
+          {:stop, {:error, "consumer not found"}, state}
       end
 
     if not is_nil(ctx_token), do: :otel_ctx.detach(ctx_token)
