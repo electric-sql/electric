@@ -1,4 +1,6 @@
 defmodule Electric.DbConnectionError do
+  require Logger
+
   defexception [:message, :type, :original_error, :retry_may_fix?]
 
   alias Electric.DbConnectionError
@@ -71,6 +73,8 @@ defmodule Electric.DbConnectionError do
   def from_error(error), do: unknown_error(error)
 
   defp unknown_error(error) do
+    Logger.error("Electric.DBConnection unknown error: #{inspect(error)}")
+
     %DbConnectionError{
       message: inspect(error),
       type: :unknown,
