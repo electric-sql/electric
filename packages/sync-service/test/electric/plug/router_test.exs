@@ -733,13 +733,13 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.transaction(db_conn, fn tx_conn ->
         Postgrex.query!(
           tx_conn,
-          "UPDATE wide_table SET id = 2, value2 = 'test value 2' WHERE id = 1",
+          "INSERT INTO wide_table VALUES (3, 'other', 'other', 'other')",
           []
         )
 
         Postgrex.query!(
           tx_conn,
-          "INSERT INTO wide_table VALUES (3, 'other', 'other', 'other')",
+          "UPDATE wide_table SET id = 2, value2 = 'test value 2' WHERE id = 1",
           []
         )
       end)
@@ -747,6 +747,11 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn = Task.await(task)
 
       assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "3", "value1" => _, "value2" => _, "value3" => _},
+                 "key" => key3
+               },
                %{
                  "headers" => %{"operation" => "delete"},
                  "value" => %{"id" => "1"},
@@ -756,11 +761,6 @@ defmodule Electric.Plug.RouterTest do
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"id" => "2", "value1" => _, "value2" => _, "value3" => _},
                  "key" => key2
-               },
-               %{
-                 "headers" => %{"operation" => "insert"},
-                 "value" => %{"id" => "3", "value1" => _, "value2" => _, "value3" => _},
-                 "key" => key3
                },
                @up_to_date
              ] = Jason.decode!(conn.resp_body)

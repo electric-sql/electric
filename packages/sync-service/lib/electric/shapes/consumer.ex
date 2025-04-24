@@ -6,6 +6,7 @@ defmodule Electric.Shapes.Consumer do
   import Electric.Postgres.Xid, only: [compare: 2]
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
+  alias Electric.Replication.LogOffset
   alias Electric.Shapes.Api
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
@@ -206,6 +207,8 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def terminate(reason, state) do
+    Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
+
     state =
       reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
 
@@ -346,7 +349,7 @@ defmodule Electric.Shapes.Consumer do
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
-    %{xid: xid, changes: changes, lsn: _lsn, last_log_offset: last_log_offset} = txn
+    %{xid: xid, changes: changes, lsn: _lsn} = txn
 
     {relevant_changes, {num_changes, has_truncate?}} =
       Enum.flat_map_reduce(changes, {0, false}, fn
@@ -376,7 +379,7 @@ defmodule Electric.Shapes.Consumer do
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
       num_changes > 0 ->
-        {log_entries, new_log_state} =
+        {log_entries, new_log_state, last_log_offset} =
           prepare_log_entries(relevant_changes, xid, shape, log_state, chunk_bytes_threshold)
 
         timestamp = System.monotonic_time()
@@ -518,7 +521,7 @@ defmodule Electric.Shapes.Consumer do
           Shape.t(),
           log_state(),
           non_neg_integer()
-        ) :: {Enumerable.t(ShapeCache.Storage.log_item()), log_state()}
+        ) :: {Enumerable.t(ShapeCache.Storage.log_item()), log_state(), LogOffset.t()}
   defp prepare_log_entries(
          changes,
          xid,
@@ -528,7 +531,8 @@ defmodule Electric.Shapes.Consumer do
        ) do
     log_state = %{
       current_chunk_byte_size: log_state.current_chunk_byte_size,
-      current_txn_bytes: 0
+      current_txn_bytes: 0,
+      last_log_offset: LogOffset.before_all()
     }
 
     {log_items, new_log_state} =
@@ -548,7 +552,7 @@ defmodule Electric.Shapes.Consumer do
 
         item_byte_size = byte_size(json_log_item)
 
-        state = %{state | current_txn_bytes: txn_bytes + item_byte_size}
+        state = %{state | current_txn_bytes: txn_bytes + item_byte_size, last_log_offset: offset}
         line_tuple = {offset, log_item.key, log_item.headers.operation, json_log_item}
 
         case LogChunker.fit_into_chunk(item_byte_size, chunk_size, chunk_bytes_threshold) do
@@ -563,7 +567,9 @@ defmodule Electric.Shapes.Consumer do
         end
       end)
 
-    {log_items, new_log_state}
+    {last_log_offset, new_log_state} = Map.pop!(new_log_state, :last_log_offset)
+
+    {log_items, new_log_state, last_log_offset}
   end
 
   defp shape_attrs(shape_handle, shape) do
