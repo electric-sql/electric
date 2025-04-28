@@ -1047,9 +1047,9 @@ defmodule Electric.Connection.Manager do
   defp update_connection_opts(
          :start_replication_client,
          conn_opts,
-         %State{shared_connection_opts: nil} = state
+         %State{shared_connection_opts: nil, replication_opts: replication_opts} = state
        ) do
-    %State{state | replication_opts: put_in(state.replication_opts[:connection_opts], conn_opts)}
+    %State{state | replication_opts: put_in(replication_opts, [:connection_opts], conn_opts)}
   end
 
   defp update_connection_opts(_step, conn_opts, %State{shared_connection_opts: nil} = state) do
