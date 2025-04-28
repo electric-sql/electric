@@ -66,8 +66,8 @@ defmodule Electric.Connection.Manager do
             | :start_shapes_supervisor
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
-            | nil
             | :waiting_for_streaming_to_start
+            | :streaming
 
     defstruct [
       # The phase the connection manager is in. It defines which actions are taken if any of
@@ -173,43 +173,43 @@ defmodule Electric.Connection.Manager do
     name(Access.fetch!(opts, :stack_id))
   end
 
-  def drop_replication_slot_on_stop(server) do
-    GenServer.cast(server, :drop_replication_slot_on_stop)
+  def drop_replication_slot_on_stop(manager) do
+    GenServer.cast(manager, :drop_replication_slot_on_stop)
   end
 
-  def lock_connection_started(server) do
-    GenServer.cast(server, :lock_connection_started)
+  def lock_connection_started(manager) do
+    GenServer.cast(manager, :lock_connection_started)
   end
 
-  def exclusive_connection_lock_acquisition_failed(server, error) do
-    GenServer.cast(server, {:exclusive_connection_lock_acquisition_failed, error})
+  def exclusive_connection_lock_acquisition_failed(manager, error) do
+    GenServer.cast(manager, {:exclusive_connection_lock_acquisition_failed, error})
   end
 
-  def exclusive_connection_lock_acquired(server) do
-    GenServer.cast(server, :exclusive_connection_lock_acquired)
+  def exclusive_connection_lock_acquired(manager) do
+    GenServer.cast(manager, :exclusive_connection_lock_acquired)
   end
 
-  def replication_client_started(server) do
-    GenServer.cast(server, :replication_client_started)
+  def replication_client_started(manager) do
+    GenServer.cast(manager, :replication_client_started)
   end
 
-  def replication_client_ready_to_stream(server) do
-    GenServer.cast(server, :replication_client_ready_to_stream)
+  def replication_client_ready_to_stream(manager) do
+    GenServer.cast(manager, :replication_client_ready_to_stream)
   end
 
-  def replication_client_started_streaming(server) do
-    GenServer.cast(server, :replication_client_started_streaming)
+  def replication_client_started_streaming(manager) do
+    GenServer.cast(manager, :replication_client_started_streaming)
   end
 
-  def pg_info_looked_up(server, pg_info) do
-    GenServer.cast(server, {:pg_info_looked_up, pg_info})
+  def pg_info_looked_up(manager, pg_info) do
+    GenServer.cast(manager, {:pg_info_looked_up, pg_info})
   end
 
   @impl true
   def init(opts) do
-    # Because child processes are started via `start_link()` functions and due to how Postgrex
-    # (mis)manages connection errors, we have to trap exists in the manager process to
-    # implement our custom error handling logic.
+    # Connection processes that the manager starts all initialize asynchronously and so the way
+    # the report errors back to the manager process is via exit signals. To keep the manager
+    # process alive and able to correct those errors, it has to trap exits.
     Process.flag(:trap_exit, true)
 
     Process.set_label({:connection_manager, opts[:stack_id]})
@@ -288,6 +288,9 @@ defmodule Electric.Connection.Manager do
       stack_id: state.stack_id
     ]
 
+    # The lock connection process starts up quickly and then tries to open a database
+    # connection asynchronously. The manager will be notified about the lock connection's
+    # progress via the :lock_connection_started and :exclusive_connection_lock_acquired casts.
     {:ok, pid} = Electric.Postgres.LockConnection.start_link(opts)
 
     state = %State{
@@ -296,8 +299,6 @@ defmodule Electric.Connection.Manager do
         current_step: {:start_lock_connection, :connecting}
     }
 
-    # The lock connection has started but we need to wait for it to acquire the advisory
-    # lock before we proceed to starting the replication client.
     {:noreply, state}
   end
 
@@ -316,8 +317,20 @@ defmodule Electric.Connection.Manager do
       stack_id: state.stack_id
     ]
 
-    Logger.debug("Starting replication client for stack #{state.stack_id}")
+    action =
+      case phase do
+        :connection_setup -> "Starting"
+        :restarting_replication_client -> "Restarting"
+      end
 
+    Logger.debug("#{action} replication client for stack #{state.stack_id}")
+
+    # The replication client starts up quickly and then proceeds to asynchronously opening a
+    # replication connection to the database and configuring it.
+    # The manager will be notified about the replication client's progress via the
+    # :replication_client_started and :replication_client_ready_to_stream casts.
+    # If configured to start streaming immediately, the :replication_client_started_streaming
+    # cast would follow soon afterwards.
     {:ok, pid} = Electric.Postgres.ReplicationClient.start_link(opts)
 
     state = %State{
@@ -326,8 +339,6 @@ defmodule Electric.Connection.Manager do
         current_step: {:start_replication_client, :connecting}
     }
 
-    # The replication client has started but it still needs to open a database connection
-    # and perform setup queries before it's be ready to start streaming.
     {:noreply, state}
   end
 
@@ -455,7 +466,6 @@ defmodule Electric.Connection.Manager do
     {:noreply, state}
   end
 
-  # Periodically log the connection status for easier debugging and diagnostics.
   @impl true
   def handle_info(
         {:timeout, tref, {:check_status, :lock_connection}},
@@ -624,8 +634,8 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     dispatch_stack_event(:waiting_for_connection_lock, state)
-    tref = schedule_periodic_connection_status_check(:lock_connection)
     state = mark_connection_succeeded(state)
+    tref = schedule_periodic_connection_status_check(:lock_connection)
 
     state = %State{
       state
@@ -720,8 +730,16 @@ defmodule Electric.Connection.Manager do
         :replication_client_started_streaming,
         %State{current_phase: :running, current_step: :waiting_for_streaming_to_start} = state
       ) do
+    # The call to `mark_connection_succeeded()` resets the backoff timer, so the next
+    # reconnection attempt will start from the minimum timeout and grow exponentially from
+    # there.
+    # When the replication connection is stuck in a reconnection loop, we only mark it as
+    # having succeeded after receiving confirmation that streaming replication has started.
+    # This is the only way to be sure because it can still fail after we issue the
+    # start_streaming() call, so marking it as having succeeded earlier would result in a
+    # reconnection loop with no exponential backoff.
     state = mark_connection_succeeded(state)
-    state = %State{state | current_step: nil}
+    state = %State{state | current_step: :streaming}
     {:noreply, state}
   end
 
