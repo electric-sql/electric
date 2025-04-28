@@ -251,7 +251,6 @@ defmodule Electric.Shapes.Consumer do
     state =
       state
       |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
-      |> notify_shape_rotation()
       |> cleanup()
 
     {:stop, :normal, state}
@@ -375,9 +374,7 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        state
-        |> cleanup()
-        |> notify_shape_rotation()
+        cleanup(state)
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
 
@@ -494,6 +491,7 @@ defmodule Electric.Shapes.Consumer do
       publication_manager: {publication_manager, publication_manager_opts}
     } = state
 
+    notify_shape_rotation(state)
     shape_status.remove_shape(shape_status_state, state.shape_handle)
     publication_manager.remove_shape(state.shape, publication_manager_opts)
     ShapeCache.Storage.cleanup!(state.storage)
