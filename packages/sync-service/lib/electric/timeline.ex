@@ -54,6 +54,11 @@ defmodule Electric.Timeline do
     :timeline_changed
   end
 
+  defp verify_timeline({_, _}, {_, -1}) do
+    Logger.warning("Purging all shapes because consistent replication could not be continued.")
+    :timeline_changed
+  end
+
   defp verify_timeline({_, timeline_id}, _) do
     Logger.warning("Detected PITR to timeline #{timeline_id}; will purge all shapes.")
     :timeline_changed
@@ -81,6 +86,17 @@ defmodule Electric.Timeline do
   def store_timeline({pg_id, timeline_id}, opts) do
     kv = make_serialized_kv(opts)
     :ok = PersistentKV.set(kv, timeline_key(opts), [pg_id, timeline_id])
+  end
+
+  @doc """
+  Stores a timeline that is irrecoverable.
+
+  We use the fact that timelines are positive to store a special timeline
+  that's guaranteed to not match thus ensuring shape cleanup.
+  """
+  @spec store_irrecoverable_timeline(pg_id(), Keyword.t()) :: :ok
+  def store_irrecoverable_timeline(pg_id, opts) do
+    store_timeline({pg_id, -1}, opts)
   end
 
   defp make_serialized_kv(opts) do
