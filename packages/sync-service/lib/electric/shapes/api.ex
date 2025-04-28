@@ -232,6 +232,7 @@ defmodule Electric.Shapes.Api do
 
   defp seek(%Request{} = request) do
     request
+    |> register_shape_subscriber()
     |> listen_for_new_changes()
     |> determine_global_last_seen_lsn()
     |> determine_log_chunk_offset()
@@ -334,6 +335,12 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  defp register_shape_subscriber(%Request{} = request) do
+    %{api: %{stack_id: stack_id}, handle: handle} = request
+    {:ok, _} = Electric.Shapes.Status.register_subscriber(stack_id, handle)
+    request
+  end
+
   defp listen_for_new_changes(%Request{params: %{live: false}} = request) do
     request
   end
@@ -406,7 +413,11 @@ defmodule Electric.Shapes.Api do
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
       response = do_serve_shape_log(request)
-      clean_up_change_listener(request)
+
+      request
+      |> clean_up_change_listener()
+      |> clean_up_shape_subscriber()
+
       response
     end)
   end
@@ -420,8 +431,6 @@ defmodule Electric.Shapes.Api do
         {:cont, request} ->
           serve_shape_log(request)
       end
-
-    clean_up_change_listener(request)
 
     conn
     |> Plug.Conn.assign(:response, response)
@@ -549,6 +558,12 @@ defmodule Electric.Shapes.Api do
   end
 
   defp clean_up_change_listener(%Request{} = request), do: request
+
+  defp clean_up_shape_subscriber(%Request{} = request) do
+    %{api: %{stack_id: stack_id}, handle: handle} = request
+    {:ok, _} = Electric.Shapes.Status.unregister_subscriber(stack_id, handle)
+    request
+  end
 
   defp no_change_response(%Request{} = request) do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
