@@ -787,19 +787,6 @@ defmodule Electric.Connection.Manager do
   defp stop_if_fatal_error(
          %Postgrex.Error{
            postgres: %{
-             code: :object_not_in_prerequisite_state,
-             detail: "This slot has been invalidated" <> _,
-             pg_code: "55000"
-           }
-         } = error,
-         state
-       ) do
-    dispatch_fatal_error_and_shutdown({:database_slot_invalidated, %{error: error}}, state)
-  end
-
-  defp stop_if_fatal_error(
-         %Postgrex.Error{
-           postgres: %{
              code: :internal_error,
              pg_code: "XX000"
            }
