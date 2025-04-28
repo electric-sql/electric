@@ -31,9 +31,10 @@ describe(`Shape`, () => {
     expect(() => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
-        subscribe: false,
         params: {
           table: `foo`,
+          // @ts-expect-error should not allow reserved parameters
+          live: `false`,
         },
       })
       new Shape(shapeStream)
