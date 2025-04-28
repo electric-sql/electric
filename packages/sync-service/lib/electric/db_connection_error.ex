@@ -18,20 +18,7 @@ defmodule Electric.DbConnectionError do
   end
 
   def from_error(%DBConnection.ConnectionError{} = error) do
-    ~r/\((?<domain>[^:]+).*\): non-existing domain - :nxdomain/
-    |> Regex.named_captures(error.message)
-    |> case do
-      %{"domain" => domain} ->
-        %DbConnectionError{
-          message: "domain does not exist: #{domain}",
-          type: :nxdomain,
-          original_error: error,
-          retry_may_fix?: false
-        }
-
-      _ ->
-        unknown_error(error)
-    end
+    maybe_nxdomain_error(error) || maybe_connection_refused_error(error) || unknown_error(error)
   end
 
   def from_error(
@@ -76,13 +63,13 @@ defmodule Electric.DbConnectionError do
   end
 
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
-    maybe_database_does_not_exist(error)
+    maybe_database_does_not_exist(error) || unknown_error(error)
   end
 
   def from_error(
         %Postgrex.Error{postgres: %{code: :invalid_catalog_name, pg_code: "3D000"}} = error
       ) do
-    maybe_database_does_not_exist(error)
+    maybe_database_does_not_exist(error) || unknown_error(error)
   end
 
   def from_error(error), do: unknown_error(error)
@@ -100,15 +87,46 @@ defmodule Electric.DbConnectionError do
 
   defp maybe_database_does_not_exist(error) do
     if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
-      {:ok,
-       %DbConnectionError{
-         message: error.postgres.message,
-         type: :database_does_not_exist,
-         original_error: error,
-         retry_may_fix?: false
-       }}
-    else
-      {:error, :not_fatal}
+      %DbConnectionError{
+        message: error.postgres.message,
+        type: :database_does_not_exist,
+        original_error: error,
+        retry_may_fix?: false
+      }
+    end
+  end
+
+  defp maybe_nxdomain_error(error) do
+    ~r/\((?<domain>[^:]+).*\): non-existing domain - :nxdomain/
+    |> Regex.named_captures(error.message)
+    |> case do
+      %{"domain" => domain} ->
+        %DbConnectionError{
+          message: "domain does not exist: #{domain}",
+          type: :nxdomain,
+          original_error: error,
+          retry_may_fix?: false
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp maybe_connection_refused_error(error) do
+    ~r/\((?<destination>.*)\): connection refused - :econnrefused/
+    |> Regex.named_captures(error.message)
+    |> case do
+      %{"destination" => destination} ->
+        %DbConnectionError{
+          message: "connection refused while trying to connect to #{destination}",
+          type: :connection_refused,
+          original_error: error,
+          retry_may_fix?: false
+        }
+
+      _ ->
+        nil
     end
   end
 end

@@ -58,5 +58,20 @@ defmodule Electric.FatalErrorTest do
                retry_may_fix?: true
              } == DbConnectionError.from_error(error)
     end
+
+    test "with a connection refused error" do
+      error = %DBConnection.ConnectionError{
+        message: "tcp connect (localhost:54321): connection refused - :econnrefused",
+        severity: :error,
+        reason: :error
+      }
+
+      assert %DbConnectionError{
+               message: "connection refused while trying to connect to localhost:54321",
+               type: :connection_refused,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
   end
 end
