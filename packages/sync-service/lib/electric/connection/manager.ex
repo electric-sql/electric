@@ -392,7 +392,7 @@ defmodule Electric.Connection.Manager do
         state = update_replication_connection_opts(state, conn_opts)
         {:noreply, state, {:continue, :start_replication_client}}
 
-      {:error, reason} ->
+      {:error, error} ->
         handle_connection_error(error, state, @replication_mode)
     end
   end

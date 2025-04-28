@@ -51,6 +51,21 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{code: :object_not_in_prerequisite_state, message: msg, pg_code: "55000"}
+        } = error
+      )
+      when msg == "logical decoding requires wal_level >= logical" or
+             msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
+    %DbConnectionError{
+      message: msg,
+      type: :wal_level_is_not_logical,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
   def from_error(%Postgrex.Error{postgres: %{code: :invalid_password}} = error) do
     %DbConnectionError{
       message: error.postgres.message,
