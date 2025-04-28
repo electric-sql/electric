@@ -70,8 +70,7 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       :persistent_kv,
-      drop_slot_requested: false,
-      monitoring_started?: false
+      drop_slot_requested: false
     ]
   end
 
@@ -130,16 +129,8 @@ defmodule Electric.Connection.Manager do
     name(Access.fetch!(opts, :stack_id))
   end
 
-  @doc """
-  Returns the version of the PostgreSQL server.
-  """
-  @spec get_pg_version(GenServer.server()) :: integer()
-  def get_pg_version(server) do
-    GenServer.call(server, :get_pg_version)
-  end
-
   def drop_replication_slot_on_stop(server) do
-    GenServer.call(server, :drop_replication_slot_on_stop)
+    GenServer.cast(server, :drop_replication_slot_on_stop)
   end
 
   def exclusive_connection_lock_acquired(server) do
@@ -223,17 +214,6 @@ defmodule Electric.Connection.Manager do
         connection_opts: connection_opts,
         replication_opts: replication_opts
     }
-  end
-
-  @impl true
-  def handle_call(:get_pg_version, _from, %State{pg_version: pg_version} = state) do
-    # If we haven't queried the PG version by the time it is requested, that's a fatal error.
-    false = is_nil(pg_version)
-    {:reply, pg_version, state}
-  end
-
-  def handle_call(:drop_replication_slot_on_stop, _from, state) do
-    {:reply, :ok, %State{state | drop_slot_requested: true}}
   end
 
   @impl true
@@ -352,12 +332,7 @@ defmodule Electric.Connection.Manager do
         log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
         Process.monitor(log_collector_pid)
 
-        state = %State{
-          state
-          | pool_pid: pool_pid,
-            shape_log_collector_pid: log_collector_pid,
-            monitoring_started?: true
-        }
+        state = %State{state | pool_pid: pool_pid, shape_log_collector_pid: log_collector_pid}
 
         {:noreply, state}
 
@@ -497,6 +472,10 @@ defmodule Electric.Connection.Manager do
   end
 
   @impl true
+  def handle_cast(:drop_replication_slot_on_stop, state) do
+    {:noreply, %State{state | drop_slot_requested: true}}
+  end
+
   def handle_cast(:exclusive_connection_lock_acquired, %State{pg_lock_acquired: false} = state) do
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
