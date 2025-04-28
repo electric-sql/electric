@@ -9,7 +9,10 @@ defmodule Electric.Postgres.LockConnection do
   `Electric.Connection.Manager` such that the required setup can acquired now that
   the service is sure to be the only one operating on this replication stream.
   """
+  alias Electric.Connection
+
   require Logger
+
   @behaviour Postgrex.SimpleConnection
 
   @type option ::
@@ -36,7 +39,7 @@ defmodule Electric.Postgres.LockConnection do
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      [timeout: :infinity, auto_reconnect: false] ++
+      [timeout: :infinity, auto_reconnect: false, sync_connect: false] ++
         Electric.Utils.deobfuscate_password(connection_opts)
     )
   end
@@ -47,8 +50,6 @@ defmodule Electric.Postgres.LockConnection do
 
     Process.set_label({:lock_connection, opts.stack_id})
 
-    send(self(), :acquire_lock)
-
     metadata = [
       lock_name: opts.lock_name,
       stack_id: opts.stack_id
@@ -57,14 +58,22 @@ defmodule Electric.Postgres.LockConnection do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {:ok,
-     %State{
-       connection_manager: opts.connection_manager,
-       lock_name: opts.lock_name,
-       lock_acquired: false,
-       backoff: {:backoff.init(1000, 10_000), nil},
-       stack_id: opts.stack_id
-     }}
+    state = %State{
+      connection_manager: opts.connection_manager,
+      lock_name: opts.lock_name,
+      lock_acquired: false,
+      backoff: {:backoff.init(1000, 10_000), nil},
+      stack_id: opts.stack_id
+    }
+
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_connect(state) do
+    notify_connection_opened(state)
+    send(self(), :acquire_lock)
+    {:noreply, state}
   end
 
   @impl true
@@ -97,14 +106,21 @@ defmodule Electric.Postgres.LockConnection do
       "Failed to acquire lock #{state.lock_name} with reason #{inspect(error)} - retrying in #{inspect(time)}ms."
     )
 
-    Electric.StatusMonitor.mark_pg_lock_as_errored(state.stack_id, inspect(error))
+    notify_lock_acquisition_error(error, state)
 
     {:noreply, %{state | lock_acquired: false, backoff: {backoff, tref}}}
   end
 
-  defp notify_lock_acquired(%State{connection_manager: connection_manager} = state) do
-    Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, self())
-    Electric.Connection.Manager.exclusive_connection_lock_acquired(connection_manager)
+  defp notify_connection_opened(%State{connection_manager: manager}) do
+    Connection.Manager.lock_connection_started(manager)
+  end
+
+  defp notify_lock_acquisition_error(error, %State{connection_manager: manager}) do
+    Connection.Manager.exclusive_connection_lock_acquisition_failed(manager, error)
+  end
+
+  defp notify_lock_acquired(%State{connection_manager: manager}) do
+    Connection.Manager.exclusive_connection_lock_acquired(manager)
   end
 
   defp lock_query(%State{lock_name: name} = _state) do
