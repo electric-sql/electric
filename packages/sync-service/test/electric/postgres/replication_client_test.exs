@@ -1,6 +1,5 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: true
-  use Repatch.ExUnit
 
   import Support.ComponentSetup, only: [with_stack_id_from_test: 1, with_status_monitor: 1]
   import Support.DbSetup, except: [with_publication: 1]
@@ -8,7 +7,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
-  alias Electric.StatusMonitor
 
   alias Electric.Replication.Changes.{
     DeletedRecord,
@@ -37,11 +35,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
       end
     end
 
-    defp process_message({:"$gen_cast", :replication_connection_initializing}), do: nil
+    defp process_message({:"$gen_cast", :replication_client_started}), do: nil
     defp process_message({:"$gen_cast", {:pg_info_looked_up, _}}), do: nil
 
-    defp process_message({:"$gen_cast", :replication_connection_established}),
-      do: {self(), :ready_to_stream}
+    defp process_message({:"$gen_cast", :replication_client_started_streaming}),
+      do: {self(), :streaming_started}
   end
 
   setup do
@@ -106,22 +104,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
         end)
 
       log =~ "Started replication from postgres"
-    end
-
-    test "notifies the StatusMonitor when it is ready", ctx do
-      Repatch.patch(StatusMonitor, :mark_replication_client_ready, [mode: :shared], fn _, _ ->
-        :ok
-      end)
-
-      client_pid = start_client(ctx)
-      Repatch.allow(self(), client_pid)
-
-      assert Repatch.called?(
-               StatusMonitor,
-               :mark_replication_client_ready,
-               [ctx.stack_id, client_pid],
-               by: :any
-             )
     end
 
     test "works with an existing publication", %{replication_opts: replication_opts} = ctx do
@@ -494,8 +476,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       )
 
     conn_mgr = ctx.connection_manager
-    assert_receive {^conn_mgr, :ready_to_stream}, @assert_receive_db_timeout
-    ReplicationClient.start_streaming(client_pid)
+    assert_receive {^conn_mgr, :streaming_started}, @assert_receive_db_timeout
 
     client_pid
   end

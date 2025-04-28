@@ -33,7 +33,7 @@ defmodule Electric.Postgres.LockConnectionTest do
 
           Repatch.allow(owner, lock_pid)
 
-          assert_lock_acquired(stack_id, lock_pid)
+          assert_lock_acquired()
         end)
 
       # should have logged lock acquisition process
@@ -65,7 +65,7 @@ defmodule Electric.Postgres.LockConnectionTest do
 
           Repatch.allow(owner, lock_pid)
 
-          assert_lock_acquired(stack_id, lock_pid)
+          assert_lock_acquired()
           lock_pid
         end)
 
@@ -85,23 +85,21 @@ defmodule Electric.Postgres.LockConnectionTest do
           Repatch.allow(owner, pid)
 
           # should fail to grab it
-          refute_lock_acquired(pid)
+          refute_lock_acquired()
 
           # should immediately grab it once previous lock is released
           GenServer.stop(pid1)
-          assert_lock_acquired(new_stack_id, pid)
+          assert_lock_acquired()
           pid
         end)
     end
   end
 
-  defp assert_lock_acquired(stack_id, lock_pid) do
+  defp assert_lock_acquired() do
     assert_receive {_, :exclusive_connection_lock_acquired}
-    assert Repatch.called?(StatusMonitor, :mark_pg_lock_acquired, [stack_id, lock_pid], by: :any)
   end
 
-  defp refute_lock_acquired(pid) do
+  defp refute_lock_acquired() do
     refute_receive {_, :exclusive_connection_lock_acquired}, 1000
-    refute Repatch.called?(StatusMonitor, :mark_pg_lock_acquired, 2, by: pid)
   end
 end
