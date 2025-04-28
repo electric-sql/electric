@@ -33,7 +33,7 @@ function addDatabaseToElectric({
 
       // The delete command will use the JSON output from the create command
       // to get the source ID, and will wait for a bit to ensure source is cleaned up
-      delete: `curl --fail-with-body -s -X DELETE $ADMIN_API_URL/v1/sources/$(jq -r .id <<< $PULUMI_COMMAND_STDOUT) \
+      delete: `curl --fail-with-body -s -X DELETE $ADMIN_API_URL/v1/sources/$(echo $PULUMI_COMMAND_STDOUT | jq -r .id) \
         -H "Authorization: Bearer $ADMIN_API_TOKEN" \
         && sleep 10`,
       addPreviousOutputInEnv: true,
