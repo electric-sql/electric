@@ -40,15 +40,9 @@
   -
 
   ??$invalidated_slot_error
-  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id]
-
-  # Restart the OTP application to verify that the supervisors shut down again due to the invalidated slot.
-  !:ok = Application.stop(:electric)
-  !:ok = Application.start(:electric)
-
-  [invoke capture_stack_supervisor_pid]
-  ??$invalidated_slot_error
-  [invoke verify_connection_and_stack_supervisors_shutdown $stack_id]
+  ??Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
+  ??Purging all shapes because consistent replication could not be continued.
+  ??Starting replication from postgres
 
 [cleanup]
   [invoke teardown]

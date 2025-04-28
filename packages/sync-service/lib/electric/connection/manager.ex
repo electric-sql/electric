@@ -395,7 +395,8 @@ defmodule Electric.Connection.Manager do
   def handle_info({:EXIT, pid, signal}, %State{replication_client_pid: pid} = state) do
     reason = strip_exit_signal_stacktrace(signal)
 
-    with false <- stop_if_fatal_error(reason, state) do
+    with false <- drop_slot_and_restart(reason, state),
+         false <- stop_if_fatal_error(reason, state) do
       Logger.debug(
         "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
       )
@@ -730,6 +731,42 @@ defmodule Electric.Connection.Manager do
       ""
     end
   end
+
+  defp drop_slot_and_restart(
+         %Postgrex.Error{
+           postgres: %{
+             code: :object_not_in_prerequisite_state,
+             detail:
+               "This slot has been invalidated because it exceeded the maximum reserved size."
+           }
+         } = error,
+         state
+       ) do
+    Logger.warning("""
+    Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
+        In order to recover consistent replication, the slot will be dropped along with all existing shapes.
+        If you're seeing this message without having recently stopped Electric for a while,
+        it's possible either Electric is lagging behind and you might need to scale up,
+        or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
+    """)
+
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      {:database_slot_exceeded_max_size, %{error: error}}
+    )
+
+    drop_slot(state)
+
+    Electric.Timeline.store_irrecoverable_timeline(
+      state.pg_system_identifier,
+      state.timeline_opts
+    )
+
+    {:stop, {:shutdown, :database_slot_exceeded_max_size}, state}
+  end
+
+  defp drop_slot_and_restart(_, _), do: false
 
   defp stop_if_fatal_error(
          %Postgrex.Error{
