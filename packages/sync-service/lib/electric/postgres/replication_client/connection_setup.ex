@@ -42,7 +42,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   @spec start_streaming(state) :: callback_return
   def start_streaming(%{step: :ready_to_stream} = state) do
     Logger.debug("ReplicationClient step: start_streaming")
-    query_for_step(:streaming, %{state | step: :streaming})
+    query_for_step(:start_streaming, %{state | step: :start_streaming})
   end
 
   ###
@@ -192,8 +192,6 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     query =
       "START_REPLICATION SLOT #{Utils.quote_name(state.slot_name)} LOGICAL 0/0 (proto_version '1', publication_names '#{state.publication_name}')"
 
-    Logger.info("Starting replication from postgres")
-
     {:stream, query, [], state}
   end
 
@@ -224,7 +222,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     do: :set_display_setting
 
   defp next_step(%{step: :set_display_setting, start_streaming?: true}),
-    do: :streaming
+    do: :start_streaming
 
   defp next_step(%{step: :set_display_setting}),
     do: :ready_to_stream
@@ -241,7 +239,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp query_for_step(:create_slot, state), do: create_slot_query(state)
   defp query_for_step(:set_display_setting, state), do: set_display_setting_query(state)
   defp query_for_step(:ready_to_stream, state), do: ready_to_stream(state)
-  defp query_for_step(:streaming, state), do: start_replication_slot_query(state)
+  defp query_for_step(:start_streaming, state), do: start_replication_slot_query(state)
 
   ###
 
