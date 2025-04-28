@@ -102,10 +102,8 @@ type ParamValue =
  * Excludes reserved parameters to prevent dynamic variations that could cause stream shape changes.
  */
 export type ExternalParamsRecord<T extends Row<unknown> = Row> = {
-  [K in string as K extends ReservedParamKeys ? never : K]:
-    | ParamValue
-    | undefined
-} & Partial<PostgresParams<T>>
+  [K in string]: ParamValue | undefined
+} & Partial<PostgresParams<T>> & { [K in ReservedParamKeys]?: never }
 
 type ReservedParamKeys =
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
