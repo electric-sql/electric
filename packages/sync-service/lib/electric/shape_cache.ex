@@ -176,7 +176,8 @@ defmodule Electric.ShapeCache do
           :exit, {:noproc, _} ->
             # The fact that we got the shape handle means we know the shape exists, and the process should
             # exist too. We can get here if registry didn't propagate registration across partitions yet, so
-            # we'll just retry.
+            # we'll just retry after waiting for a short time to avoid busy waiting.
+            Process.sleep(50)
             await_snapshot_start(shape_handle, opts)
         end
     end
