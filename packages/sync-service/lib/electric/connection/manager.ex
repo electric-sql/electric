@@ -405,7 +405,7 @@ defmodule Electric.Connection.Manager do
     reason = strip_exit_signal_stacktrace(signal)
 
     with false <- drop_slot_and_restart(reason, state),
-         false <- stop_if_fatal_error(reason, state) do
+         false <- stop_if_fatal_error(reason, state, @replication_mode) do
       Logger.debug(
         "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
       )
