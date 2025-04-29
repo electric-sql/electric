@@ -778,6 +778,11 @@ defmodule Electric.Connection.Manager do
     error = DbConnectionError.from_error(error)
 
     if error.retry_may_fix? do
+      Logger.warning(
+        "Error while trying to connect to the database (#{mode}): #{error.message}\n" <>
+          "Retrying..."
+      )
+
       mark_error_for_mode(mode, error.message, state.stack_id)
       false
     else
