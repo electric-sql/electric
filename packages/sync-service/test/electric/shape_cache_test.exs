@@ -261,6 +261,28 @@ defmodule Electric.ShapeCacheTest do
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert shape_handle != shape_handle2
     end
+
+    test "shape gets cleaned up if terminated unexpectedly", %{storage: storage} = ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
+          run_with_conn_fn: &run_with_conn_noop/2,
+          create_snapshot_fn: fn _, _, _, _, _, _, _ -> nil end
+        )
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+
+      consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+      consumer_ref = Process.monitor(consumer_pid)
+      Process.exit(consumer_pid, :some_reason)
+
+      assert_receive {:DOWN, ^consumer_ref, :process, _pid, :some_reason}
+
+      # should have cleaned up the shape
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      assert nil == ShapeStatus.get_existing_shape(meta_table, shape_handle)
+      assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(storage)
+      assert map_size(found) == 0
+    end
   end
 
   describe "get_or_create_shape_handle/2 against real db" do
@@ -713,6 +735,21 @@ defmodule Electric.ShapeCacheTest do
         end)
 
       assert log =~ "Snapshot creation failed for #{shape_handle}"
+    end
+
+    test "should stop awaiting if shape process dies unexpectedly", ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
+          run_with_conn_fn: &run_with_conn_noop/2,
+          create_snapshot_fn: fn _, _, _, _, _, _, _ -> nil end
+        )
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+      Process.exit(Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle), :some_reason)
+
+      # should not be able to find the shape anymore
+      assert {:error, :unknown} = Task.await(task)
     end
   end
 
