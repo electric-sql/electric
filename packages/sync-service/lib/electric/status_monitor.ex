@@ -201,6 +201,12 @@ defmodule Electric.StatusMonitor do
       %{pg_lock_acquired: {false, details}} ->
         "Timeout waiting for Postgres lock acquisition" <> format_details(details)
 
+      %{replication_client_ready: {false, details}} when details == %{} ->
+        "Timeout waiting for replication client to be ready. " <>
+          "Check that you don't have pending transactions in the database. " <>
+          "Electric has to wait for all pending transactions to commit or rollback " <>
+          "before it can create the replication slot."
+
       %{replication_client_ready: {false, details}} ->
         "Timeout waiting for replication client to be ready" <> format_details(details)
 

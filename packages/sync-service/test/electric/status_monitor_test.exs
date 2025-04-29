@@ -149,8 +149,8 @@ defmodule Electric.StatusMonitorTest do
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
-               {:error, "Timeout waiting for replication client to be ready"}
+      assert {:error, "Timeout waiting for replication client to be ready" <> _} =
+               StatusMonitor.wait_until_active(stack_id, 1)
     end
 
     test "returns error on timeout when mark_connection_pool_ready not received", %{
