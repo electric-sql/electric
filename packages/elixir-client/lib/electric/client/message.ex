@@ -85,13 +85,14 @@ defmodule Electric.Client.Message do
   end
 
   defmodule ChangeMessage do
-    defstruct [:key, :value, :headers, :request_timestamp]
+    defstruct [:key, :value, :old_value, :headers, :request_timestamp]
 
     @type key :: String.t()
     @type value :: %{String.t() => binary()}
     @type t :: %__MODULE__{
             key: key(),
             value: value(),
+            old_value: value() | nil,
             headers: Headers.t(),
             request_timestamp: DateTime.t()
           }
@@ -104,7 +105,7 @@ defmodule Electric.Client.Message do
         "value" => raw_value
       } = msg
 
-      value =
+      mapValue = fn raw_value ->
         try do
           value_mapping_fun.(raw_value)
         rescue
@@ -115,11 +116,17 @@ defmodule Electric.Client.Message do
 
             reraise exception, __STACKTRACE__
         end
+      end
+
+      value = mapValue.(raw_value)
+      raw_old_value = msg["old_value"]
+      old_value = if !is_nil(raw_old_value), do: mapValue.(raw_old_value), else: nil
 
       %__MODULE__{
         key: msg["key"],
         headers: Headers.from_message(headers, handle),
-        value: value
+        value: value,
+        old_value: old_value
       }
     end
   end
