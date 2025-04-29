@@ -1,12 +1,11 @@
 defmodule Electric.StatusMonitorTest do
   use ExUnit.Case, async: true
 
-  import Support.TestUtils, only: [full_test_name: 1]
   alias Electric.StatusMonitor
 
-  describe "status/1" do
-    setup {Support.ComponentSetup, :with_stack_id_from_test}
+  setup {Support.ComponentSetup, :with_stack_id_from_test}
 
+  describe "status/1" do
     test "when not started, returns :waiting", %{stack_id: stack_id} do
       assert StatusMonitor.status(stack_id) == :waiting
     end
@@ -99,20 +98,17 @@ defmodule Electric.StatusMonitorTest do
   end
 
   describe "wait_until_active/2" do
-    setup ctx do
-      %{stack_id: full_test_name(ctx)}
-    end
-
     test "waits until all conditions are met", %{stack_id: stack_id} do
       test_process = self()
+      stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
 
       Task.async(fn ->
         assert StatusMonitor.wait_until_active(stack_id, 100) == :ok
         send(test_process, :active)
       end)
 
-      create_process_registry(stack_id)
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
@@ -123,19 +119,18 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "returns error on timeout when process registry is not present", %{stack_id: stack_id} do
+      stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
+
       assert StatusMonitor.wait_until_active(stack_id, 1) ==
                {:error, "Stack ID not recognised: #{stack_id}"}
     end
 
     test "returns error on timeout when status monitor is not present", %{stack_id: stack_id} do
-      create_process_registry(stack_id)
-
       assert StatusMonitor.wait_until_active(stack_id, 1) ==
                {:error, "Status monitor not found for stack ID: #{stack_id}"}
     end
 
     test "returns error on timeout when mark_pg_lock_acquired not received", %{stack_id: stack_id} do
-      create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
 
       assert StatusMonitor.wait_until_active(stack_id, 1) ==
@@ -145,7 +140,6 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout when mark_replication_client_ready not received", %{
       stack_id: stack_id
     } do
-      create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
 
@@ -156,7 +150,6 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout when mark_connection_pool_ready not received", %{
       stack_id: stack_id
     } do
-      create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
@@ -168,7 +161,6 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout when mark_shape_log_collector_ready not received", %{
       stack_id: stack_id
     } do
-      create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
@@ -183,7 +175,6 @@ defmodule Electric.StatusMonitorTest do
     } do
       error_message = "Some error message"
 
-      create_process_registry(stack_id)
       start_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
@@ -194,9 +185,5 @@ defmodule Electric.StatusMonitorTest do
                {:error,
                 "Timeout waiting for database connection pool to be ready: #{error_message}"}
     end
-  end
-
-  defp create_process_registry(stack_id) do
-    start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
   end
 end
