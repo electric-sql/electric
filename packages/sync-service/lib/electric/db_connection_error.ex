@@ -47,8 +47,25 @@ defmodule Electric.DbConnectionError do
              msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
     %DbConnectionError{
       message:
-        "Electric reuqires requires wal_level >= logical. See https://www.postgresql.org/docs/current/logical-replication-config.html",
+        "Electric reuqires requires wal_level >= logical. See https://electric-sql.com/docs/guides/deployment#_1-running-postgres",
       type: :wal_level_is_not_logical,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :insufficient_privilege,
+            detail: "Only roles with the REPLICATION attribute may start a WAL sender process."
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message:
+        "User does have the REPLICATION attribute. See https://electric-sql.com/docs/guides/deployment#_1-running-postgres",
+      type: :insufficient_privileges,
       original_error: error,
       retry_may_fix?: false
     }

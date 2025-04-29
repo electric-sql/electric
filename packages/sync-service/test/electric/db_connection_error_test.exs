@@ -29,6 +29,32 @@ defmodule Electric.FatalErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with insufficient privileges error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :insufficient_privilege,
+          line: "994",
+          message: "permission denied to start WAL sender",
+          file: "postinit.c",
+          unknown: "FATAL",
+          severity: "FATAL",
+          detail: "Only roles with the REPLICATION attribute may start a WAL sender process.",
+          pg_code: "42501",
+          routine: "InitPostgres"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "User does have the REPLICATION attribute. " <> _,
+               type: :insufficient_privileges,
+               original_error: ^error,
+               retry_may_fix?: false
+             } = DbConnectionError.from_error(error)
+    end
+
     test "with an invalid domain error" do
       error = %DBConnection.ConnectionError{
         message: "tcp connect (dbserver.example:5555): non-existing domain - :nxdomain",
