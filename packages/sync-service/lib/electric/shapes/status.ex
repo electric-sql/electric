@@ -79,7 +79,7 @@ defmodule Electric.Shapes.Status do
   def handle_call({:register_subscriber, handle, pid}, _from, state) do
     ref = Process.monitor(pid)
 
-    if :ets.insert_new(state.monitor_table, {pid, handle, ref}) do
+    if :ets.insert_new(state.monitor_table, {pid, :subscriber, handle, ref}) do
       count = update_counter(state.stack_id, handle, 1)
 
       Logger.debug(fn ->
@@ -105,7 +105,7 @@ defmodule Electric.Shapes.Status do
     ref = Process.monitor(pid)
 
     if :ets.insert_new(state.monitor_table, {pid, :consumer, handle, ref}) do
-      {:reply, {:ok, count}, state}
+      {:reply, :ok, state}
     else
       {:reply, {:error, "pid is already registered"}, state}
     end
