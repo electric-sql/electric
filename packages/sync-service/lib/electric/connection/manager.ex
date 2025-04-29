@@ -803,10 +803,9 @@ defmodule Electric.Connection.Manager do
   end
 
   defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
-    Electric.StackSupervisor.dispatch_stack_event(
-      state.stack_events_registry,
-      state.stack_id,
-      {:fatal_error, %{error: error.original_error, message: error.message, type: error.type}}
+    dispatch_stack_event(
+      {:fatal_error, %{error: error.original_error, message: error.message, type: error.type}},
+      state
     )
 
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
