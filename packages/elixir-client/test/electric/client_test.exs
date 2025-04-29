@@ -320,6 +320,39 @@ defmodule Electric.ClientTest do
       refute_receive _
     end
 
+    test "does not send old values for updates with replica default", ctx do
+      {:ok, id1} = insert_item(ctx, title: "Changing item")
+      parent = self()
+      stream = stream(ctx)
+
+      {:ok, _task} =
+        start_supervised(
+          {Task,
+           fn ->
+             stream
+             |> Stream.each(&send(parent, {:stream, 1, &1}))
+             |> Stream.run()
+           end},
+          id: {:stream, 1}
+        )
+
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
+      assert_receive {:stream, 1, up_to_date()}
+      refute_receive _
+
+      :ok = update_item(ctx, id1, value: 999)
+
+      assert_receive {:stream, 1,
+                      %ChangeMessage{
+                        value: %{"id" => ^id1, "value" => 999},
+                        old_value: nil
+                      }},
+                     500
+
+      assert_receive {:stream, 1, up_to_date()}
+      refute_receive _
+    end
+
     test "sends full rows with replica: :full", ctx do
       {:ok, id1} = insert_item(ctx, title: "Changing item")
       parent = self()
@@ -344,7 +377,8 @@ defmodule Electric.ClientTest do
 
       assert_receive {:stream, 1,
                       %ChangeMessage{
-                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"}
+                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"},
+                        old_value: %{"value" => 0}
                       }},
                      500
 
