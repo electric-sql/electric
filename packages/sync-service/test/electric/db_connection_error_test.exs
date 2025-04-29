@@ -78,7 +78,7 @@ defmodule Electric.FatalErrorTest do
       }
 
       assert %DbConnectionError{
-               message: "connection timed out",
+               message: "connection timed out while trying to connect to the database",
                type: :connection_timeout,
                original_error: error,
                retry_may_fix?: true
