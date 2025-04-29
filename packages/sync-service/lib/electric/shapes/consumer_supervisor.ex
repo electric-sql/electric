@@ -57,34 +57,45 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     end
   end
 
+  defp time(fun, label) do
+    {t, result} = :timer.tc(fun, :millisecond)
+    dbg(time: [{label, t}])
+    result
+  end
+
   def init(config) when is_map(config) do
-    %{shape_handle: shape_handle, storage: {_, _} = storage, shape: shape} =
-      config
+    time(
+      fn ->
+        %{shape_handle: shape_handle, storage: {_, _} = storage, shape: shape} =
+          config
 
-    Process.set_label({:consumer_supervisor, shape_handle})
-    metadata = [stack_id: config.stack_id, shape_handle: shape_handle]
-    Logger.metadata(metadata)
-    Electric.Telemetry.Sentry.set_tags_context(metadata)
+        Process.set_label({:consumer_supervisor, shape_handle})
+        metadata = [stack_id: config.stack_id, shape_handle: shape_handle]
+        Logger.metadata(metadata)
+        Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
+        shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
 
-    shape_config = %{config | storage: shape_storage}
+        shape_config = %{config | storage: shape_storage}
 
-    children = [
-      {Electric.ShapeCache.Storage, shape_storage},
-      {Electric.Shapes.Consumer, shape_config},
-      {Electric.Shapes.Consumer.Snapshotter, shape_config}
-    ]
+        children = [
+          {Electric.ShapeCache.Storage, shape_storage},
+          {Electric.Shapes.Consumer, shape_config},
+          {Electric.Shapes.Consumer.Snapshotter, shape_config}
+        ]
 
-    children =
-      if should_enable_compaction?(shape, config) do
-        children ++
-          [{Electric.ShapeCache.CompactionRunner, [{:storage, shape_storage} | metadata]}]
-      else
-        children
-      end
+        children =
+          if should_enable_compaction?(shape, config) do
+            children ++
+              [{Electric.ShapeCache.CompactionRunner, [{:storage, shape_storage} | metadata]}]
+          else
+            children
+          end
 
-    Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
+        Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
+      end,
+      :consumer_supervisor_init
+    )
   end
 
   defp should_enable_compaction?(%{storage: %{compaction: :enabled}}, _config), do: true

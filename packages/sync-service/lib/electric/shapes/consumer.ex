@@ -63,52 +63,67 @@ defmodule Electric.Shapes.Consumer do
     )
   end
 
+  defp time(fun, label) do
+    {t, result} = :timer.tc(fun, :millisecond)
+    dbg(time: [{label, t}])
+    result
+  end
+
   def init(config) do
-    Process.set_label({:consumer, config.shape_handle})
+    time(
+      fn ->
+        Process.set_label({:consumer, config.shape_handle})
 
-    %{log_producer: producer, storage: storage, shape_status: {shape_status, shape_status_state}} =
-      config
+        %{
+          log_producer: producer,
+          storage: storage,
+          shape_status: {shape_status, shape_status_state}
+        } =
+          config
 
-    metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
-    Logger.metadata(metadata)
-    Electric.Telemetry.Sentry.set_tags_context(metadata)
+        metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
+        Logger.metadata(metadata)
+        Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    :ok = ShapeCache.Storage.initialise(storage)
+        :ok = ShapeCache.Storage.initialise(storage)
 
-    # Store the shape definition to ensure we can restore it
-    :ok = ShapeCache.Storage.set_shape_definition(config.shape, storage)
+        # Store the shape definition to ensure we can restore it
+        :ok = ShapeCache.Storage.set_shape_definition(config.shape, storage)
 
-    {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
+        {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
-    # When writing the snapshot initially, we don't know ahead of time the real last offset for the
-    # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
-    # however many there may be. That means the clients will be using that as the latest offset.
-    # In order to avoid confusing the clients, we make sure that we preserve that functionality
-    # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
-    normalized_latest_offset =
-      if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
+        # When writing the snapshot initially, we don't know ahead of time the real last offset for the
+        # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
+        # however many there may be. That means the clients will be using that as the latest offset.
+        # In order to avoid confusing the clients, we make sure that we preserve that functionality
+        # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
+        normalized_latest_offset =
+          if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
 
-    :ok =
-      shape_status.initialise_shape(
-        shape_status_state,
-        config.shape_handle,
-        pg_snapshot[:xmin],
-        normalized_latest_offset
-      )
+        :ok =
+          shape_status.initialise_shape(
+            shape_status_state,
+            config.shape_handle,
+            pg_snapshot[:xmin],
+            normalized_latest_offset
+          )
 
-    state =
-      Map.merge(config, %{
-        latest_offset: normalized_latest_offset,
-        pg_snapshot: pg_snapshot,
-        log_state: @initial_log_state,
-        inspector: config.inspector,
-        snapshot_started: false,
-        awaiting_snapshot_start: [],
-        buffer: [],
-        monitors: []
-      })
+        state =
+          Map.merge(config, %{
+            latest_offset: normalized_latest_offset,
+            pg_snapshot: pg_snapshot,
+            log_state: @initial_log_state,
+            inspector: config.inspector,
+            snapshot_started: false,
+            awaiting_snapshot_start: [],
+            buffer: [],
+            monitors: []
+          })
 
-    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
+        {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
+      end,
+      :consumer_init
+    )
   end
 
   def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
