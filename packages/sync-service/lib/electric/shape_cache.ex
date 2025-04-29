@@ -106,7 +106,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]})
+      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, 15_000)
     end
   end
 
@@ -268,6 +268,12 @@ defmodule Electric.ShapeCache do
     {:noreply, state}
   end
 
+  defp time(fun, label) do
+    {t, result} = :timer.tc(fun, :millisecond)
+    dbg(time: [{label, t}])
+    result
+  end
+
   @impl GenServer
   def handle_call(
         {:create_or_wait_shape_handle, shape, otel_ctx},
@@ -278,8 +284,12 @@ defmodule Electric.ShapeCache do
       if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
         {shape_state, state}
       else
-        {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
-        {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
+        {:ok, shape_handle} =
+          time(fn -> shape_status.add_shape(state.shape_status_state, shape) end, :add_shape)
+
+        {:ok, latest_offset} =
+          time(fn -> start_shape(shape_handle, shape, state, otel_ctx) end, :start_shape)
+
         send(self(), :maybe_expire_shapes)
         {{shape_handle, latest_offset}, state}
       end
@@ -457,25 +467,33 @@ defmodule Electric.ShapeCache do
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
     with {:ok, _pid} <-
-           Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
-             state.consumer_supervisor,
-             stack_id: state.stack_id,
-             inspector: state.inspector,
-             shape_handle: shape_handle,
-             shape: shape,
-             shape_status: {state.shape_status, state.shape_status_state},
-             storage: state.storage,
-             publication_manager: state.publication_manager,
-             chunk_bytes_threshold: state.chunk_bytes_threshold,
-             log_producer: state.log_producer,
-             registry: state.registry,
-             db_pool: state.db_pool,
-             run_with_conn_fn: state.run_with_conn_fn,
-             create_snapshot_fn: state.create_snapshot_fn,
-             otel_ctx: otel_ctx
+           time(
+             fn ->
+               Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
+                 state.consumer_supervisor,
+                 stack_id: state.stack_id,
+                 inspector: state.inspector,
+                 shape_handle: shape_handle,
+                 shape: shape,
+                 shape_status: {state.shape_status, state.shape_status_state},
+                 storage: state.storage,
+                 publication_manager: state.publication_manager,
+                 chunk_bytes_threshold: state.chunk_bytes_threshold,
+                 log_producer: state.log_producer,
+                 registry: state.registry,
+                 db_pool: state.db_pool,
+                 run_with_conn_fn: state.run_with_conn_fn,
+                 create_snapshot_fn: state.create_snapshot_fn,
+                 otel_ctx: otel_ctx
+               )
+             end,
+             :start_shape_consumer
            ) do
       consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
-      {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
+
+      {:ok, latest_offset} =
+        time(fn -> Shapes.Consumer.initial_state(consumer) end, :initial_state)
+
       {:ok, latest_offset}
     end
   end
