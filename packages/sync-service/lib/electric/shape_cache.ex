@@ -7,6 +7,7 @@ defmodule Electric.ShapeCacheBehaviour do
 
   @type shape_handle :: String.t()
   @type shape_def :: Shape.t()
+  @type xmin :: non_neg_integer()
 
   @callback get_shape(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
@@ -456,7 +457,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
-    with {:ok, _pid} <-
+    with {:ok, pid} <-
            Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
              state.consumer_supervisor,
              stack_id: state.stack_id,
@@ -474,6 +475,7 @@ defmodule Electric.ShapeCache do
              create_snapshot_fn: state.create_snapshot_fn,
              otel_ctx: otel_ctx
            ) do
+      ref = Process.monitor(pid)
       consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
       {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
       {:ok, latest_offset}
