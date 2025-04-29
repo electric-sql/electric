@@ -11,19 +11,19 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "when started but no signals have been received, returns :waiting", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       assert StatusMonitor.status(stack_id) == :waiting
     end
 
     test "when pg_lock_acquired has been received, returns :starting", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
 
     test "when all conditions are met, returns :active", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
@@ -33,7 +33,7 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "when replication client not ready, returns :starting", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
@@ -42,7 +42,7 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "when connection pool not ready, returns :starting", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
@@ -51,7 +51,7 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "when shape log collector not ready, returns :starting", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
@@ -60,7 +60,7 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "when a process dies, it's condition is reset", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
 
       test_process = self()
@@ -131,7 +131,7 @@ defmodule Electric.StatusMonitorTest do
     end
 
     test "returns error on timeout when mark_pg_lock_acquired not received", %{stack_id: stack_id} do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
 
       assert StatusMonitor.wait_until_active(stack_id, 1) ==
                {:error, "Timeout waiting for Postgres lock acquisition"}
@@ -140,7 +140,7 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout when mark_replication_client_ready not received", %{
       stack_id: stack_id
     } do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
 
       assert {:error, "Timeout waiting for replication client to be ready" <> _} =
@@ -150,7 +150,7 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout when mark_connection_pool_ready not received", %{
       stack_id: stack_id
     } do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
 
@@ -161,7 +161,7 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout when mark_shape_log_collector_ready not received", %{
       stack_id: stack_id
     } do
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
@@ -175,7 +175,7 @@ defmodule Electric.StatusMonitorTest do
     } do
       error_message = "Some error message"
 
-      start_supervised!({StatusMonitor, stack_id})
+      start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, self())
