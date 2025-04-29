@@ -783,6 +783,12 @@ defmodule Electric.Connection.Manager do
           "Retrying..."
       )
 
+      dispatch_stack_event(
+        {:retryable_error,
+         %{error: error.original_error, message: error.message, type: error.type}},
+        state
+      )
+
       mark_error_for_mode(mode, error.message, state.stack_id)
       false
     else
