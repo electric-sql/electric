@@ -82,8 +82,11 @@ defmodule Electric.Replication.SchemaReconciler do
       :ok
     else
       {:error, reason} ->
-        Logger.error("Schema reconciliation failed: #{reason}")
+        Logger.warning("Schema reconciliation failed: #{reason}")
         :error
+
+      :error ->
+        Logger.warning("Schema reconciliation failed while fetching fresh relations")
     end
 
     :ok
