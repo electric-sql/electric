@@ -44,8 +44,8 @@ defmodule Electric.Connection.Supervisor do
           "due to an unrecoverable error: #{reason.message}"
       )
     else
-      # Log a critical error in the standalone mode, as the application cannot procede and will be shut down.
-      Logger.critical(reason.message)
+      # Log an emergency error in the standalone mode, as the application cannot procede and will be shut down.
+      Logger.emergency(reason.message)
     end
 
     Supervisor.stop(name(stack_id: stack_id), {:shutdown, reason}, 1_000)
