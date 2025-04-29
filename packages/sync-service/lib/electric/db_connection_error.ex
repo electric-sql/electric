@@ -46,7 +46,8 @@ defmodule Electric.DbConnectionError do
       when msg == "logical decoding requires wal_level >= logical" or
              msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
     %DbConnectionError{
-      message: msg,
+      message:
+        "Electric reuqires requires wal_level >= logical. See https://www.postgresql.org/docs/current/logical-replication-config.html",
       type: :wal_level_is_not_logical,
       original_error: error,
       retry_may_fix?: false
