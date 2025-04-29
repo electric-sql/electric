@@ -23,23 +23,6 @@ defmodule Electric.DbConnectionError do
 
   def from_error(
         %Postgrex.Error{
-          postgres: %{
-            code: :object_not_in_prerequisite_state,
-            detail: "This slot has been invalidated" <> _,
-            pg_code: "55000"
-          }
-        } = error
-      ) do
-    %DbConnectionError{
-      message: error.postgres.detail,
-      type: :database_slot_invalidated,
-      original_error: error,
-      retry_may_fix?: false
-    }
-  end
-
-  def from_error(
-        %Postgrex.Error{
           postgres: %{code: :object_not_in_prerequisite_state, message: msg, pg_code: "55000"}
         } = error
       )
