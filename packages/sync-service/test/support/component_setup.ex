@@ -15,6 +15,7 @@ defmodule Support.ComponentSetup do
     def add_shape(_shape, _opts), do: :ok
     def recover_shape(_shape, _opts), do: :ok
     def remove_shape(_shape, _opts), do: :ok
+    def remove_shape_async(_shape, _opts), do: :ok
     def refresh_publication(_opts), do: :ok
   end
 

@@ -157,6 +157,23 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     refute ShapeStatus.get_existing_shape(table, shape_handle)
   end
 
+  test "get_shape_for_consumer_ref/2 public api", ctx do
+    shape = shape!()
+    table = table_name()
+
+    {:ok, state, [shape_handle]} = new_state(ctx, table: table, shapes: [shape])
+
+    ref = make_ref()
+    ShapeStatus.set_consumer_ref(state, shape_handle, ref)
+
+    refute ShapeStatus.get_shape_for_consumer_ref(table, make_ref())
+
+    assert {^shape_handle, ^shape} = ShapeStatus.get_shape_for_consumer_ref(table, ref)
+
+    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
+    refute ShapeStatus.get_shape_for_consumer_ref(table, ref)
+  end
+
   test "latest_offset", ctx do
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
     assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
@@ -166,7 +183,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     offset = LogOffset.new(100, 3)
     assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
-    refute ShapeStatus.set_latest_offset(state, "not my shape", offset)
+
+    assert_raise MatchError, fn ->
+      ShapeStatus.set_latest_offset(state, "not my shape", offset)
+    end
+
     assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
   end
 
@@ -179,7 +200,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              {:ok, LogOffset.last_before_real_offsets()}
 
     offset = LogOffset.new(100, 3)
-    refute ShapeStatus.set_latest_offset(table_name, "not my shape", offset)
+
+    assert_raise MatchError, fn ->
+      ShapeStatus.set_latest_offset(table_name, "not my shape", offset)
+    end
+
     assert ShapeStatus.set_latest_offset(table_name, shape_handle, offset)
     assert ShapeStatus.latest_offset(table_name, shape_handle) == {:ok, offset}
   end
@@ -195,7 +220,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "snapshot_xmin/2", ctx do
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
 
-    refute ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
+    assert_raise MatchError, fn ->
+      ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
+    end
 
     assert :error = ShapeStatus.snapshot_xmin(state, "sdfsodf")
     assert {:ok, nil} == ShapeStatus.snapshot_xmin(state, shape_handle)

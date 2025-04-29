@@ -277,6 +277,9 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^consumer_ref, :process, _pid, :some_reason}
 
+      # give it little time to clean up
+      Process.sleep(10)
+
       # should have cleaned up the shape
       meta_table = Keyword.fetch!(opts, :shape_meta_table)
       assert nil == ShapeStatus.get_existing_shape(meta_table, shape_handle)
@@ -1093,6 +1096,7 @@ defmodule Electric.ShapeCacheTest do
     defmodule SlowPublicationManager do
       def refresh_publication(_), do: :ok
       def remove_shape(_, _), do: :ok
+      def remove_shape_async(_, _), do: :ok
       def recover_shape(_, _), do: Process.sleep(100)
       def add_shape(_, _), do: :ok
     end
