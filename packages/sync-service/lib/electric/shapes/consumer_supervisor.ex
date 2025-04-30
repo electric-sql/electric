@@ -59,7 +59,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
 
   defp time(fun, label) do
     {t, result} = :timer.tc(fun, :millisecond)
-    dbg(time: [{label, t}])
+    # dbg(time: [{label, t}])
     result
   end
 

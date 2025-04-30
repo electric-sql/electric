@@ -106,7 +106,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, 15_000)
+      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, :infinity)
     end
   end
 
@@ -186,7 +186,7 @@ defmodule Electric.ShapeCache do
       true
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:wait_shape_handle, shape_handle})
+      GenStage.call(server, {:wait_shape_handle, shape_handle}, :infinity)
     end
   end
 
@@ -270,7 +270,7 @@ defmodule Electric.ShapeCache do
 
   defp time(fun, label) do
     {t, result} = :timer.tc(fun, :millisecond)
-    dbg(time: [{label, t}])
+    # dbg(time: [{label, t}])
     result
   end
 
@@ -379,6 +379,12 @@ defmodule Electric.ShapeCache do
 
   defp clean_up_shape(state, shape_handle) do
     try do
+      # remove the shape immediately so new clients are redirected elsewhere
+      remove_shape(shape_handle, state)
+
+      # Rather than just stop here, tell the consumer to stop
+      # using the shape.status active connection monitor
+      # to wait for clients to finish
       Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
         state.consumer_supervisor,
         state.stack_id,
@@ -500,14 +506,18 @@ defmodule Electric.ShapeCache do
     end
   end
 
+  defp remove_shape(shape_handle, state) do
+    state.shape_status.remove_shape(state.shape_status_state, shape_handle)
+  end
+
   defp unsafe_cleanup_shape!(shape_handle, state) do
     # Remove the handle from the shape status
-    state.shape_status.remove_shape(state.shape_status_state, shape_handle)
+    remove_shape(shape_handle, state)
 
     # Cleanup the storage for the shape
-    shape_handle
-    |> Electric.ShapeCache.Storage.for_shape(state.storage)
-    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+    # shape_handle
+    # |> Electric.ShapeCache.Storage.for_shape(state.storage)
+    # |> Electric.ShapeCache.Storage.unsafe_cleanup!()
   end
 
   def get_shape_meta_table(opts),
