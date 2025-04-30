@@ -65,67 +65,65 @@ defmodule Electric.Shapes.Consumer do
 
   defp time(fun, label) do
     {t, result} = :timer.tc(fun, :millisecond)
-    dbg(time: [{label, t}])
+    # dbg(time: [{label, t}])
     result
   end
 
+  @impl GenStage
   def init(config) do
-    time(
-      fn ->
-        Process.set_label({:consumer, config.shape_handle})
+    Process.set_label({:consumer, config.shape_handle})
 
-        %{
-          log_producer: producer,
-          storage: storage,
-          shape_status: {shape_status, shape_status_state}
-        } =
-          config
+    %{
+      log_producer: producer,
+      storage: storage,
+      shape_status: {shape_status, shape_status_state}
+    } = config
 
-        metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
-        Logger.metadata(metadata)
-        Electric.Telemetry.Sentry.set_tags_context(metadata)
+    metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
+    Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-        :ok = ShapeCache.Storage.initialise(storage)
+    :ok = ShapeCache.Storage.initialise(storage)
 
-        # Store the shape definition to ensure we can restore it
-        :ok = ShapeCache.Storage.set_shape_definition(config.shape, storage)
+    # Store the shape definition to ensure we can restore it
+    :ok = ShapeCache.Storage.set_shape_definition(config.shape, storage)
 
-        {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
+    {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
-        # When writing the snapshot initially, we don't know ahead of time the real last offset for the
-        # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
-        # however many there may be. That means the clients will be using that as the latest offset.
-        # In order to avoid confusing the clients, we make sure that we preserve that functionality
-        # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
-        normalized_latest_offset =
-          if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
+    # When writing the snapshot initially, we don't know ahead of time the real last offset for the
+    # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
+    # however many there may be. That means the clients will be using that as the latest offset.
+    # In order to avoid confusing the clients, we make sure that we preserve that functionality
+    # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
+    normalized_latest_offset =
+      if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
 
-        :ok =
-          shape_status.initialise_shape(
-            shape_status_state,
-            config.shape_handle,
-            pg_snapshot[:xmin],
-            normalized_latest_offset
-          )
+    :ok =
+      shape_status.initialise_shape(
+        shape_status_state,
+        config.shape_handle,
+        pg_snapshot[:xmin],
+        normalized_latest_offset
+      )
 
-        state =
-          Map.merge(config, %{
-            latest_offset: normalized_latest_offset,
-            pg_snapshot: pg_snapshot,
-            log_state: @initial_log_state,
-            inspector: config.inspector,
-            snapshot_started: false,
-            awaiting_snapshot_start: [],
-            buffer: [],
-            monitors: []
-          })
+    state =
+      Map.merge(config, %{
+        latest_offset: normalized_latest_offset,
+        pg_snapshot: pg_snapshot,
+        log_state: @initial_log_state,
+        inspector: config.inspector,
+        snapshot_started: false,
+        awaiting_snapshot_start: [],
+        buffer: [],
+        monitors: []
+      })
 
-        {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
-      end,
-      :consumer_init
-    )
+    :ok = Electric.Shapes.Status.register_consumer(config.stack_id, config.shape_handle)
+
+    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
   end
 
+  @impl GenStage
   def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
     {:reply, {:ok, offset}, [], state}
   end
@@ -139,13 +137,15 @@ defmodule Electric.Shapes.Consumer do
     # Waiter will receive this response if the snapshot wasn't done yet, but
     # given that this is definitely a cleanup call, a 409 is appropriate
     # as old shape handle is no longer valid
-    state =
-      reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
+    state = reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
+
+    request_cleanup(state)
 
     # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
     # any race conditions and leftover data
-    cleanup(state)
-    {:stop, :normal, :ok, state}
+    # cleanup(state)
+
+    {:reply, :ok, [], state}
   end
 
   def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
@@ -158,6 +158,7 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
   end
 
+  @impl GenStage
   def handle_cast(
         {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list}},
         %{shape_handle: shape_handle} = state
@@ -213,8 +214,10 @@ defmodule Electric.Shapes.Consumer do
           error
       end
 
+    dbg(cleanup: :snapshot_failed)
     state = reply_to_snapshot_waiters(state, {:error, error})
     cleanup(state)
+    # :ok = Electric.Shapes.Status.wait_subscriber_termination(state.stack_id, state.shape_handle)
     {:stop, :normal, state}
   end
 
@@ -224,13 +227,20 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
+  @impl GenStage
+  def handle_info({Electric.Shapes.Status, :subscriber_termination}, state) do
+    dbg(subscribers_terminated: {state.shape_handle})
+    {:stop, :normal, state}
+  end
+
   def terminate(reason, state) do
-    Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
+    Logger.warning("Shapes.Consumer terminating with reason: #{inspect(reason)}")
 
     state =
       reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
 
     if is_error?(reason) do
+      dbg(cleanup: :terminate)
       cleanup(state)
     end
 
@@ -262,6 +272,8 @@ defmodule Electric.Shapes.Consumer do
     # We clean up the relation info from ETS as it has changed and we want
     # to source the fresh info from postgres for the next shape creation
     Inspector.clean(root_table, inspector)
+
+    dbg(cleanup: :relation)
 
     state =
       state
@@ -389,6 +401,7 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
+        dbg(cleanup: :truncate)
         cleanup(state)
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
@@ -500,6 +513,11 @@ defmodule Electric.Shapes.Consumer do
     %{state | pg_snapshot: pg_snapshot}
   end
 
+  defp request_cleanup(state) do
+    :ok = Electric.Shapes.Status.wait_subscriber_termination(state.stack_id, state.shape_handle)
+    state
+  end
+
   defp cleanup(state) do
     %{
       shape_status: {shape_status, shape_status_state},
@@ -507,7 +525,7 @@ defmodule Electric.Shapes.Consumer do
     } = state
 
     notify_shape_rotation(state)
-    shape_status.remove_shape(shape_status_state, state.shape_handle)
+    # shape_status.remove_shape(shape_status_state, state.shape_handle)
     publication_manager.remove_shape(state.shape, publication_manager_opts)
     ShapeCache.Storage.cleanup!(state.storage)
 

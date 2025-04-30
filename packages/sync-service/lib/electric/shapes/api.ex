@@ -337,7 +337,14 @@ defmodule Electric.Shapes.Api do
 
   defp register_shape_subscriber(%Request{} = request) do
     %{api: %{stack_id: stack_id}, handle: handle} = request
-    {:ok, _} = Electric.Shapes.Status.register_subscriber(stack_id, handle)
+    # The assumption here is that all api requests live in a transient process
+    # that will exit once the request is complete.
+    {:ok, count} = Electric.Shapes.Status.register_subscriber(stack_id, handle)
+
+    Logger.debug(fn ->
+      "Registering subscriber ##{count} for shape #{inspect(handle)}"
+    end)
+
     request
   end
 
@@ -414,9 +421,7 @@ defmodule Electric.Shapes.Api do
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
       response = do_serve_shape_log(request)
 
-      request
-      |> clean_up_change_listener()
-      |> clean_up_shape_subscriber()
+      clean_up_change_listener(request)
 
       response
     end)
@@ -558,12 +563,6 @@ defmodule Electric.Shapes.Api do
   end
 
   defp clean_up_change_listener(%Request{} = request), do: request
-
-  defp clean_up_shape_subscriber(%Request{} = request) do
-    %{api: %{stack_id: stack_id}, handle: handle} = request
-    {:ok, _} = Electric.Shapes.Status.unregister_subscriber(stack_id, handle)
-    request
-  end
 
   defp no_change_response(%Request{} = request) do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
