@@ -455,7 +455,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, :normal}
+      assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
 
@@ -487,7 +487,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, :normal}
+      assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
     end
 
@@ -518,7 +518,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, :normal}
+      assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       assert_receive {^live_ref, :shape_rotation}
     end
 
