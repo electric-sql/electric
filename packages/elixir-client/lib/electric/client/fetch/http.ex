@@ -102,7 +102,7 @@ defmodule Electric.Client.Fetch.HTTP do
 
     connect_options =
       if pool do
-        []
+        [finch: pool]
       else
         [connect_options: [protocols: [:http2, :http1]]]
       end
@@ -118,8 +118,7 @@ defmodule Electric.Client.Fetch.HTTP do
       max_retries: 10_512_000,
       # we use long polling with a timeout of 20s so we don't want Req to error before
       # Electric has returned something
-      receive_timeout: 60_000,
-      connect_options: Keyword.merge([protocols: [:http2, :http1]], connect_options)
+      receive_timeout: 60_000
     ]
     |> Keyword.merge(connect_options)
     |> Req.new()
