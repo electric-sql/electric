@@ -259,28 +259,35 @@ defmodule Electric.Shapes.Api.Response do
       Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
-        OpenTelemetry.with_span(
-          "shape_get.plug.stream_chunk",
-          [chunk_size: chunk_size],
-          stack_id,
-          fn ->
-            case Plug.Conn.chunk(conn, chunk) do
-              {:ok, conn} ->
-                {:cont, {conn, bytes_sent + chunk_size}}
+        receive do
+          {_ref, :shape_rotation} ->
+            Logger.warning("shape #{inspect(response.handle)}: stream halted by shape rotation")
+            {:halt, {conn, bytes_sent}}
+        after
+          0 ->
+            OpenTelemetry.with_span(
+              "shape_get.plug.stream_chunk",
+              [chunk_size: chunk_size],
+              stack_id,
+              fn ->
+                case Plug.Conn.chunk(conn, chunk) do
+                  {:ok, conn} ->
+                    {:cont, {conn, bytes_sent + chunk_size}}
 
-              {:error, "closed"} ->
-                error_str = "Connection closed unexpectedly while streaming response"
-                conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
+                  {:error, "closed"} ->
+                    error_str = "Connection closed unexpectedly while streaming response"
+                    conn = Plug.Conn.assign(conn, :error_str, error_str)
+                    {:halt, {conn, bytes_sent}}
 
-              {:error, reason} ->
-                error_str = "Error while streaming response: #{inspect(reason)}"
-                Logger.error(error_str)
-                conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
-            end
-          end
-        )
+                  {:error, reason} ->
+                    error_str = "Error while streaming response: #{inspect(reason)}"
+                    Logger.error(error_str)
+                    conn = Plug.Conn.assign(conn, :error_str, error_str)
+                    {:halt, {conn, bytes_sent}}
+                end
+              end
+            )
+        end
       end)
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)

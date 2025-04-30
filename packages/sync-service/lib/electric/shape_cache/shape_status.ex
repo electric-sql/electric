@@ -45,6 +45,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
 
+  require Logger
+
   @schema NimbleOptions.new!(
             shape_meta_table: [type: {:or, [:atom, :reference]}, required: true],
             storage: [type: :mod_arg, required: true],
@@ -149,8 +151,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.select_delete(
         state.shape_meta_table,
         [
-          {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
-          {{{@shape_hash_lookup, :_}, shape_handle}, [], [true]}
+          {{{@shape_hash_lookup, :_}, shape_handle}, [], [true]},
+          {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]}
           | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
               {{{@shape_relation_lookup, oid, shape_handle}, :_}, [], [true]}
             end)
@@ -183,7 +185,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
         nil
 
       [shape_handle] ->
-        {shape_handle, latest_offset!(meta_table, shape_handle)}
+        try do
+          {shape_handle, latest_offset!(meta_table, shape_handle)}
+        rescue
+          ArgumentError ->
+            Logger.warning("race condition triggered: shape deleted")
+            nil
+        end
     end
   end
 

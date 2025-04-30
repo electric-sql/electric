@@ -336,7 +336,8 @@ defmodule Electric.StackSupervisor do
           {Electric.Postgres.Inspector.EtsInspector,
            stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
           {Electric.Connection.Supervisor, new_connection_manager_opts},
-          {Electric.Shapes.Status, stack_id: stack_id}
+          {Electric.Shapes.Status, stack_id: stack_id, storage: storage},
+          {Electric.Shapes.Status.CleanupTaskSupervisor, stack_id: stack_id}
         ]
 
     # Store the telemetry span attributes in the persistent term for this stack
