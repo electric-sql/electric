@@ -251,19 +251,18 @@ defmodule Electric.ShapeCache do
         exit(reason)
     end
 
-    # do this after finishing this function so that we're subscribed to the
-    # producer before it starts forwarding its demand
-    send(self(), {:consumers_ready, last_processed_lsn})
-
-    {:ok, state}
+    # Let ShapeLogCollector that it can start processing after finishing this function so that
+    # we're subscribed to the producer before it starts forwarding its demand.
+    {:ok, state, {:continue, {:consumers_ready, last_processed_lsn}}}
   end
 
   @impl GenServer
-  def handle_info({:consumers_ready, last_processed_lsn}, state) do
+  def handle_continue({:consumers_ready, last_processed_lsn}, state) do
     ShapeLogCollector.start_processing(state.log_producer, last_processed_lsn)
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_info(:maybe_expire_shapes, state) do
     maybe_expire_shapes(state)
     {:noreply, state}

@@ -425,7 +425,6 @@ defmodule Electric.Connection.Manager do
              shape_cache_opts: shape_cache_opts,
              pool_opts: state.pool_opts,
              replication_opts: state.replication_opts,
-             stack_events_registry: state.stack_events_registry,
              tweaks: state.tweaks,
              persistent_kv: state.persistent_kv
            ) do
@@ -436,6 +435,8 @@ defmodule Electric.Connection.Manager do
           Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
           exit(reason)
       end
+
+    dispatch_stack_event(:ready, state)
 
     # Remember the shape log collector pid for later because we want to tie the replication
     # client's lifetime to it.
@@ -668,6 +669,7 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, state.lock_connection_pid)
+    dispatch_stack_event(:connection_lock_acquired, state)
 
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
