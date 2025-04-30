@@ -709,7 +709,6 @@ defmodule Electric.ShapeCache.FileStorage do
       # due to some FS race the deletion fails with EEXIST. Very hard to test
       # and prevent so we mitigate it with arbitrary retries.
       {:error, :eexist, _} when attempts_left > 0 ->
-        Process.sleep(1)
         unsafe_cleanup_with_retries!(opts, attempts_left - 1)
 
       {:error, reason, path} ->
