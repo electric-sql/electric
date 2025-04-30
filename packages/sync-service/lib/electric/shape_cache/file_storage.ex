@@ -91,7 +91,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   defp time(fun, label) do
     {t, result} = :timer.tc(fun, :millisecond)
-    dbg(time: [{label, t}])
+    # dbg(time: [{label, t}])
     result
   end
 
@@ -103,6 +103,7 @@ defmodule Electric.ShapeCache.FileStorage do
           CubDB.start_link(
             data_dir: dir,
             name: db,
+            auto_file_sync: false,
             hibernate_after: Electric.Config.get_env(:shape_hibernate_after)
           )
         end
@@ -112,8 +113,6 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp initialise_filesystem(opts) do
-    dbg(opts)
-
     with :ok <- File.mkdir_p(opts.data_dir),
          :ok <- File.mkdir_p(opts.cubdb_dir),
          :ok <- File.mkdir_p(opts.snapshot_dir),
@@ -572,6 +571,7 @@ defmodule Electric.ShapeCache.FileStorage do
         open_snapshot_chunk(opts, chunk_num, attempts_left - 1)
 
       {:error, reason} ->
+        dbg(snapshot_chunk_path(opts, chunk_num))
         raise IO.StreamError, reason: reason
     end
   end
@@ -700,6 +700,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%FS{} = opts) do
+    dbg(cleanup!: opts.shape_handle)
     # can't delete the data_dir here because the CubDb instance is still running,
     # and trying to delete the parent directory will fail since the files inside
     # are still in use
@@ -708,28 +709,8 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def unsafe_cleanup!(%FS{} = opts) do
-    unsafe_cleanup_with_retries!(opts)
-  end
-
-  defp unsafe_cleanup_with_retries!(%FS{} = opts, attempts_left \\ 5) do
-    with {:ok, _} <- File.rm_rf(opts.snapshot_dir),
-         {:ok, _} <- File.rm_rf(shape_definition_path(opts)),
-         {:ok, _} <- File.rm_rf(opts.data_dir) do
-      :ok
-    else
-      # There is a very unlikely but observed scenario where the rm_rf call
-      # tries to delete a directory after having deleted all its files, but
-      # due to some FS race the deletion fails with EEXIST. Very hard to test
-      # and prevent so we mitigate it with arbitrary retries.
-      {:error, :eexist, _} when attempts_left > 0 ->
-        unsafe_cleanup_with_retries!(opts, attempts_left - 1)
-
-      {:error, reason, path} ->
-        raise File.Error,
-          reason: reason,
-          path: path,
-          action: "remove files and directories recursively from"
-    end
+    {:ok, _} = File.rm_rf(opts.data_dir)
+    :ok
   end
 
   defp shape_definition_path(%{data_dir: data_dir} = _opts) do
