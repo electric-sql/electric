@@ -223,7 +223,8 @@ defmodule Support.ComponentSetup do
            pool_size: 2
          ],
          tweaks: [registry_partitions: 1]},
-        restart: :temporary
+        restart: :temporary,
+        significant: false
       )
 
     # allow a reasonable time for full stack setup to account for

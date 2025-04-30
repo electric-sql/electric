@@ -77,6 +77,8 @@ defmodule Electric.Connection.Manager do
 
   use GenServer
   alias Electric.Connection.Manager.ConnectionBackoff
+  alias Electric.DbConnectionError
+  alias Electric.StatusMonitor
 
   require Logger
 
@@ -93,6 +95,9 @@ defmodule Electric.Connection.Manager do
   @type options :: [option]
 
   @connection_status_logging_interval 10_000
+  @replication_mode "replication"
+  @regular_mode "regular"
+  @lock_mode "lock_connection"
 
   def child_spec(init_arg) do
     %{
@@ -253,7 +258,7 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        handle_connection_error(reason, state, "lock_connection")
+        handle_connection_error(reason, state, @lock_mode)
     end
   end
 
@@ -283,14 +288,14 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        handle_connection_error(reason, state, "replication")
+        handle_connection_error(reason, state, @replication_mode)
     end
   end
 
   def handle_continue(:start_connection_pool, state) do
     case start_connection_pool(connection_opts(state), state.pool_opts) do
       {:ok, pool_pid} ->
-        Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
+        StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
 
         state = mark_connection_succeeded(state)
         # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -357,7 +362,7 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        handle_connection_error(reason, state, "regular")
+        handle_connection_error(reason, state, @regular_mode)
     end
   end
 
@@ -387,8 +392,8 @@ defmodule Electric.Connection.Manager do
         state = update_replication_connection_opts(state, conn_opts)
         {:noreply, state, {:continue, :start_replication_client}}
 
-      {:error, reason} ->
-        handle_connection_error(reason, state, "replication")
+      {:error, error} ->
+        handle_connection_error(error, state, @replication_mode)
     end
   end
 
@@ -400,7 +405,7 @@ defmodule Electric.Connection.Manager do
     reason = strip_exit_signal_stacktrace(signal)
 
     with false <- drop_slot_and_restart(reason, state),
-         false <- stop_if_fatal_error(reason, state) do
+         false <- stop_if_fatal_error(reason, state, @replication_mode) do
       Logger.debug(
         "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
       )
@@ -678,7 +683,7 @@ defmodule Electric.Connection.Manager do
   # This separate function is needed for `handle_connection_error()` not to get stuck in a
   # recursive function call loop.
   defp fail_on_error_or_reconnect(error, state, mode) do
-    with false <- stop_if_fatal_error(error, state) do
+    with false <- stop_if_fatal_error(error, state, mode) do
       state = schedule_reconnection_after_error(error, state, mode)
       {:noreply, state}
     end
@@ -769,41 +774,45 @@ defmodule Electric.Connection.Manager do
 
   defp drop_slot_and_restart(_, _), do: false
 
-  defp stop_if_fatal_error(
-         %Postgrex.Error{
-           postgres: %{
-             code: :object_not_in_prerequisite_state,
-             message: msg,
-             pg_code: "55000"
-           }
-         } = error,
-         state
-       )
-       when msg == "logical decoding requires wal_level >= logical" or
-              msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
-    dispatch_fatal_error_and_shutdown({:wal_level_is_not_logical, %{error: error}}, state)
-  end
+  defp stop_if_fatal_error(error, state, mode) do
+    error = DbConnectionError.from_error(error)
 
-  defp stop_if_fatal_error(
-         %Postgrex.Error{
-           postgres: %{
-             code: :internal_error,
-             pg_code: "XX000"
-           }
-         } = error,
-         state
-       ) do
-    if Regex.match?(~r/database ".*" does not exist$/, error.postgres.message) do
-      dispatch_fatal_error_and_shutdown({:database_does_not_exist, %{error: error}}, state)
-    else
+    if error.retry_may_fix? do
+      Logger.warning(
+        "Error while trying to connect to the database (#{mode}): #{error.message}\n" <>
+          "Retrying..."
+      )
+
+      dispatch_stack_event(
+        {:retryable_error,
+         %{error: error.original_error, message: error.message, type: error.type}},
+        state
+      )
+
+      mark_error_for_mode(mode, error.message, state.stack_id)
       false
+    else
+      dispatch_fatal_error_and_shutdown(error, state)
     end
   end
 
-  defp stop_if_fatal_error(_, _), do: false
+  defp mark_error_for_mode(@replication_mode, error, stack_id) do
+    StatusMonitor.mark_replication_client_as_errored(stack_id, error)
+  end
 
-  defp dispatch_fatal_error_and_shutdown(error, state) do
-    dispatch_stack_event(error, state)
+  defp mark_error_for_mode(@regular_mode, error, stack_id) do
+    StatusMonitor.mark_connection_pool_as_errored(stack_id, error)
+  end
+
+  defp mark_error_for_mode(@lock_mode, error, stack_id) do
+    StatusMonitor.mark_pg_lock_as_errored(stack_id, error)
+  end
+
+  defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
+    dispatch_stack_event(
+      {:fatal_error, %{error: error.original_error, message: error.message, type: error.type}},
+      state
+    )
 
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
     # process is waiting for the supervisor to shut down its children, one of which is the

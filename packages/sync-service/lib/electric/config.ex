@@ -413,7 +413,7 @@ defmodule Electric.Config do
       true ->
         if insecure do
           Logger.warning(
-            "Electric is running in insecure mode — this risks exposing your database — only use insecure mode in development or if you've otherwise secured the Electric API."
+            "Electric is running in insecure mode - this risks exposing your database - only use insecure mode in development or if you've otherwise secured the Electric API."
           )
         end
 

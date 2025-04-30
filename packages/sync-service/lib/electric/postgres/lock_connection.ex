@@ -97,6 +97,8 @@ defmodule Electric.Postgres.LockConnection do
       "Failed to acquire lock #{state.lock_name} with reason #{inspect(error)} - retrying in #{inspect(time)}ms."
     )
 
+    Electric.StatusMonitor.mark_pg_lock_as_errored(state.stack_id, inspect(error))
+
     {:noreply, %{state | lock_acquired: false, backoff: {backoff, tref}}}
   end
 

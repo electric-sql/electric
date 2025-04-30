@@ -164,7 +164,9 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
       assert conn.status == 503
 
-      assert Jason.decode!(conn.resp_body) == %{"message" => "Stack not ready"}
+      assert Jason.decode!(conn.resp_body) == %{
+               "message" => "Timeout waiting for Postgres lock acquisition"
+             }
     end
   end
 end

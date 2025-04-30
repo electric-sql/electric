@@ -29,8 +29,12 @@ defmodule Electric.StackSupervisor do
       3. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
   """
 
-  # Setting `restart: :transient` is required for passing the `:auto_shutdown` to `Supervisor.init()` below.
-  use Supervisor, restart: :transient
+  use Supervisor,
+    # Setting `restart: :transient` is required for passing the `:auto_shutdown` to `Supervisor.init()` below.
+    restart: :transient,
+    # Make StackSupervisor `significant` so that in the case that electric is in single-stack mode, the stack stopping
+    # will stop the entire Electric application (since `auto_shutdown` is set to `:any_significant` in `Application`).
+    significant: true
 
   alias Electric.ShapeCache.LogChunker
 
