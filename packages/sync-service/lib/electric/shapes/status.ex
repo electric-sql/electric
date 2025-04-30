@@ -169,7 +169,16 @@ defmodule Electric.Shapes.Status do
   end
 
   defp update_counter(stack_id, handle, incr) do
+    :ets.update_counter(table(stack_id), :all, incr, {:all, 0})
+    # dbg(total_subscribers(stack_id))
     :ets.update_counter(table(stack_id), handle, incr, {handle, 0})
+  end
+
+  defp total_subscribers(stack_id) do
+    case :ets.lookup(table(stack_id), :all) do
+      [{:all, count}] -> count
+      [] -> 0
+    end
   end
 
   defp delete_subscriber(pid, demonitor?, state) do
