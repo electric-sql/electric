@@ -170,6 +170,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     assert {^shape_handle, ^shape} = ShapeStatus.get_shape_for_consumer_ref(table, ref)
 
+    # remove the consumer ref, should no longer match to the shape
+    ShapeStatus.remove_consumer_ref(state, ref)
+    refute ShapeStatus.get_shape_for_consumer_ref(table, ref)
+
+    # set the consumer ref again, but if shape is gone nothing is returned
+    ShapeStatus.set_consumer_ref(state, shape_handle, ref)
+
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_shape_for_consumer_ref(table, ref)
   end

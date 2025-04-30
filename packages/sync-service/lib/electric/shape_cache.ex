@@ -276,7 +276,10 @@ defmodule Electric.ShapeCache do
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, state)
       when not is_expected_consumer_shutdown?(reason) do
-    case state.shape_status.get_shape_for_consumer_ref(state.shape_status_state, ref) do
+    shape_for_ref = state.shape_status.get_shape_for_consumer_ref(state.shape_status_state, ref)
+    state.shape_status.remove_consumer_ref(state.shape_status_state, ref)
+
+    case shape_for_ref do
       nil ->
         # shape already cleaned up by consumer itself
         {:noreply, state}
@@ -294,7 +297,8 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+    state.shape_status.remove_consumer_ref(state.shape_status_state, ref)
     {:noreply, state}
   end
 
