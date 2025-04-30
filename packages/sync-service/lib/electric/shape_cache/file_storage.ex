@@ -712,8 +712,11 @@ defmodule Electric.ShapeCache.FileStorage do
         Process.sleep(1)
         unsafe_cleanup_with_retries!(opts, attempts_left - 1)
 
-      err ->
-        raise "Failed to clean up shape data: #{inspect(err)}"
+      {:error, reason, path} ->
+        raise File.Error,
+          reason: reason,
+          path: path,
+          action: "remove files and directories recursively from"
     end
   end
 
