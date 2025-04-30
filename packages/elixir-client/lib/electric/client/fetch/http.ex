@@ -124,6 +124,7 @@ defmodule Electric.Client.Fetch.HTTP do
     |> Keyword.merge(connect_options)
     |> Req.new()
     |> merge_options(request_opts)
+    |> tap(&dbg/1)
     |> Req.Request.put_private(:electric_start_request, now())
   end
 
