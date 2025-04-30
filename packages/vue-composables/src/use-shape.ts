@@ -1,6 +1,5 @@
 import {
   GetExtensions,
-  Offset,
   Row,
   Shape,
   ShapeStream,
@@ -66,7 +65,6 @@ export function getShapeStream<T extends Row<unknown>>(
   const newShapeStream = new ShapeStream<T>(options)
   streamCache.set(shapeHash, newShapeStream)
 
-  // Return the created shape
   return newShapeStream
 }
 
@@ -87,70 +85,11 @@ export function getShape<T extends Row<unknown>>(
   const newShape = new Shape<T>(shapeStream)
   shapeCache.set(shapeStream, newShape)
 
-  // Return the created shape
   return newShape
 }
 
-export interface UseShapeOptions<T extends Row<unknown> = Row> {
-  /**
-   * The full URL to where the Shape is served. This can either be the Electric server
-   * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
-   */
-  url: string
-
-  /**
-   * Shape parameters including table, columns, where, etc.
-   */
-  params: {
-    /** The root table for the shape */
-    table: string
-    /** The columns to include in the shape */
-    columns?: string[]
-    /** The where clauses for the shape */
-    where?: string
-    /** Positional where clause parameter values */
-    params?: Record<`${number}`, string> | string[]
-    /** Replica type (full or default) */
-    replica?: 'full' | 'default'
-    [key: string]: any
-  }
-
-  /**
-   * Custom fetch client for making requests
-   * @type {(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>}
-   */
-  fetchClient?: (
-    input: string | URL | Request,
-    init?: RequestInit
-  ) => Promise<Response>
-
-  /**
-   * Whether to subscribe to shape changes after initial load
-   * @type {boolean}
-   * @default true
-   */
-  subscribe?: boolean
-
-  /**
-   * The offset on the shape log
-   */
-  offset?: Offset
-
-  /**
-   * Shape handle for caching
-   */
-  handle?: string
-
-  /**
-   * HTTP headers to attach to requests
-   */
-  headers?: Record<string, string | (() => string | Promise<string>)>
-
-  /**
-   * Signal to abort requests
-   */
-  signal?: AbortSignal
-}
+export interface UseShapeOptions<T extends Row<unknown> = Row>
+  extends ShapeStreamOptions<GetExtensions<T>> {}
 
 export interface UseShapeResult<T extends Row<unknown> = Row> {
   /**
@@ -196,62 +135,31 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
 export function useShape<T extends Row<unknown> = Row>(
   options: UseShapeOptions<T>
 ): UseShapeResult<T> {
-  // Extract options to create ShapeStreamOptions
-  const {
-    fetchClient,
-    url,
-    params,
-    subscribe,
-    offset,
-    handle,
-    headers,
-    signal,
-  } = options
+  const shapeStream = getShapeStream<T>(options)
+  const shape = getShape<T>(shapeStream)
 
-  // Convert to ShapeStreamOptions
-  const streamOptions: ShapeStreamOptions<GetExtensions<T>> = {
-    url,
-    params,
-    subscribe,
-    offset,
-    handle,
-    headers,
-    signal,
-  }
+  const result = reactive<UseShapeResult<T>>({
+    data: shape.currentRows,
+    isLoading: true, // Start with loading true
+    lastSyncedAt: undefined,
+    isError: shape.error !== false,
+    error: shape.error,
+    shape,
+    stream: shapeStream,
+  })
 
-  // Store original fetch to restore later
-  let originalFetch: typeof fetch | undefined
+  // Initial load
+  shape.rows.then(() => {
+    result.data = shape.currentRows
+    result.isLoading = false
+    result.lastSyncedAt = shape.lastSyncedAt()
+    result.isError = shape.error !== false
+    result.error = shape.error
+  })
 
-  // Wrap the fetch logic to handle custom fetch client
-  // We need to do this because Vue setup functions can be called multiple times
-  if (fetchClient) {
-    originalFetch = globalThis.fetch
-    globalThis.fetch = async (
-      input: string | URL | Request,
-      init?: RequestInit
-    ) => {
-      return fetchClient(input, init)
-    }
-  }
-
-  try {
-    // Create shape and stream instances
-    const shapeStream = getShapeStream<T>(streamOptions)
-    const shape = getShape<T>(shapeStream)
-
-    // Create reactive object
-    const result = reactive<UseShapeResult<T>>({
-      data: shape.currentRows,
-      isLoading: true, // Start with loading true
-      lastSyncedAt: undefined,
-      isError: shape.error !== false,
-      error: shape.error,
-      shape,
-      stream: shapeStream,
-    })
-
-    // Initial load
-    shape.rows.then(() => {
+  // Only subscribe if subscribe option is true or undefined (default is true)
+  if (options.subscribe !== false) {
+    const unsubscribe = shape.subscribe(() => {
       result.data = shape.currentRows
       result.isLoading = false
       result.lastSyncedAt = shape.lastSyncedAt()
@@ -259,30 +167,10 @@ export function useShape<T extends Row<unknown> = Row>(
       result.error = shape.error
     })
 
-    // Only subscribe if subscribe option is true or undefined (default is true)
-    if (options.subscribe !== false) {
-      // Subscribe to shape changes
-      const unsubscribe = shape.subscribe(() => {
-        // Update reactive object with new values
-        result.data = shape.currentRows
-        result.isLoading = false
-        result.lastSyncedAt = shape.lastSyncedAt()
-        result.isError = shape.error !== false
-        result.error = shape.error
-      })
-
-      // Clean up subscription when component unmounts
-      onUnmounted(() => {
-        unsubscribe()
-      })
-    }
-
-    // Return the reactive result object
-    return result
-  } finally {
-    // Restore original fetch in any case (success or error)
-    if (originalFetch) {
-      globalThis.fetch = originalFetch
-    }
+    onUnmounted(() => {
+      unsubscribe()
+    })
   }
+
+  return result
 }

@@ -1,4 +1,4 @@
-import { ShapeStream, Message, Row } from '@electric-sql/client'
+import { Message, Row, ShapeStream } from '@electric-sql/client'
 import { Client, ClientConfig } from 'pg'
 
 export function makePgClient(overrides: ClientConfig = {}) {
@@ -11,6 +11,16 @@ export function makePgClient(overrides: ClientConfig = {}) {
     options: `-csearch_path=electric_test`,
     ...overrides,
   })
+}
+
+// Mock parallel waiter stream implementation
+export const createParallelWaiterStream = () => {
+  return {
+    waitForSyncToComplete: async () => {
+      // Mock implementation that resolves immediately
+      return Promise.resolve()
+    },
+  }
 }
 
 export function forEachMessage<T extends Row>(
