@@ -885,6 +885,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       # Stop the consumer and the shape cache server to simulate a restart
       Supervisor.stop(ctx.consumer_supervisor)
+      GenServer.stop(Electric.Shapes.ShapeCleaner.name(ctx.stack_id))
       GenServer.stop(shape_cache_opts[:server])
 
       # Restart the shape cache and the consumers

@@ -13,14 +13,10 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback list_shapes(ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
   @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
-  @callback get_shape_for_consumer_ref(ShapeStatus.t(), reference()) ::
-              {shape_handle(), Shape.t()} | nil
   @callback add_shape(ShapeStatus.t(), Shape.t()) ::
               {:ok, shape_handle()} | {:error, term()}
   @callback initialise_shape(ShapeStatus.t(), shape_handle(), xmin(), LogOffset.t()) ::
               :ok
-  @callback set_consumer_ref(ShapeStatus.t(), shape_handle(), reference()) :: :ok
-  @callback remove_consumer_ref(ShapeStatus.t(), reference()) :: :ok
   @callback set_snapshot_xmin(ShapeStatus.t(), shape_handle(), xmin()) :: :ok
   @callback set_latest_offset(ShapeStatus.t(), shape_handle(), LogOffset.t()) :: :ok
   @callback mark_snapshot_started(ShapeStatus.t(), shape_handle()) :: :ok
@@ -72,7 +68,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @shape_meta_data :shape_meta_data
   @shape_hash_lookup :shape_hash_lookup
-  @shape_consumer_ref_lookup :shape_consumer_ref_lookup
   @shape_relation_lookup :shape_relation_lookup
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
@@ -202,52 +197,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def get_shape_for_consumer_ref(%__MODULE__{shape_meta_table: meta_table} = _state, ref) do
-    get_shape_for_consumer_ref(meta_table, ref)
-  end
-
-  def get_shape_for_consumer_ref(meta_table, ref) do
-    case :ets.select(meta_table, [{{{@shape_consumer_ref_lookup, ref}, :"$1"}, [true], [:"$1"]}]) do
-      [] ->
-        nil
-
-      [shape_handle] ->
-        case shape_definition(meta_table, shape_handle) do
-          {:ok, shape} -> {shape_handle, shape}
-          _ -> nil
-        end
-    end
-  end
-
-  @impl true
   def initialise_shape(state, shape_handle, snapshot_xmin, latest_offset) do
     true =
       :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_handle}, [
         {@shape_meta_xmin_pos, snapshot_xmin},
         {@shape_meta_latest_offset_pos, latest_offset}
       ])
-
-    :ok
-  end
-
-  @impl true
-  def set_consumer_ref(state, shape_handle, ref) do
-    true =
-      :ets.insert_new(
-        state.shape_meta_table,
-        {{@shape_consumer_ref_lookup, ref}, shape_handle}
-      )
-
-    :ok
-  end
-
-  @impl true
-  def remove_consumer_ref(state, ref) do
-    true =
-      :ets.delete(
-        state.shape_meta_table,
-        {@shape_consumer_ref_lookup, ref}
-      )
 
     :ok
   end
@@ -340,7 +295,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  defp shape_definition(meta_table, shape_handle) do
+  def shape_definition(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
+    shape_definition(table, shape_handle)
+  end
+
+  def shape_definition(meta_table, shape_handle) do
     turn_raise_into_error(fn ->
       :ets.lookup_element(
         meta_table,

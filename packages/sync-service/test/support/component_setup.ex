@@ -125,6 +125,13 @@ defmodule Support.ComponentSetup do
         stack_id: ctx.stack_id
       )
 
+    {:ok, _pid} =
+      Electric.Shapes.ShapeCleaner.start_link(
+        stack_id: ctx.stack_id,
+        publication_manager: ctx.publication_manager,
+        storage: ctx.storage
+      )
+
     {:ok, _pid} = ShapeCache.start_link(start_opts)
 
     shape_meta_table = ShapeCache.get_shape_meta_table(stack_id: ctx.stack_id)

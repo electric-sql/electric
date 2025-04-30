@@ -73,10 +73,6 @@ defmodule Electric.ShapeCache do
             ]
           )
 
-  defguardp is_expected_consumer_shutdown?(reason)
-            when reason in [:normal, :killed, :shutdown] or
-                   (is_tuple(reason) and elem(reason, 0) == :shutdown and tuple_size(reason) == 2)
-
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -271,34 +267,6 @@ defmodule Electric.ShapeCache do
   @impl GenServer
   def handle_info(:maybe_expire_shapes, state) do
     maybe_expire_shapes(state)
-    {:noreply, state}
-  end
-
-  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
-      when not is_expected_consumer_shutdown?(reason) do
-    shape_for_ref = state.shape_status.get_shape_for_consumer_ref(state.shape_status_state, ref)
-    state.shape_status.remove_consumer_ref(state.shape_status_state, ref)
-
-    case shape_for_ref do
-      nil ->
-        # shape already cleaned up by consumer itself
-        {:noreply, state}
-
-      {shape_handle, shape} ->
-        Logger.warning(
-          "Cleaning up shape #{shape_handle} after unexpected consumer exit: #{inspect(reason)}"
-        )
-
-        # clean up publication and data related to shape
-        {publication_manager, publication_manager_opts} = state.publication_manager
-        publication_manager.remove_shape_async(shape, publication_manager_opts)
-        unsafe_cleanup_shape!(shape_handle, state)
-        {:noreply, state}
-    end
-  end
-
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    state.shape_status.remove_consumer_ref(state.shape_status_state, ref)
     {:noreply, state}
   end
 
@@ -509,8 +477,7 @@ defmodule Electric.ShapeCache do
              otel_ctx: otel_ctx
            ) do
       # monitor the consumer to ensure we clean up killed shapes
-      ref = Process.monitor(Electric.Shapes.Consumer.whereis(state.stack_id, shape_handle))
-      state.shape_status.set_consumer_ref(state.shape_status_state, shape_handle, ref)
+      :ok = Electric.Shapes.ShapeCleaner.monitor_shape(shape_handle, state)
 
       # retrieve initial state
       consumer = Shapes.Consumer.name(state.stack_id, shape_handle)

@@ -24,6 +24,7 @@ defmodule Electric.Replication.Supervisor do
     # TODO: weird to have these without defaults but `consumer_supervisor` with a default
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
+    shape_cleaner = Keyword.fetch!(opts, :shape_cleaner)
     log_collector = Keyword.fetch!(opts, :log_collector)
     schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -38,6 +39,7 @@ defmodule Electric.Replication.Supervisor do
     children = [
       consumer_supervisor,
       publication_manager,
+      shape_cleaner,
       log_collector,
       schema_reconciler,
       shape_cache

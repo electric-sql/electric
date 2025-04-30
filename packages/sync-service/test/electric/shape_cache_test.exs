@@ -1176,6 +1176,8 @@ defmodule Electric.ShapeCacheTest do
         Shapes.DynamicConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
       end
 
+      GenServer.stop(Shapes.ShapeCleaner.name(ctx.stack_id))
+
       for {pid, ref} <- consumers do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}
       end
