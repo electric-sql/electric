@@ -1,0 +1,31 @@
+{
+  "name": "@electric-examples/vue",
+  "private": true,
+  "version": "0.0.1",
+  "author": "ElectricSQL",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "backend:up": "PROJECT_NAME=vue-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
+    "backend:down": "PROJECT_NAME=vue-example pnpm -C ../../ run example-backend:down",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "dev": "vite",
+    "build": "vite build",
+    "format": "eslint . --ext ts,vue --fix",
+    "stylecheck": "eslint . --ext ts,vue --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/vue": "workspace:*",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@databases/pg-migrations": "^5.0.3",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  }
+}

@@ -290,6 +290,7 @@ export default defineConfig({
                 { text: 'Next.js', link: '/docs/integrations/next' },
                 { text: 'Phoenix', link: '/docs/integrations/phoenix' },
                 { text: 'React', link: '/docs/integrations/react' },
+                { text: 'Vue', link: '/docs/integrations/vue' },
                 { text: 'Redis', link: '/docs/integrations/redis' },
                 { text: 'TanStack', link: '/docs/integrations/tanstack' },
                 { text: 'Yjs', link: '/docs/integrations/yjs' },

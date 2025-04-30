@@ -1005,6 +1005,40 @@ importers:
         specifier: ^5.3.1
         version: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
 
+  examples/vue:
+    dependencies:
+      '@electric-sql/vue':
+        specifier: workspace:*
+        version: link:../../packages/vue-composables
+      vue:
+        specifier: ^3.5.13
+        version: 3.5.13(typescript@5.6.3)
+    devDependencies:
+      '@databases/pg-migrations':
+        specifier: ^5.0.3
+        version: 5.0.3(typescript@5.6.3)
+      '@types/react':
+        specifier: ^18.3.3
+        version: 18.3.12
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.1
+      '@vitejs/plugin-vue':
+        specifier: ^5.2.3
+        version: 5.2.3(vite@5.4.10(@types/node@20.17.6)(terser@5.36.0))(vue@3.5.13(typescript@5.6.3))
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.4.5
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.1
+      typescript:
+        specifier: ^5.5.3
+        version: 5.6.3
+      vite:
+        specifier: ^5.3.4
+        version: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
+
   examples/write-patterns:
     dependencies:
       '@electric-sql/client':
@@ -4958,6 +4992,13 @@ packages:
     engines: {node: ^18.0.0 || >=20.0.0}
     peerDependencies:
       vite: ^5.0.0
+      vue: ^3.2.25
+
+  '@vitejs/plugin-vue@5.2.3':
+    resolution: {integrity: sha512-IYSLEQj4LgZZuoVpdSUCw3dIynTWQgPlaRP6iAvMle4My0HdYwr5g5wQAfwOeHQBmYwEkqF70nRpSilr6PoUDg==}
+    engines: {node: ^18.0.0 || >=20.0.0}
+    peerDependencies:
+      vite: ^5.0.0 || ^6.0.0
       vue: ^3.2.25
 
   '@vitest/expect@2.1.4':
@@ -14114,6 +14155,11 @@ snapshots:
       - supports-color
 
   '@vitejs/plugin-vue@5.1.4(vite@5.4.10(@types/node@20.17.6)(terser@5.36.0))(vue@3.5.13(typescript@5.6.3))':
+    dependencies:
+      vite: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
+      vue: 3.5.13(typescript@5.6.3)
+
+  '@vitejs/plugin-vue@5.2.3(vite@5.4.10(@types/node@20.17.6)(terser@5.36.0))(vue@3.5.13(typescript@5.6.3))':
     dependencies:
       vite: 5.4.10(@types/node@20.17.6)(terser@5.36.0)
       vue: 3.5.13(typescript@5.6.3)
