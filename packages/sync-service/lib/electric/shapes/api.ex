@@ -335,6 +335,10 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  defp register_shape_subscriber(%Request{handle: nil} = request) do
+    request
+  end
+
   defp register_shape_subscriber(%Request{} = request) do
     %{api: %{stack_id: stack_id}, handle: handle} = request
     # The assumption here is that all api requests live in a transient process
@@ -419,11 +423,7 @@ defmodule Electric.Shapes.Api do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      response = do_serve_shape_log(request)
-
-      clean_up_change_listener(request)
-
-      response
+      do_serve_shape_log(request)
     end)
   end
 
@@ -564,6 +564,16 @@ defmodule Electric.Shapes.Api do
 
   defp clean_up_change_listener(%Request{} = request), do: request
 
+  defp clean_up_shape_subscriber(%Request{handle: nil} = request) do
+    request
+  end
+
+  defp clean_up_shape_subscriber(%Request{} = request) do
+    %{api: %{stack_id: stack_id}, handle: handle} = request
+    {:ok, _} = Electric.Shapes.Status.unregister_subscriber(stack_id, handle)
+    request
+  end
+
   defp no_change_response(%Request{} = request) do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
       update_attrs(request, %{ot_is_empty_response: true})
@@ -607,21 +617,42 @@ defmodule Electric.Shapes.Api do
   def stack_id(%Api{stack_id: stack_id}), do: stack_id
   def stack_id(%{api: %{stack_id: stack_id}}), do: stack_id
 
-  defp encode_log(%Request{api: api}, stream) do
-    encode(api, :log, stream)
+  # append the cleanup operations onto the end of the stream for every response
+  # by concating a dummy stream with only an `after` function. by making it
+  # part of consuming the response stream rather than an explicit call we
+  # simplify the API as it cleans up after itself when the response is read
+  defp unsubscribe_after_stream(%Request{} = request) do
+    Stream.transform(
+      [],
+      fn -> request end,
+      fn _elem, request -> {[], request} end,
+      fn request -> {[], request} end,
+      fn request ->
+        request
+        |> clean_up_change_listener()
+        |> clean_up_shape_subscriber()
+      end
+    )
+  end
+
+  defp encode_log(%Request{api: api} = request, stream) do
+    encode(api, :log, stream, unsubscribe_after_stream(request))
   end
 
   @spec encode_message(Api.t() | Request.t(), term()) :: Enum.t()
+  def encode_message(%Request{api: api} = request, message) do
+    encode(api, :message, message, unsubscribe_after_stream(request))
+  end
+
   def encode_message(%Api{} = api, message) do
     encode(api, :message, message)
   end
 
-  def encode_message(%Request{api: api}, message) do
-    encode(api, :message, message)
-  end
-
-  defp encode(%Api{encoder: encoder}, type, message) when type in [:message, :log] do
-    apply(encoder, type, [message])
+  defp encode(%Api{encoder: encoder}, type, message, concat \\ [])
+       when type in [:message, :log] do
+    encoder
+    |> apply(type, [message])
+    |> Stream.concat(concat)
   end
 
   def schema(%Response{
