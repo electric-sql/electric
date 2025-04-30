@@ -97,8 +97,15 @@ defmodule Electric.Client.Fetch.HTTP do
     is_transient_fun =
       Keyword.get(opts, :is_transient_fun, &Electric.Client.Fetch.HTTP.transient_response?/1)
 
-    connect_options = []
     timeout = Keyword.get(opts, :timeout, @default_timeout)
+    {pool, request_opts} = Keyword.pop(request_opts, :finch, nil)
+
+    connect_options =
+      if pool do
+        []
+      else
+        [connect_options: [protocols: [:http2, :http1]]]
+      end
 
     [
       method: request.method,
@@ -114,6 +121,7 @@ defmodule Electric.Client.Fetch.HTTP do
       receive_timeout: 60_000,
       connect_options: Keyword.merge([protocols: [:http2, :http1]], connect_options)
     ]
+    |> Keyword.merge(connect_options)
     |> Req.new()
     |> merge_options(request_opts)
     |> Req.Request.put_private(:electric_start_request, now())
