@@ -85,6 +85,21 @@ defmodule Electric.FatalErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with tcp closed error" do
+      error = %DBConnection.ConnectionError{
+        message: "tcp recv (idle): closed",
+        severity: :error,
+        reason: :error
+      }
+
+      assert %DbConnectionError{
+               message: "connection closed while connecting to the database",
+               type: :connection_closed,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with a connection refused error" do
       error = %DBConnection.ConnectionError{
         message: "tcp connect (localhost:54321): connection refused - :econnrefused",

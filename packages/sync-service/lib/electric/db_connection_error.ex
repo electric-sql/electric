@@ -17,6 +17,21 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(%DBConnection.ConnectionError{message: message} = error)
+      when message in [
+             "tcp recv (idle): closed",
+             "ssl recv (idle): closed",
+             "tcp recv: closed",
+             "ssl recv: closed"
+           ] do
+    %DbConnectionError{
+      message: "connection closed while connecting to the database",
+      type: :connection_closed,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error(%DBConnection.ConnectionError{} = error) do
     maybe_nxdomain_error(error) || maybe_connection_refused_error(error) || unknown_error(error)
   end
