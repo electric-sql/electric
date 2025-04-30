@@ -101,7 +101,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
           arch: to_string(arch),
           cores: processors,
           ram: total_mem,
-          electric_instance_id: Electric.instance_id(),
+          electric_instance_id: Map.fetch!(opts, :instance_id),
           electric_installation_id: Map.fetch!(opts, :installation_id),
           stack_id: opts.stack_id
         }

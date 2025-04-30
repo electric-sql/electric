@@ -15,7 +15,7 @@
 [shell electric]
   ??[info] Starting replication from postgres
 
-  !instance_id = Electric.instance_id()
+  !instance_id = Electric.Config.fetch_env!(:instance_id)
   ?"([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})"
   [my instance_id=$1]
 
@@ -47,10 +47,11 @@
   !">> installation_id = #{installation_id}"
   ??>> installation_id = $installation_id
 
-  !Electric.instance_id() == installation_id
+  !instance_id = Electric.Config.fetch_env!(:instance_id)
+  !instance_id == installation_id
   ??false
 
-  !Electric.instance_id() == "$instance_id"
+  !instance_id == "$instance_id"
   ??false
 
 [cleanup]
