@@ -120,14 +120,14 @@ defmodule Electric.Shapes.Consumer do
     {:reply, ref, [], %{state | monitors: [{pid, ref} | monitors]}}
   end
 
-  def handle_call(:stop, _from, state) do
+  def handle_call(:stop_and_clean, _from, state) do
     # Waiter will receive this response if the snapshot wasn't done yet, but
-    # given that this is definitely a termination call, a 409 is appropriate
+    # given that this is definitely a cleanup call, a 409 is appropriate
     # as old shape handle is no longer valid
     state =
       reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
 
-    {:stop, :normal, :ok, state}
+    {:stop, {:shutdown, :cleanup}, :ok, state}
   end
 
   def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
@@ -196,7 +196,7 @@ defmodule Electric.Shapes.Consumer do
       end
 
     state = reply_to_snapshot_waiters(state, {:error, error})
-    {:stop, :normal, state}
+    {:stop, {:shutdown, :cleanup}, state}
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
@@ -235,7 +235,7 @@ defmodule Electric.Shapes.Consumer do
       |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
       |> notify_shape_rotation()
 
-    {:stop, :normal, state}
+    {:stop, {:shutdown, :cleanup}, state}
   end
 
   # Buffer incoming transactions until we know our pg_snapshot
@@ -259,7 +259,7 @@ defmodule Electric.Shapes.Consumer do
   defp handle_txns(txns, state) do
     case Enum.reduce_while(txns, state, &handle_txn/2) do
       {:truncate, state} ->
-        {:stop, {:shutdown, :truncate}, state}
+        {:stop, {:shutdown, :cleanup}, state}
 
       state ->
         {:noreply, [], state}

@@ -350,7 +350,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       for {ref, pid} <- monitors do
         assert_receive {:DOWN, ^ref, :process, ^pid, reason}
-                       when reason in [:shutdown, {:shutdown, :truncate}]
+                       when reason in [:shutdown, {:shutdown, :cleanup}]
       end
     end
 

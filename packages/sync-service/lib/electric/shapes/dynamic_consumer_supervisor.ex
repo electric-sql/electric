@@ -32,7 +32,7 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
         {:error, "no consumer for shape handle #{inspect(shape_handle)}"}
 
       pid when is_pid(pid) ->
-        ConsumerSupervisor.stop(%{
+        ConsumerSupervisor.stop_and_clean(%{
           stack_id: stack_id,
           shape_handle: shape_handle
         })

@@ -381,7 +381,7 @@ defmodule Electric.ShapeCache do
       # clean itself - this is not guaranteed to run in case of an actual exit
       # but provides an additional safeguard
 
-      unsafe_cleanup_shape!(shape_handle, state)
+      Electric.Shapes.ShapeCleaner.ensure_shape_cleanup(shape_handle, state)
     end
 
     :ok
@@ -428,7 +428,7 @@ defmodule Electric.ShapeCache do
           shape_handle
         )
 
-        unsafe_cleanup_shape!(shape_handle, state)
+        Electric.Shapes.ShapeCleaner.ensure_shape_cleanup(shape_handle, state)
 
         Logger.error(
           "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
@@ -453,7 +453,7 @@ defmodule Electric.ShapeCache do
       )
 
       # clean up corrupted data to avoid persisting bad state
-      unsafe_cleanup_shape!(shape_handle, state)
+      Electric.Shapes.ShapeCleaner.ensure_shape_cleanup(shape_handle, state)
       []
   end
 
@@ -484,16 +484,6 @@ defmodule Electric.ShapeCache do
       {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
       {:ok, latest_offset}
     end
-  end
-
-  defp unsafe_cleanup_shape!(shape_handle, state) do
-    # Remove the handle from the shape status
-    state.shape_status.remove_shape(state.shape_status_state, shape_handle)
-
-    # Cleanup the storage for the shape
-    shape_handle
-    |> Electric.ShapeCache.Storage.for_shape(state.storage)
-    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
   end
 
   def get_shape_meta_table(opts),

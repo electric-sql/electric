@@ -128,8 +128,8 @@ defmodule Support.ComponentSetup do
     {:ok, _pid} =
       Electric.Shapes.ShapeCleaner.start_link(
         stack_id: ctx.stack_id,
-        publication_manager: ctx.publication_manager,
-        storage: ctx.storage
+        publication_manager: start_opts[:publication_manager],
+        storage: start_opts[:storage]
       )
 
     {:ok, _pid} = ShapeCache.start_link(start_opts)
