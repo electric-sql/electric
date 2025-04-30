@@ -695,10 +695,26 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def unsafe_cleanup!(%FS{} = opts) do
-    {:ok, _} = File.rm_rf(opts.snapshot_dir)
-    {:ok, _} = File.rm_rf(shape_definition_path(opts))
-    {:ok, _} = File.rm_rf(opts.data_dir)
-    :ok
+    unsafe_cleanup_with_retries!(opts)
+  end
+
+  defp unsafe_cleanup_with_retries!(%FS{} = opts, attempts_left \\ 5) do
+    with {:ok, _} <- File.rm_rf(opts.snapshot_dir),
+         {:ok, _} <- File.rm_rf(shape_definition_path(opts)),
+         {:ok, _} <- File.rm_rf(opts.data_dir) do
+      :ok
+    else
+      # There is a very unlikely but observed scenario where the rm_rf call
+      # tries to delete a directory after having deleted all its files, but
+      # due to some FS race the deletion fails with EEXIST. Very hard to test
+      # and prevent so we mitigate it with arbitrary retries.
+      {:error, :eexist, _} when attempts_left > 0 ->
+        Process.sleep(1)
+        unsafe_cleanup_with_retries!(opts, attempts_left - 1)
+
+      err ->
+        raise "Failed to clean up shape data: #{inspect(err)}"
+    end
   end
 
   defp shape_definition_path(%{data_dir: data_dir} = _opts) do
