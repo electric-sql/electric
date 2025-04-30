@@ -60,7 +60,6 @@ defmodule Electric.Shapes.Api.Encoder.Term do
   @behaviour Electric.Shapes.Api.Encoder
 
   @impl Electric.Shapes.Api.Encoder
-
   def message(message) when is_binary(message) do
     [Jason.decode!(message)]
   end
