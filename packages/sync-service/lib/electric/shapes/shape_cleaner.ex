@@ -71,10 +71,6 @@ defmodule Electric.Shapes.ShapeCleaner do
     {:reply, :ok, state}
   end
 
-  defguardp is_expected_consumer_shutdown?(reason)
-            when reason in [:normal, :killed, :shutdown] or
-                   (is_tuple(reason) and elem(reason, 0) == :shutdown and tuple_size(reason) == 2)
-
   @impl true
   def handle_info({{:consumer_down, shape_handle}, _ref, :process, _pid, reason}, state)
       when not is_expected_consumer_shutdown?(reason) do
@@ -113,6 +109,7 @@ defmodule Electric.Shapes.ShapeCleaner do
   defp unsafe_cleanup_shape!(shape_handle, state) do
     # Remove the handle from the shape status
     {shape_status, shape_status_state} = state.shape_status
+
     shape_status.remove_shape(shape_status_state, shape_handle)
 
     # Cleanup the storage for the shape, asynchronously to avoid
