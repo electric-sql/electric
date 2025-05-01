@@ -19,12 +19,13 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
 
   def cleanup(stack_id, storage_impl, shape_handle) do
     Task.Supervisor.start_child(name(stack_id), fn ->
+      Logger.metadata(shape_handle: shape_handle, stack_id: stack_id)
       cleanup_shape(storage_impl, shape_handle)
     end)
   end
 
   defp cleanup_shape(storage_impl, shape_handle) do
-    Logger.debug("cleaning shape #{inspect(shape_handle)}")
+    Logger.debug("cleaning shape data #{inspect(shape_handle)}")
 
     shape_handle
     |> Storage.for_shape(storage_impl)

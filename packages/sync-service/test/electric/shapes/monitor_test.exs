@@ -89,13 +89,13 @@ defmodule Electric.Shapes.MonitorTest do
     end
   end
 
-  describe "wait_subscriber_termination/2" do
+  describe "wait_subscriber_termination/3" do
     setup [:start_stack_status]
 
     test "sends a message immediately if no subscribers active", %{stack_id: stack_id} = _ctx do
       handle = "some-handle"
-      Monitor.wait_subscriber_termination(stack_id, handle)
-      assert_receive {Monitor, :subscriber_termination, ^handle}, 100
+      Monitor.wait_subscriber_termination(stack_id, handle, {:shutdown, :bored})
+      assert_receive {Monitor, :subscriber_termination, ^handle, {:shutdown, :bored}}, 100
     end
 
     test "sends a message when all subcribers have terminated", %{stack_id: stack_id} = _ctx do
@@ -133,15 +133,85 @@ defmodule Electric.Shapes.MonitorTest do
       assert_receive {:ready, 1}
       assert_receive {:ready, 2}
 
-      Monitor.wait_subscriber_termination(stack_id, handle)
+      Monitor.wait_subscriber_termination(stack_id, handle, :my_reason)
 
       send(subscriber1, :done)
-      refute_receive {Monitor, :subscriber_termination, _handle}, 100
+      refute_receive {Monitor, :subscriber_termination, _handle, _}, 100
       send(subscriber2, :done)
-      assert_receive {Monitor, :subscriber_termination, ^handle}, 100
+      assert_receive {Monitor, :subscriber_termination, ^handle, :my_reason}, 100
     end
 
-    test "cleans up if consumer exits"
+    test "cleans up if consumer exits", %{stack_id: stack_id} = _ctx do
+      handle = "some-handle"
+      parent = self()
+
+      {:ok, consumer} =
+        start_supervised(
+          {Task,
+           fn ->
+             :ok = Monitor.register_consumer(stack_id, handle)
+
+             send(parent, {:ready, :consumer, 1})
+
+             receive do
+               :wait_subscriber ->
+                 :ok = Monitor.wait_subscriber_termination(stack_id, handle, :normal)
+                 send(parent, {:ready, :consumer, 2})
+
+                 receive do
+                   _ -> raise "bye"
+                 end
+             end
+           end},
+          id: {:consumer, 1}
+        )
+
+      {:ok, _subscriber1} =
+        start_supervised(
+          {Task,
+           fn ->
+             :ok = Monitor.register_subscriber(stack_id, handle)
+             send(parent, {:ready, :subscriber, 1})
+
+             receive do
+               _ -> :ok
+             end
+           end},
+          id: {:subscriber, 1}
+        )
+
+      {:ok, _subscriber2} =
+        start_supervised(
+          {Task,
+           fn ->
+             :ok = Monitor.register_subscriber(stack_id, handle)
+             send(parent, {:ready, :subscriber, 2})
+
+             receive do
+               _ -> :ok
+             end
+           end},
+          id: {:subscriber, 2}
+        )
+
+      Process.monitor(consumer)
+
+      assert_receive {:ready, :consumer, 1}
+      assert_receive {:ready, :subscriber, 1}
+      assert_receive {:ready, :subscriber, 2}
+
+      send(consumer, :wait_subscriber)
+
+      assert_receive {:ready, :consumer, 2}
+
+      assert {:ok, [{^consumer, :normal}]} = Monitor.termination_subscribers(stack_id, handle)
+
+      send(consumer, :bye)
+
+      assert_receive {:DOWN, _, :process, ^consumer, _}
+
+      assert {:ok, []} = Monitor.termination_subscribers(stack_id, handle)
+    end
 
     test "is triggered if same reader pid changes shape handle", %{stack_id: stack_id} = _ctx do
       handle1 = "some-handle-1"
@@ -170,9 +240,9 @@ defmodule Electric.Shapes.MonitorTest do
         )
 
       assert_receive :ready, 100
-      Monitor.wait_subscriber_termination(stack_id, handle1)
+      Monitor.wait_subscriber_termination(stack_id, handle1, :my_reason)
       send(subscriber1, {:subscribe, handle2})
-      assert_receive {Monitor, :subscriber_termination, ^handle1}, 100
+      assert_receive {Monitor, :subscriber_termination, ^handle1, :my_reason}, 100
     end
 
     test "is not triggered if same reader pid re-registers under same handle",
@@ -202,9 +272,9 @@ defmodule Electric.Shapes.MonitorTest do
         )
 
       assert_receive :ready, 100
-      Monitor.wait_subscriber_termination(stack_id, handle1)
+      Monitor.wait_subscriber_termination(stack_id, handle1, :my_reason)
       send(subscriber1, {:subscribe, handle1})
-      refute_receive {Monitor, :subscriber_termination, _handle1}, 100
+      refute_receive {Monitor, :subscriber_termination, _handle1, _}, 100
     end
   end
 

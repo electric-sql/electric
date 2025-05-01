@@ -89,27 +89,16 @@ defmodule Electric.ShapeCache.FileStorage do
     }
   end
 
-  defp time(fun, label) do
-    {t, result} = :timer.tc(fun, :millisecond)
-    # dbg(time: [{label, t}])
-    result
-  end
-
   @impl Electric.ShapeCache.Storage
   def start_link(%FS{cubdb_dir: dir, db: db} = opts) do
-    time(
-      fn ->
-        with :ok <- initialise_filesystem(opts) do
-          CubDB.start_link(
-            data_dir: dir,
-            name: db,
-            auto_file_sync: false,
-            hibernate_after: Electric.Config.get_env(:shape_hibernate_after)
-          )
-        end
-      end,
-      :storage_start_link
-    )
+    with :ok <- initialise_filesystem(opts) do
+      CubDB.start_link(
+        data_dir: dir,
+        name: db,
+        auto_file_sync: false,
+        hibernate_after: Electric.Config.get_env(:shape_hibernate_after)
+      )
+    end
   end
 
   defp initialise_filesystem(opts) do
