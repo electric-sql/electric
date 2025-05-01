@@ -170,7 +170,7 @@ defmodule Electric.Shapes.Status do
 
   defp update_counter(stack_id, handle, incr) do
     :ets.update_counter(table(stack_id), :all, incr, {:all, 0})
-    # dbg(total_subscribers(stack_id))
+    # IO.inspect(total_subscribers(stack_id))
     :ets.update_counter(table(stack_id), handle, incr, {handle, 0})
   end
 
@@ -208,7 +208,7 @@ defmodule Electric.Shapes.Status do
 
       [{_, :consumer, handle, _ref}] ->
         try do
-          Logger.warning("Consumer #{inspect(handle)} terminated...")
+          Logger.debug("Consumer #{inspect(handle)} terminated")
           :ets.delete(state.monitor_table, pid)
           state.on_remove.(handle, pid)
 
