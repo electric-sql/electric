@@ -65,7 +65,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp time(fun, label) do
     {t, result} = :timer.tc(fun, :millisecond)
-    # dbg(time: [{label, t}])
+    dbg(time: [{label, t}])
     result
   end
 
@@ -137,13 +137,13 @@ defmodule Electric.Shapes.Consumer do
     # Waiter will receive this response if the snapshot wasn't done yet, but
     # given that this is definitely a cleanup call, a 409 is appropriate
     # as old shape handle is no longer valid
-    state = reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
+    state =
+      time(
+        fn -> reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()}) end,
+        :reply_to_snapshot_waiters
+      )
 
-    request_cleanup(state)
-
-    # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
-    # any race conditions and leftover data
-    # cleanup(state)
+    time(fn -> request_cleanup(state) end, :request_cleanup)
 
     {:reply, :ok, [], state}
   end
@@ -229,12 +229,11 @@ defmodule Electric.Shapes.Consumer do
 
   @impl GenStage
   def handle_info({Electric.Shapes.Status, :subscriber_termination}, state) do
-    dbg(subscribers_terminated: {state.shape_handle})
     {:stop, :normal, state}
   end
 
   def terminate(reason, state) do
-    Logger.warning("Shapes.Consumer terminating with reason: #{inspect(reason)}")
+    Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
 
     state =
       reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})

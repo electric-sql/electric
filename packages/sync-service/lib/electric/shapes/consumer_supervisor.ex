@@ -52,8 +52,11 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     consumer = Electric.Shapes.Consumer.name(stack_id, shape_handle)
 
     case GenServer.whereis(consumer) do
-      nil -> Supervisor.stop(name(stack_id, shape_handle))
-      consumer_pid when is_pid(consumer_pid) -> GenServer.call(consumer_pid, :clean_and_stop)
+      nil ->
+        Supervisor.stop(name(stack_id, shape_handle))
+
+      consumer_pid when is_pid(consumer_pid) ->
+        GenServer.call(consumer_pid, :clean_and_stop, 20_000)
     end
   end
 

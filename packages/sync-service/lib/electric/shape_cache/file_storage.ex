@@ -571,7 +571,6 @@ defmodule Electric.ShapeCache.FileStorage do
         open_snapshot_chunk(opts, chunk_num, attempts_left - 1)
 
       {:error, reason} ->
-        dbg(snapshot_chunk_path(opts, chunk_num))
         raise IO.StreamError, reason: reason
     end
   end
@@ -700,7 +699,6 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%FS{} = opts) do
-    dbg(cleanup!: opts.shape_handle)
     # can't delete the data_dir here because the CubDb instance is still running,
     # and trying to delete the parent directory will fail since the files inside
     # are still in use

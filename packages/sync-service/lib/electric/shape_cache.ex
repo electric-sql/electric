@@ -106,7 +106,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, :infinity)
+      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, 20_000)
     end
   end
 
@@ -123,7 +123,7 @@ defmodule Electric.ShapeCache do
   @spec clean_shape(shape_handle(), Access.t()) :: :ok
   def clean_shape(shape_handle, opts) do
     server = Access.get(opts, :server, name(opts))
-    GenStage.call(server, {:clean, shape_handle})
+    GenStage.call(server, {:clean, shape_handle}, 20_000)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -186,7 +186,7 @@ defmodule Electric.ShapeCache do
       true
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:wait_shape_handle, shape_handle}, :infinity)
+      GenStage.call(server, {:wait_shape_handle, shape_handle}, 20_000)
     end
   end
 

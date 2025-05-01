@@ -24,7 +24,7 @@ defmodule Electric.Shapes.Status.CleanupTaskSupervisor do
   end
 
   defp cleanup_shape(storage_impl, shape_handle) do
-    Logger.warning("cleaning shape #{inspect(shape_handle)}")
+    Logger.debug("cleaning shape #{inspect(shape_handle)}")
 
     shape_handle
     |> Storage.for_shape(storage_impl)
