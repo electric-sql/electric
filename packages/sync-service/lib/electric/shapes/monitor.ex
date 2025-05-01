@@ -39,6 +39,10 @@ defmodule Electric.Shapes.Monitor do
     MonitorRegistry.wait_subscriber_termination(stack_id, shape_handle, pid)
   end
 
+  def termination_subscribers(stack_id, shape_handle) do
+    MonitorRegistry.termination_subscribers(stack_id, shape_handle)
+  end
+
   def register_cleanup(stack_id, shape_handle, wait_pid, pid \\ self()) do
     MonitorRegistry.register_cleanup(stack_id, shape_handle, wait_pid, pid)
   end
