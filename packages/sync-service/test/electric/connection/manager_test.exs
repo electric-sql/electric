@@ -82,21 +82,26 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
 
     test "reports status=active when all connection processes are running", %{stack_id: stack_id} do
-      assert_receive {:stack_status, _, :waiting_for_connection_lock}
-      assert_receive {:stack_status, _, :connection_lock_acquired}
-      assert_receive {:stack_status, _, :ready}
-      StatusMonitor.wait_until_active(stack_id, 1000)
-      assert StatusMonitor.status(stack_id) == :active
+      wait_until_active(stack_id)
+    end
+
+    test "backtracks the status when the replication client goes down", %{stack_id: stack_id} do
+      wait_until_active(stack_id)
+
+      monitor = monitor_replication_client(stack_id)
+
+      :ok = GenServer.stop(Electric.Postgres.ReplicationClient.name(stack_id), :shutdown)
+
+      assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
     end
 
     test "resets the status when connection manager goes down", %{stack_id: stack_id} = ctx do
-      assert_receive {:stack_status, _, :waiting_for_connection_lock}
-      assert_receive {:stack_status, _, :connection_lock_acquired}
-      assert_receive {:stack_status, _, :ready}
-      StatusMonitor.wait_until_active(stack_id, 1000)
-      assert StatusMonitor.status(stack_id) == :active
+      wait_until_active(stack_id)
 
-      # Start a lock process so that when ConnectionManager exits it is not able to restore its readiness immediately.
+      # Start another lock process so that when ConnectionManager exits it is not able to restore its readiness immediately.
       lock_opts = [
         connection_opts: ctx.connection_opts,
         connection_manager: self(),
@@ -106,11 +111,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       Electric.Postgres.LockConnection.start_link(lock_opts)
 
-      monitor =
-        stack_id
-        |> Electric.Postgres.ReplicationClient.name()
-        |> GenServer.whereis()
-        |> Process.monitor()
+      monitor = monitor_replication_client(stack_id)
 
       :ok =
         Supervisor.terminate_child(
@@ -119,10 +120,24 @@ defmodule Electric.Connection.ConnectionManagerTest do
         )
 
       assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
-
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       assert StatusMonitor.status(stack_id) == :waiting
     end
+  end
+
+  defp wait_until_active(stack_id) do
+    assert_receive {:stack_status, _, :waiting_for_connection_lock}
+    assert_receive {:stack_status, _, :connection_lock_acquired}
+    assert_receive {:stack_status, _, :ready}
+    StatusMonitor.wait_until_active(stack_id, 1000)
+    assert StatusMonitor.status(stack_id) == :active
+  end
+
+  defp monitor_replication_client(stack_id) do
+    stack_id
+    |> Electric.Postgres.ReplicationClient.name()
+    |> GenServer.whereis()
+    |> Process.monitor()
   end
 end

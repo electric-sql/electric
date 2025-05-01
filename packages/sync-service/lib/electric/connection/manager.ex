@@ -811,7 +811,7 @@ defmodule Electric.Connection.Manager do
     message = error.message
     connection_mode = set_connection_status_error(message, state)
 
-    extended_message = message <> pg_error_extra_info(Map.get(error.original_error, :postgres))
+    extended_message = message <> pg_error_extra_info(error.original_error)
 
     Logger.warning(
       "Database connection in #{connection_mode} mode failed: #{extended_message}\nRetrying..."
@@ -867,9 +867,7 @@ defmodule Electric.Connection.Manager do
     "regular"
   end
 
-  defp pg_error_extra_info(nil), do: ""
-
-  defp pg_error_extra_info(pg_error) do
+  defp pg_error_extra_info(%Postgrex.Error{postgres: pg_error}) do
     extra_info_items =
       [
         {"PG code:", Map.get(pg_error, :pg_code)},
@@ -884,6 +882,8 @@ defmodule Electric.Connection.Manager do
       ""
     end
   end
+
+  defp pg_error_extra_info(_), do: ""
 
   defp drop_slot_and_restart(
          %DbConnectionError{type: :replication_slot_invalidated} = error,
