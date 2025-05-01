@@ -270,12 +270,6 @@ defmodule Electric.ShapeCache do
     {:noreply, state}
   end
 
-  defp time(fun, label) do
-    {t, result} = :timer.tc(fun, :millisecond)
-    # dbg(time: [{label, t}])
-    result
-  end
-
   @impl GenServer
   def handle_call(
         {:create_or_wait_shape_handle, shape, otel_ctx},
@@ -286,11 +280,9 @@ defmodule Electric.ShapeCache do
       if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
         {shape_state, state}
       else
-        {:ok, shape_handle} =
-          time(fn -> shape_status.add_shape(state.shape_status_state, shape) end, :add_shape)
+        {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
 
-        {:ok, latest_offset} =
-          time(fn -> start_shape(shape_handle, shape, state, otel_ctx) end, :start_shape)
+        {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
 
         send(self(), :maybe_expire_shapes)
         {{shape_handle, latest_offset}, state}
@@ -380,25 +372,17 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_handle) do
-    try do
-      # remove the shape immediately so new clients are redirected elsewhere
-      remove_shape(shape_handle, state)
+    # remove the shape immediately so new clients are redirected elsewhere
+    deregister_shape(shape_handle, state)
 
-      # Rather than just stop here, tell the consumer to stop
-      # using the shape.status active connection monitor
-      # to wait for clients to finish
-      Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-        state.consumer_supervisor,
-        state.stack_id,
-        shape_handle
-      )
-    after
-      # another failsafe for ensuring data is cleaned if consumer fails to
-      # clean itself - this is not guaranteed to run in case of an actual exit
-      # but provides an additional safeguard
-
-      unsafe_cleanup_shape!(shape_handle, state)
-    end
+    # Rather than just stop here, tell the consumer to stop
+    # using the shape.status active connection monitor
+    # to wait for clients to finish
+    Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
+      state.consumer_supervisor,
+      state.stack_id,
+      shape_handle
+    )
 
     :ok
   end
@@ -440,13 +424,7 @@ defmodule Electric.ShapeCache do
         lsn
 
       nil ->
-        Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-          state.consumer_supervisor,
-          state.stack_id,
-          shape_handle
-        )
-
-        unsafe_cleanup_shape!(shape_handle, state)
+        clean_up_shape(state, shape_handle)
 
         Logger.error(
           "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
@@ -471,55 +449,37 @@ defmodule Electric.ShapeCache do
       )
 
       # clean up corrupted data to avoid persisting bad state
-      unsafe_cleanup_shape!(shape_handle, state)
+      clean_up_shape(state, shape_handle)
       []
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
     with {:ok, _pid} <-
-           time(
-             fn ->
-               Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
-                 state.consumer_supervisor,
-                 stack_id: state.stack_id,
-                 inspector: state.inspector,
-                 shape_handle: shape_handle,
-                 shape: shape,
-                 shape_status: {state.shape_status, state.shape_status_state},
-                 storage: state.storage,
-                 publication_manager: state.publication_manager,
-                 chunk_bytes_threshold: state.chunk_bytes_threshold,
-                 log_producer: state.log_producer,
-                 registry: state.registry,
-                 db_pool: state.db_pool,
-                 run_with_conn_fn: state.run_with_conn_fn,
-                 create_snapshot_fn: state.create_snapshot_fn,
-                 otel_ctx: otel_ctx
-               )
-             end,
-             :start_shape_consumer
+           Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
+             state.consumer_supervisor,
+             stack_id: state.stack_id,
+             inspector: state.inspector,
+             shape_handle: shape_handle,
+             shape: shape,
+             shape_status: {state.shape_status, state.shape_status_state},
+             storage: state.storage,
+             publication_manager: state.publication_manager,
+             chunk_bytes_threshold: state.chunk_bytes_threshold,
+             log_producer: state.log_producer,
+             registry: state.registry,
+             db_pool: state.db_pool,
+             run_with_conn_fn: state.run_with_conn_fn,
+             create_snapshot_fn: state.create_snapshot_fn,
+             otel_ctx: otel_ctx
            ) do
       consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
 
-      {:ok, latest_offset} =
-        time(fn -> Shapes.Consumer.initial_state(consumer) end, :initial_state)
-
-      {:ok, latest_offset}
+      {:ok, _latest_offset} = Shapes.Consumer.initial_state(consumer)
     end
   end
 
-  defp remove_shape(shape_handle, state) do
+  defp deregister_shape(shape_handle, state) do
     state.shape_status.remove_shape(state.shape_status_state, shape_handle)
-  end
-
-  defp unsafe_cleanup_shape!(shape_handle, state) do
-    # Remove the handle from the shape status
-    remove_shape(shape_handle, state)
-
-    # Cleanup the storage for the shape
-    # shape_handle
-    # |> Electric.ShapeCache.Storage.for_shape(state.storage)
-    # |> Electric.ShapeCache.Storage.unsafe_cleanup!()
   end
 
   def get_shape_meta_table(opts),
