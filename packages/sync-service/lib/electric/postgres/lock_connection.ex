@@ -62,8 +62,7 @@ defmodule Electric.Postgres.LockConnection do
       connection_manager: opts.connection_manager,
       lock_name: opts.lock_name,
       lock_acquired: false,
-      backoff: {:backoff.init(1000, 10_000), nil},
-      stack_id: opts.stack_id
+      backoff: {:backoff.init(1000, 10_000), nil}
     }
 
     {:ok, state}
