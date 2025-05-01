@@ -30,6 +30,8 @@ defmodule Electric.StackSupervisor do
   """
 
   use Supervisor,
+    # WARNING: in stand-alone mode, the child spec options below (e.g. `:restart`) are overridden by Application.
+    #
     # Setting `restart: :transient` is required for passing the `:auto_shutdown` to `Supervisor.init()` below.
     restart: :transient
 
