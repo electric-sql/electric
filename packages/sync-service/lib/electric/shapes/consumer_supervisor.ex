@@ -37,6 +37,10 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     name(stack_id, shape_handle)
   end
 
+  def whereis(stack_id, shape_handle) do
+    GenServer.whereis(name(stack_id, shape_handle))
+  end
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       config = Map.new(opts)
@@ -56,7 +60,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
         Supervisor.stop(name(stack_id, shape_handle))
 
       consumer_pid when is_pid(consumer_pid) ->
-        GenServer.call(consumer_pid, :clean_and_stop, 20_000)
+        GenServer.call(consumer_pid, :clean_and_stop, 30_000)
     end
   end
 

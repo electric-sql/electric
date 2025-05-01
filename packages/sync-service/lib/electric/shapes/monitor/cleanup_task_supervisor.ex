@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Status.CleanupTaskSupervisor do
+defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   require Logger
 
   alias Electric.ShapeCache.Storage
