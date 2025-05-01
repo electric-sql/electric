@@ -334,8 +334,7 @@ defmodule Electric.StackSupervisor do
          name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
         {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
         {Electric.Connection.Supervisor, new_connection_manager_opts},
-        {Electric.Shapes.Status, stack_id: stack_id, storage: storage},
-        {Electric.Shapes.Status.CleanupTaskSupervisor, stack_id: stack_id}
+        {Electric.Shapes.Monitor, stack_id: stack_id, storage: storage}
       ] ++ telemetry_children
 
     # Store the telemetry span attributes in the persistent term for this stack
