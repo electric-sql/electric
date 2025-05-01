@@ -121,6 +121,9 @@ defmodule Electric.Postgres.ReplicationClient do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
+  # This is a send() and not a call() to prevent the caller (the Connection.Manager process) from
+  # getting blocked when the replication connection is blocked some replication slot condition
+  # that doesn't let it start streaming immediately.
   def start_streaming(client) do
     send(client, :start_streaming)
   end
@@ -169,18 +172,14 @@ defmodule Electric.Postgres.ReplicationClient do
   @impl true
   def handle_connect(state) do
     %State{state | step: :connected}
-    |> notify_connection_open()
+    |> notify_connection_opened()
     |> ConnectionSetup.start()
   end
 
   @impl true
   def handle_result(result_list_or_error, state) do
     {step, return_val} = ConnectionSetup.process_query_result(result_list_or_error, state)
-
-    if step in [:ready_to_stream, :streaming] do
-      notify_connection_ready_for_streaming(state)
-    end
-
+    if step == :ready_to_stream, do: notify_ready_to_stream(state)
     return_val
   end
 
@@ -203,9 +202,26 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply, state}
   end
 
+  # The implementation of Postgrex.ReplicationConnection doesn't give us a convenient way to
+  # check whether the START_REPLICATION_SLOT statement succeeded before switching the
+  # connection into streaming mode. Returning {:query, "START_REPLICATION_SLOT ...", state}
+  # works fine when the query result is an error: it is then passed to the handle_result()
+  # callback. But if streaming starts without issues, a function clause error is encountered
+  # inside Postgrex.ReplicationConnection because it expects the connection to already have
+  # been switched into streaming mode by returning {:stream, "START_REPLICATION_SLOT ...", [], state}.
+  #
+  # Hence this function clause of `handle_data()` that notifies the connection manager about
+  # successful streaming start as soon as it receives the first replication message from
+  # Postgres.
   @impl true
   @spec handle_data(binary(), State.t()) ::
           {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
+  def handle_data(data, %State{step: :start_streaming} = state) do
+    state = %State{state | step: :streaming}
+    notify_seen_first_message(state)
+    handle_data(data, state)
+  end
+
   def handle_data(
         <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
         %State{stack_id: stack_id} = state
@@ -350,18 +366,20 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp update_applied_wal(state, wal) when is_number(wal), do: state
 
-  defp notify_connection_open(%State{connection_manager: connection_manager} = state) do
-    :ok =
-      Electric.Connection.Manager.replication_connection_initializing(connection_manager)
-
+  defp notify_connection_opened(%State{connection_manager: connection_manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_started(connection_manager)
     state
   end
 
-  defp notify_connection_ready_for_streaming(
-         %State{connection_manager: connection_manager} = state
-       ) do
-    Electric.StatusMonitor.mark_replication_client_ready(state.stack_id, self())
-    :ok = Electric.Connection.Manager.replication_connection_established(connection_manager)
+  defp notify_ready_to_stream(%State{connection_manager: connection_manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_ready_to_stream(connection_manager)
+    state
+  end
+
+  defp notify_seen_first_message(%State{connection_manager: connection_manager} = state) do
+    :ok =
+      Electric.Connection.Manager.replication_client_streamed_first_message(connection_manager)
+
     state
   end
 end

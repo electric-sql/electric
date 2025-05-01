@@ -107,14 +107,6 @@ defmodule Electric.Connection.Supervisor do
         restart: :temporary
       )
 
-    with {:ok, pid} <- Supervisor.start_child(name(opts), child_spec) do
-      Electric.StackSupervisor.dispatch_stack_event(
-        opts[:stack_events_registry],
-        stack_id,
-        :ready
-      )
-
-      {:ok, pid}
-    end
+    Supervisor.start_child(name(opts), child_spec)
   end
 end

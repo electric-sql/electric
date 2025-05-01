@@ -27,8 +27,55 @@ defmodule Electric.Connection.Manager do
       Supervisor.start_link(children, strategy: :one_for_one)
   """
 
+  # We model the connection manager as a state machine with 2 levels of state. On the 1st
+  # level, it can be in one of several phases:
+  #
+  #   - :connection_setup
+  #   - :running
+  #   - :restarting_replication_client
+  #
+  # Connection manager starts in the :connection_setup phase and moves into the :running phase
+  # after all processes have been started and the replication client is given the command to
+  # start streaming.
+  #
+  # If at any point after that the replication client process exits, connection manager
+  # transitions into the :restarting_replication_client phase and tries to restart the client.
+  #
+  # If any other connection process exits, connection manager itself will shut down to start
+  # from scratch, as there could be too many failure states to address each one individually.
+  #
+  # The 2nd level of the state machine splits the current phase into a series of steps which
+  # the process goes through until it finishes the connection setup phase and transitions into
+  # the running phase.
+  #
+  # Function clauses match on the current phase and step as a way to both assert on the current
+  # state as well as make the code more self-documenting.
+
   defmodule State do
+    @type phase :: :connection_setup | :running | :restarting_replication_client
+    @type step ::
+            {:start_lock_connection, nil}
+            | {:start_lock_connection, :connecting}
+            | {:start_lock_connection, :acquiring_lock}
+            # Steps that start with {:start_replication_client, ...} are pertinent to both the
+            # :connection_setup phase and the :restarting_replication_client phase
+            | {:start_replication_client, nil}
+            | {:start_replication_client, :connecting}
+            | {:start_replication_client, :configuring_connection}
+            | :start_connection_pool
+            | :start_shapes_supervisor
+            | {:start_replication_client, :start_streaming}
+            # Steps of the :running phase:
+            | :waiting_for_streaming_confirmation
+            | :streaming
+
     defstruct [
+      # The phase the connection manager is in. It defines which actions are taken if any of
+      # the connection processes exit.
+      :current_phase,
+      # The current step defines what the connection manager does in the current phase and
+      # which step will be taken next.
+      :current_step,
       # Database connection opts to be passed to Postgrex modules
       :connection_opts,
       # Replication options specific to `Electric.Postgres.ReplicationClient`
@@ -46,18 +93,18 @@ defmodule Electric.Connection.Manager do
       :shape_cache_opts,
       # PID of the replication client
       :replication_client_pid,
+      # Timer reference for the periodic replication client status check
+      :replication_client_timer,
       # PID of the Postgres connection lock
       :lock_connection_pid,
+      # Timer reference for the periodic lock status check
+      :lock_connection_timer,
       # PID of the database connection pool
       :pool_pid,
       # PID of the shape log collector
       :shape_log_collector_pid,
       # Backoff term used for reconnection with exponential back-off
       :connection_backoff,
-      # Flag indicating whether the lock on the replication has been acquired
-      :pg_lock_acquired,
-      # This flag is set to true when the replication connection completes its setup procedure.
-      :replication_connection_established,
       # PostgreSQL server version
       :pg_version,
       # PostgreSQL system identifier
@@ -70,8 +117,7 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       :persistent_kv,
-      drop_slot_requested: false,
-      monitoring_started?: false
+      drop_slot_requested: false
     ]
   end
 
@@ -94,10 +140,7 @@ defmodule Electric.Connection.Manager do
 
   @type options :: [option]
 
-  @connection_status_logging_interval 10_000
-  @replication_mode "replication"
-  @regular_mode "regular"
-  @lock_mode "lock_connection"
+  @connection_status_check_interval 10_000
 
   def child_spec(init_arg) do
     %{
@@ -130,39 +173,43 @@ defmodule Electric.Connection.Manager do
     name(Access.fetch!(opts, :stack_id))
   end
 
-  @doc """
-  Returns the version of the PostgreSQL server.
-  """
-  @spec get_pg_version(GenServer.server()) :: integer()
-  def get_pg_version(server) do
-    GenServer.call(server, :get_pg_version)
+  def drop_replication_slot_on_stop(manager) do
+    GenServer.cast(manager, :drop_replication_slot_on_stop)
   end
 
-  def drop_replication_slot_on_stop(server) do
-    GenServer.call(server, :drop_replication_slot_on_stop)
+  def lock_connection_started(manager) do
+    GenServer.cast(manager, :lock_connection_started)
   end
 
-  def exclusive_connection_lock_acquired(server) do
-    GenServer.cast(server, :exclusive_connection_lock_acquired)
+  def exclusive_connection_lock_acquisition_failed(manager, error) do
+    GenServer.cast(manager, {:exclusive_connection_lock_acquisition_failed, error})
   end
 
-  def replication_connection_initializing(server) do
-    GenServer.cast(server, :replication_connection_initializing)
+  def exclusive_connection_lock_acquired(manager) do
+    GenServer.cast(manager, :exclusive_connection_lock_acquired)
   end
 
-  def replication_connection_established(server) do
-    GenServer.cast(server, :replication_connection_established)
+  def replication_client_started(manager) do
+    GenServer.cast(manager, :replication_client_started)
   end
 
-  def pg_info_looked_up(server, pg_info) do
-    GenServer.cast(server, {:pg_info_looked_up, pg_info})
+  def replication_client_ready_to_stream(manager) do
+    GenServer.cast(manager, :replication_client_ready_to_stream)
+  end
+
+  def replication_client_streamed_first_message(manager) do
+    GenServer.cast(manager, :replication_client_streamed_first_message)
+  end
+
+  def pg_info_looked_up(manager, pg_info) do
+    GenServer.cast(manager, {:pg_info_looked_up, pg_info})
   end
 
   @impl true
   def init(opts) do
-    # Because child processes are started via `start_link()` functions and due to how Postgrex
-    # (mis)manages connection errors, we have to trap exists in the manager process to
-    # implement our custom error handling logic.
+    # Connection processes that the manager starts all initialize asynchronously and so the way
+    # the report errors back to the manager process is via exit signals. To keep the manager
+    # process alive and able to correct those errors, it has to trap exits.
     Process.flag(:trap_exit, true)
 
     Process.set_label({:connection_manager, opts[:stack_id]})
@@ -175,11 +222,11 @@ defmodule Electric.Connection.Manager do
 
     state =
       %State{
+        current_phase: :connection_setup,
+        current_step: {:start_lock_connection, nil},
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
-        pg_lock_acquired: false,
-        replication_connection_established: false,
         connection_backoff: {ConnectionBackoff.init(1000, 10_000), nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
@@ -226,149 +273,252 @@ defmodule Electric.Connection.Manager do
   end
 
   @impl true
-  def handle_call(:get_pg_version, _from, %State{pg_version: pg_version} = state) do
-    # If we haven't queried the PG version by the time it is requested, that's a fatal error.
-    false = is_nil(pg_version)
-    {:reply, pg_version, state}
-  end
-
-  def handle_call(:drop_replication_slot_on_stop, _from, state) do
-    {:reply, :ok, %State{state | drop_slot_requested: true}}
-  end
-
-  @impl true
-  def handle_continue(:start_lock_connection, %State{lock_connection_pid: nil} = state) do
+  def handle_continue(
+        :start_lock_connection,
+        %State{
+          current_phase: :connection_setup,
+          current_step: {:start_lock_connection, _},
+          lock_connection_pid: nil
+        } = state
+      ) do
     opts = [
-      connection_opts: connection_opts(state),
+      connection_opts: connection_opts(nil, state),
       connection_manager: self(),
       lock_name: Keyword.fetch!(state.replication_opts, :slot_name),
       stack_id: state.stack_id
     ]
 
-    case start_lock_connection(opts) do
-      {:ok, pid, connection_opts} ->
-        state =
-          %State{state | lock_connection_pid: pid}
-          |> mark_connection_succeeded()
-          |> update_connection_opts(connection_opts)
+    # The lock connection process starts up quickly and then tries to open a database
+    # connection asynchronously. The manager will be notified about the lock connection's
+    # progress via the :lock_connection_started and :exclusive_connection_lock_acquired casts.
+    {:ok, pid} = Electric.Postgres.LockConnection.start_link(opts)
 
-        dispatch_stack_event(:waiting_for_connection_lock, state)
-        schedule_periodic_connection_status_log(:log_lock_connection_status)
+    state = %State{
+      state
+      | lock_connection_pid: pid,
+        current_step: {:start_lock_connection, :connecting}
+    }
 
-        {:noreply, state}
-
-      {:error, reason} ->
-        handle_connection_error(reason, state, @lock_mode)
-    end
+    {:noreply, state}
   end
 
   def handle_continue(
         :start_replication_client,
-        %State{replication_connection_established: false} = state
-      ) do
+        %State{
+          current_phase: phase,
+          current_step: {:start_replication_client, _},
+          replication_client_pid: nil
+        } = state
+      )
+      when phase in [:connection_setup, :restarting_replication_client] do
     opts = [
       replication_opts: replication_opts(state),
       connection_manager: self(),
       stack_id: state.stack_id
     ]
 
-    # This function might be called multiple times due to the possibility of the noSSL
-    # fallback. We want to do some of the steps on the first connection attempt only.
-    first_time? = is_nil(state.replication_client_pid)
+    action =
+      case phase do
+        :connection_setup -> "Starting"
+        :restarting_replication_client -> "Restarting"
+      end
 
-    if first_time?, do: Logger.debug("Starting replication client for stack #{state.stack_id}")
+    Logger.debug("#{action} replication client for stack #{state.stack_id}")
 
-    case Electric.Postgres.ReplicationClient.start_link(opts) do
-      {:ok, pid} ->
-        state = %State{state | replication_client_pid: pid}
+    # The replication client starts up quickly and then proceeds to asynchronously opening a
+    # replication connection to the database and configuring it.
+    # The manager will be notified about the replication client's progress via the
+    # :replication_client_started and :replication_client_ready_to_stream casts.
+    # If configured to start streaming immediately, the :replication_client_streamed_first_message
+    # cast would follow soon afterwards.
+    {:ok, pid} = Electric.Postgres.ReplicationClient.start_link(opts)
 
-        if first_time?,
-          do: schedule_periodic_connection_status_log(:log_replication_connection_status)
+    state = %State{
+      state
+      | replication_client_pid: pid,
+        current_step: {:start_replication_client, :connecting}
+    }
 
-        {:noreply, state}
-
-      {:error, reason} ->
-        handle_connection_error(reason, state, @replication_mode)
-    end
+    {:noreply, state}
   end
 
-  def handle_continue(:start_connection_pool, state) do
-    case start_connection_pool(connection_opts(state), state.pool_opts) do
-      {:ok, pool_pid} ->
-        StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
+  def handle_continue(
+        :start_connection_pool,
+        %State{
+          current_phase: :connection_setup,
+          current_step: :start_connection_pool,
+          pool_pid: nil
+        } = state
+      ) do
+    # Use default backoff strategy for connections to prevent pool from shutting down
+    # in the case of a connection error. Deleting a shape while its still generating
+    # its snapshot from the db can trigger this as the snapshot process and the storage
+    # process are both terminated when the shape is removed.
+    #
+    # See https://github.com/electric-sql/electric/issues/1554
+    conn_opts = connection_opts(nil, state) |> Electric.Utils.deobfuscate_password()
 
-        state = mark_connection_succeeded(state)
-        # Checking the timeline continuity to see if we need to purge all shapes persisted so far
-        # and reset any replication related persistent state
-        timeline_changed? =
-          Electric.Timeline.check(
-            {state.pg_system_identifier, state.pg_timeline_id},
-            state.timeline_opts
-          ) == :timeline_changed
+    {:ok, pool_pid} =
+      Postgrex.start_link(
+        state.pool_opts ++
+          [
+            backoff_type: :exp,
+            max_restarts: 3,
+            max_seconds: 5,
+            # Assume the manager connection might be pooled, so use unnamed prepared
+            # statements to avoid issues with the pooler
+            #
+            # See https://hexdocs.pm/postgrex/0.19.3/readme.html#pgbouncer
+            prepare: :unnamed
+          ] ++ conn_opts
+      )
 
-        shape_cache_opts =
-          state.shape_cache_opts
-          |> Keyword.put(:purge_all_shapes?, timeline_changed?)
+    # NOTE(alco): We're jumping ahead of ourselves here a bit because at this point we don't
+    # yet have a confirmation that the connection pool has succeeded in opening a database
+    # connection. But since we already have a lock connection and a replication connection
+    # open, it's likely the connection pool will also succeed.
+    Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
+    state = mark_connection_succeeded(state)
 
-        if timeline_changed? do
-          Electric.Replication.PersistentReplicationState.reset(
-            stack_id: state.stack_id,
-            persistent_kv: state.persistent_kv
-          )
+    state = %State{state | pool_pid: pool_pid, current_step: :start_shapes_supervisor}
+    {:noreply, state, {:continue, :start_shapes_supervisor}}
+  end
 
-          dispatch_stack_event(
-            {:database_id_or_timeline_changed,
-             %{
-               message:
-                 "Purging shape logs from disk. Clients will refetch shape data automatically."
-             }},
-            state
-          )
-        end
+  def handle_continue(
+        :start_shapes_supervisor,
+        %State{
+          current_phase: :connection_setup,
+          current_step: :start_shapes_supervisor,
+          shape_log_collector_pid: nil
+        } = state
+      ) do
+    # Checking the timeline continuity to see if we need to purge all shapes persisted so far
+    # and reset any replication related persistent state
+    timeline_changed? =
+      Electric.Timeline.check(
+        {state.pg_system_identifier, state.pg_timeline_id},
+        state.timeline_opts
+      ) == :timeline_changed
 
-        shapes_sup_pid =
-          case Electric.Connection.Supervisor.start_shapes_supervisor(
-                 stack_id: state.stack_id,
-                 shape_cache_opts: shape_cache_opts,
-                 pool_opts: state.pool_opts,
-                 replication_opts: state.replication_opts,
-                 stack_events_registry: state.stack_events_registry,
-                 tweaks: state.tweaks,
-                 persistent_kv: state.persistent_kv
-               ) do
-            {:ok, shapes_sup_pid} ->
-              shapes_sup_pid
+    shape_cache_opts =
+      state.shape_cache_opts
+      |> Keyword.put(:purge_all_shapes?, timeline_changed?)
 
-            {:error, reason} ->
-              Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
-              exit(reason)
-          end
+    if timeline_changed? do
+      Electric.Replication.PersistentReplicationState.reset(
+        stack_id: state.stack_id,
+        persistent_kv: state.persistent_kv
+      )
 
-        # Everything is ready to start accepting and processing logical messages from Postgres.
-        Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
-
-        # Remember the shape log collector pid for later because we want to tie the replication
-        # client's lifetime to it.
-        log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
-        Process.monitor(log_collector_pid)
-
-        state = %State{
-          state
-          | pool_pid: pool_pid,
-            shape_log_collector_pid: log_collector_pid,
-            monitoring_started?: true
-        }
-
-        {:noreply, state}
-
-      {:error, reason} ->
-        handle_connection_error(reason, state, @regular_mode)
+      dispatch_stack_event(
+        {:database_id_or_timeline_changed,
+         %{
+           message: "Purging shape logs from disk. Clients will refetch shape data automatically."
+         }},
+        state
+      )
     end
+
+    shapes_sup_pid =
+      case Electric.Connection.Supervisor.start_shapes_supervisor(
+             stack_id: state.stack_id,
+             shape_cache_opts: shape_cache_opts,
+             pool_opts: state.pool_opts,
+             replication_opts: state.replication_opts,
+             tweaks: state.tweaks,
+             persistent_kv: state.persistent_kv
+           ) do
+        {:ok, shapes_sup_pid} ->
+          shapes_sup_pid
+
+        {:error, reason} ->
+          Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+          exit(reason)
+      end
+
+    dispatch_stack_event(:ready, state)
+
+    # Remember the shape log collector pid for later because we want to tie the replication
+    # client's lifetime to it.
+    log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
+    Process.monitor(log_collector_pid)
+
+    state = %State{
+      state
+      | shape_log_collector_pid: log_collector_pid,
+        current_step: {:start_replication_client, :start_streaming}
+    }
+
+    {:noreply, state, {:continue, :start_streaming}}
+  end
+
+  def handle_continue(
+        :start_streaming,
+        %State{
+          current_phase: phase,
+          current_step: {:start_replication_client, :start_streaming}
+        } = state
+      )
+      when phase in [:connection_setup, :restarting_replication_client] do
+    # Everything is ready to start accepting and processing logical messages from Postgres.
+    Logger.info("Starting replication from postgres")
+    Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
+
+    state = %State{
+      state
+      | current_phase: :running,
+        current_step: :waiting_for_streaming_confirmation
+    }
+
+    {:noreply, state}
   end
 
   @impl true
   def handle_info(
-        {:timeout, tref, step},
+        {:timeout, tref, {:check_status, :lock_connection}},
+        %State{
+          lock_connection_timer: tref,
+          current_phase: :connection_setup,
+          current_step: {:start_lock_connection, :acquiring_lock}
+        } = state
+      ) do
+    Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
+    tref = schedule_periodic_connection_status_check(:lock_connection)
+    state = %State{state | lock_connection_timer: tref}
+    {:noreply, state}
+  end
+
+  def handle_info(
+        {:timeout, tref, {:check_status, :replication_client}},
+        %State{
+          replication_client_timer: tref,
+          current_phase: phase,
+          current_step: {:start_replication_client, :configuring_connection}
+        } = state
+      )
+      when phase in [:connection_setup, :restarting_replication_client] do
+    Logger.warning(fn ->
+      "Waiting for the replication connection setup to complete... " <>
+        "Check that you don't have pending transactions in the database. " <>
+        "Electric has to wait for all pending transactions to commit or rollback " <>
+        "before it can create the replication slot."
+    end)
+
+    tref = schedule_periodic_connection_status_check(:replication_client)
+    state = %State{state | replication_client_timer: tref}
+    {:noreply, state}
+  end
+
+  def handle_info({:timeout, tref, {:check_status, _}}, state) do
+    # The connection status must have changed after the last schedule_periodic_connection_status_check()
+    # call and before this callback has been invoked. Or a new timer has been created, so this
+    # one needs to lapse without scheduling another tick.
+    state = nillify_timer(state, tref)
+    {:noreply, state}
+  end
+
+  def handle_info(
+        {:timeout, tref, {:retry_connection, step}},
         %State{connection_backoff: {conn_backoff, tref}} = state
       ) do
     state = %State{state | connection_backoff: {conn_backoff, nil}}
@@ -379,60 +529,79 @@ defmodule Electric.Connection.Manager do
   def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
   def handle_info({:EXIT, _, {:shutdown, _}}, state), do: {:noreply, state}
 
-  # The replication client failed to establish its database connection.
-  def handle_info(
-        {:EXIT, pid, signal},
-        %State{replication_client_pid: pid, replication_connection_established: false} = state
-      ) do
-    reason = strip_exit_signal_stacktrace(signal)
-    conn_opts = Keyword.fetch!(replication_opts(state), :connection_opts)
+  # A process exited as it was trying to open a database connection.
+  def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
+    # Try repairing the connection opts and try connecting again. If we're already using noSSL
+    # and IPv4, the error will be propagated to a `shutdown_or_reconnect()` function call
+    # further down below.
+    error = strip_exit_signal_stacktrace(reason)
+    state = nillify_pid(state, pid)
+    {step, _} = state.current_step
+    conn_opts = connection_opts(step, state)
 
-    case maybe_fallback_to_no_ssl(reason, conn_opts) do
-      {:ok, conn_opts} ->
-        state = update_replication_connection_opts(state, conn_opts)
-        {:noreply, state, {:continue, :start_replication_client}}
+    repaired_conn_opts =
+      case error do
+        %Postgrex.Error{message: "ssl not available"} ->
+          maybe_fallback_to_no_ssl(conn_opts)
 
-      {:error, error} ->
-        handle_connection_error(error, state, @replication_mode)
+        # Seen this when connecting to Fly Postgres
+        %DBConnection.ConnectionError{message: "ssl connect: closed"} ->
+          maybe_fallback_to_no_ssl(conn_opts)
+
+        %DBConnection.ConnectionError{message: message, severity: :error} ->
+          maybe_fallback_to_ipv4(message, conn_opts)
+
+        _ ->
+          nil
+      end
+
+    if repaired_conn_opts do
+      state = update_connection_opts(step, repaired_conn_opts, state)
+      {:noreply, state, {:continue, step}}
+    else
+      shutdown_or_reconnect(error, state)
     end
   end
 
-  # The replication client exited after it had already started streaming from the database.
-  # It can be restarted independently of the lock connection and the DB pool. If any of the
+  # The replication client exited after the connection setup has completed, it can be restarted
+  # independently of the lock connection and the DB pool. On the other hand, if any of the
   # latter two shut down, Connection.Manager will itself terminate to be restarted by its
   # supervisor in a clean state.
-  def handle_info({:EXIT, pid, signal}, %State{replication_client_pid: pid} = state) do
-    reason = strip_exit_signal_stacktrace(signal)
+  def handle_info(
+        {:EXIT, pid, reason},
+        %State{replication_client_pid: pid, current_phase: :running} = state
+      ) do
+    state = nillify_pid(state, pid)
+    error = strip_exit_signal_stacktrace(reason)
 
-    with false <- drop_slot_and_restart(reason, state),
-         false <- stop_if_fatal_error(reason, state, @replication_mode) do
-      Logger.debug(
-        "Handling the exit of the replication client #{inspect(pid)} with reason #{inspect(reason)}"
-      )
+    state = %State{
+      state
+      | current_phase: :restarting_replication_client,
+        current_step: {:start_replication_client, nil}
+    }
 
-      state = %State{
-        state
-        | replication_client_pid: nil,
-          replication_connection_established: false
-      }
-
-      state = schedule_reconnection(:start_replication_client, state)
-      {:noreply, state}
-    end
+    shutdown_or_reconnect(error, state)
   end
 
-  # The most likely reason for the lock connection or the DB pool to exit is the database
-  # server going offline or shutting down. Stop Connection.Manager to allow its supervisor to
-  # restart it in the initial state.
-  def handle_info({:EXIT, pid, signal}, state) do
-    reason = strip_exit_signal_stacktrace(signal)
+  # The most likely reason for any database connection to get closed after we've already opened a
+  # bunch of them is the database server going offline or shutting down. Stop
+  # Connection.Manager to allow its supervisor to restart it in the initial state.
+  def handle_info({:EXIT, pid, reason}, state) do
+    error =
+      reason
+      |> strip_exit_signal_stacktrace()
+      |> DbConnectionError.from_error()
 
     Logger.warning(
       "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
-        inspect(reason, pretty: true) <> "\n\n" <> inspect(state, pretty: true)
+        error.message <> "\n\n" <> inspect(state, pretty: true)
     )
 
-    dispatch_stack_event({:database_connection_severed, format_exit_reason(reason)}, state)
+    dispatch_stack_event(
+      {:database_connection_severed,
+       %{error: error.original_error, type: error.type, message: error.message}},
+      state
+    )
 
     {:stop, {:shutdown, reason}, state}
   end
@@ -468,71 +637,127 @@ defmodule Electric.Connection.Manager do
     {:noreply, %State{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
   end
 
-  # Periodically log the status of the lock connection until it is acquired for
-  # easier debugging and diagnostics.
-  def handle_info(:log_lock_connection_status, state) do
-    if not state.pg_lock_acquired do
-      Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
-      schedule_periodic_connection_status_log(:log_lock_connection_status)
-    end
-
-    {:noreply, state}
-  end
-
-  # Periodically log the status of the replication connection while waiting for it to get ready
-  # for streaming.
-  def handle_info(:log_replication_connection_status, state) do
-    if not state.replication_connection_established do
-      Logger.warning(fn ->
-        "Waiting for the replication connection setup to complete... " <>
-          "Check that you don't have pending transactions in the database. " <>
-          "Electric has to wait for all pending transactions to commit or rollback " <>
-          "before it can create the replication slot."
-      end)
-
-      schedule_periodic_connection_status_log(:log_replication_connection_status)
-    end
-
-    {:noreply, state}
-  end
-
   @impl true
-  def handle_cast(:exclusive_connection_lock_acquired, %State{pg_lock_acquired: false} = state) do
+  def handle_cast(:drop_replication_slot_on_stop, state) do
+    {:noreply, %State{state | drop_slot_requested: true}}
+  end
+
+  def handle_cast(
+        :lock_connection_started,
+        %State{
+          current_phase: :connection_setup,
+          current_step: {:start_lock_connection, :connecting}
+        } = state
+      ) do
+    dispatch_stack_event(:waiting_for_connection_lock, state)
+    state = mark_connection_succeeded(state)
+    tref = schedule_periodic_connection_status_check(:lock_connection)
+
+    state = %State{
+      state
+      | lock_connection_timer: tref,
+        current_step: {:start_lock_connection, :acquiring_lock}
+    }
+
+    {:noreply, state}
+  end
+
+  def handle_cast(
+        {:exclusive_connection_lock_acquisition_failed, error},
+        %State{
+          current_phase: :connection_setup,
+          current_step: {:start_lock_connection, :acquiring_lock}
+        } = state
+      ) do
+    Electric.StatusMonitor.mark_pg_lock_as_errored(state.stack_id, inspect(error))
+    dispatch_stack_event({:failed_to_acquire_connection_lock, %{error: error}}, state)
+
+    # The LockConnection process will keep retrying to acquire the lock.
+    {:noreply, state}
+  end
+
+  def handle_cast(
+        :exclusive_connection_lock_acquired,
+        %State{
+          current_phase: :connection_setup,
+          current_step: {:start_lock_connection, :acquiring_lock}
+        } = state
+      ) do
+    Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, state.lock_connection_pid)
+    dispatch_stack_event(:connection_lock_acquired, state)
+
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to open a replication connection should be reported ASAP.
-    {:noreply, %State{state | pg_lock_acquired: true}, {:continue, :start_replication_client}}
+    state = %State{state | current_step: {:start_replication_client, nil}}
+    {:noreply, state, {:continue, :start_replication_client}}
   end
 
   def handle_cast(
-        :replication_connection_initializing,
-        %State{replication_connection_established: false} = state
-      ) do
-    state = mark_connection_succeeded(state)
+        :replication_client_started,
+        %State{
+          current_phase: phase,
+          current_step: {:start_replication_client, :connecting}
+        } = state
+      )
+      when phase in [:connection_setup, :restarting_replication_client] do
+    tref = schedule_periodic_connection_status_check(:replication_client)
+
+    state = %{
+      state
+      | replication_client_timer: tref,
+        current_step: {:start_replication_client, :configuring_connection}
+    }
+
     {:noreply, state}
   end
 
   def handle_cast(
-        :replication_connection_established,
-        %State{replication_connection_established: false} = state
-      ) do
-    state = %State{state | replication_connection_established: true}
+        :replication_client_ready_to_stream,
+        %State{
+          current_phase: phase,
+          current_step: {:start_replication_client, :configuring_connection}
+        } = state
+      )
+      when phase in [:connection_setup, :restarting_replication_client] do
+    Electric.StatusMonitor.mark_replication_client_ready(
+      state.stack_id,
+      state.replication_client_pid
+    )
 
-    if is_nil(state.pool_pid) do
-      # This is the case where Connection.Manager starts connections from the initial state.
-      # Replication connection is opened after the lock connection has acquired the
-      # exclusive lock. After it, we start the connection pool.
-      false = is_nil(state.lock_connection_pid)
-      {:noreply, state, {:continue, :start_connection_pool}}
-    else
-      # The replication client process exited while the other connection processes were
-      # already running. Now that it's been restarted, we can transition it into the
-      # logical replication mode immediately since all the other connection process and the
-      # shapes supervisor are already up.
-      false = is_nil(state.lock_connection_pid)
-      Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
-      {:noreply, state}
+    case phase do
+      :connection_setup ->
+        # This is the case where Connection.Manager starts connections from the initial state.
+        # Replication connection is opened after the lock connection has acquired the
+        # exclusive lock. Now it's time to start the connection pool.
+        state = %{state | current_step: :start_connection_pool}
+        {:noreply, state, {:continue, :start_connection_pool}}
+
+      :restarting_replication_client ->
+        # The replication client process exited while the other connection processes were
+        # already running. Now that it's been restarted, we can transition it into the
+        # logical replication mode immediately since all the other connection process and the
+        # shapes supervisor are already up.
+        state = %{state | current_step: {:start_replication_client, :start_streaming}}
+        {:noreply, state, {:continue, :start_streaming}}
     end
+  end
+
+  def handle_cast(
+        :replication_client_streamed_first_message,
+        %State{current_phase: :running, current_step: :waiting_for_streaming_confirmation} = state
+      ) do
+    # The call to `mark_connection_succeeded()` resets the backoff timer, so the next
+    # reconnection attempt will start from the minimum timeout and grow exponentially from
+    # there.
+    # When the replication connection is stuck in a reconnection loop, we only mark it as
+    # having succeeded after receiving confirmation that streaming replication has started.
+    # This is the only way to be sure because it can still fail after we issue the
+    # start_streaming() call, so marking it as having succeeded earlier would result in a
+    # reconnection loop with no exponential backoff.
+    state = mark_connection_succeeded(state)
+    state = %State{state | current_step: :streaming}
+    {:noreply, state}
   end
 
   def handle_cast({:pg_info_looked_up, {server_version, system_identifier, timeline_id}}, state) do
@@ -555,83 +780,24 @@ defmodule Electric.Connection.Manager do
      }}
   end
 
-  defp start_lock_connection(opts) do
-    case Electric.Postgres.LockConnection.start_link(opts) do
-      {:ok, pid} ->
-        {:ok, pid, opts[:connection_opts]}
-
-      {:error, reason} ->
-        with {:ok, connection_opts} <- maybe_fallback_to_no_ssl(reason, opts[:connection_opts]) do
-          opts = Keyword.put(opts, :connection_opts, connection_opts)
-          start_lock_connection(opts)
-        end
-    end
-  end
-
-  defp start_connection_pool(connection_opts, pool_opts) do
-    # Use default backoff strategy for connections to prevent pool from shutting down
-    # in the case of a connection error. Deleting a shape while its still generating
-    # its snapshot from the db can trigger this as the snapshot process and the storage
-    # process are both terminated when the shape is removed.
-    #
-    # See https://github.com/electric-sql/electric/issues/1554
-    Postgrex.start_link(
-      pool_opts ++
-        [
-          backoff_type: :exp,
-          max_restarts: 3,
-          max_seconds: 5,
-          # Assume the manager connection might be pooled, so use unnamed prepared
-          # statements to avoid issues with the pooler
-          #
-          # See https://hexdocs.pm/postgrex/0.19.3/readme.html#pgbouncer
-          prepare: :unnamed
-        ] ++
-        Electric.Utils.deobfuscate_password(connection_opts)
-    )
-  end
-
-  defp maybe_fallback_to_ipv4(
-         %DBConnection.ConnectionError{message: message, severity: :error} = error,
-         connection_opts
-       ) do
+  defp maybe_fallback_to_ipv4(error_message, conn_opts) do
     # If network is unreachable, IPv6 is not enabled on the machine
     # If domain cannot be resolved, assume there is no AAAA record for it
     # Fall back to IPv4 for these cases
-    if connection_opts[:ipv6] and
-         String.starts_with?(message, "tcp connect (") and
-         (String.ends_with?(message, "): non-existing domain - :nxdomain") or
-            String.ends_with?(message, "): network is unreachable - :enetunreach")) do
+    if conn_opts[:ipv6] and
+         String.starts_with?(error_message, "tcp connect (") and
+         (String.ends_with?(error_message, "): non-existing domain - :nxdomain") or
+            String.ends_with?(error_message, "): network is unreachable - :enetunreach")) do
       Logger.warning(
-        "Database connection failed to find valid IPv6 address for #{connection_opts[:hostname]} - falling back to IPv4"
+        "Database connection failed to find valid IPv6 address for #{conn_opts[:hostname]} - falling back to IPv4"
       )
 
-      {:ok, connection_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts()}
-    else
-      {:error, error}
+      conn_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts()
     end
   end
 
-  defp maybe_fallback_to_ipv4(error, _connection_opts), do: {:error, error}
-
-  defp maybe_fallback_to_no_ssl(reason, connection_opts) do
-    error = {:error, reason}
-
-    case reason do
-      %Postgrex.Error{message: "ssl not available"} ->
-        do_fallback_to_no_ssl(connection_opts) || error
-
-      # Seen this when connecting to Fly Postgres
-      %DBConnection.ConnectionError{message: "ssl connect: closed"} ->
-        do_fallback_to_no_ssl(connection_opts) || error
-
-      _ ->
-        error
-    end
-  end
-
-  defp do_fallback_to_no_ssl(connection_opts) do
-    sslmode = connection_opts[:sslmode]
+  defp maybe_fallback_to_no_ssl(conn_opts) do
+    sslmode = conn_opts[:sslmode]
 
     if sslmode != :require do
       if not is_nil(sslmode) do
@@ -642,91 +808,81 @@ defmodule Electric.Connection.Manager do
         )
       end
 
-      {:ok, Keyword.put(connection_opts, :ssl, false)}
+      Keyword.put(conn_opts, :ssl, false)
     end
   end
 
-  defp handle_connection_error(
-         %DBConnection.ConnectionError{severity: :error} = error,
-         state,
-         mode
-       ) do
-    conn_opts =
-      if current_connection_step(state) == :start_replication_client do
-        Keyword.fetch!(replication_opts(state), :connection_opts)
-      else
-        connection_opts(state)
-      end
+  defp shutdown_or_reconnect(error, state) do
+    error = DbConnectionError.from_error(error)
 
-    case maybe_fallback_to_ipv4(error, conn_opts) do
-      {:ok, conn_opts} ->
-        # disable IPv6 and retry immediately
-        state =
-          if current_connection_step(state) == :start_replication_client do
-            update_replication_connection_opts(state, conn_opts)
-          else
-            update_connection_opts(state, conn_opts)
-          end
-
-        step = current_connection_step(state)
-        handle_continue(step, state)
-
-      {:error, reason} ->
-        fail_on_error_or_reconnect(reason, state, mode)
-    end
-  end
-
-  defp handle_connection_error(error, state, mode) do
-    fail_on_error_or_reconnect(error, state, mode)
-  end
-
-  # This separate function is needed for `handle_connection_error()` not to get stuck in a
-  # recursive function call loop.
-  defp fail_on_error_or_reconnect(error, state, mode) do
-    with false <- stop_if_fatal_error(error, state, mode) do
-      state = schedule_reconnection_after_error(error, state, mode)
+    with false <- drop_slot_and_restart(error, state),
+         false <- stop_if_fatal_error(error, state) do
+      state = schedule_reconnection_after_error(error, state)
       {:noreply, state}
     end
   end
 
-  defp schedule_reconnection_after_error(error, state, mode) do
-    message =
-      case error do
-        %DBConnection.ConnectionError{message: message} ->
-          message
+  defp schedule_reconnection_after_error(error, state) do
+    message = error.message
+    connection_mode = set_connection_status_error(message, state)
 
-        %Postgrex.Error{message: message} when not is_nil(message) ->
-          message
+    extended_message = message <> pg_error_extra_info(error.original_error)
 
-        %Postgrex.Error{postgres: %{message: message} = pg_error} ->
-          message <> pg_error_extra_info(pg_error)
-      end
-
-    Logger.warning("Database connection in #{mode} mode failed: #{message}")
+    Logger.warning(
+      "Database connection in #{connection_mode} mode failed: #{extended_message}\nRetrying..."
+    )
 
     dispatch_stack_event(
       {:database_connection_failed,
        %{
+         error: error.original_error,
+         type: error.type,
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
        }},
       state
     )
 
-    step = current_connection_step(state)
+    {step, _} = state.current_step
     schedule_reconnection(step, state)
   end
 
-  defp current_connection_step(%State{lock_connection_pid: nil}),
-    do: :start_lock_connection
+  defp set_connection_status_error(
+         error_message,
+         %State{
+           current_phase: :connection_setup,
+           current_step: {:start_lock_connection, _}
+         } = state
+       ) do
+    StatusMonitor.mark_pg_lock_as_errored(state.stack_id, error_message)
+    "lock_connection"
+  end
 
-  defp current_connection_step(%State{replication_connection_established: false}),
-    do: :start_replication_client
+  defp set_connection_status_error(
+         error_message,
+         %State{
+           current_phase: phase,
+           current_step: {:start_replication_client, _}
+         } = state
+       )
+       when phase in [:connection_setup, :restarting_replication_client] do
+    StatusMonitor.mark_replication_client_as_errored(state.stack_id, error_message)
+    "replication"
+  end
 
-  defp current_connection_step(%State{pool_pid: nil}),
-    do: :start_connection_pool
+  defp set_connection_status_error(
+         error_message,
+         %State{current_phase: :connection_setup} = state
+       ) do
+    StatusMonitor.mark_connection_pool_as_errored(state.stack_id, error_message)
+    "connection_pool"
+  end
 
-  defp pg_error_extra_info(pg_error) do
+  defp set_connection_status_error(_error_message, _state) do
+    "regular"
+  end
+
+  defp pg_error_extra_info(%Postgrex.Error{postgres: pg_error}) do
     extra_info_items =
       [
         {"PG code:", Map.get(pg_error, :pg_code)},
@@ -742,14 +898,10 @@ defmodule Electric.Connection.Manager do
     end
   end
 
+  defp pg_error_extra_info(_), do: ""
+
   defp drop_slot_and_restart(
-         %Postgrex.Error{
-           postgres: %{
-             code: :object_not_in_prerequisite_state,
-             detail:
-               "This slot has been invalidated because it exceeded the maximum reserved size."
-           }
-         } = error,
+         %DbConnectionError{type: :replication_slot_invalidated} = error,
          state
        ) do
     Logger.warning("""
@@ -760,7 +912,10 @@ defmodule Electric.Connection.Manager do
         or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
     """)
 
-    dispatch_stack_event({:database_slot_exceeded_max_size, %{error: error}}, state)
+    dispatch_stack_event(
+      {:database_slot_exceeded_max_size, %{error: error.original_error}},
+      state
+    )
 
     drop_slot(state)
 
@@ -774,38 +929,12 @@ defmodule Electric.Connection.Manager do
 
   defp drop_slot_and_restart(_, _), do: false
 
-  defp stop_if_fatal_error(error, state, mode) do
-    error = DbConnectionError.from_error(error)
-
+  defp stop_if_fatal_error(error, state) do
     if error.retry_may_fix? do
-      Logger.warning(
-        "Error while trying to connect to the database (#{mode}): #{error.message}\n" <>
-          "Retrying..."
-      )
-
-      dispatch_stack_event(
-        {:retryable_error,
-         %{error: error.original_error, message: error.message, type: error.type}},
-        state
-      )
-
-      mark_error_for_mode(mode, error.message, state.stack_id)
       false
     else
       dispatch_fatal_error_and_shutdown(error, state)
     end
-  end
-
-  defp mark_error_for_mode(@replication_mode, error, stack_id) do
-    StatusMonitor.mark_replication_client_as_errored(stack_id, error)
-  end
-
-  defp mark_error_for_mode(@regular_mode, error, stack_id) do
-    StatusMonitor.mark_connection_pool_as_errored(stack_id, error)
-  end
-
-  defp mark_error_for_mode(@lock_mode, error, stack_id) do
-    StatusMonitor.mark_pg_lock_as_errored(stack_id, error)
   end
 
   defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
@@ -829,7 +958,7 @@ defmodule Electric.Connection.Manager do
          } = state
        ) do
     {time, conn_backoff} = ConnectionBackoff.fail(conn_backoff)
-    tref = :erlang.start_timer(time, self(), step)
+    tref = :erlang.start_timer(time, self(), {:retry_connection, step})
     Logger.warning("Reconnecting in #{inspect(time)}ms")
     %State{state | connection_backoff: {conn_backoff, tref}}
   end
@@ -915,16 +1044,37 @@ defmodule Electric.Connection.Manager do
   defp populate_connection_opts(conn_opts),
     do: conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
 
-  defp update_connection_opts(%State{shared_connection_opts: nil} = state, conn_opts) do
+  defp connection_opts(:start_replication_client, %State{shared_connection_opts: nil} = state) do
+    Keyword.fetch!(state.replication_opts, :connection_opts)
+  end
+
+  defp connection_opts(_step, %State{shared_connection_opts: nil} = state) do
+    state.connection_opts
+  end
+
+  defp connection_opts(_step, state) do
+    state.shared_connection_opts
+  end
+
+  defp replication_opts(%State{shared_connection_opts: nil} = state), do: state.replication_opts
+
+  defp replication_opts(%State{shared_connection_opts: conn_opts} = state),
+    do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
+
+  defp update_connection_opts(
+         :start_replication_client,
+         conn_opts,
+         %State{shared_connection_opts: nil, replication_opts: replication_opts} = state
+       ) do
+    %State{state | replication_opts: put_in(replication_opts, [:connection_opts], conn_opts)}
+  end
+
+  defp update_connection_opts(_step, conn_opts, %State{shared_connection_opts: nil} = state) do
     %State{state | connection_opts: conn_opts}
   end
 
-  defp update_connection_opts(state, conn_opts) do
+  defp update_connection_opts(_step, conn_opts, state) do
     %State{state | shared_connection_opts: conn_opts}
-  end
-
-  defp update_replication_connection_opts(%State{shared_connection_opts: nil} = state, conn_opts) do
-    %State{state | replication_opts: put_in(state.replication_opts[:connection_opts], conn_opts)}
   end
 
   defp lookup_log_collector_pid(shapes_supervisor) do
@@ -962,17 +1112,9 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  defp schedule_periodic_connection_status_log(type) do
-    Process.send_after(self(), type, @connection_status_logging_interval)
+  defp schedule_periodic_connection_status_check(type) do
+    :erlang.start_timer(@connection_status_check_interval, self(), {:check_status, type})
   end
-
-  defp connection_opts(%State{shared_connection_opts: nil} = state), do: state.connection_opts
-  defp connection_opts(%State{shared_connection_opts: conn_opts}), do: conn_opts
-
-  defp replication_opts(%State{shared_connection_opts: nil} = state), do: state.replication_opts
-
-  defp replication_opts(%State{shared_connection_opts: conn_opts} = state),
-    do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
 
   # It's possible that the exit signal received from the replication client process includes a
   # stacktrace. I haven't found the rule that would describe when the stacktrace is to be
@@ -984,16 +1126,6 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  defp format_exit_reason(error) do
-    if is_exception(error) do
-      Exception.format(:error, error)
-    else
-      error
-      |> strip_exit_signal_stacktrace()
-      |> inspect()
-    end
-  end
-
   defp dispatch_stack_event(event, state) do
     Electric.StackSupervisor.dispatch_stack_event(
       state.stack_events_registry,
@@ -1001,4 +1133,24 @@ defmodule Electric.Connection.Manager do
       event
     )
   end
+
+  defp nillify_pid(%State{lock_connection_pid: pid} = state, pid),
+    do: %State{state | lock_connection_pid: nil}
+
+  defp nillify_pid(%State{replication_client_pid: pid} = state, pid),
+    do: %State{state | replication_client_pid: nil}
+
+  defp nillify_pid(%State{pool_pid: pid} = state, pid),
+    do: %State{state | pool_pid: nil}
+
+  defp nillify_pid(%State{shape_log_collector_pid: pid} = state, pid),
+    do: %State{state | shape_log_collector_pid: nil}
+
+  defp nillify_timer(%State{lock_connection_timer: tref} = state, tref),
+    do: %State{state | lock_connection_timer: nil}
+
+  defp nillify_timer(%State{replication_client_timer: tref} = state, tref),
+    do: %State{state | replication_client_timer: nil}
+
+  defp nillify_timer(state, _tref), do: state
 end

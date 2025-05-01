@@ -1,12 +1,10 @@
 defmodule Electric.Postgres.LockConnectionTest do
   use ExUnit.Case, async: true
-  use Repatch.ExUnit
   import ExUnit.CaptureLog
   import Support.DbSetup, except: [with_publication: 1]
   import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
 
   alias Electric.Postgres.LockConnection
-  alias Electric.StatusMonitor
 
   @lock_name "test_electric_slot"
 
@@ -18,12 +16,9 @@ defmodule Electric.Postgres.LockConnectionTest do
       db_conn: conn,
       stack_id: stack_id
     } do
-      Repatch.patch(StatusMonitor, :mark_pg_lock_acquired, [mode: :shared], fn _, _ -> :ok end)
-      owner = self()
-
       log =
         capture_log(fn ->
-          assert {:ok, lock_pid} =
+          assert {:ok, _pid} =
                    LockConnection.start_link(
                      connection_opts: config,
                      connection_manager: self(),
@@ -31,9 +26,7 @@ defmodule Electric.Postgres.LockConnectionTest do
                      stack_id: stack_id
                    )
 
-          Repatch.allow(owner, lock_pid)
-
-          assert_lock_acquired(stack_id, lock_pid)
+          assert_lock_acquired()
         end)
 
       # should have logged lock acquisition process
@@ -50,58 +43,42 @@ defmodule Electric.Postgres.LockConnectionTest do
     end
 
     test "should wait if lock is already acquired", %{db_config: config, stack_id: stack_id} do
-      Repatch.patch(StatusMonitor, :mark_pg_lock_acquired, [mode: :shared], fn _, _ -> :ok end)
-      owner = self()
       # grab lock with one connection
-      {pid1, _} =
-        with_log(fn ->
-          assert {:ok, lock_pid} =
-                   LockConnection.start_link(
-                     connection_opts: config,
-                     connection_manager: self(),
-                     lock_name: @lock_name,
-                     stack_id: stack_id
-                   )
+      assert {:ok, pid1} =
+               LockConnection.start_link(
+                 connection_opts: config,
+                 connection_manager: self(),
+                 lock_name: @lock_name,
+                 stack_id: stack_id
+               )
 
-          Repatch.allow(owner, lock_pid)
-
-          assert_lock_acquired(stack_id, lock_pid)
-          lock_pid
-        end)
+      assert_lock_acquired()
 
       # try to grab the same with another
-      _ =
-        capture_log(fn ->
-          new_stack_id = :"#{stack_id}_new"
+      new_stack_id = :"#{stack_id}_new"
 
-          assert {:ok, pid} =
-                   LockConnection.start_link(
-                     connection_opts: config,
-                     connection_manager: self(),
-                     lock_name: @lock_name,
-                     stack_id: new_stack_id
-                   )
+      assert {:ok, _pid} =
+               LockConnection.start_link(
+                 connection_opts: config,
+                 connection_manager: self(),
+                 lock_name: @lock_name,
+                 stack_id: new_stack_id
+               )
 
-          Repatch.allow(owner, pid)
+      # should fail to grab it
+      refute_lock_acquired()
 
-          # should fail to grab it
-          refute_lock_acquired(pid)
-
-          # should immediately grab it once previous lock is released
-          GenServer.stop(pid1)
-          assert_lock_acquired(new_stack_id, pid)
-          pid
-        end)
+      # should immediately grab it once previous lock is released
+      GenServer.stop(pid1)
+      assert_lock_acquired()
     end
   end
 
-  defp assert_lock_acquired(stack_id, lock_pid) do
-    assert_receive {_, :exclusive_connection_lock_acquired}
-    assert Repatch.called?(StatusMonitor, :mark_pg_lock_acquired, [stack_id, lock_pid], by: :any)
+  defp assert_lock_acquired do
+    assert_receive {:"$gen_cast", :exclusive_connection_lock_acquired}
   end
 
-  defp refute_lock_acquired(pid) do
-    refute_receive {_, :exclusive_connection_lock_acquired}, 1000
-    refute Repatch.called?(StatusMonitor, :mark_pg_lock_acquired, 2, by: pid)
+  defp refute_lock_acquired do
+    refute_receive {:"$gen_cast", :exclusive_connection_lock_acquired}, 1000
   end
 end
