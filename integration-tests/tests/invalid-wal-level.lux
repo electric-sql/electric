@@ -20,7 +20,7 @@
   # Reset the failure pattern because we'll be matching on an error.
   -
 
-  ?? [emergency] Electric requires requires wal_level >= logical
+  ?? [emergency] Electric requires wal_level >= logical
   ?? [notice] Application electric exited: shutdown
 
 [cleanup]

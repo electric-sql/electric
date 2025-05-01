@@ -788,34 +788,20 @@ defmodule Electric.Connection.Manager do
   end
 
   defp schedule_reconnection_after_error(error, state) do
-    message =
-      case error do
-        %DBConnection.ConnectionError{message: message} ->
-          message
+    message = error.message
+    connection_mode = set_connection_status_error(message, state)
 
-        %Postgrex.Error{message: message} when not is_nil(message) ->
-          message
+    extended_message = message <> pg_error_extra_info(Map.get(error.original_error, :postgres))
 
-        %Postgrex.Error{postgres: %{message: message} = pg_error} ->
-          message <> pg_error_extra_info(pg_error)
-      end
-
-    connection_mode = set_connection_status_error(error, state)
-
-    # TODO: error.message
     Logger.warning(
-      "Database connection in #{connection_mode} mode failed: #{message}\nRetrying..."
-    )
-
-    dispatch_stack_event(
-      {:retryable_error,
-       %{error: error.original_error, message: error.message, type: error.type}},
-      state
+      "Database connection in #{connection_mode} mode failed: #{extended_message}\nRetrying..."
     )
 
     dispatch_stack_event(
       {:database_connection_failed,
        %{
+         error: error.original_error,
+         type: error.type,
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
        }},
@@ -827,36 +813,41 @@ defmodule Electric.Connection.Manager do
   end
 
   defp set_connection_status_error(
-         error,
+         error_message,
          %State{
            current_phase: :connection_setup,
            current_step: {:start_lock_connection, _}
          } = state
        ) do
-    StatusMonitor.mark_pg_lock_as_errored(state.stack_id, error)
+    StatusMonitor.mark_pg_lock_as_errored(state.stack_id, error_message)
     "lock_connection"
   end
 
   defp set_connection_status_error(
-         error,
+         error_message,
          %State{
            current_phase: phase,
            current_step: {:start_replication_client, _}
          } = state
        )
        when phase in [:connection_setup, :restarting_replication_client] do
-    StatusMonitor.mark_replication_client_as_errored(state.stack_id, error)
+    StatusMonitor.mark_replication_client_as_errored(state.stack_id, error_message)
     "replication"
   end
 
-  defp set_connection_status_error(error, %State{current_phase: :connection_setup} = state) do
-    StatusMonitor.mark_connection_pool_as_errored(state.stack_id, error)
+  defp set_connection_status_error(
+         error_message,
+         %State{current_phase: :connection_setup} = state
+       ) do
+    StatusMonitor.mark_connection_pool_as_errored(state.stack_id, error_message)
     "connection_pool"
   end
 
-  defp set_connection_status_error(_error, _state) do
+  defp set_connection_status_error(_error_message, _state) do
     "regular"
   end
+
+  defp pg_error_extra_info(nil), do: ""
 
   defp pg_error_extra_info(pg_error) do
     extra_info_items =
@@ -875,13 +866,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp drop_slot_and_restart(
-         %Postgrex.Error{
-           postgres: %{
-             code: :object_not_in_prerequisite_state,
-             detail:
-               "This slot has been invalidated because it exceeded the maximum reserved size."
-           }
-         } = error,
+         %DbConnectionError{type: :replication_slot_invalidated} = error,
          state
        ) do
     Logger.warning("""
@@ -892,7 +877,10 @@ defmodule Electric.Connection.Manager do
         or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
     """)
 
-    dispatch_stack_event({:database_slot_exceeded_max_size, %{error: error}}, state)
+    dispatch_stack_event(
+      {:database_slot_exceeded_max_size, %{error: error.original_error}},
+      state
+    )
 
     drop_slot(state)
 

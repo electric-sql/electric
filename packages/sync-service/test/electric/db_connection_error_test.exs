@@ -48,7 +48,7 @@ defmodule Electric.FatalErrorTest do
       }
 
       assert %DbConnectionError{
-               message: "User does have the REPLICATION attribute. " <> _,
+               message: "User does not have the REPLICATION attribute. " <> _,
                type: :insufficient_privileges,
                original_error: ^error,
                retry_may_fix?: false

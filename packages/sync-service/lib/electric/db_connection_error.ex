@@ -45,8 +45,26 @@ defmodule Electric.DbConnectionError do
              msg == "logical decoding requires \"wal_level\" >= \"logical\"" do
     %DbConnectionError{
       message:
-        "Electric requires requires wal_level >= logical. See https://electric-sql.com/docs/guides/deployment#_1-running-postgres",
+        "Electric requires wal_level >= logical. See https://electric-sql.com/docs/guides/deployment#_1-running-postgres",
       type: :wal_level_is_not_logical,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :object_not_in_prerequisite_state,
+            detail:
+              "This slot has been invalidated because it exceeded the maximum reserved size." =
+                msg
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message: msg,
+      type: :replication_slot_invalidated,
       original_error: error,
       retry_may_fix?: false
     }
@@ -62,7 +80,7 @@ defmodule Electric.DbConnectionError do
       ) do
     %DbConnectionError{
       message:
-        "User does have the REPLICATION attribute. See https://electric-sql.com/docs/guides/deployment#_1-running-postgres",
+        "User does not have the REPLICATION attribute. See https://electric-sql.com/docs/guides/deployment#_1-running-postgres",
       type: :insufficient_privileges,
       original_error: error,
       retry_may_fix?: false
