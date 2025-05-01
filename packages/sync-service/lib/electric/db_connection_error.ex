@@ -73,6 +73,27 @@ defmodule Electric.DbConnectionError do
   def from_error(
         %Postgrex.Error{
           postgres: %{
+            code: :object_in_use,
+            message: "replication slot " <> _,
+            severity: "ERROR",
+            pg_code: "55006"
+          }
+        } = error
+      ) do
+    # The full error message in this case looks like
+    # "replication slot \"electric_slot_integration\" is active for PID 83",
+    %DbConnectionError{
+      message:
+        "Replication slot already in use by another database connection, possibly external to Electric.",
+      type: :replication_slot_in_use,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
             code: :insufficient_privilege,
             detail: "Only roles with the REPLICATION attribute may start a WAL sender process."
           }
