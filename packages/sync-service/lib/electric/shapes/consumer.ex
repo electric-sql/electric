@@ -63,12 +63,6 @@ defmodule Electric.Shapes.Consumer do
     )
   end
 
-  defp time(fun, label) do
-    {t, result} = :timer.tc(fun, :millisecond)
-    dbg(time: [{label, t}])
-    result
-  end
-
   @impl GenStage
   def init(config) do
     Process.set_label({:consumer, config.shape_handle})
@@ -137,13 +131,8 @@ defmodule Electric.Shapes.Consumer do
     # Waiter will receive this response if the snapshot wasn't done yet, but
     # given that this is definitely a cleanup call, a 409 is appropriate
     # as old shape handle is no longer valid
-    state =
-      time(
-        fn -> reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()}) end,
-        :reply_to_snapshot_waiters
-      )
-
-    time(fn -> request_cleanup(state) end, :request_cleanup)
+    state = reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
+    request_cleanup(state)
 
     {:reply, :ok, [], state}
   end
@@ -228,7 +217,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenStage
-  def handle_info({Electric.Shapes.Status, :subscriber_termination}, state) do
+  def handle_info(
+        {Electric.Shapes.Status, :subscriber_termination, handle},
+        %{shape_handle: handle} = state
+      ) do
     {:stop, :normal, state}
   end
 
