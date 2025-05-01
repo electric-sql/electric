@@ -52,7 +52,23 @@ defmodule Electric.Application do
 
     Enum.concat([
       children_library(),
-      [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
+      [
+        # The full child spec is given for StackSupervisor so we can specify `significant: true`
+        # for only single-stack mode (specifying `significant: true` inside StackSupervisor would set it
+        # for library mode as well, which will result in a `invalid_significant` error if StackSupervisor is
+        # started by a DynamicSupervisor)
+        %{
+          id: Electric.StackSupervisor,
+          start:
+            {Electric.StackSupervisor, :start_link,
+             [Keyword.put(config, :name, Electric.StackSupervisor)]},
+          type: :supervisor,
+          restart: :transient,
+          # Make StackSupervisor `significant` so that in the case that electric is in single-stack mode, the stack stopping
+          # will stop the entire Electric application (since `auto_shutdown` is set to `:any_significant` in `Application`).
+          significant: true
+        }
+      ],
       application_telemetry(config),
       api_server_children(),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
