@@ -1,5 +1,7 @@
-defmodule Electric.Shapes.Status do
+defmodule Electric.Shapes.Monitor.MonitorRegistry do
   use GenServer
+
+  alias Electric.Shapes.Monitor
 
   require Logger
 
@@ -13,7 +15,7 @@ defmodule Electric.Shapes.Status do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             storage: [type: :mod_arg, required: true],
-            on_remove: [type: {:fun, 2}]
+            on_remove: [type: {:or, [nil, {:fun, 2}]}]
           )
 
   def name(opts_or_stack_id) do
@@ -56,12 +58,16 @@ defmodule Electric.Shapes.Status do
     end
   end
 
+  def register_cleanup(stack_id, shape_handle, wait_pid, pid \\ self()) do
+    GenServer.call(name(stack_id), {:register_cleanup, shape_handle, wait_pid, pid})
+  end
+
   defp notify_subscriber_termination(pids, handle) when is_list(pids) do
     Enum.each(pids, &notify_subscriber_termination(&1, handle))
   end
 
   defp notify_subscriber_termination(pid, handle) when is_pid(pid) do
-    send(pid, {__MODULE__, :subscriber_termination, handle})
+    send(pid, {Monitor, :subscriber_termination, handle})
   end
 
   defp table(stack_id) do
@@ -75,7 +81,7 @@ defmodule Electric.Shapes.Status do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     storage = Map.fetch!(opts, :storage)
-    on_remove = Map.get(opts, :on_remove, fn _, _ -> :ok end)
+    on_remove = Map.get(opts, :on_remove) || fn _, _ -> :ok end
 
     subscriber_table =
       :ets.new(table(stack_id), [
@@ -92,7 +98,8 @@ defmodule Electric.Shapes.Status do
       monitor_table: monitor_table,
       subscriber_table: subscriber_table,
       on_remove: on_remove,
-      termination_watchers: %{}
+      termination_watchers: %{},
+      cleanup_pids: MapSet.new()
     }
 
     {:ok, state}
@@ -142,7 +149,7 @@ defmodule Electric.Shapes.Status do
   end
 
   def handle_call({:unregister_subscriber, _handle, pid}, _from, state) do
-    {state, _count} = delete_subscriber(pid, true, state)
+    {state, _count} = delete_registered_process(pid, true, state)
 
     {:reply, :ok, state}
   end
@@ -173,9 +180,25 @@ defmodule Electric.Shapes.Status do
     {:reply, :ok, state}
   end
 
+  def handle_call({:register_cleanup, shape_handle, wait_pid, pid}, _from, state) do
+    # has the consumer registered itself?
+    # if not that's an error
+    case :ets.match(state.monitor_table, {pid, :consumer, :"$1", :_}) do
+      [] ->
+        {:reply, {:error, "process not registered as consumer"}, state}
+
+      [[_handle]] ->
+        if :ets.insert_new(state.monitor_table, {wait_pid, :cleanup, shape_handle, nil}) do
+          _ref = Process.monitor(wait_pid)
+        end
+
+        {:reply, :ok, state}
+    end
+  end
+
   @impl GenServer
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    {state, _count} = delete_subscriber(pid, false, state)
+    {state, _count} = delete_registered_process(pid, false, state)
 
     {:noreply, state}
   end
@@ -205,23 +228,27 @@ defmodule Electric.Shapes.Status do
     end
   end
 
-  defp delete_subscriber(pid, demonitor?, state) do
+  defp delete_registered_process(pid, demonitor?, state) do
     %{stack_id: stack_id} = state
 
     case :ets.lookup(state.monitor_table, pid) do
       [{_, :subscriber, handle, ref}] ->
         if demonitor?, do: Process.demonitor(ref, [:flush])
-        :ets.delete(state.monitor_table, pid)
         {state, count} = pid_handle_termination(pid, handle, state)
         state.on_remove.(handle, pid)
         {state, count}
 
       [{_, :consumer, handle, _ref}] ->
         Logger.debug("Consumer #{inspect(handle)} terminated")
-        :ets.delete(state.monitor_table, pid)
+
         state.on_remove.(handle, pid)
 
-        Electric.Shapes.Status.CleanupTaskSupervisor.cleanup(
+        {state, 0}
+
+      [{_, :cleanup, handle, _ref}] ->
+        Logger.warning("Cleaning up data for #{inspect(handle)}")
+
+        Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
           state.stack_id,
           state.storage,
           handle
@@ -232,6 +259,8 @@ defmodule Electric.Shapes.Status do
       [] ->
         {state, 0}
     end
+  after
+    :ets.delete(state.monitor_table, pid)
   end
 
   defp pid_handle_termination(pid, handle, state) do

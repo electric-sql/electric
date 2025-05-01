@@ -72,6 +72,8 @@ defmodule Electric.ShapeCache do
             ]
           )
 
+  @call_timeout 30_000
+
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -106,7 +108,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, 20_000)
+      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, @call_timeout)
     end
   end
 
@@ -123,7 +125,7 @@ defmodule Electric.ShapeCache do
   @spec clean_shape(shape_handle(), Access.t()) :: :ok
   def clean_shape(shape_handle, opts) do
     server = Access.get(opts, :server, name(opts))
-    GenStage.call(server, {:clean, shape_handle}, 20_000)
+    GenStage.call(server, {:clean, shape_handle}, @call_timeout)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -186,7 +188,7 @@ defmodule Electric.ShapeCache do
       true
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:wait_shape_handle, shape_handle}, 20_000)
+      GenStage.call(server, {:wait_shape_handle, shape_handle}, @call_timeout)
     end
   end
 
