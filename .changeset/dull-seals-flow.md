@@ -2,4 +2,4 @@
 "@core/sync-service": patch
 ---
 
-Fix: properly more connection-related edge cases, enabling Electric to recover from exotic failure states.
+Fix: properly handle more connection-related edge cases. Streamline error reporting in stack events.
