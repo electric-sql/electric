@@ -581,12 +581,21 @@ defmodule Electric.Connection.Manager do
   # bunch of them is the database server going offline or shutting down. Stop
   # Connection.Manager to allow its supervisor to restart it in the initial state.
   def handle_info({:EXIT, pid, reason}, state) do
+    error =
+      reason
+      |> strip_exit_signal_stacktrace()
+      |> DbConnectionError.from_error()
+
     Logger.warning(
       "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
-        format_exit_reason(reason, pretty: true) <> "\n\n" <> inspect(state, pretty: true)
+        error.message <> "\n\n" <> inspect(state, pretty: true)
     )
 
-    dispatch_stack_event({:database_connection_severed, format_exit_reason(reason)}, state)
+    dispatch_stack_event(
+      {:database_connection_severed,
+       %{error: error.original_error, type: error.type, message: error.message}},
+      state
+    )
 
     {:stop, {:shutdown, reason}, state}
   end
@@ -1108,16 +1117,6 @@ defmodule Electric.Connection.Manager do
     case signal do
       {reason, stacktrace} when is_list(stacktrace) -> reason
       reason -> reason
-    end
-  end
-
-  defp format_exit_reason(error, inspect_opts \\ []) do
-    if is_exception(error) do
-      Exception.format(:error, error)
-    else
-      error
-      |> strip_exit_signal_stacktrace()
-      |> inspect(inspect_opts)
     end
   end
 
