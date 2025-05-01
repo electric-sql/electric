@@ -66,7 +66,7 @@ defmodule Electric.Connection.Manager do
             | :start_shapes_supervisor
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
-            | :waiting_for_streaming_to_start
+            | :waiting_for_streaming_confirmation
             | :streaming
 
     defstruct [
@@ -197,8 +197,8 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :replication_client_ready_to_stream)
   end
 
-  def replication_client_started_streaming(manager) do
-    GenServer.cast(manager, :replication_client_started_streaming)
+  def replication_client_streamed_first_message(manager) do
+    GenServer.cast(manager, :replication_client_streamed_first_message)
   end
 
   def pg_info_looked_up(manager, pg_info) do
@@ -329,7 +329,7 @@ defmodule Electric.Connection.Manager do
     # replication connection to the database and configuring it.
     # The manager will be notified about the replication client's progress via the
     # :replication_client_started and :replication_client_ready_to_stream casts.
-    # If configured to start streaming immediately, the :replication_client_started_streaming
+    # If configured to start streaming immediately, the :replication_client_streamed_first_message
     # cast would follow soon afterwards.
     {:ok, pid} = Electric.Postgres.ReplicationClient.start_link(opts)
 
@@ -463,7 +463,13 @@ defmodule Electric.Connection.Manager do
     # Everything is ready to start accepting and processing logical messages from Postgres.
     Logger.info("Starting replication from postgres")
     Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
-    state = %State{state | current_phase: :running, current_step: :waiting_for_streaming_to_start}
+
+    state = %State{
+      state
+      | current_phase: :running,
+        current_step: :waiting_for_streaming_confirmation
+    }
+
     {:noreply, state}
   end
 
@@ -738,8 +744,8 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast(
-        :replication_client_started_streaming,
-        %State{current_phase: :running, current_step: :waiting_for_streaming_to_start} = state
+        :replication_client_streamed_first_message,
+        %State{current_phase: :running, current_step: :waiting_for_streaming_confirmation} = state
       ) do
     # The call to `mark_connection_succeeded()` resets the backoff timer, so the next
     # reconnection attempt will start from the minimum timeout and grow exponentially from

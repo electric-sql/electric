@@ -218,7 +218,7 @@ defmodule Electric.Postgres.ReplicationClient do
           {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
   def handle_data(data, %State{step: :start_streaming} = state) do
     state = %State{state | step: :streaming}
-    notify_streaming_started(state)
+    notify_seen_first_message(state)
     handle_data(data, state)
   end
 
@@ -376,8 +376,10 @@ defmodule Electric.Postgres.ReplicationClient do
     state
   end
 
-  defp notify_streaming_started(%State{connection_manager: connection_manager} = state) do
-    :ok = Electric.Connection.Manager.replication_client_started_streaming(connection_manager)
+  defp notify_seen_first_message(%State{connection_manager: connection_manager} = state) do
+    :ok =
+      Electric.Connection.Manager.replication_client_streamed_first_message(connection_manager)
+
     state
   end
 end
