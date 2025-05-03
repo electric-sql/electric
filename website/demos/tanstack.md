@@ -20,7 +20,7 @@ This is an example TanStack application developed using Electric for read-path s
 
 See the [Electric <> Tanstack integration docs](https://electric-sql.com/docs/integrations/tanstack) for more context and a [video of the example running here](https://x.com/msfstef/status/1828763769498952173).
 
-The main Electric code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blog/main/examples/tanstack/src/Example.tsx):
+The main Electric code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blob/main/examples/tanstack/src/Example.tsx):
 
 <<< @../../examples/tanstack/src/Example.tsx{tsx}
 

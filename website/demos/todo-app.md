@@ -14,7 +14,7 @@ example: true
 
 ## Todo MVC using Electric
 
-The main Electric code is in [`./src/routes/index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/todo-app/src/routes/index.tsx):
+The main Electric code is in [`./src/routes/index.tsx`](https://github.com/electric-sql/electric/blob/main/examples/todo-app/src/routes/index.tsx):
 
 <<< @../../examples/todo-app/src/routes/index.tsx{tsx}
 

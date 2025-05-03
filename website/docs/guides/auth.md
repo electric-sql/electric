@@ -22,7 +22,7 @@ import GatekeeperFlowJPG from '/static/img/docs/guides/auth/gatekeeper-flow.jpg?
 
 <div class="hidden-xs">
 
-  How to do auth<span class="hidden-sm inline-md">entication and authorization</span> with Electric. Including examples for <span class="no-wrap-md">[proxy](#proxy-auth) and</span> [gatekeeper](#gatekeeper-auth)&nbsp;auth.
+How to do auth<span class="hidden-sm inline-md">entication and authorization</span> with Electric. Including examples for <span class="no-wrap-md">[proxy](#proxy-auth) and</span> [gatekeeper](#gatekeeper-auth)&nbsp;auth.
 
 </div>
 <div class="block-xs">
@@ -38,7 +38,6 @@ Including examples for <span class="no-wrap-md">[proxy](#proxy-auth) and</span> 
 The golden rule with Electric is that it's [all just HTTP](/docs/api/http).
 
 So when it comes to auth, you can use existing primitives, such as your API, middleware and external authorization services<!-- (like [Auth0](/docs/integrations/auth0) and [Authzed](/docs/integrations/auth0)) -->.
-
 
 ### Shapes are resources
 
@@ -63,7 +62,7 @@ You can proxy the request in your cloud, or at the edge, [in-front of a CDN](#cd
 
 ### Rules are optional
 
-You *don't* have to codify your auth logic into a database rule system.
+You _don't_ have to codify your auth logic into a database rule system.
 
 There's no need to use database rules to [secure data access](/docs/guides/security) when your sync engine runs over standard HTTP.
 
@@ -101,12 +100,12 @@ const usersShape = (): ShapeStreamOptions => {
   return {
     url: new URL(`/api/shapes/users`, window.location.origin).href,
     headers: {
-      authorization: `Bearer ${user.token}`
-    }
+      authorization: `Bearer ${user.token}`,
+    },
   }
 }
 
-export default function ExampleComponent () {
+export default function ExampleComponent() {
   const { data: users } = useShape(usersShape())
 }
 ```
@@ -114,9 +113,7 @@ export default function ExampleComponent () {
 Then for the `/api/shapes/users` route:
 
 ```tsx
-export async function GET(
-  request: Request,
-) {
+export async function GET(request: Request) {
   const url = new URL(request.url)
 
   // Construct the upstream URL
@@ -180,7 +177,7 @@ The auth token should include a claim containing the shape definition. This allo
 This keeps your main auth logic:
 
 - in your API (in the gatekeeper endpoint) where it's natural to do things like query the database and call external services
-- running *once* when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
+- running _once_ when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
 
 #### Implementation
 
@@ -190,7 +187,7 @@ The [GitHub example](https://github.com/electric-sql/electric/tree/main/examples
 2. [`./caddy`](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/caddy) a Caddy web server as a reverse proxy
 3. [`./edge`](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/edge) an edge function that you can run in front of a CDN
 
-The API is an [Elixir/Phoenix](/docs/integrations/phoenix) web application that [exposes](https://github.com/electric-sql/electric/blog/main/examples/gatekeeper-auth/api/lib/api_web/router.ex) two endpoints:
+The API is an [Elixir/Phoenix](/docs/integrations/phoenix) web application that [exposes](https://github.com/electric-sql/electric/blob/main/examples/gatekeeper-auth/api/lib/api_web/router.ex) two endpoints:
 
 1. a gatekeeper endpoint at `POST /gatekeeper/:table`
 2. a proxy endpoint at `GET /proxy/v1/shape`
@@ -213,7 +210,7 @@ The API is an [Elixir/Phoenix](/docs/integrations/phoenix) web application that 
 
 4. the proxy validates the JWT and verifies that the shape claim in the token matches the shape being requested; if so it sends the request on to Electric
 5. Electric then handles the request as normal
-6. sending a response back *through the proxy* to the client
+6. sending a response back _through the proxy_ to the client
 
 The client can then process the data and make additional requests using the same token (step 3). If the token expires or is rejected, the client starts again (step 1).
 
@@ -232,15 +229,16 @@ The TypeScript client supports function-based options for headers and params, ma
 
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   headers: {
     // Token will be refreshed on each request
-    'Authorization': async () => `Bearer ${await getAccessToken()}`
-  }
+    Authorization: async () => `Bearer ${await getAccessToken()}`,
+  },
 })
 ```
 
 This pattern is particularly useful when:
+
 - Your auth tokens need periodic refreshing
 - You're using session-based authentication
 - You need to fetch tokens from a secure storage
@@ -258,7 +256,7 @@ If you're using an external authentication service, such as [Auth0](https://auth
 
 If you're using an external authorization service to authorize a user's access to a shape, then you can call this whereever you run your authorization logic. For proxy auth this is the proxy. For gatekeeper auth this is the gatekeeper endpoint.
 
-Note that if you're using a distributed auth service to ensure consistent distributed auth, such as [Authzed](https://authzed.com/), then this works best with the proxy auth pattern. This is because you explicitly *want* to authorize the user each shape request, as opposed to the gatekeeper generating a token that can potentially become stale.
+Note that if you're using a distributed auth service to ensure consistent distributed auth, such as [Authzed](https://authzed.com/), then this works best with the proxy auth pattern. This is because you explicitly _want_ to authorize the user each shape request, as opposed to the gatekeeper generating a token that can potentially become stale.
 
 ### CDN <-> Proxy
 
