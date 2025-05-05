@@ -20,32 +20,32 @@ defmodule Electric.Shapes.Monitor do
     end
   end
 
-  def register_subscriber(stack_id, shape_handle, pid \\ self()) do
-    MonitorRegistry.register_subscriber(stack_id, shape_handle, pid)
+  def register_reader(stack_id, shape_handle, pid \\ self()) do
+    MonitorRegistry.register_reader(stack_id, shape_handle, pid)
   end
 
-  def unregister_subscriber(stack_id, shape_handle, pid \\ self()) do
-    MonitorRegistry.unregister_subscriber(stack_id, shape_handle, pid)
+  def unregister_reader(stack_id, shape_handle, pid \\ self()) do
+    MonitorRegistry.unregister_reader(stack_id, shape_handle, pid)
   end
 
-  def register_consumer(stack_id, shape_handle, pid \\ self()) do
-    MonitorRegistry.register_consumer(stack_id, shape_handle, pid)
+  def register_writer(stack_id, shape_handle, pid \\ self()) do
+    MonitorRegistry.register_writer(stack_id, shape_handle, pid)
   end
 
-  def subscriber_count(stack_id, shape_handle) do
-    MonitorRegistry.subscriber_count(stack_id, shape_handle)
+  def reader_count(stack_id, shape_handle) do
+    MonitorRegistry.reader_count(stack_id, shape_handle)
   end
 
-  def wait_subscriber_termination(stack_id, shape_handle, pid \\ self()) do
-    MonitorRegistry.wait_subscriber_termination(stack_id, shape_handle, pid)
+  def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
+    MonitorRegistry.notify_reader_termination(stack_id, shape_handle, reason, pid)
   end
 
-  def termination_subscribers(stack_id, shape_handle) do
-    MonitorRegistry.termination_subscribers(stack_id, shape_handle)
+  def termination_watchers(stack_id, shape_handle) do
+    MonitorRegistry.termination_watchers(stack_id, shape_handle)
   end
 
-  def register_cleanup(stack_id, shape_handle, wait_pid, pid \\ self()) do
-    MonitorRegistry.register_cleanup(stack_id, shape_handle, wait_pid, pid)
+  def cleanup_after_termination(stack_id, shape_handle, wait_pid, pid \\ self()) do
+    MonitorRegistry.cleanup_after_termination(stack_id, shape_handle, wait_pid, pid)
   end
 
   def init(opts) do
