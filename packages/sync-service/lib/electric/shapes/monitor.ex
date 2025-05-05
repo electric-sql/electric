@@ -6,8 +6,8 @@ defmodule Electric.Shapes.Monitor do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             storage: [type: :mod_arg, required: true],
-            on_remove: [type: {:fun, 2}],
-            on_cleanup: [type: {:fun, 1}]
+            on_remove: [type: {:or, [nil, {:fun, 2}]}],
+            on_cleanup: [type: {:or, [nil, {:fun, 1}]}]
           )
 
   def name(stack_id) do

@@ -65,6 +65,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenStage
+
   def init(config) do
     Process.set_label({:consumer, config.shape_handle})
 
@@ -244,7 +245,7 @@ defmodule Electric.Shapes.Consumer do
       reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
 
     if is_error?(reason) do
-      cleanup_publication_and_data(state)
+      remove_shape(state)
     end
 
     state
@@ -514,28 +515,40 @@ defmodule Electric.Shapes.Consumer do
   # 2. request a notification when all active shape data reads are complete
   # 3. exit the process when we receive that notification
   defp cleanup(state, reason \\ :normal) do
-    notify_shape_rotation(state)
+    %{
+      stack_id: stack_id,
+      shape_handle: shape_handle
+    } = state
+
+    state =
+      state
+      |> remove_shape()
+      |> notify_shape_rotation()
 
     :ok =
       Electric.Shapes.Monitor.wait_subscriber_termination(
-        state.stack_id,
-        state.shape_handle,
+        stack_id,
+        shape_handle,
         reason
       )
 
-    cleanup_publication_and_data(state)
-  end
-
-  defp cleanup_publication_and_data(%{cleaned?: true} = state) do
     state
   end
 
-  defp cleanup_publication_and_data(state) do
+  defp remove_shape(%{cleaned?: true} = state) do
+    state
+  end
+
+  defp remove_shape(state) do
     %{
       stack_id: stack_id,
       shape_handle: shape_handle,
+      shape_status: {shape_status, shape_status_state},
       publication_manager: {publication_manager, publication_manager_opts}
     } = state
+
+    # do this early to remove the shape from the api asap
+    shape_status.remove_shape(shape_status_state, shape_handle)
 
     # Trigger shape data cleanup after the consumer processes have terminated
     # including the storage process
