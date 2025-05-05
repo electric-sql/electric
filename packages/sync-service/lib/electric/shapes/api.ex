@@ -619,12 +619,17 @@ defmodule Electric.Shapes.Api do
   # by concating a dummy stream with only an `after` function. by making it
   # part of consuming the response stream rather than an explicit call we
   # simplify the API as it cleans up after itself when the response is read
-  defp unsubscribe_after_stream(%Request{} = request) do
+  defp unsubscribe_after_stream(stream, %Request{} = request) do
     Stream.transform(
-      [],
+      stream,
       fn -> request end,
-      fn _elem, request -> {[], request} end,
-      fn request -> {[], request} end,
+      fn
+        elems, request when is_list(elems) ->
+          {elems, request}
+
+        elem, request ->
+          {[elem], request}
+      end,
       fn request ->
         request
         |> clean_up_change_listener()
@@ -634,23 +639,25 @@ defmodule Electric.Shapes.Api do
   end
 
   defp encode_log(%Request{api: api} = request, stream) do
-    encode(api, :log, stream, unsubscribe_after_stream(request))
+    api
+    |> encode(:log, stream)
+    |> unsubscribe_after_stream(request)
   end
 
   @spec encode_message(Api.t() | Request.t(), term()) :: Enum.t()
   def encode_message(%Request{api: api} = request, message) do
-    encode(api, :message, message, unsubscribe_after_stream(request))
+    api
+    |> encode(:message, message)
+    |> unsubscribe_after_stream(request)
   end
 
   def encode_message(%Api{} = api, message) do
     encode(api, :message, message)
   end
 
-  defp encode(%Api{encoder: encoder}, type, message, concat \\ [])
+  defp encode(%Api{encoder: encoder}, type, message)
        when type in [:message, :log] do
-    encoder
-    |> apply(type, [message])
-    |> Stream.concat(concat)
+    apply(encoder, type, [message])
   end
 
   def schema(%Response{
