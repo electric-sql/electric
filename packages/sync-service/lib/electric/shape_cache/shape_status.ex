@@ -189,7 +189,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
           {shape_handle, latest_offset!(meta_table, shape_handle)}
         rescue
           ArgumentError ->
-            Logger.warning("race condition triggered: shape deleted")
             nil
         end
     end
