@@ -15,7 +15,8 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             storage: [type: :mod_arg, required: true],
-            on_remove: [type: {:or, [nil, {:fun, 2}]}]
+            on_remove: [type: {:or, [nil, {:fun, 2}]}],
+            on_cleanup: [type: {:or, [nil, {:fun, 1}]}]
           )
 
   def name(opts_or_stack_id) do
@@ -93,6 +94,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
 
     storage = Map.fetch!(opts, :storage)
     on_remove = Map.get(opts, :on_remove) || fn _, _ -> :ok end
+    on_cleanup = Map.get(opts, :on_cleanup) || fn _ -> :ok end
 
     subscriber_table =
       :ets.new(table(stack_id), [
@@ -109,6 +111,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
       monitor_table: monitor_table,
       subscriber_table: subscriber_table,
       on_remove: on_remove,
+      on_cleanup: on_cleanup,
       termination_watchers: %{},
       cleanup_pids: MapSet.new()
     }
@@ -260,7 +263,8 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
         Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
           state.stack_id,
           state.storage,
-          handle
+          handle,
+          state.on_cleanup
         )
 
         {state, 0}

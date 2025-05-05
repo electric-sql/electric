@@ -14,7 +14,8 @@ defmodule Electric.Shapes.MonitorTest do
       {Monitor,
        stack_id: stack_id,
        storage: storage,
-       on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end}
+       on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end,
+       on_cleanup: fn shape_handle -> send(parent, {:on_cleanup, shape_handle}) end}
     )
 
     :ok
@@ -330,6 +331,7 @@ defmodule Electric.Shapes.MonitorTest do
       refute_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
       send(supervisor, :quit)
       assert_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
+      assert_receive {:on_cleanup, ^handle}
     end
 
     test "cleanup is not performed unless the consumer registers", %{stack_id: stack_id} do
