@@ -101,7 +101,7 @@ defmodule Electric.Shapes.ApiTest do
     :ok
   end
 
-  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor, :with_shape_monitor]
 
   describe "validate/2" do
     setup [:ready_stack, :configure_request]
@@ -208,12 +208,16 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response_body(response) == %{
-               message: "Invalid request",
-               errors: %{
-                 offset: ["out of bounds for this shape"]
+      # this error returns as a list as it reaches the request stage
+      # and so needs cleaning up. when encoded the result is the same
+      assert response_body(response) == [
+               %{
+                 message: "Invalid request",
+                 errors: %{
+                   offset: ["out of bounds for this shape"]
+                 }
                }
-             }
+             ]
     end
 
     test "the shape handle does not match the shape definition", ctx do
@@ -711,8 +715,6 @@ defmodule Electric.Shapes.ApiTest do
 
           response = Api.serve_shape_log(request)
 
-          # Ensure registered listener is cleaned up
-          assert [] == Registry.lookup(@registry, @test_shape_handle)
           response
         end)
 
@@ -741,6 +743,8 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response.offset == next_offset
       assert response.up_to_date
+      # Ensure registered listener is cleaned up after body is read
+      assert [] == Registry.lookup(@registry, @test_shape_handle)
     end
 
     test "returns correct global_last_seen_lsn on non-live responses during data race", ctx do

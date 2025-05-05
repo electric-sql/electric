@@ -145,7 +145,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
 
         count = update_counter(state.stack_id, handle, 1)
 
-        Logger.info(fn ->
+        Logger.debug(fn ->
           "register: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
         end)
 
