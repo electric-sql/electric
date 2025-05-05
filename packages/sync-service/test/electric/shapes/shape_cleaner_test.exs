@@ -38,7 +38,8 @@ defmodule Electric.Shapes.ShapeCleanerTest do
 
       {:ok, pid} = start_mock_consumer(ctx)
 
-      ShapeCleaner.monitor_shape(shape_handle, server: cleaner, stack_id: ctx.stack_id)
+      assert :ok =
+               ShapeCleaner.monitor_shape(shape_handle, server: cleaner, stack_id: ctx.stack_id)
 
       # ensure consumer is killed
       on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
@@ -62,7 +63,8 @@ defmodule Electric.Shapes.ShapeCleanerTest do
 
       {:ok, pid} = start_mock_consumer(ctx)
 
-      ShapeCleaner.monitor_shape(shape_handle, server: cleaner, stack_id: ctx.stack_id)
+      assert :ok =
+               ShapeCleaner.monitor_shape(shape_handle, server: cleaner, stack_id: ctx.stack_id)
 
       # ensure consumer is killed
       on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
@@ -71,6 +73,38 @@ defmodule Electric.Shapes.ShapeCleanerTest do
 
       # give some time to process messages
       Process.sleep(10)
+    end
+
+    test "ensure shape is cleaned up if consumer dead",
+         %{cleaner: cleaner, shape_handle: shape_handle} = ctx do
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
+      |> allow(self(), cleaner)
+
+      assert :ok =
+               ShapeCleaner.ensure_shape_cleanup(shape_handle,
+                 server: cleaner,
+                 stack_id: ctx.stack_id
+               )
+
+      # give some time to process messages
+      Process.sleep(10)
+    end
+
+    test "fails to ensure shape is cleaned up if consumer alive",
+         %{cleaner: cleaner, shape_handle: shape_handle} = ctx do
+      Mock.ShapeStatus
+      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
+      |> allow(self(), cleaner)
+
+      {:ok, _pid} = start_mock_consumer(ctx)
+
+      assert {:error,
+              "Expected shape #{shape_handle} consumer to not be alive before cleaning shape"} ==
+               ShapeCleaner.ensure_shape_cleanup(shape_handle,
+                 server: cleaner,
+                 stack_id: ctx.stack_id
+               )
     end
   end
 

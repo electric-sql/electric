@@ -89,8 +89,16 @@ defmodule Electric.Shapes.ShapeCleaner do
   end
 
   def handle_call({:ensure_shape_cleanup, shape_handle}, _from, state) do
-    unsafe_cleanup_shape!(shape_handle, state)
-    {:reply, :ok, state}
+    case Electric.Shapes.Consumer.whereis(state.stack_id, shape_handle) do
+      nil ->
+        unsafe_cleanup_shape!(shape_handle, state)
+        {:reply, :ok, state}
+
+      _ ->
+        {:reply,
+         {:error,
+          "Expected shape #{shape_handle} consumer to not be alive before cleaning shape"}, state}
+    end
   end
 
   @impl true
@@ -120,10 +128,6 @@ defmodule Electric.Shapes.ShapeCleaner do
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
     # ignore down messages from task failures
     {:noreply, state}
-  end
-
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    {:noreply, %{state | ref_to_shape_handle: Map.delete(state.ref_to_shape_handle, ref)}}
   end
 
   def handle_info({_ref, :ok}, state) do
