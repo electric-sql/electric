@@ -58,8 +58,7 @@ defmodule Electric.Shapes.ShapeCleaner do
        storage: opts.storage,
        shape_status:
          {opts.shape_status,
-          %ShapeStatus{shape_meta_table: Electric.ShapeCache.get_shape_meta_table(opts)}},
-       ref_to_shape_handle: %{}
+          %ShapeStatus{shape_meta_table: Electric.ShapeCache.get_shape_meta_table(opts)}}
      }}
   end
 
@@ -67,10 +66,9 @@ defmodule Electric.Shapes.ShapeCleaner do
   def handle_call({:monitor_shape, shape_handle}, _from, state) do
     # monitor the consumer to ensure we clean up killed shapes
     shape_consumer_pid = Electric.Shapes.Consumer.whereis(state.stack_id, shape_handle)
-    ref = Process.monitor(shape_consumer_pid)
+    Process.monitor(shape_consumer_pid, tag: {:consumer_down, shape_handle})
 
-    {:reply, :ok,
-     %{state | ref_to_shape_handle: Map.put(state.ref_to_shape_handle, ref, shape_handle)}}
+    {:reply, :ok, state}
   end
 
   defguardp is_expected_consumer_shutdown?(reason)
@@ -78,34 +76,27 @@ defmodule Electric.Shapes.ShapeCleaner do
                    (is_tuple(reason) and elem(reason, 0) == :shutdown and tuple_size(reason) == 2)
 
   @impl true
-  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
+  def handle_info({{:consumer_down, shape_handle}, _ref, :process, _pid, reason}, state)
       when not is_expected_consumer_shutdown?(reason) do
-    case Map.get(state.ref_to_shape_handle, ref) do
-      nil ->
-        # shape already cleaned up by consumer itself
-        {:noreply, state}
+    Logger.warning(
+      "Cleaning up shape #{shape_handle} after unexpected consumer exit: #{inspect(reason)}"
+    )
 
-      shape_handle ->
-        Logger.warning(
-          "Cleaning up shape #{shape_handle} after unexpected consumer exit: #{inspect(reason)}"
-        )
+    {shape_status, shape_status_state} = state.shape_status
+    {publication_manager, publication_manager_opts} = state.publication_manager
 
-        {shape_status, shape_status_state} = state.shape_status
-        {publication_manager, publication_manager_opts} = state.publication_manager
-
-        with %Electric.Shapes.Shape{} = shape <-
-               shape_status.shape_definition(shape_status_state, shape_handle) do
-          # clean up publication and data related to shape
-          publication_manager.remove_shape_async(shape, publication_manager_opts)
-        end
-
-        unsafe_cleanup_shape!(state.ref_to_shape_handle[ref], state)
-        {:noreply, %{state | ref_to_shape_handle: Map.delete(state.ref_to_shape_handle, ref)}}
+    with %Electric.Shapes.Shape{} = shape <-
+           shape_status.shape_definition(shape_status_state, shape_handle) do
+      # clean up publication and data related to shape
+      publication_manager.remove_shape_async(shape, publication_manager_opts)
     end
+
+    unsafe_cleanup_shape!(shape_handle, state)
+    {:noreply, state}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    {:noreply, %{state | ref_to_shape_handle: Map.delete(state.ref_to_shape_handle, ref)}}
+  def handle_info({{:consumer_down, _shape_handle}, _ref, :process, _pid, _reason}, state) do
+    {:noreply, state}
   end
 
   def handle_info({_ref, :ok}, state) do
