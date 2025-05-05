@@ -1085,6 +1085,9 @@ defmodule Electric.ShapeCacheTest do
 
       Process.flag(:trap_exit, false)
 
+      # Give some time for cleanups to take place
+      Process.sleep(50)
+
       # Next restart should not recover shape
       restart_shape_cache(context)
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
