@@ -51,7 +51,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     :ok
   end
 
-  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
+  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor, :with_shape_monitor]
 
   def conn(_ctx, method, params, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string, params)

@@ -7,6 +7,14 @@ defmodule Electric.LsnTracker do
     set_last_processed_lsn(last_processed_lsn, stack_id)
   end
 
+  def terminate(stack_id) do
+    stack_id
+    |> table()
+    |> :ets.delete()
+
+    :ok
+  end
+
   @spec set_last_processed_lsn(Lsn.t() | non_neg_integer(), String.t()) :: :ok
   def set_last_processed_lsn(lsn, stack_id) when is_struct(lsn, Lsn) do
     stack_id

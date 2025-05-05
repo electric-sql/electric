@@ -88,6 +88,14 @@ defmodule Electric.StackSupervisor do
                    type: :pos_integer,
                    default: Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
                  ],
+                 monitor_opts: [
+                   type: :keyword_list,
+                   required: false,
+                   keys: [
+                     on_remove: [type: {:fun, 2}],
+                     on_cleanup: [type: {:fun, 1}]
+                   ]
+                 ],
                  tweaks: [
                    type: :keyword_list,
                    required: false,
@@ -309,6 +317,8 @@ defmodule Electric.StackSupervisor do
       tweaks: config.tweaks
     ]
 
+    monitor_opts = Map.get(config, :monitor_opts, [])
+
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
 
@@ -336,7 +346,11 @@ defmodule Electric.StackSupervisor do
           {Electric.Postgres.Inspector.EtsInspector,
            stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
           {Electric.Connection.Supervisor, new_connection_manager_opts},
-          {Electric.Shapes.Monitor, stack_id: stack_id, storage: storage}
+          {Electric.Shapes.Monitor,
+           Keyword.merge(
+             [stack_id: stack_id, storage: storage],
+             Keyword.take(monitor_opts, [:on_remove, :on_cleanup])
+           )}
         ]
 
     # Store the telemetry span attributes in the persistent term for this stack

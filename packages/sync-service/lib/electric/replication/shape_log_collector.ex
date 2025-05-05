@@ -103,6 +103,11 @@ defmodule Electric.Replication.ShapeLogCollector do
     }
   end
 
+  def terminate(_reason, state) do
+    LsnTracker.terminate(state.stack_id)
+    :ok
+  end
+
   # initial subscription before any transactions have been sent
   def handle_demand(_demand, %{producer: nil} = state) do
     {:noreply, [], state}

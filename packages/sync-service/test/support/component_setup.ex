@@ -189,6 +189,41 @@ defmodule Support.ComponentSetup do
     %{}
   end
 
+  def with_shape_monitor(ctx) do
+    storage =
+      Map.get_lazy(ctx, :storage, fn ->
+        %{storage: storage} = with_in_memory_storage(ctx)
+
+        storage
+      end)
+
+    start_link_supervised!(
+      {Electric.Shapes.Monitor,
+       Keyword.merge(monitor_config(ctx),
+         stack_id: ctx.stack_id,
+         storage: storage
+       )}
+    )
+
+    %{storage: storage}
+  end
+
+  defp monitor_config(ctx) do
+    parent = self()
+
+    on_remove =
+      Map.get(ctx, :on_shape_remove, fn handle, _pid ->
+        send(parent, {Electric.Shapes.Monitor, :remove, handle})
+      end)
+
+    on_cleanup =
+      Map.get(ctx, :on_shape_cleanup, fn handle ->
+        send(parent, {Electric.Shapes.Monitor, :cleanup, handle})
+      end)
+
+    [on_remove: on_remove, on_cleanup: on_cleanup]
+  end
+
   def with_complete_stack(ctx) do
     stack_id = full_test_name(ctx)
 
@@ -224,7 +259,8 @@ defmodule Support.ComponentSetup do
            max_restarts: 0,
            pool_size: 2
          ],
-         tweaks: [registry_partitions: 1]},
+         tweaks: [registry_partitions: 1],
+         monitor_opts: monitor_config(ctx)},
         restart: :temporary,
         significant: false
       )

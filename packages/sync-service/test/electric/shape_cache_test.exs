@@ -65,11 +65,16 @@ defmodule Electric.ShapeCacheTest do
     %{inspector: @stub_inspector, run_with_conn_fn: fn _, cb -> cb.(:connection) end}
   end
 
-  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor]
+  setup [
+    :with_persistent_kv,
+    :with_stack_id_from_test,
+    :with_in_memory_storage,
+    :with_status_monitor,
+    :with_shape_monitor
+  ]
 
   describe "get_or_create_shape_handle/2" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_no_pool,
       :with_registry,
@@ -98,7 +103,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_handle/2 shape initialization" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -260,7 +264,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "get_or_create_shape_handle/2 against real db" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
       :with_unique_db,
@@ -433,7 +436,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "list_shapes/1" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -502,7 +504,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "has_shape?/2" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -542,7 +543,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "await_snapshot_start/4" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -713,7 +713,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_shape/2" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -793,7 +792,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_all_shapes_for_relations/2" do
     setup [
-      :with_in_memory_storage,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -873,7 +871,6 @@ defmodule Electric.ShapeCacheTest do
 
   describe "clean_all_shapes/1" do
     setup [
-      :with_in_memory_storage,
       :with_tracing_storage,
       :with_log_chunking,
       :with_registry,
@@ -896,17 +893,13 @@ defmodule Electric.ShapeCacheTest do
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
       ref =
-        Process.monitor(
-          Electric.Shapes.Consumer.name(ctx.stack_id, shape_handle)
-          |> GenServer.whereis()
-        )
+        Process.monitor(Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle))
 
       :ok = ShapeCache.clean_all_shapes(opts)
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
-      assert_receive {Support.TestStorage, :cleanup!, ^shape_handle}
-      assert_receive {Support.TestStorage, :unsafe_cleanup!, ^shape_handle}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}
     end
   end
 
