@@ -17,14 +17,14 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def cleanup(stack_id, storage_impl, shape_handle) do
+  def cleanup(stack_id, storage_impl, shape_handle, on_cleanup) do
     Task.Supervisor.start_child(name(stack_id), fn ->
       Logger.metadata(shape_handle: shape_handle, stack_id: stack_id)
-      cleanup_shape(storage_impl, shape_handle)
+      cleanup_shape(storage_impl, shape_handle, on_cleanup)
     end)
   end
 
-  defp cleanup_shape(storage_impl, shape_handle) do
+  defp cleanup_shape(storage_impl, shape_handle, on_cleanup) do
     Logger.debug("cleaning shape data #{inspect(shape_handle)}")
 
     shape_handle
@@ -32,5 +32,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     |> Storage.unsafe_cleanup!()
   catch
     exception -> Logger.error(exception)
+  after
+    on_cleanup.(shape_handle)
   end
 end
