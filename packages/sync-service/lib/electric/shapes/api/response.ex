@@ -283,7 +283,7 @@ defmodule Electric.Shapes.Api.Response do
 
         receive do
           {_ref, :shape_rotation} ->
-            Logger.warning("shape #{inspect(response.handle)}: stream halted by shape rotation")
+            Logger.info("shape #{inspect(response.handle)}: stream halted by shape rotation")
             {:halt, {conn, bytes_sent}}
         after
           0 ->

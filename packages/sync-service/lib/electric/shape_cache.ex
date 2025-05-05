@@ -231,7 +231,7 @@ defmodule Electric.ShapeCache do
 
     last_processed_lsn =
       if opts[:purge_all_shapes?] do
-        clean_up_all_shapes(state)
+        purge_all_shapes(state)
         Lsn.from_integer(0)
       else
         recover_shapes(state, opts.recover_shape_timeout)
@@ -245,11 +245,11 @@ defmodule Electric.ShapeCache do
       :ok = publication_manager.refresh_publication(publication_manager_opts)
     rescue
       error ->
-        clean_up_all_shapes(state)
+        purge_all_shapes(state)
         reraise error, __STACKTRACE__
     catch
       :exit, reason ->
-        clean_up_all_shapes(state)
+        purge_all_shapes(state)
         exit(reason)
     end
 
@@ -387,13 +387,34 @@ defmodule Electric.ShapeCache do
     :ok
   end
 
-  defp clean_up_all_shapes(state) do
-    shape_handles =
-      state.shape_status_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
+  # reset shape storage before any consumer have been started
+  defp purge_all_shapes(state) do
+    for shape_handle <- shape_handles(state) do
+      purge_shape(state, shape_handle)
+    end
 
-    for shape_handle <- shape_handles do
+    state
+  end
+
+  defp purge_shape(state, shape_handle) do
+    deregister_shape(shape_handle, state)
+
+    # Cleanup the storage for the shape
+    shape_handle
+    |> Electric.ShapeCache.Storage.for_shape(state.storage)
+    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+
+    state
+  end
+
+  defp clean_up_all_shapes(state) do
+    for shape_handle <- shape_handles(state) do
       clean_up_shape(state, shape_handle)
     end
+  end
+
+  defp shape_handles(state) do
+    state.shape_status_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
   end
 
   defp recover_shapes(state, timeout) do
@@ -422,7 +443,7 @@ defmodule Electric.ShapeCache do
         lsn
 
       nil ->
-        clean_up_shape(state, shape_handle)
+        purge_shape(state, shape_handle)
 
         Logger.error(
           "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
@@ -447,7 +468,7 @@ defmodule Electric.ShapeCache do
       )
 
       # clean up corrupted data to avoid persisting bad state
-      clean_up_shape(state, shape_handle)
+      purge_shape(state, shape_handle)
       []
   end
 
