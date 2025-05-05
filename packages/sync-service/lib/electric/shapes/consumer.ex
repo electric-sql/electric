@@ -115,7 +115,7 @@ defmodule Electric.Shapes.Consumer do
         cleaned?: false
       })
 
-    :ok = Electric.Shapes.Monitor.register_consumer(config.stack_id, config.shape_handle)
+    :ok = Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle)
 
     {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
   end
@@ -225,10 +225,10 @@ defmodule Electric.Shapes.Consumer do
 
   @impl GenStage
   def handle_info(
-        {Electric.Shapes.Monitor, :subscriber_termination, handle, reason},
+        {Electric.Shapes.Monitor, :reader_termination, handle, reason},
         %{shape_handle: handle} = state
       ) do
-    # Triggered as a result of `Electric.Shapes.Monitor.wait_subscriber_termination/3`
+    # Triggered as a result of `Electric.Shapes.Monitor.notify_reader_termination/3`
     # when all readers have terminated.
     # By the time we reach here, all the work cleaning the shape is either done
     # or will be done once this process (and its owning supervisor), have
@@ -526,12 +526,7 @@ defmodule Electric.Shapes.Consumer do
       |> remove_shape()
       |> notify_shape_rotation()
 
-    :ok =
-      Electric.Shapes.Monitor.wait_subscriber_termination(
-        stack_id,
-        shape_handle,
-        reason
-      )
+    :ok = Electric.Shapes.Monitor.notify_reader_termination(stack_id, shape_handle, reason)
 
     state
   end
@@ -554,7 +549,7 @@ defmodule Electric.Shapes.Consumer do
     # Trigger shape data cleanup after the consumer processes have terminated
     # including the storage process
     :ok =
-      Electric.Shapes.Monitor.register_cleanup(
+      Electric.Shapes.Monitor.cleanup_after_termination(
         stack_id,
         shape_handle,
         ConsumerSupervisor.whereis(stack_id, shape_handle)
