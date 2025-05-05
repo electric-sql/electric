@@ -1,4 +1,14 @@
 defmodule Electric.Shapes.Monitor.MonitorRegistry do
+  @moduledoc """
+  Tracks active uses of shapes, the number of readers (and their pids) and the
+  active writer.
+
+  Allows for registering callback messages when all readers of a shape have
+  terminated or when some other process has terminated.
+
+  Uses `Electric.Shapes.Monitor.CleanupTaskSupervisor` to trigger an
+  `unsafe_cleanup!` of shape storage once the shape supervisor has terminated.
+  """
   use GenServer
 
   alias Electric.Shapes.Monitor
@@ -29,57 +39,81 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     end
   end
 
-  def register_subscriber(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_subscriber, shape_handle, pid})
+  @doc """
+  Register the current process as a reader of the given shape.
+  """
+  def register_reader(stack_id, shape_handle, pid \\ self()) do
+    GenServer.call(name(stack_id), {:register_reader, shape_handle, pid})
   end
 
-  def unregister_subscriber(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:unregister_subscriber, shape_handle, pid})
+  @doc """
+  Unregister the current process as a reader of the given shape.
+  """
+  def unregister_reader(stack_id, shape_handle, pid \\ self()) do
+    GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid})
   end
 
-  def register_consumer(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_consumer, shape_handle, pid})
+  @doc """
+  Register the current process as a writer (consumer) of the given shape.
+  """
+  def register_writer(stack_id, shape_handle, pid \\ self()) do
+    GenServer.call(name(stack_id), {:register_writer, shape_handle, pid})
   end
 
-  def subscriber_count(stack_id, shape_handle) do
+  @doc """
+  The number of active readers of the given shape.
+  """
+  def reader_count(stack_id, shape_handle) do
     case :ets.lookup(table(stack_id), shape_handle) do
       [{_, count}] -> {:ok, count}
       [] -> {:ok, 0}
     end
   end
 
-  def subscriber_count(stack_id) do
+  @doc """
+  The number of active readers of all shapes.
+  """
+  def reader_count(stack_id) do
     case :ets.lookup(table(stack_id), :all) do
       [{:all, count}] -> count
       [] -> 0
     end
   end
 
-  def wait_subscriber_termination(stack_id, shape_handle, reason, pid \\ self()) do
-    case subscriber_count(stack_id, shape_handle) do
+  @doc """
+  Request a message when all readers of the given handle have finished or terminated.
+  """
+  def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
+    case reader_count(stack_id, shape_handle) do
       {:ok, 0} ->
-        notify_subscriber_termination({pid, reason}, shape_handle)
+        do_notify_reader_termination({pid, reason}, shape_handle)
         :ok
 
       {:ok, _} ->
-        GenServer.call(name(stack_id), {:wait_subscriber_termination, shape_handle, pid, reason})
+        GenServer.call(name(stack_id), {:notify_reader_termination, shape_handle, pid, reason})
     end
   end
 
-  def termination_subscribers(stack_id, shape_handle) do
-    GenServer.call(name(stack_id), {:termination_subscribers, shape_handle})
+  # used in tests
+  def termination_watchers(stack_id, shape_handle) do
+    GenServer.call(name(stack_id), {:termination_watchers, shape_handle})
   end
 
-  def register_cleanup(stack_id, shape_handle, wait_pid, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_cleanup, shape_handle, wait_pid, pid})
+  @doc """
+  Request that the given shape is cleaned up by
+  `Electric.Shapes.Monitor.CleanupTaskSupervisor` after `wait_pid` has
+  terminated.
+  """
+  def cleanup_after_termination(stack_id, shape_handle, wait_pid, pid \\ self()) do
+    GenServer.call(name(stack_id), {:cleanup_after_termination, shape_handle, wait_pid, pid})
   end
 
-  defp notify_subscriber_termination(pids, handle) when is_list(pids) do
-    Enum.each(pids, &notify_subscriber_termination(&1, handle))
+  defp do_notify_reader_termination(pids, handle) when is_list(pids) do
+    Enum.each(pids, &do_notify_reader_termination(&1, handle))
   end
 
-  defp notify_subscriber_termination({pid, reason}, handle) when is_pid(pid) do
-    send(pid, {Monitor, :subscriber_termination, handle, reason})
+  defp do_notify_reader_termination({pid, reason}, handle) when is_pid(pid) do
+    send(pid, {Monitor, :reader_termination, handle, reason})
   end
 
   defp table(stack_id) do
@@ -96,7 +130,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     on_remove = Map.get(opts, :on_remove) || fn _, _ -> :ok end
     on_cleanup = Map.get(opts, :on_cleanup) || fn _ -> :ok end
 
-    subscriber_table =
+    reader_table =
       :ets.new(table(stack_id), [
         :protected,
         :named_table,
@@ -109,7 +143,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
       stack_id: stack_id,
       storage: storage,
       monitor_table: monitor_table,
-      subscriber_table: subscriber_table,
+      reader_table: reader_table,
       on_remove: on_remove,
       on_cleanup: on_cleanup,
       termination_watchers: %{},
@@ -127,21 +161,21 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   # - decrement counters for previous shapes
   # if the pid has registered for the given shape before
   # - do nothing
-  def handle_call({:register_subscriber, handle, pid}, _from, state) do
+  def handle_call({:register_reader, handle, pid}, _from, state) do
     previous_registrations =
       :ets.select(state.monitor_table, [
-        {{pid, :subscriber, :"$1", :"$2"}, [{:"=/=", :"$1", handle}], [[:"$1", :"$2"]]}
+        {{pid, :reader, :"$1", :"$2"}, [{:"=/=", :"$1", handle}], [[:"$1", :"$2"]]}
       ])
 
     existing_registrations =
       :ets.select(state.monitor_table, [
-        {{pid, :subscriber, :"$1", :"$2"}, [{:==, :"$1", handle}], [[:"$1", :"$2"]]}
+        {{pid, :reader, :"$1", :"$2"}, [{:==, :"$1", handle}], [[:"$1", :"$2"]]}
       ])
 
     case existing_registrations do
       [] ->
         ref = Process.monitor(pid)
-        :ets.insert(state.monitor_table, {pid, :subscriber, handle, ref})
+        :ets.insert(state.monitor_table, {pid, :reader, handle, ref})
 
         count = update_counter(state.stack_id, handle, 1)
 
@@ -162,13 +196,13 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     {:reply, :ok, state}
   end
 
-  def handle_call({:unregister_subscriber, _handle, pid}, _from, state) do
+  def handle_call({:unregister_reader, _handle, pid}, _from, state) do
     {state, _count} = delete_registered_process(pid, true, state)
 
     {:reply, :ok, state}
   end
 
-  def handle_call({:register_consumer, handle, pid}, _from, state) do
+  def handle_call({:register_writer, handle, pid}, _from, state) do
     ref = Process.monitor(pid)
 
     if :ets.insert_new(state.monitor_table, {pid, :consumer, handle, ref}) do
@@ -178,23 +212,23 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     end
   end
 
-  def handle_call({:wait_subscriber_termination, shape_handle, pid, reason}, _from, state) do
+  def handle_call({:notify_reader_termination, shape_handle, pid, reason}, _from, state) do
     %{stack_id: stack_id} = state
 
     state =
-      case subscriber_count(stack_id, shape_handle) do
+      case reader_count(stack_id, shape_handle) do
         {:ok, 0} ->
-          notify_subscriber_termination({pid, reason}, shape_handle)
+          do_notify_reader_termination({pid, reason}, shape_handle)
           state
 
         {:ok, _} ->
-          add_subscriber_termination_watcher(shape_handle, pid, reason, state)
+          add_reader_termination_watcher(shape_handle, pid, reason, state)
       end
 
     {:reply, :ok, state}
   end
 
-  def handle_call({:register_cleanup, shape_handle, wait_pid, pid}, _from, state) do
+  def handle_call({:cleanup_after_termination, shape_handle, wait_pid, pid}, _from, state) do
     # has the consumer registered itself?
     # if not that's an error
     case :ets.match(state.monitor_table, {pid, :consumer, :"$1", :_}) do
@@ -211,7 +245,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     end
   end
 
-  def handle_call({:termination_subscribers, shape_handle}, _from, state) do
+  def handle_call({:termination_watchers, shape_handle}, _from, state) do
     {:reply, {:ok, Map.get(state.termination_watchers, shape_handle, [])}, state}
   end
 
@@ -222,13 +256,13 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     {:noreply, state}
   end
 
-  defp add_subscriber_termination_watcher(shape_handle, pid, reason, state) do
+  defp add_reader_termination_watcher(shape_handle, pid, reason, state) do
     Map.update!(state, :termination_watchers, fn watchers ->
       Map.update(watchers, shape_handle, [{pid, reason}], &[{pid, reason} | &1])
     end)
   end
 
-  defp remove_subscriber_termination_watcher(shape_handle, pid, state) do
+  defp remove_reader_termination_watcher(shape_handle, pid, state) do
     Map.update!(state, :termination_watchers, fn watchers ->
       {pids, watchers} = Map.pop(watchers, shape_handle, [])
 
@@ -246,7 +280,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
 
   defp delete_registered_process(pid, demonitor?, state) do
     case :ets.lookup(state.monitor_table, pid) do
-      [{_, :subscriber, handle, ref}] ->
+      [{_, :reader, handle, ref}] ->
         if demonitor?, do: Process.demonitor(ref, [:flush])
         {state, count} = pid_handle_termination(pid, handle, state)
         state.on_remove.(handle, pid)
@@ -257,7 +291,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
 
         state.on_remove.(handle, pid)
 
-        {remove_subscriber_termination_watcher(handle, pid, state), 0}
+        {remove_reader_termination_watcher(handle, pid, state), 0}
 
       [{_, :cleanup, handle, _ref}] ->
         Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
@@ -288,7 +322,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     {
       if count == 0 do
         {pids, termination_watchers} = Map.pop(termination_watchers, handle, [])
-        notify_subscriber_termination(pids, handle)
+        do_notify_reader_termination(pids, handle)
         %{state | termination_watchers: termination_watchers}
       else
         state
