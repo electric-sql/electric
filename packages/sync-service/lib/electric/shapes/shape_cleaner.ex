@@ -85,7 +85,7 @@ defmodule Electric.Shapes.ShapeCleaner do
     {shape_status, shape_status_state} = state.shape_status
     {publication_manager, publication_manager_opts} = state.publication_manager
 
-    with %Electric.Shapes.Shape{} = shape <-
+    with {:ok, shape} <-
            shape_status.shape_definition(shape_status_state, shape_handle) do
       # clean up publication and data related to shape
       publication_manager.remove_shape_async(shape, publication_manager_opts)
@@ -96,6 +96,12 @@ defmodule Electric.Shapes.ShapeCleaner do
   end
 
   def handle_info({{:consumer_down, _shape_handle}, _ref, :process, _pid, _reason}, state) do
+    # ignore regular consumer shutdowns
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    # ignore down messages from task failures
     {:noreply, state}
   end
 

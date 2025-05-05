@@ -17,6 +17,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
               {:ok, shape_handle()} | {:error, term()}
   @callback initialise_shape(ShapeStatus.t(), shape_handle(), xmin(), LogOffset.t()) ::
               :ok
+  @callback shape_definition(ShapeStatus.t(), shape_handle()) :: {:ok, Shape.t()} | :error
   @callback set_snapshot_xmin(ShapeStatus.t(), shape_handle(), xmin()) :: :ok
   @callback set_latest_offset(ShapeStatus.t(), shape_handle(), LogOffset.t()) :: :ok
   @callback mark_snapshot_started(ShapeStatus.t(), shape_handle()) :: :ok
@@ -295,6 +296,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  @impl true
   def shape_definition(%__MODULE__{shape_meta_table: table} = _state, shape_handle) do
     shape_definition(table, shape_handle)
   end
