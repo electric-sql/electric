@@ -4,11 +4,6 @@
 
 [global pg_container_name=invalid-wal-level__pg]
 
-[my stack_id="single_stack"]
-
-# The error message is slightly different in older PG versions
-[my error_regex=\(Postgrex.Error\) ERROR 55000 \(object_not_in_prerequisite_state\) logical decoding requires wal_level >= logical|\(Postgrex.Error\) ERROR 55000 \(object_not_in_prerequisite_state\) logical decoding requires "wal_level" >= "logical"]
-
 ## Start a new Postgres cluster with logical replication disabled
 [invoke setup_pg_with_shell_name "pg" "" "-c wal_level=replica"]
 
