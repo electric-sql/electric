@@ -44,7 +44,7 @@ function addDatabaseToElectric({
           database_url: dbUri,
           source_options: {
             db_pool_size: 5,
-            ...(pooledDbUri ? { pooled_db_uri: pooledDbUri } : {}),
+            ...(pooledDbUri ? { pooled_database_url: pooledDbUri } : {}),
           },
           region: `us-east-1`,
           team_id: teamId,
