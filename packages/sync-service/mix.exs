@@ -3,11 +3,8 @@ defmodule Electric.MixProject do
 
   @github_repo "https://github.com/electric-sql/electric"
 
-  # Telemetry deps are marked as `target: :application` to prevent their
-  # inclusion in applications including `:electric` as a dependency.
-  #
-  # To build Electric as a standalone app with telemetry enabled, add
-  # `MIX_TARGET=application` to the compilation (& runtime?) environment.
+  # Application and Stack telemetry are enabled when Mix target is set to this value,
+  # e.g. via `MIX_TARGET=application` environment variable.
   @telemetry_target :application
 
   # make the metrics-enabled target available to the rest of the app
@@ -33,12 +30,7 @@ defmodule Electric.MixProject do
       ],
       releases: [
         electric: [
-          applications:
-            [
-              electric: :permanent
-              # This order of application is important to ensure proper startup sequence of
-              # application dependencies, namely, inets.
-            ] ++ telemetry_applications(),
+          applications: [electric: :permanent] ++ telemetry_applications_in_release(),
           include_executables_for: [:unix]
         ]
       ],
@@ -123,8 +115,10 @@ defmodule Electric.MixProject do
     ]
   end
 
-  defp telemetry_applications do
+  defp telemetry_applications_in_release do
     if Mix.target() == @telemetry_target do
+      # This order of application is important to ensure proper startup sequence of
+      # application dependencies, namely, inets.
       [
         opentelemetry_exporter: :permanent,
         opentelemetry: :temporary
@@ -158,7 +152,7 @@ defmodule Electric.MixProject do
   end
 
   defp telemetry_dep_opts(source_opts) do
-    Keyword.merge(source_opts, target: @telemetry_target, optional: true)
+    Keyword.merge(source_opts, targets: @telemetry_target, optional: true)
   end
 
   defp aliases() do
