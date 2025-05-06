@@ -47,6 +47,7 @@ defmodule Electric.StackSupervisor do
   use Supervisor, opts
 
   alias Electric.ShapeCache.LogChunker
+  alias Electric.ShapeCache.ShapeStatus
 
   require Logger
 
@@ -86,7 +87,7 @@ defmodule Electric.StackSupervisor do
                  storage: [type: :mod_arg, required: true],
                  chunk_bytes_threshold: [
                    type: :pos_integer,
-                   default: Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
+                   default: LogChunker.default_chunk_size_threshold()
                  ],
                  monitor_opts: [
                    type: :keyword_list,
@@ -337,6 +338,12 @@ defmodule Electric.StackSupervisor do
         []
       end
 
+    shape_status =
+      {ShapeStatus,
+       %ShapeStatus{
+         shape_meta_table: Electric.ShapeCache.get_shape_meta_table(stack_id: stack_id)
+       }}
+
     children =
       [
         {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
@@ -345,10 +352,11 @@ defmodule Electric.StackSupervisor do
         {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
         {Electric.Connection.Supervisor, new_connection_manager_opts},
         {Electric.Shapes.Monitor,
-         Keyword.merge(
-           [stack_id: stack_id, storage: storage],
-           Keyword.take(monitor_opts, [:on_remove, :on_cleanup])
-         )}
+         Electric.Utils.merge_all([
+           [stack_id: stack_id, storage: storage, shape_status: shape_status],
+           Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
+           Keyword.take(shape_cache_opts, [:publication_manager])
+         ])}
       ] ++ telemetry_children
 
     # Store the telemetry span attributes in the persistent term for this stack

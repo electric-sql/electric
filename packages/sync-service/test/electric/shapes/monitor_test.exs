@@ -2,18 +2,35 @@ defmodule Electric.Shapes.MonitorTest do
   use ExUnit.Case, async: true
 
   alias Electric.Shapes.Monitor
+  alias Electric.Shapes.Shape
+
+  alias Support.StubInspector
 
   import Support.ComponentSetup
 
-  setup [:with_stack_id_from_test, :with_in_memory_storage]
+  @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+  @shape Shape.new!("the_table", inspector: @inspector)
 
-  defp start_stack_status(%{stack_id: stack_id, storage: storage}) do
+  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_test_publication_manager]
+
+  def shape, do: @shape
+
+  defmodule TestStatus do
+    def remove_shape(%{parent: parent}, shape_handle) do
+      send(parent, {TestStatus, :remove_shape, shape_handle})
+    end
+  end
+
+  defp start_stack_status(ctx) do
+    %{stack_id: stack_id, storage: storage, publication_manager: publication_manager} = ctx
     parent = self()
 
     start_link_supervised!(
       {Monitor,
        stack_id: stack_id,
        storage: storage,
+       publication_manager: publication_manager,
+       shape_status: {TestStatus, %{parent: self()}},
        on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end,
        on_cleanup: fn shape_handle -> send(parent, {:on_cleanup, shape_handle}) end}
     )
@@ -142,30 +159,62 @@ defmodule Electric.Shapes.MonitorTest do
       assert_receive {Monitor, :reader_termination, ^handle, :my_reason}, 100
     end
 
-    test "cleans up if consumer exits", %{stack_id: stack_id} = _ctx do
-      handle = "some-handle"
+    defmodule ControlledConsumer do
+      use GenServer
+
+      def start_link({stack_id, handle, parent}) do
+        GenServer.start_link(__MODULE__, {stack_id, handle, parent})
+      end
+
+      @impl GenServer
+      def init({stack_id, handle, parent}) do
+        :ok = Monitor.register_writer(stack_id, handle, Electric.Shapes.MonitorTest.shape())
+        send(parent, {:ready, :consumer, 1})
+        {:ok, {stack_id, handle, parent}}
+      end
+
+      @impl GenServer
+      def handle_info(:wait_subscriber, {stack_id, handle, parent} = state) do
+        :ok = Monitor.notify_reader_termination(stack_id, handle, :normal)
+        send(parent, {:ready, :consumer, 2})
+        {:noreply, state}
+      end
+
+      def handle_info({:raise, msg}, _state) do
+        raise msg
+      end
+
+      def handle_info({:stop, reason}, state) do
+        {:stop, reason, state}
+      end
+    end
+
+    defp exit_consumer(ctx, handle, reason) do
+      %{stack_id: stack_id} = ctx
+
       parent = self()
 
-      {:ok, consumer} =
+      {:ok, consumer_supervisor} =
         start_supervised(
           {Task,
            fn ->
-             :ok = Monitor.register_writer(stack_id, handle)
+             {:via, Registry, {registry, name}} =
+               Electric.Shapes.ConsumerSupervisor.name(stack_id, handle)
 
-             send(parent, {:ready, :consumer, 1})
+             Registry.register(registry, name, [])
+
+             send(parent, {:ready, :supervisor})
 
              receive do
-               :wait_subscriber ->
-                 :ok = Monitor.notify_reader_termination(stack_id, handle, :normal)
-                 send(parent, {:ready, :consumer, 2})
-
-                 receive do
-                   _ -> raise "bye"
-                 end
+               _ -> :ok
              end
            end},
-          id: {:consumer, 1}
+          id: {:consumer_supervisor, 1}
         )
+
+      assert_receive {:ready, :supervisor}
+
+      {:ok, consumer} = start_supervised({ControlledConsumer, {stack_id, handle, parent}})
 
       {:ok, _subscriber1} =
         start_supervised(
@@ -196,6 +245,7 @@ defmodule Electric.Shapes.MonitorTest do
         )
 
       Process.monitor(consumer)
+      Process.monitor(consumer_supervisor)
 
       assert_receive {:ready, :consumer, 1}
       assert_receive {:ready, :subscriber, 1}
@@ -207,11 +257,50 @@ defmodule Electric.Shapes.MonitorTest do
 
       assert {:ok, [{^consumer, :normal}]} = Monitor.termination_watchers(stack_id, handle)
 
-      send(consumer, :bye)
+      case reason do
+        {:raise, message} ->
+          send(consumer, {:raise, message})
+
+        reason ->
+          send(consumer, {:stop, reason})
+      end
 
       assert_receive {:DOWN, _, :process, ^consumer, _}
 
+      # we don't get reasons from the supervisor, it just `:shutdown`s
+      send(consumer_supervisor, :bye)
+
+      assert_receive {:DOWN, _, :process, ^consumer_supervisor, _}
+
       assert {:ok, []} = Monitor.termination_watchers(stack_id, handle)
+    end
+
+    test "cleans up if consumer raises", ctx do
+      handle = "some-handle"
+
+      exit_consumer(ctx, handle, {:raise, "boom"})
+
+      assert_receive {:on_cleanup, ^handle}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, @shape}
+      assert_receive {TestStatus, :remove_shape, ^handle}
+    end
+
+    test "cleans up if consumer exits with {:shutdown, :cleanup}", ctx do
+      handle = "some-handle"
+
+      exit_consumer(ctx, handle, {:shutdown, :cleanup})
+
+      assert_receive {:on_cleanup, ^handle}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, @shape}
+      assert_receive {TestStatus, :remove_shape, ^handle}
+    end
+
+    test "does not clean up if consumer exits with :normal", ctx do
+      handle = "some-handle"
+
+      exit_consumer(ctx, handle, :normal)
+
+      refute_receive {:on_cleanup, ^handle}, 500
     end
 
     test "is triggered if same reader pid changes shape handle", %{stack_id: stack_id} = _ctx do
@@ -279,88 +368,88 @@ defmodule Electric.Shapes.MonitorTest do
     end
   end
 
-  defp wrap_storage(%{storage: storage}) do
-    storage = Support.TestStorage.wrap(storage, %{})
-    [storage: storage]
-  end
+  # defp wrap_storage(%{storage: storage}) do
+  #   storage = Support.TestStorage.wrap(storage, %{})
+  #   [storage: storage]
+  # end
 
-  describe "cleanup_after_termination/2" do
-    setup [:wrap_storage, :start_stack_status]
-
-    test "cleanup is performed if the consumer registers", %{stack_id: stack_id} do
-      handle = "some-handle-1"
-      parent = self()
-
-      {:ok, supervisor} =
-        start_supervised(
-          {Task,
-           fn ->
-             receive do
-               _ -> :ok
-             end
-           end},
-          id: {:supervisor, 1}
-        )
-
-      {:ok, consumer} =
-        start_supervised(
-          {Task,
-           fn ->
-             :ok = Monitor.register_writer(stack_id, handle)
-             send(parent, {:ready, 1})
-
-             receive do
-               :request_cleanup ->
-                 :ok = Monitor.cleanup_after_termination(stack_id, handle, supervisor)
-                 send(parent, {:cleanup, 1})
-
-                 receive do
-                   _ ->
-                     :ok
-                 end
-             end
-           end},
-          id: {:consumer, 1}
-        )
-
-      assert_receive {:ready, 1}
-
-      send(consumer, :request_cleanup)
-      assert_receive {:cleanup, 1}
-      send(consumer, :quit)
-      refute_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
-      send(supervisor, :quit)
-      assert_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
-      assert_receive {:on_cleanup, ^handle}
-    end
-
-    test "cleanup is not performed unless the consumer registers", %{stack_id: stack_id} do
-      handle = "some-handle-1"
-      parent = self()
-
-      {:ok, consumer} =
-        start_supervised(
-          {Task,
-           fn ->
-             :ok = Monitor.register_writer(stack_id, handle)
-             send(parent, {:ready, 1})
-
-             receive do
-               :quit ->
-                 :ok
-             end
-           end},
-          id: {:consumer, 1}
-        )
-
-      assert_receive {:ready, 1}
-
-      send(consumer, :quit)
-      refute_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
-    end
-
-    test "returns an error if the process is not registered as a consumer", %{stack_id: stack_id} do
-      assert {:error, _} = Monitor.cleanup_after_termination(stack_id, "some-handle-1", self())
-    end
-  end
+  # describe "cleanup_after_termination/2" do
+  #   setup [:wrap_storage, :start_stack_status]
+  #
+  #   test "cleanup is performed if the consumer registers", %{stack_id: stack_id} do
+  #     handle = "some-handle-1"
+  #     parent = self()
+  #
+  #     {:ok, supervisor} =
+  #       start_supervised(
+  #         {Task,
+  #          fn ->
+  #            receive do
+  #              _ -> :ok
+  #            end
+  #          end},
+  #         id: {:supervisor, 1}
+  #       )
+  #
+  #     {:ok, consumer} =
+  #       start_supervised(
+  #         {Task,
+  #          fn ->
+  #            :ok = Monitor.register_writer(stack_id, handle)
+  #            send(parent, {:ready, 1})
+  #
+  #            receive do
+  #              :request_cleanup ->
+  #                :ok = Monitor.cleanup_after_termination(stack_id, handle, supervisor)
+  #                send(parent, {:cleanup, 1})
+  #
+  #                receive do
+  #                  _ ->
+  #                    :ok
+  #                end
+  #            end
+  #          end},
+  #         id: {:consumer, 1}
+  #       )
+  #
+  #     assert_receive {:ready, 1}
+  #
+  #     send(consumer, :request_cleanup)
+  #     assert_receive {:cleanup, 1}
+  #     send(consumer, :quit)
+  #     refute_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
+  #     send(supervisor, :quit)
+  #     assert_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
+  #     assert_receive {:on_cleanup, ^handle}
+  #   end
+  #
+  #   test "cleanup is not performed unless the consumer registers", %{stack_id: stack_id} do
+  #     handle = "some-handle-1"
+  #     parent = self()
+  #
+  #     {:ok, consumer} =
+  #       start_supervised(
+  #         {Task,
+  #          fn ->
+  #            :ok = Monitor.register_writer(stack_id, handle)
+  #            send(parent, {:ready, 1})
+  #
+  #            receive do
+  #              :quit ->
+  #                :ok
+  #            end
+  #          end},
+  #         id: {:consumer, 1}
+  #       )
+  #
+  #     assert_receive {:ready, 1}
+  #
+  #     send(consumer, :quit)
+  #     refute_receive {Support.TestStorage, :unsafe_cleanup!, ^handle}
+  #   end
+  #
+  #   test "returns an error if the process is not registered as a consumer", %{stack_id: stack_id} do
+  #     assert {:error, _} = Monitor.cleanup_after_termination(stack_id, "some-handle-1", self())
+  #   end
+  # end
 end

@@ -718,4 +718,11 @@ defmodule Electric.Utils do
       after_fun
     )
   end
+
+  @spec merge_all([keyword()]) :: keyword()
+  def merge_all([keyword | keywords]) do
+    Enum.reduce(keywords, keyword, fn k, merged ->
+      Keyword.merge(merged, k)
+    end)
+  end
 end

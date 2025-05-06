@@ -7,7 +7,7 @@ defmodule Electric.Replication.PublicationManager do
   alias Electric.Replication.Eval.Expr
   alias Electric.Shapes.Shape
 
-  @callback name(binary() | Keyword.t()) :: atom()
+  @callback name(binary() | Keyword.t()) :: term()
   @callback recover_shape(Shape.t(), Keyword.t()) :: :ok
   @callback add_shape(Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(Shape.t(), Keyword.t()) :: :ok
@@ -93,6 +93,9 @@ defmodule Electric.Replication.PublicationManager do
             server: [type: :any, required: false]
           )
 
+  @behaviour __MODULE__
+
+  @impl __MODULE__
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -102,7 +105,7 @@ defmodule Electric.Replication.PublicationManager do
     name(stack_id)
   end
 
-  @spec add_shape(Shape.t(), Keyword.t()) :: :ok
+  @impl __MODULE__
   def add_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
@@ -112,13 +115,13 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @spec recover_shape(Shape.t(), Keyword.t()) :: :ok
+  @impl __MODULE__
   def recover_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:recover_shape, shape})
   end
 
-  @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
+  @impl __MODULE__
   def remove_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
@@ -128,7 +131,7 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @spec refresh_publication(Keyword.t()) :: :ok
+  @impl __MODULE__
   def refresh_publication(opts \\ []) do
     server = Access.get(opts, :server, name(opts))
     timeout = Access.get(opts, :timeout, 10_000)

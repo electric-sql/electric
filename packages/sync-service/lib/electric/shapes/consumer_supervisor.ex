@@ -48,7 +48,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     end
   end
 
-  def clean_and_stop(%{
+  def stop_and_clean(%{
         stack_id: stack_id,
         shape_handle: shape_handle
       }) do
@@ -60,7 +60,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
         Supervisor.stop(name(stack_id, shape_handle))
 
       consumer_pid when is_pid(consumer_pid) ->
-        GenServer.call(consumer_pid, :clean_and_stop, 30_000)
+        GenServer.call(consumer_pid, :stop_and_clean, 30_000)
     end
   end
 
