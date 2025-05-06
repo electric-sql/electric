@@ -277,12 +277,12 @@ defmodule Electric.Connection.Manager do
         :start_lock_connection,
         %State{
           current_phase: :connection_setup,
-          current_step: {:start_lock_connection, _},
+          current_step: {:start_lock_connection = step, _},
           lock_connection_pid: nil
         } = state
       ) do
     opts = [
-      connection_opts: connection_opts(nil, state),
+      connection_opts: connection_opts(step, state),
       connection_manager: self(),
       lock_name: Keyword.fetch!(state.replication_opts, :slot_name),
       stack_id: state.stack_id
@@ -1044,7 +1044,8 @@ defmodule Electric.Connection.Manager do
   defp populate_connection_opts(conn_opts),
     do: conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
 
-  defp connection_opts(:start_replication_client, %State{shared_connection_opts: nil} = state) do
+  defp connection_opts(step, %State{shared_connection_opts: nil} = state)
+       when step in [:start_lock_connection, :start_replication_client] do
     Keyword.fetch!(state.replication_opts, :connection_opts)
   end
 
