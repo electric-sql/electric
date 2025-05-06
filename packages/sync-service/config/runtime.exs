@@ -36,98 +36,12 @@ if config_env() == :test do
   config :logger, :default_handler, level: test_log_level
 end
 
-config :sentry,
-  environment_name: config_env(),
-  client: Electric.Telemetry.SentryReqHTTPClient
-
-sentry_dsn = env!("SENTRY_DSN", :string, nil)
-
-if !is_nil(sentry_dsn) do
-  config :sentry,
-    dsn: sentry_dsn
-end
-
 # Disable the default telemetry_poller process since we start our own in
 # `Electric.Telemetry.{ApplicationTelemetry, StackTelemetry}`.
 config :telemetry_poller, default: false
 
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
-version = Electric.version()
-
-config :opentelemetry,
-  resource_detectors: [
-    :otel_resource_env_var,
-    :otel_resource_app_env,
-    Electric.Telemetry.OpenTelemetry.ResourceDetector
-  ],
-  resource: %{service: %{name: service_name, version: version}, instance: %{id: instance_id}}
-
-otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
-otel_debug = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
-
-if otlp_endpoint do
-  # Shortcut config for Honeycomb.io:
-  # users may set the optional ELECTRIC_HNY_API_KEY and ELECTRIC_HNY_DATASET environment variables
-  # and specify the Honeycomb URL in ELECTRIC_OTLP_ENDPOINT to export traces directly to
-  # Honeycomb, without the need to run an OpenTelemetry Collector.
-  honeycomb_api_key = env!("ELECTRIC_HNY_API_KEY", :string, nil)
-  honeycomb_dataset = env!("ELECTRIC_HNY_DATASET", :string, nil)
-
-  headers =
-    Enum.reject(
-      [
-        {"x-honeycomb-team", honeycomb_api_key},
-        {"x-honeycomb-dataset", honeycomb_dataset}
-      ],
-      fn {_, val} -> is_nil(val) end
-    )
-
-  config :opentelemetry_exporter,
-    otlp_protocol: :http_protobuf,
-    otlp_endpoint: otlp_endpoint,
-    otlp_headers: headers,
-    otlp_compression: :gzip
-
-  config :otel_metric_exporter,
-    otlp_protocol: :http_protobuf,
-    otlp_endpoint: otlp_endpoint,
-    otlp_headers: Map.new(headers),
-    otlp_compression: :gzip,
-    resource: %{
-      name: "metrics",
-      service: %{name: service_name, version: version},
-      instance: %{id: instance_id}
-    }
-end
-
-otel_batch_processor =
-  if otlp_endpoint do
-    {:otel_batch_processor, %{}}
-  end
-
-otel_simple_processor =
-  if otel_debug do
-    # In this mode, each span is printed to stdout as soon as it ends, without batching.
-    {:otel_simple_processor, %{exporter: {:otel_exporter_stdout, []}}}
-  end
-
-otel_sampling_ratio = env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, 0.01)
-
-config :opentelemetry,
-  processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1),
-  # sampler: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}}
-  # Sample root spans based on our custom sampler
-  # and inherit sampling decision from remote parents
-  sampler:
-    {:parent_based,
-     %{
-       root: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}},
-       remote_parent_sampled: :always_on,
-       remote_parent_not_sampled: :always_off,
-       local_parent_sampled: :always_on,
-       local_parent_not_sampled: :always_off
-     }}
 
 replication_database_url_config = env!("DATABASE_URL", &Electric.Config.parse_postgresql_uri!/1)
 
@@ -287,3 +201,90 @@ config :electric,
   persistent_kv: persistent_kv_spec,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil),
   secret: secret
+
+if Mix.target() == Electric.MixProject.telemetry_target() do
+  config :sentry,
+    environment_name: config_env(),
+    client: Electric.Telemetry.SentryReqHTTPClient
+
+  sentry_dsn = env!("SENTRY_DSN", :string, nil)
+
+  if !is_nil(sentry_dsn) do
+    config :sentry,
+      dsn: sentry_dsn
+  end
+
+  otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
+  otel_debug = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
+  otel_sampling_ratio = env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, 0.01)
+
+  otel_batch_processor =
+    if otlp_endpoint do
+      {:otel_batch_processor, %{}}
+    end
+
+  otel_simple_processor =
+    if otel_debug do
+      # In this mode, each span is printed to stdout as soon as it ends, without batching.
+      {:otel_simple_processor, %{exporter: {:otel_exporter_stdout, []}}}
+    end
+
+  config :opentelemetry,
+    resource_detectors: [
+      :otel_resource_env_var,
+      :otel_resource_app_env,
+      Electric.Telemetry.OpenTelemetry.ResourceDetector
+    ],
+    resource: %{
+      service: %{name: service_name, version: Electric.version()},
+      instance: %{id: instance_id}
+    },
+    processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1),
+    # sampler: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}}
+    # Sample root spans based on our custom sampler
+    # and inherit sampling decision from remote parents
+    sampler:
+      {:parent_based,
+       %{
+         root: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}},
+         remote_parent_sampled: :always_on,
+         remote_parent_not_sampled: :always_off,
+         local_parent_sampled: :always_on,
+         local_parent_not_sampled: :always_off
+       }}
+
+  if otlp_endpoint do
+    # Shortcut config for Honeycomb.io:
+    # users may set the optional ELECTRIC_HNY_API_KEY and ELECTRIC_HNY_DATASET environment variables
+    # and specify the Honeycomb URL in ELECTRIC_OTLP_ENDPOINT to export traces directly to
+    # Honeycomb, without the need to run an OpenTelemetry Collector.
+    honeycomb_api_key = env!("ELECTRIC_HNY_API_KEY", :string, nil)
+    honeycomb_dataset = env!("ELECTRIC_HNY_DATASET", :string, nil)
+
+    headers =
+      Enum.reject(
+        [
+          {"x-honeycomb-team", honeycomb_api_key},
+          {"x-honeycomb-dataset", honeycomb_dataset}
+        ],
+        fn {_, val} -> is_nil(val) end
+      )
+
+    config :opentelemetry_exporter,
+      otlp_protocol: :http_protobuf,
+      otlp_endpoint: otlp_endpoint,
+      otlp_headers: headers,
+      otlp_compression: :gzip
+
+    config :otel_metric_exporter,
+      otlp_protocol: :http_protobuf,
+      otlp_endpoint: otlp_endpoint,
+      otlp_headers: Map.new(headers),
+      otlp_compression: :gzip,
+      resource: %{
+        name: "metrics",
+        service: %{name: service_name, version: Electric.version()},
+        instance: %{id: instance_id}
+      }
+  end
+end
