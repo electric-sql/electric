@@ -190,7 +190,7 @@ The [GitHub example](https://github.com/electric-sql/electric/tree/main/examples
 2. [`./caddy`](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/caddy) a Caddy web server as a reverse proxy
 3. [`./edge`](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth/edge) an edge function that you can run in front of a CDN
 
-The API is an [Elixir/Phoenix](/docs/integrations/phoenix) web application that [exposes](https://github.com/electric-sql/electric/blog/main/examples/gatekeeper-auth/api/lib/api_web/router.ex) two endpoints:
+The API is an [Elixir/Phoenix](/docs/integrations/phoenix) web application that [exposes](https://github.com/electric-sql/electric/blob/main/examples/gatekeeper-auth/api/lib/api_web/router.ex) two endpoints:
 
 1. a gatekeeper endpoint at `POST /gatekeeper/:table`
 2. a proxy endpoint at `GET /proxy/v1/shape`

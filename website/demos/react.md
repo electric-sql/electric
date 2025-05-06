@@ -18,7 +18,7 @@ example: true
 
 This is our simplest example of a web app using Electric with [React](https://react.dev) and [Vite](https://vite.dev).
 
-The Electric-specific code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blog/main/examples/react/src/Example.tsx):
+The Electric-specific code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blob/main/examples/react/src/Example.tsx):
 
 <<< @../../examples/react/src/Example.tsx{tsx}
 

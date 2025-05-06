@@ -84,7 +84,6 @@ Good use-cases include:
 
 You have the network on the write path. This can be slow and laggy with the user left watching loading spinners. The UI doesn't update until the server responds. Applications won't work offline.
 
-
 <h3 id="optimistic-state" tabindex="-1" style="display: inline-block">
   2. Optimistic state
   <a class="header-anchor" href="#online-writes" aria-label="Permalink to &quot;Optimistic state&quot;">&ZeroWidthSpace;</a>
@@ -123,7 +122,6 @@ This example illustrates a "simple" approach where the optimistic state:
 2. is not persisted
 
 This means that other components may display inconsistent information and users may be confused by the optimistic state dissapearing if they unmount the component or reload the page. These limitations are addressed by the more comprehensive approach in the next pattern.
-
 
 <h3 id="shared-persistent" tabindex="-1" style="display: inline-block">
   3. Shared persistent <span class="hidden-xs">optimistic state</span>
@@ -167,7 +165,6 @@ The entrypoint for handling rollbacks has the local write context available. So 
 
 Because it has the shared store available, it would also be possible to extend this to implement more sophisticated strategies. Such as also removing other local writes that causally depended-on or were related-to the rejected write.
 
-
 <h3 id="through-the-db" tabindex="-1" style="display: inline-block">
   4. Through the database sync
   <a class="header-anchor" href="#online-writes" aria-label="Permalink to &quot;Through the database sync&quot;">&ZeroWidthSpace;</a>
@@ -202,7 +199,7 @@ Through this, the implementation:
 - presents a single table interface for reads and writes
 - auto-syncs the local writes to the server
 
-The application code in [`index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/index.tsx) stays very simple. Most of the complexity is abstracted into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql). The write-path sync utility in [`sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) handles sending data to the server.
+The application code in [`index.tsx`](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/index.tsx) stays very simple. Most of the complexity is abstracted into the local database schema, defined in [`local-schema.sql`](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql). The write-path sync utility in [`sync.ts`](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) handles sending data to the server.
 
 These are shown in the three tabs below:
 
@@ -233,12 +230,11 @@ Syncing changes in the background complicates any potential [rollback handling](
 
 #### Implementation notes
 
-The [merge logic](#merge-logic) in the `delete_local_on_synced_insert_and_update_trigger` in [`./local-schema.sql`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) supports rebasing local optimistic state on concurrent updates from other users.
+The [merge logic](#merge-logic) in the `delete_local_on_synced_insert_and_update_trigger` in [`./local-schema.sql`](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) supports rebasing local optimistic state on concurrent updates from other users.
 
-The rollback strategy in the `rollback` method of the `ChangeLogSynchronizer` in [`./sync.ts`](https://github.com/electric-sql/electric/blog/main/examples/write-patterns/patterns/4-through-the-db/sync.ts) is very naive: clearing all local state and writes in the event of any write being rejected by the server. You may want to implement a more nuanced strategy. For example, to provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write.
+The rollback strategy in the `rollback` method of the `ChangeLogSynchronizer` in [`./sync.ts`](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/sync.ts) is very naive: clearing all local state and writes in the event of any write being rejected by the server. You may want to implement a more nuanced strategy. For example, to provide information to the user about what is happening and / or minimise data loss by only clearing local-state that's causally dependent on a rejected write.
 
 This opens the door to a lot of complexity that may best be addressed by [using an existing framework](#framework) or one of the [simpler patterns](#patterns).
-
 
 ## Advanced
 
@@ -254,7 +250,7 @@ There are two key complexities introduced by handling offline writes or local wr
 
 When a change syncs in over the Electric replication stream, the application has to decide how to handle any overlapping optimistic state. This can be complicated by concurrency, when changes syncing in may be made by other users (or devices, or even tabs). The third and fourth examples both demonstrate approaches to rebasing the local state on the synced state, rather than just naively clearing the local state, in order to preserve local changes.
 
-[Linearlite](https://github.com/electric-sql/electric/blog/main/examples/linearlite) is another example of through-the-DB sync with more sophisticated merge logic.
+[Linearlite](https://github.com/electric-sql/electric/blob/main/examples/linearlite) is another example of through-the-DB sync with more sophisticated merge logic.
 
 ### Rollbacks
 
@@ -276,7 +272,6 @@ One consideration is the indirection between making a write and handling a rollb
 </div>
 
 If you're crafting a highly concurrent, collaborative experience, you may want to engage with the complexities of merge logic and rebasing local state. However, blunt strategies like those illustrated by the [patterns in this guide](#patterns) can be much easier to implement and reason about &mdash; and are perfectly serviceable for many applications.
-
 
 ## Tools
 
