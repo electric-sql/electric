@@ -10,10 +10,30 @@ concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
 
 jobs:
-  deploy-examples:
-    name: Deploy Examples
+  deploy:
+    name: Deploy ${{ matrix.example.name }}
     environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        example:
+          - name: yjs
+            path: examples/yjs
+          - name: linearlite-read-only
+            path: examples/linearlite-read-only
+          - name: write-patterns
+            path: examples/write-patterns
+          - name: nextjs
+            path: examples/nextjs
+          - name: todo-app
+            path: examples/todo-app
+          - name: proxy-auth
+            path: examples/proxy-auth
+
+    outputs:
+      website_url: ${{ steps.deploy.outputs.website_url }}
+      example_name: ${{ matrix.example.name }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -29,7 +49,6 @@ jobs:
       ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
       ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
       ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
-      # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
 
     steps:
       - uses: actions/checkout@v4
@@ -46,118 +65,53 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .sst
-          key: sst-cache-main-${{ runner.os }}
+          key: sst-cache-${{ matrix.example.name }}-${{ runner.os }}
           restore-keys: |
-            sst-cache-main-${{ runner.os }}
+            sst-cache-${{ matrix.example.name }}-${{ runner.os }}
 
-      - name: Deploy Yjs example
-        working-directory: ./examples/yjs
+      - name: Optional Build (Write Patterns only)
+        if: matrix.example.name == 'write-patterns'
+        run: pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
+
+      - name: Deploy
+        id: deploy
+        working-directory: ./${{ matrix.example.path }}
         run: |
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
+
           if [ -f ".sst/outputs.json" ]; then
-            yjs=$(jq -r '.website' .sst/outputs.json)
-            echo "yjs=$yjs" >> $GITHUB_ENV
+            website=$(jq -r '.website' .sst/outputs.json)
+            echo "${{ matrix.example.name }}=$website" >> $GITHUB_OUTPUT
           else
             echo "sst outputs file not found. Exiting."
             exit 123
           fi
-          exit $code
 
-      - name: Deploy Linearlite Read Only
-        working-directory: ./examples/linearlite-read-only
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            linearlite_read_only=$(jq -r '.website' .sst/outputs.json)
-            echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy Write Patterns example
-        working-directory: ./examples/write-patterns
-        run: |
-          pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            writes=$(jq -r '.website' .sst/outputs.json)
-            echo "writes=$writes" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy NextJs example
-        working-directory: ./examples/nextjs
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            nextjs=$(jq -r '.website' .sst/outputs.json)
-            echo "nextjs=$nextjs" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy TODO App example
-        working-directory: ./examples/todo-app
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            todoapp=$(jq -r '.website' .sst/outputs.json)
-            echo "todoapp=$todoapp" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy proxy-auth example
-        working-directory: ./examples/proxy-auth
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            auth=$(jq -r '.website' .sst/outputs.json)
-            echo "auth=$auth" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Add comment to PR
-        if: github.event_name == 'pull_request'
+  comment:
+    if: github.event_name == 'pull_request'
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create PR comment with deployment URLs
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const linearlite_read_only = process.env.linearlite_read_only;
-            const nextjs = process.env.nextjs;
-            const todoapp = process.env.todoapp;
-            const yjs = process.env.yjs;
-            const writes = process.env.writes;
-            const auth = process.env.auth;
+            const deployments = [
+              { name: 'yjs', url: '${{ needs.deploy.outputs.yjs }}' },
+              { name: 'linearlite-read-only', url: '${{ needs.deploy.outputs.linearlite-read-only }}' },
+              { name: 'write-patterns', url: '${{ needs.deploy.outputs.write-patterns }}' },
+              { name: 'nextjs', url: '${{ needs.deploy.outputs.nextjs }}' },
+              { name: 'todo-app', url: '${{ needs.deploy.outputs.todo-app }}' },
+              { name: 'proxy-auth', url: '${{ needs.deploy.outputs.proxy-auth }}' },
+            ];
+
+            const commentBody = [
+              "## Examples",
+              ...deployments.map(d => `- ${d.name}: ${d.url || '*deploy failed or missing output*'}`),
+            ].join('\n');
 
             const prNumber = context.issue.number;
-            const commentBody = `## Examples
-            - linearlite-read-only: ${linearlite_read_only}
-            - nextjs: ${nextjs}
-            - todoapp: ${todoapp}
-            - yjs: ${yjs}
-            - writes: ${writes}
-            - auth: ${auth}
-            `;
-
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
