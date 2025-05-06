@@ -775,7 +775,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       tsx:
         specifier: ^4.19.1
         version: 4.19.2
@@ -1233,7 +1233,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -1309,7 +1309,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -1369,7 +1369,7 @@ importers:
         version: 0.3.4
       tsup:
         specifier: ^8.0.1
-        version: 8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0)
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
@@ -8897,6 +8897,11 @@ packages:
     resolution: {integrity: sha512-MGrFH9Z4NP9Iyhqn16sDtBpRRNJ0Y2hNa6D65h736fVSaPCHr4DM4sWUNvVaSuC+0OBGhwsrydQwmgfg5LncqQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
+  sst-darwin-arm64@3.3.64:
+    resolution: {integrity: sha512-sGlGX66vjWuN/501zjjEdqIalteyuawuoUvbIQsYFZ3yYg+THSPsXR5e3ADo2LgrOelaMhOOAZ8jabGGEsptnw==}
+    cpu: [arm64]
+    os: [darwin]
+
   sst-darwin-arm64@3.6.25:
     resolution: {integrity: sha512-vUf0OXeSIrPN7QPHSxYJcXqycBvcoZJ9scsV1VrTRQbYpySfWCJMD8LSAuRB+//QjcDYndSx/r/ad0Ofx+a2vw==}
     cpu: [arm64]
@@ -8905,6 +8910,11 @@ packages:
   sst-darwin-arm64@3.6.35:
     resolution: {integrity: sha512-1NSas4wm2hSBZbLOLklvRiRw+vC1IttvxrsDgj2XqFesZ/J4NknVacmym2V82JPkAI/TUcKpgf27i4JTEj7NlQ==}
     cpu: [arm64]
+    os: [darwin]
+
+  sst-darwin-x64@3.3.64:
+    resolution: {integrity: sha512-qH8vDyPMbRASBt5T5+dIyheJ7DoGjHaeGBWzloDVN9Ukz+H3W37rSR4cWEkZlYAwxx32DoiFl6hNIhH39TFpAw==}
+    cpu: [x64]
     os: [darwin]
 
   sst-darwin-x64@3.6.25:
@@ -8917,6 +8927,11 @@ packages:
     cpu: [x64]
     os: [darwin]
 
+  sst-linux-arm64@3.3.64:
+    resolution: {integrity: sha512-MUd0hHMap0SXAdU+UniAAlAzEzuJNIPbnQ80SHFGKatJNgFlQmmp7jq4qR1GXjaB3/NttLKIroQ8RBXuydtUzA==}
+    cpu: [arm64]
+    os: [linux]
+
   sst-linux-arm64@3.6.25:
     resolution: {integrity: sha512-5Xjj08Uo5J1abiCHv09lxA0SqswbP2Vz5y6DAgocTPSLMuUlgCv9m0r+w+ng3OLDoCDVb56EUY0G8zwWX1Q3gA==}
     cpu: [arm64]
@@ -8925,6 +8940,11 @@ packages:
   sst-linux-arm64@3.6.35:
     resolution: {integrity: sha512-VFFVk1b6wPg/nBgHPUARJZmJQnQKebJr9m+Cu6jDfVyNsIpCo+q1W/uKbia7Y2fSpMMS6Pdw5480CJvmLtz/7g==}
     cpu: [arm64]
+    os: [linux]
+
+  sst-linux-x64@3.3.64:
+    resolution: {integrity: sha512-8V42iyy9hc2bcW570DCzFIZrL1wOlSx0PF2M+Zlq7jhVGbhBTTZ13HHIo//W7ETtsAhItBeknZil6LidLz4ZDg==}
+    cpu: [x64]
     os: [linux]
 
   sst-linux-x64@3.6.25:
@@ -8937,6 +8957,11 @@ packages:
     cpu: [x64]
     os: [linux]
 
+  sst-linux-x86@3.3.64:
+    resolution: {integrity: sha512-TuJ5Zf9Lt5nTUOFKR+/EqPbpmzvtngHzQ5qvVq0k0wgPFC/ZgZItJtgZlspz8LL7wFl5dt2Y7VTVUHpov4PKNQ==}
+    cpu: [x86]
+    os: [linux]
+
   sst-linux-x86@3.6.25:
     resolution: {integrity: sha512-7n3x2JcnN6Fbn3y/S9xI2DzhkL6vdV7D2vi0FxxkmW+Q7kZE/L8KrV6K5+IHFVrLmW37H4hyzLAU1r4Oy0Mx7A==}
     cpu: [x86]
@@ -8946,6 +8971,18 @@ packages:
     resolution: {integrity: sha512-I1C+QuL4j0t5whv6GzRSWFcyRGZKIxTNNVS82KYFiJdA6YPMYvTE2Tp5eYixBA1WutQAFBwkC4brhhovJHz1uQ==}
     cpu: [x86]
     os: [linux]
+
+  sst@3.3.64:
+    resolution: {integrity: sha512-Mvgbz/ylG2UOzDir9t0Qk8M0wbzQMzwm0/lk5+lywqpK8emAea43+yOIgPvaJEeGiv9i9T97XRnYLbddUGZAFA==}
+    hasBin: true
+    peerDependencies:
+      hono: 4.x
+      valibot: 0.30.x
+    peerDependenciesMeta:
+      hono:
+        optional: true
+      valibot:
+        optional: true
 
   sst@3.6.25:
     resolution: {integrity: sha512-lEvXCunAEhBQ7jUTj/tF8/5vfbXS1T7nNvfzAo0ZpHE1AH/Pj3vGqI1y4Zxs+SQBfEhUbPKjOH3aDWsOWHCmfA==}
@@ -18637,10 +18674,16 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
+  sst-darwin-arm64@3.3.64:
+    optional: true
+
   sst-darwin-arm64@3.6.25:
     optional: true
 
   sst-darwin-arm64@3.6.35:
+    optional: true
+
+  sst-darwin-x64@3.3.64:
     optional: true
 
   sst-darwin-x64@3.6.25:
@@ -18649,10 +18692,16 @@ snapshots:
   sst-darwin-x64@3.6.35:
     optional: true
 
+  sst-linux-arm64@3.3.64:
+    optional: true
+
   sst-linux-arm64@3.6.25:
     optional: true
 
   sst-linux-arm64@3.6.35:
+    optional: true
+
+  sst-linux-x64@3.3.64:
     optional: true
 
   sst-linux-x64@3.6.25:
@@ -18661,11 +18710,27 @@ snapshots:
   sst-linux-x64@3.6.35:
     optional: true
 
+  sst-linux-x86@3.3.64:
+    optional: true
+
   sst-linux-x86@3.6.25:
     optional: true
 
   sst-linux-x86@3.6.35:
     optional: true
+
+  sst@3.3.64(hono@4.6.13):
+    dependencies:
+      aws4fetch: 1.0.20
+      jose: 5.2.3
+      openid-client: 5.6.4
+    optionalDependencies:
+      hono: 4.6.13
+      sst-darwin-arm64: 3.3.64
+      sst-darwin-x64: 3.3.64
+      sst-linux-arm64: 3.3.64
+      sst-linux-x64: 3.3.64
+      sst-linux-x86: 3.3.64
 
   sst@3.6.25:
     dependencies:
@@ -19084,7 +19149,7 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  tsup@8.3.5(@swc/core@1.9.1)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0):
+  tsup@8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@1.21.6)(postcss@8.4.47)(tsx@4.19.2)(typescript@5.6.3)(yaml@2.6.0):
     dependencies:
       bundle-require: 5.0.0(esbuild@0.24.0)
       cac: 6.7.14
