@@ -154,7 +154,7 @@ paths:
           explode: true
           schema:
             type: object
-            pattenProperties:
+            patternProperties:
               '^\d+$':
                 type: string
           description: |-
