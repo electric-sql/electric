@@ -120,17 +120,14 @@ defmodule Electric.Shapes.Consumer do
     {:reply, ref, [], %{state | monitors: [{pid, ref} | monitors]}}
   end
 
-  def handle_call(:clean_and_stop, _from, state) do
+  def handle_call(:stop_and_clean, _from, state) do
     # Waiter will receive this response if the snapshot wasn't done yet, but
     # given that this is definitely a cleanup call, a 409 is appropriate
     # as old shape handle is no longer valid
     state =
       reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
 
-    # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
-    # any race conditions and leftover data
-    cleanup(state)
-    {:stop, :normal, :ok, state}
+    {:stop, {:shutdown, :cleanup}, :ok, state}
   end
 
   def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
@@ -199,8 +196,7 @@ defmodule Electric.Shapes.Consumer do
       end
 
     state = reply_to_snapshot_waiters(state, {:error, error})
-    cleanup(state)
-    {:stop, :normal, state}
+    {:stop, {:shutdown, :cleanup}, state}
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
@@ -211,22 +207,8 @@ defmodule Electric.Shapes.Consumer do
 
   def terminate(reason, state) do
     Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
-
-    state =
-      reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
-
-    if is_error?(reason) do
-      cleanup(state)
-    end
-
-    state
+    reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
-
-  defp is_error?(:normal), do: false
-  defp is_error?(:killed), do: false
-  defp is_error?(:shutdown), do: false
-  defp is_error?({:shutdown, _}), do: false
-  defp is_error?(_), do: true
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
@@ -252,9 +234,8 @@ defmodule Electric.Shapes.Consumer do
       state
       |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
       |> notify_shape_rotation()
-      |> cleanup()
 
-    {:stop, :normal, state}
+    {:stop, {:shutdown, :cleanup}, state}
   end
 
   # Buffer incoming transactions until we know our pg_snapshot
@@ -278,7 +259,7 @@ defmodule Electric.Shapes.Consumer do
   defp handle_txns(txns, state) do
     case Enum.reduce_while(txns, state, &handle_txn/2) do
       {:truncate, state} ->
-        {:stop, {:shutdown, :truncate}, state}
+        {:stop, {:shutdown, :cleanup}, state}
 
       state ->
         {:noreply, [], state}
@@ -376,7 +357,6 @@ defmodule Electric.Shapes.Consumer do
         )
 
         state
-        |> cleanup()
         |> notify_shape_rotation()
 
         {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
@@ -486,19 +466,6 @@ defmodule Electric.Shapes.Consumer do
     pg_snapshot = Map.put(state.pg_snapshot, :filter_txns?, false)
     ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
     %{state | pg_snapshot: pg_snapshot}
-  end
-
-  defp cleanup(state) do
-    %{
-      shape_status: {shape_status, shape_status_state},
-      publication_manager: {publication_manager, publication_manager_opts}
-    } = state
-
-    shape_status.remove_shape(shape_status_state, state.shape_handle)
-    publication_manager.remove_shape(state.shape, publication_manager_opts)
-    ShapeCache.Storage.cleanup!(state.storage)
-
-    state
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
