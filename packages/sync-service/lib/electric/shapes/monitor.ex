@@ -6,6 +6,8 @@ defmodule Electric.Shapes.Monitor do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             storage: [type: :mod_arg, required: true],
+            shape_status: [type: :mod_arg, required: true],
+            publication_manager: [type: :mod_arg, required: true],
             on_remove: [type: {:or, [nil, {:fun, 2}]}],
             on_cleanup: [type: {:or, [nil, {:fun, 1}]}]
           )
@@ -28,8 +30,8 @@ defmodule Electric.Shapes.Monitor do
     MonitorRegistry.unregister_reader(stack_id, shape_handle, pid)
   end
 
-  def register_writer(stack_id, shape_handle, pid \\ self()) do
-    MonitorRegistry.register_writer(stack_id, shape_handle, pid)
+  def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
+    MonitorRegistry.register_writer(stack_id, shape_handle, shape, pid)
   end
 
   def reader_count(stack_id, shape_handle) do
@@ -44,18 +46,21 @@ defmodule Electric.Shapes.Monitor do
     MonitorRegistry.termination_watchers(stack_id, shape_handle)
   end
 
-  def cleanup_after_termination(stack_id, shape_handle, wait_pid, pid \\ self()) do
-    MonitorRegistry.cleanup_after_termination(stack_id, shape_handle, wait_pid, pid)
-  end
-
   def init(opts) do
-    %{stack_id: stack_id, storage: storage} = opts
+    %{
+      stack_id: stack_id,
+      storage: storage,
+      publication_manager: publication_manager,
+      shape_status: shape_status
+    } = opts
 
     children = [
       {__MODULE__.CleanupTaskSupervisor, stack_id: stack_id},
       {__MODULE__.MonitorRegistry,
        stack_id: stack_id,
        storage: storage,
+       publication_manager: publication_manager,
+       shape_status: shape_status,
        on_remove: Map.get(opts, :on_remove),
        on_cleanup: Map.get(opts, :on_cleanup)}
     ]

@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   use GenServer
 
   alias Electric.Shapes.Monitor
+  alias Electric.Shapes.ConsumerSupervisor
 
   require Logger
 
@@ -22,21 +23,18 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   # - a process can only register for a single shape handle at a time
   # - consumers that are just shutdown normally (because being moved or instance shutdown) should not be deleted
 
-  @schema NimbleOptions.new!(
-            stack_id: [type: :string, required: true],
-            storage: [type: :mod_arg, required: true],
-            on_remove: [type: {:or, [nil, {:fun, 2}]}],
-            on_cleanup: [type: {:or, [nil, {:fun, 1}]}]
-          )
+  defguardp is_consumer_shutdown_with_data_retention?(reason)
+            when reason in [:normal, :killed, :shutdown] or
+                   (is_tuple(reason) and elem(reason, 0) == :shutdown and
+                      elem(reason, 1) != :cleanup)
 
   def name(opts_or_stack_id) do
     Electric.ProcessRegistry.name(opts_or_stack_id, __MODULE__)
   end
 
+  # the opts are validated by Monitor
   def start_link(opts) do
-    with {:ok, config} <- NimbleOptions.validate(Map.new(opts), @schema) do
-      GenServer.start_link(__MODULE__, config, name: name(opts))
-    end
+    GenServer.start_link(__MODULE__, Map.new(opts), name: name(opts))
   end
 
   @doc """
@@ -56,8 +54,8 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   @doc """
   Register the current process as a writer (consumer) of the given shape.
   """
-  def register_writer(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_writer, shape_handle, pid})
+  def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
+    GenServer.call(name(stack_id), {:register_writer, shape_handle, shape, pid})
   end
 
   @doc """
@@ -99,15 +97,6 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     GenServer.call(name(stack_id), {:termination_watchers, shape_handle})
   end
 
-  @doc """
-  Request that the given shape is cleaned up by
-  `Electric.Shapes.Monitor.CleanupTaskSupervisor` after `wait_pid` has
-  terminated.
-  """
-  def cleanup_after_termination(stack_id, shape_handle, wait_pid, pid \\ self()) do
-    GenServer.call(name(stack_id), {:cleanup_after_termination, shape_handle, wait_pid, pid})
-  end
-
   defp do_notify_reader_termination(pids, handle) when is_list(pids) do
     Enum.each(pids, &do_notify_reader_termination(&1, handle))
   end
@@ -127,6 +116,8 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     storage = Map.fetch!(opts, :storage)
+    publication_manager = Map.fetch!(opts, :publication_manager)
+    shape_status = Map.fetch!(opts, :shape_status)
     on_remove = Map.get(opts, :on_remove) || fn _, _ -> :ok end
     on_cleanup = Map.get(opts, :on_cleanup) || fn _ -> :ok end
 
@@ -142,12 +133,14 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     state = %{
       stack_id: stack_id,
       storage: storage,
+      publication_manager: publication_manager,
+      shape_status: shape_status,
       monitor_table: monitor_table,
       reader_table: reader_table,
       on_remove: on_remove,
       on_cleanup: on_cleanup,
       termination_watchers: %{},
-      cleanup_pids: MapSet.new()
+      cleanup_handles: MapSet.new()
     }
 
     {:ok, state}
@@ -174,7 +167,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
 
     case existing_registrations do
       [] ->
-        ref = Process.monitor(pid)
+        ref = Process.monitor(pid, tag: {:down, :reader, handle})
         :ets.insert(state.monitor_table, {pid, :reader, handle, ref})
 
         count = update_counter(state.stack_id, handle, 1)
@@ -196,19 +189,26 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     {:reply, :ok, state}
   end
 
-  def handle_call({:unregister_reader, _handle, pid}, _from, state) do
-    {state, _count} = delete_registered_process(pid, true, state)
+  def handle_call({:unregister_reader, handle, pid}, _from, state) do
+    {state, _count} = delete_reader_process(pid, handle, true, state)
 
     {:reply, :ok, state}
   end
 
-  def handle_call({:register_writer, handle, pid}, _from, state) do
-    ref = Process.monitor(pid)
+  def handle_call({:register_writer, handle, shape, pid}, _from, state) do
+    supervisor = ConsumerSupervisor.whereis(state.stack_id, handle)
 
-    if :ets.insert_new(state.monitor_table, {pid, :consumer, handle, ref}) do
-      {:reply, :ok, state}
+    if supervisor do
+      if :ets.insert_new(state.monitor_table, {pid, :writer, handle, nil}) do
+        Process.monitor(pid, tag: {:down, :writer, handle})
+        Process.monitor(supervisor, tag: {:down, :writer_supervisor, handle, shape})
+
+        {:reply, :ok, state}
+      else
+        {:reply, {:error, "process is already registered"}, state}
+      end
     else
-      {:reply, {:error, "pid is already registered"}, state}
+      {:reply, {:error, "no supervisor registered for consumer"}, state}
     end
   end
 
@@ -228,30 +228,52 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     {:reply, :ok, state}
   end
 
-  def handle_call({:cleanup_after_termination, shape_handle, wait_pid, pid}, _from, state) do
-    # has the consumer registered itself?
-    # if not that's an error
-    case :ets.match(state.monitor_table, {pid, :consumer, :"$1", :_}) do
-      [] ->
-        {:reply, {:error, "process not registered as consumer"}, state}
-
-      [[_handle]] ->
-        # registration should be idempotent
-        if :ets.insert_new(state.monitor_table, {wait_pid, :cleanup, shape_handle, nil}) do
-          _ref = Process.monitor(wait_pid)
-        end
-
-        {:reply, :ok, state}
-    end
-  end
-
   def handle_call({:termination_watchers, shape_handle}, _from, state) do
     {:reply, {:ok, Map.get(state.termination_watchers, shape_handle, [])}, state}
   end
 
   @impl GenServer
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
-    {state, _count} = delete_registered_process(pid, false, state)
+  def handle_info({{:down, :writer, handle}, _ref, :process, pid, reason}, state)
+      when not is_consumer_shutdown_with_data_retention?(reason) do
+    :ets.delete(state.monitor_table, pid)
+
+    state.on_remove.(handle, pid)
+
+    {:noreply,
+     state
+     |> Map.update!(:cleanup_handles, &MapSet.put(&1, handle))
+     |> remove_reader_termination_watcher(handle, pid)}
+  end
+
+  def handle_info({{:down, :writer, handle}, _ref, :process, pid, _reason}, state) do
+    :ets.delete(state.monitor_table, pid)
+    state.on_remove.(handle, pid)
+    {:noreply, remove_reader_termination_watcher(state, handle, pid)}
+  end
+
+  def handle_info(
+        {{:down, :writer_supervisor, handle, shape}, _ref, :process, _pid, _reason},
+        state
+      ) do
+    if MapSet.member?(state.cleanup_handles, handle) do
+      Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
+        state.stack_id,
+        state.storage,
+        state.publication_manager,
+        state.shape_status,
+        handle,
+        shape,
+        state.on_cleanup
+      )
+
+      {:noreply, Map.update!(state, :cleanup_handles, &MapSet.delete(&1, handle))}
+    else
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({{:down, :reader, handle}, _ref, :process, pid, _reason}, state) do
+    {state, _count} = delete_reader_process(pid, handle, false, state)
 
     {:noreply, state}
   end
@@ -262,7 +284,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     end)
   end
 
-  defp remove_reader_termination_watcher(shape_handle, pid, state) do
+  defp remove_reader_termination_watcher(state, shape_handle, pid) do
     Map.update!(state, :termination_watchers, fn watchers ->
       {pids, watchers} = Map.pop(watchers, shape_handle, [])
 
@@ -278,30 +300,13 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     :ets.update_counter(table(stack_id), handle, incr, {handle, 0})
   end
 
-  defp delete_registered_process(pid, demonitor?, state) do
+  defp delete_reader_process(pid, handle, demonitor?, state) do
     case :ets.lookup(state.monitor_table, pid) do
-      [{_, :reader, handle, ref}] ->
+      [{_, :reader, ^handle, ref}] ->
         if demonitor?, do: Process.demonitor(ref, [:flush])
         {state, count} = pid_handle_termination(pid, handle, state)
         state.on_remove.(handle, pid)
         {state, count}
-
-      [{_, :consumer, handle, _ref}] ->
-        Logger.debug("Consumer #{inspect(handle)} terminated")
-
-        state.on_remove.(handle, pid)
-
-        {remove_reader_termination_watcher(handle, pid, state), 0}
-
-      [{_, :cleanup, handle, _ref}] ->
-        Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
-          state.stack_id,
-          state.storage,
-          handle,
-          state.on_cleanup
-        )
-
-        {state, 0}
 
       [] ->
         {state, 0}

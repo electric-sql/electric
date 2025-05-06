@@ -18,6 +18,36 @@ defmodule Support.ComponentSetup do
     def refresh_publication(_opts), do: :ok
   end
 
+  defmodule TestPublicationManager do
+    @behaviour Electric.Replication.PublicationManager
+
+    def new do
+      {__MODULE__, %{parent: self()}}
+    end
+
+    def name(_), do: TestPublicationManager
+
+    def add_shape(shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :add_shape, shape})
+      :ok
+    end
+
+    def recover_shape(shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :recover_shape, shape})
+      :ok
+    end
+
+    def remove_shape(shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :remove_shape, shape})
+      :ok
+    end
+
+    def refresh_publication(%{parent: parent}) do
+      send(parent, {TestPublicationManager, :refresh_publication})
+      :ok
+    end
+  end
+
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
     registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
@@ -93,6 +123,10 @@ defmodule Support.ComponentSetup do
       publication_manager:
         {Electric.Replication.PublicationManager, stack_id: ctx.stack_id, server: server}
     }
+  end
+
+  def with_test_publication_manager(_ctx) do
+    %{publication_manager: TestPublicationManager.new()}
   end
 
   def with_noop_publication_manager(_ctx) do
@@ -189,7 +223,21 @@ defmodule Support.ComponentSetup do
     %{}
   end
 
+  defmodule NoopShapeStatus do
+    def initialise(_), do: {:ok, []}
+    def list_shapes(_), do: []
+    def get_existing_shape(_, _), do: nil
+    def add_shape(_, _), do: {:ok, "handle"}
+    def initialise_shape(_, _, _, _), do: :ok
+    def set_snapshot_xmin(_, _, _), do: :ok
+    def mark_snapshot_started(_, _), do: :ok
+    def snapshot_started?(_, _), do: false
+    def remove_shape(_, _), do: {:ok, nil}
+  end
+
   def with_shape_monitor(ctx) do
+    alias Electric.ShapeCache.ShapeStatus
+
     storage =
       Map.get_lazy(ctx, :storage, fn ->
         %{storage: storage} = with_in_memory_storage(ctx)
@@ -197,15 +245,29 @@ defmodule Support.ComponentSetup do
         storage
       end)
 
+    publication_manager =
+      Map.get_lazy(ctx, :publication_manager, fn ->
+        %{publication_manager: publication_manager} = with_test_publication_manager(ctx)
+        publication_manager
+      end)
+
+    shape_status =
+      {ShapeStatus,
+       %ShapeStatus{
+         shape_meta_table: Electric.ShapeCache.get_shape_meta_table(stack_id: ctx.stack_id)
+       }}
+
     start_link_supervised!(
       {Electric.Shapes.Monitor,
        Keyword.merge(monitor_config(ctx),
          stack_id: ctx.stack_id,
-         storage: storage
+         storage: storage,
+         publication_manager: publication_manager,
+         shape_status: shape_status
        )}
     )
 
-    %{storage: storage}
+    %{storage: storage, publication_manager: publication_manager}
   end
 
   defp monitor_config(ctx) do
