@@ -14,7 +14,6 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.ShapeCache
   alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Api
-  alias Electric.Shapes.ConsumerSupervisor
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
@@ -115,7 +114,8 @@ defmodule Electric.Shapes.Consumer do
         cleaned?: false
       })
 
-    :ok = Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle)
+    :ok =
+      Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
 
     {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
   end
@@ -130,7 +130,7 @@ defmodule Electric.Shapes.Consumer do
     {:reply, ref, [], %{state | monitors: [{pid, ref} | monitors]}}
   end
 
-  def handle_call(:clean_and_stop, _from, state) do
+  def handle_call(:stop_and_clean, _from, state) do
     # Waiter will receive this response if the snapshot wasn't done yet, but
     # given that this is definitely a cleanup call, a 409 is appropriate
     # as old shape handle is no longer valid
@@ -138,7 +138,7 @@ defmodule Electric.Shapes.Consumer do
     state =
       state
       |> reply_to_snapshot_waiters({:error, Api.Error.must_refetch()})
-      |> cleanup()
+      |> terminate_safely()
 
     {:reply, :ok, [], state}
   end
@@ -212,7 +212,7 @@ defmodule Electric.Shapes.Consumer do
     state =
       state
       |> reply_to_snapshot_waiters({:error, error})
-      |> cleanup()
+      |> terminate_safely()
 
     {:noreply, [], state}
   end
@@ -230,10 +230,6 @@ defmodule Electric.Shapes.Consumer do
       ) do
     # Triggered as a result of `Electric.Shapes.Monitor.notify_reader_termination/3`
     # when all readers have terminated.
-    # By the time we reach here, all the work cleaning the shape is either done
-    # or will be done once this process (and its owning supervisor), have
-    # terminated. This message just tells us that we're safe to shutdown
-    # without crashing readers.
     {:stop, reason, state}
   end
 
@@ -241,21 +237,8 @@ defmodule Electric.Shapes.Consumer do
   def terminate(reason, state) do
     Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
 
-    state =
-      reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
-
-    if is_error?(reason) do
-      remove_shape(state)
-    end
-
-    state
+    reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
-
-  defp is_error?(:normal), do: false
-  defp is_error?(:killed), do: false
-  defp is_error?(:shutdown), do: false
-  defp is_error?({:shutdown, _}), do: false
-  defp is_error?(_), do: true
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
@@ -281,7 +264,7 @@ defmodule Electric.Shapes.Consumer do
     state =
       state
       |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
-      |> cleanup()
+      |> terminate_safely()
 
     {:noreply, [], state}
   end
@@ -399,7 +382,7 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        cleanup(state, {:shutdown, :truncate})
+        terminate_safely(state)
 
         {:halt, notify(txn, %{state | log_state: @initial_log_state})}
 
@@ -510,53 +493,22 @@ defmodule Electric.Shapes.Consumer do
     %{state | pg_snapshot: pg_snapshot}
   end
 
-  # cleanup is now done in stages.
+  # termination and cleanup is now done in stages.
   # 1. register that we want the shape data to be cleaned up.
   # 2. request a notification when all active shape data reads are complete
   # 3. exit the process when we receive that notification
-  defp cleanup(state, reason \\ :normal) do
-    %{
-      stack_id: stack_id,
-      shape_handle: shape_handle
-    } = state
-
-    state =
-      state
-      |> remove_shape()
-      |> notify_shape_rotation()
-
-    :ok = Electric.Shapes.Monitor.notify_reader_termination(stack_id, shape_handle, reason)
-
-    state
-  end
-
-  defp remove_shape(%{cleaned?: true} = state) do
-    state
-  end
-
-  defp remove_shape(state) do
+  defp terminate_safely(state, reason \\ {:shutdown, :cleanup}) do
     %{
       stack_id: stack_id,
       shape_handle: shape_handle,
-      shape_status: {shape_status, shape_status_state},
-      publication_manager: {publication_manager, publication_manager_opts}
+      shape_status: {shape_status, shape_status_state}
     } = state
 
-    # do this early to remove the shape from the api asap
     shape_status.remove_shape(shape_status_state, shape_handle)
 
-    # Trigger shape data cleanup after the consumer processes have terminated
-    # including the storage process
-    :ok =
-      Electric.Shapes.Monitor.cleanup_after_termination(
-        stack_id,
-        shape_handle,
-        ConsumerSupervisor.whereis(stack_id, shape_handle)
-      )
+    :ok = Electric.Shapes.Monitor.notify_reader_termination(stack_id, shape_handle, reason)
 
-    publication_manager.remove_shape(state.shape, publication_manager_opts)
-
-    %{state | cleaned?: true}
+    notify_shape_rotation(state)
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do

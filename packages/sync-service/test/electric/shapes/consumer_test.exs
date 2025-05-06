@@ -332,12 +332,6 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:remove_shape, 1, fn _, @shape_handle1 -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
 
-      shape1 = ctx.shapes[@shape_handle1]
-
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.TruncatedRelation{
@@ -368,7 +362,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       for {ref, pid} <- monitors do
         assert_receive {:DOWN, ^ref, :process, ^pid, reason}
-                       when reason in [:shutdown, {:shutdown, :truncate}]
+                       when reason in [:shutdown, {:shutdown, :cleanup}]
       end
     end
 
@@ -386,15 +380,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeStatus
       |> expect(:remove_shape, fn _, @shape_handle1 -> :ok end)
-      |> allow(
-        self(),
-        Shapes.Consumer.whereis(ctx.stack_id, @shape_handle1)
-      )
-
-      shape = ctx.shapes[@shape_handle1]
-
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn ^shape, _ -> :ok end)
       |> allow(
         self(),
         Shapes.Consumer.whereis(ctx.stack_id, @shape_handle1)
@@ -501,16 +486,11 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
-
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, :normal}
+      assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
     end
 
     test "cleans shapes affected by a relation change", ctx do
@@ -545,19 +525,12 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      shape1 = ctx.shapes[@shape_handle1]
-      shape2 = ctx.shapes[@shape_handle2]
-
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn ^shape2, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
-
       assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, :normal}
+      assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
     end
 
     test "notifies live listeners when invalidated", ctx do
@@ -589,16 +562,11 @@ defmodule Electric.Shapes.ConsumerTest do
       |> expect(:remove_shape, 1, fn _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
 
-      shape1 = ctx.shapes[@shape_handle1]
-
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-
       assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
 
-      assert_receive {:DOWN, ^ref1, :process, _, :normal}
+      assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       assert_receive {^live_ref, :shape_rotation}
+      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
     end
 
     test "unexpected error while handling events stops affected consumer and cleans affected shape",
@@ -630,51 +598,19 @@ defmodule Electric.Shapes.ConsumerTest do
       ref2 =
         Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
-
-      shape1 = ctx.shapes[@shape_handle1]
-      shape2 = ctx.shapes[@shape_handle2]
-
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn ^shape2, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
-
       :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
-
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
-      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
 
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
+
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
     end
 
-    test "consumer crashing stops affected consumer and cleans affected shape", ctx do
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+    test "consumer crashing stops affected consumer", ctx do
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
 
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
-
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
-
-      shape1 = ctx.shapes[@shape_handle1]
-      shape2 = ctx.shapes[@shape_handle2]
-
-      Mock.PublicationManager
-      |> expect(:remove_shape, 1, fn ^shape1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn ^shape2, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)
 
@@ -683,27 +619,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
-    end
-
-    test "consumer exiting normally does not clean up the shape", ctx do
-      ref =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
-
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-
-      shape1 = ctx.shapes[@shape_handle1]
-
-      Mock.PublicationManager
-      |> expect(:remove_shape, 0, fn ^shape1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-
-      GenServer.stop(Consumer.whereis(ctx.stack_id, @shape_handle1))
-
-      refute_receive {Support.TestStorage, :cleanup!, @shape_handle1}
-
-      assert_receive {:DOWN, ^ref, :process, _, _}
     end
   end
 
@@ -714,14 +629,14 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     setup [
-      {Support.ComponentSetup, :with_registry},
-      {Support.ComponentSetup, :with_cub_db_storage},
-      {Support.ComponentSetup, :with_log_chunking},
-      {Support.ComponentSetup, :with_persistent_kv},
-      {Support.ComponentSetup, :with_shape_log_collector},
-      {Support.ComponentSetup, :with_noop_publication_manager},
-      {Support.ComponentSetup, :with_status_monitor},
-      {Support.ComponentSetup, :with_shape_monitor}
+      :with_registry,
+      :with_cub_db_storage,
+      :with_log_chunking,
+      :with_persistent_kv,
+      :with_shape_log_collector,
+      :with_noop_publication_manager,
+      :with_status_monitor,
+      :with_shape_monitor
     ]
 
     setup(ctx) do
@@ -892,8 +807,8 @@ defmodule Electric.Shapes.ConsumerTest do
       ref = ctx.consumer_supervisor |> GenServer.whereis() |> Process.monitor()
       # Stop the consumer and the shape cache server to simulate a restart
       Supervisor.stop(ctx.consumer_supervisor)
-      assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
+      assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}
 
       ref = shape_cache_opts[:server] |> GenServer.whereis() |> Process.monitor()
       GenServer.stop(shape_cache_opts[:server])
