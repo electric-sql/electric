@@ -22,14 +22,17 @@ function addDatabaseToElectric({
     )
   }
 
+  const createCommand = `curl --fail-with-body -s -X PUT $ADMIN_API_URL/v1/sources \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+        -d $SOURCE_CONFIG`
+
   // TODO: replace with Pulumi Electric provider when available
   const electricSourceCommand = new command.local.Command(
     `electric-create-source-command`,
     {
-      create: `curl --fail-with-body -s -X PUT $ADMIN_API_URL/v1/sources \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $ADMIN_API_TOKEN" \
-        -d $SOURCE_CONFIG`,
+      create: createCommand,
+      update: createCommand,
 
       // The delete command will use the JSON output from the create command
       // to get the source ID, and will wait for a bit to ensure source is cleaned up
@@ -42,7 +45,7 @@ function addDatabaseToElectric({
         ADMIN_API_TOKEN: adminApiAuthToken,
         SOURCE_CONFIG: $jsonStringify({
           database_url: dbUri,
-          source_options: {
+          options: {
             db_pool_size: 5,
             ...(pooledDbUri ? { pooled_database_url: pooledDbUri } : {}),
           },
