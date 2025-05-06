@@ -159,10 +159,10 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp prometheus_metrics do
       [
+        last_value("process.memory.total", tags: [:process_type], unit: :byte),
         last_value("system.cpu.core_count"),
         last_value("system.cpu.utilization.total"),
         last_value("vm.memory.processes_used", unit: :byte),
-        last_value("vm.memory.processes_by_type", tags: [:process_type], unit: :byte),
         last_value("vm.memory.binary", unit: :byte),
         last_value("vm.memory.ets", unit: :byte),
         last_value("vm.system_counts.process_count"),
@@ -197,7 +197,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp memory_by_process_type_metrics(%{otel_per_process_metrics?: true}) do
       [
-        last_value("vm.memory.processes_by_type", tags: [:process_type], unit: :byte)
+        last_value("process.memory.total", tags: [:process_type], unit: :byte)
       ]
     end
 
@@ -218,7 +218,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         # Our custom measurements:
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
-        {__MODULE__, :memory_by_process_type, [opts]},
+        {__MODULE__, :process_memory, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
       ]
@@ -230,12 +230,10 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       })
     end
 
-    def memory_by_process_type(%{top_process_count: process_count}) do
+    def process_memory(%{top_process_count: process_count}) do
       for %{type: type, memory: memory} <-
             Electric.Debug.Process.top_memory_by_type(process_count) do
-        :telemetry.execute([:vm, :memory], %{processes_by_type: memory}, %{
-          process_type: to_string(type)
-        })
+        :telemetry.execute([:process, :memory], %{total: memory}, %{process_type: to_string(type)})
       end
     end
 
