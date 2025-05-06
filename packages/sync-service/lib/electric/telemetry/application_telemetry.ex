@@ -238,15 +238,20 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     end
 
     def cpu_utilization do
-      cores =
-        :cpu_sup.util([:per_cpu])
-        |> Map.new(fn {cpu_index, busy, _free, _misc} -> {:"core_#{cpu_index}", busy} end)
+      {per_core_utilization, bare_values} =
+        for {cpu_index, busy, _free, _misc} <- :cpu_sup.util([:per_cpu]) do
+          {{:"core_#{cpu_index}", busy}, busy}
+        end
+        |> Enum.unzip()
 
-      cores
-      |> Map.put(:total, cores |> Map.values() |> mean())
-      |> then(&:telemetry.execute([:system, :cpu, :utilization], &1))
+      utilization =
+        per_core_utilization
+        |> Map.new()
+        |> Map.put(:total, mean(bare_values))
 
-      :telemetry.execute([:system, :cpu], %{core_count: Enum.count(cores)})
+      :telemetry.execute([:system, :cpu, :utilization], utilization)
+
+      :telemetry.execute([:system, :cpu], %{core_count: length(bare_values)})
     end
 
     def get_system_load_average do
