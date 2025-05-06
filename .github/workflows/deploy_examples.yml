@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy ${{ matrix.example.name }}
+    name: Deploy Examples
     environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -33,8 +33,12 @@ jobs:
             path: examples/proxy-auth
 
     outputs:
-      website_url: ${{ steps.deploy.outputs.website_url }}
-      example_name: ${{ matrix.example.name }}
+      yjs: ${{ steps.deploy.outputs.yjs }}
+      linearlite-read-only: ${{ steps.deploy.outputs.linearlite-read-only }}
+      write-patterns: ${{ steps.deploy.outputs.write-patterns }}
+      nextjs: ${{ steps.deploy.outputs.nextjs }}
+      todo-app: ${{ steps.deploy.outputs.todo-app }}
+      proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
