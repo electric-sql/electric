@@ -173,7 +173,8 @@ defmodule Electric.ShapeCache do
           :exit, {:noproc, _} ->
             # The fact that we got the shape handle means we know the shape exists, and the process should
             # exist too. We can get here if registry didn't propagate registration across partitions yet, so
-            # we'll just retry.
+            # we'll just retry after waiting for a short time to avoid busy waiting.
+            Process.sleep(50)
             await_snapshot_start(shape_handle, opts)
         end
     end
@@ -458,12 +459,18 @@ defmodule Electric.ShapeCache do
   defp start_and_recover_shape(shape_handle, shape, state) do
     %{publication_manager: {publication_manager, publication_manager_opts}} = state
 
-    {:ok, latest_offset} = start_shape(shape_handle, shape, state)
+    case start_shape(shape_handle, shape, state) do
+      {:ok, latest_offset} ->
+        publication_manager.recover_shape(shape, publication_manager_opts)
+        [LogOffset.extract_lsn(latest_offset)]
 
-    # recover publication filter state
-    publication_manager.recover_shape(shape, publication_manager_opts)
-    [LogOffset.extract_lsn(latest_offset)]
+      :error ->
+        []
+    end
   catch
+    # exception can only come from the receover_shape call
+    # if the shape consumer failed to start for some reason
+    # start_shape/4 will have returned an error
     kind, reason when kind in [:exit, :error] ->
       Logger.error(
         "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
@@ -475,27 +482,32 @@ defmodule Electric.ShapeCache do
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
-    with {:ok, _pid} <-
-           Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
-             state.consumer_supervisor,
-             stack_id: state.stack_id,
-             inspector: state.inspector,
-             shape_handle: shape_handle,
-             shape: shape,
-             shape_status: {state.shape_status, state.shape_status_state},
-             storage: state.storage,
-             publication_manager: state.publication_manager,
-             chunk_bytes_threshold: state.chunk_bytes_threshold,
-             log_producer: state.log_producer,
-             registry: state.registry,
-             db_pool: state.db_pool,
-             run_with_conn_fn: state.run_with_conn_fn,
-             create_snapshot_fn: state.create_snapshot_fn,
-             otel_ctx: otel_ctx
-           ) do
-      consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
+    case Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
+           state.consumer_supervisor,
+           stack_id: state.stack_id,
+           inspector: state.inspector,
+           shape_handle: shape_handle,
+           shape: shape,
+           shape_status: {state.shape_status, state.shape_status_state},
+           storage: state.storage,
+           publication_manager: state.publication_manager,
+           chunk_bytes_threshold: state.chunk_bytes_threshold,
+           log_producer: state.log_producer,
+           registry: state.registry,
+           db_pool: state.db_pool,
+           run_with_conn_fn: state.run_with_conn_fn,
+           create_snapshot_fn: state.create_snapshot_fn,
+           otel_ctx: otel_ctx
+         ) do
+      {:ok, _supervisor_pid} ->
+        consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
+        {:ok, _latest_offset} = Shapes.Consumer.initial_state(consumer)
 
-      {:ok, _latest_offset} = Shapes.Consumer.initial_state(consumer)
+      {:error, _reason} = error ->
+        Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
+        # purge because we know the consumer isn't running
+        purge_shape(state, shape_handle)
+        :error
     end
   end
 
