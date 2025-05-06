@@ -341,8 +341,6 @@ defmodule Electric.Shapes.Api do
 
   defp register_shape_subscriber(%Request{} = request) do
     %{api: %{stack_id: stack_id}, handle: handle} = request
-    # The assumption here is that all api requests live in a transient process
-    # that will exit once the request is complete.
     :ok = Electric.Shapes.Monitor.register_reader(stack_id, handle)
 
     Logger.debug(fn -> "Registering subscriber for shape #{inspect(handle)}" end)
