@@ -97,6 +97,9 @@ jobs:
       - name: Run tests
         run: mix test --include slow
 
+      - name: Run telemetry tests
+        run: MIX_TARGET=application mix test --only telemetry_target
+
   formatting:
     name: Check formatting
     runs-on: ubuntu-latest
