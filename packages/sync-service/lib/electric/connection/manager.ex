@@ -1063,10 +1063,11 @@ defmodule Electric.Connection.Manager do
     do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
 
   defp update_connection_opts(
-         :start_replication_client,
+         step,
          conn_opts,
          %State{shared_connection_opts: nil, replication_opts: replication_opts} = state
-       ) do
+       )
+       when step in [:start_lock_connection, :start_replication_client] do
     %State{state | replication_opts: put_in(replication_opts, [:connection_opts], conn_opts)}
   end
 
