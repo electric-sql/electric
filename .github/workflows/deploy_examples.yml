@@ -70,14 +70,11 @@ jobs:
           restore-keys: |
             sst-cache-${{ matrix.example.name }}-${{ runner.os }}
 
-      - name: Optional Build (Write Patterns only)
-        if: matrix.example.name == 'write-patterns'
-        run: pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
-
       - name: Deploy
         id: deploy
         working-directory: ./${{ matrix.example.path }}
         run: |
+          pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
 
           if [ -f ".sst/outputs.json" ]; then
