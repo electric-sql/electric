@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy Examples
+    name: Deploy ${{ matrix.example.name }}
     environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -110,7 +110,7 @@ jobs:
 
             const commentBody = [
               "## Examples",
-              ...deployments.map(d => `- ${d.name}: ${d.url || '*deploy failed or missing output*'}`),
+              ...deployments.map(d => `- ${d.name}: ${d.url || '*deploy failed*'}`),
             ].join('\n');
 
             const prNumber = context.issue.number;
