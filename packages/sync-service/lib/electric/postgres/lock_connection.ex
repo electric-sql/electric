@@ -101,9 +101,12 @@ defmodule Electric.Postgres.LockConnection do
     {time, backoff} = :backoff.fail(backoff)
     tref = :erlang.start_timer(time, self(), :acquire_lock)
 
-    Logger.error(
+    log_message =
       "Failed to acquire lock #{state.lock_name} with reason #{inspect(error)} - retrying in #{inspect(time)}ms."
-    )
+
+    if is_expected_error?(error),
+      do: Logger.info(log_message),
+      else: Logger.error(log_message)
 
     notify_lock_acquisition_error(error, state)
 
@@ -130,4 +133,15 @@ defmodule Electric.Postgres.LockConnection do
   def notify(_channel, _payload, _state) do
     :ok
   end
+
+  defp is_expected_error?(%Postgrex.Error{
+         postgres: %{
+           code: :query_canceled,
+           pg_code: "57014",
+           message: "canceling statement due to statement timeout"
+         }
+       }),
+       do: true
+
+  defp is_expected_error?(_), do: false
 end
