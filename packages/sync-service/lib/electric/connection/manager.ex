@@ -418,9 +418,11 @@ defmodule Electric.Connection.Manager do
       )
 
       dispatch_stack_event(
-        {:database_id_or_timeline_changed,
+        {:warning,
          %{
-           message: "Purging shape logs from disk. Clients will refetch shape data automatically."
+           type: :database_id_or_timeline_changed,
+           message:
+             "Database ID or timeline changed. Purging shape logs from disk. Clients will refetch shape data automatically."
          }},
         state
       )
@@ -621,7 +623,7 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:database_connection_severed,
+      {:connection_issue,
        %{error: error.original_error, type: error.type, message: error.message}},
       state
     )
@@ -860,7 +862,7 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:database_connection_failed,
+      {:connection_issue,
        %{
          error: error.original_error,
          type: error.type,
@@ -931,16 +933,19 @@ defmodule Electric.Connection.Manager do
          %DbConnectionError{type: :replication_slot_invalidated} = error,
          state
        ) do
-    Logger.warning("""
+    message = """
     Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
         In order to recover consistent replication, the slot will be dropped along with all existing shapes.
         If you're seeing this message without having recently stopped Electric for a while,
         it's possible either Electric is lagging behind and you might need to scale up,
         or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
-    """)
+    """
+
+    Logger.warning(message)
 
     dispatch_stack_event(
-      {:database_slot_exceeded_max_size, %{error: error.original_error}},
+      {:warning,
+       %{type: :database_slot_exceeded_max_size, message: message, error: error.original_error}},
       state
     )
 
@@ -966,7 +971,7 @@ defmodule Electric.Connection.Manager do
 
   defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
     dispatch_stack_event(
-      {:fatal_error, %{error: error.original_error, message: error.message, type: error.type}},
+      {:config_error, %{error: error.original_error, message: error.message, type: error.type}},
       state
     )
 
