@@ -26,28 +26,34 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
         shape,
         on_cleanup \\ fn _ -> :ok end
       ) do
-    Task.Supervisor.start_child(name(stack_id), fn ->
-      Logger.metadata(shape_handle: shape_handle, stack_id: stack_id)
+    with {:ok, _pid} <-
+           Task.Supervisor.start_child(name(stack_id), fn ->
+             Logger.metadata(shape_handle: shape_handle, stack_id: stack_id)
 
-      try do
-        cleanup(
-          stack_id,
-          storage_impl,
-          publication_manager_impl,
-          shape_status_impl,
-          shape_handle,
-          shape
-        )
-        |> case do
-          :ok -> :ok
-          {:error, reason} -> Logger.error(["Failed to clean shape #{shape_handle}: ", reason])
-        end
-      catch
-        exception -> Logger.error(exception)
-      after
-        on_cleanup.(shape_handle)
-      end
-    end)
+             try do
+               cleanup(
+                 stack_id,
+                 storage_impl,
+                 publication_manager_impl,
+                 shape_status_impl,
+                 shape_handle,
+                 shape
+               )
+               |> case do
+                 :ok ->
+                   :ok
+
+                 {:error, reason} ->
+                   Logger.error(["Failed to clean shape #{shape_handle}: ", reason])
+               end
+             catch
+               exception -> Logger.error(exception)
+             after
+               on_cleanup.(shape_handle)
+             end
+           end) do
+      :ok
+    end
   end
 
   def cleanup(
