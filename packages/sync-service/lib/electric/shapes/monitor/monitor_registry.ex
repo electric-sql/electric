@@ -92,6 +92,13 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     end
   end
 
+  @doc """
+  Clean up the state of a non-running consumer.
+  """
+  def purge_shape(stack_id, shape_handle, shape) do
+    GenServer.call(name(stack_id), {:purge_shape, shape_handle, shape})
+  end
+
   # used in tests
   def termination_watchers(stack_id, shape_handle) do
     GenServer.call(name(stack_id), {:termination_watchers, shape_handle})
@@ -230,6 +237,21 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
 
   def handle_call({:termination_watchers, shape_handle}, _from, state) do
     {:reply, {:ok, Map.get(state.termination_watchers, shape_handle, [])}, state}
+  end
+
+  def handle_call({:purge_shape, shape_handle, shape}, _from, state) do
+    :ok =
+      Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
+        state.stack_id,
+        state.storage,
+        state.publication_manager,
+        state.shape_status,
+        shape_handle,
+        shape,
+        state.on_cleanup
+      )
+
+    {:reply, :ok, state}
   end
 
   @impl GenServer
