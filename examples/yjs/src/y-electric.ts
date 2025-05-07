@@ -27,11 +27,6 @@ type AwarenessUpdate = {
   removed: number[]
 }
 
-/**
- * Maximum number of incoming change messages that are merged before applying to the Y document.
- */
-const MAX_APPLY_BATCH_SIZE = 10
-
 export class ElectricProvider<
   RowWithDocumentUpdate extends Row<decoding.Decoder> = never,
   RowWithAwarenessUpdate extends Row<decoding.Decoder> = never,
@@ -281,30 +276,17 @@ export class ElectricProvider<
     handle: string
   ) {
     const operations: Uint8Array[] = []
-    const applyBatch = (): void => {
-      if (operations.length > 0) {
-        const batch = operations.splice(0, operations.length)
-        Y.applyUpdate(this.doc, Y.mergeUpdates(batch), `server`)
-      }
-    }
-
     for (const message of messages) {
       if (isChangeMessage(message) && message.value.op) {
         const decoder = this.documentUpdates.getUpdateFromRow(message.value)
         while (decoder.pos !== decoder.arr.length) {
           const operation = decoding.readVarUint8Array(decoder)
-          operations.push(operation)
-
-          if (operations.length >= MAX_APPLY_BATCH_SIZE) {
-            applyBatch()
-          }
+          Y.applyUpdate(this.doc, operation, `server`)
         }
       } else if (
         isControlMessage(message) &&
         message.headers.control === `up-to-date`
       ) {
-        applyBatch()
-
         this.resumeState.document = {
           offset,
           handle,
