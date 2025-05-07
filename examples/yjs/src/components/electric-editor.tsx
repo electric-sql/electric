@@ -14,19 +14,17 @@ import * as random from "lib0/random"
 import { IndexeddbPersistence } from "y-indexeddb"
 import { parseToDecoder } from "../common/utils"
 import LocalStorageResumeStateProvider from "../local-storage-persistence"
-import { ElectricProviderOptions, ConnectivityStatus } from "../types"
+import { ElectricProviderOptions } from "../types"
 
 import * as decoding from "lib0/decoding"
 
-type DocumentUpdateRow = {
+type UpdateTableSchema = {
   op: decoding.Decoder
 }
 
-type AwarenessUpdateRow = {
-  op: decoding.Decoder
-}
+const serverUrl = import.meta.env.VITE_SERVER_URL || `http://localhost:3002`
 
-const usercolors = [
+const users = [
   { color: `#30bced`, light: `#30bced33` },
   { color: `#6eeb83`, light: `#6eeb8333` },
   { color: `#ffbc42`, light: `#ffbc4233` },
@@ -34,11 +32,14 @@ const usercolors = [
   { color: `#ee6352`, light: `#ee635233` },
   { color: `#9ac2c9`, light: `#9ac2c933` },
 ]
+const user = users[random.uint32() % users.length]
 
-const user = usercolors[random.uint32() % usercolors.length]
+const shapeUrl = new URL(`/shape-proxy/v1/shape`, serverUrl)
 const room = `electric-demo`
+
 const ydoc = new Y.Doc()
 const awareness = new Awareness(ydoc)
+
 awareness.setLocalStateField(`user`, {
   name: user.color,
   color: user.color,
@@ -48,89 +49,113 @@ awareness.setLocalStateField(`user`, {
 const databaseProvider = new IndexeddbPersistence(user.color, ydoc)
 const resumeStateProvider = new LocalStorageResumeStateProvider(user.color)
 
-const shapesEndpoint = new URL(`/shape-proxy/v1/shape`, window?.location.origin)
-const operationSendUrl = new URL(
-  `/api/operation?room=${room}`,
-  window?.location.origin
-)
-const awarenessSendUrl = new URL(
-  `/api/operation?room=${room}&client_id=${user.color}`,
-  window?.location.origin
-)
+const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
+  doc: ydoc,
+  documentUpdates: {
+    shape: {
+      url: shapeUrl.href,
+      params: {
+        table: `ydoc_operations`,
+        where: `room = '${room}'`,
+      },
+      parser: parseToDecoder,
+    },
+    sendUrl: new URL(`/api/operation?room=${room}`, serverUrl),
+    getUpdateFromRow: (row) => row.op,
+  },
+  awarenessUpdates: {
+    shape: {
+      url: shapeUrl.href,
+      params: {
+        table: `ydoc_awareness`,
+        where: `room = '${room}'`,
+      },
+      parser: parseToDecoder,
+    },
+    sendUrl: new URL(
+      `/api/operation?room=${room}&client_id=${ydoc.clientID}`,
+      serverUrl
+    ),
+    protocol: awareness,
+    getUpdateFromRow: (row) => row.op,
+  },
+  resumeState: resumeStateProvider.load(),
+}
 
 function ElectricEditor({
-  electricProviderOptions,
+  options,
 }: {
-  electricProviderOptions: ElectricProviderOptions<
-    DocumentUpdateRow,
-    AwarenessUpdateRow
-  >
+  options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema>
 }) {
-  const [docLoaded, setDocLoaded] = useState<boolean>(false)
   const editor = useRef(null)
-  const provider = useRef<ElectricProvider<
-    DocumentUpdateRow,
-    AwarenessUpdateRow
-  > | null>(null)
-  const [connectivityStatus, setConnectivityStatus] =
-    useState<ConnectivityStatus>(`disconnected`)
+  const provider = useRef<ElectricProvider | null>(null)
+  const [connectivityStatus, setConnectivityStatus] = useState<
+    `connected` | `disconnected` | `connecting`
+  >(`disconnected`)
+  const [docLoaded, setDocumentLoaded] = useState<boolean>(false)
+  const editorViewRef = useRef<EditorView | null>(null)
 
-  // load document from storage
+  // Define status handler outside useEffect to avoid closure issues
+  const statusHandler = (status: {
+    status: `connected` | `disconnected` | `connecting`
+  }) => {
+    setConnectivityStatus(status.status)
+  }
+
   useEffect(() => {
-    databaseProvider.once(`synced`, () => setDocLoaded(true))
-  }, [])
+    // Set up database sync listener
+    databaseProvider.once(`synced`, () => setDocumentLoaded(true))
 
-  // setup provider
-  useEffect(() => {
-    if (!docLoaded) {
-      return
-    }
-    provider.current = new ElectricProvider<
-      DocumentUpdateRow,
-      AwarenessUpdateRow
-    >(electricProviderOptions)
-    const resumeStateUnsubscribe = resumeStateProvider.subscribeToResumeState(
-      provider.current
-    )
+    let resumeStateUnsubscribeHandler: (() => void) | undefined
+    let view: EditorView | undefined
 
-    const statusHandler = provider.current.on(
-      `status`,
-      (status: { status: `connected` | `disconnected` | `connecting` }) => {
-        setConnectivityStatus(status.status)
+    // Only proceed with provider setup if document is loaded
+    if (docLoaded) {
+      // Set up Electric provider
+      provider.current = new ElectricProvider(options)
+      resumeStateUnsubscribeHandler =
+        resumeStateProvider.subscribeToResumeState(provider.current)
+      provider.current.on(`status`, statusHandler)
+
+      // Set up editor if the editor ref is available
+      if (editor.current) {
+        const ytext = ydoc.getText(room)
+
+        const state = EditorState.create({
+          doc: ytext.toString(),
+          extensions: [
+            keymap.of([...yUndoManagerKeymap]),
+            basicSetup,
+            javascript(),
+            EditorView.lineWrapping,
+            yCollab(ytext, awareness),
+          ],
+        })
+
+        view = new EditorView({ state, parent: editor.current })
+        editorViewRef.current = view
       }
-    )
+    }
 
+    // Cleanup function
     return () => {
-      resumeStateUnsubscribe()
-      provider.current!.off(`status`, statusHandler)
-      provider.current!.destroy()
-      provider.current = null
+      // Clean up provider
+      if (provider.current) {
+        provider.current.off(`status`, statusHandler)
+        provider.current.destroy()
+        provider.current = null
+        if (resumeStateUnsubscribeHandler) {
+          resumeStateUnsubscribeHandler()
+        }
+      }
+
+      // Clean up editor view
+      if (editorViewRef.current) {
+        editorViewRef.current.destroy()
+        editorViewRef.current = null
+      }
     }
-  }, [provider.current])
-
-  // setup editor
-  useEffect(() => {
-    if (!editor.current) {
-      return
-    }
-
-    const ytext = ydoc.getText(room)
-
-    const state = EditorState.create({
-      doc: ytext.toString(),
-      extensions: [
-        keymap.of([...yUndoManagerKeymap]),
-        basicSetup,
-        javascript(),
-        EditorView.lineWrapping,
-        yCollab(ytext, awareness),
-      ],
-    })
-
-    const view = new EditorView({ state, parent: editor.current })
-
-    return () => view.destroy()
-  }, [editor.current])
+  }, [docLoaded, editor.current])
 
   const toggleNetwork = () => {
     if (!provider.current) return
@@ -142,7 +167,7 @@ function ElectricEditor({
     }
   }
 
-  if (!provider.current) {
+  if (!docLoaded) {
     return <span>Loading...</span>
   }
 
@@ -175,38 +200,5 @@ function ElectricEditor({
 }
 
 export default function Page() {
-  const electricProviderOptions: ElectricProviderOptions<
-    DocumentUpdateRow,
-    AwarenessUpdateRow
-  > = {
-    doc: ydoc,
-    documentUpdates: {
-      shape: {
-        url: shapesEndpoint.href,
-        params: {
-          table: `ydoc_operations`,
-          where: `room = '${room}'`,
-        },
-        parser: parseToDecoder,
-      },
-      sendUrl: operationSendUrl,
-      getUpdateFromRow: (row) => row.op,
-    },
-    awarenessUpdates: {
-      shape: {
-        url: shapesEndpoint.href,
-        params: {
-          table: `ydoc_awareness`,
-          where: `room = '${room}'`,
-        },
-        parser: parseToDecoder,
-      },
-      sendUrl: awarenessSendUrl,
-      protocol: awareness,
-      getUpdateFromRow: (row) => row.op,
-    },
-    resumeState: resumeStateProvider.load(),
-  }
-
-  return <ElectricEditor electricProviderOptions={electricProviderOptions} />
+  return <ElectricEditor options={options} />
 }

@@ -123,7 +123,7 @@ export class ElectricProvider<
     )
     if (this.awarenessUpdates) {
       this.awarenessUpdateHandler = this.applyAwarenessUpdate.bind(this)
-      this.awarenessUpdates.protocol.on(`update`, this.awarenessUpdateHandler)
+      this.awarenessUpdates.protocol.on(`update`, this.awarenessUpdateHandler!)
     }
 
     // enqueue unsynced changes from document if the
@@ -197,7 +197,7 @@ export class ElectricProvider<
       awarenessProtocol.removeAwarenessStates(
         this.awarenessUpdates.protocol,
         Array.from(this.awarenessUpdates.protocol.getStates().keys()).filter(
-          (client) => client !== this.doc.clientID
+          (client) => client !== this.awarenessUpdates!.protocol.clientID
         ),
         this
       )
@@ -205,7 +205,7 @@ export class ElectricProvider<
       // try to notifying other clients that we are disconnecting
       awarenessProtocol.removeAwarenessStates(
         this.awarenessUpdates.protocol,
-        [this.doc.clientID],
+        [this.awarenessUpdates.protocol.clientID],
         `local`
       )
 
@@ -275,7 +275,6 @@ export class ElectricProvider<
     offset: Offset,
     handle: string
   ) {
-    const operations: Uint8Array[] = []
     for (const message of messages) {
       if (isChangeMessage(message) && message.value.op) {
         const decoder = this.documentUpdates.getUpdateFromRow(message.value)

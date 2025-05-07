@@ -12,7 +12,7 @@ CREATE TABLE ydoc_awareness(
   PRIMARY KEY (client_id, room)
 );
 
-CREATE OR REPLACE FUNCTION delete_old_rows()
+CREATE OR REPLACE FUNCTION gc_awareness_timeouts()
 RETURNS TRIGGER AS $$
 BEGIN
     DELETE FROM ydoc_awareness
@@ -21,7 +21,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER delete_old_rows_trigger
+CREATE TRIGGER gc_awareness_timeouts_trigger
 AFTER INSERT OR UPDATE ON ydoc_awareness
 FOR EACH ROW
-EXECUTE FUNCTION delete_old_rows();
+EXECUTE FUNCTION gc_awareness_timeouts();

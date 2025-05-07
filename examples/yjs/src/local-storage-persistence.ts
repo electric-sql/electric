@@ -4,8 +4,8 @@ import { ElectricProvider } from "./y-electric"
 import * as buffer from "lib0/buffer"
 
 /**
- * A ResumeStateProvider implementation using localStorage.
- * This is a reference implementation that can be used as a starting point 
+ * A ResumeStateProvider implementation using LocalStorage.
+ * This is a reference implementation that can be used as a starting point
  * for implementing other ResumeStateProviders.
  */
 export default class LocalStorageResumeStateProvider extends ObservableV2<ElectricResumeStateProvider> {

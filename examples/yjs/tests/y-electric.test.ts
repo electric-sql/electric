@@ -40,7 +40,7 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
     provider = createMockProvider(doc)
 
     sendSpy = vi
-      .spyOn(global, "fetch")
+      .spyOn(global, `fetch`)
       .mockImplementation(() =>
         Promise.resolve(new Response(null, { status: 200 }))
       )
@@ -141,9 +141,8 @@ describe(`ElectricProvider connectivity handling`, () => {
 
     const ytext = doc.getText(`test`)
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sendOperationSpy: ReturnType<typeof vi.spyOn> = vi.spyOn(
-      provider as any,
+      provider as unknown as { sendOperations: () => Promise<void> },
       `sendOperations`
     )
 

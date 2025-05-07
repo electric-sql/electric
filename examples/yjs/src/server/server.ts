@@ -1,7 +1,8 @@
 import { serve } from "@hono/node-server"
 import { Hono } from "hono"
 import type { Context } from "hono"
-import pg from "pg"
+import { cors } from "hono/cors"
+import * as pg from "pg"
 const { Pool } = pg
 import * as db from "./db"
 import { logger } from "hono/logger"
@@ -18,6 +19,26 @@ const pool = new Pool({ connectionString })
 
 const app = new Hono()
 app.use(logger())
+app.use(
+  cors({
+    origin: [
+      `http://localhost:5173`,
+      `http://localhost:4173`,
+      `http://localhost:4174`,
+    ],
+    allowHeaders: [`Content-Type`, `Authorization`],
+    allowMethods: [`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`],
+    exposeHeaders: [
+      `Content-Length`,
+      `electric-offset`,
+      `electric-handle`,
+      `electric-schema`,
+      `electric-cursor`,
+    ],
+    credentials: true,
+    maxAge: 600,
+  })
+)
 
 const parseRequest = async (
   c: Context
@@ -49,7 +70,7 @@ app.put(`/api/operation`, async (c: Context) => {
   try {
     const requestParams = await parseRequest(c)
     if (!requestParams.isValid) {
-      return c.json({ error: requestParams.error }, 400)
+      return c.json({ error: requestParams }, 400)
     }
 
     if (`client_id` in requestParams) {
@@ -81,7 +102,15 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
   }
 
+  // Copy all headers from the original request to forward to Electric
   const headers = new Headers()
+  c.req.raw.headers.forEach((value, key) => {
+    if (key !== `host`) {
+      // Skip host header to avoid conflicts
+      headers.set(key, value)
+    }
+  })
+
   if (process.env.ELECTRIC_SOURCE_SECRET) {
     originUrl.searchParams.set(
       `source_secret`,
@@ -112,9 +141,26 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
 
     // Create a response with all headers from the Electric response
     const responseHeaders = new Headers()
+
+    // Copy all headers from the original response
+    // Using forEach which is available in the Headers implementation
     resp.headers.forEach((value, key) => {
       responseHeaders.set(key, value)
     })
+
+    // Ensure the Electric headers are explicitly included
+    const electricHeaders = [
+      `electric-offset`,
+      `electric-handle`,
+      `electric-schema`,
+      `electric-total-count`,
+    ]
+    for (const header of electricHeaders) {
+      const value = resp.headers.get(header)
+      if (value) {
+        responseHeaders.set(header, value)
+      }
+    }
 
     return new Response(resp.body, {
       status: resp.status,
@@ -133,10 +179,7 @@ console.log(`Server is running on port ${port}`)
 // Export the app for testing purposes
 export const honoApp = app
 
-// Only start the server if this file is run directly
-if (import.meta.url === new URL(import.meta.url).href) {
-  serve({
-    fetch: app.fetch,
-    port,
-  })
-}
+serve({
+  fetch: app.fetch,
+  port,
+})
