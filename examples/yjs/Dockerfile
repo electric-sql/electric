@@ -16,7 +16,8 @@ COPY examples/yjs examples/yjs/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
-RUN pnpm run build:server 
+RUN pnpm run -r build:server 
+RUN pnpm run -r build:static
 
 
 # Need to make production image more clean
@@ -29,4 +30,4 @@ COPY --from=deps /app/ ./
 WORKDIR /app/examples/yjs/
 
 EXPOSE 3000
-CMD ["pnpm", "run", "start:server"]
+CMD ["node", "dist/server/server.js"]
