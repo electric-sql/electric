@@ -8,23 +8,29 @@ import {
   ScrollRestoration,
 } from "@remix-run/react"
 
+if (!process.env.ELECTRIC_SOURCE_ID || !process.env.ELECTRIC_SOURCE_SECRET) {
+  throw new Error(
+    `ELECTRIC_SOURCE_ID and ELECTRIC_SOURCE_SECRET must be set`
+  )
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <Meta />
-        <Links />
-      </head>
-      <body style={{ margin: 0, padding: 0 }}>
-        {children}
-        <ScrollRestoration />
-        <Scripts />
-      </body>
-    </html>
-  )
-}
+        <head>
+          <meta charSet="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <Meta />
+          <Links />
+        </head>
+        <body style={{ margin: 0, padding: 0 }}>
+          {children}
+          <ScrollRestoration />
+          <Scripts />
+        </body>
+      </html>
+    )
+  }
 
 export default function App() {
   return (
