@@ -668,7 +668,7 @@ defmodule Electric.ShapeCacheTest do
 
           n ->
             # Sleep to allow read processes to run
-            Process.sleep(1)
+            Process.sleep(2)
             [n]
         end)
 
@@ -699,9 +699,13 @@ defmodule Electric.ShapeCacheTest do
                 storage
               )
 
-            assert_raise Storage.Error, fn -> Stream.run(stream) end
+            assert_raise Storage.Error, fn ->
+              stream |> Stream.each(fn _ -> Process.sleep(1) end) |> Stream.run()
+            end
           end)
         end
+
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}
 
       Task.await_many(tasks, 10_000)
     end
