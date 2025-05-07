@@ -8,6 +8,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     originUrl.searchParams.set(key, value)
   })
 
+  originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID!)
+  originUrl.searchParams.set(`source_secret`, process.env.ELECTRIC_SOURCE_SECRET!)
+
   const response = await fetch(originUrl)
 
   // Fetch decompresses the body but doesn't remove the
