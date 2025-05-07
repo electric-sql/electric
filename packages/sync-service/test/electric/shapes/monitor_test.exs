@@ -48,6 +48,21 @@ defmodule Electric.Shapes.MonitorTest do
       assert {:ok, 1} = Monitor.reader_count(stack_id, "handle-1")
     end
 
+    test "allows double de-registration", %{stack_id: stack_id} = _ctx do
+      assert :ok = Monitor.register_reader(stack_id, "handle-1")
+      assert :ok = Monitor.register_reader(stack_id, "handle-1")
+
+      assert {:ok, 1} = Monitor.reader_count(stack_id, "handle-1")
+      assert {:ok, 1} = Monitor.reader_count(stack_id)
+
+      assert :ok = Monitor.unregister_reader(stack_id, "handle-1")
+      assert :ok = Monitor.unregister_reader(stack_id, "handle-1")
+      assert :ok = Monitor.unregister_reader(stack_id, "handle-1")
+
+      assert {:ok, 0} = Monitor.reader_count(stack_id, "handle-1")
+      assert {:ok, 0} = Monitor.reader_count(stack_id)
+    end
+
     test "tracks process termination", %{stack_id: stack_id} = _ctx do
       parent = self()
       n = Enum.random(1..200)
