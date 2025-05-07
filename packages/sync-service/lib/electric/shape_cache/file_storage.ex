@@ -553,7 +553,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
         case IO.binread(file, :line) do
           {:error, reason} ->
-            raise IO.StreamError, reason: reason
+            raise Storage.Error, message: "failed to read #{inspect(path)}: #{inspect(reason)}"
 
           :eof ->
             cond do
@@ -564,7 +564,7 @@ defmodule Electric.ShapeCache.FileStorage do
               # If it's been 90s without any new lines, and also we've not seen <<4>>,
               # then likely something is wrong
               System.monotonic_time(:millisecond) - eof_seen > 90_000 ->
-                raise "Snapshot hasn't updated in 90s"
+                raise Storage.Error, message: "Snapshot hasn't updated in 90s"
 
               true ->
                 # Sleep a little and check for new lines
@@ -590,7 +590,9 @@ defmodule Electric.ShapeCache.FileStorage do
 
   # Attempts enough for a 5s wait
   defp open_snapshot_chunk(opts, chunk_num, attempts_left \\ 250)
-  defp open_snapshot_chunk(_, _, 0), do: raise(IO.StreamError, reason: :enoent)
+
+  defp open_snapshot_chunk(_, chunk_num, 0),
+    do: raise(Storage.Error, message: "failed to read snapshot chunk #{chunk_num}: :enoent")
 
   defp open_snapshot_chunk(opts, chunk_num, attempts_left) do
     path = snapshot_chunk_path(opts, chunk_num)
