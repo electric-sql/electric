@@ -390,32 +390,43 @@ defmodule Electric.ShapeCache do
 
   # reset shape storage before any consumer have been started
   defp purge_all_shapes(state) do
-    for shape_handle <- shape_handles(state) do
-      purge_shape(state, shape_handle)
+    for {shape_handle, shape} <- shape_handles(state) do
+      purge_shape(state, shape_handle, shape)
     end
 
     state
   end
 
-  defp purge_shape(state, shape_handle) do
-    deregister_shape(shape_handle, state)
+  defp purge_shape(state, shape_handle, shape) do
+    case Electric.Shapes.ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
+      :noproc ->
+        # if the consumer isn't running then we can just delete things gratuitously
+        :ok =
+          Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
+            state.stack_id,
+            state.storage,
+            state.publication_manager,
+            {state.shape_status, state.shape_status_state},
+            shape_handle,
+            shape
+          )
 
-    # Cleanup the storage for the shape
-    shape_handle
-    |> Electric.ShapeCache.Storage.for_shape(state.storage)
-    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
+      :ok ->
+        # if it is running then the stop_and_clean process will cleanup properly
+        :ok
+    end
 
     state
   end
 
   defp clean_up_all_shapes(state) do
-    for shape_handle <- shape_handles(state) do
+    for {shape_handle, _shape} <- shape_handles(state) do
       clean_up_shape(state, shape_handle)
     end
   end
 
   defp shape_handles(state) do
-    state.shape_status_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
+    state.shape_status_state |> state.shape_status.list_shapes()
   end
 
   defp recover_shapes(state, timeout) do
@@ -444,11 +455,11 @@ defmodule Electric.ShapeCache do
         lsn
 
       nil ->
-        purge_shape(state, shape_handle)
-
         Logger.error(
           "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
         )
+
+        purge_shape(state, shape_handle, shape)
 
         []
     end
@@ -475,7 +486,7 @@ defmodule Electric.ShapeCache do
       )
 
       # clean up corrupted data to avoid persisting bad state
-      purge_shape(state, shape_handle)
+      purge_shape(state, shape_handle, shape)
       []
   end
 
@@ -504,7 +515,7 @@ defmodule Electric.ShapeCache do
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
         # purge because we know the consumer isn't running
-        purge_shape(state, shape_handle)
+        purge_shape(state, shape_handle, shape)
         :error
     end
   end
