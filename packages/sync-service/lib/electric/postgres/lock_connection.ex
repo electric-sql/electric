@@ -101,12 +101,11 @@ defmodule Electric.Postgres.LockConnection do
     {time, backoff} = :backoff.fail(backoff)
     tref = :erlang.start_timer(time, self(), :acquire_lock)
 
-    log_message =
-      "Failed to acquire lock #{state.lock_name} with reason #{inspect(error)} - retrying in #{inspect(time)}ms."
-
-    if is_expected_error?(error),
-      do: Logger.info(log_message),
-      else: Logger.error(log_message)
+    if not is_expected_error?(error),
+      do:
+        Logger.error(
+          "Failed to acquire lock #{state.lock_name} with reason #{inspect(error)} - retrying in #{inspect(time)}ms."
+        )
 
     notify_lock_acquisition_error(error, state)
 
