@@ -167,9 +167,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     offset = LogOffset.new(100, 3)
     assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
 
-    assert_raise MatchError, fn ->
-      ShapeStatus.set_latest_offset(state, "not my shape", offset)
-    end
+    # set latest offset for an unknown shape silently does nothing
+    # this is because real-world race conditions mean that we may
+    # still receive updates on a shape that is in the process of
+    # being deleted
+    assert ShapeStatus.set_latest_offset(state, "not my shape", offset)
 
     assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
   end
@@ -184,9 +186,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     offset = LogOffset.new(100, 3)
 
-    assert_raise MatchError, fn ->
-      ShapeStatus.set_latest_offset(table_name, "not my shape", offset)
-    end
+    assert ShapeStatus.set_latest_offset(table_name, "not my shape", offset)
 
     assert ShapeStatus.set_latest_offset(table_name, shape_handle, offset)
     assert ShapeStatus.latest_offset(table_name, shape_handle) == {:ok, offset}
