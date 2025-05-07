@@ -139,7 +139,8 @@ jobs:
               "write-patterns": "${{ needs.deploy.outputs.write-patterns }}",
               nextjs: "${{ needs.deploy.outputs.nextjs }}",
               "todo-app": "${{ needs.deploy.outputs.todo-app }}",
-              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}"
+              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}",
+              "remix": "${{ needs.deploy.outputs.remix }}"
             }
 
             // Create deployments array only for examples that were deployed
