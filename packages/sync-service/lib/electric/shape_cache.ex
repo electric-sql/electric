@@ -403,15 +403,7 @@ defmodule Electric.ShapeCache do
     case Electric.Shapes.ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously
-        :ok =
-          Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
-            state.stack_id,
-            state.storage,
-            state.publication_manager,
-            {state.shape_status, state.shape_status_state},
-            shape_handle,
-            shape
-          )
+        :ok = Electric.Shapes.Monitor.purge_shape(state.stack_id, shape_handle, shape)
 
       :ok ->
         # if it is running then the stop_and_clean process will cleanup properly
