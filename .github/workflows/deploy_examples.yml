@@ -24,6 +24,14 @@ jobs:
           diff_relative: true
           dir_names: true
           dir_names_max_depth: 1
+          # Whitelist examples that need to be deployed
+          files: |
+            yjs/**
+            linearlite-read-only/**
+            write-patterns/**
+            nextjs/**
+            todo-app/**
+            proxy-auth/**
 
       - name: Create example matrix
         id: create-example-matrix
