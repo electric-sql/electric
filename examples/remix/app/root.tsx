@@ -8,12 +8,6 @@ import {
   ScrollRestoration,
 } from "@remix-run/react"
 
-if (!process.env.ELECTRIC_SOURCE_ID || !process.env.ELECTRIC_SOURCE_SECRET) {
-  throw new Error(
-    `ELECTRIC_SOURCE_ID and ELECTRIC_SOURCE_SECRET must be set`
-  )
-}
-
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
