@@ -27,7 +27,10 @@ type AwarenessUpdate = {
   removed: number[]
 }
 
-const MAX_BATCH_SIZE = 100
+/**
+ * Maximum number of incoming change messages that are merged before applying to the Y document.
+ */
+const MAX_APPLY_BATCH_SIZE = 10
 
 export class ElectricProvider<
   RowWithDocumentUpdate extends Row<decoding.Decoder> = never,
@@ -79,20 +82,20 @@ export class ElectricProvider<
    * Creates a new ElectricProvider instance that connects YJS documents to Electric SQL.
    *
    * @constructor
-   * @param {Object} options - Configuration options for the provider
+   * @param {ElectricProviderOptions} options - Configuration options for the provider
    * @param {Y.Doc} options.doc - The YJS document to be synchronized
-   * @param {Object} options.operations - Operations configuration
-   * @param {ShapeStreamOptions} options.operations.options - Options for the operations shape stream
-   * @param {string|URL} options.operations.endpoint - URL endpoint for sending operations
-   * @param {Function} options.operations.getDocumentUpdateFromRow - Function to extract document update from row
-   * @param {SendErrorRetryHandler} [options.operations.sendErrorRetryHandler] - Error handler for retrying sending operations
-   * @param {Object} [options.awareness] - Awareness configuration (optional)
-   * @param {ShapeStreamOptions} options.awareness.options - Options for the awareness shape stream
-   * @param {string|URL} options.awareness.endpoint - URL endpoint for sending awareness states
-   * @param {awarenessProtocol.Awareness} options.awareness.protocol - Awareness protocol instance
-   * @param {Function} options.awareness.getAwarenessUpdateFromRow - Function to extract awareness update from row
-   * @param {SendErrorRetryHandler} [options.awareness.sendErrorRetryHandler] - Error handler for retrying sending awareness changes
-   * @param {ResumeState} [options.resumeState] - resume state for the provider
+   * @param {Object} options.documentUpdates - Document updates configuration
+   * @param {ShapeStreamOptions} options.documentUpdates.shape - Options for the document updates shape stream
+   * @param {string|URL} options.documentUpdates.sendUrl - URL endpoint for sending document updates
+   * @param {Function} options.documentUpdates.getUpdateFromRow - Function to extract document update from row
+   * @param {SendErrorRetryHandler} [options.documentUpdates.sendErrorRetryHandler] - Error handler for retrying document updates
+   * @param {Object} [options.awarenessUpdates] - Awareness updates configuration (optional)
+   * @param {ShapeStreamOptions} options.awarenessUpdates.shape - Options for the awareness updates shape stream
+   * @param {string|URL} options.awarenessUpdates.sendUrl - URL endpoint for sending awareness updates
+   * @param {awarenessProtocol.Awareness} options.awarenessUpdates.protocol - Awareness protocol instance
+   * @param {Function} options.awarenessUpdates.getUpdateFromRow - Function to extract awareness update from row
+   * @param {SendErrorRetryHandler} [options.awarenessUpdates.sendErrorRetryHandler] - Error handler for retrying awareness updates
+   * @param {ResumeState} [options.resumeState] - Resume state for the provider
    * @param {boolean} [options.connect=true] - Whether to automatically connect upon initialization
    * @param {typeof fetch} [options.fetchClient] - Custom fetch implementation to use for HTTP requests
    */
@@ -128,7 +131,8 @@ export class ElectricProvider<
       this.awarenessUpdates.protocol.on(`update`, this.awarenessUpdateHandler)
     }
 
-    // enqueue unsynced changes from document
+    // enqueue unsynced changes from document if the
+    // resume state provides the document state vector
     if (this.resumeState?.stableStateVector) {
       this.pendingChanges = Y.encodeStateAsUpdate(
         this.doc,
@@ -291,7 +295,7 @@ export class ElectricProvider<
           const operation = decoding.readVarUint8Array(decoder)
           operations.push(operation)
 
-          if (operations.length >= MAX_BATCH_SIZE) {
+          if (operations.length >= MAX_APPLY_BATCH_SIZE) {
             applyBatch()
           }
         }
@@ -309,8 +313,6 @@ export class ElectricProvider<
         if (!this.sendingPendingChanges) {
           this.synced = true
           this.resumeState.stableStateVector = Y.encodeStateVector(this.doc)
-          // console.dir(this.resumeState)
-          // console.log(`updating vector ${JSON.stringify(this.resumeState)}`)
         }
         this.emit(`resumeState`, [this.resumeState])
         this.connected = true
@@ -318,6 +320,8 @@ export class ElectricProvider<
     }
   }
 
+  // TODO: add an optional throttler that batches updates
+  // before pushing to the server
   private async applyDocumentUpdate(update: Uint8Array, origin: unknown) {
     // don't re-send updates from electric
     if (origin === `server`) {

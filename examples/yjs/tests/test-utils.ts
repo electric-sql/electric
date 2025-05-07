@@ -1,9 +1,8 @@
 import { vi, Mock } from "vitest"
 import * as Y from "yjs"
 import { ElectricProvider } from "../src/y-electric"
-import { Message, ShapeStream } from "@electric-sql/client"
-import { OperationMessage } from "../src/types"
-import { parseToDecoder } from "../src/common/utils"
+import { Message, Row, ShapeStream } from "@electric-sql/client"
+import * as decoding from "lib0/decoding"
 
 // Mock the Electric client library
 vi.mock(`@electric-sql/client`, async (importOriginal) => {
@@ -21,7 +20,7 @@ vi.mock(`@electric-sql/client`, async (importOriginal) => {
 export const MockShapeStream = ShapeStream as unknown as Mock
 
 // Feed message function for simulating server responses
-export let feedMessage: (messages: Message<OperationMessage>[]) => void =
+export let feedMessage: (messages: Message<Row<decoding.Decoder>>[]) => void =
   vi.fn()
 
 export function createMockProvider(
@@ -35,7 +34,7 @@ export function createMockProvider(
     let unsubscribed = false
     return {
       subscribe: vi.fn(
-        (cb: (messages: Message<OperationMessage>[]) => Promise<void>) => {
+        (cb: (messages: Message<Row<decoding.Decoder>>[]) => Promise<void>) => {
           feedMessage = (messages) => {
             if (unsubscribed) {
               return
@@ -60,14 +59,14 @@ export function createMockProvider(
   })
 
   // Create the real provider
-  const provider = new ElectricProvider({
+  const provider = new ElectricProvider<{ op: decoding.Decoder }>({
     doc,
-    operations: {
-      options: {
+    documentUpdates: {
+      shape: {
         url: `http://localhost:3000/v1/subscriptions`,
-        parser: parseToDecoder,
       },
-      endpoint: `/ops`,
+      sendUrl: `/ops`,
+      getUpdateFromRow: (row) => row.op,
     },
     connect: options.connect ?? true,
     fetchClient: options.fetchClient,

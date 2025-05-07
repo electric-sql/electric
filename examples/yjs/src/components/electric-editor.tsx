@@ -14,11 +14,15 @@ import * as random from "lib0/random"
 import { IndexeddbPersistence } from "y-indexeddb"
 import { parseToDecoder } from "../common/utils"
 import LocalStorageResumeStateProvider from "../local-storage-persistence"
-import { ElectricProviderOptions } from "../types"
+import { ElectricProviderOptions, ConnectivityStatus } from "../types"
 
 import * as decoding from "lib0/decoding"
 
-type R = {
+type DocumentUpdateRow = {
+  op: decoding.Decoder
+}
+
+type AwarenessUpdateRow = {
   op: decoding.Decoder
 }
 
@@ -36,7 +40,7 @@ const room = `electric-demo`
 const ydoc = new Y.Doc()
 const awareness = new Awareness(ydoc)
 awareness.setLocalStateField(`user`, {
-  name: awareness.clientID,
+  name: user.color,
   color: user.color,
   colorLight: user.light,
 })
@@ -50,21 +54,26 @@ const operationSendUrl = new URL(
   window?.location.origin
 )
 const awarenessSendUrl = new URL(
-  `/api/operation?room=${room}&client_id=${ydoc.clientID}`,
+  `/api/operation?room=${room}&client_id=${user.color}`,
   window?.location.origin
 )
 
 function ElectricEditor({
   electricProviderOptions,
 }: {
-  electricProviderOptions: ElectricProviderOptions<R, R>
+  electricProviderOptions: ElectricProviderOptions<
+    DocumentUpdateRow,
+    AwarenessUpdateRow
+  >
 }) {
   const [docLoaded, setDocLoaded] = useState<boolean>(false)
   const editor = useRef(null)
-  const provider = useRef<ElectricProvider<R, R> | null>(null)
-  const [connectivityStatus, setConnectivityStatus] = useState<
-    `connected` | `disconnected` | `connecting`
-  >(`disconnected`)
+  const provider = useRef<ElectricProvider<
+    DocumentUpdateRow,
+    AwarenessUpdateRow
+  > | null>(null)
+  const [connectivityStatus, setConnectivityStatus] =
+    useState<ConnectivityStatus>(`disconnected`)
 
   // load document from storage
   useEffect(() => {
@@ -76,7 +85,10 @@ function ElectricEditor({
     if (!docLoaded) {
       return
     }
-    provider.current = new ElectricProvider<R, R>(electricProviderOptions)
+    provider.current = new ElectricProvider<
+      DocumentUpdateRow,
+      AwarenessUpdateRow
+    >(electricProviderOptions)
     const resumeStateUnsubscribe = resumeStateProvider.subscribeToResumeState(
       provider.current
     )
@@ -163,7 +175,10 @@ function ElectricEditor({
 }
 
 export default function Page() {
-  const electricProviderOptions: ElectricProviderOptions<R, R> = {
+  const electricProviderOptions: ElectricProviderOptions<
+    DocumentUpdateRow,
+    AwarenessUpdateRow
+  > = {
     doc: ydoc,
     documentUpdates: {
       shape: {

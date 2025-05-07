@@ -1,18 +1,26 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  MockInstance,
+} from "vitest"
 import * as Y from "yjs"
 import * as encoding from "lib0/encoding"
 import * as decoding from "lib0/decoding"
-import * as syncProtocol from "y-protocols/sync"
 import { ElectricProvider } from "../src/y-electric"
 import { createMockProvider, feedMessage } from "./test-utils"
 
-// Mock fetch API
 vi.stubGlobal(`fetch`, vi.fn())
 
 describe(`ElectricProvider upstream/downstream changes`, () => {
   let doc: Y.Doc
   let provider: ElectricProvider
-  let sendSpy: ReturnType<typeof vi.spyOn>
+  let sendSpy: MockInstance<{
+    (input: RequestInfo | URL, init?: RequestInit): Promise<Response>
+  }>
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -28,15 +36,14 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
       })
     )
 
-    // Set up fresh document and provider for each test
     doc = new Y.Doc()
     provider = createMockProvider(doc)
 
-    // Access private method for testing purposes
     sendSpy = vi
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .spyOn(provider as any, `send`)
-      .mockImplementation(() => Promise.resolve(true))
+      .spyOn(global, "fetch")
+      .mockImplementation(() =>
+        Promise.resolve(new Response(null, { status: 200 }))
+      )
   })
 
   afterEach(() => {
@@ -59,10 +66,9 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
     sourceDoc.getText(`shared`).insert(0, `Hello Electric YJS!`)
     const text = doc.getText(`shared`)
 
-    // Encode update and feed it to the provider
     const update = Y.encodeStateAsUpdate(sourceDoc)
     const encoder = encoding.createEncoder()
-    syncProtocol.writeUpdate(encoder, update)
+    encoding.writeVarUint8Array(encoder, update)
     const decoder = decoding.createDecoder(encoding.toUint8Array(encoder))
 
     feedMessage([
@@ -83,12 +89,9 @@ describe(`ElectricProvider connectivity handling`, () => {
   let mockFetch: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
-    // Create a test document
     doc = new Y.Doc()
 
-    // Set up a mock fetch function that we can get the sent data from
     mockFetch = vi.fn().mockImplementation((url, init) => {
-      // Read the request body
       const requestBody = init?.body
 
       return Promise.resolve({
@@ -138,11 +141,12 @@ describe(`ElectricProvider connectivity handling`, () => {
 
     const ytext = doc.getText(`test`)
 
-    // Access private method for testing purposes
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sendOperationSpy = vi.spyOn(provider as any, `sendOperations`)
+    const sendOperationSpy: ReturnType<typeof vi.spyOn> = vi.spyOn(
+      provider as any,
+      `sendOperations`
+    )
 
-    // two local updates
     ytext.insert(0, `hello`)
     ytext.insert(5, ` world`)
 
@@ -157,12 +161,11 @@ describe(`ElectricProvider connectivity handling`, () => {
     const fetchCall = mockFetch.mock.calls[0]
     const requestBody = fetchCall[1]?.body as Uint8Array
 
-    // Apply the merged updates to a new doc and verify content
     const newDoc = new Y.Doc()
     const decoder = decoding.createDecoder(requestBody)
-    const encoder = encoding.createEncoder()
-    encoding.writeVarUint(encoder, 0)
-    syncProtocol.readSyncMessage(decoder, encoder, newDoc, null)
+
+    const update = decoding.readVarUint8Array(decoder)
+    Y.applyUpdate(newDoc, update)
 
     expect(newDoc.getText(`test`).toString()).toBe(`hello world`)
   })
@@ -171,8 +174,9 @@ describe(`ElectricProvider connectivity handling`, () => {
     const sourceDoc = new Y.Doc()
     sourceDoc.getText(`test`).insert(0, `test content`)
     const update = Y.encodeStateAsUpdate(sourceDoc)
+
     const encoder = encoding.createEncoder()
-    syncProtocol.writeUpdate(encoder, update)
+    encoding.writeVarUint8Array(encoder, update)
     const decoder = decoding.createDecoder(encoding.toUint8Array(encoder))
 
     const text = doc.getText(`test`)
@@ -190,5 +194,17 @@ describe(`ElectricProvider connectivity handling`, () => {
     ])
 
     expect(text.toString()).toBe(``)
+  })
+
+  it(`should remove all update handlers when disconnected`, () => {
+    console.dir(doc._observers)
+    const initialUpdateHandlers = doc._observers.get(`update`)!.size
+    expect(initialUpdateHandlers).toBeGreaterThan(0)
+
+    provider.disconnect()
+    provider.destroy()
+
+    const finalUpdateHandlers = doc._observers.get(`update`)
+    expect(finalUpdateHandlers).toBeUndefined()
   })
 })
