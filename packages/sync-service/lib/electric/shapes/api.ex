@@ -442,7 +442,12 @@ defmodule Electric.Shapes.Api do
     etag = Response.etag(request.response, quote: false)
 
     if etag in if_none_match(conn) do
-      %{response: response} = Request.update_response(request, &%{&1 | status: 304, body: []})
+      %{response: response} =
+        Request.update_response(
+          request,
+          &%{&1 | status: 304, body: unsubscribe_after_stream([], request)}
+        )
+
       {:halt, response}
     else
       {:cont, request}
@@ -628,12 +633,14 @@ defmodule Electric.Shapes.Api do
         elem, request ->
           {[elem], request}
       end,
-      fn request ->
-        request
-        |> clean_up_change_listener()
-        |> clean_up_shape_subscriber()
-      end
+      &clean_up/1
     )
+  end
+
+  defp clean_up(request) do
+    request
+    |> clean_up_change_listener()
+    |> clean_up_shape_subscriber()
   end
 
   defp encode_log(%Request{api: api} = request, stream) do
