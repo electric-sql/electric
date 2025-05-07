@@ -282,7 +282,8 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     opts = [
-      connection_opts: connection_opts(nil, state),
+      # Lock connection must be direct-to-database, hence no pooled connection opts here.
+      connection_opts: replication_connection_opts(state),
       connection_manager: self(),
       lock_name: Keyword.fetch!(state.replication_opts, :slot_name),
       stack_id: state.stack_id
@@ -356,7 +357,7 @@ defmodule Electric.Connection.Manager do
     # process are both terminated when the shape is removed.
     #
     # See https://github.com/electric-sql/electric/issues/1554
-    conn_opts = connection_opts(nil, state) |> Electric.Utils.deobfuscate_password()
+    conn_opts = pooled_connection_opts(state) |> Electric.Utils.deobfuscate_password()
 
     {:ok, pool_pid} =
       Postgrex.start_link(
@@ -537,7 +538,7 @@ defmodule Electric.Connection.Manager do
     error = strip_exit_signal_stacktrace(reason)
     state = nillify_pid(state, pid)
     {step, _} = state.current_step
-    conn_opts = connection_opts(step, state)
+    conn_opts = connection_opts_for_step(step, state)
 
     repaired_conn_opts =
       case error do
@@ -1044,16 +1045,23 @@ defmodule Electric.Connection.Manager do
   defp populate_connection_opts(conn_opts),
     do: conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
 
-  defp connection_opts(:start_replication_client, %State{shared_connection_opts: nil} = state) do
-    Keyword.fetch!(state.replication_opts, :connection_opts)
+  defp connection_opts_for_step(step, state)
+       when step in [:start_lock_connection, :start_replication_client] do
+    replication_connection_opts(state)
   end
 
-  defp connection_opts(_step, %State{shared_connection_opts: nil} = state) do
-    state.connection_opts
+  defp connection_opts_for_step(_step, state) do
+    pooled_connection_opts(state)
   end
 
-  defp connection_opts(_step, state) do
-    state.shared_connection_opts
+  defp replication_connection_opts(state) do
+    state
+    |> replication_opts()
+    |> Keyword.fetch!(:connection_opts)
+  end
+
+  defp pooled_connection_opts(state) do
+    state.shared_connection_opts || state.connection_opts
   end
 
   defp replication_opts(%State{shared_connection_opts: nil} = state), do: state.replication_opts
@@ -1062,10 +1070,11 @@ defmodule Electric.Connection.Manager do
     do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
 
   defp update_connection_opts(
-         :start_replication_client,
+         step,
          conn_opts,
          %State{shared_connection_opts: nil, replication_opts: replication_opts} = state
-       ) do
+       )
+       when step in [:start_lock_connection, :start_replication_client] do
     %State{state | replication_opts: put_in(replication_opts, [:connection_opts], conn_opts)}
   end
 
