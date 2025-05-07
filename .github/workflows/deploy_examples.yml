@@ -10,27 +10,49 @@ concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
 
 jobs:
+  changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-example-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v41
+        with:
+          path: "examples"
+          diff_relative: true
+          dir_names: true
+          dir_names_max_depth: 1
+
+      - name: Create example matrix
+        id: create-example-matrix
+        run: |
+          # Get changed example directories
+          CHANGED_DIRS="${{ steps.changed-files.outputs.all_changed_files }}"
+          
+          # Initialize empty JSON array
+          MATRIX='{"example":[]}'
+          
+          # Add each changed directory to the matrix
+          if [ -n "$CHANGED_DIRS" ]; then
+            for dir in $CHANGED_DIRS; do
+              name=$(basename $dir)
+              MATRIX=$(echo $MATRIX | jq --arg name "$name" --arg path "examples/$name" '.example += [{"name": $name, "path": $path}]')
+            done
+          fi
+          
+          # Use jq to properly format and escape the JSON
+          echo "matrix=$(echo $MATRIX | jq -c '.')" >> $GITHUB_OUTPUT
+
   deploy:
     name: Deploy ${{ matrix.example.name }}
     environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
     runs-on: ubuntu-latest
     continue-on-error: true
-
+    needs: changed-files
     strategy:
-      matrix:
-        example:
-          - name: yjs
-            path: examples/yjs
-          - name: linearlite-read-only
-            path: examples/linearlite-read-only
-          - name: write-patterns
-            path: examples/write-patterns
-          - name: nextjs
-            path: examples/nextjs
-          - name: todo-app
-            path: examples/todo-app
-          - name: proxy-auth
-            path: examples/proxy-auth
+      matrix: ${{ fromJson(needs.changed-files.outputs.matrix) }}
 
     outputs:
       yjs: ${{ steps.deploy.outputs.yjs }}
@@ -91,7 +113,7 @@ jobs:
 
   comment:
     if: github.event_name == 'pull_request'
-    needs: deploy
+    needs: [changed-files, deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Create PR comment with deployment URLs
@@ -99,28 +121,37 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const deployments = [
-              { name: 'yjs', url: '${{ needs.deploy.outputs.yjs }}' },
-              { name: 'linearlite-read-only', url: '${{ needs.deploy.outputs.linearlite-read-only }}' },
-              { name: 'write-patterns', url: '${{ needs.deploy.outputs.write-patterns }}' },
-              { name: 'nextjs', url: '${{ needs.deploy.outputs.nextjs }}' },
-              { name: 'todo-app', url: '${{ needs.deploy.outputs.todo-app }}' },
-              { name: 'proxy-auth', url: '${{ needs.deploy.outputs.proxy-auth }}' },
-            ];
+            // Get the matrix of examples that were deployed
+            const matrix = JSON.parse(${{ toJSON(needs.changed-files.outputs.matrix) }})
+            
+            const urls = {
+              yjs: "${{ needs.deploy.outputs.yjs }}",
+              "linearlite-read-only": "${{ needs.deploy.outputs.linearlite-read-only }}",
+              "write-patterns": "${{ needs.deploy.outputs.write-patterns }}",
+              nextjs: "${{ needs.deploy.outputs.nextjs }}",
+              "todo-app": "${{ needs.deploy.outputs.todo-app }}",
+              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}"
+            }
+
+            // Create deployments array only for examples that were deployed
+            const deployments = matrix.example.map(example => ({
+              name: example.name,
+              url: urls[example.name]
+            }))
 
             const commentBody = [
               "## Examples",
               ...deployments.map(d => `- ${d.name}: ${d.url || '*deploy failed*'}`),
-            ].join('\n');
+            ].join('\n')
 
-            const prNumber = context.issue.number;
+            const prNumber = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-            });
+            })
 
-            const existingComment = comments.find(comment => comment.user.login ==='github-actions[bot]' && comment.body.startsWith("## Examples"));
+            const existingComment = comments.find(comment => comment.user.login ==='github-actions[bot]' && comment.body.startsWith("## Examples"))
 
             if (existingComment) {
               // Update the existing comment
@@ -129,7 +160,7 @@ jobs:
                 repo: context.repo.repo,
                 comment_id: existingComment.id,
                 body: commentBody,
-              });
+              })
             } else {
               // Create a new comment if none exists
               await github.rest.issues.createComment({
@@ -137,5 +168,5 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: prNumber,
                 body: commentBody,
-              });
+              })
             }
