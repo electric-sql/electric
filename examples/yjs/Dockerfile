@@ -10,14 +10,11 @@ COPY pnpm-*.yaml ./
 COPY package.json ./
 COPY tsconfig.base.json ./
 COPY tsconfig.build.json ./
-COPY packages/typescript-client packages/typescript-client/
-COPY packages/react-hooks packages/react-hooks/
 COPY examples/yjs examples/yjs/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 RUN pnpm run -r build:server 
-RUN pnpm run -r build:static
 
 
 # Need to make production image more clean
