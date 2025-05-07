@@ -1073,6 +1073,7 @@ defmodule Electric.ShapeCacheTest do
         })
       end
 
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}
       Process.flag(:trap_exit, false)
 
       # Next restart should not recover shape
