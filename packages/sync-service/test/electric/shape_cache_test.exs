@@ -1122,6 +1122,9 @@ defmodule Electric.ShapeCacheTest do
 
       restart_shape_cache(ctx, purge_all_shapes?: true)
 
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, 500
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle2}, 500
+
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(ctx.storage)
       assert map_size(found) == 0
 
