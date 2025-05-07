@@ -73,8 +73,8 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   """
   def reader_count(stack_id) do
     case :ets.lookup(table(stack_id), :all) do
-      [{:all, count}] -> count
-      [] -> 0
+      [{:all, count}] -> {:ok, count}
+      [] -> {:ok, 0}
     end
   end
 
@@ -296,8 +296,13 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   end
 
   defp update_counter(stack_id, handle, incr) do
-    :ets.update_counter(table(stack_id), :all, incr, {:all, 0})
-    :ets.update_counter(table(stack_id), handle, incr, {handle, 0})
+    update_op =
+      if incr < 0,
+        do: {2, incr, 0, 0},
+        else: incr
+
+    :ets.update_counter(table(stack_id), :all, update_op, {:all, 0})
+    :ets.update_counter(table(stack_id), handle, update_op, {handle, 0})
   end
 
   defp delete_reader_process(pid, handle, demonitor?, state) do

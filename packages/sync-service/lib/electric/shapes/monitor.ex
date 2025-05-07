@@ -38,6 +38,10 @@ defmodule Electric.Shapes.Monitor do
     MonitorRegistry.reader_count(stack_id, shape_handle)
   end
 
+  def reader_count(stack_id) do
+    MonitorRegistry.reader_count(stack_id)
+  end
+
   def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
     MonitorRegistry.notify_reader_termination(stack_id, shape_handle, reason, pid)
   end
