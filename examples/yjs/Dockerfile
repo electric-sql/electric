@@ -29,4 +29,4 @@ COPY --from=deps /app/ ./
 WORKDIR /app/examples/yjs/
 
 EXPOSE 3000
-CMD ["npm", "run", "start:server"]
+CMD ["pnpm", "run", "start:server"]
