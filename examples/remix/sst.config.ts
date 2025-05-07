@@ -2,8 +2,7 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 import { createDatabaseForCloudElectric } from "../.shared/lib/database"
-
-const isProduction = (stage: string) => stage.toLowerCase() === `production`
+import { getSharedCluster, isProduction } from "../.shared/lib/infra"
 
 export default $config({
   app(input) {
@@ -26,7 +25,7 @@ export default $config({
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
       )
 
-    const dbName = isProduction($app.stage)
+    const dbName = isProduction()
       ? `remix-production`
       : `remix-${$app.stage}`
     
@@ -35,6 +34,26 @@ export default $config({
         dbName,
         migrationsDirectory: `./db/migrations`,
       })
+    
+    const websiteDomain = `remix${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
+    
+    const cluster = getSharedCluster(`remix-app-${$app.stage}`)
+    const service = cluster.addService(`remix-app-${$app.stage}-service`, {
+      loadBalancer: {
+        ports: [{ listen: "443/https", forward: "3010/http" }],
+        domain: {
+          name: websiteDomain,
+          dns: sst.cloudflare.dns(),
+        },
+      },
+      environment: {
+        DATABASE_URL: pooledDatabaseUri,
+      },
+      image: {
+        context: "../..",
+        dockerfile: "Dockerfile",
+      },
+    })
 
     const bucket = new sst.aws.Bucket(`RemixExample`)
     const staticSite = new sst.aws.Remix(`remix`, {
@@ -46,7 +65,7 @@ export default $config({
         DATABASE_URL: pooledDatabaseUri,
       },
       domain: {
-        name: `remix${isProduction($app.stage) ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
+        name: websiteDomain,
         dns: sst.cloudflare.dns(),
       },
     })
@@ -55,6 +74,7 @@ export default $config({
       pooledDatabaseUri,
       sourceId: sourceId,
       website: staticSite.url,
+      server: service.url,
     }
   },
 })
