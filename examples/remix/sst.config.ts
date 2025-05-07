@@ -15,7 +15,8 @@ export default $config({
       providers: {
         cloudflare: `5.42.0`,
         aws: { version: `6.57.0`, region: `eu-west-1` },
-        postgresql: `3.14.0`,
+        neon: `0.6.3`,
+        command: `1.0.1`,
       },
     }
   },
