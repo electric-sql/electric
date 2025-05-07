@@ -694,13 +694,11 @@ defmodule Electric.ShapeCacheTest do
                 storage
               )
 
-            assert_raise Storage.Error, fn ->
-              Stream.run(stream)
-            end
+            assert_raise Storage.Error, fn -> Stream.run(stream) end
           end)
         end
 
-      Task.await_many(tasks)
+      Task.await_many(tasks, 10_000)
     end
 
     test "propagates error in snapshot creation to listeners", ctx do
