@@ -50,6 +50,10 @@ defmodule Electric.Shapes.Monitor do
     MonitorRegistry.termination_watchers(stack_id, shape_handle)
   end
 
+  def purge_shape(stack_id, shape_handle, shape) do
+    MonitorRegistry.purge_shape(stack_id, shape_handle, shape)
+  end
+
   def init(opts) do
     %{
       stack_id: stack_id,
