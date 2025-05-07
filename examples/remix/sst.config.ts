@@ -54,7 +54,7 @@ export default $config({
     return {
       pooledDatabaseUri,
       sourceId: sourceId,
-      url: staticSite.url,
+      website: staticSite.url,
     }
   },
 })
