@@ -1,12 +1,15 @@
 defmodule Electric.ShapeCache.FileStorage do
   use Retry
-  require Logger
 
   alias Electric.ShapeCache.LogChunker
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Replication.LogOffset
-  import Electric.Replication.LogOffset, only: :macros
+  alias Electric.ShapeCache.Storage
   alias __MODULE__, as: FS
+
+  require Logger
+
+  import Electric.Replication.LogOffset, only: :macros
 
   # If the storage format changes, increase `@version` to prevent
   # the incompatable older versions being read
@@ -76,7 +79,7 @@ defmodule Electric.ShapeCache.FileStorage do
     }
   end
 
-  defp name(stack_id, shape_handle) do
+  def name(stack_id, shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
@@ -113,10 +116,11 @@ defmodule Electric.ShapeCache.FileStorage do
   @impl Electric.ShapeCache.Storage
   def initialise(%FS{} = opts) do
     stored_version = stored_version(opts)
+    db = validate_db_process!(opts.db)
 
     if stored_version != opts.version || is_nil(pg_snapshot(opts)) ||
          not File.exists?(shape_definition_path(opts)) ||
-         not CubDB.has_key?(opts.db, @snapshot_meta_key) do
+         not CubDB.has_key?(db, @snapshot_meta_key) do
       cleanup_internals!(opts)
     end
 
@@ -125,10 +129,10 @@ defmodule Electric.ShapeCache.FileStorage do
       # We need to move the old snapshot into the new format and store correct metadata
       # so that we know it's complete.
       File.rename(old_snapshot_path(opts), snapshot_chunk_path(opts, 0))
-      CubDB.put(opts.db, @snapshot_meta_key, LogOffset.new(0, 0))
+      CubDB.put(db, @snapshot_meta_key, LogOffset.new(0, 0))
     end
 
-    CubDB.put(opts.db, @version_key, @version)
+    CubDB.put(db, @version_key, @version)
   end
 
   defp old_snapshot_path(opts) do
@@ -235,39 +239,62 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp get_latest_txn_log_offset(opts) do
-    case CubDB.select(opts.db,
-           min_key: log_start(),
-           max_key: log_end(),
-           min_key_inclusive: true,
-           reverse: true
-         )
-         |> Enum.take(1) do
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.select(
+      min_key: log_start(),
+      max_key: log_end(),
+      min_key_inclusive: true,
+      reverse: true
+    )
+    |> Enum.take(1)
+    |> case do
       [{key, _}] -> offset(key)
       _ -> nil
     end
   end
 
   defp pg_snapshot(opts) do
+    db = validate_db_process!(opts.db)
+
     # Temporary fallback to @xmin_key until we do a breaking release that drops that key entirely.
-    with nil <- CubDB.get(opts.db, @pg_snapshot_key),
-         xmin when not is_nil(xmin) <- CubDB.get(opts.db, @xmin_key) do
+    with nil <- CubDB.get(db, @pg_snapshot_key),
+         xmin when not is_nil(xmin) <- CubDB.get(db, @xmin_key) do
       %{xmin: xmin, xmax: xmin + 1, xip_list: [xmin], filter_txns?: true}
     end
   end
 
   @impl Electric.ShapeCache.Storage
   def set_pg_snapshot(pg_snapshot, %FS{} = opts) do
-    CubDB.put(opts.db, @pg_snapshot_key, pg_snapshot)
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.put(@pg_snapshot_key, pg_snapshot)
   end
 
   @impl Electric.ShapeCache.Storage
   def snapshot_started?(%FS{} = opts) do
-    CubDB.has_key?(opts.db, @snapshot_started_key)
+    try do
+      opts.db
+      |> validate_db_process!()
+      |> CubDB.has_key?(@snapshot_started_key)
+    rescue
+      Storage.Error -> false
+    end
+  end
+
+  defp validate_db_process!(name) do
+    if pid = GenServer.whereis(name) do
+      pid
+    else
+      raise Storage.Error, message: "CubDb process not running"
+    end
   end
 
   @impl Electric.ShapeCache.Storage
   def mark_snapshot_as_started(%FS{} = opts) do
-    CubDB.put(opts.db, @snapshot_started_key, true)
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.put(@snapshot_started_key, true)
   end
 
   defp offset({_, tuple_offset}), do: LogOffset.new(tuple_offset)
@@ -281,7 +308,9 @@ defmodule Electric.ShapeCache.FileStorage do
       fn ->
         last_chunk_num = write_stream_to_chunk_files(data_stream, opts)
 
-        CubDB.put(opts.db, @snapshot_meta_key, LogOffset.new(0, last_chunk_num))
+        opts.db
+        |> validate_db_process!()
+        |> CubDB.put(@snapshot_meta_key, LogOffset.new(0, last_chunk_num))
       end
     )
   end
@@ -344,6 +373,8 @@ defmodule Electric.ShapeCache.FileStorage do
   def append_to_log!(log_items, %FS{} = opts) do
     compaction_boundary = get_compaction_boundary(opts)
 
+    db = validate_db_process!(opts.db)
+
     retry with: linear_backoff(50, 2) |> expiry(5_000) do
       log_items
       |> Enum.flat_map(fn
@@ -358,7 +389,7 @@ defmodule Electric.ShapeCache.FileStorage do
         {offset, key, op_type, json_log_item} ->
           [{log_key(offset), {key, op_type, json_log_item}}]
       end)
-      |> then(&CubDB.put_multi(opts.db, &1))
+      |> then(&CubDB.put_multi(db, &1))
     else
       error -> raise(error)
     end
@@ -373,9 +404,11 @@ defmodule Electric.ShapeCache.FileStorage do
         %FS{} = opts
       )
       when tx_offset <= 0 do
-    unless snapshot_started?(opts), do: raise("Snapshot not started")
+    unless snapshot_started?(opts), do: raise(Storage.Error, message: "Snapshot not started")
 
-    case {CubDB.get(opts.db, @snapshot_meta_key), offset} do
+    db = validate_db_process!(opts.db)
+
+    case {CubDB.get(db, @snapshot_meta_key), offset} do
       # Snapshot is complete
       {%LogOffset{}, offset} when is_min_offset(offset) ->
         # Stream first chunk of snapshot
@@ -404,7 +437,9 @@ defmodule Electric.ShapeCache.FileStorage do
     do: stream_log_chunk(offset, max_offset, opts)
 
   def compact(%FS{} = opts) do
-    CubDB.select(opts.db,
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.select(
       min_key: chunk_checkpoint_start(),
       max_key: chunk_checkpoint_end(),
       reverse: true
@@ -427,7 +462,9 @@ defmodule Electric.ShapeCache.FileStorage do
     # will be able to read out everything they want while the compaction is happening and we're only
     # atomically updating the pointer to the live portion.
 
-    case CubDB.fetch(opts.db, @compaction_info_key) do
+    db = validate_db_process!(opts.db)
+
+    case CubDB.fetch(db, @compaction_info_key) do
       {:ok, {_, ^upper_bound}} ->
         :ok
 
@@ -440,7 +477,7 @@ defmodule Electric.ShapeCache.FileStorage do
           )
 
         new_log =
-          CubDB.select(opts.db,
+          CubDB.select(db,
             min_key: log_start(),
             max_key: log_key(upper_bound),
             max_key_inclusive: true
@@ -458,7 +495,7 @@ defmodule Electric.ShapeCache.FileStorage do
             opts.chunk_bytes_threshold
           )
 
-        CubDB.put(opts.db, @compaction_info_key, {merged_log, upper_bound})
+        CubDB.put(db, @compaction_info_key, {merged_log, upper_bound})
         delete_compacted_keys(opts, upper_bound)
         FS.Compaction.rm_log(new_log)
         FS.Compaction.rm_log(old_log)
@@ -468,7 +505,7 @@ defmodule Electric.ShapeCache.FileStorage do
         log_file_path = Path.join(opts.log_dir, "compact_log.electric")
 
         log =
-          CubDB.select(opts.db,
+          CubDB.select(db,
             min_key: log_start(),
             max_key: log_key(upper_bound),
             max_key_inclusive: true
@@ -479,15 +516,17 @@ defmodule Electric.ShapeCache.FileStorage do
           |> FS.LogFile.write_log_file(log_file_path)
           |> FS.Compaction.compact_in_place(opts.chunk_bytes_threshold)
 
-        CubDB.put(opts.db, @compaction_info_key, {log, upper_bound})
+        CubDB.put(db, @compaction_info_key, {log, upper_bound})
         delete_compacted_keys(opts, upper_bound)
         :ok
     end
   end
 
   defp delete_compacted_keys(%FS{} = opts, upper_bound) do
+    db = validate_db_process!(opts.db)
+
     compacted_chunks =
-      CubDB.select(opts.db,
+      CubDB.select(db,
         min_key: chunk_checkpoint_start(),
         max_key: chunk_checkpoint_key(upper_bound),
         max_key_inclusive: true
@@ -495,20 +534,23 @@ defmodule Electric.ShapeCache.FileStorage do
       |> Enum.map(fn {key, _} -> key end)
 
     compacted_logs =
-      CubDB.select(opts.db,
+      CubDB.select(db,
         min_key: log_start(),
         max_key: log_key(upper_bound)
       )
       |> Enum.map(fn {key, _} -> key end)
 
-    CubDB.delete_multi(opts.db, compacted_chunks ++ compacted_logs)
+    CubDB.delete_multi(db, compacted_chunks ++ compacted_logs)
   end
 
   # This function raises if the chunk file doesn't exist.
   defp stream_snapshot_chunk!(%FS{} = opts, chunk_number) do
     Stream.resource(
       fn -> {open_snapshot_chunk(opts, chunk_number), nil, ""} end,
-      fn {file, eof_seen, incomplete_line} ->
+      fn {{path, file}, eof_seen, incomplete_line} ->
+        # even if you delete the file the file handle is still valid and will continue to return data
+        if !File.exists?(path), do: raise(Storage.Error, message: "Snapshot has been deleted")
+
         case IO.binread(file, :line) do
           {:error, reason} ->
             raise IO.StreamError, reason: reason
@@ -517,7 +559,7 @@ defmodule Electric.ShapeCache.FileStorage do
             cond do
               is_nil(eof_seen) ->
                 # First time we see eof after any valid lines, we store a timestamp
-                {[], {file, System.monotonic_time(:millisecond), incomplete_line}}
+                {[], {{path, file}, System.monotonic_time(:millisecond), incomplete_line}}
 
               # If it's been 90s without any new lines, and also we've not seen <<4>>,
               # then likely something is wrong
@@ -527,22 +569,22 @@ defmodule Electric.ShapeCache.FileStorage do
               true ->
                 # Sleep a little and check for new lines
                 Process.sleep(20)
-                {[], {file, eof_seen, incomplete_line}}
+                {[], {{path, file}, eof_seen, incomplete_line}}
             end
 
           # The 4 byte marker (ASCII "end of transmission") indicates the end of the snapshot file.
           <<4::utf8>> ->
-            {:halt, {file, nil, ""}}
+            {:halt, {{path, file}, nil, ""}}
 
           line ->
             if binary_slice(line, -1, 1) == "\n" do
-              {[incomplete_line <> line], {file, nil, ""}}
+              {[incomplete_line <> line], {{path, file}, nil, ""}}
             else
-              {[], {file, nil, incomplete_line <> line}}
+              {[], {{path, file}, nil, incomplete_line <> line}}
             end
         end
       end,
-      &File.close(elem(&1, 0))
+      &File.close(elem(elem(&1, 0), 1))
     )
   end
 
@@ -551,9 +593,11 @@ defmodule Electric.ShapeCache.FileStorage do
   defp open_snapshot_chunk(_, _, 0), do: raise(IO.StreamError, reason: :enoent)
 
   defp open_snapshot_chunk(opts, chunk_num, attempts_left) do
-    case File.open(snapshot_chunk_path(opts, chunk_num), [:read, :raw, read_ahead: 1024]) do
+    path = snapshot_chunk_path(opts, chunk_num)
+
+    case File.open(path, [:read, :raw, read_ahead: 1024]) do
       {:ok, file} ->
-        file
+        {path, file}
 
       {:error, :enoent} ->
         Process.sleep(20)
@@ -565,13 +609,15 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp stream_log_chunk(%LogOffset{} = offset, max_offset, %FS{} = opts) do
-    case CubDB.fetch(opts.db, @compaction_info_key) do
+    db = validate_db_process!(opts.db)
+
+    case CubDB.fetch(db, @compaction_info_key) do
       {:ok, {log, upper_bound}} when is_log_offset_lt(offset, upper_bound) ->
         FS.ChunkIndex.fetch_chunk(elem(log, 1), offset)
         FS.LogFile.read_chunk(log, offset)
 
       _ ->
-        opts.db
+        db
         |> CubDB.select(
           min_key: log_key(offset),
           max_key: log_key(max_offset),
@@ -582,7 +628,10 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp get_compaction_boundary(%FS{} = opts) do
-    case CubDB.fetch(opts.db, @compaction_info_key) do
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.fetch(@compaction_info_key)
+    |> case do
       {:ok, {_, upper_bound}} -> upper_bound
       :error -> LogOffset.first()
     end
@@ -610,7 +659,7 @@ defmodule Electric.ShapeCache.FileStorage do
       File.exists?(path, [:raw]) ->
         stream_snapshot_chunk!(opts, chunk_number)
 
-      CubDB.has_key?(opts.db, @snapshot_meta_key) ->
+      CubDB.has_key?(validate_db_process!(opts.db), @snapshot_meta_key) ->
         []
 
       true ->
@@ -647,13 +696,15 @@ defmodule Electric.ShapeCache.FileStorage do
   def get_chunk_end_log_offset(offset, %FS{} = opts), do: get_chunk_end_for_log(offset, opts)
 
   defp get_chunk_end_for_log(offset, %FS{} = opts) do
-    case CubDB.fetch(opts.db, @compaction_info_key) do
+    db = validate_db_process!(opts.db)
+
+    case CubDB.fetch(db, @compaction_info_key) do
       {:ok, {log, upper_bound}} when is_log_offset_lt(offset, upper_bound) ->
         {:ok, max_offset, _} = FS.ChunkIndex.fetch_chunk(elem(log, 1), offset)
         max_offset
 
       _ ->
-        CubDB.select(opts.db,
+        CubDB.select(db,
           min_key: chunk_checkpoint_key(offset),
           max_key: chunk_checkpoint_end(),
           min_key_inclusive: false
@@ -665,10 +716,14 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp get_last_snapshot_offset(%FS{} = opts) do
-    CubDB.get(opts.db, @snapshot_meta_key)
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.get(@snapshot_meta_key)
   end
 
   defp cleanup_internals!(%FS{} = opts) do
+    db = validate_db_process!(opts.db)
+
     [
       @xmin_key,
       @pg_snapshot_key,
@@ -677,7 +732,7 @@ defmodule Electric.ShapeCache.FileStorage do
     ]
     |> Enum.concat(keys_from_range(log_start(), log_end(), opts))
     |> Enum.concat(keys_from_range(chunk_checkpoint_start(), chunk_checkpoint_end(), opts))
-    |> then(&CubDB.delete_multi(opts.db, &1))
+    |> then(&CubDB.delete_multi(db, &1))
 
     {:ok, _} = File.rm_rf(opts.snapshot_dir)
     {:ok, _} = File.rm_rf(shape_definition_path(opts))
@@ -696,7 +751,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def unsafe_cleanup!(%FS{} = opts) do
-    {:ok, _} = File.rm_rf(opts.data_dir)
+    File.rm_rf!(opts.data_dir)
     :ok
   end
 
@@ -705,12 +760,16 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   defp keys_from_range(min_key, max_key, opts) do
-    CubDB.select(opts.db, min_key: min_key, max_key: max_key)
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.select(min_key: min_key, max_key: max_key)
     |> Stream.map(&elem(&1, 0))
   end
 
   defp stored_version(opts) do
-    CubDB.get(opts.db, @version_key)
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.get(@version_key)
   end
 
   defp snapshot_offset(chunk_number), do: LogOffset.new(0, chunk_number)

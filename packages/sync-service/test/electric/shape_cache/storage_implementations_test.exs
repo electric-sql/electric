@@ -413,7 +413,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         storage.cleanup!(opts)
 
-        assert_raise RuntimeError, fn ->
+        assert_raise Storage.Error, fn ->
           storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts) |> Enum.to_list()
         end
       end

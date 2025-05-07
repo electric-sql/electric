@@ -51,6 +51,8 @@ defmodule Electric.ShapeCacheTest do
   @pg_snapshot_xmin_10 {10, 11, [10]}
   @pg_snapshot_xmin_100 {100, 101, [100]}
 
+  @moduletag :tmp_dir
+
   defmodule TempPubManager do
     def add_shape(_, opts) do
       send(opts[:test_pid], {:called, :prepare_tables_fn})
@@ -68,7 +70,7 @@ defmodule Electric.ShapeCacheTest do
   setup [
     :with_persistent_kv,
     :with_stack_id_from_test,
-    :with_in_memory_storage,
+    :with_cub_db_storage,
     :with_status_monitor,
     :with_shape_monitor
   ]
@@ -253,8 +255,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
-      assert_raise ArgumentError,
-                   ~r"the table identifier does not refer to an existing ETS table",
+      assert_raise Storage.Error,
                    fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
@@ -693,7 +694,9 @@ defmodule Electric.ShapeCacheTest do
                 storage
               )
 
-            assert_raise RuntimeError, fn -> Stream.run(stream) end
+            assert_raise Storage.Error, fn ->
+              Stream.run(stream)
+            end
           end)
         end
 
@@ -804,8 +807,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
-      assert_raise ArgumentError,
-                   ~r"the table identifier does not refer to an existing ETS table",
+      assert_raise Storage.Error,
                    fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
@@ -899,9 +901,9 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
-      assert_raise ArgumentError,
-                   ~r"the table identifier does not refer to an existing ETS table",
-                   fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
+      assert_raise Storage.Error, fn ->
+        Stream.run(Storage.get_log_stream(@zero_offset, storage))
+      end
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert shape_handle != shape_handle2
@@ -943,10 +945,13 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "after restart" do
-    @describetag :tmp_dir
+    setup do
+      %{
+        inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+      }
+    end
 
     setup [
-      :with_cub_db_storage,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
@@ -1087,15 +1092,16 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} = ctx
 
       {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       restart_shape_cache(ctx,
         publication_manager: {SlowPublicationManager, []},
         storage: Support.TestStorage.wrap(ctx.storage, %{}),
-        recover_shape_timeout: 10
+        recover_shape_timeout: 1
       )
 
-      assert_receive {Support.TestStorage, :unsafe_cleanup!, ^shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}
 
       Process.sleep(100)
 

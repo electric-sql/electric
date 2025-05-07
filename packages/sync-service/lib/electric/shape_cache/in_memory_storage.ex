@@ -1,11 +1,14 @@
 defmodule Electric.ShapeCache.InMemoryStorage do
   use Agent
+
   alias Electric.ConcurrentStream
   alias Electric.Replication.LogOffset
-  import Electric.Replication.LogOffset, only: :macros
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.ShapeCache.Storage
 
   alias __MODULE__, as: MS
+
+  import Electric.Replication.LogOffset, only: :macros
 
   @behaviour Electric.ShapeCache.Storage
 
@@ -64,8 +67,10 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def start_link(%MS{} = opts) do
-    if is_nil(opts.shape_handle), do: raise("cannot start an un-attached storage instance")
-    if is_nil(opts.stack_id), do: raise("stack_id cannot be nil")
+    if is_nil(opts.shape_handle),
+      do: raise(Storage.Error, "cannot start an un-attached storage instance")
+
+    if is_nil(opts.stack_id), do: raise(Storage.Error, "stack_id cannot be nil")
 
     Agent.start_link(
       fn ->
@@ -186,7 +191,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
       end_marker_key: snapshot_chunk_end(storage_offset(max_offset)),
       poll_time_in_ms: 10,
       stream_fun: fn excluded_start_key, included_end_key ->
-        if !snapshot_started?(opts), do: raise("Snapshot no longer available")
+        if !snapshot_started?(opts), do: raise(Storage.Error, "Snapshot no longer available")
 
         :ets.select(
           opts.snapshot_table,

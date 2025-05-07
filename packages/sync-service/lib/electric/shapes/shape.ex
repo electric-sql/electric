@@ -509,7 +509,13 @@ defimpl Inspect, for: Electric.Shapes.Shape do
   def inspect(%Electric.Shapes.Shape{} = shape, _opts) do
     %{root_table: {schema, table}, root_table_id: root_table_id} = shape
 
-    where = if shape.where, do: concat([", where: \"", shape.where.query, "\""]), else: ""
+    # some tests have invalid, unparsed, where clauses
+    where =
+      case shape.where do
+        %{query: query} -> concat([", where: \"", query, "\""])
+        query when is_binary(query) -> concat([", where: \"", query, "\""])
+        nil -> ""
+      end
 
     concat(["Shape.new!(\"", schema, ".", table, "\" [OID #{root_table_id}]", where, ")"])
   end
