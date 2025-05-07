@@ -35,6 +35,7 @@
     "pg": "^8.13.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sst": "^3.6.35",
     "y-codemirror.next": "0.3.5",
     "y-indexeddb": "^9.0.12",
     "y-protocols": "1.0.6",
