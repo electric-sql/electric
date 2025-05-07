@@ -256,7 +256,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
         state
       ) do
     if MapSet.member?(state.cleanup_handles, handle) do
-      Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup(
+      Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
         state.stack_id,
         state.storage,
         state.publication_manager,
