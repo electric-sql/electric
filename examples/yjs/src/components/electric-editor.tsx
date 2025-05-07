@@ -13,9 +13,14 @@ import { javascript } from "@codemirror/lang-javascript"
 import * as random from "lib0/random"
 import { IndexeddbPersistence } from "y-indexeddb"
 import { parseToDecoder } from "../common/utils"
-import { LocalStorageResumeStateProvider } from "../local-storage-persistence"
+import LocalStorageResumeStateProvider from "../local-storage-persistence"
+import { ElectricProviderOptions } from "../types"
 
-const room = `electric-demo`
+import * as decoding from "lib0/decoding"
+
+type R = {
+  op: decoding.Decoder
+}
 
 const usercolors = [
   { color: `#30bced`, light: `#30bced33` },
@@ -27,11 +32,8 @@ const usercolors = [
 ]
 
 const user = usercolors[random.uint32() % usercolors.length]
+const room = `electric-demo`
 const ydoc = new Y.Doc()
-
-// use database provider
-const databaseProvider = new IndexeddbPersistence(room, ydoc)
-
 const awareness = new Awareness(ydoc)
 awareness.setLocalStateField(`user`, {
   name: awareness.clientID,
@@ -39,74 +41,66 @@ awareness.setLocalStateField(`user`, {
   colorLight: user.light,
 })
 
-const shapesEndpoint = new URL(`/shape-proxy/v1/shape`, window?.location.origin)
-  .href
-const endpoints = {
-  operations: new URL(`/api/operation?room=${room}`, window?.location.origin)
-    .href,
-  awareness: new URL(
-    `/api/operation?room=${room}&client_id=${ydoc.clientID}`,
-    window?.location.origin
-  ).href,
-}
-
-// This basic example doesn't prevent session conflicts
+const databaseProvider = new IndexeddbPersistence(user.color, ydoc)
 const resumeStateProvider = new LocalStorageResumeStateProvider(user.color)
 
-const network = new ElectricProvider({
-  doc: ydoc,
-  operations: {
-    options: {
-      url: shapesEndpoint,
-      params: {
-        table: `ydoc_operations`,
-        where: `room = '${room}'`,
-      },
-      parser: parseToDecoder,
-    },
-    endpoint: endpoints.operations,
-  },
-  awareness: {
-    options: {
-      url: shapesEndpoint,
-      params: {
-        table: `ydoc_awareness`,
-        where: `room = '${room}'`,
-      },
-      parser: parseToDecoder,
-    },
-    endpoint: endpoints.awareness,
-    protocol: awareness!,
-  },
-  resumeStateProvider,
-  databaseProvider,
-})
+const shapesEndpoint = new URL(`/shape-proxy/v1/shape`, window?.location.origin)
+const operationSendUrl = new URL(
+  `/api/operation?room=${room}`,
+  window?.location.origin
+)
+const awarenessSendUrl = new URL(
+  `/api/operation?room=${room}&client_id=${ydoc.clientID}`,
+  window?.location.origin
+)
 
-export default function ElectricEditor() {
+function ElectricEditor({
+  electricProviderOptions,
+}: {
+  electricProviderOptions: ElectricProviderOptions<R, R>
+}) {
+  const [docLoaded, setDocLoaded] = useState<boolean>(false)
   const editor = useRef(null)
-
+  const provider = useRef<ElectricProvider<R, R> | null>(null)
   const [connectivityStatus, setConnectivityStatus] = useState<
     `connected` | `disconnected` | `connecting`
   >(`disconnected`)
 
-  const toggle = () => {
-    const toggleStatus =
-      connectivityStatus === `connected` ? `disconnected` : `connected`
-    if (toggleStatus === `connected`) {
-      network.connect()
-    } else {
-      network.disconnect()
-    }
-  }
-
+  // load document from storage
   useEffect(() => {
-    if (typeof window === `undefined`) {
+    databaseProvider.once(`synced`, () => setDocLoaded(true))
+  }, [])
+
+  // setup provider
+  useEffect(() => {
+    if (!docLoaded) {
       return
     }
+    provider.current = new ElectricProvider<R, R>(electricProviderOptions)
+    const resumeStateUnsubscribe = resumeStateProvider.subscribeToResumeState(
+      provider.current
+    )
 
-    network.on(`status`, (status) => {
-      setConnectivityStatus(status.status)
-    })
+    const statusHandler = provider.current.on(
+      `status`,
+      (status: { status: `connected` | `disconnected` | `connecting` }) => {
+        setConnectivityStatus(status.status)
+      }
+    )
+
+    return () => {
+      resumeStateUnsubscribe()
+      provider.current!.off(`status`, statusHandler)
+      provider.current!.destroy()
+      provider.current = null
+    }
+  }, [provider.current])
+
+  // setup editor
+  useEffect(() => {
+    if (!editor.current) {
+      return
+    }
 
     const ytext = ydoc.getText(room)
 
@@ -121,19 +115,31 @@ export default function ElectricEditor() {
       ],
     })
 
-    const view = new EditorView({ state, parent: editor.current ?? undefined })
+    const view = new EditorView({ state, parent: editor.current })
 
-    return () => {
-      view.destroy()
+    return () => view.destroy()
+  }, [editor.current])
+
+  const toggleNetwork = () => {
+    if (!provider.current) return
+
+    if (connectivityStatus === `connected`) {
+      provider.current.disconnect()
+    } else {
+      provider.current.connect()
     }
-  })
+  }
+
+  if (!provider.current) {
+    return <span>Loading...</span>
+  }
 
   return (
     <div>
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          toggle()
+          toggleNetwork()
         }}
       >
         <button type="submit" className="button" name="intent" value="add">
@@ -154,4 +160,38 @@ export default function ElectricEditor() {
       <div ref={editor}></div>
     </div>
   )
+}
+
+export default function Page() {
+  const electricProviderOptions: ElectricProviderOptions<R, R> = {
+    doc: ydoc,
+    documentUpdates: {
+      shape: {
+        url: shapesEndpoint.href,
+        params: {
+          table: `ydoc_operations`,
+          where: `room = '${room}'`,
+        },
+        parser: parseToDecoder,
+      },
+      sendUrl: operationSendUrl,
+      getUpdateFromRow: (row) => row.op,
+    },
+    awarenessUpdates: {
+      shape: {
+        url: shapesEndpoint.href,
+        params: {
+          table: `ydoc_awareness`,
+          where: `room = '${room}'`,
+        },
+        parser: parseToDecoder,
+      },
+      sendUrl: awarenessSendUrl,
+      protocol: awareness,
+      getUpdateFromRow: (row) => row.op,
+    },
+    resumeState: resumeStateProvider.load(),
+  }
+
+  return <ElectricEditor electricProviderOptions={electricProviderOptions} />
 }

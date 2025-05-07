@@ -9,10 +9,6 @@ const hexStringToUint8Array = (hexString: string) => {
   )
 }
 
-export const parseToUint8Array = {
-  bytea: hexStringToUint8Array,
-}
-
 export const parseToDecoder = {
   bytea: (hexString: string) => {
     const uint8Array = hexStringToUint8Array(hexString)

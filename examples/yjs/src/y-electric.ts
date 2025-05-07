@@ -1,25 +1,24 @@
 import * as encoding from "lib0/encoding"
 import * as decoding from "lib0/decoding"
-import * as syncProtocol from "y-protocols/sync"
 import * as awarenessProtocol from "y-protocols/awareness"
-import { Observable, ObservableV2 } from "lib0/observable"
+import { ObservableV2 } from "lib0/observable"
 import * as env from "lib0/environment"
 import * as Y from "yjs"
 import {
+  GetExtensions,
   isChangeMessage,
   isControlMessage,
   Message,
   Offset,
+  Row,
   ShapeStream,
+  ShapeStreamOptions,
 } from "@electric-sql/client"
 import {
-  AwarenessMessage,
-  AwarenessSteamOptions,
   YProvider,
-  OperationMessage,
-  OperationSteamOptions,
   ResumeState,
-  ResumeStateProvider,
+  SendErrorRetryHandler,
+  ElectricProviderOptions,
 } from "./types"
 
 type AwarenessUpdate = {
@@ -28,46 +27,53 @@ type AwarenessUpdate = {
   removed: number[]
 }
 
+const MAX_BATCH_SIZE = 100
+
 export class ElectricProvider<
-  OperationsShapeOptions extends OperationSteamOptions = OperationSteamOptions,
-  AwarenessShapeOptions extends AwarenessSteamOptions = AwarenessSteamOptions,
+  RowWithDocumentUpdate extends Row<decoding.Decoder> = never,
+  RowWithAwarenessUpdate extends Row<decoding.Decoder> = never,
 > extends ObservableV2<YProvider> {
   private doc: Y.Doc
 
-  private operations: {
-    options: OperationSteamOptions
-    endpoint: string
+  private documentUpdates: {
+    shape: ShapeStreamOptions<GetExtensions<RowWithDocumentUpdate>>
+    sendUrl: string | URL
+    getUpdateFromRow: (row: RowWithDocumentUpdate) => decoding.Decoder
+    sendErrorRetryHandler?: SendErrorRetryHandler
   }
 
-  private awareness?: {
-    options: AwarenessSteamOptions
-    endpoint: string
+  private awarenessUpdates?: {
+    shape: ShapeStreamOptions<GetExtensions<RowWithAwarenessUpdate>>
+    sendUrl: string | URL
     protocol: awarenessProtocol.Awareness
+    getUpdateFromRow: (row: RowWithAwarenessUpdate) => decoding.Decoder
+    sendErrorRetryHandler?: SendErrorRetryHandler
   }
 
-  private resumeStateProvider?: ResumeStateProvider
-  private resume: ResumeState
+  private _connected: boolean = false
+  private _synced: boolean = false
 
-  private _ready: boolean
-  private _connected: boolean
-  private _synced: boolean
-
+  private resumeState: ResumeState
+  private sendingPendingChanges: boolean = false
+  private pendingChanges: Uint8Array | null = null
   private sendingAwarenessState: boolean = false
   private pendingAwarenessUpdate: AwarenessUpdate | null = null
 
-  private operationsHandler?: any
-  private awarenessHandler?: any
-  private unsubscribeShapes?: () => void
-  private exitHandler?: () => void
+  private documentUpdateHandler: (
+    update: Uint8Array,
+    origin: unknown,
+    doc: Y.Doc,
+    transaction: Y.Transaction
+  ) => void
+  private awarenessUpdateHandler?: (
+    update: AwarenessUpdate,
+    origin: unknown
+  ) => void
 
-  private onSendError?: (error: unknown, context: string) => Promise<boolean>
+  private exitHandler: () => void
+  private unsubscribeShapes?: () => void
 
   private fetchClient?: typeof fetch
-
-  // TODO: implement database provider for Electric
-  // - Keep document state in same place as shape resume state
-  // - Compute diff from local update state instead of persisting
-  //   the batch of pending changes
 
   /**
    * Creates a new ElectricProvider instance that connects YJS documents to Electric SQL.
@@ -75,111 +81,64 @@ export class ElectricProvider<
    * @constructor
    * @param {Object} options - Configuration options for the provider
    * @param {Y.Doc} options.doc - The YJS document to be synchronized
-   * @param {OperationsShapeOptions} options.operations.options - Options for the operations shape stream
-   * @param {string} options.operations.endpoint - URL endpoint for sending operations
-   * @param {AwarenessShapeOptions} options.awareness.options - Options for the awareness shape stream
-   * @param {string} options.awareness.endpoint - URL endpoint for sending awareness states
-   * @param {awarenessProtocol.Awareness} options.awareness.protocol - The awareness protocol implementation
-   * @param {ResumeStateProvider} [options.resumeStateProvider] - Alternatively, you can use a provider for loading/saving resume state
-   * @param {Observable<string>} [options.databaseProvider] - Observable for loading/saving document state (e.g. IndexeddbPersistence)
+   * @param {Object} options.operations - Operations configuration
+   * @param {ShapeStreamOptions} options.operations.options - Options for the operations shape stream
+   * @param {string|URL} options.operations.endpoint - URL endpoint for sending operations
+   * @param {Function} options.operations.getDocumentUpdateFromRow - Function to extract document update from row
+   * @param {SendErrorRetryHandler} [options.operations.sendErrorRetryHandler] - Error handler for retrying sending operations
+   * @param {Object} [options.awareness] - Awareness configuration (optional)
+   * @param {ShapeStreamOptions} options.awareness.options - Options for the awareness shape stream
+   * @param {string|URL} options.awareness.endpoint - URL endpoint for sending awareness states
+   * @param {awarenessProtocol.Awareness} options.awareness.protocol - Awareness protocol instance
+   * @param {Function} options.awareness.getAwarenessUpdateFromRow - Function to extract awareness update from row
+   * @param {SendErrorRetryHandler} [options.awareness.sendErrorRetryHandler] - Error handler for retrying sending awareness changes
+   * @param {ResumeState} [options.resumeState] - resume state for the provider
    * @param {boolean} [options.connect=true] - Whether to automatically connect upon initialization
-   * @param {Function} [options.onSendError] - Error handler for sending operations/awareness changes
-   * @param {Function} [options.fetchClient] - Custom fetch implementation to use for sending operations/awareness changes
+   * @param {typeof fetch} [options.fetchClient] - Custom fetch implementation to use for HTTP requests
    */
   constructor({
     doc,
-    operations,
-    awareness,
-    resumeStateProvider,
-    databaseProvider,
+    documentUpdates: documentUpdatesConfig,
+    awarenessUpdates: awarenessUpdatesConfig,
+    resumeState,
     connect = true,
-    onSendError,
     fetchClient,
-  }: {
-    doc: Y.Doc
-    operations: {
-      options: OperationsShapeOptions
-      endpoint: string
-    }
-    awareness?: {
-      options: AwarenessShapeOptions
-      endpoint: string
-      protocol: awarenessProtocol.Awareness
-    }
-    resumeStateProvider?: ResumeStateProvider
-    databaseProvider?: Observable<string>
-    connect?: boolean
-    onSendError?: (error: unknown, context: string) => Promise<boolean>
-    fetchClient?: typeof fetch
-  }) {
+  }: ElectricProviderOptions<RowWithDocumentUpdate, RowWithAwarenessUpdate>) {
     super()
 
     this.doc = doc
-    this.operations = operations
-
-    if (onSendError) {
-      this.onSendError = onSendError
-    }
-    this.awareness = awareness
+    this.documentUpdates = documentUpdatesConfig
+    this.awarenessUpdates = awarenessUpdatesConfig
+    this.resumeState = resumeState ?? {}
 
     this.fetchClient = fetchClient
-    this.resumeStateProvider = resumeStateProvider
 
-    this._ready = false
-    this._connected = false
-    this._synced = false
-
-    this.resume = this.resumeStateProvider?.load() ?? {}
-
-    // recovery
-    if (this.resume.batching || this.resume.sending) {
-      console.log(`recover from unfinished push`)
-      if (this.resume.sending) {
-        this.batch(this.resume.sending)
-      }
-      this.resumeStateProvider?.save(this.resume)
-    }
-
-    if (env.isNode && typeof process !== `undefined`) {
-      this.exitHandler = () => {
-        process.on(`exit`, () => this.destroy())
+    this.exitHandler = () => {
+      if (env.isNode && typeof process !== `undefined`) {
+        process.on(`exit`, this.destroy.bind(this))
       }
     }
 
-    if (databaseProvider) {
-      databaseProvider.once(`synced`, () => {
-        this.ready = true
-        if (connect) {
-          this.connect()
-        }
-      })
-    } else {
-      this.ready = true
-      if (connect) {
-        this.connect()
-      }
+    this.documentUpdateHandler = this.doc.on(
+      `update`,
+      this.applyDocumentUpdate.bind(this)
+    )
+    if (this.awarenessUpdates) {
+      this.awarenessUpdateHandler = this.applyAwarenessUpdate.bind(this)
+      this.awarenessUpdates.protocol.on(`update`, this.awarenessUpdateHandler)
     }
-  }
 
-  set ready(state: boolean) {
-    if (state) {
-      this._ready = true
-      this.operationsHandler = this.doc.on(
-        `update`,
-        this.sendOperationsHandler.bind(this)
+    // enqueue unsynced changes from document
+    if (this.resumeState?.stableStateVector) {
+      this.pendingChanges = Y.encodeStateAsUpdate(
+        this.doc,
+        this.resumeState.stableStateVector
       )
-      this.awarenessHandler = this.awareness?.protocol.on(
-        `update`,
-        this.sendAwarenessStateHandler.bind(this)
-      )
-    } else {
-      this.doc.off(`update`, this.operationsHandler)
-      this.awareness?.protocol.off(`update`, this.awarenessHandler)
     }
-  }
 
-  get ready() {
-    return this._ready
+    if (connect) {
+      this.connect()
+    }
   }
 
   get synced() {
@@ -209,17 +168,18 @@ export class ElectricProvider<
   }
 
   private batch(update: Uint8Array) {
-    if (this.resume.batching) {
-      this.resume.batching = Y.mergeUpdates([this.resume.batching, update])
+    if (this.pendingChanges) {
+      this.pendingChanges = Y.mergeUpdates([this.pendingChanges, update])
     } else {
-      this.resume.batching = update
+      this.pendingChanges = update
     }
-    this.resumeStateProvider?.save(this.resume)
   }
 
   destroy() {
     this.disconnect()
-    this.ready = false
+
+    this.doc.off(`update`, this.documentUpdateHandler)
+    this.awarenessUpdates?.protocol.off(`update`, this.awarenessUpdateHandler!)
 
     if (env.isNode && typeof process !== `undefined`) {
       process.off(`exit`, this.exitHandler!)
@@ -234,10 +194,10 @@ export class ElectricProvider<
       return
     }
 
-    if (this.awareness) {
+    if (this.awarenessUpdates) {
       awarenessProtocol.removeAwarenessStates(
-        this.awareness.protocol,
-        Array.from(this.awareness.protocol.getStates().keys()).filter(
+        this.awarenessUpdates.protocol,
+        Array.from(this.awarenessUpdates.protocol.getStates().keys()).filter(
           (client) => client !== this.doc.clientID
         ),
         this
@@ -245,14 +205,15 @@ export class ElectricProvider<
 
       // try to notifying other clients that we are disconnecting
       awarenessProtocol.removeAwarenessStates(
-        this.awareness.protocol,
+        this.awarenessUpdates.protocol,
         [this.doc.clientID],
         `local`
       )
 
-      this.awareness.protocol.setLocalState({})
+      this.awarenessUpdates.protocol.setLocalState({})
     }
 
+    // TODO: await for events before closing
     this.emit(`connection-close`, [])
 
     this.pendingAwarenessUpdate = null
@@ -262,14 +223,14 @@ export class ElectricProvider<
   }
 
   connect() {
-    if (!this.ready || this.connected) {
+    if (this.connected) {
       return
     }
     const abortController = new AbortController()
 
-    const operationsStream = new ShapeStream<OperationMessage>({
-      ...this.operations.options,
-      ...this.resume.operations,
+    const operationsStream = new ShapeStream<RowWithDocumentUpdate>({
+      ...this.documentUpdates.shape,
+      ...this.resumeState.document,
       signal: abortController.signal,
     })
 
@@ -284,10 +245,10 @@ export class ElectricProvider<
     )
 
     let awarenessShapeUnsubscribe: () => void | undefined
-    if (this.awareness) {
-      const awarenessStream = new ShapeStream<AwarenessMessage>({
-        ...this.awareness.options,
-        ...this.resume.awareness,
+    if (this.awarenessUpdates) {
+      const awarenessStream = new ShapeStream<RowWithAwarenessUpdate>({
+        ...this.awarenessUpdates.shape,
+        ...this.resumeState.awareness,
         signal: abortController.signal,
       })
 
@@ -303,72 +264,61 @@ export class ElectricProvider<
     this.unsubscribeShapes = () => {
       abortController.abort()
       operationsShapeUnsubscribe()
-
-      if (this.awareness) {
-        awarenessShapeUnsubscribe()
-      }
-
+      awarenessShapeUnsubscribe?.()
       this.unsubscribeShapes = undefined
     }
 
     this.emit(`status`, [{ status: `connecting` }])
   }
 
-  private async sendOperations() {
-    if (!this.connected || this.resume.sending) {
-      return
-    }
-
-    try {
-      while (this.resume.batching && this.resume.batching.length > 2) {
-        this.resume.sending = this.resume.batching
-        this.resume.batching = undefined
-
-        const encoder = encoding.createEncoder()
-        syncProtocol.writeUpdate(encoder, this.resume.sending)
-
-        const success = await this.send(encoder, `operations`)
-        if (!success) {
-          this.batch(this.resume.sending)
-          throw new Error(`Failed to send changes`)
-        }
-        this.resumeStateProvider?.save(this.resume)
-      }
-    } finally {
-      this.resume.sending = undefined
-    }
-  }
-
   private operationsShapeHandler(
-    messages: Message<OperationMessage>[],
+    messages: Message<RowWithDocumentUpdate>[],
     offset: Offset,
     handle: string
   ) {
+    const operations: Uint8Array[] = []
+    const applyBatch = (): void => {
+      if (operations.length > 0) {
+        const batch = operations.splice(0, operations.length)
+        Y.applyUpdate(this.doc, Y.mergeUpdates(batch), `server`)
+      }
+    }
+
     for (const message of messages) {
       if (isChangeMessage(message) && message.value.op) {
-        const decoder = message.value.op
-        const encoder = encoding.createEncoder()
-        encoding.writeVarUint(encoder, 0)
-
+        const decoder = this.documentUpdates.getUpdateFromRow(message.value)
         while (decoder.pos !== decoder.arr.length) {
-          syncProtocol.readSyncMessage(decoder, encoder, this.doc, `server`)
+          const operation = decoding.readVarUint8Array(decoder)
+          operations.push(operation)
+
+          if (operations.length >= MAX_BATCH_SIZE) {
+            applyBatch()
+          }
         }
       } else if (
         isControlMessage(message) &&
         message.headers.control === `up-to-date`
       ) {
-        this.resume.operations = {
+        applyBatch()
+
+        this.resumeState.document = {
           offset,
           handle,
         }
-        this.resumeStateProvider?.save(this.resume)
-        this.synced = true
+
+        if (!this.sendingPendingChanges) {
+          this.synced = true
+          this.resumeState.stableStateVector = Y.encodeStateVector(this.doc)
+          // console.dir(this.resumeState)
+          // console.log(`updating vector ${JSON.stringify(this.resumeState)}`)
+        }
+        this.emit(`resumeState`, [this.resumeState])
         this.connected = true
       }
     }
   }
 
-  private async sendOperationsHandler(update: Uint8Array, origin: unknown) {
+  private async applyDocumentUpdate(update: Uint8Array, origin: unknown) {
     // don't re-send updates from electric
     if (origin === `server`) {
       return
@@ -378,25 +328,64 @@ export class ElectricProvider<
     this.sendOperations()
   }
 
-  private async sendAwarenessStateHandler(
-    awarenessUpdate: AwarenessUpdate,
-    origin: unknown
-  ) {
-    if (origin !== `local` || !this.connected || !this.awareness) {
+  private async sendOperations() {
+    if (!this.connected || this.sendingPendingChanges) {
       return
     }
 
+    try {
+      this.sendingPendingChanges = true
+      while (
+        this.pendingChanges &&
+        this.pendingChanges.length > 2 &&
+        this.connected
+      ) {
+        const sending = this.pendingChanges
+        this.pendingChanges = null
+
+        const encoder = encoding.createEncoder()
+        encoding.writeVarUint8Array(encoder, sending)
+
+        const success = await send(
+          encoder,
+          this.documentUpdates.sendUrl,
+          this.fetchClient ?? fetch,
+          this.documentUpdates.sendErrorRetryHandler
+        )
+        if (!success) {
+          this.batch(sending)
+          this.disconnect()
+        }
+      }
+      // no more pending changes, move stableStateVector forward
+      this.resumeState.stableStateVector = Y.encodeStateVector(this.doc)
+      this.emit(`resumeState`, [this.resumeState])
+    } finally {
+      this.sendingPendingChanges = false
+    }
+  }
+
+  private async applyAwarenessUpdate(
+    awarenessUpdate: AwarenessUpdate,
+    origin: unknown
+  ) {
+    if (origin !== `local` || !this.connected) {
+      return
+    }
+
+    this.pendingAwarenessUpdate = awarenessUpdate
+
     if (this.sendingAwarenessState) {
-      this.pendingAwarenessUpdate = awarenessUpdate
       return
     }
 
     this.sendingAwarenessState = true
 
     try {
-      let update: AwarenessUpdate | null = awarenessUpdate
+      while (this.pendingAwarenessUpdate && this.connected) {
+        const update = this.pendingAwarenessUpdate
+        this.pendingAwarenessUpdate = null
 
-      while (update && this.connected) {
         const { added, updated, removed } = update
         const changedClients = added.concat(updated).concat(removed)
         const encoder = encoding.createEncoder()
@@ -404,14 +393,19 @@ export class ElectricProvider<
         encoding.writeVarUint8Array(
           encoder,
           awarenessProtocol.encodeAwarenessUpdate(
-            this.awareness.protocol,
+            this.awarenessUpdates!.protocol,
             changedClients
           )
         )
-        await this.send(encoder, `awareness`)
-
-        update = this.pendingAwarenessUpdate
-        this.pendingAwarenessUpdate = null
+        const success = await send(
+          encoder,
+          this.awarenessUpdates!.sendUrl,
+          this.fetchClient ?? fetch,
+          this.awarenessUpdates!.sendErrorRetryHandler
+        )
+        if (!success) {
+          this.disconnect()
+        }
       }
     } finally {
       this.sendingAwarenessState = false
@@ -419,26 +413,22 @@ export class ElectricProvider<
   }
 
   private awarenessShapeHandler(
-    messages: Message<AwarenessMessage>[],
+    messages: Message<RowWithAwarenessUpdate>[],
     offset: Offset,
     handle: string
   ) {
-    if (!this.awareness) {
-      return
-    }
-
     for (const message of messages) {
       if (isChangeMessage(message)) {
         if (message.headers.operation === `delete`) {
           awarenessProtocol.removeAwarenessStates(
-            this.awareness.protocol,
+            this.awarenessUpdates!.protocol,
             [Number(message.value.client_id)],
             `remote`
           )
         } else {
-          const decoder = message.value.op
+          const decoder = this.awarenessUpdates!.getUpdateFromRow(message.value)
           awarenessProtocol.applyAwarenessUpdate(
-            this.awareness.protocol,
+            this.awarenessUpdates!.protocol,
             decoding.readVarUint8Array(decoder),
             this
           )
@@ -447,52 +437,44 @@ export class ElectricProvider<
         isControlMessage(message) &&
         message.headers.control === `up-to-date`
       ) {
-        this.resume.awareness = {
+        this.resumeState.awareness = {
           offset: offset,
           handle: handle,
         }
-        this.resumeStateProvider?.save(this.resume)
+        this.emit(`resumeState`, [this.resumeState])
       }
     }
   }
+}
 
-  private async send(
-    encoder: encoding.Encoder,
-    endpointType: `operations` | `awareness`
-  ): Promise<boolean> {
-    const op = encoding.toUint8Array(encoder)
+async function send(
+  encoder: encoding.Encoder,
+  endpoint: string | URL,
+  fetchClient: typeof fetch,
+  retryHandler?: SendErrorRetryHandler
+): Promise<boolean> {
+  let response: Response | undefined
+  const op = encoding.toUint8Array(encoder)
 
-    const endpoint =
-      endpointType === `operations`
-        ? this.operations.endpoint
-        : this.awareness?.endpoint
+  try {
+    response = await fetchClient(endpoint!, {
+      method: `PUT`,
+      headers: {
+        "Content-Type": `application/octet-stream`,
+      },
+      body: op,
+    })
 
-    let badResponse = false
-    try {
-      const response = await (this.fetchClient ?? fetch)(endpoint!, {
-        method: `PUT`,
-        headers: {
-          "Content-Type": `application/octet-stream`,
-        },
-        body: op,
-      })
-
-      if (!response.ok) {
-        badResponse = true
-        throw new Error(`HTTP error ${response.status}: ${response.statusText}`)
-      }
-
-      return true
-    } catch (error) {
-      if (!badResponse) {
-        const shouldRetry = await (this.onSendError?.(error, endpointType) ??
-          false)
-        if (!shouldRetry) {
-          this.disconnect()
-        }
-        return shouldRetry
-      }
-      throw error
+    if (!response.ok) {
+      throw new Error(`Server did not return 2xx`)
     }
+
+    return true
+  } catch (error) {
+    const shouldRetry = await (retryHandler?.({
+      response,
+      error,
+    }) ?? false)
+    return shouldRetry
   }
 }
