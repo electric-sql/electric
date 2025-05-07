@@ -69,6 +69,7 @@ jobs:
       nextjs: ${{ steps.deploy.outputs.nextjs }}
       todo-app: ${{ steps.deploy.outputs.todo-app }}
       proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
+      remix: ${{ steps.deploy.outputs.remix }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
