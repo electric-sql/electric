@@ -1,5 +1,9 @@
 import type { LoaderFunctionArgs } from "@remix-run/node"
 
+if (!process.env.ELECTRIC_SOURCE_ID || !process.env.ELECTRIC_SOURCE_SECRET) {
+  throw new Error(`ELECTRIC_SOURCE_ID and ELECTRIC_SOURCE_SECRET must be set`)
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url)
   const baseUrl = process.env.ELECTRIC_URL ?? `http://localhost:3000`
