@@ -195,6 +195,9 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     assert_receive {^ref, :shape_rotation}, 5000
 
+    # wait for a bit for cleanup to occur
+    Process.sleep(50)
+
     assert [_] = active_shapes = ShapeCache.list_shapes(stack_id: ctx.stack_id)
 
     assert MapSet.equal?(
@@ -248,6 +251,9 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     assert_receive {^ref, :shape_rotation}, 5000
     assert_receive {^partition_ref, :shape_rotation}, 5000
+
+    # wait for a bit for cleanup to occur
+    Process.sleep(50)
 
     assert [] = ShapeCache.list_shapes(stack_id: ctx.stack_id)
 

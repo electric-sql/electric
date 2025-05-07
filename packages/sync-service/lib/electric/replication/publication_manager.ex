@@ -1,5 +1,7 @@
 defmodule Electric.Replication.PublicationManager do
   @moduledoc false
+  @behaviour __MODULE__
+
   require Logger
   use GenServer
 
@@ -7,10 +9,11 @@ defmodule Electric.Replication.PublicationManager do
   alias Electric.Replication.Eval.Expr
   alias Electric.Shapes.Shape
 
-  @callback name(binary() | Keyword.t()) :: atom()
+  @callback name(binary() | Keyword.t()) :: term()
   @callback recover_shape(Shape.t(), Keyword.t()) :: :ok
   @callback add_shape(Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(Shape.t(), Keyword.t()) :: :ok
+  @callback remove_shape_async(Shape.t(), Keyword.t()) :: :ok
   @callback refresh_publication(Keyword.t()) :: :ok
 
   defstruct [
@@ -93,6 +96,7 @@ defmodule Electric.Replication.PublicationManager do
             server: [type: :any, required: false]
           )
 
+  @impl true
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -102,7 +106,7 @@ defmodule Electric.Replication.PublicationManager do
     name(stack_id)
   end
 
-  @spec add_shape(Shape.t(), Keyword.t()) :: :ok
+  @impl true
   def add_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
@@ -112,13 +116,13 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @spec recover_shape(Shape.t(), Keyword.t()) :: :ok
+  @impl true
   def recover_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:recover_shape, shape})
   end
 
-  @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
+  @impl true
   def remove_shape(shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
@@ -128,7 +132,14 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @spec refresh_publication(Keyword.t()) :: :ok
+  @impl true
+  def remove_shape_async(shape, opts \\ []) do
+    server = Access.get(opts, :server, name(opts))
+
+    GenServer.cast(server, {:remove_shape_async, shape})
+  end
+
+  @impl true
   def refresh_publication(opts \\ []) do
     server = Access.get(opts, :server, name(opts))
     timeout = Access.get(opts, :timeout, 10_000)
@@ -212,6 +223,13 @@ defmodule Electric.Replication.PublicationManager do
   def handle_call({:recover_shape, shape}, _from, state) do
     state = update_relation_filters_for_shape(shape, :add, state)
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_cast({:remove_shape_async, shape}, state) do
+    state = update_relation_filters_for_shape(shape, :remove, state)
+    state = schedule_update_publication(state.update_debounce_timeout, state)
+    {:noreply, state}
   end
 
   defguardp is_fatal(err)
@@ -410,7 +428,7 @@ defmodule Electric.Replication.PublicationManager do
     %{state | prepared_relation_filters: new_relation_filters}
   end
 
-  @spec get_relation_filter(Electric.relation(), state()) :: RelationFilter.t() | nil
+  @spec get_relation_filter(Electric.oid_relation(), state()) :: RelationFilter.t() | nil
   defp get_relation_filter(
          {_oid, relation} = oid_rel,
          %__MODULE__{relation_filter_counters: relation_filter_counters} = _state

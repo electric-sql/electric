@@ -261,6 +261,31 @@ defmodule Electric.ShapeCacheTest do
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert shape_handle != shape_handle2
     end
+
+    test "shape gets cleaned up if terminated unexpectedly", %{storage: storage} = ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
+          run_with_conn_fn: &run_with_conn_noop/2,
+          create_snapshot_fn: fn _, _, _, _, _, _, _ -> nil end
+        )
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+
+      consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+      consumer_ref = Process.monitor(consumer_pid)
+      Process.exit(consumer_pid, :some_reason)
+
+      assert_receive {:DOWN, ^consumer_ref, :process, _pid, :some_reason}
+
+      # give it little time to clean up
+      Process.sleep(10)
+
+      # should have cleaned up the shape
+      meta_table = Keyword.fetch!(opts, :shape_meta_table)
+      assert nil == ShapeStatus.get_existing_shape(meta_table, shape_handle)
+      assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(storage)
+      assert map_size(found) == 0
+    end
   end
 
   describe "get_or_create_shape_handle/2 against real db" do
@@ -714,6 +739,21 @@ defmodule Electric.ShapeCacheTest do
 
       assert log =~ "Snapshot creation failed for #{shape_handle}"
     end
+
+    test "should stop awaiting if shape process dies unexpectedly", ctx do
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
+          run_with_conn_fn: &run_with_conn_noop/2,
+          create_snapshot_fn: fn _, _, _, _, _, _, _ -> nil end
+        )
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+      Process.exit(Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle), :some_reason)
+
+      # should not be able to find the shape anymore
+      assert {:error, :unknown} = Task.await(task)
+    end
   end
 
   describe "clean_shape/2" do
@@ -910,7 +950,6 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
-      assert_receive {Support.TestStorage, :cleanup!, ^shape_handle}
       assert_receive {Support.TestStorage, :unsafe_cleanup!, ^shape_handle}
     end
   end
@@ -1028,10 +1067,10 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       Mock.PublicationManager
-      |> stub(:remove_shape, fn _, _ -> :ok end)
+      |> stub(:remove_shape_async, fn _, _ -> :ok end)
       |> expect(:recover_shape, 1, fn _, _ -> :ok end)
       |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
-      |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
+      |> allow(self(), fn -> GenServer.whereis(Shapes.ShapeCleaner.name(context[:stack_id])) end)
       |> allow(self(), fn -> Process.whereis(opts[:server]) end)
 
       # Should fail to start shape cache and clean up shapes
@@ -1046,6 +1085,9 @@ defmodule Electric.ShapeCacheTest do
 
       Process.flag(:trap_exit, false)
 
+      # Give some time for cleanups to take place
+      Process.sleep(50)
+
       # Next restart should not recover shape
       restart_shape_cache(context)
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
@@ -1056,6 +1098,7 @@ defmodule Electric.ShapeCacheTest do
     defmodule SlowPublicationManager do
       def refresh_publication(_), do: :ok
       def remove_shape(_, _), do: :ok
+      def remove_shape_async(_, _), do: :ok
       def recover_shape(_, _), do: Process.sleep(100)
       def add_shape(_, _), do: :ok
     end
@@ -1093,7 +1136,15 @@ defmodule Electric.ShapeCacheTest do
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(ctx.storage)
       assert map_size(found) == 2
 
-      restart_shape_cache(ctx, purge_all_shapes?: true)
+      restart_shape_cache(ctx,
+        purge_all_shapes?: true,
+        storage: Support.TestStorage.wrap(ctx.storage, %{})
+      )
+
+      # give some time to clean up shape
+      assert_receive {Support.TestStorage, :unsafe_cleanup!, ^shape_handle1}
+      assert_receive {Support.TestStorage, :unsafe_cleanup!, ^shape_handle2}
+      Process.sleep(50)
 
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(ctx.storage)
       assert map_size(found) == 0
@@ -1134,6 +1185,8 @@ defmodule Electric.ShapeCacheTest do
       if Enum.count(consumers) > 0 do
         Shapes.DynamicConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
       end
+
+      GenServer.stop(Shapes.ShapeCleaner.name(ctx.stack_id))
 
       for {pid, ref} <- consumers do
         assert_receive {:DOWN, ^ref, :process, ^pid, _}

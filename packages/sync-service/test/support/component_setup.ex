@@ -15,6 +15,7 @@ defmodule Support.ComponentSetup do
     def add_shape(_shape, _opts), do: :ok
     def recover_shape(_shape, _opts), do: :ok
     def remove_shape(_shape, _opts), do: :ok
+    def remove_shape_async(_shape, _opts), do: :ok
     def refresh_publication(_opts), do: :ok
   end
 
@@ -122,6 +123,13 @@ defmodule Support.ComponentSetup do
       Electric.Shapes.DynamicConsumerSupervisor.start_link(
         name: consumer_supervisor,
         stack_id: ctx.stack_id
+      )
+
+    {:ok, _pid} =
+      Electric.Shapes.ShapeCleaner.start_link(
+        stack_id: ctx.stack_id,
+        publication_manager: start_opts[:publication_manager],
+        storage: start_opts[:storage]
       )
 
     {:ok, _pid} = ShapeCache.start_link(start_opts)
