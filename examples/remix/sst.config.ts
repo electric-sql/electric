@@ -40,7 +40,7 @@ export default $config({
     const cluster = getSharedCluster(`remix-app-${$app.stage}`)
     const service = cluster.addService(`remix-app-${$app.stage}-service`, {
       loadBalancer: {
-        ports: [{ listen: "443/https", forward: "3010/http" }],
+        ports: [{ listen: "443/https", forward: "3000/http" }],
         domain: {
           name: websiteDomain,
           dns: sst.cloudflare.dns(),
@@ -52,6 +52,9 @@ export default $config({
       image: {
         context: "../..",
         dockerfile: "Dockerfile",
+      },
+      dev: {
+        command: "pnpm dev",
       },
     })
 
