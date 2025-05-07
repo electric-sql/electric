@@ -1107,7 +1107,7 @@ defmodule Electric.ShapeCacheTest do
         recover_shape_timeout: 1
       )
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, 500
 
       Process.sleep(100)
 
