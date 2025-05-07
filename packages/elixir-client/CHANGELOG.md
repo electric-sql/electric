@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.4.0
+
+### Minor Changes
+
+- 63b9b9f: Include old value in Elixir client update messages
+
 ## 0.3.2
 
 ### Patch Changes
