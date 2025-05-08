@@ -572,7 +572,7 @@ importers:
         version: link:../../packages/react-hooks
       next:
         specifier: ^14.2.5
-        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(@playwright/test@1.52.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.13.1
@@ -633,7 +633,7 @@ importers:
         version: link:../../packages/react-hooks
       next:
         specifier: ^14.2.5
-        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(@playwright/test@1.52.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.12.0
         version: 8.13.1
@@ -825,6 +825,9 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
+      '@playwright/test':
+        specifier: ^1.52.0
+        version: 1.52.0
       '@types/aws-lambda':
         specifier: 8.10.146
         version: 8.10.146
@@ -849,6 +852,9 @@ importers:
       eslint:
         specifier: ^8.57.0
         version: 8.57.1
+      playwright:
+        specifier: ^1.52.0
+        version: 1.52.0
       typescript:
         specifier: ^5.5.3
         version: 5.6.3
@@ -1127,7 +1133,7 @@ importers:
         version: 0.2.99
       next:
         specifier: ^14.2.9
-        version: 14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 14.2.17(@playwright/test@1.52.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       pg:
         specifier: ^8.13.1
         version: 8.13.1
@@ -3231,6 +3237,11 @@ packages:
   '@pkgr/core@0.1.1':
     resolution: {integrity: sha512-cq8o4cWH0ibXh9VGi5P20Tu9XF/0fFXl9EUinr9QfTM7a7p0oTA4iJRCQWppXR1Pg8dSM0UCItCkPwsk9qWWYA==}
     engines: {node: ^12.20.0 || ^14.18.0 || >=16.0.0}
+
+  '@playwright/test@1.52.0':
+    resolution: {integrity: sha512-uh6W7sb55hl7D6vsAeA+V2p5JnlAqzhqFyF0VcJkKZXkgnFcVG9PziERRHQfPLfNGx1C292a4JqbWzhR8L4R1g==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@popperjs/core@2.11.8':
     resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
@@ -6400,6 +6411,11 @@ packages:
   fs.realpath@1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -7968,6 +7984,16 @@ packages:
 
   pkg-types@1.2.1:
     resolution: {integrity: sha512-sQoqa8alT3nHjGuTjuKgOnvjo4cljkufdtLMnO2LBP/wRwuDlo1tkaEdMxCRhyGRPacv/ztlZgDPm2b7FAmEvw==}
+
+  playwright-core@1.52.0:
+    resolution: {integrity: sha512-l2osTgLXSMeuLZOML9qYODUQoPPnUsKsb5/P6LJ2e6uPKXUdPK5WYhN4z03G+YNbWmGDY4YENauNu4ZKczreHg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.52.0:
+    resolution: {integrity: sha512-JAwMNMBlxJ2oD1kce4KPtMkDeKGHQstdpFPcPH3maElAXon/QZeTvtsfXmTMRyO9TslfoYOXkSsvao2nE1ilTw==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
@@ -12001,6 +12027,10 @@ snapshots:
 
   '@pkgr/core@0.1.1': {}
 
+  '@playwright/test@1.52.0':
+    dependencies:
+      playwright: 1.52.0
+
   '@popperjs/core@2.11.8': {}
 
   '@radix-ui/colors@3.0.0': {}
@@ -15845,6 +15875,9 @@ snapshots:
 
   fs.realpath@1.0.0: {}
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
@@ -17185,7 +17218,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@14.2.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next@14.2.17(@playwright/test@1.52.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@next/env': 14.2.17
       '@swc/helpers': 0.5.5
@@ -17206,6 +17239,7 @@ snapshots:
       '@next/swc-win32-arm64-msvc': 14.2.17
       '@next/swc-win32-ia32-msvc': 14.2.17
       '@next/swc-win32-x64-msvc': 14.2.17
+      '@playwright/test': 1.52.0
     transitivePeerDependencies:
       - '@babel/core'
       - babel-plugin-macros
@@ -17611,6 +17645,14 @@ snapshots:
       confbox: 0.1.8
       mlly: 1.7.2
       pathe: 1.1.2
+
+  playwright-core@1.52.0: {}
+
+  playwright@1.52.0:
+    dependencies:
+      playwright-core: 1.52.0
+    optionalDependencies:
+      fsevents: 2.3.2
 
   pluralize@8.0.0: {}
 
