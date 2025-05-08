@@ -23,7 +23,6 @@ services:
   backend:
     image: electricsql/electric:canary
     environment:
-      ELECTRIC_INSECURE: true
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
       # Not suitable for production. Only use insecure mode in development or if you've otherwise secured the Electric API.
       # See https://electric-sql.com/docs/guides/security

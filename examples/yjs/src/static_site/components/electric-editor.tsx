@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react"
 
 import * as Y from "yjs"
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next"
-import { ElectricProvider } from "../y-electric"
+import {
+  ElectricProvider,
+  ElectricProviderOptions,
+  LocalStorageResumeStateProvider,
+} from "@electric-sql/y-electric"
 import { Awareness } from "y-protocols/awareness"
 
 import { EditorState } from "@codemirror/state"
@@ -13,8 +17,6 @@ import { javascript } from "@codemirror/lang-javascript"
 import * as random from "lib0/random"
 import { IndexeddbPersistence } from "y-indexeddb"
 import { parseToDecoder } from "../common/utils"
-import LocalStorageResumeStateProvider from "../local-storage-persistence"
-import { ElectricProviderOptions } from "../types"
 
 import * as decoding from "lib0/decoding"
 
@@ -95,7 +97,6 @@ function ElectricEditor({
   const [docLoaded, setDocumentLoaded] = useState<boolean>(false)
   const editorViewRef = useRef<EditorView | null>(null)
 
-  // Define status handler outside useEffect to avoid closure issues
   const statusHandler = (status: {
     status: `connected` | `disconnected` | `connecting`
   }) => {
@@ -103,21 +104,17 @@ function ElectricEditor({
   }
 
   useEffect(() => {
-    // Set up database sync listener
     databaseProvider.once(`synced`, () => setDocumentLoaded(true))
 
     let resumeStateUnsubscribeHandler: (() => void) | undefined
     let view: EditorView | undefined
 
-    // Only proceed with provider setup if document is loaded
     if (docLoaded) {
-      // Set up Electric provider
       provider.current = new ElectricProvider(options)
       resumeStateUnsubscribeHandler =
         resumeStateProvider.subscribeToResumeState(provider.current)
       provider.current.on(`status`, statusHandler)
 
-      // Set up editor if the editor ref is available
       if (editor.current) {
         const ytext = ydoc.getText(room)
 
@@ -137,9 +134,7 @@ function ElectricEditor({
       }
     }
 
-    // Cleanup function
     return () => {
-      // Clean up provider
       if (provider.current) {
         provider.current.off(`status`, statusHandler)
         provider.current.destroy()
@@ -149,7 +144,6 @@ function ElectricEditor({
         }
       }
 
-      // Clean up editor view
       if (editorViewRef.current) {
         editorViewRef.current.destroy()
         editorViewRef.current = null

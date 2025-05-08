@@ -18,9 +18,8 @@ vi.stubGlobal(`fetch`, vi.fn())
 describe(`ElectricProvider upstream/downstream changes`, () => {
   let doc: Y.Doc
   let provider: ElectricProvider
-  let sendSpy: MockInstance<{
-    (input: RequestInfo | URL, init?: RequestInit): Promise<Response>
-  }>
+  // Use a simple type for the spy in tests
+  let sendSpy: MockInstance
 
   beforeEach(() => {
     vi.clearAllMocks()

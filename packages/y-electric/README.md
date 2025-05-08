@@ -19,9 +19,9 @@ Y-Electric handles syncing over HTTP using ElectricSQL's sync engine
 
 ```typescript
 import * as Y from "yjs"
-import { ElectricProvider } from "@electric/yjs"
+import { ElectricProvider } from "@electric-sql/y-electric"
 import { Awareness } from "y-protocols/awareness"
-import { parseToDecoder } from "@electric/yjs/utils"
+import { parseToDecoder } from "@electric-sql/y-electric/utils"
 
 const ydoc = new Y.Doc()
 const awareness = new Awareness(ydoc)
@@ -120,16 +120,8 @@ EXECUTE FUNCTION gc_awareness_timeouts();
 
 In the client, you can use the optional `getUpdateFromRow` to extract the column with the actual yjs update for document and awareness updates.
 
-Here's an example of how to implement these endpoints using ElectricSQL:
-
-## Storage providers
+### Storage providers
 
 Y-Electric work with existing [database providers](https://docs.yjs.dev/ecosystem/database-provider). If you're using a persistence backend on the client, we recommend using the ElectricStorageProvider to save a resume point for the shapes, otherwise the entire document will be retransmitted when a new client session starts.
 
 The ElectricStorageProvider also keeps track of the document state vector to handle offline updates.
-
-### Learn mode
-
-TODO: Point to code docs
-
-Check this example for a full-working example of y-electric with CodeMirror and using IndexedDB for persistence.

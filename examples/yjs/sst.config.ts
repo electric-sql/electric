@@ -58,7 +58,7 @@ export default $config({
 
     const website = new sst.aws.StaticSite(`yjs-website`, {
       build: {
-        command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-examples/yjs build`,
+        command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-sql/y-electric --filter @electric-examples/yjs build`,
         output: `dist/static_site`,
       },
       environment: {

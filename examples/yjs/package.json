@@ -18,18 +18,14 @@
     "build:static": "vite build src/static_site",
     "preview:static": "vite preview src/static_site",
     "start-all": "concurrently \"pnpm run dev:server\" \"pnpm run dev:static\"",
-    "test": "vitest run",
-    "test:watch": "vitest",
     "build": "pnpm run build:static"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/state": "^6.4.1",
     "@codemirror/view": "^6.32.0",
-    "@electric-sql/client": "workspace:*",
-    "@electric-sql/react": "workspace:*",
+    "@electric-sql/y-electric": "workspace:*",
     "@hono/node-server": "^1.8.2",
-    "@neondatabase/serverless": "^0.10.4",
     "codemirror": "^6.0.1",
     "hono": "^4.6.13",
     "lib0": "^0.2.96",
@@ -53,7 +49,6 @@
     "eslint": "^8.57.0",
     "tsx": "^4.7.1",
     "typescript": "^5.5.3",
-    "vite": "^5.3.4",
-    "vitest": "^2.0.2"
+    "vite": "^5.3.4"
   }
 }

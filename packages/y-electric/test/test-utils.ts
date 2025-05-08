@@ -26,7 +26,7 @@ export let feedMessage: (messages: Message<Row<decoding.Decoder>>[]) => void =
 export function createMockProvider(
   doc: Y.Doc,
   options: {
-    fetchClient?: typeof fetch
+    fetchClient?: Mock
     connect?: boolean
   } = {}
 ): ElectricProvider {
