@@ -28,16 +28,14 @@ export default $config({
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
       )
 
-    const dbName = isProduction()
-      ? `remix-production`
-      : `remix-${$app.stage}`
-    
+    const dbName = isProduction() ? `remix-production` : `remix-${$app.stage}`
+
     const { sourceId, sourceSecret, pooledDatabaseUri } =
       createDatabaseForCloudElectric({
         dbName,
         migrationsDirectory: `./db/migrations`,
       })
-    
+
     const bucket = new sst.aws.Bucket(`RemixExample`, {
       access: "public",
     })
