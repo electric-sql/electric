@@ -1,0 +1,426 @@
+import {
+  ChangeMessage,
+  Row,
+  ShapeStreamOptions,
+  isChangeMessage,
+  isControlMessage,
+} from '@electric-sql/client'
+
+import { MultiShapeStream } from '@electric-sql/experimental'
+
+import {
+  SyncShapeToTableOptions,
+  SyncShapeToTableResult,
+  ElectricSyncOptions,
+  ElectricSync,
+  SyncShapesToTablesOptions,
+  SyncShapesToTablesResult,
+  Lsn,
+} from './types'
+import { SqliteWrapper } from './wrapper'
+import { Mutex } from 'async-mutex'
+import { applyMessageToTable } from './apply'
+import {
+  deleteSubscriptionState,
+  getSubscriptionState,
+  migrateSubscriptionMetadataTables,
+  SubscriptionState,
+  updateSubscriptionState,
+} from './subscriptionState'
+
+export function electricSync({
+  db,
+  options,
+}: {
+  db: SqliteWrapper
+  options?: ElectricSyncOptions
+}): ElectricSync {
+  const { close, electric } = makeElectricSync(db, options)
+  const mutex = new Mutex()
+  return {
+    ...db,
+    electric,
+    close: () => {
+      close()
+      db.close()
+    },
+    mutex: {
+      acquire: async () => {
+        await mutex.acquire()
+      },
+      release: () => mutex.release(),
+      runExclusive: async (fn: (db: SqliteWrapper) => Promise<void>) =>
+        mutex.runExclusive(() => fn(db)),
+    },
+  }
+}
+
+export const makeElectricSync = (
+  sqlite: SqliteWrapper,
+  options?: ElectricSyncOptions
+) => {
+  const debug = options?.debug ?? false
+  const metadataSchema = options?.metadataSchema ?? `electric`
+  const streams: Array<{
+    stream: MultiShapeStream<Record<string, Row>>
+    aborter: AbortController
+  }> = []
+
+  // We keep an in-memory lock per table such that two
+  // shapes are not synced into one table - this will be
+  // resolved by using reference counting in shadow tables
+  const shapePerTableLock = new Map<string, void>()
+
+  let initMetadataTablesDone = false
+  const initMetadataTables = async () => {
+    if (initMetadataTablesDone) return
+    initMetadataTablesDone = true
+    await migrateSubscriptionMetadataTables({
+      sqlite,
+      metadataSchema,
+    })
+  }
+
+  const syncShapesToTables = async ({
+    key,
+    shapes,
+    onInitialSync,
+  }: SyncShapesToTablesOptions): Promise<SyncShapesToTablesResult> => {
+    let unsubscribed = false
+    await initMetadataTables()
+
+    Object.values(shapes)
+      .filter((shape) => !shape.onMustRefetch) // Shapes with onMustRefetch bypass the lock
+      .forEach((shape) => {
+        if (shapePerTableLock.has(shape.table)) {
+          throw new Error(`Already syncing shape for table ` + shape.table)
+        }
+        shapePerTableLock.set(shape.table)
+      })
+
+    let subState: SubscriptionState | null = null
+
+    // if key is not null, ensure persistence of subscription state
+    // is possible and check if it is already persisted
+    if (key !== null) {
+      subState = await getSubscriptionState({
+        sqlite,
+        metadataSchema,
+        subscriptionKey: key,
+      })
+      if (debug && subState) {
+        console.log(`resuming from subscription state`, subState)
+      }
+    }
+
+    // Track if onInitialSync has been called
+    let onInitialSyncCalled = false
+
+    // Map of shape name to lsn to changes
+    // We accumulate changes for each lsn and then apply them all at once
+    const changes = new Map<string, Map<Lsn, ChangeMessage<Row>[]>>(
+      Object.keys(shapes).map((key) => [key, new Map()])
+    )
+
+    // We track the highest completely buffered lsn for each shape
+    const completeLsns = new Map<string, Lsn>(
+      Object.keys(shapes).map((key) => [key, BigInt(-1)])
+    )
+
+    // We track which shapes need a truncate
+    // These are truncated at the start of the next commit
+    const truncateNeeded = new Set<string>()
+
+    // We also have to track the last lsn that we have committed
+    // This is across all shapes
+    const lastCommittedLsn: Lsn = subState?.last_lsn ?? BigInt(-1)
+
+    // We need our own aborter to be able to abort the streams but still accept the
+    // signals from the user for each shape, and so we monitor the user provided signal
+    // for each shape and abort our own aborter when the user signal is aborted.
+    const aborter = new AbortController()
+    Object.values(shapes)
+      .filter((shapeOptions) => !!shapeOptions.shape.signal)
+      .forEach((shapeOptions) => {
+        shapeOptions.shape.signal!.addEventListener(
+          `abort`,
+          () => aborter.abort(),
+          {
+            once: true,
+          }
+        )
+      })
+
+    const multiShapeStream = new MultiShapeStream<Record<string, Row>>({
+      shapes: Object.fromEntries(
+        Object.entries(shapes).map(([key, shapeOptions]) => {
+          const shapeMetadata = subState?.shape_metadata[key]
+          return [
+            key,
+            {
+              ...shapeOptions.shape,
+              ...(shapeMetadata
+                ? {
+                    offset: shapeMetadata.offset,
+                    handle: shapeMetadata.handle,
+                  }
+                : {}),
+              signal: aborter.signal,
+            } satisfies ShapeStreamOptions,
+          ]
+        })
+      ),
+    })
+
+    const commitUpToLsn = async (targetLsn: Lsn) => {
+      // We need to collect all the messages for each shape that we need to commit
+      const messagesToCommit = new Map<string, ChangeMessage<Row>[]>(
+        Object.keys(shapes).map((shapeName) => [shapeName, []])
+      )
+      for (const [shapeName, shapeChanges] of changes.entries()) {
+        const messagesForShape = messagesToCommit.get(shapeName)!
+        for (const lsn of shapeChanges.keys()) {
+          if (lsn <= targetLsn) {
+            for (const message of shapeChanges.get(lsn)!) {
+              messagesForShape.push(message)
+            }
+            shapeChanges.delete(lsn)
+          }
+        }
+      }
+
+      await sqlite.transaction(async (tx) => {
+        if (debug) {
+          console.time(`commit`)
+        }
+
+        for (const [shapeName, initialMessages] of messagesToCommit.entries()) {
+          const shape = shapes[shapeName]
+          const messages = initialMessages
+
+          // If we need to truncate the table, do so
+          if (truncateNeeded.has(shapeName)) {
+            if (debug) {
+              console.log(`truncating table`, shape.table)
+            }
+            if (shape.onMustRefetch) {
+              await shape.onMustRefetch(tx)
+            } else {
+              await tx.exec(`DELETE FROM ${shape.table};`)
+            }
+            truncateNeeded.delete(shapeName)
+          }
+
+          for (const changeMessage of messages) {
+            await applyMessageToTable({
+              sqlite: tx,
+              table: shape.table,
+              schema: shape.schema,
+              message: changeMessage,
+              mapColumns: shape.mapColumns,
+              primaryKey: shape.primaryKey,
+              debug,
+            })
+          }
+        }
+
+        if (key) {
+          await updateSubscriptionState({
+            sqlite: tx,
+            metadataSchema,
+            subscriptionKey: key,
+            shapeMetadata: Object.fromEntries(
+              Object.keys(shapes).map((shapeName) => [
+                shapeName,
+                {
+                  handle: multiShapeStream.shapes[shapeName].shapeHandle!,
+                  offset: multiShapeStream.shapes[shapeName].lastOffset,
+                },
+              ])
+            ),
+            lastLsn: targetLsn,
+            debug,
+          })
+        }
+        if (unsubscribed) {
+          tx.rollback()
+        }
+      })
+      if (debug) console.timeEnd(`commit`)
+      if (
+        onInitialSync &&
+        !onInitialSyncCalled &&
+        multiShapeStream.isUpToDate
+      ) {
+        onInitialSync()
+        onInitialSyncCalled = true
+      }
+    }
+
+    multiShapeStream.subscribe(async (messages) => {
+      if (unsubscribed) {
+        return
+      }
+      if (debug) {
+        console.log(`received messages`, messages.length)
+      }
+      messages.forEach((message) => {
+        const lastCommittedLsnForShape =
+          completeLsns.get(message.shape) ?? BigInt(-1) // we default to -1 if there are no previous changes
+        if (isChangeMessage(message)) {
+          const shapeChanges = changes.get(message.shape)!
+          const lsn =
+            typeof message.headers.lsn === `string`
+              ? BigInt(message.headers.lsn)
+              : BigInt(0) // we default to 0 if there no lsn on the message
+          if (lsn <= lastCommittedLsnForShape) {
+            // We are replaying changes / have already seen this lsn
+            // skip and move on to the next message
+            return
+          }
+          const isLastOfLsn =
+            (message.headers.last as boolean | undefined) ?? false
+          if (!shapeChanges.has(lsn)) {
+            shapeChanges.set(lsn, [])
+          }
+          shapeChanges.get(lsn)!.push(message)
+          if (isLastOfLsn) {
+            completeLsns.set(message.shape, lsn)
+          }
+        } else if (isControlMessage(message)) {
+          switch (message.headers.control) {
+            case `up-to-date`: {
+              // Update the complete lsn for this shape
+              if (debug) {
+                console.log(`received up-to-date`, message)
+              }
+              if (typeof message.headers.global_last_seen_lsn !== `string`) {
+                throw new Error(`global_last_seen_lsn is not a string`)
+              }
+              const globalLastSeenLsn = BigInt(
+                message.headers.global_last_seen_lsn
+              )
+              if (globalLastSeenLsn <= lastCommittedLsnForShape) {
+                // We are replaying changes / have already seen this lsn
+                // skip and move on to the next message
+                return
+              }
+              completeLsns.set(message.shape, globalLastSeenLsn)
+              break
+            }
+            case `must-refetch`: {
+              // Reset the changes for this shape
+              if (debug) {
+                console.log(`received must-refetch`, message)
+              }
+              const shapeChanges = changes.get(message.shape)!
+              shapeChanges.clear()
+              completeLsns.set(message.shape, BigInt(-1))
+              // Track that we need to truncate the table for this shape
+              truncateNeeded.add(message.shape)
+              break
+            }
+          }
+        }
+      })
+      const lowestCommittedLsn = Array.from(completeLsns.values()).reduce(
+        (m, e) => (e < m ? e : m) // Min of all complete lsn
+      )
+
+      // Normal commit needed
+      const isCommitNeeded = lowestCommittedLsn > lastCommittedLsn
+      // We've had a must-refetch and are catching up on one of the shape
+      const isMustRefetchAndCatchingUp =
+        lowestCommittedLsn >= lastCommittedLsn && truncateNeeded.size > 0
+
+      if (isCommitNeeded || isMustRefetchAndCatchingUp) {
+        // We have new changes to commit
+        // TODO: is this safe
+        commitUpToLsn(lowestCommittedLsn)
+        // Await a timeout to start a new task and allow other connections to do work
+        await new Promise((resolve) => setTimeout(resolve))
+      }
+    })
+
+    streams.push({
+      stream: multiShapeStream,
+      aborter,
+    })
+    const unsubscribe = () => {
+      if (debug) {
+        console.log(`unsubscribing`)
+      }
+      unsubscribed = true
+      multiShapeStream.unsubscribeAll()
+      aborter.abort()
+      for (const shape of Object.values(shapes)) {
+        shapePerTableLock.delete(shape.table)
+      }
+    }
+    return {
+      unsubscribe,
+      get isUpToDate() {
+        return multiShapeStream.isUpToDate
+      },
+      streams: Object.fromEntries(
+        Object.keys(shapes).map((shapeName) => [
+          shapeName,
+          multiShapeStream.shapes[shapeName],
+        ])
+      ),
+    }
+  }
+
+  const syncShapeToTable = async (
+    options: SyncShapeToTableOptions
+  ): Promise<SyncShapeToTableResult> => {
+    const multiShapeSub = await syncShapesToTables({
+      shapes: {
+        shape: {
+          shape: options.shape,
+          table: options.table,
+          schema: options.schema,
+          mapColumns: options.mapColumns,
+          primaryKey: options.primaryKey,
+          onMustRefetch: options.onMustRefetch,
+        },
+      },
+      key: options.shapeKey,
+      useCopy: options.useCopy,
+      onInitialSync: options.onInitialSync,
+    })
+    return {
+      unsubscribe: multiShapeSub.unsubscribe,
+      get isUpToDate() {
+        return multiShapeSub.isUpToDate
+      },
+      stream: multiShapeSub.streams.shape,
+    }
+  }
+  const deleteSubscription = async (key: string) => {
+    await deleteSubscriptionState({
+      sqlite,
+      metadataSchema,
+      subscriptionKey: key,
+    })
+  }
+
+  const namespaceObj = {
+    initMetadataTables,
+    syncShapesToTables,
+    syncShapeToTable,
+    deleteSubscription,
+  }
+
+  const close = async () => {
+    for (const { stream, aborter } of streams) {
+      stream.unsubscribeAll()
+      aborter.abort()
+    }
+  }
+
+  return {
+    electric: namespaceObj,
+    close,
+  }
+}
