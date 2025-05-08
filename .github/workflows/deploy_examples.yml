@@ -10,10 +10,65 @@ concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
 
 jobs:
-  deploy-examples:
-    name: Deploy Examples
+  changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-example-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v41
+        with:
+          path: "examples"
+          diff_relative: true
+          dir_names: true
+          dir_names_max_depth: 1
+          # Whitelist examples that need to be deployed
+          files: |
+            yjs/**
+            linearlite-read-only/**
+            write-patterns/**
+            nextjs/**
+            todo-app/**
+            proxy-auth/**
+
+      - name: Create example matrix
+        id: create-example-matrix
+        run: |
+          # Get changed example directories
+          CHANGED_DIRS="${{ steps.changed-files.outputs.all_changed_files }}"
+          
+          # Initialize empty JSON array
+          MATRIX='{"example":[]}'
+          
+          # Add each changed directory to the matrix
+          if [ -n "$CHANGED_DIRS" ]; then
+            for dir in $CHANGED_DIRS; do
+              name=$(basename $dir)
+              MATRIX=$(echo $MATRIX | jq --arg name "$name" --arg path "examples/$name" '.example += [{"name": $name, "path": $path}]')
+            done
+          fi
+          
+          # Use jq to properly format and escape the JSON
+          echo "matrix=$(echo $MATRIX | jq -c '.')" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy ${{ matrix.example.name }}
     environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
     runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: changed-files
+    strategy:
+      matrix: ${{ fromJson(needs.changed-files.outputs.matrix) }}
+
+    outputs:
+      yjs: ${{ steps.deploy.outputs.yjs }}
+      linearlite-read-only: ${{ steps.deploy.outputs.linearlite-read-only }}
+      write-patterns: ${{ steps.deploy.outputs.write-patterns }}
+      nextjs: ${{ steps.deploy.outputs.nextjs }}
+      todo-app: ${{ steps.deploy.outputs.todo-app }}
+      proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -29,7 +84,6 @@ jobs:
       ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
       ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
       ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
-      # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
 
     steps:
       - uses: actions/checkout@v4
@@ -46,125 +100,66 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .sst
-          key: sst-cache-main-${{ runner.os }}
+          key: sst-cache-${{ matrix.example.name }}-${{ runner.os }}
           restore-keys: |
-            sst-cache-main-${{ runner.os }}
+            sst-cache-${{ matrix.example.name }}-${{ runner.os }}
 
-      - name: Deploy Yjs example
-        working-directory: ./examples/yjs
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            yjs=$(jq -r '.website' .sst/outputs.json)
-            echo "yjs=$yjs" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy Linearlite Read Only
-        working-directory: ./examples/linearlite-read-only
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            linearlite_read_only=$(jq -r '.website' .sst/outputs.json)
-            echo "linearlite_read_only=$linearlite_read_only" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy Write Patterns example
-        working-directory: ./examples/write-patterns
+      - name: Deploy
+        id: deploy
+        working-directory: ./${{ matrix.example.path }}
         run: |
           pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
           pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
+
           if [ -f ".sst/outputs.json" ]; then
-            writes=$(jq -r '.website' .sst/outputs.json)
-            echo "writes=$writes" >> $GITHUB_ENV
+            website=$(jq -r '.website' .sst/outputs.json)
+            echo "${{ matrix.example.name }}=$website" >> $GITHUB_OUTPUT
           else
             echo "sst outputs file not found. Exiting."
             exit 123
           fi
-          exit $code
 
-      - name: Deploy NextJs example
-        working-directory: ./examples/nextjs
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            nextjs=$(jq -r '.website' .sst/outputs.json)
-            echo "nextjs=$nextjs" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy TODO App example
-        working-directory: ./examples/todo-app
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            todoapp=$(jq -r '.website' .sst/outputs.json)
-            echo "todoapp=$todoapp" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Deploy proxy-auth example
-        working-directory: ./examples/proxy-auth
-        run: |
-          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
-          code=$!
-          if [ -f ".sst/outputs.json" ]; then
-            auth=$(jq -r '.website' .sst/outputs.json)
-            echo "auth=$auth" >> $GITHUB_ENV
-          else
-            echo "sst outputs file not found. Exiting."
-            exit 123
-          fi
-          exit $code
-
-      - name: Add comment to PR
-        if: github.event_name == 'pull_request'
+  comment:
+    if: github.event_name == 'pull_request'
+    needs: [changed-files, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create PR comment with deployment URLs
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const linearlite_read_only = process.env.linearlite_read_only;
-            const nextjs = process.env.nextjs;
-            const todoapp = process.env.todoapp;
-            const yjs = process.env.yjs;
-            const writes = process.env.writes;
-            const auth = process.env.auth;
+            // Get the matrix of examples that were deployed
+            const matrix = JSON.parse(${{ toJSON(needs.changed-files.outputs.matrix) }})
+            
+            const urls = {
+              yjs: "${{ needs.deploy.outputs.yjs }}",
+              "linearlite-read-only": "${{ needs.deploy.outputs.linearlite-read-only }}",
+              "write-patterns": "${{ needs.deploy.outputs.write-patterns }}",
+              nextjs: "${{ needs.deploy.outputs.nextjs }}",
+              "todo-app": "${{ needs.deploy.outputs.todo-app }}",
+              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}"
+            }
 
-            const prNumber = context.issue.number;
-            const commentBody = `## Examples
-            - linearlite-read-only: ${linearlite_read_only}
-            - nextjs: ${nextjs}
-            - todoapp: ${todoapp}
-            - yjs: ${yjs}
-            - writes: ${writes}
-            - auth: ${auth}
-            `;
+            // Create deployments array only for examples that were deployed
+            const deployments = matrix.example.map(example => ({
+              name: example.name,
+              url: urls[example.name]
+            }))
 
+            const commentBody = [
+              "## Examples",
+              ...deployments.map(d => `- ${d.name}: ${d.url || '*deploy failed*'}`),
+            ].join('\n')
+
+            const prNumber = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-            });
+            })
 
-            const existingComment = comments.find(comment => comment.user.login ==='github-actions[bot]' && comment.body.startsWith("## Examples"));
+            const existingComment = comments.find(comment => comment.user.login ==='github-actions[bot]' && comment.body.startsWith("## Examples"))
 
             if (existingComment) {
               // Update the existing comment
@@ -173,7 +168,7 @@ jobs:
                 repo: context.repo.repo,
                 comment_id: existingComment.id,
                 body: commentBody,
-              });
+              })
             } else {
               // Create a new comment if none exists
               await github.rest.issues.createComment({
@@ -181,5 +176,5 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: prNumber,
                 body: commentBody,
-              });
+              })
             }

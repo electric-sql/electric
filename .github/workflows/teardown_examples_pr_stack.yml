@@ -62,4 +62,22 @@ jobs:
         run: |
           export PR_NUMBER=${{ github.event.number }}
           echo "Removing stage pr-$PR_NUMBER"
-          pnpm sst remove --stage "pr-$PR_NUMBER"
+
+          # If we fail to remove the stage, the app might not have been deployed
+          # so check the output to see if that's the case
+          # and if that's the case, exit with a 0 exit code (success)
+          output=$(pnpm sst remove --stage "pr-$PR_NUMBER" 2>&1)
+          exit_code=$?
+          
+          if [ $exit_code -ne 0 ]; then
+            if echo "$output" | grep -q "Stage not found"; then
+              echo "Example was not deployed."
+              exit 0
+            else
+              echo "$output" >&2
+              exit $exit_code
+            fi
+          fi
+          
+          # If we get here, the command succeeded normally
+          exit 0

@@ -8,10 +8,27 @@ concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
 
 jobs:
-  deploy-examples:
-    name: Deploy All Examples to Production
+  deploy:
+    name: Deploy ${{ matrix.example.name }}
     environment: "Production"
     runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: changed-files
+    strategy:
+      matrix:
+        example:
+          - name: yjs
+            path: examples/yjs
+          - name: linearlite-read-only
+            path: examples/linearlite-read-only
+          - name: write-patterns
+            path: examples/write-patterns
+          - name: nextjs
+            path: examples/nextjs
+          - name: todo-app
+            path: examples/todo-app
+          - name: proxy-auth
+            path: examples/proxy-auth
 
     env:
       DEPLOY_ENV: "production"
@@ -43,34 +60,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .sst
-          key: sst-cache-main-${{ runner.os }}
+          key: sst-cache-${{ matrix.example.name }}-${{ runner.os }}
           restore-keys: |
-            sst-cache-main-${{ runner.os }}
+            sst-cache-${{ matrix.example.name }}-${{ runner.os }}
 
-      - name: Deploy proxy-auth example
-        working-directory: ./examples/proxy-auth
-        run: pnpm sst deploy --stage production
-
-      - name: Deploy todo-app example
-        working-directory: ./examples/todo-app
-        run: pnpm sst deploy --stage production
-
-      - name: Deploy Write Patterns example
-        working-directory: ./examples/write-patterns
-        run: pnpm sst deploy --stage production
-
-      - name: Deploy Linearlite Read Only
-        working-directory: ./examples/linearlite-read-only
-        run: pnpm sst deploy --stage production
-
-      # - name: Deploy Linearlite
-      #   working-directory: ./examples/linearlite
-      #   run: pnpm sst deploy --stage production
-
-      - name: Deploy NextJs example
-        working-directory: ./examples/nextjs
-        run: pnpm sst deploy --stage production
-
-      - name: Deploy Yjs example
-        working-directory: ./examples/yjs
-        run: pnpm sst deploy --stage production
+      - name: Deploy
+        id: deploy
+        working-directory: ./${{ matrix.example.path }}
+        run: |
+          pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
+          pnpm sst deploy --stage production
