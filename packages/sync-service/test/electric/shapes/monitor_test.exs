@@ -348,6 +348,10 @@ defmodule Electric.Shapes.MonitorTest do
       Monitor.notify_reader_termination(stack_id, handle1, :my_reason)
       send(subscriber1, {:subscribe, handle2})
       assert_receive {Monitor, :reader_termination, ^handle1, :my_reason}, 100
+      Monitor.notify_reader_termination(stack_id, handle2, :my_reason)
+
+      send(subscriber1, :stop)
+      assert_receive {Monitor, :reader_termination, ^handle2, :my_reason}, 100
     end
 
     test "is not triggered if same reader pid re-registers under same handle",

@@ -188,16 +188,15 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     end
 
     state =
-      Enum.reduce(previous_registrations, state, fn [handle, _ref], state ->
-        {state, _count} = pid_handle_termination(pid, handle, state)
-        state
+      Enum.reduce(previous_registrations, state, fn [handle, ref], state ->
+        handle_pid_termination(state, pid, handle, ref)
       end)
 
     {:reply, :ok, state}
   end
 
   def handle_call({:unregister_reader, handle, pid}, _from, state) do
-    {state, _count} = delete_reader_process(pid, handle, true, state)
+    state = delete_reader_process(pid, handle, state)
 
     {:reply, :ok, state}
   end
@@ -259,18 +258,20 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
       when not is_consumer_shutdown_with_data_retention?(reason) do
     :ets.delete(state.monitor_table, pid)
 
-    state.on_remove.(handle, pid)
-
     {:noreply,
      state
+     |> notify_remove(handle, pid)
      |> Map.update!(:cleanup_handles, &MapSet.put(&1, handle))
      |> remove_reader_termination_watcher(handle, pid)}
   end
 
   def handle_info({{:down, :writer, handle}, _ref, :process, pid, _reason}, state) do
     :ets.delete(state.monitor_table, pid)
-    state.on_remove.(handle, pid)
-    {:noreply, remove_reader_termination_watcher(state, handle, pid)}
+
+    {:noreply,
+     state
+     |> notify_remove(handle, pid)
+     |> remove_reader_termination_watcher(handle, pid)}
   end
 
   def handle_info(
@@ -295,7 +296,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   end
 
   def handle_info({{:down, :reader, handle}, _ref, :process, pid, _reason}, state) do
-    {state, _count} = delete_reader_process(pid, handle, false, state)
+    state = delete_reader_process(pid, handle, state)
 
     {:noreply, state}
   end
@@ -327,39 +328,61 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     :ets.update_counter(table(stack_id), handle, update_op, {handle, 0})
   end
 
-  defp delete_reader_process(pid, handle, demonitor?, state) do
+  defp delete_reader_process(pid, handle, state) do
     case :ets.lookup(state.monitor_table, pid) do
-      [{_, :reader, ^handle, ref}] ->
-        if demonitor?, do: Process.demonitor(ref, [:flush])
-        {state, count} = pid_handle_termination(pid, handle, state)
-        state.on_remove.(handle, pid)
-        {state, count}
+      [{^pid, :reader, registered_handle, ref}] ->
+        # we get occasional :down messages with stale handles, maybe from
+        # a race condition between a de/re-register and the down message.
+        # it's important that we only deregister the active one, rather than
+        # the stale one, otherwise the count of active clients differs from the
+        # number of registered pids and shapes get deleted with active readers
+        if registered_handle != handle,
+          do: Logger.debug("Stale de-registration of pid for handle #{handle}")
+
+        state
+        |> handle_pid_termination(pid, registered_handle, ref)
+        |> notify_remove(handle, pid)
 
       [] ->
-        {state, 0}
+        state
     end
   after
     :ets.delete(state.monitor_table, pid)
   end
 
-  defp pid_handle_termination(pid, handle, state) do
+  defp handle_pid_termination(state, pid, handle, ref) do
     %{stack_id: stack_id, termination_watchers: termination_watchers} = state
 
-    count = update_counter(stack_id, handle, -1)
+    Process.demonitor(ref, [:flush])
 
-    Logger.debug(fn ->
-      "deregister: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
+    stack_id
+    |> update_counter(handle, -1)
+    |> tap(fn count ->
+      Logger.debug(fn ->
+        "deregister: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
+      end)
     end)
-
-    {
-      if count == 0 do
+    |> case do
+      0 ->
         {pids, termination_watchers} = Map.pop(termination_watchers, handle, [])
+
+        :ets.delete(table(stack_id), handle)
+
+        Logger.debug(fn ->
+          "notifying #{length(pids)} of shape #{inspect(handle)} release"
+        end)
+
         do_notify_reader_termination(pids, handle)
+
         %{state | termination_watchers: termination_watchers}
-      else
+
+      n when n > 0 ->
         state
-      end,
-      count
-    }
+    end
+  end
+
+  defp notify_remove(%{on_remove: on_remove} = state, handle, pid) do
+    on_remove.(handle, pid)
+    state
   end
 end
