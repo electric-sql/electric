@@ -203,9 +203,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "snapshot_xmin/2", ctx do
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
 
-    assert_raise MatchError, fn ->
-      ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
-    end
+    # set_snapshot_xmin for an unknown shape silently does nothing
+    # this is because real-world race conditions mean that we may
+    # still receive updates on a shape that is in the process of
+    # being deleted
+    assert ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
 
     assert :error = ShapeStatus.snapshot_xmin(state, "sdfsodf")
     assert {:ok, nil} == ShapeStatus.snapshot_xmin(state, shape_handle)
