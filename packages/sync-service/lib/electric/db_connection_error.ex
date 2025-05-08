@@ -132,6 +132,22 @@ defmodule Electric.DbConnectionError do
     maybe_database_does_not_exist(error) || unknown_error(error)
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :admin_shutdown,
+            message: "terminating connection due to administrator command"
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message: "database connection terminated by administrator command",
+      type: :admin_shutdown,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
   def from_error(error), do: unknown_error(error)
 
   defp unknown_error(error) do

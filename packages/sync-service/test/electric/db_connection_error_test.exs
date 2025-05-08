@@ -114,5 +114,30 @@ defmodule Electric.FatalErrorTest do
                retry_may_fix?: false
              } == DbConnectionError.from_error(error)
     end
+
+    test "with administrator shutdown" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :admin_shutdown,
+          line: "3318",
+          message: "terminating connection due to administrator command",
+          file: "postgres.c",
+          unknown: "FATAL",
+          severity: "FATAL",
+          pg_code: "57P01",
+          routine: "ProcessInterrupts"
+        },
+        connection_id: 425_675_478,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "database connection terminated by administrator command",
+               type: :admin_shutdown,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
   end
 end
