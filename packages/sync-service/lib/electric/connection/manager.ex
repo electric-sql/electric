@@ -941,21 +941,13 @@ defmodule Electric.Connection.Manager do
          %DbConnectionError{type: :replication_slot_invalidated} = error,
          state
        ) do
-    message = """
-    Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
-        In order to recover consistent replication, the slot will be dropped along with all existing shapes.
-        If you're seeing this message without having recently stopped Electric for a while,
-        it's possible either Electric is lagging behind and you might need to scale up,
-        or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
-    """
-
-    Logger.warning(message)
+    Logger.warning(error.message)
 
     dispatch_stack_event(
       {:warning,
        %{
          type: :database_slot_exceeded_max_size,
-         message: message,
+         message: error.message,
          error: inspect(error.original_error, pretty: true)
        }},
       state
