@@ -2,7 +2,7 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 import { createDatabaseForCloudElectric } from "../.shared/lib/database"
-import { getSharedCluster, isProduction } from "../.shared/lib/infra"
+import { isProduction } from "../.shared/lib/infra"
 
 export default $config({
   app(input) {
@@ -41,36 +41,25 @@ export default $config({
     const bucket = new sst.aws.Bucket(`RemixExample`, {
       access: "public",
     })
-    
-    const cluster = getSharedCluster(`remix-app-${$app.stage}`)
-    const service = cluster.addService(`remix-app-${$app.stage}-service`, {
-      loadBalancer: {
-        ports: [{ listen: "443/https", forward: "3000/http" }],
-        domain: {
-          name: `remix${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
-          dns: sst.cloudflare.dns(),
-        },
-      },
+
+    const remix = new sst.aws.Remix(`remix-${$app.stage}`, {
+      link: [bucket],
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
-        DATABASE_URL: pooledDatabaseUri,
         ELECTRIC_SOURCE_SECRET: sourceSecret,
         ELECTRIC_SOURCE_ID: sourceId,
+        DATABASE_URL: pooledDatabaseUri,
       },
-      image: {
-        context: "../..",
-        dockerfile: "Dockerfile",
+      domain: {
+        name: `remix${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
+        dns: sst.cloudflare.dns(),
       },
-      dev: {
-        command: "pnpm dev",
-      },
-      link: [bucket],
     })
 
     return {
       pooledDatabaseUri,
       sourceId: sourceId,
-      website: service.url,
+      website: remix.url,
     }
   },
 })
