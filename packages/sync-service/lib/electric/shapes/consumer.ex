@@ -593,6 +593,10 @@ defmodule Electric.Shapes.Consumer do
     ]
   end
 
+  defp calculate_replication_lag(%Transaction{commit_timestamp: nil}) do
+    0
+  end
+
   defp calculate_replication_lag(%Transaction{commit_timestamp: commit_timestamp}) do
     # Compute time elapsed since commit
     # since we are comparing PG's clock with our own
