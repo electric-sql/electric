@@ -41,7 +41,7 @@
 [macro setup_pg_with_pooler]
   [invoke setup_pg]
 
-  [shell "pg_pooler"]
+  [shell pg_pooler]
     -$fail_pattern
 
     !docker run \
