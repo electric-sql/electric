@@ -5,23 +5,23 @@ CREATE TABLE ydoc_operations(
 );
 
 CREATE TABLE ydoc_awareness(
-  clientId TEXT, 
+  client_id TEXT, 
   room TEXT,
   op BYTEA NOT NULL,
   updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (clientId, room)
+  PRIMARY KEY (client_id, room)
 );
 
-CREATE OR REPLACE FUNCTION delete_old_rows()
+CREATE OR REPLACE FUNCTION gc_awareness_timeouts()
 RETURNS TRIGGER AS $$
 BEGIN
     DELETE FROM ydoc_awareness
-    WHERE updated < NOW() - INTERVAL '2 minutes';
+    WHERE updated < (CURRENT_TIMESTAMP - INTERVAL '30 seconds') AND room = NEW.room;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER delete_old_rows_trigger
+CREATE TRIGGER gc_awareness_timeouts_trigger
 AFTER INSERT OR UPDATE ON ydoc_awareness
-FOR EACH STATEMENT
-EXECUTE FUNCTION delete_old_rows();
+FOR EACH ROW
+EXECUTE FUNCTION gc_awareness_timeouts();

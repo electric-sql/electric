@@ -7,17 +7,16 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "types": ["vite/client"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "components/**/*.ts", "components/**/*.tsx", "common/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/server"]
+  "include": ["src/server/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

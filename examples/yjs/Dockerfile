@@ -10,13 +10,11 @@ COPY pnpm-*.yaml ./
 COPY package.json ./
 COPY tsconfig.base.json ./
 COPY tsconfig.build.json ./
-COPY packages/typescript-client packages/typescript-client/
-COPY packages/react-hooks packages/react-hooks/
 COPY examples/yjs examples/yjs/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
-RUN pnpm run -r build 
+RUN pnpm run -r build:server 
 
 
 # Need to make production image more clean
@@ -29,4 +27,4 @@ COPY --from=deps /app/ ./
 WORKDIR /app/examples/yjs/
 
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["node", "dist/server/server.js"]
