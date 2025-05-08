@@ -13,12 +13,14 @@ import type { LoaderFunctionArgs } from "@remix-run/node"
 
 export async function loader(_: LoaderFunctionArgs) {
   return json({
-    PUBLIC_SERVER_URL: process.env.PUBLIC_SERVER_URL,
+    ENV: {
+      PUBLIC_SERVER_URL: process.env.PUBLIC_SERVER_URL,
+    }
   })
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { PUBLIC_SERVER_URL } = useLoaderData<typeof loader>()
+  const data = useLoaderData<typeof loader>()
   
   return (
     <html lang="en">
@@ -29,7 +31,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Links />
           <script
             dangerouslySetInnerHTML={{
-              __html: `window.ENV = ${JSON.stringify({ PUBLIC_SERVER_URL })}`,
+              __html: `window.ENV = ${JSON.stringify(data.ENV)}`,
             }}
           />
         </head>

@@ -13,10 +13,6 @@ declare global {
   }
 }
 
-if (!window.ENV?.PUBLIC_SERVER_URL) {
-  throw new Error(`PUBLIC_SERVER_URL is not set`)
-}
-
 const itemShape = () => {
   return {
     url: new URL(`/shape-proxy`, window.ENV.PUBLIC_SERVER_URL).href,
