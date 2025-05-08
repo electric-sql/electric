@@ -6,12 +6,12 @@ import {
   beforeEach,
   afterEach,
   MockInstance,
-} from "vitest"
-import * as Y from "yjs"
-import * as encoding from "lib0/encoding"
-import * as decoding from "lib0/decoding"
-import { ElectricProvider } from "../src/y-electric"
-import { createMockProvider, feedMessage } from "./test-utils"
+} from 'vitest'
+import * as Y from 'yjs'
+import * as encoding from 'lib0/encoding'
+import * as decoding from 'lib0/decoding'
+import { ElectricProvider } from '../src/y-electric'
+import { createMockProvider, feedMessage } from './test-utils'
 
 vi.stubGlobal(`fetch`, vi.fn())
 
@@ -28,9 +28,9 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
       new Response(null, {
         status: 200,
         headers: {
-          "electric-offset": `123`,
-          "electric-handle": `test-handle`,
-          "electric-schema": `test-schema`,
+          'electric-offset': `123`,
+          'electric-handle': `test-handle`,
+          'electric-schema': `test-schema`,
         },
       })
     )

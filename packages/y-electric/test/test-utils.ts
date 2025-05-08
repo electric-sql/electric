@@ -1,13 +1,13 @@
-import { vi, Mock } from "vitest"
-import * as Y from "yjs"
-import { ElectricProvider } from "../src/y-electric"
-import { Message, Row, ShapeStream } from "@electric-sql/client"
-import * as decoding from "lib0/decoding"
+import { vi, Mock } from 'vitest'
+import * as Y from 'yjs'
+import { ElectricProvider } from '../src/y-electric'
+import { Message, Row, ShapeStream } from '@electric-sql/client'
+import * as decoding from 'lib0/decoding'
 
 // Mock the Electric client library
 vi.mock(`@electric-sql/client`, async (importOriginal) => {
   // eslint-disable-next-line quotes
-  const mod = await importOriginal<typeof import("@electric-sql/client")>()
+  const mod = await importOriginal<typeof import('@electric-sql/client')>()
   const ShapeStream = vi.fn(() => ({
     subscribe: vi.fn().mockReturnValue(vi.fn()),
     unsubscribeAll: vi.fn(),

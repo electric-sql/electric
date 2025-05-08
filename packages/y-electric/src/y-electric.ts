@@ -1,9 +1,9 @@
-import * as encoding from "lib0/encoding"
-import * as decoding from "lib0/decoding"
-import * as awarenessProtocol from "y-protocols/awareness"
-import { ObservableV2 } from "lib0/observable"
-import * as env from "lib0/environment"
-import * as Y from "yjs"
+import * as encoding from 'lib0/encoding'
+import * as decoding from 'lib0/decoding'
+import * as awarenessProtocol from 'y-protocols/awareness'
+import { ObservableV2 } from 'lib0/observable'
+import * as env from 'lib0/environment'
+import * as Y from 'yjs'
 import {
   GetExtensions,
   isChangeMessage,
@@ -13,13 +13,13 @@ import {
   Row,
   ShapeStream,
   ShapeStreamOptions,
-} from "@electric-sql/client"
+} from '@electric-sql/client'
 import {
   YProvider,
   ResumeState,
   SendErrorRetryHandler,
   ElectricProviderOptions,
-} from "./types"
+} from './types'
 
 type AwarenessUpdate = {
   added: number[]
@@ -445,7 +445,7 @@ async function send(
     response = await fetchClient(endpoint!, {
       method: `PUT`,
       headers: {
-        "Content-Type": `application/octet-stream`,
+        'Content-Type': `application/octet-stream`,
       },
       body: op,
     })

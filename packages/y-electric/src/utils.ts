@@ -1,4 +1,4 @@
-import * as decoding from "lib0/decoding"
+import * as decoding from 'lib0/decoding'
 
 /**
  * Convert a hex string from PostgreSQL's bytea format to a Uint8Array
