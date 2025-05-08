@@ -142,6 +142,12 @@ defmodule Electric.Connection.Manager do
 
   @connection_status_check_interval 10_000
 
+  # Time after establishing replication connection before we consider it successful
+  # from a retrying perspective, to allow for setup errors sent over the stream
+  # to be received. Any failure within this period will trigger a retry within
+  # the same reconnection period rather than a new one.
+  @replication_liveness_confirmation_duration 5_000
+
   def child_spec(init_arg) do
     %{
       id: __MODULE__,
@@ -526,6 +532,22 @@ defmodule Electric.Connection.Manager do
     handle_continue(step, state)
   end
 
+  # After a replication liveness timeout passes, if the same replication client is still
+  # alive, a call to `mark_connection_succeeded()` resets the backoff timer, so the next
+  # reconnection attempt will start from the minimum timeout and grow exponentially from
+  # there.
+  def handle_info(
+        {:timeout, _tref, {:replication_liveness_check, replication_client_pid}},
+        %State{replication_client_pid: replication_client_pid} = state
+      ),
+      do: {:noreply, mark_connection_succeeded(state)}
+
+  def handle_info(
+        {:timeout, _tref, {:replication_liveness_check, _replication_client_pid}},
+        state
+      ),
+      do: {:noreply, state}
+
   # Special-case the explicit shutdown of the supervision tree
   def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
   def handle_info({:EXIT, _, {:shutdown, _}}, state), do: {:noreply, state}
@@ -748,15 +770,19 @@ defmodule Electric.Connection.Manager do
         :replication_client_streamed_first_message,
         %State{current_phase: :running, current_step: :waiting_for_streaming_confirmation} = state
       ) do
-    # The call to `mark_connection_succeeded()` resets the backoff timer, so the next
-    # reconnection attempt will start from the minimum timeout and grow exponentially from
-    # there.
     # When the replication connection is stuck in a reconnection loop, we only mark it as
-    # having succeeded after receiving confirmation that streaming replication has started.
+    # having succeeded after receiving confirmation that streaming replication has started
+    # and waiting for some time to ensure no errors are sent over the stream due to a failure
+    # to start replication.
     # This is the only way to be sure because it can still fail after we issue the
     # start_streaming() call, so marking it as having succeeded earlier would result in a
     # reconnection loop with no exponential backoff.
-    state = mark_connection_succeeded(state)
+    :erlang.start_timer(
+      @replication_liveness_confirmation_duration,
+      self(),
+      {:replication_liveness_check, state.replication_client_pid}
+    )
+
     state = %State{state | current_step: :streaming}
     {:noreply, state}
   end
