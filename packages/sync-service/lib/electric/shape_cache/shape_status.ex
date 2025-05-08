@@ -217,10 +217,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def set_snapshot_xmin(state, shape_handle, snapshot_xmin) do
-    true =
-      :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_handle}, [
-        {@shape_meta_xmin_pos, snapshot_xmin}
-      ])
+    :ets.update_element(state.shape_meta_table, {@shape_meta_data, shape_handle}, [
+      {@shape_meta_xmin_pos, snapshot_xmin}
+    ])
 
     :ok
   end
