@@ -1,32 +1,32 @@
-FROM node:lts-alpine as base
-ENV NODE_ENV production
+FROM node:lts-alpine AS base
 
-# Stage 1: Install all node_modules, including dev dependencies
-FROM base as deps
-WORKDIR /remix-app
+# Stage 1: Install dependencies
+FROM base AS deps
+WORKDIR /app
+
+RUN npm install -g pnpm
+
+COPY pnpm-*.yaml ./
 COPY package.json ./
-RUN npm install --include=dev
+COPY tsconfig.base.json ./
+COPY tsconfig.build.json ./
+COPY packages/typescript-client packages/typescript-client/
+COPY packages/react-hooks packages/react-hooks/
+COPY examples/remix examples/remix/
 
-# Stage 2: Setup production node_modules
-FROM base as production-deps
-WORKDIR /remix-app
-COPY --from=deps /remix-app/node_modules /remix-app/node_modules
-COPY package.json ./
-RUN npm prune --omit=dev
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+RUN pnpm run -r build 
 
-# Stage 3: Build the app
-FROM base as build
-WORKDIR /remix-app
-COPY --from=deps /remix-app/node_modules /remix-app/node_modules
-COPY . .
-RUN npm run build
-
-# Stage 4: Build the production image
+# Make production image
 FROM base
-WORKDIR /remix-app
-COPY --from=production-deps /remix-app/node_modules /remix-app/node_modules
-COPY --from=build /remix-app/build /remix-app/build
-COPY --from=build /remix-app/public /remix-app/public
-COPY package.json ./
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY --from=deps /app/examples/remix/node_modules ./node_modules
+COPY --from=deps /app/examples/remix/build ./build
+COPY --from=deps /app/examples/remix/public ./public
+COPY --from=deps /app/examples/remix/package.json ./
 
 CMD ["npm", "start"]
