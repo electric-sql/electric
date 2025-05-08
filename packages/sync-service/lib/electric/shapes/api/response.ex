@@ -110,13 +110,57 @@ defmodule Electric.Shapes.Api.Response do
   def send(%Plug.Conn{} = conn, %__MODULE__{chunked: false} = response) do
     conn
     |> put_resp_headers(response)
-    |> Plug.Conn.send_resp(response.status, Enum.into(response.body, []))
+    |> Plug.Conn.send_resp(response.status, Enum.into(unsubscribe_after_stream(response), []))
   end
 
   def send(%Plug.Conn{} = conn, %__MODULE__{} = response) do
     conn
     |> put_resp_headers(response)
     |> send_stream(response)
+  end
+
+  # append the cleanup operations onto the end of the stream for every response
+  # by concating a dummy stream with only an `after` function.
+  #
+  # the cleanup **has** to come after the body has been read, not when we
+  # return the body to the conn otherwise we'd be reducing the active reader
+  # count either before or during the period when the client is reading the
+  # response.
+  defp unsubscribe_after_stream(%__MODULE__{body: body} = response) do
+    Stream.transform(
+      body,
+      fn -> response end,
+      fn
+        elems, response when is_list(elems) -> {elems, response}
+        elem, response -> {[elem], response}
+      end,
+      &clean_up/1
+    )
+  end
+
+  defp clean_up(response) do
+    response
+    |> clean_up_change_listener()
+    |> clean_up_shape_subscriber()
+  end
+
+  defp clean_up_change_listener(%__MODULE__{handle: shape_handle} = response)
+       when not is_nil(shape_handle) do
+    %{api: %{registry: registry}} = response
+    Registry.unregister(registry, shape_handle)
+    response
+  end
+
+  defp clean_up_change_listener(%__MODULE__{} = response), do: response
+
+  defp clean_up_shape_subscriber(%__MODULE__{handle: nil} = response) do
+    response
+  end
+
+  defp clean_up_shape_subscriber(%__MODULE__{} = response) do
+    %{api: %{stack_id: stack_id}, handle: handle} = response
+    :ok = Electric.Shapes.Monitor.unregister_reader(stack_id, handle)
+    response
   end
 
   defp put_resp_headers(conn, response) do
@@ -273,12 +317,14 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.put_resp_header(conn, @electric_offset_header, "#{offset}")
   end
 
-  defp send_stream(%Plug.Conn{} = conn, %__MODULE__{body: stream, status: status} = response) do
+  defp send_stream(%Plug.Conn{} = conn, %__MODULE__{status: status} = response) do
     stack_id = Api.stack_id(response)
     conn = Plug.Conn.send_chunked(conn, status)
 
     {conn, bytes_sent} =
-      Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
+      response
+      |> unsubscribe_after_stream()
+      |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
         OpenTelemetry.with_span(
