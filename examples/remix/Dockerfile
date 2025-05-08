@@ -20,10 +20,11 @@ RUN pnpm run -r build
 
 # Make production image
 FROM base
-WORKDIR /app
+WORKDIR /app/examples/remix
 
 ENV NODE_ENV=production
 
+COPY --from=deps /app/node_modules ../../node_modules
 COPY --from=deps /app/examples/remix/node_modules ./node_modules
 COPY --from=deps /app/examples/remix/build ./build
 COPY --from=deps /app/examples/remix/public ./public
