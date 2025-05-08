@@ -975,7 +975,12 @@ defmodule Electric.Connection.Manager do
 
   defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
     dispatch_stack_event(
-      {:config_error, %{error: error.original_error, message: error.message, type: error.type}},
+      {:config_error,
+       %{
+         error: inspect(error.original_error, pretty: true),
+         message: error.message,
+         type: error.type
+       }},
       state
     )
 
