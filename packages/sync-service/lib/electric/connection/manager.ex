@@ -144,7 +144,7 @@ defmodule Electric.Connection.Manager do
 
   # Time after establishing replication connection before we consider it successful,
   # to allow for setup errors sent over the stream to be received.
-  @replication_liveness_timeout 5_000
+  @replication_liveness_confirmation_duration 5_000
 
   def child_spec(init_arg) do
     %{
@@ -775,7 +775,7 @@ defmodule Electric.Connection.Manager do
     Process.send_after(
       self(),
       {:replication_liveness_timeout, state.replication_client_pid},
-      @replication_liveness_timeout
+      @replication_liveness_confirmation_duration
     )
 
     state = %State{state | current_step: :streaming}
