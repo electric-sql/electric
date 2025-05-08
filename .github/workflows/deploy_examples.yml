@@ -32,7 +32,7 @@ jobs:
             nextjs/**
             todo-app/**
             proxy-auth/**
-
+            remix/**
       - name: Create example matrix
         id: create-example-matrix
         run: |
