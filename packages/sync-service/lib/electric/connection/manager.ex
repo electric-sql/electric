@@ -537,13 +537,16 @@ defmodule Electric.Connection.Manager do
   # reconnection attempt will start from the minimum timeout and grow exponentially from
   # there.
   def handle_info(
-        {:replication_liveness_timeout, replication_client_pid},
+        {:timeout, _tref, {:replication_liveness_check, replication_client_pid}},
         %State{replication_client_pid: replication_client_pid} = state
       ),
       do: {:noreply, mark_connection_succeeded(state)}
 
-  def handle_info({:replication_liveness_timeout, _replication_client_pid}, state),
-    do: {:noreply, state}
+  def handle_info(
+        {:timeout, _tref, {:replication_liveness_check, _replication_client_pid}},
+        state
+      ),
+      do: {:noreply, state}
 
   # Special-case the explicit shutdown of the supervision tree
   def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
@@ -774,10 +777,10 @@ defmodule Electric.Connection.Manager do
     # This is the only way to be sure because it can still fail after we issue the
     # start_streaming() call, so marking it as having succeeded earlier would result in a
     # reconnection loop with no exponential backoff.
-    Process.send_after(
+    :erlang.start_timer(
+      @replication_liveness_confirmation_duration,
       self(),
-      {:replication_liveness_timeout, state.replication_client_pid},
-      @replication_liveness_confirmation_duration
+      {:replication_liveness_check, state.replication_client_pid}
     )
 
     state = %State{state | current_step: :streaming}
