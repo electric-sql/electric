@@ -210,14 +210,12 @@ defmodule Electric.Shapes.ApiTest do
 
       # this error returns as a list as it reaches the request stage
       # and so needs cleaning up. when encoded the result is the same
-      assert response_body(response) == [
-               %{
-                 message: "Invalid request",
-                 errors: %{
-                   offset: ["out of bounds for this shape"]
-                 }
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 offset: ["out of bounds for this shape"]
                }
-             ]
+             }
     end
 
     test "the shape handle does not match the shape definition", ctx do
@@ -740,6 +738,8 @@ defmodule Electric.Shapes.ApiTest do
                  }
                }
              ]
+
+      assert_receive {Electric.Shapes.Monitor, :remove, @test_shape_handle}
 
       assert response.offset == next_offset
       assert response.up_to_date
