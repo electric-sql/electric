@@ -29,8 +29,11 @@ jobs:
             path: examples/todo-app
           - name: proxy-auth
             path: examples/proxy-auth
+<<<<<<< HEAD
           - name: remix
             path: examples/remix
+=======
+>>>>>>> origin/main
 
     env:
       DEPLOY_ENV: "production"

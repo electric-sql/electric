@@ -21,7 +21,7 @@ Electric syncs ciphertext as well as it syncs plaintext. You can encrypt data on
 - encrypting data before it leaves the client
 - decrypting data after it syncs in to the client through Electric
 
-It's a React app with a very simple Express API server. The Electric-specific code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blog/main/examples/encryption/src/Example.tsx):
+It's a React app with a very simple Express API server. The Electric-specific code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blob/main/examples/encryption/src/Example.tsx):
 
 <<< @../../examples/encryption/src/Example.tsx{tsx}
 

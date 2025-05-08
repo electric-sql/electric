@@ -1,5 +1,25 @@
 # @core/sync-service
 
+## 1.0.12
+
+### Patch Changes
+
+- 8c52956: Fix: properly handle more connection-related edge cases. Streamline error reporting in stack events.
+- 7f01303: Lower severity of expected lock acquisition errors
+- 4ad1d0f: Mitigate `EEXIST` error on `rm_rf` due to suspected filesystem race with retries.
+- c66b869: Use non-pooled connection for grabbing advisory lock to avoid unexpected behaviour.
+- a00e863: fix: ensure continued replication (via shape reset) when WAL slot size is exceeded
+- 55aef88: Fix handling of some connections errors. Treat "wal_level != logical" as a fatal error after which there's no point in retrying the connection.
+- c82153d: fix: make sure a split PK update is visible in the read log when it's in the last position in the transaction
+- 575a6fa: fix: load instance_id from opts for configuring application_telemetry
+- 79d769a: Electric will now shut down and provide an error message if there is a critical error connecting to the database
+  such as the database or domain not existing.
+
+  The API will now return more helpful error messages if Electric is having issues connecting to the database.
+
+- c7bde30: Add stack events for when timeline change is detected and when the database connection shuts down.
+- 7fa69ac: fix: don't send a 500 on a shape delete race condition
+
 ## 1.0.11
 
 ### Patch Changes

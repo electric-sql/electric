@@ -18,7 +18,7 @@ example: true
 
 This is an example using Electric with [Remix](https://remix.run/).
 
-The entrypoint for the Electric-specific code is in [`./app/routes/_index.tsx`](https://github.com/electric-sql/electric/blog/main/examples/remix/app/routes/_index.tsx):
+The entrypoint for the Electric-specific code is in [`./app/routes/_index.tsx`](https://github.com/electric-sql/electric/blob/main/examples/remix/app/routes/_index.tsx):
 
 <<< @../../examples/remix/app/routes/_index.tsx{tsx}
 
