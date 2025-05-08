@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.13
+
+### Patch Changes
+
+- e79ad21: Allow replication connection some time before considering it succeeded so errors can come through.
+
 ## 1.0.12
 
 ### Patch Changes
