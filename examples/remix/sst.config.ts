@@ -61,7 +61,9 @@ export default $config({
       },
     })
 
-    const bucket = new sst.aws.Bucket(`RemixExample`)
+    const bucket = new sst.aws.Bucket(`RemixExample`, {
+      access: "public",
+    })
     const staticSite = new sst.aws.Remix(`remix`, {
       link: [bucket],
       environment: {
