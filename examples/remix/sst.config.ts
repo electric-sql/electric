@@ -49,6 +49,8 @@ export default $config({
       },
       environment: {
         DATABASE_URL: pooledDatabaseUri,
+        ELECTRIC_SOURCE_SECRET: sourceSecret,
+        ELECTRIC_SOURCE_ID: sourceId,
       },
       image: {
         context: "../..",
@@ -64,8 +66,6 @@ export default $config({
       link: [bucket],
       environment: {
         ELECTRIC_URL: process.env.ELECTRIC_API!,
-        ELECTRIC_SOURCE_SECRET: sourceSecret,
-        ELECTRIC_SOURCE_ID: sourceId,
         DATABASE_URL: pooledDatabaseUri,
         PUBLIC_SERVER_URL: service.url,
       },
