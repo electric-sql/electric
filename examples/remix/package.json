@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "start": "remix-serve ./build/server/index.js",
     "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@playwright/test": "^1.52.0",
     "@types/aws-lambda": "8.10.146",
     "@types/pg": "^8.11.6",
     "@types/react": "^18.3.3",
@@ -41,6 +43,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
+    "playwright": "^1.52.0",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
   }
