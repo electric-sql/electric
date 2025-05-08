@@ -623,8 +623,12 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:connection_issue,
-       %{error: error.original_error, type: error.type, message: error.message}},
+      {:database_connection_severed,
+       %{
+         error: inspect(error.original_error, pretty: true),
+         type: error.type,
+         message: error.message
+       }},
       state
     )
 
@@ -695,7 +699,11 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     Electric.StatusMonitor.mark_pg_lock_as_errored(state.stack_id, inspect(error))
-    dispatch_stack_event({:failed_to_acquire_connection_lock, %{error: error}}, state)
+
+    dispatch_stack_event(
+      {:failed_to_acquire_connection_lock, %{error: inspect(error, pretty: true)}},
+      state
+    )
 
     # The LockConnection process will keep retrying to acquire the lock.
     {:noreply, state}
@@ -862,9 +870,9 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:connection_issue,
+      {:database_connection_failed,
        %{
-         error: error.original_error,
+         error: inspect(error.original_error, pretty: true),
          type: error.type,
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
@@ -945,7 +953,11 @@ defmodule Electric.Connection.Manager do
 
     dispatch_stack_event(
       {:warning,
-       %{type: :database_slot_exceeded_max_size, message: message, error: error.original_error}},
+       %{
+         type: :database_slot_exceeded_max_size,
+         message: message,
+         error: inspect(error.original_error, pretty: true)
+       }},
       state
     )
 
