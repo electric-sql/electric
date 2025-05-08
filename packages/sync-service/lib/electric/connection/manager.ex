@@ -601,7 +601,7 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:database_connection_severed,
+      {:connection_issue,
        %{
          error: inspect(error.original_error, pretty: true),
          type: error.type,
