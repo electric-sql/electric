@@ -14,6 +14,10 @@ test(`sync items between tabs`, async ({ browser }) => {
   await page1.goto(BASE_URL!)
   await page2.goto(BASE_URL!)
 
+  // Give some time for initial sync
+  await page1.waitForTimeout(1000)
+  await page2.waitForTimeout(1000)
+
   // Get initial count of items
   const initialItemsPage1 = await page1.$$('.item')
   const initialItemsPage2 = await page2.$$('.item')
@@ -23,11 +27,10 @@ test(`sync items between tabs`, async ({ browser }) => {
   // Click Add button in first tab
   await page1.click('button[value="add"]')
 
-  // Wait for the new entry to appear in first tab
-  await page1.waitForSelector(`.item:nth-child(${initialCount + 1})`)
 
-  // Wait for synchronization and check second tab
-  await page2.waitForSelector(`.item:nth-child(${initialCount + 1})`)
+  // Give some time for the new entry to be synced
+  await page1.waitForTimeout(1000)
+  await page2.waitForTimeout(1000)
 
   // Verify both tabs have one more entry
   const page1Items = await page1.$$('.item')
