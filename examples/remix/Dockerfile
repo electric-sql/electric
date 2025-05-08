@@ -29,4 +29,4 @@ COPY --from=deps /app/examples/remix/build ./build
 COPY --from=deps /app/examples/remix/public ./public
 COPY --from=deps /app/examples/remix/package.json ./
 
-CMD ["npm", "start"]
+CMD ["pnpm", "start"]
