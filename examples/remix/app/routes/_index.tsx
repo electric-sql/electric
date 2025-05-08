@@ -5,9 +5,21 @@ import type { ClientActionFunctionArgs } from "@remix-run/react"
 import "../Example.css"
 import { matchStream } from "../match-stream"
 
+declare global {
+  interface Window {
+    ENV: {
+      PUBLIC_SERVER_URL: string
+    }
+  }
+}
+
+if (!window.ENV?.PUBLIC_SERVER_URL) {
+  throw new Error(`PUBLIC_SERVER_URL is not set`)
+}
+
 const itemShape = () => {
   return {
-    url: new URL(`/shape-proxy`, window.location.origin).href,
+    url: new URL(`/shape-proxy`, window.ENV.PUBLIC_SERVER_URL).href,
     params: {
       table: `items`,
     },

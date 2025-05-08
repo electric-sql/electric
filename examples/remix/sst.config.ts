@@ -38,14 +38,12 @@ export default $config({
         migrationsDirectory: `./db/migrations`,
       })
     
-    const websiteDomain = `remix${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
-    
     const cluster = getSharedCluster(`remix-app-${$app.stage}`)
     const service = cluster.addService(`remix-app-${$app.stage}-service`, {
       loadBalancer: {
         ports: [{ listen: "443/https", forward: "3000/http" }],
         domain: {
-          name: websiteDomain,
+          name: `remix-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
         },
       },
@@ -69,9 +67,10 @@ export default $config({
         ELECTRIC_SOURCE_SECRET: sourceSecret,
         ELECTRIC_SOURCE_ID: sourceId,
         DATABASE_URL: pooledDatabaseUri,
+        PUBLIC_SERVER_URL: service.url,
       },
       domain: {
-        name: websiteDomain,
+        name: `remix${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
         dns: sst.cloudflare.dns(),
       },
     })
