@@ -142,8 +142,10 @@ defmodule Electric.Connection.Manager do
 
   @connection_status_check_interval 10_000
 
-  # Time after establishing replication connection before we consider it successful,
-  # to allow for setup errors sent over the stream to be received.
+  # Time after establishing replication connection before we consider it successful
+  # from a retrying perspective, to allow for setup errors sent over the stream
+  # to be received. Any failure within this period will trigger a retry within
+  # the same reconnection period rather than a new one.
   @replication_liveness_confirmation_duration 5_000
 
   def child_spec(init_arg) do
