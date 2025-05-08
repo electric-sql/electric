@@ -38,16 +38,21 @@ export default $config({
         migrationsDirectory: `./db/migrations`,
       })
     
+    const bucket = new sst.aws.Bucket(`RemixExample`, {
+      access: "public",
+    })
+    
     const cluster = getSharedCluster(`remix-app-${$app.stage}`)
     const service = cluster.addService(`remix-app-${$app.stage}-service`, {
       loadBalancer: {
         ports: [{ listen: "443/https", forward: "3000/http" }],
         domain: {
-          name: `remix-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
+          name: `remix${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
         },
       },
       environment: {
+        ELECTRIC_URL: process.env.ELECTRIC_API!,
         DATABASE_URL: pooledDatabaseUri,
         ELECTRIC_SOURCE_SECRET: sourceSecret,
         ELECTRIC_SOURCE_ID: sourceId,
@@ -59,29 +64,13 @@ export default $config({
       dev: {
         command: "pnpm dev",
       },
-    })
-
-    const bucket = new sst.aws.Bucket(`RemixExample`, {
-      access: "public",
-    })
-    const staticSite = new sst.aws.Remix(`remix`, {
       link: [bucket],
-      environment: {
-        ELECTRIC_URL: process.env.ELECTRIC_API!,
-        DATABASE_URL: pooledDatabaseUri,
-        PUBLIC_SERVER_URL: service.url,
-      },
-      domain: {
-        name: `remix${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
-        dns: sst.cloudflare.dns(),
-      },
     })
 
     return {
       pooledDatabaseUri,
       sourceId: sourceId,
-      website: staticSite.url,
-      server: service.url,
+      website: service.url,
     }
   },
 })

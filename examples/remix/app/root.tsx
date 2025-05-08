@@ -6,22 +6,9 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  useLoaderData,
 } from "@remix-run/react"
-import { json } from "@remix-run/node"
-import type { LoaderFunctionArgs } from "@remix-run/node"
 
-export async function loader(_: LoaderFunctionArgs) {
-  return json({
-    ENV: {
-      PUBLIC_SERVER_URL: process.env.PUBLIC_SERVER_URL,
-    }
-  })
-}
-
-export function Layout({ children }: { children: React.ReactNode }) {
-  const data = useLoaderData<typeof loader>()
-  
+export function Layout({ children }: { children: React.ReactNode }) {  
   return (
     <html lang="en">
         <head>
@@ -29,11 +16,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <Meta />
           <Links />
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `window.ENV = ${JSON.stringify(data.ENV)}`,
-            }}
-          />
         </head>
         <body style={{ margin: 0, padding: 0 }}>
           {children}
