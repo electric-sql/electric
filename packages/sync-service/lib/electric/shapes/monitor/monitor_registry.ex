@@ -154,45 +154,22 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   end
 
   @impl GenServer
-  # should be idempotent - same pid, same handle, no change
-  #
-  # if the pid hasn't registered before for the given shape then
-  # - add it and increment the counter for the shape
-  # - decrement counters for previous shapes
-  # if the pid has registered for the given shape before
-  # - do nothing
   def handle_call({:register_reader, handle, pid}, _from, state) do
-    previous_registrations =
-      :ets.select(state.monitor_table, [
-        {{pid, :reader, :"$1", :"$2"}, [{:"=/=", :"$1", handle}], [[:"$1", :"$2"]]}
-      ])
+    case :ets.lookup(state.monitor_table, pid) do
+      [{^pid, :reader, ^handle, _ref}] ->
+        {:reply, :ok, state}
 
-    existing_registrations =
-      :ets.select(state.monitor_table, [
-        {{pid, :reader, :"$1", :"$2"}, [{:==, :"$1", handle}], [[:"$1", :"$2"]]}
-      ])
+      [{^pid, :reader, previous_handle, ref}] ->
+        state =
+          state
+          |> register_reader_for_handle(handle, pid)
+          |> handle_pid_termination(pid, previous_handle, ref)
 
-    case existing_registrations do
+        {:reply, :ok, state}
+
       [] ->
-        ref = Process.monitor(pid, tag: {:down, :reader, handle})
-        :ets.insert(state.monitor_table, {pid, :reader, handle, ref})
-
-        count = update_counter(state.stack_id, handle, 1)
-
-        Logger.debug(fn ->
-          "register: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
-        end)
-
-      [_] ->
-        :ok
+        {:reply, :ok, register_reader_for_handle(state, handle, pid)}
     end
-
-    state =
-      Enum.reduce(previous_registrations, state, fn [handle, ref], state ->
-        handle_pid_termination(state, pid, handle, ref)
-      end)
-
-    {:reply, :ok, state}
   end
 
   def handle_call({:unregister_reader, handle, pid}, _from, state) do
@@ -301,6 +278,19 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
     {:noreply, state}
   end
 
+  defp register_reader_for_handle(state, handle, pid) do
+    ref = Process.monitor(pid, tag: {:down, :reader, handle})
+    :ets.insert(state.monitor_table, {pid, :reader, handle, ref})
+
+    count = update_counter(state.stack_id, handle, 1)
+
+    Logger.debug(fn ->
+      "register: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
+    end)
+
+    state
+  end
+
   defp add_reader_termination_watcher(shape_handle, pid, reason, state) do
     Map.update!(state, :termination_watchers, fn watchers ->
       Map.update(watchers, shape_handle, [{pid, reason}], &[{pid, reason} | &1])
@@ -353,7 +343,7 @@ defmodule Electric.Shapes.Monitor.MonitorRegistry do
   defp handle_pid_termination(state, pid, handle, ref) do
     %{stack_id: stack_id, termination_watchers: termination_watchers} = state
 
-    Process.demonitor(ref, [:flush])
+    if is_reference(ref), do: Process.demonitor(ref, [:flush])
 
     stack_id
     |> update_counter(handle, -1)
