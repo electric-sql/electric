@@ -321,37 +321,19 @@ defmodule Electric.Shapes.MonitorTest do
     test "is triggered if same reader pid changes shape handle", %{stack_id: stack_id} = _ctx do
       handle1 = "some-handle-1"
       handle2 = "some-handle-2"
-      parent = self()
 
-      {:ok, subscriber1} =
-        start_supervised(
-          {Task,
-           fn ->
-             :ok = Monitor.register_reader(stack_id, handle1)
+      :ok = Monitor.register_reader(stack_id, handle1)
 
-             send(parent, :ready)
-
-             receive do
-               {:subscribe, handle} ->
-                 :ok = Monitor.register_reader(stack_id, handle)
-
-                 receive do
-                   _ ->
-                     :ok
-                 end
-             end
-           end},
-          id: {:subscriber, 1}
-        )
-
-      assert_receive :ready, 100
       Monitor.notify_reader_termination(stack_id, handle1, :my_reason)
-      send(subscriber1, {:subscribe, handle2})
+      assert {:ok, 1} = Monitor.reader_count(stack_id, handle1)
+
+      :ok = Monitor.register_reader(stack_id, handle2)
+
+      assert {:ok, 0} = Monitor.reader_count(stack_id, handle1)
+      assert {:ok, 1} = Monitor.reader_count(stack_id, handle2)
+
       assert_receive {Monitor, :reader_termination, ^handle1, :my_reason}, 100
       Monitor.notify_reader_termination(stack_id, handle2, :my_reason)
-
-      send(subscriber1, :stop)
-      assert_receive {Monitor, :reader_termination, ^handle2, :my_reason}, 100
     end
 
     test "is not triggered if same reader pid re-registers under same handle",
