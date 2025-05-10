@@ -667,7 +667,7 @@ defmodule Electric.ShapeCacheTest do
             raise "some error"
 
           1 ->
-            Process.sleep(20)
+            Process.sleep(100)
             [1]
 
           n ->
