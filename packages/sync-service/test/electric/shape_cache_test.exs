@@ -658,8 +658,15 @@ defmodule Electric.ShapeCacheTest do
     test "errors while streaming from database are sent to all callers", ctx do
       stream_from_database =
         Stream.map(1..10, fn
-          10 -> raise "some error"
-          n -> [n]
+          10 ->
+            raise "some error"
+
+          1 ->
+            Process.sleep(20)
+            [1]
+
+          n ->
+            [n]
         end)
 
       %{shape_cache_opts: opts} =
@@ -690,7 +697,7 @@ defmodule Electric.ShapeCacheTest do
               )
 
             assert_raise Storage.Error, fn ->
-              stream |> Stream.each(fn _ -> Process.sleep(5) end) |> Stream.run()
+              stream |> Stream.each(fn _ -> Process.sleep(1) end) |> Stream.run()
             end
           end)
         end
