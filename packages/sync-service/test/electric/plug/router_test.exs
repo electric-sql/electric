@@ -577,6 +577,7 @@ defmodule Electric.Plug.RouterTest do
              ] = Jason.decode!(conn.resp_body)
     end
 
+    @tag slow: true
     @large_binary_table "large_binary_table"
     @tag with_sql: ["CREATE TABLE #{@large_binary_table} (id INT PRIMARY KEY, blob BYTEA)"]
     test "can sync large binaries", %{opts: opts, db_conn: db_conn} do
