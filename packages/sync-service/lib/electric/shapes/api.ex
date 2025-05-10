@@ -212,11 +212,15 @@ defmodule Electric.Shapes.Api do
   def delete_shape(%Request{handle: handle} = request) when is_binary(handle) do
     :ok = Shapes.clean_shape(handle, request.api)
 
-    %Response{status: 202, body: []}
+    # Delete responses don't need to have cleanup operations appended
+    # after the body has been read, so mark them as finalized
+    Response.final(%Response{status: 202, body: []})
   end
 
   def delete_shape(%Request{handle: nil} = request) do
-    Response.error(request, "Shape not found", status: 404)
+    request
+    |> Response.error("Shape not found", status: 404)
+    |> Response.final()
   end
 
   @spec delete_shape(Plug.Conn.t()) :: Plug.Conn.t()
@@ -419,7 +423,9 @@ defmodule Electric.Shapes.Api do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      do_serve_shape_log(request)
+      request
+      |> do_serve_shape_log()
+      |> Response.ensure_cleanup()
     end)
   end
 
@@ -427,7 +433,7 @@ defmodule Electric.Shapes.Api do
     response =
       case if_not_modified(conn, request) do
         {:halt, response} ->
-          response
+          Response.ensure_cleanup(response)
 
         {:cont, request} ->
           serve_shape_log(request)
