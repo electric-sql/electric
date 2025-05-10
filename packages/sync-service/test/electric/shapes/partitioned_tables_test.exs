@@ -194,6 +194,8 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     )
 
     assert_receive {^ref, :shape_rotation}, 5000
+    assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}, 5000
+    assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, 5000
 
     assert [_] = active_shapes = ShapeCache.list_shapes(stack_id: ctx.stack_id)
 
@@ -248,6 +250,8 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     assert_receive {^ref, :shape_rotation}, 5000
     assert_receive {^partition_ref, :shape_rotation}, 5000
+    assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, 5000
+    assert_receive {Electric.Shapes.Monitor, :cleanup, ^partition_shape_handle}, 5000
 
     assert [] = ShapeCache.list_shapes(stack_id: ctx.stack_id)
 
