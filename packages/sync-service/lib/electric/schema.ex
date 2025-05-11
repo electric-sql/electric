@@ -42,7 +42,7 @@ defmodule Electric.Schema do
   @doc """
   Convert column information into a schema map
   """
-  @spec from_column_info(Inspector.column_info(), [String.t(), ...] | nil) :: %{
+  @spec from_column_info([Inspector.column_info()], [String.t(), ...] | nil) :: %{
           column_name() => schema()
         }
   def from_column_info(column_info, included_columns \\ nil) do

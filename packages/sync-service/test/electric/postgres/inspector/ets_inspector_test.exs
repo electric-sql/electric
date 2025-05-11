@@ -8,6 +8,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
   describe "load_relation/2" do
     setup [
+      :with_persistent_kv,
       :with_inspector,
       :with_basic_tables,
       :with_sql_execute
@@ -116,6 +117,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
   describe "clean/2" do
     setup [
+      :with_persistent_kv,
       :with_inspector,
       :with_basic_tables,
       :with_sql_execute
@@ -183,7 +185,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "load_column_info/2" do
-    setup [:with_inspector, :with_basic_tables, :with_sql_execute]
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
 
     setup %{inspector: {EtsInspector, opts}} do
       {:ok, %{opts: opts, table: {"public", "items"}}}

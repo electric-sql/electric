@@ -54,9 +54,9 @@ defmodule Electric.Shapes.Shape do
           root_table_id: non_neg_integer(),
           root_pk: [String.t(), ...],
           root_column_count: non_neg_integer(),
-          selects_all_columns?: boolean(),
           where: String.t(),
           selected_columns: [String.t(), ...],
+          flags: %{optional(flag()) => boolean()},
           replica: String.t(),
           storage: %{required(String.t()) => String.t()}
         }
@@ -230,6 +230,7 @@ defmodule Electric.Shapes.Shape do
       {:ok, column_info} ->
         # %{["column_name"] => :type}
         Logger.debug("Table #{inspect(table)} found with #{length(column_info)} columns")
+        Logger.debug("Column info: #{inspect(column_info)}")
 
         pk_cols = Inspector.get_pk_cols(column_info)
 
