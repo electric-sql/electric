@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "author": "ElectricSQL",
   "license": "Apache-2.0",
+  "type": "module",
   "scripts": {
     "backend:up": "PROJECT_NAME=yjs pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=yjs pnpm -C ../../ run example-backend:down",
@@ -14,11 +15,11 @@
     "dev:server": "tsx watch src/server/server.ts",
     "build:server": "tsc -p tsconfig-server.json --outDir dist/server",
     "start:server": "node dist/server/server.js",
-    "dev:static": "vite src/static_site",
-    "build:static": "vite build src/static_site",
-    "preview:static": "vite preview src/static_site",
-    "start-all": "concurrently \"pnpm run dev:server\" \"pnpm run dev:static\"",
-    "build": "pnpm run build:static"
+    "dev:client": "vite src/client",
+    "build:client": "vite build src/client",
+    "preview:client": "vite preview src/client",
+    "start-all": "concurrently \"pnpm run dev:server\" \"pnpm run dev:client\"",
+    "build": "pnpm run build:client"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",

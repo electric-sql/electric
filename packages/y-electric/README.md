@@ -1,19 +1,15 @@
-# YJS Electric network provider
+# Y-Electric
 
-A [YJS](https://yjs.dev) provider that enables real-time collaborative document editing using ElectricSQL and Postgres.
-
-## What is y-electric?
-
-`y-electric` is a YJS [connection provider](https://docs.yjs.dev/ecosystem/connection-provider) that allows syncing YJS documents using ElectricSQL's sync engine. It leverages Postgres as the backend database for storing and syncing document updates and awareness states across users.
+A [YJS](https://yjs.dev) [connection provider](https://docs.yjs.dev/ecosystem/connection-provider) that enables real-time collaborative document editing using YJS, ElectricSQL and Postgres. It comes with supports for the [Awareness CRDT](https://docs.yjs.dev/getting-started/adding-awareness) and can be used with any [database](https://docs.yjs.dev/ecosystem/database-provider) providers (like local storage). See a full example [here](https://github.com/electric-sql/electric/tree/main/examples/yjs).
 
 ## How It Works
 
-Y-Electric handles syncing over HTTP using ElectricSQL's sync engine
+The typical flow for syncing shared documents using Yjs and Electric is the following:
 
-1. Updates made locally are pushed to the server and
-   stored in Postgres using your API
-2. ElectricSQL propagates updates across all connected clients using shapes
-3. It has support for document and awareness updates
+1. Developer exposes a shape proxy for [authorizing](https://electric-sql.com/docs/guides/auth) shape requests
+2. Clients define a [shape](https://electric-sql.com/docs/guides/shapes) for syncing changes for a [Y.Doc](https://docs.yjs.dev/api/y.doc)
+3. Developer exposes a [write API](#Handling Writes) for handling Yjs updates
+4. Vòila! Y-Electric automatically shares updates across all connected clients
 
 ### Basic Setup
 
@@ -32,7 +28,7 @@ new ElectricProvider({
     shape: {
       url: SHAPE_PROXY_URL,
       params: {
-        table: `ydoc_operations`,
+        table: `ydoc_update`,
         where: `room = '${room}'`,
       },
       parser: parseToDecoder,
@@ -57,38 +53,33 @@ new ElectricProvider({
 })
 ```
 
-### Backend implementation
+### Handling Writes
 
-ElectricSQL is a read-path sync engine. This means that you bring your own API for handling document and awareness updates.
+ElectricSQL is a read-path sync engine. This means that you bring your own API for handling document and awareness updates. See our sample server implementation [here](https://github.com/electric-sql/electric/blob/main/examples/yjs/server/server.ts). It's very easy!
 
 #### Document Updates
 
-Y-Electric sends yjs document updates as binary data. You can directly save the body of the request as a bytea column into your database.
+Y-Electric sends YJS document updates as binary data. You can directly save the body of the request as a bytea column into the database.
 
 ```sql
-INSERT INTO ydoc_operations (room, op) VALUES ($1, $2)`
-```
-
-```sql
--- schema definition
-CREATE TABLE ydoc_operations (
+-- Schema definition
+CREATE TABLE ydoc_updates (
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
     room text NOT NULL,
     op bytea NOT NULL
 )
+-- Save updates into individual rows
+INSERT INTO ydoc_updates (room, op) VALUES ($1, $2)`
 ```
 
 #### Awareness Updates
 
-The awareness protocol implementation saves vector clock for each `awareness.clientID` in separate rows:
-
-```sql
-INSERT INTO ydoc_awareness (room, client_id, op) VALUES ($1, $2, $3)`
-```
+The awareness protocol implementation saves vector clock for each individual cliendId in separate rows:
 
 Here is an example schema definition for ydoc_awareness:
 
 ```sql
+-- Schema definitions
 CREATE TABLE ydoc_awareness(
   client_id TEXT,
   room TEXT,
@@ -96,9 +87,12 @@ CREATE TABLE ydoc_awareness(
   updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (client_id, room)
 );
+-- Save 
+INSERT INTO ydoc_awareness (room, client_id, op, updated) VALUES ($1, $2, $3, now())
+         ON CONFLICT (client_id, room) DO UPDATE SET op = $3, updated = now()
 ```
 
-You can garbage collect old client rows using a database trigger:
+It's recommended that you can garbage collect old client rows using a database trigger since the provider can't reliability detect when a client goes away:
 
 ```sql
 CREATE OR REPLACE FUNCTION gc_awareness_timeouts()
@@ -118,10 +112,10 @@ EXECUTE FUNCTION gc_awareness_timeouts();
 
 ### Schema mapping in the client
 
-In the client, you can use the optional `getUpdateFromRow` to extract the column with the actual yjs update for document and awareness updates.
+In the client, you need to pass a `getUpdateFromRow` to extract the column with the update binary. This allows Y-Electric to work with any backend schema.
 
 ### Storage providers
 
-Y-Electric work with existing [database providers](https://docs.yjs.dev/ecosystem/database-provider). If you're using a persistence backend on the client, we recommend using the ElectricStorageProvider to save a resume point for the shapes, otherwise the entire document will be retransmitted when a new client session starts.
+Y-Electric work with existing [database providers](https://docs.yjs.dev/ecosystem/database-provider) to store documents locally. When saving documents locally, we recommend using the ElectricStorageProvider to save a resume point for the shapes, otherwise the entire document will be retransmitted when a new client session starts.
 
 The ElectricStorageProvider also keeps track of the document state vector to handle offline updates.

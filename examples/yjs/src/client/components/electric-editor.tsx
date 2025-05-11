@@ -21,7 +21,7 @@ import { parseToDecoder } from "../common/utils"
 import * as decoding from "lib0/decoding"
 
 type UpdateTableSchema = {
-  op: decoding.Decoder
+  update: decoding.Decoder
 }
 
 const serverUrl = import.meta.env.VITE_SERVER_URL || `http://localhost:3002`
@@ -57,13 +57,13 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
     shape: {
       url: shapeUrl.href,
       params: {
-        table: `ydoc_operations`,
+        table: `ydoc_update`,
         where: `room = '${room}'`,
       },
       parser: parseToDecoder,
     },
-    sendUrl: new URL(`/api/operation?room=${room}`, serverUrl),
-    getUpdateFromRow: (row) => row.op,
+    sendUrl: new URL(`/api/update?room=${room}`, serverUrl),
+    getUpdateFromRow: (row) => row.update,
   },
   awarenessUpdates: {
     shape: {
@@ -75,11 +75,11 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
       parser: parseToDecoder,
     },
     sendUrl: new URL(
-      `/api/operation?room=${room}&client_id=${ydoc.clientID}`,
+      `/api/update?room=${room}&client_id=${ydoc.clientID}`,
       serverUrl
     ),
     protocol: awareness,
-    getUpdateFromRow: (row) => row.op,
+    getUpdateFromRow: (row) => row.update,
   },
   resumeState: resumeStateProvider.load(),
 }

@@ -1,11 +1,12 @@
 {
   "name": "@electric-sql/y-electric",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "YJS network provider for ElectricSQL",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
+  "type": "module",
   "dependencies": {
     "@electric-sql/client": "workspace:*",
     "lib0": "^0.2.65",
@@ -40,7 +41,6 @@
     "collaboration",
     "real-time"
   ],
-  "type": "module",
   "exports": {
     "./package.json": "./package.json",
     ".": {
@@ -63,9 +63,6 @@
   "main": "./dist/cjs/index.cjs",
   "module": "./dist/index.legacy-esm.js",
   "types": "./dist/index.d.ts",
-  "optionalDependencies": {
-    "@rollup/rollup-darwin-arm64": "^4.18.1"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric.git"

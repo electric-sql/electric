@@ -276,7 +276,7 @@ export class ElectricProvider<
     handle: string
   ) {
     for (const message of messages) {
-      if (isChangeMessage(message) && message.value.op) {
+      if (isChangeMessage(message)) {
         const decoder = this.documentUpdates.getUpdateFromRow(message.value)
         while (decoder.pos !== decoder.arr.length) {
           const operation = decoding.readVarUint8Array(decoder)

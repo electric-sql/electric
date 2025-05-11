@@ -2,20 +2,18 @@ import { serve } from "@hono/node-server"
 import { Hono } from "hono"
 import type { Context } from "hono"
 import { cors } from "hono/cors"
-import * as pg from "pg"
-const { Pool } = pg
+import pg from "pg"
 import * as db from "./db"
 import { logger } from "hono/logger"
 
 type InvalidRequest = { isValid: false; error?: string }
-type ValidRequest = (db.Operation | db.AwarenessOperation) & { isValid: true }
+type ValidRequest = (db.Update | db.AwarenessUpdate) & { isValid: true }
 
-// Database connection setup
 const connectionString =
   process.env.DATABASE_URL ||
   `postgresql://postgres:password@localhost:54321/electric`
 
-const pool = new Pool({ connectionString })
+const pool = new pg.Pool({ connectionString })
 
 const app = new Hono()
 app.use(logger())
@@ -48,21 +46,21 @@ const parseRequest = async (
 
   const client_id = url.searchParams.get(`client_id`) ?? undefined
 
-  // Get operation data from request body
+  // Get update binary from request body
   const arrayBuffer = await c.req.arrayBuffer()
-  const op = new Uint8Array(arrayBuffer)
+  const update = new Uint8Array(arrayBuffer)
 
-  if (op.length === 0) {
-    return { isValid: false, error: `Operation is required` }
+  if (update.length === 0) {
+    return { isValid: false, error: `No update provided` }
   }
   if (client_id) {
-    return { isValid: true, room, client_id, op }
+    return { isValid: true, room, client_id, update }
   } else {
-    return { isValid: true, room, op }
+    return { isValid: true, room, update }
   }
 }
 
-app.put(`/api/operation`, async (c: Context) => {
+app.put(`/api/update`, async (c: Context) => {
   try {
     const requestParams = await parseRequest(c)
     if (!requestParams.isValid) {
@@ -70,9 +68,9 @@ app.put(`/api/operation`, async (c: Context) => {
     }
 
     if (`client_id` in requestParams) {
-      await db.upsertAwarenessOperation(requestParams, pool)
+      await db.upsertAwarenessUpdate(requestParams, pool)
     } else {
-      await db.saveOperation(requestParams, pool)
+      await db.saveUpdate(requestParams, pool)
     }
 
     return c.json({})
