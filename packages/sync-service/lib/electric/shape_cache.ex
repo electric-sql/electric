@@ -462,7 +462,7 @@ defmodule Electric.ShapeCache do
 
     case start_shape(shape_handle, shape, state) do
       {:ok, latest_offset} ->
-        publication_manager.recover_shape(shape, publication_manager_opts)
+        publication_manager.recover_shape(shape_handle, shape, publication_manager_opts)
         [LogOffset.extract_lsn(latest_offset)]
 
       :error ->
