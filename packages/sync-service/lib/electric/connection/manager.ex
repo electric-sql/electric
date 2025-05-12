@@ -623,7 +623,7 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:connection_issue,
+      {:connection_error,
        %{
          error: inspect(error.original_error, pretty: true),
          type: error.type,
