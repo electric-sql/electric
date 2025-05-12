@@ -20,6 +20,7 @@ defmodule Electric.Postgres.ReplicationClient do
           | :connected
           | :query_pg_info
           | :create_publication
+          | :drop_slot
           | :create_slot
           | :set_display_setting
           | :ready_to_stream
@@ -180,8 +181,14 @@ defmodule Electric.Postgres.ReplicationClient do
 
   @impl true
   def handle_result(result_list_or_error, state) do
-    {step, return_val} = ConnectionSetup.process_query_result(result_list_or_error, state)
-    if step == :ready_to_stream, do: notify_ready_to_stream(state)
+    {current_step, next_step, extra_info, return_val} =
+      ConnectionSetup.process_query_result(result_list_or_error, state)
+
+    if current_step == :create_slot and extra_info == :created_new_slot,
+      do: notify_created_new_slot(state)
+
+    if next_step == :ready_to_stream, do: notify_ready_to_stream(state)
+
     return_val
   end
 
@@ -370,6 +377,11 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp notify_connection_opened(%State{connection_manager: connection_manager} = state) do
     :ok = Electric.Connection.Manager.replication_client_started(connection_manager)
+    state
+  end
+
+  defp notify_created_new_slot(%State{connection_manager: connection_manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_created_new_slot(connection_manager)
     state
   end
 

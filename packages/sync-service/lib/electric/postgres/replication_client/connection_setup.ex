@@ -14,6 +14,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   @type state :: Electric.Postgres.ReplicationClient.State.t()
   @type step :: Electric.Postgres.ReplicationClient.step()
+  @type extra_info :: term
   @type callback_return ::
           {:noreply, state}
           | {:query, iodata, state}
@@ -30,11 +31,16 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   # Process the result of executing the query, pick the next step and return the `{:query, ...}`
   # tuple for it.
-  @spec process_query_result(query_result, state) :: callback_return
+  @spec process_query_result(query_result, state) :: {step, step, extra_info, callback_return}
   def process_query_result(result, %{step: step} = state) do
-    state = dispatch_query_result(step, result, state)
+    {extra_info, state} =
+      case dispatch_query_result(step, result, state) do
+        {extra_info, %State{} = state} -> {extra_info, state}
+        %State{} = state -> {nil, state}
+      end
+
     next_step = next_step(state)
-    {next_step, query_for_step(next_step, %{state | step: next_step})}
+    {step, next_step, extra_info, query_for_step(next_step, %{state | step: next_step})}
   end
 
   # Instruct `Postgrex.ReplicationConnection` to switch the connection into the logical
@@ -151,8 +157,16 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   # Sucessfully created the replication slot.
   defp create_slot_result([%Postgrex.Result{} = result], state) do
-    log_slot_creation_result(result)
-    state
+    %Postgrex.Result{
+      command: :create,
+      columns: ["slot_name", "consistent_point", "snapshot_name", "output_plugin"],
+      rows: [[_, lsn_str, nil, _]],
+      num_rows: 1
+    } = result
+
+    Logger.debug("Created new slot at lsn=#{lsn_str}")
+
+    {:created_new_slot, state}
   end
 
   defp create_slot_result(%Postgrex.Error{} = error, state) do
@@ -168,21 +182,6 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
         # Unexpected error, fail loudly.
         raise error
     end
-  end
-
-  defp log_slot_creation_result(result) do
-    Logger.debug(fn ->
-      %Postgrex.Result{
-        command: :create,
-        columns: ["slot_name", "consistent_point", "snapshot_name", "output_plugin"],
-        rows: [[_, lsn_str, nil, _]],
-        num_rows: 1,
-        connection_id: _,
-        messages: []
-      } = result
-
-      "Created new slot at lsn=#{lsn_str}"
-    end)
   end
 
   ###
@@ -282,7 +281,8 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   # Helper function that dispatches processing of a query result to a function specific to
   # that query's step. This is again done to facilitate grouping functions for the same step.
-  @spec dispatch_query_result(step, query_result, state) :: state | no_return
+  @spec dispatch_query_result(step, query_result, state) ::
+          state | {extra_info, state} | no_return
 
   defp dispatch_query_result(:query_pg_info, result, state),
     do: pg_info_result(result, state)

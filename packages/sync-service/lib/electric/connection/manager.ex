@@ -117,6 +117,7 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       :persistent_kv,
+      :purge_all_shapes?,
       drop_slot_requested: false
     ]
   end
@@ -197,6 +198,10 @@ defmodule Electric.Connection.Manager do
 
   def replication_client_started(manager) do
     GenServer.cast(manager, :replication_client_started)
+  end
+
+  def replication_client_created_new_slot(manager) do
+    GenServer.cast(manager, :replication_client_created_new_slot)
   end
 
   def replication_client_ready_to_stream(manager) do
@@ -409,7 +414,7 @@ defmodule Electric.Connection.Manager do
 
     shape_cache_opts =
       state.shape_cache_opts
-      |> Keyword.put(:purge_all_shapes?, timeline_changed?)
+      |> Keyword.put(:purge_all_shapes?, state.purge_all_shapes? || timeline_changed?)
 
     if timeline_changed? do
       Electric.Replication.PersistentReplicationState.reset(
@@ -453,7 +458,8 @@ defmodule Electric.Connection.Manager do
     state = %State{
       state
       | shape_log_collector_pid: log_collector_pid,
-        current_step: {:start_replication_client, :start_streaming}
+        current_step: {:start_replication_client, :start_streaming},
+        purge_all_shapes?: false
     }
 
     {:noreply, state, {:continue, :start_streaming}}
@@ -733,6 +739,19 @@ defmodule Electric.Connection.Manager do
     }
 
     {:noreply, state}
+  end
+
+  def handle_cast(
+        :replication_client_created_new_slot,
+        %State{
+          current_phase: phase,
+          current_step: {:start_replication_client, :configuring_connection}
+        } = state
+      )
+      when phase in [:connection_setup, :restarting_replication_client] do
+    # When the replication slot is created for the first time or recreated at any point, we
+    # must invalidate all shapes to ensure transactional continuity and prevent missed changes.
+    {:noreply, %State{state | purge_all_shapes?: true}}
   end
 
   def handle_cast(
