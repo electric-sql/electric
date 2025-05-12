@@ -1,6 +1,6 @@
 # Y-Electric
 
-A [Yjs](https://yjs.dev) [provider](https://docs.yjs.dev/ecosystem/connection-provider) that enables real-time collaborative document editing using YJS, ElectricSQL and Postgres. It supports [Awareness](https://docs.yjs.dev/getting-started/adding-awareness) and can be used with any Yjjs [database](https://docs.yjs.dev/ecosystem/database-provider) providers. See a full example [here](https://github.com/electric-sql/electric/tree/main/examples/yjs).
+A [Yjs](https://yjs.dev) [provider](https://docs.yjs.dev/ecosystem/connection-provider) that enables real-time collaborative document editing using YJS, ElectricSQL and Postgres. It supports [Awareness](https://docs.yjs.dev/getting-started/adding-awareness) and can be used with any Yjs [database](https://docs.yjs.dev/ecosystem/database-provider) providers. See a full example [here](https://github.com/electric-sql/electric/tree/main/examples/yjs).
 
 ## How It Works
 
