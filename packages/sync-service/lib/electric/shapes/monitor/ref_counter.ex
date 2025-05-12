@@ -163,7 +163,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         # then...) and is re-registering itself for `handle`. Treat this an
         # implicit deregister plus register and make sure we notify watchers if
         # this process was the last one using `previous_handle`.
-        end.
         state =
           state
           |> register_reader_for_handle(handle, pid)
