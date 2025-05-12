@@ -292,7 +292,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       "register: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
     end)
 
-    state
+    record_telemetry(state)
   end
 
   defp add_reader_termination_watcher(shape_handle, pid, reason, state) do
@@ -373,10 +373,21 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       n when n > 0 ->
         state
     end
+    |> record_telemetry()
   end
 
   defp notify_remove(%{on_remove: on_remove} = state, handle, pid) do
     on_remove.(handle, pid)
+    state
+  end
+
+  defp record_telemetry(state) do
+    :telemetry.execute(
+      [:electric, :shape_monitor],
+      %{active_reader_count: reader_count!(state.stack_id)},
+      %{stack_id: state.stack_id}
+    )
+
     state
   end
 end
