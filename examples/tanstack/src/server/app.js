@@ -36,6 +36,13 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    if (req.method === `GET` && (req.url === `/` || req.url === `/health`)) {
+      // This is a health check
+      res.writeHead(200, { ...JSON_HEADERS, ...CORS_HEADERS })
+      res.end(JSON.stringify({ message: `OK` }))
+      return
+    }
+
     // Handle adding an item
     if (req.method === `POST` && req.url === `/items`) {
       const body = await getRequestBody(req)
