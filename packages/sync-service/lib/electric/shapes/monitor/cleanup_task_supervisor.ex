@@ -56,14 +56,14 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     end
   end
 
-  def cleanup(
-        stack_id,
-        storage_impl,
-        publication_manager_impl,
-        shape_status_impl,
-        shape_handle,
-        shape
-      ) do
+  defp cleanup(
+         stack_id,
+         storage_impl,
+         publication_manager_impl,
+         shape_status_impl,
+         shape_handle,
+         shape
+       ) do
     if consumer_alive?(stack_id, shape_handle) do
       {:error, "Expected shape #{shape_handle} consumer to not be alive before cleaning shape"}
     else
@@ -73,17 +73,45 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
       Logger.debug("cleaning shape data #{inspect(shape_handle)}")
 
       shape_status.remove_shape(shape_status_state, shape_handle)
-      publication_manager.remove_shape(shape_handle, shape, publication_manager_opts)
 
-      shape_handle
-      |> Storage.for_shape(storage_impl)
-      |> Storage.unsafe_cleanup!()
+      data_cleanup =
+        perform_async_catching_errors(
+          fn ->
+            shape_handle
+            |> Storage.for_shape(storage_impl)
+            |> Storage.unsafe_cleanup!()
+          end,
+          "Failed to delete data for shape #{shape_handle}"
+        )
 
-      :ok
+      remove_shape =
+        perform_async_catching_errors(
+          fn ->
+            publication_manager.remove_shape(shape_handle, shape, publication_manager_opts)
+          end,
+          "Failed to remove shape #{shape_handle} from publication"
+        )
+
+      [data_cleanup, remove_shape]
+      |> Task.await_many(60000)
+      |> Enum.find(:ok, &match?({:error, _}, &1))
     end
   end
 
   defp consumer_alive?(stack_id, shape_handle) do
     !is_nil(Electric.Shapes.Consumer.whereis(stack_id, shape_handle))
+  end
+
+  defp perform_async_catching_errors(fun, message) do
+    Task.async(fn ->
+      try do
+        fun.()
+      catch
+        kind, reason when kind in [:exit, :error] ->
+          Logger.error([message, ": ", Exception.format(kind, reason, __STACKTRACE__)])
+
+          {:error, reason}
+      end
+    end)
   end
 end
