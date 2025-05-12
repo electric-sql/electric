@@ -80,6 +80,22 @@ defmodule Electric.Replication.PublicationManagerTest do
                       ]}
     end
 
+    test "should ignore subsequent shapes for same shape handle", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape2, opts)
+
+      # should respect first one only
+      assert_receive {:filters,
+                      [
+                        %RelationFilter{
+                          relation: {"public", "items"},
+                          where_clauses: [@where_clause_1]
+                        }
+                      ]}
+    end
+
     test "should accept multiple shapes for different relations", %{opts: opts} do
       shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "other"})
@@ -303,6 +319,25 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     @tag update_debounce_timeout: 50
+    test "should deduplicate calls with the same shape handle", %{opts: opts} do
+      shape = generate_shape({"public", "items"}, @where_clause_1)
+      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape, opts) end)
+      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape, opts) end)
+      task3 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, shape, opts) end)
+      task4 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, shape, opts) end)
+
+      Task.await_many([task1, task2, task3, task4])
+
+      assert_receive {:filters,
+                      [
+                        %RelationFilter{
+                          relation: {"public", "items"},
+                          where_clauses: [@where_clause_1]
+                        }
+                      ]}
+    end
+
+    @tag update_debounce_timeout: 50
     test "should reference count to avoid removing needed filters", %{opts: opts} do
       shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "items"}, @where_clause_2)
@@ -333,6 +368,24 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape, opts)
 
       refute_receive {:filters, _}, 500
+    end
+
+    test "should ignore subsequent shapes for same shape handle", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+      assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape1, opts)
+      assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape2, opts)
+
+      :ok = PublicationManager.refresh_publication(opts)
+
+      # should respect first one only
+      assert_receive {:filters,
+                      [
+                        %RelationFilter{
+                          relation: {"public", "items"},
+                          where_clauses: [@where_clause_1]
+                        }
+                      ]}
     end
   end
 
