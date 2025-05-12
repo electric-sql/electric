@@ -11,6 +11,7 @@
     "build": "vite build",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "concurrently \"vite\" \"node src/server/app.js\"",
+    "start": "node dist/server/app.js",
     "format": "eslint . --fix",
     "preview": "vite preview",
     "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -36,6 +37,7 @@
     "concurrently": "^8.2.2",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
+    "sst": "3.6.35",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
   }
