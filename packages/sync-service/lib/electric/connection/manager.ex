@@ -744,14 +744,26 @@ defmodule Electric.Connection.Manager do
   def handle_cast(
         :replication_client_created_new_slot,
         %State{
-          current_phase: phase,
+          current_phase: :connection_setup,
           current_step: {:start_replication_client, :configuring_connection}
         } = state
-      )
-      when phase in [:connection_setup, :restarting_replication_client] do
+      ) do
     # When the replication slot is created for the first time or recreated at any point, we
     # must invalidate all shapes to ensure transactional continuity and prevent missed changes.
     {:noreply, %State{state | purge_all_shapes?: true}}
+  end
+
+  def handle_cast(
+        :replication_client_created_new_slot,
+        %State{
+          current_phase: :restarting_replication_client,
+          current_step: {:start_replication_client, :configuring_connection}
+        } = state
+      ) do
+    # In the :restarting_replication_client phase the shape streaming pipeline is already
+    # running, so we need to notify it about the need to purge existing shapes.
+    :ok = Electric.ShapeCache.clean_all_shapes(stack_id: state.stack_id)
+    {:noreply, state}
   end
 
   def handle_cast(
