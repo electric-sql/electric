@@ -23,6 +23,7 @@ defmodule Electric do
   opts_schema = NimbleOptions.new!(@connection_opts)
 
   @type pg_connection_opts :: [unquote(NimbleOptions.option_typespec(opts_schema))]
+  @type stack_id :: binary()
 
   default = fn key -> inspect(Electric.Config.default(key)) end
 
