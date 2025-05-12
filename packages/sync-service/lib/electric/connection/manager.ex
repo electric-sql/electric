@@ -625,7 +625,7 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(
       {:connection_error,
        %{
-         error: inspect(error.original_error, pretty: true),
+         error: DbConnectionError.format_original_error(error),
          type: error.type,
          message: error.message
        }},
@@ -872,7 +872,7 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(
       {:database_connection_failed,
        %{
-         error: inspect(error.original_error, pretty: true),
+         error: DbConnectionError.format_original_error(error),
          type: error.type,
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
@@ -948,7 +948,7 @@ defmodule Electric.Connection.Manager do
        %{
          type: :database_slot_exceeded_max_size,
          message: error.message,
-         error: inspect(error.original_error, pretty: true)
+         error: DbConnectionError.format_original_error(error)
        }},
       state
     )
@@ -977,7 +977,7 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(
       {:config_error,
        %{
-         error: inspect(error.original_error, pretty: true),
+         error: DbConnectionError.format_original_error(error),
          message: error.message,
          type: error.type
        }},

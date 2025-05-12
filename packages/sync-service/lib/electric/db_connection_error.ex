@@ -134,6 +134,10 @@ defmodule Electric.DbConnectionError do
 
   def from_error(error), do: unknown_error(error)
 
+  def format_original_error(%DbConnectionError{original_error: error}) do
+    inspect(error, pretty: true)
+  end
+
   defp unknown_error(error) do
     Logger.error("Electric.DBConnection unknown error: #{inspect(error)}")
 
