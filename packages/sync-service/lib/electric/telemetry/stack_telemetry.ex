@@ -206,6 +206,9 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         summary("electric.querying.stream_initial_data.stop.duration",
           unit: {:native, :millisecond},
           keep: for_stack(opts)
+        ),
+        summary("electric.shape_monitor.active_reader_count",
+          keep: for_stack(opts)
         )
       ]
       |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
