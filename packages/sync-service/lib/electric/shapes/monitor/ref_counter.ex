@@ -8,6 +8,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   Uses `Electric.Shapes.Monitor.CleanupTaskSupervisor` to trigger an
   `unsafe_cleanup!` of shape storage once the shape supervisor has terminated.
+
+  See `Electric.Shapes.Monitor` for usage.
   """
   use GenServer
 
@@ -33,33 +35,25 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     GenServer.start_link(__MODULE__, Map.new(opts), name: name(opts))
   end
 
-  @doc """
-  Register the current process as a reader of the given shape.
-  """
+  @doc false
   @spec register_reader(stack_id(), shape_handle(), pid()) :: :ok
   def register_reader(stack_id, shape_handle, pid \\ self()) do
     GenServer.call(name(stack_id), {:register_reader, shape_handle, pid})
   end
 
-  @doc """
-  Unregister the current process as a reader of the given shape.
-  """
+  @doc false
   @spec unregister_reader(stack_id(), shape_handle(), pid()) :: :ok
   def unregister_reader(stack_id, shape_handle, pid \\ self()) do
     GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid})
   end
 
-  @doc """
-  Register the current process as a writer (consumer) of the given shape.
-  """
+  @doc false
   @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
   def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
     GenServer.call(name(stack_id), {:register_writer, shape_handle, shape, pid})
   end
 
-  @doc """
-  The number of active readers of the given shape.
-  """
+  @doc false
   @spec reader_count(stack_id(), shape_handle()) :: {:ok, non_neg_integer()}
   def reader_count(stack_id, shape_handle) do
     case :ets.lookup(table(stack_id), shape_handle) do
@@ -68,9 +62,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end
   end
 
-  @doc """
-  The number of active readers of all shapes.
-  """
+  @doc false
   @spec reader_count(stack_id()) :: {:ok, non_neg_integer()}
   def reader_count(stack_id) do
     case :ets.lookup(table(stack_id), :all) do
@@ -79,22 +71,13 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end
   end
 
-  @doc """
-  The number of active readers of all shapes.
-  """
+  @doc false
   @spec reader_count!(stack_id()) :: non_neg_integer()
   def reader_count!(stack_id) do
     {:ok, count} = reader_count(stack_id)
     count
   end
 
-  @doc """
-  Request a message when all readers of the given handle have finished or terminated.
-
-  Sends `{Electric.Shapes.Monitor, :reader_termination, shape_handle, reason}`
-  to the registered `pid` when the reader count on a shape is `0`.
-  """
-  @spec notify_reader_termination(stack_id(), shape_handle(), term(), pid()) :: :ok
   def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
     case reader_count(stack_id, shape_handle) do
       {:ok, 0} ->
@@ -106,15 +89,10 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end
   end
 
-  @doc """
-  Clean up the state of a non-running consumer.
-  """
-  @spec purge_shape(stack_id(), shape_handle(), Electris.Shapes.Shape.t()) :: :ok
   def purge_shape(stack_id, shape_handle, shape) do
     GenServer.call(name(stack_id), {:purge_shape, shape_handle, shape})
   end
 
-  # used in tests to validate internal state
   @doc false
   @spec termination_watchers(stack_id(), shape_handle()) :: {:ok, [{pid(), reason :: term()}]}
   def termination_watchers(stack_id, shape_handle) do
