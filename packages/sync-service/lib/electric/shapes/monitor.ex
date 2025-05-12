@@ -1,7 +1,7 @@
 defmodule Electric.Shapes.Monitor do
   use Supervisor
 
-  alias __MODULE__.MonitorRegistry
+  alias __MODULE__.RefCounter
 
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
@@ -23,35 +23,35 @@ defmodule Electric.Shapes.Monitor do
   end
 
   def register_reader(stack_id, shape_handle, pid \\ self()) do
-    MonitorRegistry.register_reader(stack_id, shape_handle, pid)
+    RefCounter.register_reader(stack_id, shape_handle, pid)
   end
 
   def unregister_reader(stack_id, shape_handle, pid \\ self()) do
-    MonitorRegistry.unregister_reader(stack_id, shape_handle, pid)
+    RefCounter.unregister_reader(stack_id, shape_handle, pid)
   end
 
   def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
-    MonitorRegistry.register_writer(stack_id, shape_handle, shape, pid)
+    RefCounter.register_writer(stack_id, shape_handle, shape, pid)
   end
 
   def reader_count(stack_id, shape_handle) do
-    MonitorRegistry.reader_count(stack_id, shape_handle)
+    RefCounter.reader_count(stack_id, shape_handle)
   end
 
   def reader_count(stack_id) do
-    MonitorRegistry.reader_count(stack_id)
+    RefCounter.reader_count(stack_id)
   end
 
   def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
-    MonitorRegistry.notify_reader_termination(stack_id, shape_handle, reason, pid)
+    RefCounter.notify_reader_termination(stack_id, shape_handle, reason, pid)
   end
 
   def termination_watchers(stack_id, shape_handle) do
-    MonitorRegistry.termination_watchers(stack_id, shape_handle)
+    RefCounter.termination_watchers(stack_id, shape_handle)
   end
 
   def purge_shape(stack_id, shape_handle, shape) do
-    MonitorRegistry.purge_shape(stack_id, shape_handle, shape)
+    RefCounter.purge_shape(stack_id, shape_handle, shape)
   end
 
   def init(opts) do
@@ -64,7 +64,7 @@ defmodule Electric.Shapes.Monitor do
 
     children = [
       {__MODULE__.CleanupTaskSupervisor, stack_id: stack_id},
-      {__MODULE__.MonitorRegistry,
+      {__MODULE__.RefCounter,
        stack_id: stack_id,
        storage: storage,
        publication_manager: publication_manager,

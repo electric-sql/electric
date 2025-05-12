@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Monitor.MonitorRegistry do
+defmodule Electric.Shapes.Monitor.RefCounter do
   @moduledoc """
   Tracks active uses of shapes, the number of readers (and their pids) and the
   active writer.
