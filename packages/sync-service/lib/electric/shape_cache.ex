@@ -376,9 +376,6 @@ defmodule Electric.ShapeCache do
     # remove the shape immediately so new clients are redirected elsewhere
     deregister_shape(shape_handle, state)
 
-    # Rather than just stop here, tell the consumer to stop
-    # using the shape.status active connection monitor
-    # to wait for clients to finish
     Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
       state.consumer_supervisor,
       state.stack_id,
