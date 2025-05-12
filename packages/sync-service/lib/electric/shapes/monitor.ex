@@ -3,6 +3,9 @@ defmodule Electric.Shapes.Monitor do
 
   alias __MODULE__.RefCounter
 
+  @type stack_id :: Electric.stack_id()
+  @type shape_handle :: Electric.ShapeCache.shape_handle()
+
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             storage: [type: :mod_arg, required: true],
@@ -22,36 +25,77 @@ defmodule Electric.Shapes.Monitor do
     end
   end
 
+  @doc """
+  Register the current process as a reader of the given shape.
+  """
+  @spec register_reader(stack_id(), shape_handle(), pid()) :: :ok
   def register_reader(stack_id, shape_handle, pid \\ self()) do
     RefCounter.register_reader(stack_id, shape_handle, pid)
   end
 
+  @doc """
+  Unregister the current process as a reader of the given shape.
+  """
+  @spec unregister_reader(stack_id(), shape_handle(), pid()) :: :ok
   def unregister_reader(stack_id, shape_handle, pid \\ self()) do
     RefCounter.unregister_reader(stack_id, shape_handle, pid)
   end
 
+  @doc """
+  Register the current process as a writer (consumer) of the given shape.
+  """
+  @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
   def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
     RefCounter.register_writer(stack_id, shape_handle, shape, pid)
   end
 
+  @doc """
+  The number of active readers of the given shape.
+  """
+  @spec reader_count(stack_id(), shape_handle()) :: {:ok, non_neg_integer()}
   def reader_count(stack_id, shape_handle) do
     RefCounter.reader_count(stack_id, shape_handle)
   end
 
+  @doc """
+  The number of active readers of all shapes.
+  """
+  @spec reader_count(stack_id()) :: {:ok, non_neg_integer()}
   def reader_count(stack_id) do
     RefCounter.reader_count(stack_id)
   end
 
+  @doc """
+  The number of active readers of all shapes.
+  """
+  @spec reader_count!(stack_id()) :: non_neg_integer()
+  def reader_count!(stack_id) do
+    RefCounter.reader_count!(stack_id)
+  end
+
+  @doc """
+  Request a message when all readers of the given handle have finished or terminated.
+
+  Sends `{Electric.Shapes.Monitor, :reader_termination, shape_handle, reason}`
+  to the registered `pid` when the reader count on a shape is `0`.
+  """
+  @spec notify_reader_termination(stack_id(), shape_handle(), term(), pid()) :: :ok
   def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
     RefCounter.notify_reader_termination(stack_id, shape_handle, reason, pid)
   end
 
-  def termination_watchers(stack_id, shape_handle) do
-    RefCounter.termination_watchers(stack_id, shape_handle)
-  end
-
+  @doc """
+  clean up the state of a non-running consumer.
+  """
+  @spec purge_shape(stack_id(), shape_handle(), Electric.Shapes.Shape.t()) :: :ok
   def purge_shape(stack_id, shape_handle, shape) do
     RefCounter.purge_shape(stack_id, shape_handle, shape)
+  end
+
+  # used in tests to validate internal state
+  @doc false
+  def termination_watchers(stack_id, shape_handle) do
+    RefCounter.termination_watchers(stack_id, shape_handle)
   end
 
   def init(opts) do
