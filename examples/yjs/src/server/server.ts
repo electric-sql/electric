@@ -2,12 +2,20 @@ import { serve } from "@hono/node-server"
 import { Hono } from "hono"
 import type { Context } from "hono"
 import { cors } from "hono/cors"
-import pg from "pg"
-import * as db from "./db"
+import pg, { Pool } from "pg"
 import { logger } from "hono/logger"
 
 type InvalidRequest = { isValid: false; error?: string }
-type ValidRequest = (db.Update | db.AwarenessUpdate) & { isValid: true }
+type ValidRequest = (Update | AwarenessUpdate) & { isValid: true }
+
+export type Update = {
+  room: string
+  update: Uint8Array
+}
+
+export type AwarenessUpdate = Update & {
+  client_id: string
+}
 
 const connectionString =
   process.env.DATABASE_URL ||
@@ -68,9 +76,9 @@ app.put(`/api/update`, async (c: Context) => {
     }
 
     if (`client_id` in requestParams) {
-      await db.upsertAwarenessUpdate(requestParams, pool)
+      await upsertAwarenessUpdate(requestParams, pool)
     } else {
-      await db.saveUpdate(requestParams, pool)
+      await saveUpdate(requestParams, pool)
     }
 
     return c.json({})
@@ -177,3 +185,19 @@ serve({
   fetch: app.fetch,
   port,
 })
+
+export async function saveUpdate({ room, update }: Update, pool: Pool) {
+  const q = `INSERT INTO ydoc_update (room, update) VALUES ($1, $2)`
+  const params = [room, update]
+  await pool.query(q, params)
+}
+
+export async function upsertAwarenessUpdate(
+  { room, client_id, update }: AwarenessUpdate,
+  pool: Pool
+) {
+  const q = `INSERT INTO ydoc_awareness (room, client_id, update) VALUES ($1, $2, $3)
+         ON CONFLICT (client_id, room) DO UPDATE SET update = $3, updated_at = now()`
+  const params = [room, client_id, update]
+  await pool.query(q, params)
+}
