@@ -145,6 +145,9 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       cleanup_handles: MapSet.new()
     }
 
+    # log some debug stats
+    # send(self(), :log_active)
+
     {:ok, state}
   end
 
@@ -269,6 +272,14 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   def handle_info({{:down, :reader, handle}, _ref, :process, pid, _reason}, state) do
     state = delete_reader_process(pid, handle, state)
+
+    {:noreply, state}
+  end
+
+  def handle_info(:log_active, state) do
+    Logger.debug(fn -> statistics(state) end)
+
+    Process.send_after(self(), :log_active, 10_000)
 
     {:noreply, state}
   end
