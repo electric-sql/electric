@@ -66,7 +66,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                     shape_attrs(shape_handle, shape),
                     stack_id,
                     fn ->
-                      publication_manager.add_shape(shape, publication_manager_opts)
+                      publication_manager.add_shape(shape_handle, shape, publication_manager_opts)
                     end
                   )
 
