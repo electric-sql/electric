@@ -12,9 +12,9 @@ defmodule Support.ComponentSetup do
   defmodule NoopPublicationManager do
     @behaviour Electric.Replication.PublicationManager
     def name(_), do: :pub_man
-    def add_shape(_shape, _opts), do: :ok
-    def recover_shape(_shape, _opts), do: :ok
-    def remove_shape(_shape, _opts), do: :ok
+    def add_shape(_handle, _shape, _opts), do: :ok
+    def recover_shape(_handle, _shape, _opts), do: :ok
+    def remove_shape(_handle, _shape, _opts), do: :ok
     def refresh_publication(_opts), do: :ok
   end
 
@@ -27,18 +27,18 @@ defmodule Support.ComponentSetup do
 
     def name(_), do: TestPublicationManager
 
-    def add_shape(shape, %{parent: parent}) do
-      send(parent, {TestPublicationManager, :add_shape, shape})
+    def add_shape(handle, shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :add_shape, handle, shape})
       :ok
     end
 
-    def recover_shape(shape, %{parent: parent}) do
-      send(parent, {TestPublicationManager, :recover_shape, shape})
+    def recover_shape(handle, shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :recover_shape, handle, shape})
       :ok
     end
 
-    def remove_shape(shape, %{parent: parent}) do
-      send(parent, {TestPublicationManager, :remove_shape, shape})
+    def remove_shape(handle, shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :remove_shape, handle, shape})
       :ok
     end
 

@@ -296,7 +296,10 @@ defmodule Electric.Shapes.MonitorTest do
       exit_consumer(ctx, handle, {:raise, "boom"})
 
       assert_receive {:on_cleanup, ^handle}
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, @shape}
+
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle,
+                      @shape}
+
       assert_receive {TestStatus, :remove_shape, ^handle}
     end
 
@@ -306,7 +309,10 @@ defmodule Electric.Shapes.MonitorTest do
       exit_consumer(ctx, handle, {:shutdown, :cleanup})
 
       assert_receive {:on_cleanup, ^handle}
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, @shape}
+
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle,
+                      @shape}
+
       assert_receive {TestStatus, :remove_shape, ^handle}
     end
 

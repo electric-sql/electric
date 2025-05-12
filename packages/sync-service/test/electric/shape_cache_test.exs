@@ -59,7 +59,7 @@ defmodule Electric.ShapeCacheTest do
   @moduletag :tmp_dir
 
   defmodule TempPubManager do
-    def add_shape(_, opts) do
+    def add_shape(_handle, _, opts) do
       send(opts[:test_pid], {:called, :prepare_tables_fn})
     end
 
@@ -1010,7 +1010,7 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       Mock.PublicationManager
-      |> expect(:recover_shape, 1, fn _, _ -> :ok end)
+      |> expect(:recover_shape, 1, fn ^shape_handle1, _, _ -> :ok end)
       |> expect(:refresh_publication, 1, fn _ -> :ok end)
       |> allow(self(), fn -> Process.whereis(opts[:server]) end)
 
@@ -1063,8 +1063,8 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       Mock.PublicationManager
-      |> stub(:remove_shape, fn _, _ -> :ok end)
-      |> expect(:recover_shape, 1, fn _, _ -> :ok end)
+      |> stub(:remove_shape, fn ^shape_handle1, _, _ -> :ok end)
+      |> expect(:recover_shape, 1, fn ^shape_handle1, _, _ -> :ok end)
       |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
       |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
       |> allow(self(), fn -> Process.whereis(opts[:server]) end)

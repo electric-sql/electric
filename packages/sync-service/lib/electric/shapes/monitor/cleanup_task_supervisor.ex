@@ -73,7 +73,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
       Logger.debug("cleaning shape data #{inspect(shape_handle)}")
 
       shape_status.remove_shape(shape_status_state, shape_handle)
-      publication_manager.remove_shape(shape, publication_manager_opts)
+      publication_manager.remove_shape(shape_handle, shape, publication_manager_opts)
 
       shape_handle
       |> Storage.for_shape(storage_impl)
