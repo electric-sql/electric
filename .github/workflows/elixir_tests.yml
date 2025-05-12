@@ -51,7 +51,7 @@ jobs:
           POSTGRESQL_USERNAME: postgres
           POSTGRESQL_PASSWORD: password
         ports:
-          - 64321:6432
+          - 65432:6432
     steps:
       - uses: actions/checkout@v4
 

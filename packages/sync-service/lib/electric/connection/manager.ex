@@ -418,9 +418,11 @@ defmodule Electric.Connection.Manager do
       )
 
       dispatch_stack_event(
-        {:database_id_or_timeline_changed,
+        {:warning,
          %{
-           message: "Purging shape logs from disk. Clients will refetch shape data automatically."
+           type: :database_id_or_timeline_changed,
+           message:
+             "Database ID or timeline changed. Purging shape logs from disk. Clients will refetch shape data automatically."
          }},
         state
       )
@@ -621,8 +623,12 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:database_connection_severed,
-       %{error: error.original_error, type: error.type, message: error.message}},
+      {:connection_error,
+       %{
+         error: DbConnectionError.format_original_error(error),
+         type: error.type,
+         message: error.message
+       }},
       state
     )
 
@@ -693,7 +699,11 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     Electric.StatusMonitor.mark_pg_lock_as_errored(state.stack_id, inspect(error))
-    dispatch_stack_event({:failed_to_acquire_connection_lock, %{error: error}}, state)
+
+    dispatch_stack_event(
+      {:failed_to_acquire_connection_lock, %{error: inspect(error, pretty: true)}},
+      state
+    )
 
     # The LockConnection process will keep retrying to acquire the lock.
     {:noreply, state}
@@ -862,7 +872,7 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(
       {:database_connection_failed,
        %{
-         error: error.original_error,
+         error: DbConnectionError.format_original_error(error),
          type: error.type,
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
@@ -931,16 +941,15 @@ defmodule Electric.Connection.Manager do
          %DbConnectionError{type: :replication_slot_invalidated} = error,
          state
        ) do
-    Logger.warning("""
-    Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
-        In order to recover consistent replication, the slot will be dropped along with all existing shapes.
-        If you're seeing this message without having recently stopped Electric for a while,
-        it's possible either Electric is lagging behind and you might need to scale up,
-        or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
-    """)
+    Logger.warning(error.message)
 
     dispatch_stack_event(
-      {:database_slot_exceeded_max_size, %{error: error.original_error}},
+      {:warning,
+       %{
+         type: :database_slot_exceeded_max_size,
+         message: error.message,
+         error: DbConnectionError.format_original_error(error)
+       }},
       state
     )
 
@@ -966,7 +975,12 @@ defmodule Electric.Connection.Manager do
 
   defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
     dispatch_stack_event(
-      {:fatal_error, %{error: error.original_error, message: error.message, type: error.type}},
+      {:config_error,
+       %{
+         error: DbConnectionError.format_original_error(error),
+         message: error.message,
+         type: error.type
+       }},
       state
     )
 
