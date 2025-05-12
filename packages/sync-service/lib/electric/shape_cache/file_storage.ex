@@ -164,7 +164,9 @@ defmodule Electric.ShapeCache.FileStorage do
 
     case File.ls(shapes_dir) do
       {:ok, shape_handles} ->
-        Enum.reduce(shape_handles, %{}, fn shape_handle, acc ->
+        shape_handles
+        |> Enum.reject(&File.exists?(deletion_marker_path(shapes_dir, &1)))
+        |> Enum.reduce(%{}, fn shape_handle, acc ->
           shape_def_path =
             shape_definition_path(%{
               data_dir: Path.join([opts.base_path, shape_handle])
@@ -753,7 +755,21 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def unsafe_cleanup!(%FS{} = opts) do
-    unsafe_cleanup_with_retries!(opts)
+    # do a quick touch operation to exclude this directory from `get_all_stored_shapes`
+    marker_file = deletion_marker_path(opts.base_path, opts.shape_handle)
+
+    try do
+      File.touch!(marker_file)
+      unsafe_cleanup_with_retries!(opts)
+    after
+      File.rm(marker_file)
+    end
+  end
+
+  @doc false
+  # used in tests
+  def deletion_marker_path(base_path, shape_handle) do
+    Path.join([base_path, ".#{shape_handle}-deleted"])
   end
 
   defp unsafe_cleanup_with_retries!(%FS{} = opts, attempts_left \\ 5) do

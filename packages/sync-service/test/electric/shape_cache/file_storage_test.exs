@@ -1,14 +1,22 @@
 defmodule Electric.ShapeCache.FileStorageTest do
   use ExUnit.Case, async: true
-  import Support.ComponentSetup
+
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.FileStorage
+  alias Electric.Shapes.Shape
+
+  alias Support.Mock
+  alias Support.StubInspector
+
+  import Mox
+  import Support.ComponentSetup
 
   @moduletag :tmp_dir
 
   @shape_handle "the-shape-handle"
 
   setup :with_stack_id_from_test
+  setup :set_mox_from_context
 
   setup %{tmp_dir: tmp_dir, stack_id: stack_id} do
     opts =
@@ -75,5 +83,35 @@ defmodule Electric.ShapeCache.FileStorageTest do
     string
     |> Stream.unfold(&String.split_at(&1, every))
     |> Stream.take_while(&(&1 != ""))
+  end
+
+  describe "get_all_stored_shapes" do
+    setup do
+      stub(Mock.Inspector, :load_column_info, fn
+        {"public", "test_table"}, _ ->
+          {:ok, [%{name: "id", type: "int8", pk_position: 0, is_generated: false}]}
+      end)
+
+      stub(Mock.Inspector, :load_relation, fn
+        tbl, _ -> StubInspector.load_relation(tbl, nil)
+      end)
+
+      :ok
+    end
+
+    test "excludes shapes marked for deletion", ctx do
+      shape = Shape.new!("public.test_table", inspector: {Mock.Inspector, []})
+      :ok = FileStorage.set_shape_definition(shape, ctx.opts)
+
+      assert {:ok, %{@shape_handle => _shape}} =
+               FileStorage.get_all_stored_shapes(ctx.shared_opts)
+
+      File.touch!(FileStorage.deletion_marker_path(ctx.opts.base_path, @shape_handle))
+
+      assert {:ok, shapes} =
+               FileStorage.get_all_stored_shapes(ctx.shared_opts)
+
+      assert map_size(shapes) == 0
+    end
   end
 end
