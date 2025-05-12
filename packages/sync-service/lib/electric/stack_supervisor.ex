@@ -352,13 +352,13 @@ defmodule Electric.StackSupervisor do
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
           {Electric.Postgres.Inspector.EtsInspector,
            stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
-          {Electric.Connection.Supervisor, new_connection_manager_opts},
           {Electric.Shapes.Monitor,
            Electric.Utils.merge_all([
              [stack_id: stack_id, storage: storage, shape_status: shape_status],
              Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
              Keyword.take(shape_cache_opts, [:publication_manager])
-           ])}
+           ])},
+          {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 
     # Store the telemetry span attributes in the persistent term for this stack
