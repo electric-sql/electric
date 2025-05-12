@@ -158,6 +158,12 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         {:reply, :ok, state}
 
       [{^pid, :reader, previous_handle, ref}] ->
+        # process has failed to de-register itself from previous_handle (maybe
+        # due to exception - though the stream cleanup handlers run even
+        # then...) and is re-registering itself for `handle`. Treat this an
+        # implicit deregister plus register and make sure we notify watchers if
+        # this process was the last one using `previous_handle`.
+        end.
         state =
           state
           |> register_reader_for_handle(handle, pid)
