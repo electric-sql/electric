@@ -37,7 +37,7 @@ export default $config({
       loadBalancer: {
         ports: [{ listen: `443/https`, forward: `3002/http` }],
         domain: {
-          name: `yjs${isProduction() ? `` : `-server-${$app.stage}`}.examples.electric-sql.com`,
+          name: `yjs-server${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
         },
       },
