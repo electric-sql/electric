@@ -29,5 +29,5 @@ COPY --from=deps /app/examples/tanstack/node_modules ./node_modules
 COPY --from=deps /app/examples/tanstack/dist ./dist
 COPY --from=deps /app/examples/tanstack/public ./public
 COPY --from=deps /app/examples/tanstack/package.json ./
-
+COPY --from=deps /app/examples/tanstack/src/server ./src/server
 CMD ["npm", "start"]
