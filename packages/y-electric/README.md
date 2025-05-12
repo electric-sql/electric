@@ -1,6 +1,6 @@
 # Y-Electric
 
-A [YJS](https://yjs.dev) [connection provider](https://docs.yjs.dev/ecosystem/connection-provider) that enables real-time collaborative document editing using YJS, ElectricSQL and Postgres. It comes with supports for the [Awareness CRDT](https://docs.yjs.dev/getting-started/adding-awareness) and can be used with any [database](https://docs.yjs.dev/ecosystem/database-provider) providers (like local storage). See a full example [here](https://github.com/electric-sql/electric/tree/main/examples/yjs).
+A [Yjs](https://yjs.dev) [provider](https://docs.yjs.dev/ecosystem/connection-provider) that enables real-time collaborative document editing using YJS, ElectricSQL and Postgres. It supports [Awareness](https://docs.yjs.dev/getting-started/adding-awareness) and can be used with any Yjjs [database](https://docs.yjs.dev/ecosystem/database-provider) providers. See a full example [here](https://github.com/electric-sql/electric/tree/main/examples/yjs).
 
 ## How It Works
 
@@ -63,7 +63,7 @@ Y-Electric sends YJS document updates as binary data. You can directly save the 
 
 ```sql
 -- Schema definition
-CREATE TABLE ydoc_updates (
+CREATE TABLE ydoc_updates(
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
     room text NOT NULL,
     op bytea NOT NULL
