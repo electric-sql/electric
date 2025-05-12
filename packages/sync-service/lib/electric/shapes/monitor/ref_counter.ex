@@ -16,12 +16,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   require Logger
 
-  # responsibilities:
-  # - record active connections to each shape handle
-  # - monitor shape supervisor instances
-  # - cleanup after a shape terminates and all connections have ended
-  # - a process can only register for a single shape handle at a time
-  # - consumers that are just shutdown normally (because being moved or instance shutdown) should not be deleted
+  @type stack_id :: Electric.stack_id()
+  @type shape_handle :: Electric.ShapeCache.shape_handle()
 
   defguardp is_consumer_shutdown_with_data_retention?(reason)
             when reason in [:normal, :killed, :shutdown] or
@@ -40,6 +36,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc """
   Register the current process as a reader of the given shape.
   """
+  @spec register_reader(stack_id(), shape_handle(), pid()) :: :ok
   def register_reader(stack_id, shape_handle, pid \\ self()) do
     GenServer.call(name(stack_id), {:register_reader, shape_handle, pid})
   end
@@ -47,6 +44,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc """
   Unregister the current process as a reader of the given shape.
   """
+  @spec unregister_reader(stack_id(), shape_handle(), pid()) :: :ok
   def unregister_reader(stack_id, shape_handle, pid \\ self()) do
     GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid})
   end
@@ -54,6 +52,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc """
   Register the current process as a writer (consumer) of the given shape.
   """
+  @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
   def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
     GenServer.call(name(stack_id), {:register_writer, shape_handle, shape, pid})
   end
@@ -61,6 +60,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc """
   The number of active readers of the given shape.
   """
+  @spec reader_count(stack_id(), shape_handle()) :: {:ok, non_neg_integer()}
   def reader_count(stack_id, shape_handle) do
     case :ets.lookup(table(stack_id), shape_handle) do
       [{_, count}] -> {:ok, count}
@@ -71,6 +71,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc """
   The number of active readers of all shapes.
   """
+  @spec reader_count(stack_id()) :: {:ok, non_neg_integer()}
   def reader_count(stack_id) do
     case :ets.lookup(table(stack_id), :all) do
       [{:all, count}] -> {:ok, count}
@@ -79,8 +80,21 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   @doc """
-  Request a message when all readers of the given handle have finished or terminated.
+  The number of active readers of all shapes.
   """
+  @spec reader_count!(stack_id()) :: non_neg_integer()
+  def reader_count!(stack_id) do
+    {:ok, count} = reader_count(stack_id)
+    count
+  end
+
+  @doc """
+  Request a message when all readers of the given handle have finished or terminated.
+
+  Sends `{Electric.Shapes.Monitor, :reader_termination, shape_handle, reason}`
+  to the registered `pid` when the reader count on a shape is `0`.
+  """
+  @spec notify_reader_termination(stack_id(), shape_handle(), term(), pid()) :: :ok
   def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
     case reader_count(stack_id, shape_handle) do
       {:ok, 0} ->
@@ -95,11 +109,14 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc """
   Clean up the state of a non-running consumer.
   """
+  @spec purge_shape(stack_id(), shape_handle(), Electris.Shapes.Shape.t()) :: :ok
   def purge_shape(stack_id, shape_handle, shape) do
     GenServer.call(name(stack_id), {:purge_shape, shape_handle, shape})
   end
 
-  # used in tests
+  # used in tests to validate internal state
+  @doc false
+  @spec termination_watchers(stack_id(), shape_handle()) :: {:ok, [{pid(), reason :: term()}]}
   def termination_watchers(stack_id, shape_handle) do
     GenServer.call(name(stack_id), {:termination_watchers, shape_handle})
   end
@@ -276,6 +293,15 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     state = delete_reader_process(pid, handle, state)
 
     {:noreply, state}
+  end
+
+  defp statistics(state) do
+    handles =
+      state.monitor_table
+      |> :ets.select([{{:_, :reader, :"$1", :_}, [], [[:"$1"]]}])
+      |> MapSet.new(&hd/1)
+
+    %{readers: reader_count!(state.stack_id), shapes: MapSet.size(handles)}
   end
 
   defp register_reader_for_handle(state, handle, pid) do
