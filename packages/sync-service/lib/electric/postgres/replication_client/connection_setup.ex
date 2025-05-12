@@ -79,14 +79,18 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp create_publication_query(state) do
     Logger.debug("ReplicationClient step: create_publication_query")
-    # We're creating an "empty" publication because first snapshot creation should add the table
+    # We're creating an "empty" publication here because synced tables are added to it
+    # elsewhere. See `Electric.Replication.PublicationManager`.
     query = "CREATE PUBLICATION #{Utils.quote_name(state.publication_name)}"
     {:query, query, state}
   end
 
   # Successfully created the publication.
   defp create_publication_result([%Postgrex.Result{}], state) do
-    state
+    # At this point, even if there is a replication slot already, we have to drop it and create
+    # a new one, while also invalidating existing shapes. See
+    # https://github.com/electric-sql/electric/issues/2692 for details.
+    %{state | recreate_slot?: true}
   end
 
   defp create_publication_result(%Postgrex.Error{} = error, state) do
@@ -105,8 +109,35 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   ###
 
+  defp drop_slot_query(%State{slot_name: slot_name} = state) do
+    Logger.debug("ReplicationClient step: drop_slot")
+    query = "SELECT pg_drop_replication_slot('#{slot_name}')"
+    {:query, query, state}
+  end
+
+  defp drop_slot_result([%Postgrex.Result{}], state) do
+    state
+  end
+
+  defp drop_slot_result(%Postgrex.Error{} = error, %State{slot_name: slot_name} = state) do
+    error_msg = "replication slot \"#{slot_name}\" does not exist"
+
+    case error.postgres do
+      %{code: :undefined_object, pg_code: "42704", message: ^error_msg} ->
+        # No slot with such name exists, proceed to the next step.
+        state
+
+      _ ->
+        # Unexpected error, fail loudly.
+        raise error
+    end
+  end
+
+  ###
+
   @slot_options "LOGICAL pgoutput NOEXPORT_SNAPSHOT"
   @temp_slot_options "TEMPORARY #{@slot_options}"
+
   defp create_slot_query(%State{slot_name: slot_name, slot_temporary?: true} = state) do
     query = "CREATE_REPLICATION_SLOT #{Utils.quote_name(slot_name)} #{@temp_slot_options}"
     {:query, query, state}
@@ -115,7 +146,6 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp create_slot_query(%State{slot_name: slot_name} = state) do
     Logger.debug("ReplicationClient step: create_slot")
     query = "CREATE_REPLICATION_SLOT #{Utils.quote_name(slot_name)} #{@slot_options}"
-
     {:query, query, state}
   end
 
@@ -212,7 +242,13 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp next_step(%{step: :query_pg_info}),
     do: :create_slot
 
+  defp next_step(%{step: :create_publication, recreate_slot?: true}),
+    do: :drop_slot
+
   defp next_step(%{step: :create_publication}),
+    do: :create_slot
+
+  defp next_step(%{step: :drop_slot}),
     do: :create_slot
 
   defp next_step(%{step: :create_slot}),
@@ -236,6 +272,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp query_for_step(:query_pg_info, state), do: pg_info_query(state)
   defp query_for_step(:create_publication, state), do: create_publication_query(state)
+  defp query_for_step(:drop_slot, state), do: drop_slot_query(state)
   defp query_for_step(:create_slot, state), do: create_slot_query(state)
   defp query_for_step(:set_display_setting, state), do: set_display_setting_query(state)
   defp query_for_step(:ready_to_stream, state), do: ready_to_stream(state)
@@ -252,6 +289,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp dispatch_query_result(:create_publication, result, state),
     do: create_publication_result(result, state)
+
+  defp dispatch_query_result(:drop_slot, result, state),
+    do: drop_slot_result(result, state)
 
   defp dispatch_query_result(:create_slot, result, state),
     do: create_slot_result(result, state)
