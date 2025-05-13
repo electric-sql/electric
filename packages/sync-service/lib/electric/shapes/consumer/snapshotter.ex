@@ -8,6 +8,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   require Logger
 
+  # The threshold in milliseconds for an initial data query to stream out
+  # to be considered slow and for it to be logged as a warning
+  @slow_query_threshold_ms 1_000
+
   def name(%{
         stack_id: stack_id,
         shape_handle: shape_handle
@@ -181,6 +185,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               end
             )
 
+            query_start_time = System.monotonic_time(:millisecond)
+
             stream =
               Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
               |> Stream.transform(
@@ -197,7 +203,21 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
             # that way it has the relation, but it is still missing the pk_cols
-            Storage.make_new_snapshot!(stream, storage)
+            result = Storage.make_new_snapshot!(stream, storage)
+
+            total_query_time = System.monotonic_time(:millisecond) - query_start_time
+            # in case the query took a long time, log it to facilitate debugging
+            if total_query_time > @slow_query_threshold_ms do
+              {query_str, _} = Querying.build_initial_data_query(shape)
+
+              Logger.warning(
+                "Slow query for handle #{shape_handle} took #{total_query_time}ms, shape: #{inspect(shape)}, query: #{query_str}",
+                query_str: query_str,
+                stack_id: stack_id
+              )
+            end
+
+            result
           end
         )
       end,

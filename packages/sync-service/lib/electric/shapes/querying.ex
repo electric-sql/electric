@@ -23,14 +23,10 @@ defmodule Electric.Shapes.Querying do
       ) do
     OpenTelemetry.with_span("shape_read.stream_initial_data", [], stack_id, fn ->
       table = Utils.relation_to_sql(root_table)
-
-      where =
-        if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
-
-      {json_like_select, params} = json_like_select(shape)
+      {query_str, params} = build_initial_data_query(shape)
 
       query =
-        Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
+        Postgrex.prepare!(conn, table, query_str)
 
       Postgrex.stream(conn, query, params)
       |> Stream.flat_map(& &1.rows)
@@ -49,6 +45,17 @@ defmodule Electric.Shapes.Querying do
         end
       end)
     end)
+  end
+
+  @spec build_initial_data_query(Shape.t()) :: {String.t(), list(any())}
+  def build_initial_data_query(%Shape{root_table: root_table, where: where} = shape) do
+    table = Utils.relation_to_sql(root_table)
+
+    where = if not is_nil(where), do: " WHERE " <> where.query, else: ""
+
+    {json_like_select, params} = json_like_select(shape)
+
+    {~s|SELECT #{json_like_select} FROM #{table} #{where}|, params}
   end
 
   defp json_like_select(%Shape{
