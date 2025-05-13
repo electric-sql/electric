@@ -1,0 +1,83 @@
+[doc Verify that Electric recreates the replication slot after it has had to create a new publication]
+
+[include _macros.luxinc]
+
+[global pg_container_name=recreation-of-replication-slot__pg]
+
+## Start a new Postgres cluster
+[invoke setup_pg]
+
+## Start the sync service.
+[invoke setup_electric]
+
+[shell electric]
+  ??[info] Starting replication from postgres
+
+## Create a shape
+[invoke start_psql]
+[shell psql]
+  !CREATE TABLE items(val text);
+  !INSERT INTO items VALUES ('1'), ('2');
+  ??INSERT 0 2
+
+[shell client]
+  # strip ANSI codes from response for easier matching
+  !curl -i "http://localhost:3000/v1/shape?table=items&offset=-1" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  ??HTTP/1.1 200 OK
+
+  ?electric-handle: (\d+-\d+)
+  [my shape_handle=$1]
+
+  ??electric-schema: {"val":{"type":"text"}}
+  ??electric-offset: 0_0
+
+  ??"value":{"val":"2"}
+
+## Drop the publication and insert into the table to force Electric to recreate its PG resources
+[shell psql]
+  !DROP PUBLICATION electric_publication_integration;
+  ??DROP PUBLICATION
+
+  !INSERT INTO items VALUES ('3');
+  ??INSERT 0 1
+
+[shell electric]
+  -
+
+  ??[error] :gen_statem {:"Elixir.Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
+  ??** (Postgrex.Error) ERROR 42704 (undefined_object) publication "electric_publication_integration" does not exist
+  ??[warning] Reconnecting in 2000ms
+
+  -$fail_pattern
+
+  ??[debug] Restarting replication client for stack single_stack
+  ??[debug] ReplicationClient step: create_publication_query
+  ??[debug] ReplicationClient step: drop_slot
+  ??[debug] ReplicationClient step: create_slot
+  ??[debug] Created new slot at lsn=
+  ??[warning] Purging all shapes.
+  ??[info] Starting replication from postgres
+
+## Verify that the old shape is no longer accessible
+[shell client]
+  !curl -i "http://localhost:3000/v1/shape?table=items&handle=$shape_handle&offset=0_0"
+  ??HTTP/1.1 409 Conflict
+  ??[{"headers":{"control":"must-refetch"}}]
+
+## Verify that a new snapshot has been created that includes the new row
+[shell client]
+  !curl -i "http://localhost:3000/v1/shape?table=items&offset=-1" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  ??HTTP/1.1 200 OK
+
+  ?electric-handle: (\d+-\d+)
+  [my new_shape_handle=$1]
+
+  ??"value":{"val":"3"}
+
+[shell electric]
+  ??[debug] Opening snapshot chunk 0 for writing
+  ??[debug] Snapshot started shape_handle: $new_shape_handle
+  ??[info] Chunked 200
+
+[cleanup]
+  [invoke teardown]

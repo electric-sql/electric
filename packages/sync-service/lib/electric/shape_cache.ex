@@ -130,7 +130,7 @@ defmodule Electric.ShapeCache do
   @spec clean_all_shapes(Access.t()) :: :ok
   def clean_all_shapes(opts) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:clean_all})
+    GenServer.call(server, :clean_all_shapes)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -306,7 +306,7 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, state}
   end
 
-  def handle_call({:clean_all}, _from, state) do
+  def handle_call(:clean_all_shapes, _from, state) do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
     {:reply, :ok, state}
@@ -386,6 +386,8 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_all_shapes(state) do
+    Logger.warning("Purging all shapes.")
+
     shape_handles =
       state.shape_status_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
 
