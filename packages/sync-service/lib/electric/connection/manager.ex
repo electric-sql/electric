@@ -211,6 +211,11 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, {:pg_info_looked_up, pg_info})
   end
 
+  # Used for testing the responsiveness of the manager process
+  def ping(manager, timeout \\ 1000) do
+    GenServer.call(manager, :ping, timeout)
+  end
+
   @impl true
   def init(opts) do
     # Connection processes that the manager starts all initialize asynchronously and so the way
@@ -815,6 +820,11 @@ defmodule Electric.Connection.Manager do
          pg_system_identifier: system_identifier,
          pg_timeline_id: timeline_id
      }}
+  end
+
+  @impl true
+  def handle_call(:ping, _from, state) do
+    {:reply, :pong, state}
   end
 
   defp maybe_fallback_to_ipv4(error_message, conn_opts) do
