@@ -66,6 +66,7 @@ describe(`Shape`, () => {
         url: `${BASE_URL}/v1/shape`,
         params: {
           table: `foo`,
+          // @ts-expect-error should not allow reserved parameters
           live: `false`,
         },
       })

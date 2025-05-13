@@ -80,18 +80,18 @@ describe(`client`, () => {
 
       it(`should not allow reserved params`, () => {
         // Test that reserved parameters are not allowed in ExternalParamsRecord
-        type WithReservedParam1 = { [COLUMNS_QUERY_PARAM]: string[] }
+        type WithReservedParam1 = { [COLUMNS_QUERY_PARAM]: string }
         type WithReservedParam2 = { [LIVE_CACHE_BUSTER_QUERY_PARAM]: string }
         type WithReservedParam3 = { [SHAPE_HANDLE_QUERY_PARAM]: string }
         type WithReservedParam4 = { [LIVE_QUERY_PARAM]: string }
         type WithReservedParam5 = { [OFFSET_QUERY_PARAM]: string }
 
         // These should all not be equal to ExternalParamsRecord (not assignable)
-        expectTypeOf<WithReservedParam1>().not.toEqualTypeOf<ExternalParamsRecord>()
-        expectTypeOf<WithReservedParam2>().not.toEqualTypeOf<ExternalParamsRecord>()
-        expectTypeOf<WithReservedParam3>().not.toEqualTypeOf<ExternalParamsRecord>()
-        expectTypeOf<WithReservedParam4>().not.toEqualTypeOf<ExternalParamsRecord>()
-        expectTypeOf<WithReservedParam5>().not.toEqualTypeOf<ExternalParamsRecord>()
+        expectTypeOf<WithReservedParam1>().not.toMatchTypeOf<ExternalParamsRecord>()
+        expectTypeOf<WithReservedParam2>().not.toMatchTypeOf<ExternalParamsRecord>()
+        expectTypeOf<WithReservedParam3>().not.toMatchTypeOf<ExternalParamsRecord>()
+        expectTypeOf<WithReservedParam4>().not.toMatchTypeOf<ExternalParamsRecord>()
+        expectTypeOf<WithReservedParam5>().not.toMatchTypeOf<ExternalParamsRecord>()
       })
     })
   })
