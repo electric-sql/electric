@@ -6,8 +6,8 @@
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
-    "typescript": "5.7.2",
-    "sst": "3.3.7"
+    "sst": "3.6.35",
+    "typescript": "5.7.2"
   },
   "scripts": {
     "deploy": "sst deploy --stage production"
