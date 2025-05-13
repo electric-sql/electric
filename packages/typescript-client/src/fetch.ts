@@ -245,10 +245,21 @@ export function createFetchWithRequestOptions(
   fetchClient: typeof fetch,
   requestOpts: AllowedRequestOptions
 ) {
+  const baseOpts = {
+    signal: requestOpts.signal,
+    credentials: requestOpts.credentials,
+    redirect: requestOpts.redirect,
+    referrer: requestOpts.referrer,
+    referrerPolicy: requestOpts.referrerPolicy,
+    mode: requestOpts.mode,
+    priority: requestOpts.priority,
+    cache: requestOpts.cache,
+    window: requestOpts.window,
+  }
   return async (...args: Parameters<typeof fetchClient>) => {
     return fetchClient(args[0], {
-      ...requestOpts,
-      ...args[1],
+      ...baseOpts,
+      ...(args[1] ?? {}),
     })
   }
 }
