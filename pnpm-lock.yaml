@@ -9010,6 +9010,11 @@ packages:
     resolution: {integrity: sha512-MGrFH9Z4NP9Iyhqn16sDtBpRRNJ0Y2hNa6D65h736fVSaPCHr4DM4sWUNvVaSuC+0OBGhwsrydQwmgfg5LncqQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
+  sst-darwin-arm64@3.3.7:
+    resolution: {integrity: sha512-2CQh78YIdvrRpO8enZ/Jx51JsUSFtk564u9w4ldcu5SsMMDY1ocdw5p/XIwBy1eKeRtrXLizd35sYbtSfSy6sw==}
+    cpu: [arm64]
+    os: [darwin]
+
   sst-darwin-arm64@3.6.25:
     resolution: {integrity: sha512-vUf0OXeSIrPN7QPHSxYJcXqycBvcoZJ9scsV1VrTRQbYpySfWCJMD8LSAuRB+//QjcDYndSx/r/ad0Ofx+a2vw==}
     cpu: [arm64]
@@ -9018,6 +9023,11 @@ packages:
   sst-darwin-arm64@3.6.35:
     resolution: {integrity: sha512-1NSas4wm2hSBZbLOLklvRiRw+vC1IttvxrsDgj2XqFesZ/J4NknVacmym2V82JPkAI/TUcKpgf27i4JTEj7NlQ==}
     cpu: [arm64]
+    os: [darwin]
+
+  sst-darwin-x64@3.3.7:
+    resolution: {integrity: sha512-+hiDT3+am+CBO3xBy8yl3bmFeTjGXUT/+7V6NFOV2yxlRP3A8J65nEjWdzPTU/u7hRl+leE8EBu14j0grt/7/A==}
+    cpu: [x64]
     os: [darwin]
 
   sst-darwin-x64@3.6.25:
@@ -9030,6 +9040,11 @@ packages:
     cpu: [x64]
     os: [darwin]
 
+  sst-linux-arm64@3.3.7:
+    resolution: {integrity: sha512-dYolpXAjq0S8QjL8sTKzcRpPNgZDeMcJ9PHnt/8GpdqxNxEpGlNF9gMl2cB7mleJyJYBNMPvi4YEeCGtcazmeQ==}
+    cpu: [arm64]
+    os: [linux]
+
   sst-linux-arm64@3.6.25:
     resolution: {integrity: sha512-5Xjj08Uo5J1abiCHv09lxA0SqswbP2Vz5y6DAgocTPSLMuUlgCv9m0r+w+ng3OLDoCDVb56EUY0G8zwWX1Q3gA==}
     cpu: [arm64]
@@ -9038,6 +9053,11 @@ packages:
   sst-linux-arm64@3.6.35:
     resolution: {integrity: sha512-VFFVk1b6wPg/nBgHPUARJZmJQnQKebJr9m+Cu6jDfVyNsIpCo+q1W/uKbia7Y2fSpMMS6Pdw5480CJvmLtz/7g==}
     cpu: [arm64]
+    os: [linux]
+
+  sst-linux-x64@3.3.7:
+    resolution: {integrity: sha512-K2vPOZ5DS8mJmE4QtffgZN5Nem1MIBhoVozNtZ0NoufeKHbFz0Hyw9wbqxYSbs2MOoVNKvG8qwcX99ojVXTFKw==}
+    cpu: [x64]
     os: [linux]
 
   sst-linux-x64@3.6.25:
@@ -9050,6 +9070,11 @@ packages:
     cpu: [x64]
     os: [linux]
 
+  sst-linux-x86@3.3.7:
+    resolution: {integrity: sha512-4rXj54+UJd+HLmrhCHQ0k9AOkugHZhhh6sCUnkUNChJr5ei62pRscUQ7ge8/jywvfzHZGZw3eXXJWCCsjilXFA==}
+    cpu: [x86]
+    os: [linux]
+
   sst-linux-x86@3.6.25:
     resolution: {integrity: sha512-7n3x2JcnN6Fbn3y/S9xI2DzhkL6vdV7D2vi0FxxkmW+Q7kZE/L8KrV6K5+IHFVrLmW37H4hyzLAU1r4Oy0Mx7A==}
     cpu: [x86]
@@ -9059,6 +9084,18 @@ packages:
     resolution: {integrity: sha512-I1C+QuL4j0t5whv6GzRSWFcyRGZKIxTNNVS82KYFiJdA6YPMYvTE2Tp5eYixBA1WutQAFBwkC4brhhovJHz1uQ==}
     cpu: [x86]
     os: [linux]
+
+  sst@3.3.7:
+    resolution: {integrity: sha512-qIJPQnGeIHarWZoUvphwi6R1nu6Pccd3Q2Qy9ltBLs4Z47TkSdwBNeqCBhgAzWA0eLDwStTXliexyQCcNM6gDQ==}
+    hasBin: true
+    peerDependencies:
+      hono: 4.x
+      valibot: 0.30.x
+    peerDependenciesMeta:
+      hono:
+        optional: true
+      valibot:
+        optional: true
 
   sst@3.6.25:
     resolution: {integrity: sha512-lEvXCunAEhBQ7jUTj/tF8/5vfbXS1T7nNvfzAo0ZpHE1AH/Pj3vGqI1y4Zxs+SQBfEhUbPKjOH3aDWsOWHCmfA==}
@@ -18873,10 +18910,16 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
+  sst-darwin-arm64@3.3.7:
+    optional: true
+
   sst-darwin-arm64@3.6.25:
     optional: true
 
   sst-darwin-arm64@3.6.35:
+    optional: true
+
+  sst-darwin-x64@3.3.7:
     optional: true
 
   sst-darwin-x64@3.6.25:
@@ -18885,10 +18928,16 @@ snapshots:
   sst-darwin-x64@3.6.35:
     optional: true
 
+  sst-linux-arm64@3.3.7:
+    optional: true
+
   sst-linux-arm64@3.6.25:
     optional: true
 
   sst-linux-arm64@3.6.35:
+    optional: true
+
+  sst-linux-x64@3.3.7:
     optional: true
 
   sst-linux-x64@3.6.25:
@@ -18897,11 +18946,27 @@ snapshots:
   sst-linux-x64@3.6.35:
     optional: true
 
+  sst-linux-x86@3.3.7:
+    optional: true
+
   sst-linux-x86@3.6.25:
     optional: true
 
   sst-linux-x86@3.6.35:
     optional: true
+
+  sst@3.3.7(hono@4.6.13):
+    dependencies:
+      aws4fetch: 1.0.20
+      jose: 5.2.3
+      openid-client: 5.6.4
+    optionalDependencies:
+      hono: 4.6.13
+      sst-darwin-arm64: 3.3.7
+      sst-darwin-x64: 3.3.7
+      sst-linux-arm64: 3.3.7
+      sst-linux-x64: 3.3.7
+      sst-linux-x86: 3.3.7
 
   sst@3.6.25:
     dependencies:
