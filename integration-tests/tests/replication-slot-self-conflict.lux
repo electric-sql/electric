@@ -11,8 +11,6 @@
   This slot has been invalidated because it exceeded the maximum reserved size.
   """]
 
-[my stack_id="single_stack"]
-
 ## Start a new Postgres cluster
 [invoke setup_pg]
 
