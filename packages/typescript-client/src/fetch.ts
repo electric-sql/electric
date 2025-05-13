@@ -245,7 +245,7 @@ export function createFetchWithRequestOptions(
   fetchClient: typeof fetch,
   requestOpts: AllowedRequestOptions
 ) {
-  const baseOpts = {
+  const baseOpts: AllowedRequestOptions = {
     signal: requestOpts.signal,
     credentials: requestOpts.credentials,
     redirect: requestOpts.redirect,
