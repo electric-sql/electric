@@ -1,7 +1,7 @@
 defmodule Electric.Telemetry do
   require Logger
 
-  @enabled Mix.env() == :test || Mix.target() == Electric.MixProject.telemetry_target()
+  @enabled Mix.target() == Electric.MixProject.telemetry_target()
   @log_level Application.compile_env(:electric, [Electric.Telemetry, :log_level], false)
 
   defmacro __using__(_opts) do
