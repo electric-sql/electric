@@ -17,11 +17,13 @@ import {
   ReservedParamError,
 } from './error'
 import {
+  AllowedRequestOptions,
   BackoffDefaults,
   BackoffOptions,
   createFetchWithBackoff,
   createFetchWithChunkBuffer,
   createFetchWithConsumedMessages,
+  createFetchWithRequestOptions,
   createFetchWithResponseHeadersCheck,
 } from './fetch'
 import {
@@ -193,7 +195,7 @@ type ShapeStreamErrorHandler = (
 /**
  * Options for constructing a ShapeStream.
  */
-export interface ShapeStreamOptions<T = never> {
+export interface ShapeStreamOptions<T = never> extends AllowedRequestOptions {
   /**
    * The full URL to where the Shape is served. This can either be the Electric server
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
@@ -365,13 +367,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
       options.fetchClient ??
       ((...args: Parameters<typeof fetch>) => fetch(...args))
 
-    const fetchWithBackoffClient = createFetchWithBackoff(baseFetchClient, {
-      ...(options.backoffOptions ?? BackoffDefaults),
-      onFailedAttempt: () => {
-        this.#connected = false
-        options.backoffOptions?.onFailedAttempt?.()
-      },
-    })
+    const fetchWithRequestOptions = createFetchWithRequestOptions(
+      baseFetchClient,
+      options
+    )
+
+    const fetchWithBackoffClient = createFetchWithBackoff(
+      fetchWithRequestOptions,
+      {
+        ...(options.backoffOptions ?? BackoffDefaults),
+        onFailedAttempt: () => {
+          this.#connected = false
+          options.backoffOptions?.onFailedAttempt?.()
+        },
+      }
+    )
 
     this.#fetchClient = createFetchWithConsumedMessages(
       createFetchWithResponseHeadersCheck(

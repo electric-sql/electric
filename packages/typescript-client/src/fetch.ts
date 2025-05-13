@@ -12,6 +12,19 @@ import {
   MissingHeadersError,
 } from './error'
 
+export type AllowedRequestOptions = Pick<
+  RequestInit,
+  | `signal`
+  | `credentials`
+  | `redirect`
+  | `referrer`
+  | `referrerPolicy`
+  | `mode`
+  | `priority`
+  | `cache`
+  | `window`
+>
+
 // Some specific 4xx and 5xx HTTP status codes that we definitely
 // want to retry
 const HTTP_RETRY_STATUS_CODES = [429]
@@ -225,6 +238,18 @@ export function createFetchWithResponseHeadersCheck(
     }
 
     return response
+  }
+}
+
+export function createFetchWithRequestOptions(
+  fetchClient: typeof fetch,
+  requestOpts: AllowedRequestOptions
+) {
+  return async (...args: Parameters<typeof fetchClient>) => {
+    return fetchClient(args[0], {
+      ...requestOpts,
+      ...args[1],
+    })
   }
 }
 
