@@ -40,7 +40,7 @@ export default $config({
         migrationsDirectory: `./db/migrations`,
       })
 
-    const domainName = `phoenix-liveview-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
+    const domainName = `liveview-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
 
     const cluster = getSharedCluster(`phoenix-liveview-app-${$app.stage}`)
     const service = cluster.addService(`phoenix-liveview-app-${$app.stage}-service`, {
