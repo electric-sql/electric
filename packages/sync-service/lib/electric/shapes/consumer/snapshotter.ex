@@ -212,8 +212,9 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
               Logger.warning(
                 "Slow query for handle #{shape_handle} took #{total_query_time}ms, shape: #{inspect(shape)}, query: #{query_str}",
-                query_str: query_str,
-                stack_id: stack_id
+                stack_id: stack_id,
+                shape_handle: shape_handle,
+                query_str: query_str
               )
             end
 
