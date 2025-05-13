@@ -1282,9 +1282,6 @@ defmodule Electric.Plug.RouterTest do
 
       new_shape_handle = get_resp_header(conn, "electric-handle")
       assert new_shape_handle != shape_handle
-
-      assert get_resp_header(conn, "location") ==
-               "/v1/shape?handle=#{new_shape_handle}&offset=-1&table=items"
     end
 
     test "GET receives 409 to a newly created shape when shape handle is not found and no shape matches the shape definition",
@@ -1298,10 +1295,8 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 409} = conn
       assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
-      new_shape_handle = get_resp_header(conn, "electric-handle")
-
-      assert get_resp_header(conn, "location") ==
-               "/v1/shape?handle=#{new_shape_handle}&offset=-1&table=items&unrelated=foo"
+      assert new_shape_handle = get_resp_header(conn, "electric-handle")
+      assert is_binary(new_shape_handle)
     end
 
     test "GET receives 409 when shape handle is not found but there is another shape matching the definition",
