@@ -577,7 +577,6 @@ describe(`createFetchWithRequestOptions`, () => {
   const mockRequestOptions: AllowedRequestOptions = {
     credentials: `include`,
     mode: `cors`,
-    cache: `no-store`,
   }
 
   it(`should merge provided request options with fetch call options`, async () => {
@@ -592,7 +591,6 @@ describe(`createFetchWithRequestOptions`, () => {
       expect.objectContaining({
         credentials: `include`,
         mode: `cors`,
-        cache: `no-store`,
         headers: { 'X-Test': `value` },
       })
     )
@@ -600,14 +598,14 @@ describe(`createFetchWithRequestOptions`, () => {
 
   it(`should prioritize fetch call options over default options when conflicts exist`, async () => {
     const customFetch = createFetchWithRequestOptions(mockFetch, {
-      cache: `no-store`,
+      mode: `cors`,
     })
-    await customFetch(`https://example.com`, { cache: `force-cache` })
+    await customFetch(`https://example.com`, { mode: `navigate` })
 
     expect(mockFetch).toHaveBeenCalledWith(
       `https://example.com`,
       expect.objectContaining({
-        cache: `force-cache`,
+        mode: `navigate`,
       })
     )
   })

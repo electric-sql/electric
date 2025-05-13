@@ -14,15 +14,7 @@ import {
 
 export type AllowedRequestOptions = Pick<
   RequestInit,
-  | `signal`
-  | `credentials`
-  | `redirect`
-  | `referrer`
-  | `referrerPolicy`
-  | `mode`
-  | `priority`
-  | `cache`
-  | `window`
+  `signal` | `credentials` | `redirect` | `referrer` | `referrerPolicy` | `mode`
 >
 
 // Some specific 4xx and 5xx HTTP status codes that we definitely
@@ -252,9 +244,6 @@ export function createFetchWithRequestOptions(
     referrer: requestOpts.referrer,
     referrerPolicy: requestOpts.referrerPolicy,
     mode: requestOpts.mode,
-    priority: requestOpts.priority,
-    cache: requestOpts.cache,
-    window: requestOpts.window,
   }
   return async (...args: Parameters<typeof fetchClient>) => {
     return fetchClient(args[0], {
