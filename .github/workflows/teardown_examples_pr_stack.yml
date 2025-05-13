@@ -24,6 +24,7 @@ jobs:
             "nextjs",
             "todo-app",
             "proxy-auth",
+            "phoenix-liveview",
           ]
 
     env:
