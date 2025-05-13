@@ -33,6 +33,7 @@ jobs:
             nextjs/**
             todo-app/**
             proxy-auth/**
+            phoenix-liveview/**
 
       - name: Create example matrix
         id: create-example-matrix
@@ -74,6 +75,7 @@ jobs:
       nextjs: ${{ steps.deploy.outputs.nextjs }}
       todo-app: ${{ steps.deploy.outputs.todo-app }}
       proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
+      phoenix-liveview: ${{ steps.deploy.outputs.phoenix-liveview }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -89,6 +91,7 @@ jobs:
       ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
       ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
       ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
+      SECRET_KEY_BASE: ${{ secrets.LIVEVIEW_EXAMPLE_SECRET_KEY_BASE }}
 
     steps:
       - uses: actions/checkout@v4
@@ -143,7 +146,8 @@ jobs:
               "write-patterns": "${{ needs.deploy.outputs.write-patterns }}",
               nextjs: "${{ needs.deploy.outputs.nextjs }}",
               "todo-app": "${{ needs.deploy.outputs.todo-app }}",
-              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}"
+              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}",
+              "phoenix-liveview": "${{ needs.deploy.outputs.phoenix-liveview }}"
             }
 
             // Create deployments array only for examples that were deployed
