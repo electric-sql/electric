@@ -1,33 +1,77 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { execSync } from "child_process"
-import camelcase from "camelcase"
-
-const isProduction = (stage) => stage.toLowerCase() === `production`
-
-const regionName = `eu-west-1`
+import { createDatabaseForCloudElectric } from "../.shared/lib/database"
+import { getSharedCluster, isProduction } from "../.shared/lib/infra"
 
 export default $config({
   app(input) {
     return {
       name: "phoenix-liveview",
-      removal: input?.stage === "production" ? "retain" : "remove",
-      protect: ["production"].includes(input?.stage),
+      removal:
+        input?.stage.toLocaleLowerCase() === `production` ? `retain` : `remove`,
       home: "aws",
       providers: {
         cloudflare: `5.42.0`,
-        aws: { version: `6.57.0`, region: regionName },
-        postgresql: `3.14.0`,
+        aws: {
+          version: `6.66.2`,
+          profile: process.env.CI ? undefined : `marketing`,
+        },
+        neon: `0.6.3`,
+        command: `1.0.1`,
       },
     }
   },
   async run() {
     if (!process.env.SECRET_KEY_BASE) {
-      throw new Error(
-        `Env variable SECRET_KEY_BASE must be set`
-      )
+      throw new Error(`Env variable SECRET_KEY_BASE must be set`)
     }
 
+    if (!process.env.ELECTRIC_API) {
+      throw new Error(`ELECTRIC_API environment variable is required`)
+    }
+
+    const dbName = isProduction()
+      ? `phoenix-liveview-app`
+      : `phoenix-liveview-app-${$app.stage}`
+
+    const { pooledDatabaseUri, sourceId, sourceSecret } =
+      createDatabaseForCloudElectric({
+        dbName,
+        migrationsDirectory: `./db/migrations`,
+      })
+
+    const domainName = `phoenix-liveview-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
+
+    const cluster = getSharedCluster(`phoenix-liveview-app-${$app.stage}`)
+    const service = cluster.addService(`phoenix-liveview-app-${$app.stage}-service`, {
+      loadBalancer: {
+        ports: [
+          { listen: `443/https`, forward: `4000/http` },
+          { listen: `80/http`, forward: `4000/http` },
+        ],
+        domain: {
+          name: domainName,
+          dns: sst.cloudflare.dns(),
+        },
+      },
+      environment: {
+        DATABASE_URL: pooledDatabaseUri,
+        ELECTRIC_URL: process.env.ELECTRIC_API,
+        SECRET_KEY_BASE: process.env.SECRET_KEY_BASE,
+        PHX_HOST: domainName,
+        ELECTRIC_CLIENT_PARAMS: $interpolate`{ "source_id": "${sourceId}", "secret": "${sourceSecret}" }`,
+      },
+      image: {
+        context: `.`,
+        dockerfile: `Dockerfile`,
+      },
+    })
+
+    return {
+      website: service.url,
+    }
+
+    /*
     if (!process.env.ELECTRIC_API || !process.env.ELECTRIC_ADMIN_API)
       throw new Error(
         `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
@@ -106,7 +150,7 @@ export default $config({
           ELECTRIC_URL: `https://api-dev-production.electric-sql.com`,
           SECRET_KEY_BASE: process.env.SECRET_KEY_BASE,
           PHX_HOST: domainName,
-          ELECTRIC_CLIENT_PARAMS: $interpolate`{ "database_id": "${electricInfo.id}", "token": "${electricInfo.token}" }`,
+          ELECTRIC_CLIENT_PARAMS: $interpolate`{ "source_id": "${electricInfo.id}", "secret": "${electricInfo.token}" }`,
         },
         image: {
           context: `.`,
@@ -122,44 +166,6 @@ export default $config({
       databaseId: electricInfo.id,
       token: electricInfo.token,
     }
+    */
   },
 })
-
-function applyMigrations(uri: string) {
-  execSync(`pnpm exec pg-migrations apply --directory ./db/migrations`, {
-    env: {
-      ...process.env,
-      DATABASE_URL: uri,
-    },
-  })
-}
-
-async function addDatabaseToElectric(
-  uri: string,
-  region: string
-): Promise<{
-  id: string
-  token: string
-}> {
-  const adminApi = process.env.ELECTRIC_ADMIN_API
-  const url = new URL(`/v1/databases`, adminApi)
-  const result = await fetch(url, {
-    method: `PUT`,
-    headers: { "Content-Type": `application/json` },
-    body: JSON.stringify({
-      database_url: uri,
-      region,
-    }),
-  })
-  if (!result.ok) {
-    throw new Error(
-      `Could not add database to Electric (${
-        result.status
-      }): ${await result.text()}`
-    )
-  }
-  return (await result.json()) as {
-    token: string
-    id: string
-  }
-}
