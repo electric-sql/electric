@@ -26,19 +26,18 @@ export default $config({
     if (!process.env.ELECTRIC_API) {
       throw new Error(`ELECTRIC_API environment variable is required`)
     }
-    
+
     const dbName = isProduction() ? `react-app` : `react-app-${$app.stage}`
 
-    const { sourceId, sourceSecret } =
-      createDatabaseForCloudElectric({
-        dbName,
-        migrationsDirectory: `./db/migrations`,
-      })
+    const { sourceId, sourceSecret } = createDatabaseForCloudElectric({
+      dbName,
+      migrationsDirectory: `./db/migrations`,
+    })
 
-    const website = new sst.aws.StaticSite("react-app-website", {
+    const website = new sst.aws.StaticSite(`react-app-website`, {
       build: {
-        command: "npm run build",
-        output: "dist",
+        command: `npm run build`,
+        output: `dist`,
       },
       environment: {
         VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
@@ -50,7 +49,7 @@ export default $config({
         dns: sst.cloudflare.dns(),
       },
       dev: {
-        command: "npm run dev",
+        command: `npm run dev`,
       },
     })
 
