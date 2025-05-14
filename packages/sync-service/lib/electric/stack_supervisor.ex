@@ -328,13 +328,14 @@ defmodule Electric.StackSupervisor do
       end
 
     children =
-      [
-        {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
-        {Registry,
-         name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
-        {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
-        {Electric.Connection.Supervisor, new_connection_manager_opts}
-      ] ++ telemetry_children
+      telemetry_children ++
+        [
+          {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
+          {Registry,
+           name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
+          {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
+          {Electric.Connection.Supervisor, new_connection_manager_opts}
+        ]
 
     # Store the telemetry span attributes in the persistent term for this stack
     telemetry_span_attrs = Access.get(config, :telemetry_span_attrs, %{})
