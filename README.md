@@ -106,7 +106,10 @@ We use [asdf](https://asdf-vm.com/) to install Elixir, Erlang, and Node.js. Vers
 
 ```sh
 brew install asdf
-asdf plugin-add nodejs elixir erlang
+asdf plugin add nodejs
+asdf plugin add pnpm
+asdf plugin add elixir
+asdf plugin add erlang
 asdf install
 ```
 
