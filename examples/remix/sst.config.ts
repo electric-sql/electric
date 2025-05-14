@@ -56,16 +56,6 @@ export default $config({
       },
     })
 
-    remix.url.apply((url) =>
-      command.local.runOutput({
-        command: `pnpm test:browser`,
-        dir: `../../`,
-        environment: {
-          BASE_URL: $dev ? `http://localhost:5173` : url,
-        },
-      })
-    )
-
     return {
       pooledDatabaseUri,
       sourceId: sourceId,
