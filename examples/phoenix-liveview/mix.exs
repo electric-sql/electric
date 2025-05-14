@@ -57,7 +57,7 @@ defmodule Electric.PhoenixExample.MixProject do
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
       {:phoenix_sync, "~> 0.4.1"},
-      {:electric_client, ">= 0.4.0", override: true}
+      {:electric_client, ">= 0.5.0-beta-1", override: true}
     ]
   end
 
