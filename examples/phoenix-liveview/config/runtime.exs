@@ -100,6 +100,11 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
+  IO.puts("DEBUG INFO:")
+  dbg(System.get_env("ELECTRIC_URL"))
+  dbg(System.get_env("ELECTRIC_SECRET"))
+  dbg(System.get_env("ELECTRIC_SOURCE_ID"))
+
   config :phoenix_sync,
     url:
       System.get_env("ELECTRIC_URL") || raise("ELECTRIC_URL environment variable not set"),

@@ -43,30 +43,34 @@ export default $config({
     const domainName = `liveview-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`
 
     const cluster = getSharedCluster(`phoenix-liveview-app-${$app.stage}`)
-    const service = cluster.addService(`phoenix-liveview-app-${$app.stage}-service`, {
-      loadBalancer: {
-        ports: [
-          { listen: `443/https`, forward: `4000/http` },
-          { listen: `80/http`, forward: `4000/http` },
-        ],
-        domain: {
-          name: domainName,
-          dns: sst.cloudflare.dns(),
+    const service = cluster.addService(
+      `phoenix-liveview-app-${$app.stage}-service`,
+      {
+        loadBalancer: {
+          ports: [
+            { listen: `443/https`, forward: `4000/http` },
+            { listen: `80/http`, forward: `4000/http` },
+          ],
+          domain: {
+            name: domainName,
+            dns: sst.cloudflare.dns(),
+          },
         },
-      },
-      environment: {
-        DATABASE_URL: pooledDatabaseUri,
-        ELECTRIC_URL: process.env.ELECTRIC_API,
-        SECRET_KEY_BASE: process.env.SECRET_KEY_BASE,
-        PHX_HOST: domainName,
-        ELECTRIC_SOURCE_ID: sourceId,
-        ELECTRIC_SECRET: sourceSecret,
-      },
-      image: {
-        context: `.`,
-        dockerfile: `Dockerfile`,
-      },
-    })
+        environment: {
+          DATABASE_URL: pooledDatabaseUri,
+          ELECTRIC_URL: process.env.ELECTRIC_API,
+          SECRET_KEY_BASE: process.env.SECRET_KEY_BASE,
+          PHX_HOST: domainName,
+          ELECTRIC_SOURCE_ID: sourceId,
+          ELECTRIC_SECRET: sourceSecret,
+          ELECTRIC_LOG_LEVEL: `debug`,
+        },
+        image: {
+          context: `.`,
+          dockerfile: `Dockerfile`,
+        },
+      }
+    )
 
     return {
       website: service.url,
