@@ -39,11 +39,11 @@ jobs:
         run: |
           # Get changed example directories
           CHANGED_DIRS="${{ steps.changed-files.outputs.all_changed_files }}"
-          
+
           # Initialize empty JSON array
           MATRIX='{"example":[]}'
           HAS_CHANGES="false"
-          
+
           # Add each changed directory to the matrix
           if [ -n "$CHANGED_DIRS" ]; then
             for dir in $CHANGED_DIRS; do
@@ -52,7 +52,7 @@ jobs:
               HAS_CHANGES="true"
             done
           fi
-          
+
           # Use jq to properly format and escape the JSON
           echo "matrix=$(echo $MATRIX | jq -c '.')" >> $GITHUB_OUTPUT
           echo "has_changes=$HAS_CHANGES" >> $GITHUB_OUTPUT
@@ -65,6 +65,7 @@ jobs:
     needs: changed-files
     if: ${{ needs.changed-files.outputs.has_changes == 'true' }}
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.changed-files.outputs.matrix) }}
 
     outputs:
@@ -136,7 +137,7 @@ jobs:
           script: |
             // Get the matrix of examples that were deployed
             const matrix = JSON.parse(${{ toJSON(needs.changed-files.outputs.matrix) }})
-            
+
             const urls = {
               yjs: "${{ needs.deploy.outputs.yjs }}",
               "linearlite-read-only": "${{ needs.deploy.outputs.linearlite-read-only }}",

@@ -13,8 +13,8 @@ jobs:
     environment: "Production"
     runs-on: ubuntu-latest
     continue-on-error: true
-    needs: changed-files
     strategy:
+      fail-fast: false
       matrix:
         example:
           - name: yjs
