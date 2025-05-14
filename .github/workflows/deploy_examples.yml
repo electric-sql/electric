@@ -33,6 +33,7 @@ jobs:
             nextjs/**
             todo-app/**
             proxy-auth/**
+            react/**
 
       - name: Create example matrix
         id: create-example-matrix
@@ -75,6 +76,7 @@ jobs:
       nextjs: ${{ steps.deploy.outputs.nextjs }}
       todo-app: ${{ steps.deploy.outputs.todo-app }}
       proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
+      react: ${{ steps.deploy.outputs.react }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -144,7 +146,8 @@ jobs:
               "write-patterns": "${{ needs.deploy.outputs.write-patterns }}",
               nextjs: "${{ needs.deploy.outputs.nextjs }}",
               "todo-app": "${{ needs.deploy.outputs.todo-app }}",
-              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}"
+              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}",
+              "react": "${{ needs.deploy.outputs.react }}"
             }
 
             // Create deployments array only for examples that were deployed
