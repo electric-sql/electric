@@ -106,6 +106,7 @@ if config_env() == :prod do
   dbg(System.get_env("ELECTRIC_SOURCE_ID"))
 
   config :phoenix_sync,
+    env: config_env(),
     url:
       System.get_env("ELECTRIC_URL") || raise("ELECTRIC_URL environment variable not set"),
     mode: :http,
