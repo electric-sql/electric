@@ -23,6 +23,10 @@ export default $config({
     }
   },
   async run() {
+    if (!process.env.ELECTRIC_API) {
+      throw new Error(`ELECTRIC_API environment variable is required`)
+    }
+    
     const dbName = isProduction() ? `react-app` : `react-app-${$app.stage}`
 
     const { sourceId, sourceSecret } =
@@ -30,10 +34,6 @@ export default $config({
         dbName,
         migrationsDirectory: `./db/migrations`,
       })
-
-    if (!process.env.ELECTRIC_API) {
-      throw new Error(`ELECTRIC_API environment variable is required`)
-    }
 
     const website = new sst.aws.StaticSite("react-app-website", {
       build: {
