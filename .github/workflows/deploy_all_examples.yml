@@ -29,6 +29,8 @@ jobs:
             path: examples/todo-app
           - name: proxy-auth
             path: examples/proxy-auth
+          - name: remix
+            path: examples/remix
           - name: react
             path: examples/react
 
