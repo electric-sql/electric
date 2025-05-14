@@ -59,7 +59,8 @@ export default $config({
         ELECTRIC_URL: process.env.ELECTRIC_API,
         SECRET_KEY_BASE: process.env.SECRET_KEY_BASE,
         PHX_HOST: domainName,
-        ELECTRIC_CLIENT_PARAMS: $interpolate`{ "source_id": "${sourceId}", "source_secret": "${sourceSecret}" }`,
+        ELECTRIC_SOURCE_ID: sourceId,
+        ELECTRIC_SECRET: sourceSecret,
       },
       image: {
         context: `.`,

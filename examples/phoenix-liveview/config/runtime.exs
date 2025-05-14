@@ -100,8 +100,12 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
-  config :electric_phoenix, Electric.Client,
-    base_url:
+  config :phoenix_sync,
+    url:
       System.get_env("ELECTRIC_URL") || raise("ELECTRIC_URL environment variable not set"),
-    params: System.get_env("ELECTRIC_CLIENT_PARAMS", "{}") |> :json.decode() |> Map.new(fn {k, v} -> {String.to_atom(k), v} end)
+    mode: :http,
+    credentials: [
+      secret: System.get_env("ELECTRIC_SECRET") || raise("ELECTRIC_SECRET environment variable not set"),
+      source_id: System.get_env("ELECTRIC_SOURCE_ID") || raise("ELECTRIC_SOURCE_ID environment variable not set")
+    ]
 end

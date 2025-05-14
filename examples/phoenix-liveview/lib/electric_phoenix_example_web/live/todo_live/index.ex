@@ -10,7 +10,7 @@ defmodule Electric.PhoenixExampleWeb.TodoLive.Index do
      socket
      |> assign(:electric_live, false)
      |> assign(:animate_insert, false)
-     |> Electric.Phoenix.LiveView.electric_stream(:todos, Todos.Todo)}
+     |> Phoenix.Sync.LiveView.sync_stream(:todos, Todos.Todo)}
   end
 
   @impl true
@@ -35,7 +35,7 @@ defmodule Electric.PhoenixExampleWeb.TodoLive.Index do
   # Forward all events from the Electric sync stream to the component.
   # This is **required** for the integration.
   def handle_info({:electric, event}, socket) do
-    {:noreply, Electric.Phoenix.LiveView.electric_stream_update(socket, event, at: 0)}
+    {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event, at: 0)}
   end
 
   @impl true
