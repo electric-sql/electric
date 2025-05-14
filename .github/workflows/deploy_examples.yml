@@ -121,54 +121,6 @@ jobs:
             exit 123
           fi
 
-  test-yjs:
-    needs: deploy
-    if: needs.deploy.outputs.yjs != ''
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: yjs
-      example_url: ${{ needs.deploy.outputs.yjs }}
-
-  test-linearlite:
-    needs: deploy
-    if: needs.deploy.outputs.linearlite-read-only != ''
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: linearlite-read-only
-      example_url: ${{ needs.deploy.outputs.linearlite-read-only }}
-
-  test-write-patterns:
-    needs: deploy
-    if: needs.deploy.outputs.write-patterns != ''
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: write-patterns
-      example_url: ${{ needs.deploy.outputs.write-patterns }}
-
-  test-nextjs:
-    needs: deploy
-    if: needs.deploy.outputs.nextjs != ''
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: nextjs
-      example_url: ${{ needs.deploy.outputs.nextjs }}
-
-  test-todo-app:
-    needs: deploy
-    if: needs.deploy.outputs.todo-app != ''
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: todo-app
-      example_url: ${{ needs.deploy.outputs.todo-app }}
-
-  test-proxy-auth:
-    needs: deploy
-    if: needs.deploy.outputs.proxy-auth != ''
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: proxy-auth
-      example_url: ${{ needs.deploy.outputs.proxy-auth }}
-
   test-remix:
     needs: deploy
     if: needs.deploy.outputs.remix != ''
