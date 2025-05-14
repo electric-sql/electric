@@ -38,7 +38,7 @@ export default $config({
         DATABASE_URL: pooledDatabaseUri,
       },
       domain: {
-        name: `nextjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.electric-sql.com`,
+        name: `nextjs${$app.stage === `production` ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
         dns: sst.cloudflare.dns(),
       },
     })

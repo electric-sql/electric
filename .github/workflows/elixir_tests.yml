@@ -22,6 +22,7 @@ jobs:
       run:
         working-directory: packages/sync-service
     strategy:
+      fail-fast: false
       matrix:
         postgres_version: [14, 15, 17]
     env:
@@ -51,7 +52,7 @@ jobs:
           POSTGRESQL_USERNAME: postgres
           POSTGRESQL_PASSWORD: password
         ports:
-          - 64321:6432
+          - 65432:6432
     steps:
       - uses: actions/checkout@v4
 
@@ -96,6 +97,12 @@ jobs:
 
       - name: Run tests
         run: mix test --include slow
+
+      - name: Run telemetry tests
+        run: |
+          cp -R _build/test _build/application_test
+          rm -rf _build/application_test/lib/electric
+          MIX_TARGET=application mix test --only telemetry_target
 
   formatting:
     name: Check formatting

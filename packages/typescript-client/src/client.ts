@@ -54,15 +54,17 @@ type Replica = `full` | `default`
 /**
  * PostgreSQL-specific shape parameters that can be provided externally
  */
-export interface PostgresParams {
+export interface PostgresParams<T extends Row<unknown> = Row> {
   /** The root table for the shape. Not required if you set the table in your proxy. */
   table?: string
 
   /**
    * The columns to include in the shape.
    * Must include primary keys, and can only include valid columns.
+   * Defaults to all columns of the type `T`. If provided, must include primary keys, and can only include valid columns.
+
    */
-  columns?: string[]
+  columns?: (keyof T)[]
 
   /** The where clauses for the shape */
   where?: string
@@ -100,11 +102,9 @@ type ParamValue =
  * External params type - what users provide.
  * Excludes reserved parameters to prevent dynamic variations that could cause stream shape changes.
  */
-export type ExternalParamsRecord = {
-  [K in string as K extends ReservedParamKeys ? never : K]:
-    | ParamValue
-    | undefined
-} & Partial<PostgresParams>
+export type ExternalParamsRecord<T extends Row<unknown> = Row> = {
+  [K in string]: ParamValue | undefined
+} & Partial<PostgresParams<T>> & { [K in ReservedParamKeys]?: never }
 
 type ReservedParamKeys =
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
@@ -146,7 +146,7 @@ export async function resolveValue<T>(
  * Helper function to convert external params to internal format
  */
 async function toInternalParams(
-  params: ExternalParamsRecord
+  params: ExternalParamsRecord<Row>
 ): Promise<InternalParamsRecord> {
   const entries = Object.entries(params)
   const resolvedEntries = await Promise.all(
@@ -262,7 +262,9 @@ export interface ShapeStreamOptions<T = never> {
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   subscribe(
-    callback: (messages: Message<T>[]) => MaybePromise<void>,
+    callback: (
+      messages: Message<T>[]
+    ) => MaybePromise<void> | { columns?: (keyof T)[] },
     onError?: (error: FetchError | Error) => void
   ): () => void
   unsubscribeAll(): void
@@ -830,8 +832,8 @@ function setQueryParam(
 }
 
 function convertWhereParamsToObj(
-  allPgParams: ExternalParamsRecord
-): ExternalParamsRecord {
+  allPgParams: ExternalParamsRecord<Row>
+): ExternalParamsRecord<Row> {
   if (Array.isArray(allPgParams.params)) {
     return {
       ...allPgParams,

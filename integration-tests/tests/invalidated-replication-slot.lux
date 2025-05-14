@@ -11,8 +11,6 @@
   This slot has been invalidated because it exceeded the maximum reserved size.
   """]
 
-[my stack_id="single_stack"]
-
 ## Start a new Postgres cluster configured for easy replication slot invalidation.
 [invoke setup_pg_with_shell_name \
   "pg" \
@@ -41,7 +39,7 @@
 
   ??$invalidated_slot_error
   ??Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
-  ??Purging all shapes because consistent replication could not be continued.
+  ??Purging all shapes.
   ??Starting replication from postgres
 
 [cleanup]

@@ -124,32 +124,10 @@ defmodule Electric.Shapes.Api.Response do
     |> put_cache_headers(response)
     |> put_cursor_headers(response)
     |> put_etag_headers(response)
-    |> put_location_header(response)
     |> put_shape_handle_header(response)
     |> put_schema_header(response)
     |> put_up_to_date_header(response)
     |> put_offset_header(response)
-  end
-
-  defp put_location_header(conn, %__MODULE__{status: 409} = response) do
-    params =
-      conn.query_params
-      |> Map.put("handle", response.handle)
-      |> Map.put("offset", to_string(@before_all_offset))
-      |> Map.delete("live")
-      |> Map.delete("cursor")
-
-    query = Plug.Conn.Query.encode(params)
-
-    Plug.Conn.put_resp_header(
-      conn,
-      "location",
-      "#{conn.request_path}?#{query}"
-    )
-  end
-
-  defp put_location_header(conn, _response) do
-    conn
   end
 
   defp put_shape_handle_header(conn, %__MODULE__{handle: nil}) do

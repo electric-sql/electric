@@ -12,7 +12,7 @@ defmodule Electric.ShapeCacheBehaviour do
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
   @callback get_or_create_shape_handle(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
-  @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}]
+  @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}] | :error
   @callback await_snapshot_start(shape_handle(), opts :: Access.t()) ::
               :started | {:error, term()}
   @callback clean_shape(shape_handle(), Access.t()) :: :ok
@@ -111,12 +111,12 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  @spec list_shapes(Access.t()) :: [{shape_handle(), Shape.t()}]
+  @spec list_shapes(Access.t()) :: [{shape_handle(), Shape.t()}] | :error
   def list_shapes(opts) do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
     shape_status.list_shapes(%ShapeStatus{shape_meta_table: get_shape_meta_table(opts)})
   rescue
-    ArgumentError -> []
+    ArgumentError -> :error
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -130,7 +130,7 @@ defmodule Electric.ShapeCache do
   @spec clean_all_shapes(Access.t()) :: :ok
   def clean_all_shapes(opts) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:clean_all})
+    GenServer.call(server, :clean_all_shapes)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -306,7 +306,7 @@ defmodule Electric.ShapeCache do
     {:reply, :ok, state}
   end
 
-  def handle_call({:clean_all}, _from, state) do
+  def handle_call(:clean_all_shapes, _from, state) do
     Logger.info("Cleaning up all shapes")
     clean_up_all_shapes(state)
     {:reply, :ok, state}
@@ -386,6 +386,8 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_all_shapes(state) do
+    Logger.warning("Purging all shapes.")
+
     shape_handles =
       state.shape_status_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
 

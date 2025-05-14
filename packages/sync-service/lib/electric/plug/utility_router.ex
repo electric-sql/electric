@@ -10,4 +10,6 @@ defmodule Electric.Plug.UtilityRouter do
   else
     get "/metrics", do: resp(conn, 200, "[]")
   end
+
+  get _, do: resp(conn, 404, "Not found")
 end

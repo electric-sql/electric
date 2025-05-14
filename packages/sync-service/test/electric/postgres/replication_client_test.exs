@@ -36,6 +36,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     defp process_message({:"$gen_cast", :replication_client_started}), do: nil
+    defp process_message({:"$gen_cast", :replication_client_created_new_slot}), do: nil
     defp process_message({:"$gen_cast", {:pg_info_looked_up, _}}), do: nil
 
     defp process_message({:"$gen_cast", :replication_client_streamed_first_message}),

@@ -324,28 +324,28 @@ describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
       {}
     )
     expect(liveRes.status).toBe(409)
-    const redirectLocation = liveRes.headers.get(`location`)
-    assert(redirectLocation)
+    const newShapeHandle = liveRes.headers.get(SHAPE_HANDLE_HEADER)
+    assert(newShapeHandle !== originalShapeHandle)
 
     const newCacheIgnoredSyncRes = await fetch(
-      `${proxyCacheBaseUrl}${redirectLocation}`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1&handle=${newShapeHandle}`,
       {}
     )
 
     expect(newCacheIgnoredSyncRes.status).toBe(200)
     expect(getCacheStatus(newCacheIgnoredSyncRes)).toBe(CacheStatus.MISS)
     const cacheBustedShapeHandle =
-      newCacheIgnoredSyncRes.headers.get(`electric-handle`)
+      newCacheIgnoredSyncRes.headers.get(SHAPE_HANDLE_HEADER)
     assert(cacheBustedShapeHandle)
     expect(cacheBustedShapeHandle).not.toBe(originalShapeHandle)
 
     // Then try do that and check that we get new shape handle
     const newInitialSyncRes = await fetch(
-      `${proxyCacheBaseUrl}${redirectLocation}`,
+      `${proxyCacheBaseUrl}/v1/shape?table=${issuesTableUrl}&offset=-1&handle=${newShapeHandle}`,
       {}
     )
     const cachedShapeHandle =
-      newInitialSyncRes.headers.get(`electric-handle`) ?? undefined
+      newInitialSyncRes.headers.get(SHAPE_HANDLE_HEADER) ?? undefined
     expect(newInitialSyncRes.status).toBe(200)
     expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.HIT)
     expect(
