@@ -111,60 +111,6 @@ defmodule Electric.ClientTest do
       assert {:error, _} =
                Client.new(endpoint: endpoint, fetch: {Electric.Client.Fetch.HTTP, invalid: true})
     end
-
-    test "params are appended to all requests" do
-      params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
-
-      expected_query_params =
-        Map.new(params, fn {k, v} ->
-          {to_string(k), v}
-        end)
-
-      bypass = Bypass.open()
-
-      on_exit(fn ->
-        Bypass.down(bypass)
-      end)
-
-      {:ok, %Client{params: ^params} = client} =
-        Client.new(base_url: "http://localhost:#{bypass.port}", params: params)
-
-      stream = Client.stream(client, "things", live: false)
-
-      parent = self()
-
-      Bypass.expect(
-        bypass,
-        fn %{
-             query_params: query_params
-           } = conn ->
-          for {k, v} <- expected_query_params do
-            assert query_params[k] == v
-          end
-
-          send(parent, {:request, query_params})
-
-          bypass_resp(conn, "[]",
-            shape_handle: "my-shape",
-            last_offset: "1234_0",
-            schema: Jason.encode!(%{"id" => %{type: "text"}, "value" => %{type: "text"}})
-          )
-        end
-      )
-
-      Task.start_link(fn ->
-        stream |> Stream.take(1) |> Enum.to_list()
-      end)
-
-      receive do
-        {:request, _query} ->
-          :ok
-      after
-        500 ->
-          # the asserts in the bypass handler just trigger a retry loop
-          flunk("did not receive the expected query parameters")
-      end
-    end
   end
 
   describe "stream/1" do
@@ -384,6 +330,106 @@ defmodule Electric.ClientTest do
 
       assert_receive {:stream, 1, up_to_date()}
       refute_receive _
+    end
+
+    test "params are appended to all requests" do
+      params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
+
+      expected_query_params =
+        Map.new(params, fn {k, v} ->
+          {to_string(k), v}
+        end)
+
+      bypass = Bypass.open()
+
+      on_exit(fn ->
+        Bypass.down(bypass)
+      end)
+
+      {:ok, %Client{params: ^params} = client} =
+        Client.new(base_url: "http://localhost:#{bypass.port}", params: params)
+
+      stream = Client.stream(client, "things", live: false)
+
+      parent = self()
+
+      Bypass.expect(
+        bypass,
+        fn %{
+             query_params: query_params
+           } = conn ->
+          for {k, v} <- expected_query_params do
+            assert query_params[k] == v
+          end
+
+          send(parent, {:request, query_params})
+
+          bypass_resp(conn, "[]",
+            shape_handle: "my-shape",
+            last_offset: "1234_0",
+            schema: Jason.encode!(%{"id" => %{type: "text"}, "value" => %{type: "text"}})
+          )
+        end
+      )
+
+      Task.start_link(fn ->
+        stream |> Stream.take(1) |> Enum.to_list()
+      end)
+
+      receive do
+        {:request, _query} ->
+          :ok
+      after
+        500 ->
+          # the asserts in the bypass handler just trigger a retry loop
+          flunk("did not receive the expected query parameters")
+      end
+    end
+
+    test "errors: :raise raises" do
+      bypass = Bypass.open()
+
+      on_exit(fn ->
+        Bypass.down(bypass)
+      end)
+
+      {:ok, client} =
+        Client.new(base_url: "http://localhost:#{bypass.port}")
+
+      stream = Client.stream(client, "things", errors: :raise)
+
+      Bypass.expect(
+        bypass,
+        fn conn ->
+          bypass_resp(conn, ~s[{"message": "not right"}], status: 400)
+        end
+      )
+
+      assert_raise Client.Error, fn ->
+        Enum.to_list(stream)
+      end
+    end
+
+    test "errors: :stream puts error responses in the enum" do
+      bypass = Bypass.open()
+
+      on_exit(fn ->
+        Bypass.down(bypass)
+      end)
+
+      {:ok, client} =
+        Client.new(base_url: "http://localhost:#{bypass.port}")
+
+      stream = Client.stream(client, "things", errors: :stream)
+
+      Bypass.expect(
+        bypass,
+        fn conn ->
+          bypass_resp(conn, ~s[{"message": "not right"}], status: 400)
+        end
+      )
+
+      assert [%Client.Error{message: %{"message" => "not right"}}] = Enum.to_list(stream)
     end
   end
 
