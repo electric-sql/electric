@@ -86,4 +86,8 @@ defmodule Support.TestUtils do
     Electric.StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
     Electric.StatusMonitor.wait_for_messages_to_be_processed(stack_id)
   end
+
+  def set_status_to_errored(%{stack_id: stack_id}, error_message) do
+    Electric.StatusMonitor.mark_pg_lock_as_errored(stack_id, error_message)
+  end
 end
