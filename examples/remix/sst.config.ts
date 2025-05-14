@@ -37,7 +37,7 @@ export default $config({
       })
 
     const bucket = new sst.aws.Bucket(`RemixExample`, {
-      access: "public",
+      access: `public`,
     })
 
     const remix = new sst.aws.Remix(`remix-${$app.stage}`, {

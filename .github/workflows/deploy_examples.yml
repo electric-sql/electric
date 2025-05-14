@@ -121,6 +121,14 @@ jobs:
             exit 123
           fi
 
+  test-remix:
+    needs: deploy
+    if: needs.deploy.outputs.remix != ''
+    uses: ./.github/workflows/test_examples.yml
+    with:
+      example_name: remix
+      example_url: ${{ needs.deploy.outputs.remix }}
+
   comment:
     if: github.event_name == 'pull_request'
     needs: [changed-files, deploy]
