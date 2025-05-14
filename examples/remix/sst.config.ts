@@ -37,9 +37,9 @@ export default $config({
         dbName,
         migrationsDirectory: `./db/migrations`,
       })
-    
+
     const bucket = new sst.aws.Bucket(`RemixExample`, {
-      access: "public",
+      access: `public`,
     })
 
     const remix = new sst.aws.Remix(`remix-${$app.stage}`, {

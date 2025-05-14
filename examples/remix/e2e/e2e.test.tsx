@@ -19,22 +19,21 @@ test(`sync items between tabs`, async ({ browser }) => {
   await page2.waitForTimeout(1000)
 
   // Get initial count of items
-  const initialItemsPage1 = await page1.$$('.item')
-  const initialItemsPage2 = await page2.$$('.item')
+  const initialItemsPage1 = await page1.$$(`.item`)
+  const initialItemsPage2 = await page2.$$(`.item`)
   const initialCount = initialItemsPage1.length
   expect(initialItemsPage2.length).toBe(initialCount)
 
   // Click Add button in first tab
-  await page1.click('button[value="add"]')
-
+  await page1.click(`button[value="add"]`)
 
   // Give some time for the new entry to be synced
   await page1.waitForTimeout(1000)
   await page2.waitForTimeout(1000)
 
   // Verify both tabs have one more entry
-  const page1Items = await page1.$$('.item')
-  const page2Items = await page2.$$('.item')
+  const page1Items = await page1.$$(`.item`)
+  const page2Items = await page2.$$(`.item`)
   expect(page1Items.length).toBe(initialCount + 1)
   expect(page2Items.length).toBe(initialCount + 1)
 
@@ -44,32 +43,32 @@ test(`sync items between tabs`, async ({ browser }) => {
   expect(newItemPage1).toBe(newItemPage2)
 
   // Click Clear button in first tab
-  await page1.click('button[value="clear"]')
+  await page1.click(`button[value="clear"]`)
 
   // Wait for items to be cleared in first tab
-  await page1.waitForSelector('.item', { state: 'hidden' })
+  await page1.waitForSelector(`.item`, { state: `hidden` })
 
   // Wait for synchronization and check second tab
-  await page2.waitForSelector('.item', { state: 'hidden' })
+  await page2.waitForSelector(`.item`, { state: `hidden` })
 
   // Verify both tabs have no entries
-  const page1ItemsAfterClear = await page1.$$('.item')
-  const page2ItemsAfterClear = await page2.$$('.item')
+  const page1ItemsAfterClear = await page1.$$(`.item`)
+  const page2ItemsAfterClear = await page2.$$(`.item`)
   expect(page1ItemsAfterClear.length).toBe(0)
   expect(page2ItemsAfterClear.length).toBe(0)
 
   // Add another entry
-  await page1.click('button[value="add"]')
+  await page1.click(`button[value="add"]`)
 
   // Wait for the new entry to appear in first tab
-  await page1.waitForSelector('.item')
+  await page1.waitForSelector(`.item`)
 
   // Wait for synchronization and check second tab
-  await page2.waitForSelector('.item')
+  await page2.waitForSelector(`.item`)
 
   // Verify both tabs have one entry again
-  const page1ItemsFinal = await page1.$$('.item')
-  const page2ItemsFinal = await page2.$$('.item')
+  const page1ItemsFinal = await page1.$$(`.item`)
+  const page2ItemsFinal = await page2.$$(`.item`)
   expect(page1ItemsFinal.length).toBe(1)
   expect(page2ItemsFinal.length).toBe(1)
 
