@@ -33,6 +33,7 @@ jobs:
             nextjs/**
             todo-app/**
             proxy-auth/**
+            tanstack/**
             remix/**
             react/**
 
@@ -77,6 +78,7 @@ jobs:
       nextjs: ${{ steps.deploy.outputs.nextjs }}
       todo-app: ${{ steps.deploy.outputs.todo-app }}
       proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
+      tanstack: ${{ steps.deploy.outputs.tanstack }}
       remix: ${{ steps.deploy.outputs.remix }}
       react: ${{ steps.deploy.outputs.react }}
 
@@ -157,6 +159,7 @@ jobs:
               nextjs: "${{ needs.deploy.outputs.nextjs }}",
               "todo-app": "${{ needs.deploy.outputs.todo-app }}",
               "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}",
+              "tanstack": "${{ needs.deploy.outputs.tanstack }}",
               "remix": "${{ needs.deploy.outputs.remix }}",
               "react": "${{ needs.deploy.outputs.react }}"
             }

@@ -36,6 +36,13 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    if (req.method === `GET` && (req.url === `/` || req.url === `/health`)) {
+      // This is a health check
+      res.writeHead(200, { ...JSON_HEADERS, ...CORS_HEADERS })
+      res.end(JSON.stringify({ message: `OK` }))
+      return
+    }
+
     // Handle adding an item
     if (req.method === `POST` && req.url === `/items`) {
       const body = await getRequestBody(req)
@@ -62,7 +69,7 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT || 3010
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
