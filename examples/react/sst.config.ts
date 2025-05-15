@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { getExampleDatabase, isProduction } from "../.shared/lib/infra"
+import { getExampleSource, isProduction } from "../.shared/lib/infra"
 
 export default $config({
   app(input) {
@@ -28,7 +28,7 @@ export default $config({
 
     const dbName = isProduction() ? `react-app` : `react-app-${$app.stage}`
 
-    const { sourceId, sourceSecret } = getExampleDatabase(dbName)
+    const { sourceId, sourceSecret } = getExampleSource(dbName)
 
     const website = new sst.aws.StaticSite(`react-app-website`, {
       build: {
