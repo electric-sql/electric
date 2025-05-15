@@ -26,7 +26,7 @@ export default $config({
     if (!process.env.ELECTRIC_API) {
       throw new Error(`ELECTRIC_API environment variable is required`)
     }
-    
+
     const dbName = isProduction()
       ? `tanstack-app`
       : `tanstack-app-${$app.stage}`
@@ -40,7 +40,7 @@ export default $config({
     const cluster = getSharedCluster(`tanstack-app-${$app.stage}`)
     const service = cluster.addService(`tanstack-app-${$app.stage}-service`, {
       loadBalancer: {
-        ports: [{ listen: "443/https", forward: "3010/http" }],
+        ports: [{ listen: `443/https`, forward: `3010/http` }],
         domain: {
           name: `tanstack-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
@@ -50,18 +50,18 @@ export default $config({
         DATABASE_URL: pooledDatabaseUri,
       },
       image: {
-        context: "../..",
-        dockerfile: "Dockerfile",
+        context: `../..`,
+        dockerfile: `Dockerfile`,
       },
       dev: {
-        command: "npm run dev",
+        command: `npm run dev`,
       },
     })
 
-    const website = new sst.aws.StaticSite("tanstack-app-website", {
+    const website = new sst.aws.StaticSite(`tanstack-app-website`, {
       build: {
-        command: "npm run build",
-        output: "dist",
+        command: `npm run build`,
+        output: `dist`,
       },
       environment: {
         VITE_SERVER_URL: service.url.apply((url) =>
@@ -76,7 +76,7 @@ export default $config({
         dns: sst.cloudflare.dns(),
       },
       dev: {
-        command: "npm run vite",
+        command: `npm run vite`,
       },
     })
 
