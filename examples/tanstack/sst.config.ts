@@ -23,6 +23,10 @@ export default $config({
     }
   },
   async run() {
+    if (!process.env.ELECTRIC_API) {
+      throw new Error(`ELECTRIC_API environment variable is required`)
+    }
+    
     const dbName = isProduction()
       ? `tanstack-app`
       : `tanstack-app-${$app.stage}`
@@ -53,10 +57,6 @@ export default $config({
         command: "npm run dev",
       },
     })
-
-    if (!process.env.ELECTRIC_API) {
-      throw new Error(`ELECTRIC_API environment variable is required`)
-    }
 
     const website = new sst.aws.StaticSite("tanstack-app-website", {
       build: {
