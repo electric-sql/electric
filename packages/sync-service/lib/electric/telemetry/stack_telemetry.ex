@@ -222,7 +222,8 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
           unit: :byte,
           keep: for_stack(opts)
         ),
-        sum("electric.storage.transaction_stored.bytes", unit: :byte, keep: for_stack(opts))
+        sum("electric.storage.transaction_stored.bytes", unit: :byte, keep: for_stack(opts)),
+        last_value("electric.shape_monitor.active_reader_count", keep: for_stack(opts))
       ]
     end
 

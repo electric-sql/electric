@@ -28,10 +28,17 @@ defmodule Electric.LsnTracker do
     lsn
   end
 
+  # make this idempotent to avoid problems in tests
   defp create_table(stack_id) do
-    stack_id
-    |> table()
-    |> :ets.new([:protected, :named_table])
+    table = table(stack_id)
+
+    case :ets.info(table, :id) do
+      :undefined ->
+        :ets.new(table, [:protected, :named_table])
+
+      ref when is_reference(ref) ->
+        :ok
+    end
   end
 
   defp table(stack_id) do

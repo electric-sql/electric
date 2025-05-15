@@ -47,6 +47,7 @@ defmodule Electric.StackSupervisor do
   use Supervisor, opts
 
   alias Electric.ShapeCache.LogChunker
+  alias Electric.ShapeCache.ShapeStatus
 
   require Logger
 
@@ -86,7 +87,15 @@ defmodule Electric.StackSupervisor do
                  storage: [type: :mod_arg, required: true],
                  chunk_bytes_threshold: [
                    type: :pos_integer,
-                   default: Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
+                   default: LogChunker.default_chunk_size_threshold()
+                 ],
+                 monitor_opts: [
+                   type: :keyword_list,
+                   required: false,
+                   keys: [
+                     on_remove: [type: {:fun, 2}],
+                     on_cleanup: [type: {:fun, 1}]
+                   ]
                  ],
                  tweaks: [
                    type: :keyword_list,
@@ -245,7 +254,7 @@ defmodule Electric.StackSupervisor do
 
   @impl true
   def init(%{stack_id: stack_id} = config) do
-    Logger.debug("The single StackSupervisor is initializing...")
+    Logger.debug("StackSupervisor for stack #{inspect(stack_id)} is initializing...")
 
     Process.set_label({:stack_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
@@ -309,6 +318,8 @@ defmodule Electric.StackSupervisor do
       tweaks: config.tweaks
     ]
 
+    monitor_opts = Map.get(config, :monitor_opts, [])
+
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
 
@@ -327,6 +338,12 @@ defmodule Electric.StackSupervisor do
         []
       end
 
+    shape_status =
+      {ShapeStatus,
+       %ShapeStatus{
+         shape_meta_table: Electric.ShapeCache.get_shape_meta_table(stack_id: stack_id)
+       }}
+
     children =
       telemetry_children ++
         [
@@ -335,6 +352,12 @@ defmodule Electric.StackSupervisor do
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
           {Electric.Postgres.Inspector.EtsInspector,
            stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
+          {Electric.Shapes.Monitor,
+           Electric.Utils.merge_all([
+             [stack_id: stack_id, storage: storage, shape_status: shape_status],
+             Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
+             Keyword.take(shape_cache_opts, [:publication_manager])
+           ])},
           {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 
