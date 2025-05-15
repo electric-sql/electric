@@ -4,6 +4,9 @@
 # If you run "mix test --cover", coverage assets end up here.
 /cover/
 
+# Tests run in MIX_ENV=test will output a JUnit XML report
+/junit/
+
 # The directory Mix downloads your dependencies sources to.
 /deps/
 
