@@ -52,6 +52,17 @@ defmodule Electric.Client.Stream do
       are appended to the change stream if you terminate it early using `live:
       false`
       """
+    ],
+    errors: [
+      type: {:in, [:raise, :stream]},
+      default: :raise,
+      type_spec: quote(do: :raise | :stream),
+      doc: """
+      How errors from the Electric server should be handled.
+
+      - `:raise` (default) - raise an exception if the server returns an error
+      - `:stream` - put the error into the message stream (and terminate)
+      """
     ]
   ]
   @external_schema NimbleOptions.new!(@external_options)
@@ -64,12 +75,17 @@ defmodule Electric.Client.Stream do
 
   @opts_schema NimbleOptions.new!(
                  live: [type: :boolean, default: true],
-                 resume: [type: {:struct, Message.ResumeMessage}]
+                 resume: [type: {:struct, Message.ResumeMessage}],
+                 errors: [
+                   type: {:in, [:raise, :stream]},
+                   default: :stream
+                 ]
                )
 
   @type opts :: %{
           live: boolean(),
-          resume: nil | Message.ResumeMessage.t()
+          resume: nil | Message.ResumeMessage.t(),
+          errors: :raise | :stream
         }
 
   @type t :: %__MODULE__{
@@ -185,13 +201,14 @@ defmodule Electric.Client.Stream do
     |> dispatch()
   end
 
-  defp handle_response({:error, %Fetch.Response{} = resp}, _stream) do
+  defp handle_response({:error, %Fetch.Response{} = resp}, stream) do
     %Fetch.Response{body: body} = resp
-    raise Client.Error, message: body, resp: resp
+
+    handle_error(%Client.Error{message: unwrap(body), resp: resp}, stream)
   end
 
-  defp handle_response({:error, error}, _stream) do
-    raise Client.Error, message: "Unable to retrieve data stream", resp: error
+  defp handle_response({:error, error}, stream) do
+    handle_error(%Client.Error{message: "Unable to retrieve data stream", resp: error}, stream)
   end
 
   defp handle_msg(%Message.ControlMessage{control: :up_to_date} = msg, stream) do
@@ -214,6 +231,19 @@ defmodule Electric.Client.Stream do
     }
 
     {:halt, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
+  end
+
+  defp unwrap([msg]), do: msg
+  defp unwrap([_ | _] = msgs), do: msgs
+  defp unwrap(msg), do: msg
+
+  defp handle_error(error, %{opts: %{errors: :stream}} = stream) do
+    %{stream | buffer: :queue.in(error, stream.buffer), state: :done}
+    |> dispatch()
+  end
+
+  defp handle_error(error, _stream) do
+    raise error
   end
 
   defp after_fetch({msgs, stream}) do
