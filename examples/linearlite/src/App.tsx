@@ -33,23 +33,47 @@ export const MenuContext = createContext(null as MenuContextInterface | null)
 
 type PGliteWorkerWithLive = PGliteWorker & { live: LiveNamespace }
 
-async function createPGlite() {
-  return PGliteWorker.create(new PGWorker(), {
-    extensions: {
-      live,
-      sync: electricSync(),
-    },
-  })
+const doSync = !new URL(window.location.href).searchParams.has('noSync')
+const dataDirName = new URL(window.location.href).searchParams.get(
+  'dataDirName'
+)
+const usePGnext = new URL(window.location.href).searchParams.get('usePGnext')
+
+async function createPGliteWorker() {
+  const extensions = {
+    live,
+    sync: electricSync(),
+  }
+
+  const url = new URL('./pglite-worker.ts', import.meta.url)
+  dataDirName && url.searchParams.set('dataDirName', dataDirName)
+  usePGnext && url.searchParams.set('usePGnext', usePGnext)
+
+  if (url.searchParams.size) {
+    const pgWorker = new Worker(url, {
+      type: 'module',
+    })
+    return await PGliteWorker.create(pgWorker, {
+      extensions,
+    })
+  } else {
+    return PGliteWorker.create(new PGWorker(), {
+      extensions: {
+        live,
+        sync: electricSync(),
+      },
+    })
+  }
 }
 
-const pgPromise = createPGlite()
+const pgWorkerPromise = createPGliteWorker()
 
 let syncStarted = false
-pgPromise.then(async (pg) => {
+pgWorkerPromise.then(async (pg) => {
   console.log('PGlite worker started')
   pg.onLeaderChange(() => {
     console.log('Leader changed, isLeader:', pg.isLeader)
-    if (pg.isLeader && !syncStarted) {
+    if (doSync && pg.isLeader && !syncStarted) {
       syncStarted = true
       startSync(pg)
     }
@@ -57,8 +81,10 @@ pgPromise.then(async (pg) => {
 })
 
 async function issueListLoader({ request }: { request: Request }) {
-  await waitForInitialSyncDone()
-  const pg = await pgPromise
+  if (doSync) {
+    await waitForInitialSyncDone()
+  }
+  const pg = await pgWorkerPromise
   const url = new URL(request.url)
   const filterState = getFilterStateFromSearchParams(url.searchParams)
   const { sql, sqlParams } = filterStateToSql(filterState)
@@ -74,7 +100,7 @@ async function issueListLoader({ request }: { request: Request }) {
 
 async function boardIssueListLoader({ request }: { request: Request }) {
   await waitForInitialSyncDone()
-  const pg = await pgPromise
+  const pg = await pgWorkerPromise
   const url = new URL(request.url)
   const filterState = getFilterStateFromSearchParams(url.searchParams)
 
@@ -116,7 +142,7 @@ async function issueLoader({
   params: Params
   request: Request
 }) {
-  const pg = await pgPromise
+  const pg = await pgWorkerPromise
   const liveIssue = await pg.live.query<IssueType>({
     query: `SELECT * FROM issue WHERE id = $1`,
     params: [params.id],
@@ -172,7 +198,7 @@ const App = () => {
   const [syncStatus, syncMessage] = useSyncStatus()
 
   useEffect(() => {
-    pgPromise.then(setPgForProvider)
+    pgWorkerPromise.then(setPgForProvider)
   }, [])
 
   const menuContextValue = useMemo(
@@ -182,7 +208,7 @@ const App = () => {
 
   if (!pgForProvider) return <LoadingScreen>Starting PGlite...</LoadingScreen>
 
-  if (syncStatus === 'initial-sync')
+  if (doSync && syncStatus === 'initial-sync')
     return (
       <LoadingScreen>
         Performing initial sync...
