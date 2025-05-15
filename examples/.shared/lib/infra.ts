@@ -20,7 +20,9 @@ export function getSharedCluster(serviceName: string): sst.aws.Cluster {
  * Otherwise, it creates a new database with the given name.
  */
 export function getExampleDatabase(dbName: string) {
-  const migrationsDirectory = `./db/migrations`
+  // Path is relative to the directory where sst is called from
+  // which we do from the individual example directories
+  const migrationsDirectory = `../.shared/db/migrations`
 
   if (isProduction()) {
     if (
