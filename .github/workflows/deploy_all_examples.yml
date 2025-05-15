@@ -13,8 +13,8 @@ jobs:
     environment: "Production"
     runs-on: ubuntu-latest
     continue-on-error: true
-    needs: changed-files
     strategy:
+      fail-fast: false
       matrix:
         example:
           - name: yjs
@@ -29,6 +29,10 @@ jobs:
             path: examples/todo-app
           - name: proxy-auth
             path: examples/proxy-auth
+          - name: remix
+            path: examples/remix
+          - name: react
+            path: examples/react
 
     env:
       DEPLOY_ENV: "production"

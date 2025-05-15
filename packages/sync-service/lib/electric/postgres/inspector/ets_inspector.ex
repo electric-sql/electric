@@ -1,7 +1,17 @@
 defmodule Electric.Postgres.Inspector.EtsInspector do
+  @moduledoc """
+  This serves as a write-through cache for caching the namespace and tablename as they occur in PG.
+
+  Note that if users create shapes for the same table but spelled differently,
+  e.g. `~s|public.users|`, `~s|users|`, `~s|Users|`, and `~s|USERS|`
+  then there will be 4 entries in the cache each of which maps to `{~s|public|, ~s|users|}`.
+  If they create a shape for a different table `~s|"Users"|`, then there will be another entry
+  in ETS for `~s|"Users"|` that maps to `{~s|public|, ~s|"Users"|}`.
+  """
   use GenServer
 
   require Logger
+  alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.DirectInspector
 
   @behaviour Electric.Postgres.Inspector
@@ -35,7 +45,10 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     case relation_from_ets(table, opts) do
       :not_found ->
         # We don't set a timeout here because it's managed by the underlying query.
-        GenServer.call(opts[:server], {:load_relation, table}, :infinity)
+        with {:ok, rel, _} <-
+               GenServer.call(opts[:server], {:load_relation_and_column_info, table}, :infinity) do
+          {:ok, rel}
+        end
 
       rel ->
         {:ok, rel}
@@ -70,9 +83,19 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   def load_column_info({_namespace, _table_name} = table, opts) do
     case column_info_from_ets(table, opts) do
       :not_found ->
-        case GenServer.call(opts[:server], {:load_column_info, table}, :infinity) do
-          {:error, err, stacktrace} -> reraise err, stacktrace
-          result -> result
+        with {:ok, _, cols} <-
+               GenServer.call(opts[:server], {:load_relation_and_column_info, table}, :infinity) do
+          {:ok, cols}
+        else
+          {:error, err, stacktrace} ->
+            reraise err, stacktrace
+
+          {:error, err} ->
+            if is_binary(err) and err =~ "ERROR 42P01 (undefined_table)" do
+              :table_not_found
+            else
+              {:error, err}
+            end
         end
 
       found ->
@@ -114,71 +137,49 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     pg_info_table = :ets.new(opts.pg_info_table, [:named_table, :public, :set])
     pg_relation_table = :ets.new(opts.pg_relation_table, [:named_table, :public, :bag])
 
-    state = %{
-      pg_info_table: pg_info_table,
-      pg_relation_table: pg_relation_table,
-      pg_pool: opts.pool
-    }
+    persistence_key = "#{opts.stack_id}:ets_inspector_state"
+
+    state =
+      %{
+        pg_info_table: pg_info_table,
+        pg_relation_table: pg_relation_table,
+        pg_pool: opts.pool,
+        persistent_kv: opts.persistent_kv,
+        persistence_key: persistence_key
+      }
+      |> restore_persistent_state()
 
     {:ok, state}
   end
 
   @impl GenServer
-  def handle_call({:load_relation, table}, _from, state) do
-    # This serves as a write-through cache for caching
-    # the namespace and tablename as they occur in PG.
-    # Note that if users create shapes for the same table but spelled differently,
-    # e.g. `~s|public.users|`, `~s|users|`, `~s|Users|`, and `~s|USERS|`
-    # then there will be 4 entries in the cache each of which maps to `{~s|public|, ~s|users|}`.
-    # If they create a shape for a different table `~s|"Users"|`, then there will be another entry
-    # in ETS for `~s|"Users"|` that maps to `{~s|public|, ~s|"Users"|}`.
-    case relation_from_ets(table, state) do
-      :not_found ->
-        case DirectInspector.load_relation(table, state.pg_pool) do
+  def handle_call({:load_relation_and_column_info, table}, _from, state) do
+    # If ETS has been filled between the `GenServer.call` and handing of this message,
+    # we can just return the data from ETS.
+    case {relation_from_ets(table, state), column_info_from_ets(table, state)} do
+      {x, y} when x == :not_found or y == :not_found ->
+        case fetch_from_db(table, state) do
+          # Outer error is a transaction error, DB likely unreachable
           {:error, err} ->
             {:reply, {:error, err}, state}
 
-          {:ok, %{relation: relation} = info} ->
-            # We keep the mapping in both directions:
-            # - Forward: user-provided table name -> PG relation (many-to-one)
-            #     e.g. `~s|users|` -> `{"public", "users"}`
-            #          `~s|USERS|` -> `{"public", "users"}`
-            # - Backward: and PG relation -> user-provided table names (one-to-many)
-            #     e.g. `{"public", "users"}` -> `[~s|users|, ~s|USERS|]`
-            #
-            # The forward direction allows for efficient lookup (based on user-provided table name)
-            # the backward direction allows for efficient cleanup (based on PG relation)
-            :ets.insert(state.pg_info_table, {{table, :table_to_relation}, info})
-            :ets.insert(state.pg_info_table, {{relation, :table_to_relation}, info})
-            :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, table})
-            :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, relation})
-            {:reply, {:ok, info}, state}
+          # Inner error means table was not found
+          {:ok, {:error, err}} ->
+            {:reply, {:error, err}, state}
+
+          # Success
+          {:ok, {:ok, rel_info, cols}} ->
+            state
+            |> store_relation(table, rel_info)
+            |> store_column_info(table, cols)
+            |> persist_data()
+
+            {:reply, {:ok, rel_info, cols}, state}
         end
 
-      relation ->
-        {:reply, {:ok, relation}, state}
+      {rel, cols} ->
+        {:reply, {:ok, rel, cols}, state}
     end
-  end
-
-  @impl GenServer
-  def handle_call({:load_column_info, table}, _from, state) do
-    case column_info_from_ets(table, state) do
-      :not_found ->
-        case DirectInspector.load_column_info(table, state.pg_pool) do
-          :table_not_found ->
-            {:reply, :table_not_found, state}
-
-          {:ok, info} ->
-            # store
-            :ets.insert(state.pg_info_table, {{table, :columns}, info})
-            {:reply, {:ok, info}, state}
-        end
-
-      found ->
-        {:reply, {:ok, found}, state}
-    end
-  rescue
-    e -> {:reply, {:error, e, __STACKTRACE__}, state}
   end
 
   def handle_call(:list_relations_with_stale_cache, _from, state) do
@@ -225,6 +226,39 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       )
 
       {:reply, :error, state}
+  end
+
+  defp fetch_from_db(table, state) do
+    Postgrex.transaction(state.pg_pool, fn conn ->
+      with {:ok, rel} <- DirectInspector.load_relation(table, conn),
+           {:ok, cols} <- DirectInspector.load_column_info(rel.relation, conn) do
+        {:ok, rel, cols}
+      else
+        {:error, err} -> Postgrex.rollback(conn, err)
+      end
+    end)
+  end
+
+  defp store_relation(state, table, %{relation: relation} = info) do
+    # We keep the mapping in both directions:
+    # - Forward: user-provided table name -> PG relation (many-to-one)
+    #     e.g. `~s|users|` -> `{"public", "users"}`
+    #          `~s|USERS|` -> `{"public", "users"}`
+    # - Backward: and PG relation -> user-provided table names (one-to-many)
+    #     e.g. `{"public", "users"}` -> `[~s|users|, ~s|USERS|]`
+    #
+    # The forward direction allows for efficient lookup (based on user-provided table name)
+    # the backward direction allows for efficient cleanup (based on PG relation)
+    :ets.insert(state.pg_info_table, {{table, :table_to_relation}, info})
+    :ets.insert(state.pg_info_table, {{relation, :table_to_relation}, info})
+    :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, table})
+    :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, relation})
+    state
+  end
+
+  defp store_column_info(state, table, cols) do
+    :ets.insert(state.pg_info_table, {{table, :columns}, cols})
+    state
   end
 
   @pg_rel_position 2
@@ -278,5 +312,25 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   def get_relation_table(opts) do
     stack_id = Access.fetch!(opts, :stack_id)
     :"#{stack_id}:relation_table"
+  end
+
+  @spec persist_data(map()) :: :ok
+  defp persist_data(state) do
+    info = :ets.tab2list(state.pg_info_table)
+    relations = :ets.tab2list(state.pg_relation_table)
+    PersistentKV.set(state.persistent_kv, state.persistence_key, {info, relations})
+  end
+
+  @spec restore_persistent_state(map()) :: map()
+  defp restore_persistent_state(state) do
+    case PersistentKV.get(state.persistent_kv, state.persistence_key) do
+      {:ok, {info, relations}} ->
+        :ets.insert(state.pg_info_table, info)
+        :ets.insert(state.pg_relation_table, relations)
+        state
+
+      {:error, :not_found} ->
+        state
+    end
   end
 end

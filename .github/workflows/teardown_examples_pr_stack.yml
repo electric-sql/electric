@@ -25,6 +25,9 @@ jobs:
             "todo-app",
             "proxy-auth",
             "phoenix-liveview",
+            "tanstack",
+            "remix",
+            "react",
           ]
 
     env:

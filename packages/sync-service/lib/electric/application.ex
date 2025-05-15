@@ -52,8 +52,8 @@ defmodule Electric.Application do
 
     Enum.concat([
       children_library(),
-      [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
       application_telemetry(config),
+      [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
       api_server_children(),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])

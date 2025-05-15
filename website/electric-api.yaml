@@ -416,10 +416,6 @@ paths:
             The requested offset for the given shape no longer exists.
             Client should sync the shape using the relative path from the location header.
           headers:
-            location:
-              schema:
-                type: string
-              description: Relative path for syncing the latest version of the requested shape.
             electric-handle:
               schema:
                 type: string

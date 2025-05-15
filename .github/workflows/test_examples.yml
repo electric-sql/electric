@@ -1,0 +1,33 @@
+name: Test Examples
+
+on:
+  workflow_call:
+    inputs:
+      example_name:
+        description: 'Name of the example to test'
+        required: true
+        type: string
+      example_url:
+        description: 'URL of the deployed example'
+        required: true
+        type: string
+
+jobs:
+  test:
+    name: Run Browser Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".tool-versions"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run browser tests
+        working-directory: examples/${{ inputs.example_name }}
+        run: pnpm test:browser
+        env:
+          BASE_URL: ${{ inputs.example_url }}
