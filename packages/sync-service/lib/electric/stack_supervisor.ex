@@ -333,7 +333,8 @@ defmodule Electric.StackSupervisor do
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
           {Registry,
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
-          {Electric.Postgres.Inspector.EtsInspector, stack_id: stack_id, pool: db_pool},
+          {Electric.Postgres.Inspector.EtsInspector,
+           stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
           {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 

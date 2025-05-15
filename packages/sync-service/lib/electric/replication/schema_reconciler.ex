@@ -48,12 +48,17 @@ defmodule Electric.Replication.SchemaReconciler do
     Process.set_label({:schema_reconciler, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
     Logger.debug("SchemaReconciler started")
-    {:ok, opts, {:continue, :schedule_next_check}}
+    {:ok, opts, {:continue, :reconcile}}
   end
 
   def handle_continue(:schedule_next_check, state) do
     Process.send_after(self(), :reconcile, state.period)
     {:noreply, state}
+  end
+
+  def handle_continue(:reconcile, state) do
+    handle_reconcile(state)
+    {:noreply, state, {:continue, :schedule_next_check}}
   end
 
   def handle_call(:reconcile_now, _from, state) do
@@ -62,8 +67,7 @@ defmodule Electric.Replication.SchemaReconciler do
   end
 
   def handle_info(:reconcile, state) do
-    handle_reconcile(state)
-    {:noreply, state, {:continue, :schedule_next_check}}
+    {:noreply, state, {:continue, :reconcile}}
   end
 
   defp handle_reconcile(state) do
@@ -71,7 +75,8 @@ defmodule Electric.Replication.SchemaReconciler do
 
     # We essentially never want to fail here, as this is a periodic task.
     # If it fails, we'll just try again next time, so no additional retries are implemented
-    with {:ok, diverged_relations} <- Inspector.list_relations_with_stale_cache(state.inspector),
+    with {:ok, diverged_relations} <-
+           Inspector.list_relations_with_stale_cache(state.inspector),
          :ok <-
            shape_cache_mod.clean_all_shapes_for_relations(diverged_relations, shape_cache_args),
          :ok <-
