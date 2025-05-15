@@ -1,5 +1,16 @@
 # @core/sync-service
 
+## 1.0.14
+
+### Patch Changes
+
+- b63528d: Fix the issue with failing to report vm memory metrics. Change the name of the "vm.memory.processes_by_type" metric to "process.memory.total".
+- fb721d4: Ensure stack is active after long poll timeout
+- bbeb474: Run a helper process in background during integration tests to make sure Connection.Manager remains responsive to incoming messages.
+- f76a76e: Fix a typo in the 'targets' option for telemetry deps, ensuring they are left out from compilation unless MIX_TARGET=application.
+- 0f14663: Remove `location` header from 409 resopnses
+- 3eddb51: Drop and recreate the replication slot when the publication goes missing. This will also invalidate existing shapes to ensure consistency. Fixes #609.
+
 ## 1.0.13
 
 ### Patch Changes
