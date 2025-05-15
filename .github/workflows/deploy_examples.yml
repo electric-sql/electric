@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check for changed files
         id: changed-files
-        uses: tj-actions/changed-files@v41
+        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c
         with:
           path: "examples"
           diff_relative: true
@@ -34,17 +34,19 @@ jobs:
             todo-app/**
             proxy-auth/**
             tanstack/**
+            remix/**
+            react/**
 
       - name: Create example matrix
         id: create-example-matrix
         run: |
           # Get changed example directories
           CHANGED_DIRS="${{ steps.changed-files.outputs.all_changed_files }}"
-          
+
           # Initialize empty JSON array
           MATRIX='{"example":[]}'
           HAS_CHANGES="false"
-          
+
           # Add each changed directory to the matrix
           if [ -n "$CHANGED_DIRS" ]; then
             for dir in $CHANGED_DIRS; do
@@ -53,7 +55,7 @@ jobs:
               HAS_CHANGES="true"
             done
           fi
-          
+
           # Use jq to properly format and escape the JSON
           echo "matrix=$(echo $MATRIX | jq -c '.')" >> $GITHUB_OUTPUT
           echo "has_changes=$HAS_CHANGES" >> $GITHUB_OUTPUT
@@ -66,6 +68,7 @@ jobs:
     needs: changed-files
     if: ${{ needs.changed-files.outputs.has_changes == 'true' }}
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.changed-files.outputs.matrix) }}
 
     outputs:
@@ -76,6 +79,8 @@ jobs:
       todo-app: ${{ steps.deploy.outputs.todo-app }}
       proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
       tanstack: ${{ steps.deploy.outputs.tanstack }}
+      remix: ${{ steps.deploy.outputs.remix }}
+      react: ${{ steps.deploy.outputs.react }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -126,6 +131,14 @@ jobs:
             exit 123
           fi
 
+  test-remix:
+    needs: deploy
+    if: needs.deploy.outputs.remix != ''
+    uses: ./.github/workflows/test_examples.yml
+    with:
+      example_name: remix
+      example_url: ${{ needs.deploy.outputs.remix }}
+
   comment:
     if: github.event_name == 'pull_request' && needs.changed-files.outputs.has_changes == 'true'
     needs: [changed-files, deploy]
@@ -138,7 +151,7 @@ jobs:
           script: |
             // Get the matrix of examples that were deployed
             const matrix = JSON.parse(${{ toJSON(needs.changed-files.outputs.matrix) }})
-            
+
             const urls = {
               yjs: "${{ needs.deploy.outputs.yjs }}",
               "linearlite-read-only": "${{ needs.deploy.outputs.linearlite-read-only }}",
@@ -146,7 +159,9 @@ jobs:
               nextjs: "${{ needs.deploy.outputs.nextjs }}",
               "todo-app": "${{ needs.deploy.outputs.todo-app }}",
               "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}",
-              "tanstack": "${{ needs.deploy.outputs.tanstack }}"
+              "tanstack": "${{ needs.deploy.outputs.tanstack }}",
+              "remix": "${{ needs.deploy.outputs.remix }}",
+              "react": "${{ needs.deploy.outputs.react }}"
             }
 
             // Create deployments array only for examples that were deployed

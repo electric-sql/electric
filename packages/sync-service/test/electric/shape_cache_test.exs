@@ -1126,9 +1126,15 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache: {shape_cache, shape_cache_opts}} = ctx
 
       consumers =
-        for {shape_handle, _} <- shape_cache.list_shapes(Map.new(shape_cache_opts)) do
-          pid = Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
-          {pid, Process.monitor(pid)}
+        case shape_cache.list_shapes(Map.new(shape_cache_opts)) do
+          :error ->
+            []
+
+          shapes ->
+            for {shape_handle, _} <- shapes do
+              pid = Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+              {pid, Process.monitor(pid)}
+            end
         end
 
       if Enum.count(consumers) > 0 do

@@ -117,6 +117,7 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       :persistent_kv,
+      :purge_all_shapes?,
       drop_slot_requested: false
     ]
   end
@@ -199,6 +200,10 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :replication_client_started)
   end
 
+  def replication_client_created_new_slot(manager) do
+    GenServer.cast(manager, :replication_client_created_new_slot)
+  end
+
   def replication_client_ready_to_stream(manager) do
     GenServer.cast(manager, :replication_client_ready_to_stream)
   end
@@ -209,6 +214,11 @@ defmodule Electric.Connection.Manager do
 
   def pg_info_looked_up(manager, pg_info) do
     GenServer.cast(manager, {:pg_info_looked_up, pg_info})
+  end
+
+  # Used for testing the responsiveness of the manager process
+  def ping(manager, timeout \\ 1000) do
+    GenServer.call(manager, :ping, timeout)
   end
 
   @impl true
@@ -409,7 +419,7 @@ defmodule Electric.Connection.Manager do
 
     shape_cache_opts =
       state.shape_cache_opts
-      |> Keyword.put(:purge_all_shapes?, timeline_changed?)
+      |> Keyword.put(:purge_all_shapes?, state.purge_all_shapes? || timeline_changed?)
 
     if timeline_changed? do
       Electric.Replication.PersistentReplicationState.reset(
@@ -418,9 +428,11 @@ defmodule Electric.Connection.Manager do
       )
 
       dispatch_stack_event(
-        {:database_id_or_timeline_changed,
+        {:warning,
          %{
-           message: "Purging shape logs from disk. Clients will refetch shape data automatically."
+           type: :database_id_or_timeline_changed,
+           message:
+             "Database ID or timeline changed. Purging shape logs from disk. Clients will refetch shape data automatically."
          }},
         state
       )
@@ -453,7 +465,8 @@ defmodule Electric.Connection.Manager do
     state = %State{
       state
       | shape_log_collector_pid: log_collector_pid,
-        current_step: {:start_replication_client, :start_streaming}
+        current_step: {:start_replication_client, :start_streaming},
+        purge_all_shapes?: false
     }
 
     {:noreply, state, {:continue, :start_streaming}}
@@ -621,8 +634,12 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:database_connection_severed,
-       %{error: error.original_error, type: error.type, message: error.message}},
+      {:connection_error,
+       %{
+         error: DbConnectionError.format_original_error(error),
+         type: error.type,
+         message: error.message
+       }},
       state
     )
 
@@ -693,7 +710,11 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     Electric.StatusMonitor.mark_pg_lock_as_errored(state.stack_id, inspect(error))
-    dispatch_stack_event({:failed_to_acquire_connection_lock, %{error: error}}, state)
+
+    dispatch_stack_event(
+      {:failed_to_acquire_connection_lock, %{error: inspect(error, pretty: true)}},
+      state
+    )
 
     # The LockConnection process will keep retrying to acquire the lock.
     {:noreply, state}
@@ -732,6 +753,31 @@ defmodule Electric.Connection.Manager do
         current_step: {:start_replication_client, :configuring_connection}
     }
 
+    {:noreply, state}
+  end
+
+  def handle_cast(
+        :replication_client_created_new_slot,
+        %State{
+          current_phase: :connection_setup,
+          current_step: {:start_replication_client, :configuring_connection}
+        } = state
+      ) do
+    # When the replication slot is created for the first time or recreated at any point, we
+    # must invalidate all shapes to ensure transactional continuity and prevent missed changes.
+    {:noreply, %State{state | purge_all_shapes?: true}}
+  end
+
+  def handle_cast(
+        :replication_client_created_new_slot,
+        %State{
+          current_phase: :restarting_replication_client,
+          current_step: {:start_replication_client, :configuring_connection}
+        } = state
+      ) do
+    # In the :restarting_replication_client phase the shape streaming pipeline is already
+    # running, so we need to notify it about the need to purge existing shapes.
+    :ok = Electric.ShapeCache.clean_all_shapes(stack_id: state.stack_id)
     {:noreply, state}
   end
 
@@ -807,6 +853,11 @@ defmodule Electric.Connection.Manager do
      }}
   end
 
+  @impl true
+  def handle_call(:ping, _from, state) do
+    {:reply, :pong, state}
+  end
+
   defp maybe_fallback_to_ipv4(error_message, conn_opts) do
     # If network is unreachable, IPv6 is not enabled on the machine
     # If domain cannot be resolved, assume there is no AAAA record for it
@@ -862,7 +913,7 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(
       {:database_connection_failed,
        %{
-         error: error.original_error,
+         error: DbConnectionError.format_original_error(error),
          type: error.type,
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
@@ -931,16 +982,15 @@ defmodule Electric.Connection.Manager do
          %DbConnectionError{type: :replication_slot_invalidated} = error,
          state
        ) do
-    Logger.warning("""
-    Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
-        In order to recover consistent replication, the slot will be dropped along with all existing shapes.
-        If you're seeing this message without having recently stopped Electric for a while,
-        it's possible either Electric is lagging behind and you might need to scale up,
-        or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
-    """)
+    Logger.warning(error.message)
 
     dispatch_stack_event(
-      {:database_slot_exceeded_max_size, %{error: error.original_error}},
+      {:warning,
+       %{
+         type: :database_slot_exceeded_max_size,
+         message: error.message,
+         error: DbConnectionError.format_original_error(error)
+       }},
       state
     )
 
@@ -966,7 +1016,12 @@ defmodule Electric.Connection.Manager do
 
   defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
     dispatch_stack_event(
-      {:fatal_error, %{error: error.original_error, message: error.message, type: error.type}},
+      {:config_error,
+       %{
+         error: DbConnectionError.format_original_error(error),
+         message: error.message,
+         type: error.type
+       }},
       state
     )
 

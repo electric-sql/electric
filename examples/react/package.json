@@ -19,7 +19,8 @@
   "dependencies": {
     "@electric-sql/react": "workspace:*",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "sst": "3.6.35"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
