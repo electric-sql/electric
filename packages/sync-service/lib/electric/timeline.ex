@@ -48,19 +48,18 @@ defmodule Electric.Timeline do
 
   defp verify_timeline({pg_id, _}, {electric_pg_id, _}) when pg_id != electric_pg_id do
     Logger.warning(
-      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}. Will purge all shapes."
+      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}."
     )
 
     :timeline_changed
   end
 
   defp verify_timeline({_, _}, {_, -1}) do
-    Logger.warning("Purging all shapes because consistent replication could not be continued.")
     :timeline_changed
   end
 
   defp verify_timeline({_, timeline_id}, _) do
-    Logger.warning("Detected PITR to timeline #{timeline_id}; will purge all shapes.")
+    Logger.warning("Detected PITR to timeline #{timeline_id}")
     :timeline_changed
   end
 

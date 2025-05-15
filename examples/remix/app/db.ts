@@ -1,14 +1,9 @@
 import pgPkg from "pg"
-const { Client } = pgPkg
+const { Pool } = pgPkg
 
-const db = new Client({
-  host: `localhost`,
-  port: 54321,
-  password: `password`,
-  user: `postgres`,
-  database: `electric`,
-})
+const connectionString =
+  process.env.DATABASE_URL ??
+  `postgresql://postgres:password@localhost:54321/electric`
+const pool = new Pool({ connectionString })
 
-db.connect()
-
-export { db }
+export { pool }

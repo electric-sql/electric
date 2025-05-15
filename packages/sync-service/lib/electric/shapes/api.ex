@@ -534,17 +534,29 @@ defmodule Electric.Shapes.Api do
     after
       # If we timeout, return an up-to-date message
       long_poll_timeout ->
-        request
-        |> update_attrs(%{ot_is_long_poll_timeout: true})
-        |> determine_global_last_seen_lsn()
-        |> no_change_response()
+        # Ensure stack is ready after a long poll timeout, as it might
+        # have failed during this period
+        case hold_until_stack_ready(request.api) do
+          :ok ->
+            request
+            |> update_attrs(%{ot_is_long_poll_timeout: true})
+            |> determine_global_last_seen_lsn()
+            |> no_change_response()
+
+          {:error, response} ->
+            response
+        end
     end
   end
 
   defp clean_up_change_listener(%Request{handle: shape_handle} = request)
        when not is_nil(shape_handle) do
     %{api: %{registry: registry}} = request
-    Registry.unregister(registry, shape_handle)
+
+    # Ensure registry is still runnning and unregister handle
+    if Process.whereis(registry) != nil,
+      do: Registry.unregister(registry, shape_handle)
+
     request
   end
 

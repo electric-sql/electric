@@ -16,8 +16,8 @@ example: true
 
 ## Electric Yjs provider
 
-The example implements a [Yjs Provider](https://docs.yjs.dev/tutorials/creating-a-custom-provider) that allows you to sync Yjs operations. This is implemented in [`y-electric.ts`](https://github.com/electric-sql/electric/blob/main/examples/yjs/app/y-electric.ts):
+An example text editor showing how to use Yjs and Electric together. It uses the Y-Electric [provider](https://docs.yjs.dev/tutorials/creating-a-custom-provider) to sync Yjs document and awareness changes to all connected clients. Checkout the [package](https://github.com/electric-sql/electric/tree/main/packages/y-electric) to learn how to integrate Yjs with your existing app:
 
-<<< @../../examples/yjs/app/y-electric.ts{typescript}
+<<< @../../packages/y-electric/src/y-electric.ts{typescript}
 
 <DemoCTAs :demo="$frontmatter" />

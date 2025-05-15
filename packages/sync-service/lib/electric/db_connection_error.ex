@@ -57,13 +57,18 @@ defmodule Electric.DbConnectionError do
           postgres: %{
             code: :object_not_in_prerequisite_state,
             detail:
-              "This slot has been invalidated because it exceeded the maximum reserved size." =
-                msg
+              "This slot has been invalidated because it exceeded the maximum reserved size."
           }
         } = error
       ) do
     %DbConnectionError{
-      message: msg,
+      message: """
+      Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
+        In order to recover consistent replication, the slot will be dropped along with all existing shapes.
+        If you're seeing this message without having recently stopped Electric for a while,
+        it's possible either Electric is lagging behind and you might need to scale up,
+        or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
+      """,
       type: :replication_slot_invalidated,
       original_error: error,
       retry_may_fix?: false
@@ -128,6 +133,10 @@ defmodule Electric.DbConnectionError do
   end
 
   def from_error(error), do: unknown_error(error)
+
+  def format_original_error(%DbConnectionError{original_error: error}) do
+    inspect(error, pretty: true)
+  end
 
   defp unknown_error(error) do
     Logger.error("Electric.DBConnection unknown error: #{inspect(error)}")

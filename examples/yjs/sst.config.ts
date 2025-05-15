@@ -35,9 +35,9 @@ export default $config({
 
     const service = cluster.addService(`yjs-${$app.stage}-service`, {
       loadBalancer: {
-        ports: [{ listen: `443/https`, forward: `3000/http` }],
+        ports: [{ listen: `443/https`, forward: `3002/http` }],
         domain: {
-          name: `yjs${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
+          name: `yjs-server${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
         },
       },
@@ -52,12 +52,30 @@ export default $config({
         dockerfile: `Dockerfile`,
       },
       dev: {
-        command: `npm run dev`,
+        command: `npm run dev:server`,
+      },
+    })
+
+    const website = new sst.aws.StaticSite(`yjs-website`, {
+      build: {
+        command: `pnpm run --filter @electric-sql/client  --filter @electric-sql/react --filter @electric-sql/y-electric --filter @electric-examples/yjs build`,
+        output: `dist/client`,
+      },
+      environment: {
+        VITE_SERVER_URL: service.url,
+      },
+      domain: {
+        name: `yjs${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
+        dns: sst.cloudflare.dns(),
+      },
+      dev: {
+        command: `npm run vite`,
       },
     })
 
     return {
-      website: service.url,
+      website: website.url,
+      server: service.url,
     }
   },
 })

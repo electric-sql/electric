@@ -10,7 +10,7 @@ defmodule Electric.Shapes.ApiTest do
   alias Support.Mock
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1]
+  import Support.TestUtils, only: [set_status_to_active: 1, set_status_to_errored: 2]
   import Mox
 
   @test_shape %Shape{
@@ -955,6 +955,50 @@ defmodule Electric.Shapes.ApiTest do
 
       assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
       assert response.up_to_date
+    end
+
+    @tag long_poll_timeout: 100
+    test "sends an error response after a timeout if stack has failed", ctx do
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
+        nil
+      end)
+      |> expect(:get_log_stream, fn @test_offset, _, @test_opts ->
+        []
+      end)
+
+      error_message = "stack failed"
+
+      task =
+        Task.async(fn ->
+          assert {:ok, request} =
+                   Api.validate(
+                     ctx.api,
+                     %{
+                       table: "public.users",
+                       offset: "#{@test_offset}",
+                       handle: @test_shape_handle,
+                       live: true
+                     }
+                   )
+
+          set_status_to_errored(ctx, error_message)
+          Api.serve_shape_log(request)
+        end)
+
+      assert response = Task.await(task)
+      assert response.status == 503
+
+      assert %{message: message} = response_body(response)
+      assert message == "Timeout waiting for Postgres lock acquisition: #{error_message}"
     end
   end
 
