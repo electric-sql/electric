@@ -73,7 +73,7 @@ defmodule Electric.MixProject do
     List.flatten([
       [
         {:backoff, "~> 1.1"},
-        {:bandit, "~> 1.5"},
+        {:bandit, "~> 1.6"},
         # Here we use a fork of CubDB that allows for hibernating all of it's processes.
         #
         # Electric currently uses a CubDB instance per shape, each instance has 4 processes, and those processes
@@ -82,22 +82,22 @@ defmodule Electric.MixProject do
         #
         # See: https://github.com/lucaong/cubdb/pull/78
         {:electric_cubdb, "~> 2.0"},
-        {:dotenvy, "~> 0.8"},
-        {:ecto, "~> 3.11"},
+        {:dotenvy, "~> 1.1"},
+        {:ecto, "~> 3.12"},
         {:gen_stage, "~> 1.2"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
         {:opentelemetry_telemetry, "~> 1.1"},
         {:opentelemetry_semantic_conventions, "~> 1.27"},
         {:pg_query_ex, "0.7.0"},
-        {:plug, "~> 1.16"},
-        {:postgrex, "~> 0.19"},
+        {:plug, "~> 1.17"},
+        {:postgrex, "~> 0.20"},
         {:retry, "~> 0.19"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
-        {:telemetry_poller, "~> 1.1"},
-        {:tls_certificate_check, "~> 1.23"},
-        {:tz, "~> 0.27"}
+        {:telemetry_poller, "~> 1.2"},
+        {:tls_certificate_check, "~> 1.27"},
+        {:tz, "~> 0.28"}
       ],
       dev_and_test_deps(),
       telemetry_deps()
@@ -111,7 +111,7 @@ defmodule Electric.MixProject do
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false},
       {:mox, "~> 1.1", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:stream_data, "~> 1.0", only: [:dev, :test]},
+      {:stream_data, "~> 1.2", only: [:dev, :test]},
       {:repatch, "~> 1.0", only: [:test]}
     ]
   end
@@ -131,7 +131,7 @@ defmodule Electric.MixProject do
 
   defp telemetry_deps() do
     [
-      {:sentry, "~> 10.0"},
+      {:sentry, "~> 10.9"},
       {:opentelemetry, "~> 1.5"},
       {:opentelemetry_exporter, "~> 1.8"},
       {:otel_metric_exporter, "~> 0.3.7"},
