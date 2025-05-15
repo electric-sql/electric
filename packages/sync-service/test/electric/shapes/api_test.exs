@@ -1,6 +1,5 @@
 defmodule Electric.Shapes.ApiTest do
   use ExUnit.Case, async: true
-  use Plug.Test
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
@@ -450,7 +449,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(conn(:get, "/"), request)
+      assert response = Api.serve_shape_log(Plug.Test.conn(:get, "/"), request)
       assert response.status == 200
 
       assert ["max-age=0, private, must-revalidate"] =
