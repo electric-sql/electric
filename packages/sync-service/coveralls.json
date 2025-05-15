@@ -4,5 +4,6 @@
     "lib/electric/replication/eval/known_definition.ex",
     "lib/electric.ex",
     "lib/electric/telemetry.ex"
-  ]
+  ],
+  "print_summary": false
 }
