@@ -87,7 +87,7 @@ export SHAPE_DEFINITION="table=items&offset=-1"
 
 curl -i "https://api.electric-sql.cloud/v1/shape?$SHAPE_DEFINITION\
     &source_id=$SOURCE_ID\
-    &source_secret=$SECRET"
+    &secret=$SECRET"
 ```
 
 ### Security Model
@@ -107,7 +107,7 @@ The recommended pattern for secure use of the Electric Cloud is to add the sourc
 
 ##### Example
 
-In your client, request the shape as normal, without the `source_id` and `source_secret` parameters. For example here using the [Typescript client](/docs/api/clients/typescript):
+In your client, request the shape as normal, without the `source_id` and `secret` parameters. For example here using the [Typescript client](/docs/api/clients/typescript):
 
 ```ts
 import { ShapeStream } from '@electric-sql/client'
@@ -136,7 +136,7 @@ export async function GET(req: Request) {
 
   // Add the source params.
   originUrl.searchParams.set(`source_id`, process.env.SOURCE_ID)
-  originUrl.searchParams.set(`source_secret`, process.env.SOURCE_SECRET)
+  originUrl.searchParams.set(`secret`, process.env.SECRET)
 
   // Proxy the authorised request on to the Electric Cloud.
   const response = await fetch(originUrl)
