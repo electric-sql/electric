@@ -6,6 +6,8 @@ import {
   BackoffDefaults,
   createFetchWithChunkBuffer,
   createFetchWithConsumedMessages,
+  AllowedRequestOptions,
+  createFetchWithRequestOptions,
 } from '../src/fetch'
 import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
 import { afterEach } from 'node:test'
@@ -569,3 +571,55 @@ function sortUrlParams(url: string): string {
   parsedUrl.searchParams.sort()
   return parsedUrl.toString()
 }
+
+describe(`createFetchWithRequestOptions`, () => {
+  const mockFetch = vi.fn(() => Promise.resolve(new Response()))
+  const mockRequestOptions: AllowedRequestOptions = {
+    credentials: `include`,
+    mode: `cors`,
+  }
+
+  it(`should merge provided request options with fetch call options`, async () => {
+    const customFetch = createFetchWithRequestOptions(
+      mockFetch,
+      mockRequestOptions
+    )
+    await customFetch(`https://example.com`, { headers: { 'X-Test': `value` } })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      `https://example.com`,
+      expect.objectContaining({
+        credentials: `include`,
+        mode: `cors`,
+        headers: { 'X-Test': `value` },
+      })
+    )
+  })
+
+  it(`should prioritize fetch call options over default options when conflicts exist`, async () => {
+    const customFetch = createFetchWithRequestOptions(mockFetch, {
+      mode: `cors`,
+    })
+    await customFetch(`https://example.com`, { mode: `navigate` })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      `https://example.com`,
+      expect.objectContaining({
+        mode: `navigate`,
+      })
+    )
+  })
+
+  it(`should work with just a URL parameter`, async () => {
+    const customFetch = createFetchWithRequestOptions(
+      mockFetch,
+      mockRequestOptions
+    )
+    await customFetch(`https://example.com`)
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      `https://example.com`,
+      mockRequestOptions
+    )
+  })
+})
