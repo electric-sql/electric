@@ -1,0 +1,384 @@
+:root {
+  /* Electric theme colors */
+  --electric-purple: rgb(126, 120, 219);
+  --electric-light-purple: rgb(208, 188, 255);
+  --electric-dark: rgb(27, 27, 31);
+  --electric-darker: rgb(22, 22, 24);
+
+  /* Custom CSS variables for black and white theme */
+  --pure-white: #ffffff;
+  --off-white: #f9f9f9;
+  --light-gray: #e1e1e1;
+  --mid-gray: #a0a0a0;
+  --dark-gray: var(--electric-dark);
+  --off-black: var(--electric-darker);
+  --pure-black: #000000;
+
+  /* Override Radix UI theme variables with Electric colors */
+  --purple-1: #f8f7ff;
+  --purple-2: #f0eeff;
+  --purple-3: #e4e0ff;
+  --purple-4: #d4cdff;
+  --purple-5: #c7beff;
+  --purple-6: #b8adff;
+  --purple-7: #a69aff;
+  --purple-8: #9281ff;
+  --purple-9: var(--electric-purple);
+  --purple-10: #6b5dd0;
+  --purple-11: #5e4fc7;
+  --purple-12: #3a2c8a;
+}
+
+/* Light theme */
+.light {
+  --background: var(--pure-white);
+  --sidebar-bg: var(--off-white);
+  --border-color: var(--light-gray);
+  --text-primary: var(--pure-black);
+  --text-secondary: var(--dark-gray);
+  --message-user-bg: var(--light-gray);
+  --message-ai-bg: var(--off-white);
+  --button-hover: var(--light-gray);
+  --active-item-bg: var(--light-gray);
+  --accent-color: var(--electric-purple);
+}
+
+/* Dark theme */
+.dark {
+  --background: var(--electric-dark);
+  --sidebar-bg: var(--electric-darker);
+  --border-color: #2a2a2a;
+  --text-primary: var(--pure-white);
+  --text-secondary: #a0a0a0;
+  --message-user-bg: #2a2a2a;
+  --message-ai-bg: var(--electric-dark);
+  --button-hover: var(--electric-darker);
+  --active-item-bg: var(--electric-darker);
+  --accent-color: var(--electric-purple);
+}
+
+/* Global styles */
+html,
+body,
+#root {
+  height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height for mobile */
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family:
+    'Open Sauce One',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+
+/* Radix Themes font overrides */
+.radix-themes {
+  --default-font-family: 'Open Sauce One', system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --heading-font-family: 'Open Sauce One', system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --strong-font-family: 'Open Sauce One', system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --em-font-family: 'Open Sauce One', system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --quote-font-family: 'Open Sauce One', system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+.content-area {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sidebar styles */
+.sidebar {
+  background-color: var(--sidebar-bg) !important;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  z-index: 100;
+  --sidebar-width: 280px;
+  width: var(--sidebar-width);
+}
+
+.sidebar-content {
+  width: calc(var(--sidebar-width) - 1px);
+  overflow: hidden;
+}
+
+/* Mobile sidebar animation */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px !important;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+    height: 100dvh;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease-in-out;
+  }
+
+  .sidebar-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Fix sidebar on desktop */
+@media (min-width: 768px) {
+  .sidebar {
+    position: relative !important;
+    transform: none !important;
+  }
+}
+
+/* Chat header */
+.chat-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Typing indicator animation */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-secondary);
+  animation: typing-dot 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Animation for our abort button loader */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: block;
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 20;
+  }
+}
+
+/* Fix mobile menu button */
+.mobile-menu-btn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 40;
+}
+@media (min-width: 768px) {
+  .mobile-menu-btn {
+    display: none;
+  }
+}
+
+/* Animation for typing indicator */
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--gray-8);
+  animation: bounce 1s infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Electric style button and UI element styling */
+.electric-button {
+  background-color: var(--purple-9);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.electric-button:hover {
+  background-color: var(--purple-8);
+  transform: translateY(-1px);
+}
+
+.dark .electric-button {
+  box-shadow: 0 0 12px rgba(126, 120, 219, 0.3);
+}
+
+.dark a,
+.dark button {
+  color: var(--purple-9);
+}
+
+.dark :focus-visible {
+  outline-color: var(--purple-9);
+}
+
+/* Scrollbar styling for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: var(--electric-darker);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+
+/* Dark mode sidebar enhancements */
+.dark .sidebar {
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.dark .sidebar-item.active {
+  background-color: rgba(126, 120, 219, 0.15);
+  border-left: 3px solid var(--purple-9);
+}
+
+.dark .sidebar-item:hover:not(.active) {
+  background-color: rgba(126, 120, 219, 0.07);
+}
+
+/* Message styling for dark mode */
+.dark .message.user {
+  background-color: #242424;
+}
+
+.dark .message.ai {
+  background-color: var(--electric-dark);
+  border: 1px solid #242424;
+}
+
+pre:has(.syntax-highlighter) {
+  overflow: auto;
+}
+
+.rt-ScrollAreaViewport > div {
+  width: 100%;
+}
+
+/* Mobile viewport height fixes */
+@media (max-width: 768px) {
+  .content-area {
+    height: 100dvh;
+  }
+
+  .sidebar {
+    height: 100dvh;
+  }
+}
+
+/* Typing indicator animation */
+@keyframes bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-6px);
+  }
+}
