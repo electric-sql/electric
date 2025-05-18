@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { Tooltip } from '@radix-ui/themes'
+import { makeStyles, mergeClasses } from '@griffel/react'
 
 interface UserAvatarProps {
   username: string
@@ -47,6 +48,45 @@ function getInitials(username: string) {
   return username.slice(0, 2).toUpperCase()
 }
 
+const useClasses = makeStyles({
+  avatar: {
+    color: `white`,
+    borderRadius: `50%`,
+    display: `flex`,
+    alignItems: `center`,
+    justifyContent: `center`,
+    fontWeight: `600`,
+    textTransform: `uppercase`,
+    letterSpacing: `0.5px`,
+    position: `relative`,
+    boxSizing: `border-box`,
+  },
+  small: {
+    width: `20px`,
+    height: `20px`,
+    fontSize: `8px`,
+  },
+  medium: {
+    width: `28px`,
+    height: `28px`,
+    fontSize: `11px`,
+  },
+  large: {
+    width: `40px`,
+    height: `40px`,
+    fontSize: `14px`,
+  },
+  'small.overlap': {
+    marginLeft: `-${Math.floor(parseInt(`20px`) * 0.35)}px`,
+  },
+  'medium.overlap': {
+    marginLeft: `-${Math.floor(parseInt(`28px`) * 0.35)}px`,
+  },
+  'large.overlap': {
+    marginLeft: `-${Math.floor(parseInt(`40px`) * 0.35)}px`,
+  },
+})
+
 const UserAvatar = memo(
   ({
     username,
@@ -54,40 +94,19 @@ const UserAvatar = memo(
     showTooltip = true,
     index = 0,
   }: UserAvatarProps) => {
+    const classes = useClasses()
     const backgroundColor = stringToColor(username)
     const initials = getInitials(username)
 
-    // Size mappings
-    const sizeMap = {
-      small: { size: `20px`, fontSize: `8px` },
-      medium: { size: `28px`, fontSize: `11px` },
-      large: { size: `40px`, fontSize: `14px` },
-    }
-
-    const { size: dimensions, fontSize } = sizeMap[size]
-    const overlapOffset =
-      index > 0 ? `-${Math.floor(parseInt(dimensions) * 0.35)}px` : `0`
-
     const avatar = (
       <div
+        className={mergeClasses(
+          classes.avatar,
+          classes[size],
+          index > 0 && classes[`${size}.overlap`]
+        )}
         style={{
           backgroundColor,
-          color: `white`,
-          width: dimensions,
-          height: dimensions,
-          borderRadius: `50%`,
-          display: `flex`,
-          alignItems: `center`,
-          justifyContent: `center`,
-          fontSize,
-          fontWeight: `600`,
-          marginLeft: overlapOffset,
-          zIndex: 10 - index, // Higher index = lower z-index for proper stacking
-          textTransform: `uppercase`,
-          letterSpacing: `0.5px`,
-          position: `relative`,
-          boxSizing: `border-box`,
-          outline: index > 0 ? `1px solid rgba(255, 255, 255, 0.15)` : `none`,
         }}
       >
         {initials}

@@ -1,8 +1,17 @@
+import { makeStyles } from '@griffel/react'
 import { Box, Heading, Text } from '@radix-ui/themes'
 
+const useClasses = makeStyles({
+  box: {
+    padding: `32px 16px`,
+    maxWidth: `600px`,
+  },
+})
+
 export default function AboutSection() {
+  const classes = useClasses()
   return (
-    <Box style={{ padding: `32px 16px`, maxWidth: `600px` }}>
+    <Box className={classes.box}>
       <Heading size="3" mb="2" align="center" weight="medium">
         About Linearlite
       </Heading>

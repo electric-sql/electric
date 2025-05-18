@@ -1,7 +1,15 @@
 import { Box, Flex, Text, IconButton, ScrollArea } from '@radix-ui/themes'
+import { makeStyles } from '@griffel/react'
 import { useMobile } from '../hooks/useMobile'
 import { useSidebar } from './SidebarProvider'
 import { Menu } from 'lucide-react'
+
+const useClasses = makeStyles({
+  scrollArea: {
+    height: `100%`,
+    width: `100%`,
+  },
+})
 
 export default function ScreenWithHeader({
   title,
@@ -12,8 +20,9 @@ export default function ScreenWithHeader({
 }) {
   const { isMobile } = useMobile()
   const { toggleSidebar } = useSidebar()
+  const classes = useClasses()
   return (
-    <Flex direction="column" style={{ height: `100%`, width: `100%` }}>
+    <Flex direction="column" width="100%" height="100%">
       {/* Header with menu button */}
       <Box className="chat-header">
         <Flex align="center" gap="2">
@@ -29,9 +38,7 @@ export default function ScreenWithHeader({
         </Flex>
       </Box>
 
-      <ScrollArea style={{ height: `100%`, width: `100%` }}>
-        {children}
-      </ScrollArea>
+      <ScrollArea className={classes.scrollArea}>{children}</ScrollArea>
     </Flex>
   )
 }

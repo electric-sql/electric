@@ -5,15 +5,34 @@ import {
   Flex,
   Text,
   IconButton,
-  Button,
   ScrollArea,
   Tooltip,
 } from '@radix-ui/themes'
-import { LogOut, Moon, Sun, MessageSquarePlus, Monitor } from 'lucide-react'
+import { LogOut, Moon, Sun, Monitor } from 'lucide-react'
+import { makeStyles, mergeClasses } from '@griffel/react'
 import { useTheme } from './ThemeProvider'
 import { useSidebar } from './SidebarProvider'
 import UserAvatar from './UserAvatar'
 import { useAuth } from '../hooks/useAuth'
+
+const useHeaderClasses = makeStyles({
+  header: {
+    height: `56px`,
+    borderBottom: `1px solid var(--gray-5)`,
+    position: `relative`,
+    flexShrink: 0,
+  },
+  title: {
+    paddingLeft: `4px`,
+  },
+  closeButton: {
+    position: `absolute`,
+    right: `12px`,
+    opacity: 0.8,
+    height: `28px`,
+    width: `28px`,
+  },
+})
 
 // Header Component
 type HeaderProps = {
@@ -22,44 +41,18 @@ type HeaderProps = {
   setSidebarOpen: (value: boolean) => void
 }
 
-function SidebarHeader({
-  isMobile,
-  handleNewChat,
-  setSidebarOpen,
-}: HeaderProps) {
+function SidebarHeader({ isMobile, setSidebarOpen }: HeaderProps) {
+  const classes = useHeaderClasses()
   return (
-    <Flex
-      p="3"
-      align="center"
-      justify="between"
-      style={{
-        height: `56px`,
-        borderBottom: `1px solid var(--gray-5)`,
-        position: `relative`,
-        flexShrink: 0,
-      }}
-    >
-      <Text size="3" weight="medium" style={{ paddingLeft: `4px` }}>
+    <Flex p="3" align="center" justify="between" className={classes.header}>
+      <Text size="3" weight="medium" className={classes.title}>
         Linearlite
       </Text>
-      {!isMobile && (
-        <Tooltip content="New Chat">
-          <IconButton variant="ghost" size="2" onClick={handleNewChat}>
-            <MessageSquarePlus size={22} />
-          </IconButton>
-        </Tooltip>
-      )}
       {isMobile && (
         <IconButton
           size="1"
           variant="ghost"
-          style={{
-            position: `absolute`,
-            right: `12px`,
-            opacity: 0.8,
-            height: `28px`,
-            width: `28px`,
-          }}
+          className={classes.closeButton}
           onClick={() => setSidebarOpen(false)}
         >
           ✕
@@ -68,6 +61,13 @@ function SidebarHeader({
     </Flex>
   )
 }
+
+const useFooterClasses = makeStyles({
+  footer: {
+    marginTop: `auto`,
+    borderTop: `1px solid var(--gray-5)`,
+  },
+})
 
 // Footer Component
 type FooterProps = {
@@ -83,12 +83,10 @@ function SidebarFooter({
   setTheme,
   handleLogout,
 }: FooterProps) {
+  const classes = useFooterClasses()
   return (
-    <Box
-      p="2"
-      style={{ marginTop: `auto`, borderTop: `1px solid var(--gray-5)` }}
-    >
-      <Flex align="center" justify="between" style={{ padding: `0 8px` }}>
+    <Box p="2" className={classes.footer}>
+      <Flex align="center" justify="between" px="2">
         <Flex align="center" gap="2">
           <UserAvatar username={username} size="small" showTooltip={false} />
           <Text size="1">{username}</Text>
@@ -137,12 +135,23 @@ function SidebarFooter({
   )
 }
 
+const useSidebarClasses = makeStyles({
+  sidebar: {
+    width: `280px`,
+    height: `100%`,
+  },
+  scrollArea: {
+    flexGrow: 1,
+  },
+})
+
 export default function Sidebar() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
   const { username, signOut } = useAuth()
   const { isSidebarOpen, setSidebarOpen } = useSidebar()
+  const classes = useSidebarClasses()
 
   // Set up window resize handler
   useEffect(() => {
@@ -171,18 +180,18 @@ export default function Sidebar() {
       {/* Sidebar overlay (mobile only) */}
       {isMobile && (
         <Box
-          className={`sidebar-overlay ${isSidebarOpen ? `open` : ``}`}
+          className={mergeClasses(`sidebar-overlay`, isSidebarOpen && `open`)}
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <Box
-        className={`sidebar ${isSidebarOpen ? `open` : ``}`}
-        style={{
-          width: isMobile ? `280px` : `280px`,
-          height: `100%`,
-        }}
+        className={mergeClasses(
+          classes.sidebar,
+          `sidebar`,
+          isSidebarOpen && `open`
+        )}
       >
         {/* Header */}
         <SidebarHeader
@@ -191,27 +200,8 @@ export default function Sidebar() {
           setSidebarOpen={setSidebarOpen}
         />
 
-        {/* Prominent New Chat button for mobile */}
-        {isMobile && (
-          <Box p="2">
-            <Button
-              size="1"
-              variant="solid"
-              style={{
-                width: `100%`,
-                justifyContent: `center`,
-                height: `28px`,
-                color: `var(--white)`,
-              }}
-              onClick={handleNewChat}
-            >
-              New Chat
-            </Button>
-          </Box>
-        )}
-
         {/* Main Chat List */}
-        <ScrollArea style={{ flexGrow: 1 }}>
+        <ScrollArea className={classes.scrollArea}>
           <Flex direction="column" px="3" py="1">
             TODO: Stuff here
           </Flex>

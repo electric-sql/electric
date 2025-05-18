@@ -16,30 +16,16 @@ function Root() {
   return (
     <>
       <Providers defaultTheme="light">
-        <Flex style={{ height: `100vh`, width: `100vw`, overflow: `hidden` }}>
+        <Flex height="100vh" width="100vw" overflow="hidden">
           {isLoggedIn ? (
             <>
               <Sidebar />
-              <Flex
-                direction="column"
-                className="content-area"
-                style={{
-                  width: `100%`,
-                  transition: `width 0.2s ease-in-out`,
-                }}
-              >
+              <Flex direction="column" className="content-area" width="100%">
                 <Outlet />
               </Flex>
             </>
           ) : (
-            <Flex
-              direction="column"
-              className="content-area"
-              style={{
-                width: `100%`,
-                transition: `width 0.2s ease-in-out`,
-              }}
-            >
+            <Flex direction="column" className="content-area" width="100%">
               <WelcomeScreen />
             </Flex>
           )}

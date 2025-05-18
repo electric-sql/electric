@@ -13,7 +13,8 @@ function Index() {
         direction="column"
         align="center"
         justify="center"
-        style={{ height: `100%`, width: `100%` }}
+        height="100%"
+        width="100%"
       >
         <h3>Welcome Home!</h3>
       </Flex>

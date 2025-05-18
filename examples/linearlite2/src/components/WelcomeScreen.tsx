@@ -8,11 +8,26 @@ import {
   Button,
   IconButton,
   Tooltip,
+  TextField,
 } from '@radix-ui/themes'
 import { Sun, Moon, Monitor } from 'lucide-react'
 import { useTheme } from './ThemeProvider'
 import { useAuth } from '../hooks/useAuth'
 import AboutSection from './AboutSection'
+import { makeStyles } from '@griffel/react'
+
+const useClasses = makeStyles({
+  welcomeScreen: {
+    height: `100vh`,
+    width: `100vw`,
+    position: `relative`,
+  },
+  themeToggle: {
+    position: `absolute`,
+    top: `16px`,
+    right: `16px`,
+  },
+})
 
 export default function WelcomeScreen() {
   const { signIn } = useAuth()
@@ -21,6 +36,7 @@ export default function WelcomeScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
+  const classes = useClasses()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,16 +52,9 @@ export default function WelcomeScreen() {
   }
 
   return (
-    <Flex
-      direction="column"
-      style={{
-        height: `100vh`,
-        width: `100vw`,
-        position: `relative`,
-      }}
-    >
+    <Flex direction="column" className={classes.welcomeScreen}>
       {/* Theme Toggle */}
-      <Box style={{ position: `absolute`, top: `16px`, right: `16px` }}>
+      <Box className={classes.themeToggle}>
         <Tooltip
           content={
             theme === `dark`
@@ -80,25 +89,17 @@ export default function WelcomeScreen() {
         direction="column"
         align="center"
         justify="center"
-        style={{
-          flex: 1,
-          padding: `16px`,
-        }}
+        p="4"
+        flexGrow="1"
       >
-        <Box
-          style={{
-            maxWidth: `480px`,
-            width: `100%`,
-            padding: `0 16px`,
-          }}
-        >
+        <Box maxWidth="480px" width="100%" p="0 16px">
           <Heading size="6" mb="5" align="center" weight="medium">
             Welcome to Linearlite
           </Heading>
 
-          <form onSubmit={handleSubmit} style={{ width: `100%` }}>
-            <Flex direction="column" gap="4" style={{ width: `100%` }}>
-              <input
+          <form onSubmit={handleSubmit}>
+            <Flex direction="column" gap="4" width="100%">
+              <TextField.Root
                 type="text"
                 placeholder="Enter your name"
                 value={username}
@@ -106,15 +107,8 @@ export default function WelcomeScreen() {
                   setUsername(e.target.value)
                   setError(``)
                 }}
-                style={{
-                  padding: `12px 16px`,
-                  fontSize: `16px`,
-                  border: `1px solid var(--gray-5)`,
-                  borderRadius: `6px`,
-                  backgroundColor: `var(--color-background)`,
-                  color: `var(--gray-12)`,
-                }}
                 disabled={isSubmitting}
+                size="3"
               />
 
               {error && (
@@ -123,14 +117,7 @@ export default function WelcomeScreen() {
                 </Text>
               )}
 
-              <Button
-                type="submit"
-                size="3"
-                disabled={isSubmitting}
-                style={{
-                  width: `100%`,
-                }}
-              >
+              <Button type="submit" size="3" disabled={isSubmitting}>
                 {isSubmitting ? `Entering...` : `Enter`}
               </Button>
             </Flex>
