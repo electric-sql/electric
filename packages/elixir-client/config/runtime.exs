@@ -13,7 +13,7 @@ if config_env() == :test do
   electric_url = System.get_env("ELECTRIC_URL", default_electric_url)
 
   config :electric_client,
-    database_config: connection_opts,
+    database_config: connection_opts |> Electric.Utils.deobfuscate_password(),
     electric_url: electric_url
 
   config :electric_client, Support.Repo, url: database_url
