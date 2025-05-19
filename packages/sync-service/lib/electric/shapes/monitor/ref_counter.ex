@@ -111,6 +111,10 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     :"#{__MODULE__}:#{stack_id}"
   end
 
+  defp monitor_table(stack_id) do
+    :"#{__MODULE__}:#{stack_id}:monitor"
+  end
+
   @impl GenServer
   def init(%{stack_id: stack_id} = opts) do
     Process.set_label({:shape_monitor, stack_id})
@@ -130,7 +134,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         read_concurrency: true
       ])
 
-    monitor_table = :ets.new(:"#{__MODULE__}:#{stack_id}:monitor", [])
+    monitor_table = :ets.new(monitor_table(stack_id), [])
 
     state = %{
       stack_id: stack_id,
@@ -175,8 +179,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end
   end
 
-  def handle_call({:unregister_reader, handle, pid}, _from, state) do
-    state = delete_reader_process(pid, handle, state)
+  def handle_call({:unregister_reader, _handle, pid}, _from, state) do
+    state = delete_reader_process(pid, state)
 
     {:reply, :ok, state}
   end
@@ -275,8 +279,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end
   end
 
-  def handle_info({{:down, :reader, handle}, _ref, :process, pid, _reason}, state) do
-    state = delete_reader_process(pid, handle, state)
+  def handle_info({{:down, :reader}, _ref, :process, pid, _reason}, state) do
+    state = delete_reader_process(pid, state)
 
     {:noreply, state}
   end
@@ -299,7 +303,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   defp register_reader_for_handle(state, handle, pid) do
-    ref = Process.monitor(pid, tag: {:down, :reader, handle})
+    ref = Process.monitor(pid, tag: {:down, :reader})
     :ets.insert(state.monitor_table, {pid, :reader, handle, ref})
 
     count = update_counter(state.stack_id, handle, 1)
@@ -338,19 +342,17 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     :ets.update_counter(table(stack_id), handle, update_op, {handle, 0})
   end
 
-  defp delete_reader_process(pid, handle, state) do
+  defp delete_reader_process(pid, state) do
     case :ets.lookup(state.monitor_table, pid) do
-      [{^pid, :reader, registered_handle, ref}] ->
+      [{^pid, :reader, handle, ref}] ->
         # we get occasional :down messages with stale handles, maybe from
         # a race condition between a de/re-register and the down message.
         # it's important that we only deregister the active one, rather than
         # the stale one, otherwise the count of active clients differs from the
         # number of registered pids and shapes get deleted with active readers
-        if registered_handle != handle,
-          do: Logger.debug("Stale de-registration of pid for handle #{handle}")
 
         state
-        |> handle_pid_termination(pid, registered_handle, ref)
+        |> handle_pid_termination(pid, handle, ref)
         |> notify_remove(handle, pid)
 
       [] ->
