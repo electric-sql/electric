@@ -8,7 +8,7 @@
   "scripts": {
     "backend:up": "PROJECT_NAME=react-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=react-example pnpm -C ../../ run example-backend:down",
-    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ../.shared/db/migrations",
     "dev": "vite",
     "build": "vite build",
     "format": "eslint . --ext ts,tsx --fix",
