@@ -76,6 +76,22 @@ jobs:
       - name: Run tests
         run: mix test
 
+      - name: Upload coverage reports to CodeCov
+        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: elixir,unit-tests,elixir-client
+          files: ./cover/excoveralls.json
+
+      - name: Upload test results to CodeCov
+        uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
+        if: ${{ !cancelled() }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          flags: elixir,unit-tests,elixir-client
+          files: ./junit/test-junit-report.xml
+
   formatting:
     name: Check formatting
     runs-on: ubuntu-latest

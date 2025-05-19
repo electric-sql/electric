@@ -6,12 +6,13 @@
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
-  "dependencies": {},
   "devDependencies": {
+    "@codecov/vite-plugin": "^1.9.0",
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
+    "@vitest/coverage-istanbul": "2.1.4",
     "cache-control-parser": "^2.0.6",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.0",

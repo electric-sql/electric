@@ -1,0 +1,4 @@
+{
+  "skip_files": ["test/support"],
+  "print_summary": false
+}

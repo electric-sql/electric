@@ -135,6 +135,21 @@ jobs:
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm test
 
+      - name: Upload coverage reports to CodeCov
+        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: typescript,unit-tests,${{ matrix.package_dir }}
+
+      - name: Upload test results to CodeCov
+        uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
+        if: ${{ !cancelled() }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          flags: typescript,unit-tests,${{ matrix.package_dir }}
+          files: ./junit/test-report.junit.xml
+
   check_and_build_examples:
     name: Check and build ${{ matrix.example_folder }}
     needs: [list_examples, build_and_test_packages]

@@ -22,4 +22,6 @@ wal
 /shapes
 .sst
 **/deps/*
+**/junit
+**/coverage
 response.tmp
