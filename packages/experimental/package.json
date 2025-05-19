@@ -68,6 +68,7 @@
     "prepack": "pnpm build",
     "stylecheck": "eslint . --quiet",
     "test": "pnpm exec vitest",
+    "coverage": "pnpm exec vitest --coverage",
     "typecheck": "tsc -p tsconfig.json"
   },
   "sideEffects": false,
