@@ -1,4 +1,4 @@
-import { applyMigrations, createDatabaseForCloudElectric } from "./database"
+import { applyMigrations, createDatabaseForCloudElectric } from './database'
 
 export function getSharedCluster(serviceName: string): sst.aws.Cluster {
   const sharedInfraVpcId = process.env.SHARED_INFRA_VPC_ID
