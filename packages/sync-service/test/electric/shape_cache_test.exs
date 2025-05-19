@@ -1,5 +1,6 @@
 defmodule Electric.ShapeCacheTest do
   use ExUnit.Case, async: true
+  use Support.Mock
 
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
@@ -17,7 +18,6 @@ defmodule Electric.ShapeCacheTest do
   import Support.DbSetup
   import Support.DbStructureSetup
   import Support.TestUtils
-  alias Support.Mock
 
   @shape %Shape{
     root_table: {"public", "items"},

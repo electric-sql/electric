@@ -1,5 +1,7 @@
 defmodule Electric.Plug.ServeShapePlugTest do
   use ExUnit.Case, async: true
+  use Support.Mock
+
   import Plug.Conn
 
   alias Electric.Postgres.Lsn
@@ -10,8 +12,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   import Support.ComponentSetup
   import Support.TestUtils, only: [set_status_to_active: 1]
-
-  alias Support.Mock
 
   import Mox
 

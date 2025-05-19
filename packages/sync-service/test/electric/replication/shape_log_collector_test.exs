@@ -1,6 +1,7 @@
 defmodule Electric.Replication.ShapeLogCollectorTest do
   use ExUnit.Case, async: false
   use Repatch.ExUnit
+  use Support.Mock
 
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
@@ -11,7 +12,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Shapes.Shape
   alias Electric.StatusMonitor
 
-  alias Support.Mock
   alias Support.StubInspector
   alias Support.RepatchExt
 

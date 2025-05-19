@@ -1,12 +1,12 @@
 defmodule Electric.Plug.DeleteShapePlugTest do
   use ExUnit.Case, async: true
+  use Support.Mock
 
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
   import Support.TestUtils, only: [set_status_to_active: 1]
-  alias Support.Mock
 
   import Mox
 
