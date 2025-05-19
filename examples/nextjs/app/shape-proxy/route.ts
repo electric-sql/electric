@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const headers = new Headers()
   if (process.env.ELECTRIC_SOURCE_SECRET) {
     originUrl.searchParams.set(
-      `source_secret`,
+      `secret`,
       process.env.ELECTRIC_SOURCE_SECRET
     )
   }
