@@ -1,11 +1,11 @@
 defmodule Electric.ShapeCache.FileStorageTest do
   use ExUnit.Case, async: true
+  use Support.Mock
 
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.FileStorage
   alias Electric.Shapes.Shape
 
-  alias Support.Mock
   alias Support.StubInspector
 
   import Mox
