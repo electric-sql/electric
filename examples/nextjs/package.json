@@ -14,6 +14,7 @@
     "start": "next start",
     "format": "eslint . --fix",
     "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
