@@ -69,7 +69,7 @@ function addDatabaseToElectric({
   })
 }
 
-function applyMigrations(
+export function applyMigrations(
   dbUri: string,
   migrationsDir: string = `./db/migrations`
 ) {
