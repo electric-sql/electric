@@ -16,7 +16,22 @@ defmodule Electric.Client.MixProject do
       docs: docs(),
       package: package(),
       source_url: "#{@github_repo}/tree/main/packages/elixir-client",
-      homepage_url: "https://electric-sql.com"
+      homepage_url: "https://electric-sql.com",
+      preferred_cli_env: [
+        dialyzer: :test,
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "coveralls.cobertura": :test,
+        "coveralls.lcov": :test
+      ],
+      test_coverage: [
+        tool: ExCoveralls,
+        ignore_modules: [
+          ~r/^Support.*/
+        ]
+      ]
     ]
   end
 
@@ -43,7 +58,9 @@ defmodule Electric.Client.MixProject do
       {:postgresql_uri, "~> 0.1", only: [:test]},
       {:uuid, "~> 1.1", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.18", only: [:test], runtime: false},
+      {:junit_formatter, "~> 3.4", only: [:test], runtime: false}
     ]
   end
 
