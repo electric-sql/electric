@@ -1,7 +1,11 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { getExampleSource, getSharedCluster, isProduction } from "../.shared/lib/infra"
+import {
+  getExampleSource,
+  getSharedCluster,
+  isProduction,
+} from "../.shared/lib/infra"
 
 export default $config({
   app(input) {
