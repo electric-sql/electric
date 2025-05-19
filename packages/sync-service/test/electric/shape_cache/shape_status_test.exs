@@ -1,12 +1,12 @@
 defmodule Electric.ShapeCache.ShapeStatusTest do
   use ExUnit.Case, async: true
+  use Support.Mock
 
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
   alias Support.StubInspector
 
-  alias Support.Mock
   import Mox
 
   setup :verify_on_exit!

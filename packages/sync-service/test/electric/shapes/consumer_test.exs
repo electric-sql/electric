@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.ConsumerTest do
   use ExUnit.Case, async: true
+  use Support.Mock
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.{Transaction, Relation}
@@ -12,7 +13,6 @@ defmodule Electric.Shapes.ConsumerTest do
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Consumer
 
-  alias Support.Mock
   alias Support.StubInspector
 
   import Support.ComponentSetup

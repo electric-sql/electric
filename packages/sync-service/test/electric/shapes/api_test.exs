@@ -1,13 +1,12 @@
 defmodule Electric.Shapes.ApiTest do
   use ExUnit.Case, async: true
   use Plug.Test
+  use Support.Mock
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
-
-  alias Support.Mock
 
   import Support.ComponentSetup
   import Support.TestUtils, only: [set_status_to_active: 1, set_status_to_errored: 2]
