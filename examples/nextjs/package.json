@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@playwright/test": "^1.52.0",
     "@types/pg": "^8.11.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -35,6 +36,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
+    "playwright": "^1.52.0",
     "sst": "3.6.35",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
