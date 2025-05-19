@@ -140,7 +140,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: typescript,unit-tests,${{ matrix.package_dir }}
-          directory: ./coverage
+          files: ./coverage/coverage-final.json
 
       - name: Upload test results to CodeCov
         uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
