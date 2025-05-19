@@ -660,18 +660,20 @@ defmodule Electric.ShapeCacheTest do
       Task.await_many(tasks)
     end
 
+    @tag :slow
     test "errors while streaming from database are sent to all callers", ctx do
+      test_pid = self()
+      ref = make_ref()
+
+      # this little dance is to try to quickly interrupt the snapshot process
+      # at the point where the filesystem storage tries to open its first
+      # snapshot file
       stream_from_database =
         Stream.map(1..10, fn
-          10 ->
-            raise "some error"
-
           1 ->
-            Process.sleep(100)
-            [1]
-
-          n ->
-            [n]
+            send(test_pid, {:stream_start, self()})
+            receive(do: ({:continue, ^ref} -> :ok))
+            raise "some error"
         end)
 
       %{shape_cache_opts: opts} =
@@ -690,7 +692,7 @@ defmodule Electric.ShapeCacheTest do
       storage = Storage.for_shape(shape_handle, ctx.storage)
 
       tasks =
-        for _ <- 1..10 do
+        for n <- 1..10 do
           Task.async(fn ->
             :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
@@ -701,15 +703,34 @@ defmodule Electric.ShapeCacheTest do
                 storage
               )
 
+            Electric.Shapes.Monitor.register_reader(ctx.stack_id, shape_handle)
+
             assert_raise Storage.Error, fn ->
-              stream |> Stream.each(fn _ -> Process.sleep(1) end) |> Stream.run()
+              send(test_pid, {:read_start, n})
+              receive(do: (:continue -> n))
+
+              stream
+              |> Stream.transform(
+                fn -> n end,
+                fn elem, acc -> {[elem], acc} end,
+                fn _ -> :ok end
+              )
+              |> Stream.run()
             end
           end)
         end
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}
+      assert_receive {:stream_start, stream_pid}
+
+      for n <- 1..10, do: assert_receive({:read_start, ^n})
+
+      for %{pid: pid} <- tasks, do: send(pid, :continue)
+
+      send(stream_pid, {:continue, ref})
 
       Task.await_many(tasks, 10_000)
+
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}
     end
 
     test "propagates error in snapshot creation to listeners", ctx do
@@ -732,15 +753,21 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+
+      task =
+        Task.async(fn ->
+          send(test_pid, {:await_snapshot_start, self()})
+          ShapeCache.await_snapshot_start(shape_handle, opts)
+        end)
+
+      assert_receive {:await_snapshot_start, _pid}
 
       log =
         capture_log(fn ->
           assert_receive {:waiting_point, ref, pid}
           send(pid, {:continue, ref})
 
-          assert {:error, %RuntimeError{message: "expected error"}} =
-                   Task.await(task)
+          assert {:error, %RuntimeError{message: "expected error"}} = Task.await(task)
         end)
 
       assert log =~ "Snapshot creation failed for #{shape_handle}"
