@@ -9,7 +9,7 @@
     "backend:up": "PROJECT_NAME=tanstack-example pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=tanstack-example pnpm -C ../../ run example-backend:down",
     "build": "vite build",
-    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
+    "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ../.shared/db/migrations",
     "dev": "concurrently \"vite\" \"node src/server/app.js\"",
     "start": "node src/server/app.js",
     "format": "eslint . --fix",

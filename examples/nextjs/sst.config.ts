@@ -1,8 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { createDatabaseForCloudElectric } from "../.shared/lib/database"
-import { isProduction } from "../.shared/lib/infra"
+import { getExampleSource, isProduction } from "../.shared/lib/infra"
 
 export default $config({
   app(input) {
@@ -25,10 +24,7 @@ export default $config({
     const dbName = `nextjs${isProduction() ? `` : `-stage-${$app.stage}`}`
 
     const { sourceId, sourceSecret, pooledDatabaseUri } =
-      createDatabaseForCloudElectric({
-        dbName,
-        migrationsDirectory: `./db/migrations`,
-      })
+      getExampleSource(dbName)
 
     const website = new sst.aws.Nextjs(`nextjs`, {
       environment: {

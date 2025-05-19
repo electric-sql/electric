@@ -1,8 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { createDatabaseForCloudElectric } from "../.shared/lib/database"
-import { getSharedCluster, isProduction } from "../.shared/lib/infra"
+import { getExampleSource, getSharedCluster, isProduction } from "../.shared/lib/infra"
 
 export default $config({
   app(input) {
@@ -32,10 +31,7 @@ export default $config({
       : `tanstack-app-${$app.stage}`
 
     const { pooledDatabaseUri, sourceId, sourceSecret } =
-      createDatabaseForCloudElectric({
-        dbName,
-        migrationsDirectory: `./db/migrations`,
-      })
+      getExampleSource(dbName)
 
     const cluster = getSharedCluster(`tanstack-app-${$app.stage}`)
     const service = cluster.addService(`tanstack-app-${$app.stage}-service`, {
