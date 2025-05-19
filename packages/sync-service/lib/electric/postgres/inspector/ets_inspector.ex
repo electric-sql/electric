@@ -10,7 +10,10 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   """
   use GenServer
 
+  import Electric, only: :macros
   require Logger
+
+  alias Electric.Postgres.Inspector
   alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.DirectInspector
 
@@ -18,13 +21,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   ## Public API
   def name(opts) do
-    case Keyword.fetch(opts, :name) do
-      {:ok, name} ->
-        name
-
-      :error ->
-        Electric.ProcessRegistry.name(Keyword.fetch!(opts, :stack_id), __MODULE__)
-    end
+    Keyword.get(
+      opts,
+      :name,
+      Electric.ProcessRegistry.name(Keyword.fetch!(opts, :stack_id), __MODULE__)
+    )
   end
 
   def start_link(opts) do
@@ -32,90 +33,51 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       GenServer.start_link(
         __MODULE__,
         Map.new(opts)
-        |> Map.put_new(:pg_info_table, get_column_info_table(opts))
-        |> Map.put_new(:pg_relation_table, get_relation_table(opts)),
+        |> Map.put_new(:pg_relation_table, relation_table(opts)),
         name: name(opts)
       )
 
     {:ok, pid}
   end
 
-  @impl Electric.Postgres.Inspector
-  def load_relation(table, opts) do
-    case relation_from_ets(table, opts) do
-      :not_found ->
-        # We don't set a timeout here because it's managed by the underlying query.
-        with {:ok, rel, _} <-
-               GenServer.call(opts[:server], {:load_relation_and_column_info, table}, :infinity) do
-          {:ok, rel}
-        end
+  ## Inspector API
 
-      rel ->
-        {:ok, rel}
+  @impl Inspector
+  @spec load_relation_oid(Electric.relation(), opts :: term()) ::
+          {:ok, Electric.oid_relation()} | :table_not_found | {:error, term()}
+  def load_relation_oid(relation, opts) when is_relation(relation) do
+    with :not_in_cache <- fetch_normalized_relation_from_ets(relation, opts) do
+      GenServer.call(opts[:server], {:load_relation_oid, relation}, :infinity)
     end
   end
 
-  defp known_schema(opts) do
-    :ets.tab2list(get_column_info_table(opts))
-    |> Enum.reduce(%{}, fn
-      {{rel, :table_to_relation}, %{relation_id: relation_id}}, acc ->
-        Map.update(acc, rel, %{relation_id: relation_id}, &Map.put(&1, :relation_id, relation_id))
-
-      {{rel, :columns}, columns}, acc ->
-        Map.update(acc, rel, %{columns: columns}, &Map.put(&1, :columns, columns))
-    end)
-    |> Enum.map(fn {rel, data} -> Map.put(data, :relation, rel) end)
-  end
-
-  defp clean_relation(rel, opts_or_state) do
-    pg_relation_ets_table = get_relation_table(opts_or_state)
-    pg_info_ets_table = get_column_info_table(opts_or_state)
-
-    # Delete all tables that are associated with the relation
-    tables_from_ets(rel, opts_or_state)
-    |> Enum.each(fn table -> :ets.delete(pg_info_ets_table, {table, :table_to_relation}) end)
-
-    # Delete the relation itself
-    :ets.delete(pg_relation_ets_table, {rel, :relation_to_table})
-  end
-
-  @impl Electric.Postgres.Inspector
-  def load_column_info({_namespace, _table_name} = table, opts) do
-    case column_info_from_ets(table, opts) do
-      :not_found ->
-        with {:ok, _, cols} <-
-               GenServer.call(opts[:server], {:load_relation_and_column_info, table}, :infinity) do
-          {:ok, cols}
-        else
-          {:error, err, stacktrace} ->
-            reraise err, stacktrace
-
-          {:error, err} ->
-            if is_binary(err) and err =~ "ERROR 42P01 (undefined_table)" do
-              :table_not_found
-            else
-              {:error, err}
-            end
-        end
-
-      found ->
-        {:ok, found}
+  @impl Inspector
+  @spec load_relation_info(Electric.relation_id(), opts :: term()) ::
+          {:ok, Inspector.relation_info()} | :table_not_found | {:error, term()}
+  def load_relation_info(oid, opts) when is_relation_id(oid) do
+    with :not_in_cache <- fetch_relation_info_from_ets(oid, opts) do
+      GenServer.call(opts[:server], {:load_relation_info, oid}, :infinity)
     end
   end
 
-  defp clean_column_info(table, opts_or_state) do
-    ets_table = get_column_info_table(opts_or_state)
-
-    :ets.delete(ets_table, {table, :columns})
+  @impl Inspector
+  @spec load_column_info(Electric.relation_id(), opts :: term()) ::
+          {:ok, [Inspector.column_info()]} | :table_not_found | {:error, term()}
+  def load_column_info(oid, opts) when is_relation_id(oid) do
+    with :not_in_cache <- fetch_column_info_from_ets(oid, opts) do
+      GenServer.call(opts[:server], {:load_column_info, oid}, :infinity)
+    end
   end
 
-  @impl Electric.Postgres.Inspector
-  def clean(relation, opts_or_state) do
-    clean_column_info(relation, opts_or_state)
-    clean_relation(relation, opts_or_state)
+  @impl Inspector
+  @spec clean(Electric.relation_id(), opts :: term()) :: :ok
+  def clean(relation_id, opts) when is_relation_id(relation_id) do
+    GenServer.call(opts[:server], {:clean, relation_id}, :infinity)
   end
 
-  @impl Electric.Postgres.Inspector
+  @impl Inspector
+  @spec list_relations_with_stale_cache(opts :: term()) ::
+          {:ok, [Electric.relation_id()]} | {:error, term()}
   def list_relations_with_stale_cache(opts) do
     GenServer.call(opts[:server], :list_relations_with_stale_cache, :infinity)
   end
@@ -134,14 +96,12 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
     # Name needs to be an atom but we don't want to dynamically create atoms.
     # Instead, we will use the reference to the table that is returned by `:ets.new`
-    pg_info_table = :ets.new(opts.pg_info_table, [:named_table, :public, :set])
-    pg_relation_table = :ets.new(opts.pg_relation_table, [:named_table, :public, :bag])
+    pg_relation_table = :ets.new(opts.pg_relation_table, [:named_table, :protected, :ordered_set])
 
     persistence_key = "#{opts.stack_id}:ets_inspector_state"
 
     state =
       %{
-        pg_info_table: pg_info_table,
         pg_relation_table: pg_relation_table,
         pg_pool: opts.pool,
         persistent_kv: opts.persistent_kv,
@@ -153,35 +113,44 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   @impl GenServer
-  def handle_call({:load_relation_and_column_info, table}, _from, state) do
-    # If ETS has been filled between the `GenServer.call` and handing of this message,
-    # we can just return the data from ETS.
-    case {relation_from_ets(table, state), column_info_from_ets(table, state)} do
-      {x, y} when x == :not_found or y == :not_found ->
-        case fetch_from_db(table, state) do
-          # Outer error is a transaction error, DB likely unreachable
-          {:error, err} ->
-            {:reply, {:error, err}, state}
+  def handle_call({:load_relation_oid, rel}, _from, state) do
+    response =
+      with :not_in_cache <- fetch_normalized_relation_from_ets(rel, state),
+           :ok <- fill_cache(rel, state) do
+        fetch_normalized_relation_from_ets(rel, state)
+      end
 
-          # Inner error means table was not found
-          {:ok, {:error, err}} ->
-            {:reply, {:error, err}, state}
-
-          # Success
-          {:ok, {:ok, rel_info, cols}} ->
-            state
-            |> store_relation(table, rel_info)
-            |> store_column_info(table, cols)
-            |> persist_data()
-
-            {:reply, {:ok, rel_info, cols}, state}
-        end
-
-      {rel, cols} ->
-        {:reply, {:ok, rel, cols}, state}
-    end
+    {:reply, response, state}
   end
 
+  @impl GenServer
+  def handle_call({:load_relation_info, oid}, _from, state) do
+    response =
+      with :not_in_cache <- fetch_relation_info_from_ets(oid, state),
+           :ok <- fill_cache(oid, state) do
+        fetch_relation_info_from_ets(oid, state)
+      end
+
+    {:reply, response, state}
+  end
+
+  @impl GenServer
+  def handle_call({:load_column_info, oid}, _from, state) do
+    response =
+      with :not_in_cache <- fetch_column_info_from_ets(oid, state),
+           :ok <- fill_cache(oid, state) do
+        fetch_column_info_from_ets(oid, state)
+      end
+
+    {:reply, response, state}
+  end
+
+  @impl GenServer
+  def handle_call({:clean, oid}, _from, state) do
+    {:reply, :ok, delete_relation_info(state, oid)}
+  end
+
+  @impl GenServer
   def handle_call(:list_relations_with_stale_cache, _from, state) do
     known_schema = known_schema(state)
     known_schema_oids = known_schema |> Enum.map(& &1.relation_id)
@@ -204,7 +173,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           found_relations_columns =
             present_relations
             |> Enum.map(& &1.relation_id)
-            |> Electric.Postgres.Inspector.DirectInspector.load_column_info_by_oids(conn)
+            |> Electric.Postgres.Inspector.DirectInspector.load_column_info_by_oids!(conn)
 
           diverged_relations =
             present_relations
@@ -228,109 +197,159 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       {:reply, :error, state}
   end
 
-  defp fetch_from_db(table, state) do
+  @impl true
+  def handle_info({:EXIT, _, reason}, state) do
+    {:stop, reason, state}
+  end
+
+  defp fill_cache(rel_or_oid, state) when is_relation(rel_or_oid) or is_relation_id(rel_or_oid) do
+    case fetch_from_db(rel_or_oid, state) do
+      {:ok, {rel, cols}} ->
+        state
+        |> store_relation_info(rel, cols)
+        |> persist_data()
+
+      {:ok, :table_not_found} ->
+        :table_not_found
+
+      {:error, err} ->
+        {:error, err}
+    end
+  end
+
+  defp fetch_from_db(rel_or_oid, state)
+       when is_relation(rel_or_oid) or is_relation_id(rel_or_oid) do
     Postgrex.transaction(state.pg_pool, fn conn ->
-      with {:ok, rel} <- DirectInspector.load_relation(table, conn),
-           {:ok, cols} <- DirectInspector.load_column_info(rel.relation, conn) do
-        {:ok, rel, cols}
+      loader_fn =
+        if is_relation(rel_or_oid),
+          do: &DirectInspector.normalize_and_load_relation_info/2,
+          else: &DirectInspector.load_relation_info/2
+
+      with {:ok, rel} <- loader_fn.(rel_or_oid, conn),
+           {:ok, cols} <- DirectInspector.load_column_info(rel.relation_id, conn) do
+        {rel, cols}
       else
         {:error, err} -> Postgrex.rollback(conn, err)
+        :table_not_found -> :table_not_found
       end
     end)
   end
 
-  defp store_relation(state, table, %{relation: relation} = info) do
-    # We keep the mapping in both directions:
-    # - Forward: user-provided table name -> PG relation (many-to-one)
-    #     e.g. `~s|users|` -> `{"public", "users"}`
-    #          `~s|USERS|` -> `{"public", "users"}`
-    # - Backward: and PG relation -> user-provided table names (one-to-many)
-    #     e.g. `{"public", "users"}` -> `[~s|users|, ~s|USERS|]`
-    #
-    # The forward direction allows for efficient lookup (based on user-provided table name)
-    # the backward direction allows for efficient cleanup (based on PG relation)
-    :ets.insert(state.pg_info_table, {{table, :table_to_relation}, info})
-    :ets.insert(state.pg_info_table, {{relation, :table_to_relation}, info})
-    :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, table})
-    :ets.insert(state.pg_relation_table, {{info, :relation_to_table}, relation})
-    state
-  end
-
-  defp store_column_info(state, table, cols) do
-    :ets.insert(state.pg_info_table, {{table, :columns}, cols})
-    state
-  end
-
-  @pg_rel_position 2
-  defp relation_from_ets(table, opts_or_state) when is_binary(table) do
-    ets_table = get_column_info_table(opts_or_state)
-
-    :ets.lookup_element(ets_table, {table, :table_to_relation}, @pg_rel_position, :not_found)
-  end
-
-  defp relation_from_ets({_schema, _name} = relation, opts_or_state) do
-    ets_table = get_column_info_table(opts_or_state)
-
-    with info when is_map(info) <-
-           :ets.lookup_element(
-             ets_table,
-             {relation, :table_to_relation},
-             @pg_rel_position,
-             :not_found
-           ) do
-      info
-    end
-  end
-
-  @pg_table_idx 1
-  defp tables_from_ets(relation, opts_or_state) do
-    ets_table = get_relation_table(opts_or_state)
-
-    :ets.lookup(ets_table, {relation, :relation_to_table})
-    |> Enum.map(&elem(&1, @pg_table_idx))
-  end
-
-  @column_info_position 2
-  defp column_info_from_ets(table, opts_or_state) do
-    ets_table = get_column_info_table(opts_or_state)
-
-    :ets.lookup_element(ets_table, {table, :columns}, @column_info_position, :not_found)
-  end
-
-  # When called from within the GenServer it is passed the state
-  # which contains the reference to the ETS table.
-  # When called from outside the GenServer it is passed the opts keyword list
-  def get_column_info_table(%{pg_info_table: ets_table}), do: ets_table
-
-  def get_column_info_table(opts) do
-    stack_id = Access.fetch!(opts, :stack_id)
-    :"#{stack_id}:column_info_table"
-  end
-
-  def get_relation_table(%{pg_relation_table: ets_table}), do: ets_table
-
-  def get_relation_table(opts) do
-    stack_id = Access.fetch!(opts, :stack_id)
-    :"#{stack_id}:relation_table"
-  end
-
   @spec persist_data(map()) :: :ok
   defp persist_data(state) do
-    info = :ets.tab2list(state.pg_info_table)
     relations = :ets.tab2list(state.pg_relation_table)
-    PersistentKV.set(state.persistent_kv, state.persistence_key, {info, relations})
+    PersistentKV.set(state.persistent_kv, state.persistence_key, version: 1, data: relations)
   end
 
   @spec restore_persistent_state(map()) :: map()
   defp restore_persistent_state(state) do
     case PersistentKV.get(state.persistent_kv, state.persistence_key) do
-      {:ok, {info, relations}} ->
-        :ets.insert(state.pg_info_table, info)
+      {:ok, [version: 1, data: relations]} ->
         :ets.insert(state.pg_relation_table, relations)
+        state
+
+      {:ok, {_info, _relations}} ->
+        # This is the old storage format. We had an issue which led to inconsistent state
+        # exactly after this storage format was introduced. Because of that, we're dropping
+        # this cache (cost here is that customers may need to manually invalidate shapes
+        # after a restart if no writes occur for these shapes).
         state
 
       {:error, :not_found} ->
         state
     end
+  end
+
+  ## ETS access
+
+  # ETS structure
+  # @typep ets_value_1 :: {{:relation_to_oid, Electric.relation()}, Electric.relation_id()}
+  # @typep ets_value_2 ::
+  #          {{:oid_info, Electric.relation_id()}, Inspector.relation_info(),
+  #           Inspector.column_info()}
+  # @typep ets_value :: ets_value_1 | ets_value_2
+
+  @doc false
+  def relation_table(%{pg_relation_table: ets_table}), do: ets_table
+
+  def relation_table(opts) do
+    stack_id = Access.fetch!(opts, :stack_id)
+    :"#{stack_id}:relation_table"
+  end
+
+  defp relation_to_oid_key(rel), do: {:relation_to_oid, rel}
+  defp oid_to_info_key(oid), do: {:oid_info, oid}
+
+  @spec store_relation_info(map(), Inspector.relation_info(), [Inspector.column_info()]) :: map()
+  defp store_relation_info(state, %{relation: rel, relation_id: oid} = info, cols) do
+    :ets.insert(relation_table(state), [
+      {relation_to_oid_key(rel), oid},
+      {oid_to_info_key(oid), info, cols}
+    ])
+
+    state
+  end
+
+  @spec delete_relation_info(map(), Electric.relation_id()) :: map()
+  defp delete_relation_info(state, oid) when is_relation_id(oid) do
+    case fetch_relation_info_from_ets(oid, state) do
+      :not_in_cache ->
+        state
+
+      {:ok, %{relation: rel}} ->
+        :ets.select_delete(relation_table(state), [
+          {{relation_to_oid_key(rel), :_}, [], [true]},
+          {{oid_to_info_key(oid), :_, :_}, [], [true]}
+        ])
+
+        state
+    end
+  end
+
+  @spec fetch_normalized_relation_from_ets(Electric.relation(), opts :: term()) ::
+          {:ok, Electric.oid_relation()} | :not_in_cache
+  defp fetch_normalized_relation_from_ets(relation, opts) do
+    key = relation_to_oid_key(relation)
+
+    case :ets.lookup_element(relation_table(opts), key, 2, :not_in_cache) do
+      :not_in_cache -> :not_in_cache
+      oid -> {:ok, {oid, relation}}
+    end
+  end
+
+  @spec fetch_relation_info_from_ets(Electric.relation_id(), opts :: term()) ::
+          {:ok, Inspector.relation_info()} | :not_in_cache
+  defp fetch_relation_info_from_ets(oid, opts) do
+    key = oid_to_info_key(oid)
+
+    case :ets.lookup_element(relation_table(opts), key, 2, :not_in_cache) do
+      :not_in_cache -> :not_in_cache
+      relation -> {:ok, relation}
+    end
+  end
+
+  @spec fetch_column_info_from_ets(Electric.relation_id(), opts :: term()) ::
+          {:ok, [Inspector.column_info()]} | :not_in_cache
+  defp fetch_column_info_from_ets(oid, opts) do
+    key = oid_to_info_key(oid)
+
+    case :ets.lookup_element(relation_table(opts), key, 3, :not_in_cache) do
+      :not_in_cache -> :not_in_cache
+      column_list -> {:ok, column_list}
+    end
+  end
+
+  @spec known_schema(opts :: term()) :: [
+          %{
+            relation: Electric.relation(),
+            relation_id: Electric.relation_id(),
+            columns: [Inspector.column_info()]
+          }
+        ]
+  defp known_schema(opts) do
+    :ets.match(relation_table(opts), {oid_to_info_key(:_), :"$1", :"$2"})
+    |> Enum.map(fn [%{relation: rel, relation_id: oid}, cols] ->
+      %{relation: rel, relation_id: oid, columns: cols}
+    end)
   end
 end

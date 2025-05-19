@@ -1,42 +1,68 @@
 defmodule Electric.Postgres.Inspector.DirectInspector do
+  @moduledoc false
+  import Electric, only: :macros
+
+  alias Electric.Postgres.Inspector
   @behaviour Electric.Postgres.Inspector
+
+  @oid_from_schema_table_name_subquery "(SELECT pg_class.oid FROM pg_class JOIN pg_namespace ON relnamespace = pg_namespace.oid WHERE pg_namespace.nspname = $1::text AND pg_class.relname = $2::text)"
 
   @doc false
   @impl Electric.Postgres.Inspector
   def list_relations_with_stale_cache(_opts), do: :error
 
-  @doc """
-  Returns the PG relation from the table name.
-  """
   @impl Electric.Postgres.Inspector
-  def load_relation(table, conn) when is_binary(table) do
-    # The extra cast from $1 to text is needed because of Postgrex' OID type encoding
-    # see: https://github.com/elixir-ecto/postgrex#oid-type-encoding
-    query = load_relation_query("$1::text::regclass")
+  @spec load_relation_oid(Electric.relation(), conn :: Postgrex.conn()) ::
+          {:ok, Electric.oid_relation()} | :table_not_found | {:error, String.t()}
+  def load_relation_oid({schema, table}, conn) do
+    query = load_relation_query(@oid_from_schema_table_name_subquery)
 
-    case do_load_relation(conn, query, [table]) do
+    case do_load_relation(conn, query, [schema, table]) do
       {:ok, []} ->
-        {:error, "No relation found"}
+        :table_not_found
 
-      # We're matching for a unique regclass here, can't be more than one
-      {:ok, [relation]} ->
-        {:ok, relation}
+      {:ok, [%{relation_id: oid, relation: {schema, table}}]} ->
+        {:ok, {oid, {schema, table}}}
 
       {:error, err} ->
         {:error, err}
     end
   end
 
-  def load_relation({schema, name}, conn) when is_binary(schema) and is_binary(name) do
-    query = load_relation_query("format('%I.%I', $1::text, $2::text)::regclass")
+  @doc """
+  Normalizes a relation and loads the relation info in one go.
 
-    case do_load_relation(conn, query, [schema, name]) do
+  This is an internal function meant to be used by the wrapping caching inspector.
+  """
+  @spec normalize_and_load_relation_info(Electric.relation(), conn :: Postgrex.conn()) ::
+          {:ok, Inspector.relation_info()} | :table_not_found | {:error, String.t()}
+  def normalize_and_load_relation_info({schema, table}, conn) do
+    query = load_relation_query(@oid_from_schema_table_name_subquery)
+
+    case do_load_relation(conn, query, [schema, table]) do
       {:ok, []} ->
-        {:error, "No relation found"}
+        :table_not_found
 
-      # We're matching for a unique regclass here, can't be more than one
-      {:ok, [relation]} ->
-        {:ok, relation}
+      {:ok, [relation_info]} ->
+        {:ok, relation_info}
+
+      {:error, err} ->
+        {:error, err}
+    end
+  end
+
+  @impl Electric.Postgres.Inspector
+  @spec load_relation_info(Electric.relation_id(), conn :: Postgrex.conn()) ::
+          {:ok, Inspector.relation_info()} | :table_not_found | {:error, String.t()}
+  def load_relation_info(oid, conn) when is_relation_id(oid) do
+    query = load_relation_query("$1::oid")
+
+    case do_load_relation(conn, query, [oid]) do
+      {:ok, []} ->
+        :table_not_found
+
+      {:ok, [relation_info]} ->
+        {:ok, relation_info}
 
       {:error, err} ->
         {:error, err}
@@ -135,49 +161,58 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   Load table information (refs) from the database
   """
   @impl Electric.Postgres.Inspector
-  def load_column_info({namespace, tbl}, conn) do
+  @spec load_column_info(Electric.relation_id(), conn :: Postgrex.conn()) ::
+          {:ok, [Inspector.column_info()]} | :table_not_found | {:error, String.t()}
+  def load_column_info(relation_id, conn) when is_relation_id(relation_id) do
     query = """
     #{@column_info_query_base}
-    WHERE relname = $1 AND nspname = $2 AND relkind IN ('r', 'p')
+    WHERE pg_class.oid = $1::oid AND relkind IN ('r', 'p')
     ORDER BY pg_class.oid, attnum
     """
 
-    case do_query_column_info!(conn, query, [tbl, namespace]) do
-      [] ->
-        # Fixme: this is not necessarily true. The table might exist but have no columns.
+    case do_query_column_info(conn, query, [relation_id]) do
+      {:ok, []} ->
+        # There is an edge case where the table exists but has no columns.
+        # We're choosing to not support this case, so for ease of use we return
+        # :table_not_found
         :table_not_found
 
-      rows ->
+      {:ok, rows} ->
         {:ok, rows}
+
+      {:error, err} ->
+        {:error, err}
     end
   end
 
-  def load_column_info_by_oids(oids, conn) do
+  def load_column_info_by_oids!(oids, conn) when is_list(oids) do
     query = """
     #{@column_info_query_base}
     WHERE pg_class.oid = ANY ($1::oid[])
     ORDER BY pg_class.oid, attnum
     """
 
-    do_query_column_info!(conn, query, [oids])
-    |> Enum.group_by(& &1.relation_id)
+    case do_query_column_info(conn, query, [oids]) do
+      {:ok, rows} -> Enum.group_by(rows, & &1.relation_id)
+      {:error, reason} -> raise reason
+    end
   end
 
-  defp do_query_column_info!(conn, query, params) do
-    %{rows: rows, columns: columns} = Postgrex.query!(conn, query, params)
+  defp do_query_column_info(conn, query, params) do
+    with {:ok, %{rows: rows, columns: columns}} <- Postgrex.query(conn, query, params) do
+      columns = Enum.map(columns, &String.to_atom/1)
 
-    columns = Enum.map(columns, &String.to_atom/1)
-
-    rows =
-      Enum.map(rows, fn row ->
-        Enum.zip_with(columns, row, fn
-          :type_kind, val -> {:type_kind, parse_type_kind(val)}
-          col, val -> {col, val}
+      rows =
+        Enum.map(rows, fn row ->
+          Enum.zip_with(columns, row, fn
+            :type_kind, val -> {:type_kind, parse_type_kind(val)}
+            col, val -> {col, val}
+          end)
+          |> Map.new()
         end)
-        |> Map.new()
-      end)
 
-    rows
+      {:ok, rows}
+    end
   end
 
   @spec parse_type_kind(String.t()) :: Electric.Postgres.Inspector.type_kind()
@@ -190,5 +225,5 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   defp parse_type_kind("m"), do: :multirange
 
   @impl Electric.Postgres.Inspector
-  def clean(_, _), do: true
+  def clean(_, _), do: :ok
 end

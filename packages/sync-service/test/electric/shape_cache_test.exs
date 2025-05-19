@@ -10,8 +10,6 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.Shapes
   alias Electric.Shapes.Shape
 
-  alias Support.StubInspector
-
   import Mox
   import ExUnit.CaptureLog
   import Support.ComponentSetup
@@ -19,12 +17,20 @@ defmodule Electric.ShapeCacheTest do
   import Support.DbStructureSetup
   import Support.TestUtils
 
-  @shape %Shape{
-    root_table: {"public", "items"},
-    root_table_id: 1,
-    root_pk: ["id"],
-    selected_columns: ["id", "value"]
-  }
+  @stub_inspector Support.StubInspector.new(
+                    tables: [{1, {"public", "items"}}],
+                    columns: [
+                      %{
+                        name: "id",
+                        type: "int8",
+                        type_id: {20, 1},
+                        pk_position: 0,
+                        is_generated: false
+                      },
+                      %{name: "value", type: "text", type_id: {25, 1}, is_generated: false}
+                    ]
+                  )
+  @shape Shape.new!("items", inspector: @stub_inspector)
   @lsn Electric.Postgres.Lsn.from_integer(13)
   @change_offset LogOffset.new(@lsn, 2)
   @xid 99
@@ -40,17 +46,6 @@ defmodule Electric.ShapeCacheTest do
   ]
 
   @zero_offset LogOffset.last_before_real_offsets()
-
-  @stub_inspector StubInspector.new([
-                    %{
-                      name: "id",
-                      type: "int8",
-                      type_id: {20, 1},
-                      pk_position: 0,
-                      is_generated: false
-                    },
-                    %{name: "value", type: "text", type_id: {25, 1}, is_generated: false}
-                  ])
 
   # {xmin, xmax, xip_list}
   @pg_snapshot_xmin_10 {10, 11, [10]}
@@ -918,12 +913,6 @@ defmodule Electric.ShapeCacheTest do
   describe "after restart" do
     @describetag :tmp_dir
 
-    setup do
-      %{
-        inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
-      }
-    end
-
     setup [
       :with_cub_db_storage,
       :with_log_chunking,
@@ -957,7 +946,9 @@ defmodule Electric.ShapeCacheTest do
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       :started = ShapeCache.await_snapshot_start(shape_handle, opts)
       meta_table = Keyword.fetch!(opts, :shape_meta_table)
-      [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+
       {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_handle)
       assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
 

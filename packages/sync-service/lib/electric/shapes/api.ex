@@ -631,7 +631,7 @@ defmodule Electric.Shapes.Api do
     # if table schema changes in a way that doesn't invalidate the shape or we can't detect
     # (e.g. column nullability changes but the type remains the same), we might return the new
     # version if it's invalidated in ETS or server is restarted.
-    case Inspector.load_column_info(shape.root_table, inspector) do
+    case Inspector.load_column_info(shape.root_table_id, inspector) do
       {:ok, columns} ->
         Electric.Schema.from_column_info(columns, shape.selected_columns)
 

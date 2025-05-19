@@ -135,9 +135,8 @@ defmodule Electric.Shapes.Shape do
   def new(opts) when is_list(opts) or is_map(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          inspector <- Access.fetch!(opts, :inspector),
-         {:ok, relation} <- validate_relation(opts, inspector),
-         %{relation: table, relation_id: relation_id} <- relation,
-         {:ok, column_info, pk_cols} <- load_column_info(table, inspector),
+         {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
+         {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
          {:ok, selected_columns} <-
            validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
@@ -155,14 +154,14 @@ defmodule Electric.Shapes.Shape do
       {:ok,
        %__MODULE__{
          root_table: table,
-         root_table_id: relation_id,
+         root_table_id: oid,
          root_column_count: length(column_info),
          root_pk: pk_cols,
          flags: flags,
          where: where,
          selected_columns: selected_columns,
          replica: Access.get(opts, :replica, :default),
-         storage: Access.get(opts, :storage)
+         storage: Access.get(opts, :storage) || %{compaction: :disabled}
        }}
     end
   end
@@ -222,15 +221,18 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp load_column_info(table, inspector) do
-    case Inspector.load_column_info(table, inspector) do
+  defp load_column_info({oid, relation}, inspector) do
+    case Inspector.load_column_info(oid, inspector) do
       :table_not_found ->
-        {:error, {:table, ["table not found"]}}
+        # Rare but technically possible if a `clean` call was made to the inspector between
+        # validating the relation and here.
+        table_not_found_error(relation)
 
       {:ok, column_info} ->
-        # %{["column_name"] => :type}
-        Logger.debug("Table #{inspect(table)} found with #{length(column_info)} columns")
-        Logger.debug("Column info: #{inspect(column_info)}")
+        Logger.debug(
+          "Table #{inspect(relation)} found with #{length(column_info)} columns. \n" <>
+            "Column info: #{inspect(column_info)}"
+        )
 
         pk_cols = Inspector.get_pk_cols(column_info)
 
@@ -252,25 +254,25 @@ defmodule Electric.Shapes.Shape do
     end)
   end
 
+  defp table_not_found_error(relation),
+    do:
+      {:error,
+       {:table,
+        [
+          "Table #{Electric.Utils.inspect_relation(relation)} does not exist. " <>
+            "If the table name contains capitals or special characters you must quote it."
+        ]}}
+
+  @spec validate_relation(Keyword.t(), term()) ::
+          {:ok, Electric.oid_relation()} | {:error, {:table, [String.t()]}}
   defp validate_relation(opts, inspector) do
     relation = Keyword.fetch!(opts, :relation)
 
     # Parse identifier locally first to avoid hitting PG for invalid tables
-    with {:ok, rel} <- Inspector.load_relation(relation, inspector) do
-      {:ok, rel}
-    else
-      {:error, err} ->
-        case Regex.run(~r/.+ relation "(?<name>.+)" does not exist/, err, capture: :all_names) do
-          [_table_name] ->
-            {:error,
-             {:table,
-              [
-                ~s|Table #{Electric.Utils.inspect_relation(relation)} does not exist. If the table name contains capitals or special characters you must quote it.|
-              ]}}
-
-          _ ->
-            {:error, {:table, [err]}}
-        end
+    case Inspector.load_relation_oid(relation, inspector) do
+      {:ok, rel} -> {:ok, rel}
+      :table_not_found -> table_not_found_error(relation)
+      {:error, err} -> {:error, {:table, [err]}}
     end
   end
 

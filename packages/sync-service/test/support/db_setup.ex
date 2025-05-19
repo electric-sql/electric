@@ -108,25 +108,32 @@ defmodule Support.DbSetup do
 
     {:ok, task} =
       Task.start(fn ->
-        Postgrex.transaction(
-          pool,
-          fn conn ->
-            send(parent, {:conn_handover, conn})
+        try do
+          Postgrex.transaction(
+            pool,
+            fn conn ->
+              send(parent, {:conn_handover, conn})
 
-            exit_parent =
+              exit_parent =
+                receive do
+                  {:done, exit_parent} -> exit_parent
+                end
+
+              Postgrex.rollback(conn, {:complete, exit_parent})
+            end,
+            timeout: :infinity
+          )
+          |> case do
+            {:error, {:complete, target}} ->
+              send(target, :transaction_complete)
+
+            {:error, _} ->
               receive do
-                {:done, exit_parent} -> exit_parent
+                {:done, target} -> send(target, :transaction_complete)
               end
-
-            Postgrex.rollback(conn, {:complete, exit_parent})
-          end,
-          timeout: :infinity
-        )
-        |> case do
-          {:error, {:complete, target}} ->
-            send(target, :transaction_complete)
-
-          {:error, _} ->
+          end
+        rescue
+          _ in Postgrex.Error ->
             receive do
               {:done, target} -> send(target, :transaction_complete)
             end

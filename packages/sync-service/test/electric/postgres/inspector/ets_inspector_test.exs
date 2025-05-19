@@ -1,70 +1,109 @@
 defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   use Support.TransactionCase, async: true
+  use Repatch.ExUnit
   import Support.ComponentSetup
   import Support.DbStructureSetup
+  alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.EtsInspector
 
   setup :with_stack_id_from_test
+  setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+  setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
 
-  describe "load_relation/2" do
-    setup [
-      :with_persistent_kv,
-      :with_inspector,
-      :with_basic_tables,
-      :with_sql_execute
-    ]
+  setup %{db_conn: conn} do
+    %{rows: [[oid]]} =
+      Postgrex.query!(conn, "SELECT oid FROM pg_class WHERE relname = 'items'", [])
 
-    setup %{inspector: {EtsInspector, opts}} do
-      {:ok, %{opts: opts, table: {"public", "items"}}}
+    %{items_oid: oid}
+  end
+
+  describe "load_relation_oid/2" do
+    test "returns the relation id for a given relation", %{opts: opts} do
+      assert {:ok, {oid, {"public", "items"}}} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert is_integer(oid)
     end
 
-    test "returns relation from table name", %{opts: opts, table: table} do
-      assert {:ok, %{relation: ^table, relation_id: _, kind: :ordinary_table}} =
-               EtsInspector.load_relation("PuBliC.ItEmS", opts)
+    test "caches the relation id for a given relation once accesses", %{opts: opts} do
+      assert {:ok, {oid, {"public", "items"}}} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert is_integer(oid)
+
+      Repatch.patch(Postgrex, :transaction, [mode: :shared], fn _, _ ->
+        raise "should not be called again"
+      end)
+
+      Repatch.allow(self(), opts[:server])
+
+      assert {:ok, {^oid, {"public", "items"}}} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
     end
 
-    test "can reload the info using the relation", %{opts: opts, table: table} do
-      assert {:ok, %{relation: ^table, relation_id: _, kind: :ordinary_table}} =
-               EtsInspector.load_relation("public.items", opts)
-
-      assert {:ok, %{relation: ^table, relation_id: _, kind: :ordinary_table}} =
-               EtsInspector.load_relation(table, opts)
+    test "returns a not found marker when the relation does not exist", %{opts: opts} do
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "nonexistent"}, opts)
     end
 
-    test "returns same value from ETS cache as the original call", %{opts: opts, table: table} do
-      original = EtsInspector.load_relation("PuBliC.ItEmS", opts)
-      from_cache = EtsInspector.load_relation("PuBliC.ItEmS", opts)
-      assert original == from_cache
-      assert {:ok, %{relation: ^table, relation_id: _}} = original
+    test "assumes passed-in relation respects casing", %{opts: opts} do
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "ITEMS"}, opts)
     end
 
-    test "returns same value from ETS cache as the original call with concurrent calls", %{
+    test "forwards the DB errors without crashing the process", %{opts: opts} do
+      Repatch.patch(Postgrex, :query, [mode: :shared], fn _, _, _ ->
+        {:error, %DBConnection.ConnectionError{message: "expected error"}}
+      end)
+
+      Repatch.allow(self(), opts[:server])
+
+      assert {:error, "expected error"} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+    end
+  end
+
+  describe "load_relation_info/2" do
+    test "returns relation info for a given relation", %{opts: opts, items_oid: items_oid} do
+      assert {:ok,
+              %{relation: {"public", "items"}, relation_id: ^items_oid, kind: :ordinary_table}} =
+               EtsInspector.load_relation_info(items_oid, opts)
+    end
+
+    test "concurrent calls load value exactly once", %{
       opts: opts,
-      table: table
+      items_oid: items_oid
     } do
-      task = Task.async(fn -> EtsInspector.load_relation("PuBliC.ItEmS", opts) end)
-      original = EtsInspector.load_relation("PuBliC.ItEmS", opts)
-      from_cache = Task.await(task)
-      assert original == from_cache
-      assert {:ok, %{relation: ^table, relation_id: _}} = original
+      Repatch.spy(Postgrex)
+      Repatch.allow(self(), opts[:server])
+
+      task1 = Task.async(fn -> EtsInspector.load_relation_info(items_oid, opts) end)
+      task2 = Task.async(fn -> EtsInspector.load_relation_info(items_oid, opts) end)
+
+      assert {:ok,
+              %{relation: {"public", "items"}, relation_id: ^items_oid, kind: :ordinary_table} =
+                info} =
+               Task.await(task1)
+
+      assert {:ok, ^info} = Task.await(task2)
+
+      # Non-parallel call should return value from cache
+      assert {:ok, ^info} = EtsInspector.load_relation_info(items_oid, opts)
+
+      assert Repatch.called?(Postgrex, :transaction, 2, by: opts[:server], exactly: 1)
     end
 
-    @tag with_sql: [
-           ~s|CREATE TABLE "ITEMS" (a INT PRIMARY KEY)|
-         ]
-    test "is case insensitive when unquoted and case sensitive when quoted", %{
-      opts: opts,
-      table: table
-    } do
-      original1 = EtsInspector.load_relation("PuBliC.ITEMS", opts)
-      from_cache1 = EtsInspector.load_relation("PuBliC.ITEMS", opts)
-      assert original1 == from_cache1
-      assert {:ok, %{relation: ^table, relation_id: _}} = original1
+    test "returns a not found marker when the relation does not exist", %{opts: opts} do
+      assert :table_not_found = EtsInspector.load_relation_info(1_234_567_890, opts)
+    end
 
-      original2 = EtsInspector.load_relation(~s|PuBliC."ITEMS"|, opts)
-      from_cache2 = EtsInspector.load_relation(~s|PuBliC."ITEMS"|, opts)
-      assert original2 == from_cache2
-      assert {:ok, %{relation: {"public", "ITEMS"}, relation_id: _}} = original2
+    test "forwards the DB errors without crashing the process", %{opts: opts} do
+      Repatch.patch(Postgrex, :query, [mode: :shared], fn _, _, _ ->
+        {:error, %DBConnection.ConnectionError{message: "expected error"}}
+      end)
+
+      Repatch.allow(self(), opts[:server])
+
+      assert {:error, "expected error"} =
+               EtsInspector.load_relation_info(1_234_567_890, opts)
     end
 
     @tag with_sql: [
@@ -73,8 +112,11 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     test "returns blank children and parent for non-partitioned tables", %{
       opts: opts
     } do
+      assert {:ok, {oid, _}} =
+               EtsInspector.load_relation_oid({"public", "just_normal_john"}, opts)
+
       assert {:ok, %{relation: {"public", "just_normal_john"}, parent: nil, children: nil}} =
-               EtsInspector.load_relation("public.just_normal_john", opts)
+               EtsInspector.load_relation_info(oid, opts)
     end
 
     @tag with_sql: [
@@ -93,6 +135,9 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
         {"other", "partitioned_items_300"}
       ]
 
+      assert {:ok, {oid, _}} =
+               EtsInspector.load_relation_oid({"public", "partitioned_items"}, opts)
+
       assert {:ok,
               %{
                 parent: nil,
@@ -100,123 +145,109 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
                 relation_id: _,
                 kind: :partitioned_table,
                 children: ^partitions
-              }} = EtsInspector.load_relation("public.partitioned_items", opts)
+              }} = EtsInspector.load_relation_info(oid, opts)
 
-      for {schema, name} = relation <- partitions do
+      for relation <- partitions do
+        assert {:ok, {oid, _}} =
+                 EtsInspector.load_relation_oid(relation, opts)
+
         assert {:ok,
                 %{
                   parent: {"public", "partitioned_items"},
                   relation: ^relation,
-                  relation_id: _,
+                  relation_id: ^oid,
                   kind: :ordinary_table,
                   children: nil
-                }} = EtsInspector.load_relation("#{schema}.#{name}", opts)
+                }} = EtsInspector.load_relation_info(oid, opts)
       end
     end
   end
 
   describe "clean/2" do
-    setup [
-      :with_persistent_kv,
-      :with_inspector,
-      :with_basic_tables,
-      :with_sql_execute
-    ]
+    test "cleans up all information from ETS cache", %{
+      inspector: {EtsInspector, opts},
+      pg_relation_table: pg_relation_table
+    } do
+      assert :ets.tab2list(pg_relation_table) == []
 
-    setup %{inspector: {EtsInspector, opts}} do
-      %{opts: opts, table: {"public", "items"}}
+      assert {:ok, {oid, _}} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      refute :ets.tab2list(pg_relation_table) == []
+      assert EtsInspector.clean(oid, opts)
+      assert :ets.tab2list(pg_relation_table) == []
     end
 
     @tag with_sql: [
            ~s|CREATE TABLE "ITEMS" (a INT PRIMARY KEY)|
          ]
-    test "cleans up relation information from ETS cache", %{
+    test "cleans just the info for one relation", %{
       inspector: {EtsInspector, opts},
-      pg_info_table: pg_info_table,
       pg_relation_table: pg_relation_table
     } do
-      # Different spellings of the same table
-      table1 = "public.items"
-      table2 = "PUBLIC.ITEMS"
+      assert {:ok, {oid1, _}} = EtsInspector.load_relation_oid({"public", "items"}, opts)
+      assert {:ok, {oid2, _}} = EtsInspector.load_relation_oid({"public", "ITEMS"}, opts)
 
-      # Another table
-      table3 = ~s|"ITEMS"|
+      assert EtsInspector.clean(oid1, opts)
 
-      assert {:ok, %{relation: rel} = relation} = EtsInspector.load_relation(table1, opts)
-      assert {:ok, ^relation} = EtsInspector.load_relation(table2, opts)
-      assert {:ok, relation2} = EtsInspector.load_relation(table3, opts)
-      assert relation != relation2
+      assert :ets.lookup(pg_relation_table, {:relation_to_oid, {"public", "items"}}) == []
+      refute :ets.lookup(pg_relation_table, {:relation_to_oid, {"public", "ITEMS"}}) == []
 
-      # Check that the relations are in the ETS cache
-      assert :ets.lookup(pg_relation_table, {relation, :relation_to_table}) == [
-               {{relation, :relation_to_table}, "public.items"},
-               {{relation, :relation_to_table}, {"public", "items"}},
-               {{relation, :relation_to_table}, "PUBLIC.ITEMS"}
-             ]
-
-      assert :ets.lookup(pg_relation_table, {relation2, :relation_to_table}) == [
-               {{relation2, :relation_to_table}, ~s|"ITEMS"|},
-               {{relation2, :relation_to_table}, {"public", "ITEMS"}}
-             ]
-
-      assert :ets.lookup_element(pg_info_table, {table1, :table_to_relation}, 2, :not_found) ==
-               relation
-
-      assert :ets.lookup_element(pg_info_table, {table2, :table_to_relation}, 2, :not_found) ==
-               relation
-
-      assert :ets.lookup_element(pg_info_table, {table3, :table_to_relation}, 2, :not_found) ==
-               relation2
-
-      # Now clean up the relation
-      # and check that it is no longer in the ETS cache
-      assert EtsInspector.clean(relation, opts)
-
-      assert :ets.member(pg_relation_table, {relation, :relation_to_table}) == false
-      assert :ets.member(pg_info_table, {table1, :table_to_relation}) == false
-      assert :ets.member(pg_info_table, {table2, :table_to_relation}) == false
-      # we also remove the info cached under the {schema, name} relation
-      assert :ets.member(pg_info_table, {rel, :table_to_relation}) == false
-
-      # relation2 should still be in the cache
-      assert :ets.member(pg_relation_table, {relation2, :relation_to_table}) == true
-      assert :ets.member(pg_info_table, {table3, :table_to_relation}) == true
+      assert :ets.lookup(pg_relation_table, {:oid_info, oid1}) == []
+      refute :ets.lookup(pg_relation_table, {:oid_info, oid2}) == []
     end
   end
 
   describe "load_column_info/2" do
-    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
-
-    setup %{inspector: {EtsInspector, opts}} do
-      {:ok, %{opts: opts, table: {"public", "items"}}}
+    test "returns column info for the table", %{opts: opts, items_oid: items_oid} do
+      assert {:ok, [%{name: "id"}, %{name: "value"}]} =
+               EtsInspector.load_column_info(items_oid, opts)
     end
 
-    test "returns column info for the table", %{opts: opts, table: table} do
-      assert {:ok, [%{name: "id"}, %{name: "value"}]} = EtsInspector.load_column_info(table, opts)
-    end
-
-    test "returns same value from ETS cache as the original call", %{opts: opts, table: table} do
-      original = EtsInspector.load_column_info(table, opts)
-      from_cache = EtsInspector.load_column_info(table, opts)
-      assert from_cache == original
-    end
-
-    test "returns same value from ETS cache as the original call with concurrent calls", %{
+    test "concurrent calls load value exactly once", %{
       opts: opts,
-      table: table
+      items_oid: items_oid
     } do
-      task = Task.async(fn -> EtsInspector.load_column_info(table, opts) end)
-      original = EtsInspector.load_column_info(table, opts)
-      from_cache = Task.await(task)
-      assert from_cache == original
+      Repatch.spy(Postgrex)
+      Repatch.allow(self(), opts[:server])
+
+      task1 = Task.async(fn -> EtsInspector.load_column_info(items_oid, opts) end)
+      task2 = Task.async(fn -> EtsInspector.load_column_info(items_oid, opts) end)
+
+      assert {:ok, [%{name: "id"}, %{name: "value"}] = columns} = Task.await(task1)
+
+      assert {:ok, ^columns} = Task.await(task2)
+
+      # Non-parallel call should return value from cache
+      assert {:ok, ^columns} = EtsInspector.load_column_info(items_oid, opts)
+
+      assert Repatch.called?(Postgrex, :transaction, 2, by: opts[:server], exactly: 1)
+    end
+
+    test "returns a not found marker when the relation does not exist", %{opts: opts} do
+      assert :table_not_found = EtsInspector.load_column_info(1_234_567_890, opts)
+    end
+
+    test "forwards the DB errors without crashing the process", %{opts: opts} do
+      Repatch.patch(Postgrex, :query, [mode: :shared], fn _, _, _ ->
+        {:error, %DBConnection.ConnectionError{message: "expected error"}}
+      end)
+
+      Repatch.allow(self(), opts[:server])
+
+      assert {:error, "expected error"} =
+               EtsInspector.load_column_info(1_234_567_890, opts)
     end
 
     @tag with_sql: [
            ~s|CREATE TABLE "partitioned_items" (a INT, b INT, c TEXT, PRIMARY KEY (a, b)) PARTITION BY RANGE (b)|
          ]
     test "can introspect partitioned tables", %{opts: opts} do
+      assert {:ok, {oid, _}} =
+               EtsInspector.load_relation_oid({"public", "partitioned_items"}, opts)
+
       assert {:ok, [%{name: "a"}, %{name: "b"}, %{name: "c"}]} =
-               EtsInspector.load_column_info({"public", "partitioned_items"}, opts)
+               EtsInspector.load_column_info(oid, opts)
     end
 
     @tag with_sql: [
@@ -224,8 +255,11 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
            ~s|CREATE TABLE "partitioned_items_100" PARTITION OF "partitioned_items" FOR VALUES FROM (0) TO (99)|
          ]
     test "can introspect partitions", %{opts: opts} do
+      assert {:ok, {oid, _}} =
+               EtsInspector.load_relation_oid({"public", "partitioned_items_100"}, opts)
+
       assert {:ok, [%{name: "a"}, %{name: "b"}, %{name: "c"}]} =
-               EtsInspector.load_column_info({"public", "partitioned_items_100"}, opts)
+               EtsInspector.load_column_info(oid, opts)
     end
 
     @tag with_sql: [
@@ -233,8 +267,11 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
            ~s|CREATE TABLE "enum_table" (foo foo_enum)|
          ]
     test "can load enum types with type kind", %{opts: opts} do
+      assert {:ok, {oid, _}} =
+               EtsInspector.load_relation_oid({"public", "enum_table"}, opts)
+
       assert {:ok, [%{name: "foo", type_kind: :enum, type: "foo_enum"}]} =
-               EtsInspector.load_column_info({"public", "enum_table"}, opts)
+               EtsInspector.load_column_info(oid, opts)
     end
 
     @tag with_sql: [
@@ -242,8 +279,171 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
            ~s|CREATE TABLE "domain_table" (foo foo_domain)|
          ]
     test "can load domain types with type kind", %{opts: opts} do
+      assert {:ok, {oid, _}} =
+               EtsInspector.load_relation_oid({"public", "domain_table"}, opts)
+
       assert {:ok, [%{name: "foo", type_kind: :domain, type: "foo_domain"}]} =
-               EtsInspector.load_column_info({"public", "domain_table"}, opts)
+               EtsInspector.load_column_info(oid, opts)
+    end
+  end
+
+  describe "list_relations_with_stale_cache/1" do
+    test "returns nothing when there is no cache", %{opts: opts} do
+      assert {:ok, []} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "doesn't return an unchanged relation", %{opts: opts} do
+      assert {:ok, {_oid, _}} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert {:ok, []} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns a relation when a column is added", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      Postgrex.query!(conn, "ALTER TABLE items ADD COLUMN new_column TEXT", [])
+
+      assert {:ok, [^oid_relation]} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns a relation when a column is dropped", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      Postgrex.query!(conn, "ALTER TABLE items DROP COLUMN value", [])
+
+      assert {:ok, [^oid_relation]} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns a relation when a column is renamed", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      Postgrex.query!(conn, "ALTER TABLE items RENAME COLUMN value TO renamed_column", [])
+
+      assert {:ok, [^oid_relation]} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns a relation when a column is changed", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      Postgrex.query!(
+        conn,
+        "ALTER TABLE items ALTER COLUMN value TYPE INTEGER USING value::INTEGER",
+        []
+      )
+
+      assert {:ok, [^oid_relation]} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns a relation when table is dropped", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      Postgrex.query!(conn, "DROP TABLE items", [])
+
+      assert {:ok, [^oid_relation]} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns a relation when table is renamed", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      Postgrex.query!(conn, "ALTER TABLE items RENAME TO renamed_items", [])
+
+      assert {:ok, [^oid_relation]} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns a relation when table is recreated", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      Postgrex.query!(conn, "DROP TABLE items", [])
+      Postgrex.query!(conn, "CREATE TABLE items (id INT PRIMARY KEY)", [])
+
+      assert {:ok, [^oid_relation]} = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+
+    test "returns multiple relations if more than one is affected", %{opts: opts, db_conn: conn} do
+      assert {:ok, oid_relation1} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert {:ok, oid_relation2} =
+               EtsInspector.load_relation_oid({"public", "serial_ids"}, opts)
+
+      Postgrex.query!(conn, "ALTER TABLE items ADD COLUMN new_column TEXT", [])
+      Postgrex.query!(conn, "DROP TABLE serial_ids", [])
+
+      assert {:ok, [^oid_relation1, ^oid_relation2]} =
+               EtsInspector.list_relations_with_stale_cache(opts)
+    end
+  end
+
+  describe "persistance" do
+    test "loads back last seen state on a restart", %{opts: opts, db_conn: conn} = ctx do
+      assert {:ok, {oid, _} = oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert {:ok, relation_info} = EtsInspector.load_relation_info(oid, opts)
+      assert {:ok, columns} = EtsInspector.load_column_info(oid, opts)
+      stop_supervised!(EtsInspector)
+
+      # Change the underlying relation to ensure we get a cached result -
+      # there's another process responsible for cache invalidation on startup
+      Postgrex.query!(conn, "DROP TABLE items", [])
+
+      %{inspector: {EtsInspector, opts}} = with_inspector(ctx)
+
+      assert {:ok, ^oid_relation} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert {:ok, ^relation_info} = EtsInspector.load_relation_info(oid, opts)
+      assert {:ok, ^columns} = EtsInspector.load_column_info(oid, opts)
+    end
+
+    test "doesn't load back last seen state on a restart if the storage format is old",
+         %{
+           opts: opts,
+           persistent_kv: persistent_kv,
+           db_conn: conn
+         } = ctx do
+      assert {:ok, {oid, relation}} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert {:ok, relation_info} = EtsInspector.load_relation_info(oid, opts)
+      assert {:ok, columns} = EtsInspector.load_column_info(oid, opts)
+      stop_supervised!(EtsInspector)
+      # internal information about the persistence key, but that's for ease of testing
+      persistence_key = "#{ctx.stack_id}:ets_inspector_state"
+
+      # Prepare old data format, overwriting the existing state
+      PersistentKV.set(
+        persistent_kv,
+        persistence_key,
+        {
+          # pg_info_table
+          [
+            {{"items", :table_to_relation}, relation_info},
+            {{relation, :table_to_relation}, relation_info},
+            {{relation, :columns}, columns}
+          ],
+          # pg_relation_table
+          [
+            {{relation_info, :relation_to_table}, relation},
+            {{relation_info, :relation_to_table}, "items"}
+          ]
+        }
+      )
+
+      # Change the underlying relation to ensure we get a cached result -
+      # there's another process responsible for cache invalidation on startup
+      Postgrex.query!(conn, "DROP TABLE items", [])
+
+      %{inspector: {EtsInspector, opts}} = with_inspector(ctx)
+      assert :table_not_found = EtsInspector.load_relation_oid({"public", "items"}, opts)
     end
   end
 end

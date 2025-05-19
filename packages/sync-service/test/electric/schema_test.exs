@@ -489,7 +489,8 @@ defmodule Electric.SchemaTest do
           []
         )
 
-        {:ok, column_info} = DirectInspector.load_column_info({"public", "items"}, conn)
+        {:ok, {oid, _}} = DirectInspector.load_relation_oid({"public", "items"}, conn)
+        {:ok, column_info} = DirectInspector.load_column_info(oid, conn)
         %{"value" => schema} = Schema.from_column_info(column_info)
 
         assert schema == unquote(Macro.escape(expected_schema))
@@ -509,7 +510,8 @@ defmodule Electric.SchemaTest do
         []
       )
 
-      {:ok, column_info} = DirectInspector.load_column_info({"public", "items"}, conn)
+      {:ok, {oid, _}} = DirectInspector.load_relation_oid({"public", "items"}, conn)
+      {:ok, column_info} = DirectInspector.load_column_info(oid, conn)
 
       %{"i" => i_schema, "name" => name_schema, "value" => value_schema} =
         Schema.from_column_info(column_info)
@@ -533,7 +535,8 @@ defmodule Electric.SchemaTest do
         []
       )
 
-      {:ok, column_info} = DirectInspector.load_column_info({"public", "items"}, conn)
+      {:ok, {oid, _}} = DirectInspector.load_relation_oid({"public", "items"}, conn)
+      {:ok, column_info} = DirectInspector.load_column_info(oid, conn)
 
       %{"i" => i_schema, "name" => name_schema, "value" => value_schema} =
         Schema.from_column_info(column_info)

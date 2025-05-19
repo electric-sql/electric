@@ -14,9 +14,10 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
   @registry Registry.DeleteShapePlugTest
 
+  @users_oid :erlang.phash2({"public", "users"})
   @test_shape %Shape{
     root_table: {"public", "users"},
-    root_table_id: :erlang.phash2({"public", "users"}),
+    root_table_id: @users_oid,
     root_pk: ["id"],
     root_column_count: 1,
     selected_columns: ["id"],
@@ -25,12 +26,15 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   @test_shape_handle "test-shape-handle"
   @test_pg_id "12345"
 
-  def load_column_info({"public", "users"}, _),
+  def load_column_info(@users_oid, _),
     do:
       {:ok, [%{name: "id", type: "int8", pk_position: 0, type_id: {20, -1}, is_generated: false}]}
 
-  def load_relation(tbl, _),
-    do: Support.StubInspector.load_relation(tbl, nil)
+  def load_relation_oid({"public", "users"}, _),
+    do: {:ok, {@users_oid, {"public", "users"}}}
+
+  def load_relation_oid(tbl, _),
+    do: {:ok, {:erlang.phash2(tbl), tbl}}
 
   def conn(_ctx, method, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string)

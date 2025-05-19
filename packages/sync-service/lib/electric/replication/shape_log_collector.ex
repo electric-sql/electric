@@ -191,7 +191,8 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     pk_cols_of_relations =
       for relation <- txn.affected_relations, into: %{} do
-        {:ok, info} = Inspector.load_column_info(relation, state.inspector)
+        {:ok, {oid, _}} = Inspector.load_relation_oid(relation, state.inspector)
+        {:ok, info} = Inspector.load_column_info(oid, state.inspector)
         pk_cols = Inspector.get_pk_cols(info)
         {relation, pk_cols}
       end
@@ -217,7 +218,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     # changed, it might be after a reconnection, or it might be because something actually changed.
     # In either case, we need to clean the inspector cache so we get the latest info.
     if rel == updated_rel do
-      Inspector.clean({updated_rel.schema, updated_rel.table}, state.inspector)
+      Inspector.clean(updated_rel.id, state.inspector)
     end
 
     :ok =

@@ -5,7 +5,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
-  alias Support.StubInspector
 
   import Mox
 
@@ -13,14 +12,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   defp shape! do
     assert {:ok, %Shape{where: %{query: "value = 'test'"}} = shape} =
-             Shape.new("other_table", inspector: {__MODULE__, nil}, where: "value = 'test'")
+             Shape.new("other_table", inspector: {__MODULE__, []}, where: "value = 'test'")
 
     shape
   end
 
   defp shape2! do
     assert {:ok, %Shape{where: nil} = shape} =
-             Shape.new("public.table", inspector: {__MODULE__, nil})
+             Shape.new("public.table", inspector: {__MODULE__, []})
 
     shape
   end
@@ -222,6 +221,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
       ShapeStatus.update_last_read_time_to_now(state, shape2)
+      Process.sleep(10)
       ShapeStatus.update_last_read_time_to_now(state, shape1)
 
       assert [%{shape_handle: ^shape2}] = ShapeStatus.least_recently_used(state, _count = 1)
@@ -252,7 +252,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
   end
 
-  def load_column_info({"public", "other_table"}, _),
+  def load_column_info(1338, _),
     do:
       {:ok,
        [
@@ -260,9 +260,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
          %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil, is_generated: false}
        ]}
 
-  def load_column_info({"public", "table"}, _),
+  def load_column_info(1337, _),
     do: {:ok, [%{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0, is_generated: false}]}
 
-  def load_relation(tbl, _),
-    do: StubInspector.load_relation(tbl, nil)
+  def load_relation_oid({"public", "table"}, _), do: {:ok, {1337, {"public", "table"}}}
+
+  def load_relation_oid({"public", "other_table"}, _),
+    do: {:ok, {1338, {"public", "other_table"}}}
 end

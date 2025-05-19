@@ -123,7 +123,11 @@ defmodule Electric.Shapes.PartitionsTest do
 
     {_, ^insert} = Partitions.handle_event(partitions, insert)
 
-    relation = %Relation{schema: "public", table: "partition_03"}
+    relation = %Relation{
+      schema: "public",
+      table: "partition_03",
+      id: :erlang.phash2({"public", "partition_03"})
+    }
 
     {partitions, ^relation} = Partitions.handle_event(partitions, relation)
 
@@ -132,7 +136,12 @@ defmodule Electric.Shapes.PartitionsTest do
 
   test "remove_shape/2 cleans up partition information" do
     empty = Partitions.new(inspector: @partition_inspector)
-    partition_03 = %Relation{schema: "public", table: "partition_03"}
+
+    partition_03 = %Relation{
+      schema: "public",
+      table: "partition_03",
+      id: :erlang.phash2({"public", "partition_03"})
+    }
 
     partitions =
       empty
