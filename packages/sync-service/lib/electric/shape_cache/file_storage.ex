@@ -597,6 +597,9 @@ defmodule Electric.ShapeCache.FileStorage do
     do: raise(Storage.Error, message: "failed to read snapshot chunk #{chunk_num}: :enoent")
 
   defp open_snapshot_chunk(opts, chunk_num, attempts_left) do
+    unless snapshot_started?(opts),
+      do: raise(Storage.Error, message: "Snapshot not started")
+
     path = snapshot_chunk_path(opts, chunk_num)
 
     case File.open(path, [:read, :raw, read_ahead: 1024]) do
