@@ -7,7 +7,6 @@
     "url": "https://github.com/electric-sql/electric/issues"
   },
   "devDependencies": {
-    "@codecov/vite-plugin": "^1.9.0",
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
@@ -63,6 +62,7 @@
     "prepack": "pnpm build",
     "stylecheck": "eslint . --quiet",
     "test": "pnpm exec vitest",
+    "coverage": "pnpm exec vitest --coverage",
     "typecheck": "tsc -p tsconfig.json"
   },
   "sideEffects": false,

@@ -1,18 +1,10 @@
 import { defineConfig } from 'vitest/config'
-import { codecovVitePlugin } from '@codecov/vite-plugin'
 
 export default defineConfig({
   // Default to ESM to avoid CJS deprecation warning
   define: {
     'import.meta.vitest': 'undefined',
   },
-  plugins: [
-    codecovVitePlugin({
-      enableBundleAnalysis: process.env.CODECOV_TOKEN !== undefined,
-      bundleName: '@electric-sql/y-electric',
-      uploadToken: process.env.CODECOV_TOKEN,
-    }),
-  ],
   test: {
     globals: true,
     environment: 'node',
