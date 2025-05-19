@@ -323,8 +323,10 @@ defmodule Support.ComponentSetup do
            max_restarts: 0,
            pool_size: 2
          ],
-         tweaks: [registry_partitions: 1],
-         monitor_opts: monitor_config(ctx)},
+         tweaks: [
+           registry_partitions: 1,
+           monitor_opts: monitor_config(ctx)
+         ]},
         restart: :temporary,
         significant: false
       )

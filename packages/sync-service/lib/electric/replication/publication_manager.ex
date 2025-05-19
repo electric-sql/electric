@@ -24,7 +24,7 @@ defmodule Electric.Replication.PublicationManager do
     :scheduled_updated_ref,
     :retries,
     :waiters,
-    :shape_handles_tracked,
+    :tracked_shape_handles,
     :publication_name,
     :db_pool,
     :pg_version,
@@ -43,7 +43,7 @@ defmodule Electric.Replication.PublicationManager do
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
-           shape_handles_tracked: MapSet.t(),
+           tracked_shape_handles: MapSet.t(),
            publication_name: String.t(),
            db_pool: term(),
            pg_version: non_neg_integer(),
@@ -178,7 +178,7 @@ defmodule Electric.Replication.PublicationManager do
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
-      shape_handles_tracked: MapSet.new(),
+      tracked_shape_handles: MapSet.new(),
       update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
@@ -557,22 +557,22 @@ defmodule Electric.Replication.PublicationManager do
 
   defp track_shape_handle(
          shape_handle,
-         %__MODULE__{shape_handles_tracked: shape_handles_tracked} = state
+         %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
        ) do
-    %__MODULE__{state | shape_handles_tracked: MapSet.put(shape_handles_tracked, shape_handle)}
+    %__MODULE__{state | tracked_shape_handles: MapSet.put(tracked_shape_handles, shape_handle)}
   end
 
   defp untrack_shape_handle(
          shape_handle,
-         %__MODULE__{shape_handles_tracked: shape_handles_tracked} = state
+         %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
        ) do
-    %__MODULE__{state | shape_handles_tracked: MapSet.delete(shape_handles_tracked, shape_handle)}
+    %__MODULE__{state | tracked_shape_handles: MapSet.delete(tracked_shape_handles, shape_handle)}
   end
 
   defp is_tracking_shape_handle?(
          shape_handle,
-         %__MODULE__{shape_handles_tracked: shape_handles_tracked}
+         %__MODULE__{tracked_shape_handles: tracked_shape_handles}
        ) do
-    MapSet.member?(shape_handles_tracked, shape_handle)
+    MapSet.member?(tracked_shape_handles, shape_handle)
   end
 end

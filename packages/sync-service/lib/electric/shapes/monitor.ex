@@ -29,49 +29,37 @@ defmodule Electric.Shapes.Monitor do
   Register the current process as a reader of the given shape.
   """
   @spec register_reader(stack_id(), shape_handle(), pid()) :: :ok
-  def register_reader(stack_id, shape_handle, pid \\ self()) do
-    RefCounter.register_reader(stack_id, shape_handle, pid)
-  end
+  defdelegate register_reader(stack_id, shape_handle, pid \\ self()), to: RefCounter
 
   @doc """
   Unregister the current process as a reader of the given shape.
   """
   @spec unregister_reader(stack_id(), shape_handle(), pid()) :: :ok
-  def unregister_reader(stack_id, shape_handle, pid \\ self()) do
-    RefCounter.unregister_reader(stack_id, shape_handle, pid)
-  end
+  defdelegate unregister_reader(stack_id, shape_handle, pid \\ self()), to: RefCounter
 
   @doc """
   Register the current process as a writer (consumer) of the given shape.
   """
   @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
-  def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
-    RefCounter.register_writer(stack_id, shape_handle, shape, pid)
-  end
+  defdelegate register_writer(stack_id, shape_handle, shape, pid \\ self()), to: RefCounter
 
   @doc """
   The number of active readers of the given shape.
   """
   @spec reader_count(stack_id(), shape_handle()) :: {:ok, non_neg_integer()}
-  def reader_count(stack_id, shape_handle) do
-    RefCounter.reader_count(stack_id, shape_handle)
-  end
+  defdelegate reader_count(stack_id, shape_handle), to: RefCounter
 
   @doc """
   The number of active readers of all shapes.
   """
   @spec reader_count(stack_id()) :: {:ok, non_neg_integer()}
-  def reader_count(stack_id) do
-    RefCounter.reader_count(stack_id)
-  end
+  defdelegate reader_count(stack_id), to: RefCounter
 
   @doc """
   The number of active readers of all shapes.
   """
   @spec reader_count!(stack_id()) :: non_neg_integer()
-  def reader_count!(stack_id) do
-    RefCounter.reader_count!(stack_id)
-  end
+  defdelegate reader_count!(stack_id), to: RefCounter
 
   @doc """
   Request a message when all readers of the given handle have finished or terminated.
@@ -80,23 +68,18 @@ defmodule Electric.Shapes.Monitor do
   to the registered `pid` when the reader count on a shape is `0`.
   """
   @spec notify_reader_termination(stack_id(), shape_handle(), term(), pid()) :: :ok
-  def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
-    RefCounter.notify_reader_termination(stack_id, shape_handle, reason, pid)
-  end
+  defdelegate notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()),
+    to: RefCounter
 
   @doc """
   clean up the state of a non-running consumer.
   """
   @spec purge_shape(stack_id(), shape_handle(), Electric.Shapes.Shape.t()) :: :ok
-  def purge_shape(stack_id, shape_handle, shape) do
-    RefCounter.purge_shape(stack_id, shape_handle, shape)
-  end
+  defdelegate purge_shape(stack_id, shape_handle, shape), to: RefCounter
 
   # used in tests to validate internal state
   @doc false
-  def termination_watchers(stack_id, shape_handle) do
-    RefCounter.termination_watchers(stack_id, shape_handle)
-  end
+  defdelegate termination_watchers(stack_id, shape_handle), to: RefCounter
 
   def init(opts) do
     %{
