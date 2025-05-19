@@ -1,6 +1,14 @@
 import { defineConfig } from 'vitest/config'
+import { codecovVitePlugin } from '@codecov/vite-plugin'
 
 export default defineConfig({
+  plugins: [
+    codecovVitePlugin({
+      enableBundleAnalysis: process.env.CODECOV_TOKEN !== undefined,
+      bundleName: '@electric-sql/experimental',
+      uploadToken: process.env.CODECOV_TOKEN,
+    }),
+  ],
   test: {
     globalSetup: `test/support/global-setup.ts`,
     typecheck: { enabled: true },
