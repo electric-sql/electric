@@ -1,8 +1,8 @@
 import Config
 
-is_telemetry_target? = Mix.target() == Electric.MixProject.telemetry_target()
+telemetry_enabled? = Mix.target() == Electric.MixProject.telemetry_target()
 
-if is_telemetry_target? do
+if telemetry_enabled? do
   # Sentry's source-context-related options need to be set in compile-time config files
   # cf. https://hexdocs.pm/sentry/Mix.Tasks.Sentry.PackageSourceCode.html
   config :sentry,
@@ -12,7 +12,7 @@ end
 
 if Mix.env() == :test do
   report_file_name =
-    if is_telemetry_target?,
+    if telemetry_enabled?,
       do: "telemetry-test-junit-report.xml",
       else: "regular-test-junit-report.xml"
 

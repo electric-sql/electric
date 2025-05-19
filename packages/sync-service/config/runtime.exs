@@ -202,7 +202,7 @@ config :electric,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil),
   secret: secret
 
-if Mix.target() == Electric.MixProject.telemetry_target() do
+if Electric.telemetry_enabled?() do
   config :sentry,
     environment_name: config_env(),
     client: Electric.Telemetry.SentryReqHTTPClient

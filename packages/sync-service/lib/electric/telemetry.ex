@@ -1,7 +1,6 @@
 defmodule Electric.Telemetry do
   require Logger
 
-  @enabled Mix.target() == Electric.MixProject.telemetry_target()
   @log_level Application.compile_env(:electric, [Electric.Telemetry, :log_level], false)
 
   defmacro __using__(_opts) do
@@ -22,9 +21,9 @@ defmodule Electric.Telemetry do
 
   defp include_with_telemetry(caller, env, dependencies, block, else_block) do
     modules = List.wrap(dependencies) |> Enum.map(&Macro.expand(&1, env))
-    available? = Enum.all?(modules, &Code.ensure_loaded?/1)
+    telemetry_code_available? = Enum.all?(modules, &Code.ensure_loaded?/1)
 
-    if @enabled && available? do
+    if Electric.telemetry_enabled?() && telemetry_code_available? do
       if @log_level,
         do:
           Logger.log(
