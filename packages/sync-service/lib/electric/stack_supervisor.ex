@@ -89,14 +89,6 @@ defmodule Electric.StackSupervisor do
                    type: :pos_integer,
                    default: LogChunker.default_chunk_size_threshold()
                  ],
-                 monitor_opts: [
-                   type: :keyword_list,
-                   required: false,
-                   keys: [
-                     on_remove: [type: {:fun, 2}],
-                     on_cleanup: [type: {:fun, 1}]
-                   ]
-                 ],
                  tweaks: [
                    type: :keyword_list,
                    required: false,
@@ -104,7 +96,15 @@ defmodule Electric.StackSupervisor do
                      "tweaks to the behaviour of parts of the supervision tree, used mostly for tests",
                    default: [],
                    keys: [
-                     registry_partitions: [type: :non_neg_integer, required: false]
+                     registry_partitions: [type: :non_neg_integer, required: false],
+                     monitor_opts: [
+                       type: :keyword_list,
+                       required: false,
+                       keys: [
+                         on_remove: [type: {:fun, 2}],
+                         on_cleanup: [type: {:fun, 1}]
+                       ]
+                     ]
                    ]
                  ],
                  telemetry_opts: [type: :keyword_list, default: []],
@@ -291,6 +291,8 @@ defmodule Electric.StackSupervisor do
       max_shapes: config.max_shapes
     ]
 
+    {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])
+
     new_connection_manager_opts = [
       stack_id: stack_id,
       # Coming from the outside, need validation
@@ -315,10 +317,8 @@ defmodule Electric.StackSupervisor do
       ],
       persistent_kv: config.persistent_kv,
       shape_cache_opts: shape_cache_opts,
-      tweaks: config.tweaks
+      tweaks: tweaks
     ]
-
-    monitor_opts = Map.get(config, :monitor_opts, [])
 
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())

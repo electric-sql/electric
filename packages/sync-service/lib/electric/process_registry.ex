@@ -1,5 +1,5 @@
 defmodule Electric.ProcessRegistry do
-  defguardp is_stack_id(stack_id) when is_binary(stack_id) or is_atom(stack_id)
+  defguardp is_stack_id(stack_id) when is_binary(stack_id)
 
   @spec child_spec([Registry.start_option()]) :: Supervisor.child_spec()
   def child_spec(options) do
@@ -19,7 +19,8 @@ defmodule Electric.ProcessRegistry do
     Registry.start_link(opts)
   end
 
-  def registry_name(stack_id) when is_stack_id(stack_id), do: :"#{__MODULE__}:#{stack_id}"
+  def registry_name(stack_id) when is_stack_id(stack_id),
+    do: :"#{inspect(__MODULE__)}:#{stack_id}"
 
   def name(opts_or_stack_id, key, sub_key \\ nil)
 

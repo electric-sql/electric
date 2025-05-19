@@ -72,6 +72,11 @@ defmodule Electric.ShapeCache do
             ]
           )
 
+  # under load some of the storage functions, particularly the create calls,
+  # can take a long time to complete (I've seen 20s locally, just due to minor
+  # filesystem calls like `ls` taking multiple seconds). Most complete in a
+  # timely manner but rather than raise for the edge cases and generate
+  # unnecessary noise let's just cover those tail timings with our timeout.
   @call_timeout 30_000
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
