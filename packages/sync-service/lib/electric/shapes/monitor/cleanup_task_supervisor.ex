@@ -3,6 +3,8 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
 
   alias Electric.ShapeCache.Storage
 
+  @env Mix.env()
+
   # set a high timeout for the shape cleanup to terminate
   # we don't want to see errors due to e.g. a slow filesystem.
   # any actual errors in the processes will be caught and reported
@@ -116,7 +118,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
       fun.()
     catch
       kind, reason when kind in [:exit, :error] ->
-        Logger.error([message, ": ", Exception.format(kind, reason, __STACKTRACE__)])
+        log_error(kind, [message, ": ", Exception.format(kind, reason, __STACKTRACE__)])
 
         {:error, reason}
     end
@@ -124,5 +126,16 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
 
   defp consumer_alive?(stack_id, shape_handle) do
     !is_nil(Electric.Shapes.Consumer.whereis(stack_id, shape_handle))
+  end
+
+  # don't spam test logs with failures due to process shutdown
+  if @env == :test do
+    defp log_error(:exit, _message) do
+      :ok
+    end
+  end
+
+  defp log_error(_kind, message) do
+    Logger.error(message)
   end
 end
