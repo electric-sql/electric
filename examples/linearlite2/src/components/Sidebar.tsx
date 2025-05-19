@@ -7,8 +7,19 @@ import {
   IconButton,
   ScrollArea,
   Tooltip,
+  Button,
 } from '@radix-ui/themes'
-import { LogOut, Moon, Sun, Monitor } from 'lucide-react'
+import {
+  LogOut,
+  Moon,
+  Sun,
+  Monitor,
+  Layers,
+  CircleDashed,
+  SquareKanban,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react'
 import { makeStyles, mergeClasses } from '@griffel/react'
 import { useTheme } from './ThemeProvider'
 import { useSidebar } from './SidebarProvider'
@@ -202,8 +213,9 @@ export default function Sidebar() {
 
         {/* Main Chat List */}
         <ScrollArea className={classes.scrollArea}>
-          <Flex direction="column" px="3" py="1">
-            TODO: Stuff here
+          <Flex direction="column" px="3" py="2">
+            <ProjectSection expanded={true} />
+            <ChatsSection />
           </Flex>
         </ScrollArea>
 
@@ -217,4 +229,179 @@ export default function Sidebar() {
       </Box>
     </>
   )
+}
+
+const useProjectSectionClasses = makeStyles({
+  projectButton: {
+    paddingLeft: '26px',
+  },
+})
+
+interface ProjectSectionProps {
+  expanded?: boolean
+}
+
+function ProjectSection({ expanded = false }: ProjectSectionProps) {
+  const classes = useProjectSectionClasses()
+  const [isExpanded, setIsExpanded] = useState(expanded)
+  return (
+    <>
+      <SidebarButton
+        label="My Project"
+        isActive={false}
+        onClick={() => setIsExpanded(!isExpanded)}
+        icon={
+          isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+        }
+      />
+      {isExpanded && (
+        <>
+          <SidebarButton
+            label="All Issues"
+            isActive={false}
+            onClick={() => {}}
+            icon={<Layers size={14} />}
+            className={classes.projectButton}
+          />
+          <SidebarButton
+            label="Active"
+            isActive={false}
+            onClick={() => {}}
+            icon={<ActiveButtonLine />}
+            className={classes.projectButton}
+          />
+          <SidebarButton
+            label="Backlog"
+            isActive={false}
+            onClick={() => {}}
+            icon={<CircleDashed size={14} />}
+            className={classes.projectButton}
+          />
+          <SidebarButton
+            label="Board"
+            isActive={false}
+            onClick={() => {}}
+            icon={<SquareKanban size={14} />}
+            className={classes.projectButton}
+          />
+        </>
+      )}
+    </>
+  )
+}
+
+const useChatsSectionClasses = makeStyles({
+  chatsButton: {
+    paddingLeft: '26px',
+  },
+})
+
+function ChatsSection() {
+  const classes = useChatsSectionClasses()
+  const [isExpanded, setIsExpanded] = useState(true)
+  return (
+    <>
+      <SidebarButton
+        label="Chats"
+        isActive={false}
+        onClick={() => setIsExpanded(!isExpanded)}
+        icon={
+          isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+        }
+      />
+      {isExpanded && (
+        <>
+          <SidebarButton
+            label="This is a conversation"
+            isActive={false}
+            onClick={() => {}}
+            className={classes.chatsButton}
+          />
+          <SidebarButton
+            label="This is a conversation with a very long title"
+            isActive={false}
+            onClick={() => {}}
+            className={classes.chatsButton}
+          />
+          <SidebarButton
+            label="This is a conversation"
+            isActive={false}
+            onClick={() => {}}
+            className={classes.chatsButton}
+          />
+        </>
+      )}
+    </>
+  )
+}
+
+const useSidebarButtonClasses = makeStyles({
+  button: {
+    justifyContent: 'flex-start',
+    height: '22px',
+    overflow: 'hidden',
+    color: 'var(--black)',
+  },
+  buttonActive: {
+    backgroundColor: 'var(--gray-5)',
+  },
+  buttonText: {
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+})
+
+type SidebarButtonProps = {
+  label: string
+  isActive: boolean
+  onClick: () => void
+  icon?: React.ReactNode
+  className?: string
+}
+
+function SidebarButton({
+  label,
+  isActive,
+  onClick,
+  icon,
+  className,
+}: SidebarButtonProps) {
+  const classes = useSidebarButtonClasses()
+  return (
+    <Button
+      variant="ghost"
+      color="gray"
+      size="1"
+      my="1"
+      mx="1"
+      className={mergeClasses(
+        classes.button,
+        isActive && classes.buttonActive,
+        className
+      )}
+      onClick={onClick}
+    >
+      {icon}
+      <Text size="1" className={classes.buttonText}>
+        {label}
+      </Text>
+    </Button>
+  )
+}
+
+const useActiveButtonLineClasses = makeStyles({
+  line: {
+    position: 'relative',
+    height: '120%',
+    width: '1px',
+    margin: '0 7px 0 6px',
+    backgroundColor: 'var(--gray-5)',
+  },
+})
+
+function ActiveButtonLine() {
+  const classes = useActiveButtonLineClasses()
+  return <div className={classes.line} />
 }
