@@ -9,7 +9,7 @@ test(`check Electric logo is displayed`, async ({ page }) => {
   await page.goto(BASE_URL!)
 
   // Wait for the logo to be visible
-  const logo = await page.waitForSelector('img[alt="logo"]')
+  const logo = await page.waitForSelector(`img[alt="logo"]`)
   expect(logo).toBeTruthy()
 
   // Check that the logo is visible
@@ -17,15 +17,15 @@ test(`check Electric logo is displayed`, async ({ page }) => {
   expect(isVisible).toBe(true)
 })
 
-test('check initial shape request succeeds', async ({ page }) => {
+test(`check initial shape request succeeds`, async ({ page }) => {
   expect(BASE_URL).toBeDefined()
 
   // Array to store console errors
   const consoleErrors: string[] = []
 
   // Listen for console errors
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
+  page.on(`console`, (msg) => {
+    if (msg.type() === `error`) {
       consoleErrors.push(msg.text())
     }
   })
@@ -33,7 +33,7 @@ test('check initial shape request succeeds', async ({ page }) => {
   // Listen for the initial shape request
   const shapeRequestPromise = page.waitForRequest(
     (request) =>
-      request.url().includes("/v1/shape") && request.url().includes("offset=-1")
+      request.url().includes(`/v1/shape`) && request.url().includes(`offset=-1`)
   )
 
   // Navigate to the page
