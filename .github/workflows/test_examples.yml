@@ -1,34 +1,30 @@
 name: Test Examples
 
 on:
-  workflow_call:
-    inputs:
-      example_name:
-        description: 'Name of the example to test'
-        required: true
-        type: string
-      example_url:
-        description: 'URL of the deployed example'
-        required: true
-        type: string
+  schedule:
+    - cron: '0 9 * * *'  # Runs daily at 9 AM UTC
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
   test:
-    name: Run Browser Tests
+    name: Test ${{ matrix.example.name }}
     runs-on: ubuntu-latest
-    if: inputs.example_url != ''
-    
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - name: remix
+            url: https://remix.examples.electric-sql.com
+          - name: nextjs
+            url: https://nextjs.examples.electric-sql.com
+          - name: tanstack
+            url: https://tanstack.examples.electric-sql.com
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - name: Test Example
+        uses: ./.github/actions/test-example
         with:
-          node-version-file: ".tool-versions"
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Run browser tests
-        working-directory: examples/${{ inputs.example_name }}
-        run: pnpm test:browser
-        env:
-          BASE_URL: ${{ inputs.example_url }}
+          example_name: ${{ matrix.example.name }}
+          example_url: ${{ matrix.example.url }}
