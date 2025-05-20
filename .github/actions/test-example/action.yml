@@ -1,0 +1,34 @@
+name: Test Examples
+description: 'Test a deployed'
+
+inputs:
+  example_name:
+    description: 'Name of the example to test'
+    required: true
+  example_url:
+    description: 'URL of the deployed example'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      if: inputs.example_url != ''
+      uses: actions/checkout@v4
+    - uses: pnpm/action-setup@v4
+      if: inputs.example_url != ''
+    - uses: actions/setup-node@v4
+      if: inputs.example_url != ''
+      with:
+        node-version-file: ".tool-versions"
+        cache: pnpm
+    - shell: bash
+      if: inputs.example_url != ''
+      run: pnpm install --frozen-lockfile
+    - name: Run browser tests
+      if: inputs.example_url != ''
+      working-directory: examples/${{ inputs.example_name }}
+      shell: bash
+      run: pnpm test:browser
+      env:
+        BASE_URL: ${{ inputs.example_url }}
