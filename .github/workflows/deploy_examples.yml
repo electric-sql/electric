@@ -33,6 +33,7 @@ jobs:
             nextjs/**
             todo-app/**
             proxy-auth/**
+            phoenix-liveview/**
             tanstack/**
             remix/**
             react/**
@@ -78,6 +79,7 @@ jobs:
       nextjs: ${{ steps.deploy.outputs.nextjs }}
       todo-app: ${{ steps.deploy.outputs.todo-app }}
       proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
+      phoenix-liveview: ${{ steps.deploy.outputs.phoenix-liveview }}
       tanstack: ${{ steps.deploy.outputs.tanstack }}
       remix: ${{ steps.deploy.outputs.remix }}
       react: ${{ steps.deploy.outputs.react }}
@@ -100,6 +102,7 @@ jobs:
       ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
       ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
       ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
+      SECRET_KEY_BASE: ${{ secrets.LIVEVIEW_EXAMPLE_SECRET_KEY_BASE }}
 
     steps:
       - uses: actions/checkout@v4
@@ -163,6 +166,7 @@ jobs:
               nextjs: "${{ needs.deploy.outputs.nextjs }}",
               "todo-app": "${{ needs.deploy.outputs.todo-app }}",
               "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}",
+              "phoenix-liveview": "${{ needs.deploy.outputs.phoenix-liveview }}",
               "tanstack": "${{ needs.deploy.outputs.tanstack }}",
               "remix": "${{ needs.deploy.outputs.remix }}",
               "react": "${{ needs.deploy.outputs.react }}"

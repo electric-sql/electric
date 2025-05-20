@@ -31,10 +31,13 @@ if config_env() == :prod do
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
   config :electric_phoenix_example, Electric.PhoenixExample.Repo,
-    # ssl: true,
+    ssl: true,
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
-    socket_options: maybe_ipv6
+    socket_options: maybe_ipv6,
+    ssl_opts: [
+      verify: :verify_none
+    ]
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -97,8 +100,18 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
-  config :electric_phoenix, Electric.Client,
-    base_url:
+  IO.puts("DEBUG INFO:")
+  dbg(System.get_env("ELECTRIC_URL"))
+  dbg(System.get_env("ELECTRIC_SECRET"))
+  dbg(System.get_env("ELECTRIC_SOURCE_ID"))
+
+  config :phoenix_sync,
+    env: config_env(),
+    url:
       System.get_env("ELECTRIC_URL") || raise("ELECTRIC_URL environment variable not set"),
-    params: System.get_env("ELECTRIC_CLIENT_PARAMS", "{}") |> :json.decode()
+    mode: :http,
+    credentials: [
+      secret: System.get_env("ELECTRIC_SECRET") || raise("ELECTRIC_SECRET environment variable not set"),
+      source_id: System.get_env("ELECTRIC_SOURCE_ID") || raise("ELECTRIC_SOURCE_ID environment variable not set")
+    ]
 end

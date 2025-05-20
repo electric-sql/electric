@@ -83,6 +83,10 @@ config :phoenix_live_view,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
 
-config :electric_phoenix, Electric.Client,
-  base_url: System.get_env("ELECTRIC_URL", "http://localhost:3000/"),
-  params: System.get_env("ELECTRIC_CLIENT_PARAMS", "{}") |> :json.decode()
+config :phoenix_sync,
+  url:
+    System.get_env("ELECTRIC_URL", "http://localhost:3000/"),
+  mode: :http,
+  credentials: [
+    secret: System.get_env("ELECTRIC_SECRET") || "my-dev-secret",
+  ]
