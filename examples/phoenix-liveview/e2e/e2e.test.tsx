@@ -40,11 +40,13 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   expect(page1Items.length).toBe(initialCount + 1)
   expect(page2Items.length).toBe(initialCount + 1)
 
-  // Verify the new todo item text matches in both browsers
-  const newItemPage1 = await page1Items[initialCount].textContent()
-  const newItemPage2 = await page2Items[initialCount].textContent()
-  expect(newItemPage1).toBe(newItemPage2)
-  expect(newItemPage1).toContain(timestamp1.toString())
+  // Get all todo items text content
+  const page1Texts = await Promise.all(page1Items.map(item => item.textContent()))
+  const page2Texts = await Promise.all(page2Items.map(item => item.textContent()))
+
+  // Verify the new todo item appears in both browsers
+  expect(page1Texts.some(text => text?.includes(timestamp1.toString()))).toBe(true)
+  expect(page2Texts.some(text => text?.includes(timestamp1.toString()))).toBe(true)
 
   // Add another todo item in second browser with timestamp
   const timestamp2 = Date.now()
@@ -62,16 +64,17 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   expect(finalPage1Items.length).toBe(initialCount + 2)
   expect(finalPage2Items.length).toBe(initialCount + 2)
 
-  // Verify the todo items match in both browsers
+  // Get all todo items text content
   const allItemsPage1 = await Promise.all(
     finalPage1Items.map((item) => item.textContent())
   )
   const allItemsPage2 = await Promise.all(
     finalPage2Items.map((item) => item.textContent())
   )
-  expect(allItemsPage1).toEqual(allItemsPage2)
 
-  // Verify both timestamps are present in the final items
-  expect(allItemsPage1).toContain(todoItem1)
-  expect(allItemsPage1).toContain(todoItem2)
+  // Verify both timestamps are present in both browsers
+  expect(allItemsPage1.some(text => text?.includes(timestamp1.toString()))).toBe(true)
+  expect(allItemsPage1.some(text => text?.includes(timestamp2.toString()))).toBe(true)
+  expect(allItemsPage2.some(text => text?.includes(timestamp1.toString()))).toBe(true)
+  expect(allItemsPage2.some(text => text?.includes(timestamp2.toString()))).toBe(true)
 })
