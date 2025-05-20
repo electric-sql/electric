@@ -9,22 +9,26 @@ jobs:
   test:
     name: Test ${{ matrix.example.name }}
     runs-on: ubuntu-latest
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        example:
-          - name: remix
-            url: https://remix.examples.electric-sql.com
-          - name: nextjs
-            url: https://nextjs.examples.electric-sql.com
-          - name: tanstack
-            url: https://tanstack.examples.electric-sql.com
-
     steps:
       - uses: actions/checkout@v4
-      - name: Test Example
+      
+      - name: Test remix example
+        continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: ${{ matrix.example.name }}
-          example_url: ${{ matrix.example.url }}
+          example_name: remix
+          example_url: https://remix.examples.electric-sql.com
+      
+      - name: Test nextjs example
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: nextjs
+          example_url: https://nextjs.examples.electric-sql.com
+      
+      - name: Test tanstack example
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: tanstack
+          example_url: https://tanstack.examples.electric-sql.com
