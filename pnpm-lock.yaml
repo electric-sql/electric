@@ -730,6 +730,9 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
+      '@playwright/test':
+        specifier: ^1.52.0
+        version: 1.52.0
       '@types/react':
         specifier: ^18.3.3
         version: 18.3.12
