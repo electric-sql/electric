@@ -638,6 +638,12 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.7.2)
+      '@playwright/test':
+        specifier: ^1.52.0
+        version: 1.52.0
+      playwright:
+        specifier: ^1.52.0
+        version: 1.52.0
       sst:
         specifier: 3.6.35
         version: 3.6.35

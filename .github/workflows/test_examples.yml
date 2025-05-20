@@ -44,12 +44,21 @@ jobs:
           example_name: react
           example_url: https://react.examples.electric-sql.com
 
+      - name: Test phoenix liveview example
+        id: liveview
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: phoenix-liveview
+          example_url: https://phoenix-liveview.examples.electric-sql.com
+
       - name: Report test failures
         if: |
           steps.remix.outcome == 'failure' ||
           steps.nextjs.outcome == 'failure' ||
           steps.tanstack.outcome == 'failure' ||
-          steps.react.outcome == 'failure'
+          steps.react.outcome == 'failure' ||
+          steps.liveview.outcome == 'failure'
         run: |
           echo "The following examples failed:"
           if [ "${{ steps.remix.outcome }}" == "failure" ]; then
@@ -63,5 +72,8 @@ jobs:
           fi
           if [ "${{ steps.react.outcome }}" == "failure" ]; then
             echo "- React example"
+          fi
+          if [ "${{ steps.liveview.outcome }}" == "failure" ]; then
+            echo "- Phoenix LiveView example"
           fi
           exit 1
