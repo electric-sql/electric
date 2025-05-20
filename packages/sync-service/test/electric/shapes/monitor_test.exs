@@ -1,5 +1,12 @@
 defmodule Electric.Shapes.MonitorTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case,
+    async: true,
+    parameterize:
+      [1]
+      |> Stream.concat(Stream.repeatedly(fn -> Enum.random(2..60) end))
+      |> Stream.uniq()
+      |> Stream.take(8)
+      |> Enum.map(fn n -> %{partitions: n} end)
 
   alias Electric.Shapes.Monitor
   alias Electric.Shapes.Shape
@@ -11,7 +18,13 @@ defmodule Electric.Shapes.MonitorTest do
   @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
   @shape Shape.new!("the_table", inspector: @inspector)
 
-  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_test_publication_manager]
+  setup(ctx) do
+    stack_id = "#{Support.TestUtils.full_test_name(ctx)}-#{ctx.partitions}"
+    registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
+    %{stack_id: stack_id, process_registry: registry}
+  end
+
+  setup [:with_in_memory_storage, :with_test_publication_manager]
 
   def shape, do: @shape
 
@@ -26,15 +39,16 @@ defmodule Electric.Shapes.MonitorTest do
     %{stack_id: stack_id, storage: storage, publication_manager: publication_manager} = ctx
     parent = self()
 
-    start_link_supervised!(
-      {Monitor,
-       stack_id: stack_id,
-       storage: storage,
-       publication_manager: publication_manager,
-       shape_status: {TestStatus, %{parent: self()}},
-       on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end,
-       on_cleanup: fn shape_handle -> send(parent, {:on_cleanup, shape_handle}) end}
-    )
+    start_link_supervised!({
+      Monitor,
+      partitions: ctx.partitions,
+      stack_id: stack_id,
+      storage: storage,
+      publication_manager: publication_manager,
+      shape_status: {TestStatus, %{parent: self()}},
+      on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end,
+      on_cleanup: fn shape_handle -> send(parent, {:on_cleanup, shape_handle}) end
+    })
 
     :ok
   end
@@ -332,6 +346,7 @@ defmodule Electric.Shapes.MonitorTest do
       :ok = Monitor.register_reader(stack_id, handle1)
 
       Monitor.notify_reader_termination(stack_id, handle1, :my_reason)
+
       assert {:ok, 1} = Monitor.reader_count(stack_id, handle1)
 
       :ok = Monitor.register_reader(stack_id, handle2)

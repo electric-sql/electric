@@ -96,15 +96,16 @@ defmodule Electric.StackSupervisor do
                      "tweaks to the behaviour of parts of the supervision tree, used mostly for tests",
                    default: [],
                    keys: [
-                     registry_partitions: [type: :non_neg_integer, required: false],
-                     monitor_opts: [
-                       type: :keyword_list,
-                       required: false,
-                       keys: [
-                         on_remove: [type: {:fun, 2}],
-                         on_cleanup: [type: {:fun, 1}]
-                       ]
-                     ]
+                     registry_partitions: [type: :non_neg_integer, required: false]
+                   ]
+                 ],
+                 monitor_opts: [
+                   type: :keyword_list,
+                   required: false,
+                   keys: [
+                     partitions: [type: :pos_integer],
+                     on_remove: [type: {:fun, 2}],
+                     on_cleanup: [type: {:fun, 1}]
                    ]
                  ],
                  telemetry_opts: [type: :keyword_list, default: []],
@@ -291,8 +292,6 @@ defmodule Electric.StackSupervisor do
       max_shapes: config.max_shapes
     ]
 
-    {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])
-
     new_connection_manager_opts = [
       stack_id: stack_id,
       # Coming from the outside, need validation
@@ -317,8 +316,10 @@ defmodule Electric.StackSupervisor do
       ],
       persistent_kv: config.persistent_kv,
       shape_cache_opts: shape_cache_opts,
-      tweaks: tweaks
+      tweaks: config.tweaks
     ]
+
+    monitor_opts = Map.get(config, :monitor_opts, [])
 
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
@@ -354,8 +355,12 @@ defmodule Electric.StackSupervisor do
            stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
           {Electric.Shapes.Monitor,
            Electric.Utils.merge_all([
-             [stack_id: stack_id, storage: storage, shape_status: shape_status],
-             Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
+             [
+               stack_id: stack_id,
+               storage: storage,
+               shape_status: shape_status
+             ],
+             Keyword.take(monitor_opts, [:on_remove, :on_cleanup, :partitions]),
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},
           {Electric.Connection.Supervisor, new_connection_manager_opts}

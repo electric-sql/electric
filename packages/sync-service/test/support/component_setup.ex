@@ -285,7 +285,7 @@ defmodule Support.ComponentSetup do
         send(parent, {Electric.Shapes.Monitor, :cleanup, handle})
       end)
 
-    [on_remove: on_remove, on_cleanup: on_cleanup]
+    [on_remove: on_remove, on_cleanup: on_cleanup, partitions: 2]
   end
 
   def with_complete_stack(ctx) do
@@ -324,9 +324,9 @@ defmodule Support.ComponentSetup do
            pool_size: 2
          ],
          tweaks: [
-           registry_partitions: 1,
-           monitor_opts: monitor_config(ctx)
-         ]},
+           registry_partitions: 1
+         ],
+         monitor_opts: monitor_config(ctx)},
         restart: :temporary,
         significant: false
       )

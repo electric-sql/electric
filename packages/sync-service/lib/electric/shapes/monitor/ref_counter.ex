@@ -20,14 +20,32 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   @type stack_id :: Electric.stack_id()
   @type shape_handle :: Electric.ShapeCache.shape_handle()
+  @type partition :: pos_integer()
 
   defguardp is_consumer_shutdown_with_data_retention?(reason)
             when reason in [:normal, :killed, :shutdown] or
                    (is_tuple(reason) and elem(reason, 0) == :shutdown and
                       elem(reason, 1) != :cleanup)
 
-  def name(opts_or_stack_id) do
-    Electric.ProcessRegistry.name(opts_or_stack_id, __MODULE__)
+  def name(opts) when is_list(opts) do
+    stack_id = Access.fetch!(opts, :stack_id)
+    partition = Access.fetch!(opts, :partition)
+    name(stack_id, partition)
+  end
+
+  def name(stack_id, partition) when is_binary(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__, partition)
+  end
+
+  def child_spec(args) do
+    stack_id = Access.fetch!(args, :stack_id)
+    partition = Access.fetch!(args, :partition)
+
+    %{
+      id: {__MODULE__, stack_id, partition},
+      start: {__MODULE__, :start_link, [args]},
+      type: :worker
+    }
   end
 
   # the opts are validated by Monitor
@@ -36,67 +54,84 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   @doc false
-  @spec register_reader(stack_id(), shape_handle(), pid()) :: :ok
-  def register_reader(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_reader, shape_handle, pid})
+  @spec deregister_if_owned(stack_id(), partition(), pid()) :: boolean()
+  def deregister_if_owned(stack_id, partition, pid) do
+    case :ets.lookup(monitor_table(stack_id, partition), pid) do
+      [{^pid, :reader, handle, _ref}] ->
+        unregister_reader(stack_id, partition, handle, pid)
+        true
+
+      [] ->
+        false
+    end
   end
 
   @doc false
-  @spec unregister_reader(stack_id(), shape_handle(), pid()) :: :ok
-  def unregister_reader(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid})
+  @spec register_reader(stack_id(), partition(), shape_handle(), pid()) :: :ok
+  def register_reader(stack_id, partition, shape_handle, pid \\ self()) do
+    GenServer.call(name(stack_id, partition), {:register_reader, shape_handle, pid})
   end
 
   @doc false
-  @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
-  def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_writer, shape_handle, shape, pid})
+  @spec unregister_reader(stack_id(), partition(), shape_handle(), pid()) :: :ok
+  def unregister_reader(stack_id, partition, shape_handle, pid \\ self()) do
+    GenServer.call(name(stack_id, partition), {:unregister_reader, shape_handle, pid})
   end
 
   @doc false
-  @spec reader_count(stack_id(), shape_handle()) :: {:ok, non_neg_integer()}
-  def reader_count(stack_id, shape_handle) do
-    case :ets.lookup(table(stack_id), shape_handle) do
+  @spec register_writer(stack_id(), partition(), shape_handle(), pid()) :: :ok | {:error, term()}
+  def register_writer(stack_id, partition, shape_handle, shape, pid \\ self()) do
+    GenServer.call(name(stack_id, partition), {:register_writer, shape_handle, shape, pid})
+  end
+
+  @doc false
+  @spec reader_count(stack_id(), partition(), shape_handle()) :: {:ok, non_neg_integer()}
+  def reader_count(stack_id, partition, shape_handle) do
+    case :ets.lookup(table(stack_id, partition), shape_handle) do
       [{_, count}] -> {:ok, count}
       [] -> {:ok, 0}
     end
   end
 
   @doc false
-  @spec reader_count(stack_id()) :: {:ok, non_neg_integer()}
-  def reader_count(stack_id) do
-    case :ets.lookup(table(stack_id), :all) do
+  @spec reader_count(stack_id(), partition()) :: {:ok, non_neg_integer()}
+  def reader_count(stack_id, partition) do
+    case :ets.lookup(table(stack_id, partition), :all) do
       [{:all, count}] -> {:ok, count}
       [] -> {:ok, 0}
     end
   end
 
   @doc false
-  @spec reader_count!(stack_id()) :: non_neg_integer()
-  def reader_count!(stack_id) do
-    {:ok, count} = reader_count(stack_id)
+  @spec reader_count!(stack_id(), partition()) :: non_neg_integer()
+  def reader_count!(stack_id, partition) do
+    {:ok, count} = reader_count(stack_id, partition)
     count
   end
 
-  def notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()) do
-    case reader_count(stack_id, shape_handle) do
+  def notify_reader_termination(stack_id, partition, shape_handle, reason, pid \\ self()) do
+    case reader_count(stack_id, partition, shape_handle) do
       {:ok, 0} ->
         do_notify_reader_termination({pid, reason}, shape_handle)
         :ok
 
       {:ok, _} ->
-        GenServer.call(name(stack_id), {:notify_reader_termination, shape_handle, pid, reason})
+        GenServer.call(
+          name(stack_id, partition),
+          {:notify_reader_termination, shape_handle, pid, reason}
+        )
     end
   end
 
-  def purge_shape(stack_id, shape_handle, shape) do
-    GenServer.call(name(stack_id), {:purge_shape, shape_handle, shape})
+  def purge_shape(stack_id, partition, shape_handle, shape) do
+    GenServer.call(name(stack_id, partition), {:purge_shape, shape_handle, shape})
   end
 
   @doc false
-  @spec termination_watchers(stack_id(), shape_handle()) :: {:ok, [{pid(), reason :: term()}]}
-  def termination_watchers(stack_id, shape_handle) do
-    GenServer.call(name(stack_id), {:termination_watchers, shape_handle})
+  @spec termination_watchers(stack_id(), partition(), shape_handle()) ::
+          {:ok, [{pid(), reason :: term()}]}
+  def termination_watchers(stack_id, partition, shape_handle) do
+    GenServer.call(name(stack_id, partition), {:termination_watchers, shape_handle})
   end
 
   defp do_notify_reader_termination(pids, handle) when is_list(pids) do
@@ -107,16 +142,22 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     send(pid, {Monitor, :reader_termination, handle, reason})
   end
 
-  defp table(stack_id) do
-    :"#{__MODULE__}:#{stack_id}"
+  defp table(%{stack_id: stack_id, partition: partition}) do
+    table(stack_id, partition)
   end
 
-  defp monitor_table(stack_id) do
-    :"#{__MODULE__}:#{stack_id}:monitor"
+  defp table(stack_id, partition) do
+    if is_binary(partition), do: raise("no")
+    :"Electric.Shapes.Monitor.RefCounter:#{stack_id}.#{partition}"
+  end
+
+  defp monitor_table(stack_id, partition) do
+    if is_binary(partition), do: raise("no")
+    :"Electric.Shapes.Monitor.RefCounter:#{stack_id}:monitor.#{partition}"
   end
 
   @impl GenServer
-  def init(%{stack_id: stack_id} = opts) do
+  def init(%{stack_id: stack_id, partition: partition} = opts) do
     Process.set_label({:shape_monitor, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
@@ -128,16 +169,24 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     on_cleanup = Map.get(opts, :on_cleanup) || fn _ -> :ok end
 
     reader_table =
-      :ets.new(table(stack_id), [
+      :ets.new(table(stack_id, partition), [
         :protected,
         :named_table,
-        read_concurrency: true
+        read_concurrency: true,
+        write_concurrency: :auto
       ])
 
-    monitor_table = :ets.new(monitor_table(stack_id), [])
+    monitor_table =
+      :ets.new(monitor_table(stack_id, partition), [
+        :protected,
+        :named_table,
+        read_concurrency: true,
+        write_concurrency: :auto
+      ])
 
     state = %{
       stack_id: stack_id,
+      partition: partition,
       storage: storage,
       publication_manager: publication_manager,
       shape_status: shape_status,
@@ -203,10 +252,10 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   def handle_call({:notify_reader_termination, shape_handle, pid, reason}, _from, state) do
-    %{stack_id: stack_id} = state
+    %{stack_id: stack_id, partition: partition} = state
 
     state =
-      case reader_count(stack_id, shape_handle) do
+      case reader_count(stack_id, partition, shape_handle) do
         {:ok, 0} ->
           do_notify_reader_termination({pid, reason}, shape_handle)
           state
@@ -299,14 +348,14 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       |> :ets.select([{{:_, :reader, :"$1", :_}, [], [[:"$1"]]}])
       |> MapSet.new(&hd/1)
 
-    %{readers: reader_count!(state.stack_id), shapes: MapSet.size(handles)}
+    %{readers: reader_count!(state.stack_id, state.partition), shapes: MapSet.size(handles)}
   end
 
   defp register_reader_for_handle(state, handle, pid) do
     ref = Process.monitor(pid, tag: {:down, :reader})
     :ets.insert(state.monitor_table, {pid, :reader, handle, ref})
 
-    count = update_counter(state.stack_id, handle, 1)
+    count = update_counter(table(state), handle, 1)
 
     Logger.debug(fn ->
       "register: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
@@ -332,14 +381,14 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end)
   end
 
-  defp update_counter(stack_id, handle, incr) do
+  defp update_counter(table, handle, incr) do
     update_op =
       if incr < 0,
         do: {2, incr, 0, 0},
         else: incr
 
-    :ets.update_counter(table(stack_id), :all, update_op, {:all, 0})
-    :ets.update_counter(table(stack_id), handle, update_op, {handle, 0})
+    :ets.update_counter(table, :all, update_op, {:all, 0})
+    :ets.update_counter(table, handle, update_op, {handle, 0})
   end
 
   defp delete_reader_process(pid, state) do
@@ -363,11 +412,13 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   defp handle_pid_termination(state, pid, handle, ref) do
-    %{stack_id: stack_id, termination_watchers: termination_watchers} = state
+    %{stack_id: stack_id, partition: partition, termination_watchers: termination_watchers} =
+      state
 
     if is_reference(ref), do: Process.demonitor(ref, [:flush])
 
     stack_id
+    |> table(partition)
     |> update_counter(handle, -1)
     |> tap(fn count ->
       Logger.debug(fn ->
@@ -378,7 +429,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       0 ->
         {pids, termination_watchers} = Map.pop(termination_watchers, handle, [])
 
-        :ets.delete(table(stack_id), handle)
+        :ets.delete(table(state), handle)
 
         Logger.debug(fn ->
           "notifying #{length(pids)} of shape #{inspect(handle)} release"
@@ -402,7 +453,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   defp record_telemetry(state) do
     :telemetry.execute(
       [:electric, :shape_monitor],
-      %{active_reader_count: reader_count!(state.stack_id)},
+      %{active_reader_count: reader_count!(state.stack_id, state.partition)},
       %{stack_id: state.stack_id}
     )
 
