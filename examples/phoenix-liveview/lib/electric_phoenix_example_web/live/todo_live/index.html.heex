@@ -40,7 +40,7 @@
           <div
             :for={{id, todo} <- @streams.todos}
             id={id}
-            class="flex flex-row justify-center items-center space-x-4 group hover:bg-zinc-50 hover:cursor-pointer"
+            class="flex flex-row justify-center items-center space-x-4 group hover:bg-zinc-50 hover:cursor-pointer todo-item"
             phx-mounted={
               if @animate_insert,
                 do:
