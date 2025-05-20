@@ -16,6 +16,7 @@ jobs:
   test:
     name: Run Browser Tests
     runs-on: ubuntu-latest
+    if: inputs.example_url != ''
     
     steps:
       - name: Checkout repository
