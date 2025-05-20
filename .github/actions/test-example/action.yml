@@ -1,5 +1,5 @@
-name: Test Examples
-description: 'Test a deployed'
+name: Test Example
+description: 'Test a deployed example'
 
 inputs:
   example_name:
