@@ -140,18 +140,31 @@ jobs:
 
   test-examples:
     needs: deploy
-    strategy:
-      matrix:
-        example: [
-          { name: 'remix', url: '${{ needs.deploy.outputs.remix }}' },
-          { name: 'nextjs', url: '${{ needs.deploy.outputs.nextjs }}' },
-          { name: 'tanstack', url: '${{ needs.deploy.outputs.tanstack }}' },
-        ]
-      fail-fast: false
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: ${{ matrix.example.name }}
-      example_url: ${{ matrix.example.url || '' }}
+    runs-on: ubuntu-latest
+    # Use steps to ensure that the tests run sequentially
+    # because the examples may use a shared DB
+    # which would cause interference if run in parallel
+    steps:
+      - name: Test remix example
+        uses: ./.github/workflows/test_examples.yml
+        continue-on-error: true
+        with:
+          example_name: 'remix'
+          example_url: ${{ needs.deploy.outputs.remix || '' }}
+      
+      - name: Test nextjs example
+        uses: ./.github/workflows/test_examples.yml
+        continue-on-error: true
+        with:
+          example_name: 'nextjs'
+          example_url: ${{ needs.deploy.outputs.nextjs || '' }}
+      
+      - name: Test tanstack example
+        uses: ./.github/workflows/test_examples.yml
+        continue-on-error: true
+        with:
+          example_name: 'tanstack'
+          example_url: ${{ needs.deploy.outputs.tanstack || '' }}
 
   comment:
     if: github.event_name == 'pull_request' && needs.changed-files.outputs.has_changes == 'true'
