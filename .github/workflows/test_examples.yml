@@ -36,6 +36,14 @@ jobs:
           example_name: tanstack
           example_url: https://tanstack.examples.electric-sql.com
 
+      - name: Test react example
+        id: react
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: react
+          example_url: https://react.examples.electric-sql.com
+
       - name: Fail if any test failed
         if: |
           steps.remix.outcome == 'failure' ||

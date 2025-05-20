@@ -168,11 +168,20 @@ jobs:
           example_name: tanstack
           example_url: ${{ needs.deploy.outputs.tanstack || '' }}
       
+      - name: Test react example
+        id: react
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: react
+          example_url: ${{ needs.deploy.outputs.react || '' }}
+
       - name: Fail if any test failed
         if: |
           steps.remix.outcome == 'failure' ||
           steps.nextjs.outcome == 'failure' ||
-          steps.tanstack.outcome == 'failure'
+          steps.tanstack.outcome == 'failure' ||
+          steps.react.outcome == 'failure'
         run: |
           echo "One or more tests failed"
           exit 1
