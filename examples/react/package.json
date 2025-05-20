@@ -14,6 +14,7 @@
     "format": "eslint . --ext ts,tsx --fix",
     "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
+    "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
+    "playwright": "^1.52.0",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
   }
