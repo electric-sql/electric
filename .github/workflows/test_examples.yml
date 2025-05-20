@@ -44,11 +44,24 @@ jobs:
           example_name: react
           example_url: https://react.examples.electric-sql.com
 
-      - name: Fail if any test failed
+      - name: Report test failures
         if: |
           steps.remix.outcome == 'failure' ||
           steps.nextjs.outcome == 'failure' ||
-          steps.tanstack.outcome == 'failure'
+          steps.tanstack.outcome == 'failure' ||
+          steps.react.outcome == 'failure'
         run: |
-          echo "One or more tests failed"
+          echo "The following examples failed:"
+          if [ "${{ steps.remix.outcome }}" == "failure" ]; then
+            echo "- Remix example"
+          fi
+          if [ "${{ steps.nextjs.outcome }}" == "failure" ]; then
+            echo "- Next.js example"
+          fi
+          if [ "${{ steps.tanstack.outcome }}" == "failure" ]; then
+            echo "- TanStack example"
+          fi
+          if [ "${{ steps.react.outcome }}" == "failure" ]; then
+            echo "- React example"
+          fi
           exit 1
