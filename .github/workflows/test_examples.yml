@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Test remix example
+        id: remix
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
@@ -20,6 +21,7 @@ jobs:
           example_url: https://remix.examples.electric-sql.com
       
       - name: Test nextjs example
+        id: nextjs
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
@@ -27,8 +29,18 @@ jobs:
           example_url: https://nextjs.examples.electric-sql.com
       
       - name: Test tanstack example
+        id: tanstack
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
           example_name: tanstack
           example_url: https://tanstack.examples.electric-sql.com
+
+      - name: Fail if any test failed
+        if: |
+          steps.remix.outcome == 'failure' ||
+          steps.nextjs.outcome == 'failure' ||
+          steps.tanstack.outcome == 'failure'
+        run: |
+          echo "One or more tests failed"
+          exit 1

@@ -145,6 +145,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Test remix example
+        id: remix
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
@@ -152,6 +153,7 @@ jobs:
           example_url: ${{ needs.deploy.outputs.remix || '' }}
       
       - name: Test nextjs example
+        id: nextjs
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
@@ -159,11 +161,21 @@ jobs:
           example_url: ${{ needs.deploy.outputs.nextjs || '' }}
       
       - name: Test tanstack example
+        id: tanstack
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
           example_name: tanstack
           example_url: ${{ needs.deploy.outputs.tanstack || '' }}
+      
+      - name: Fail if any test failed
+        if: |
+          steps.remix.outcome == 'failure' ||
+          steps.nextjs.outcome == 'failure' ||
+          steps.tanstack.outcome == 'failure'
+        run: |
+          echo "One or more tests failed"
+          exit 1
 
   comment:
     if: github.event_name == 'pull_request' && needs.changed-files.outputs.has_changes == 'true'
