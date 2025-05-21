@@ -14,7 +14,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID!)
   originUrl.searchParams.set(
-    `source_secret`,
+    `secret`,
     process.env.ELECTRIC_SOURCE_SECRET!
   )
 

@@ -63,8 +63,6 @@ export default $config({
 
       return {
         databaseUri,
-        // source_id: electricInfo.id,
-        // source_secret: electricInfo.source_secret,
         website: website.url,
       }
     } catch (e) {

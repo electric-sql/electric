@@ -58,7 +58,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
 
   const issueUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
   if (ELECTRIC_SOURCE_SECRET) {
-    issueUrl.searchParams.set('source_secret', ELECTRIC_SOURCE_SECRET)
+    issueUrl.searchParams.set('secret', ELECTRIC_SOURCE_SECRET)
   }
 
   // Issues Sync
@@ -94,7 +94,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
 
   const commentUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
   if (ELECTRIC_SOURCE_SECRET) {
-    commentUrl.searchParams.set('source_secret', ELECTRIC_SOURCE_SECRET)
+    commentUrl.searchParams.set('secret', ELECTRIC_SOURCE_SECRET)
   }
 
   // Comments Sync

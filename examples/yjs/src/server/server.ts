@@ -115,7 +115,7 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
 
   if (process.env.ELECTRIC_SOURCE_SECRET) {
     originUrl.searchParams.set(
-      `source_secret`,
+      `secret`,
       process.env.ELECTRIC_SOURCE_SECRET
     )
   }

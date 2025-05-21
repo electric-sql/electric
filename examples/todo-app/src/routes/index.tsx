@@ -27,7 +27,7 @@ export default function Index() {
     params: {
       table: `todos`,
       source_id: import.meta.env.VITE_ELECTRIC_SOURCE_ID,
-      source_secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
+      secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
     },
   })
   todos.sort((a, b) => a.created_at - b.created_at)
