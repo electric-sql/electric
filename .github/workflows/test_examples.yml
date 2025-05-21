@@ -60,6 +60,14 @@ jobs:
           example_name: linearlite
           example_url: https://linearlite.examples.electric-sql.com
 
+      - name: Test proxy-auth example
+        id: proxy-auth
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: proxy-auth
+          example_url: https://proxy-auth.examples.electric-sql.com
+
       - name: Report test failures
         if: |
           steps.remix.outcome == 'failure' ||
@@ -67,7 +75,8 @@ jobs:
           steps.tanstack.outcome == 'failure' ||
           steps.react.outcome == 'failure' ||
           steps.liveview.outcome == 'failure' ||
-          steps.linearlite.outcome == 'failure'
+          steps.linearlite.outcome == 'failure' ||
+          steps.proxy-auth.outcome == 'failure'
         run: |
           echo "The following examples failed:"
           if [ "${{ steps.remix.outcome }}" == "failure" ]; then
@@ -87,5 +96,8 @@ jobs:
           fi
           if [ "${{ steps.linearlite.outcome }}" == "failure" ]; then
             echo "- LinearLite example"
+          fi
+          if [ "${{ steps.proxy-auth.outcome }}" == "failure" ]; then
+            echo "- Proxy Auth example"
           fi
           exit 1
