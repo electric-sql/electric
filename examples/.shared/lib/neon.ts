@@ -52,7 +52,7 @@ export function createNeonDb({
 
   const ownerName = `neondb_owner`
 
-  const createCommand = `curl -f -s "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
+  const createCommand = `curl -f "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
     -H 'Accept: application/json' \
     -H "Authorization: Bearer $NEON_API_KEY" \
     -H 'Content-Type: application/json' \
