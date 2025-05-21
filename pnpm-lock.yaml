@@ -269,6 +269,9 @@ importers:
       '@faker-js/faker':
         specifier: ^8.4.1
         version: 8.4.1
+      '@playwright/test':
+        specifier: ^1.52.0
+        version: 1.52.0
       '@tailwindcss/typography':
         specifier: ^0.5.10
         version: 0.5.15(tailwindcss@3.4.14)
@@ -344,6 +347,9 @@ importers:
       globals:
         specifier: ^15.13.0
         version: 15.13.0
+      playwright:
+        specifier: ^1.52.0
+        version: 1.52.0
       postcss:
         specifier: ^8.4.39
         version: 8.4.47

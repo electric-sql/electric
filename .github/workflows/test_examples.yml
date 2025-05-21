@@ -52,13 +52,22 @@ jobs:
           example_name: phoenix-liveview
           example_url: https://phoenix-liveview.examples.electric-sql.com
 
+      - name: Test linearlite example
+        id: linearlite
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: linearlite
+          example_url: https://linearlite.examples.electric-sql.com
+
       - name: Report test failures
         if: |
           steps.remix.outcome == 'failure' ||
           steps.nextjs.outcome == 'failure' ||
           steps.tanstack.outcome == 'failure' ||
           steps.react.outcome == 'failure' ||
-          steps.liveview.outcome == 'failure'
+          steps.liveview.outcome == 'failure' ||
+          steps.linearlite.outcome == 'failure'
         run: |
           echo "The following examples failed:"
           if [ "${{ steps.remix.outcome }}" == "failure" ]; then
@@ -75,5 +84,8 @@ jobs:
           fi
           if [ "${{ steps.liveview.outcome }}" == "failure" ]; then
             echo "- Phoenix LiveView example"
+          fi
+          if [ "${{ steps.linearlite.outcome }}" == "failure" ]; then
+            echo "- LinearLite example"
           fi
           exit 1
