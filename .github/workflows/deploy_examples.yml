@@ -138,13 +138,126 @@ jobs:
             exit 123
           fi
 
-  test-remix:
+  test-examples:
+    name: Test examples
     needs: deploy
-    if: needs.deploy.outputs.remix != ''
-    uses: ./.github/workflows/test_examples.yml
-    with:
-      example_name: remix
-      example_url: ${{ needs.deploy.outputs.remix }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test remix example
+        id: remix
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: remix
+          example_url: ${{ needs.deploy.outputs.remix || '' }}
+      
+      - name: Test nextjs example
+        id: nextjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: nextjs
+          example_url: ${{ needs.deploy.outputs.nextjs || '' }}
+      
+      - name: Test tanstack example
+        id: tanstack
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: tanstack
+          example_url: ${{ needs.deploy.outputs.tanstack || '' }}
+      
+      - name: Test react example
+        id: react
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.react || '' }}
+
+      - name: Test phoenix liveview example
+        id: liveview
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: phoenix-liveview
+          example_url: ${{ needs.deploy.outputs.phoenix-liveview || '' }}
+
+      - name: Test yjs example
+        id: yjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.yjs || '' }}
+      
+      - name: Test linearlite read-only example
+        id: linearlite-read-only
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.linearlite-read-only || '' }}
+
+      - name: Test write patterns example
+        id: write-patterns
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.write-patterns || '' }}
+
+      - name: Test todo-app example
+        id: todo-app
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.todo-app || '' }}
+
+      - name: Report test failures
+        if: |
+          steps.remix.outcome == 'failure' ||
+          steps.nextjs.outcome == 'failure' ||
+          steps.tanstack.outcome == 'failure' ||
+          steps.react.outcome == 'failure' ||
+          steps.liveview.outcome == 'failure' ||
+          steps.yjs.outcome == 'failure' ||
+          steps.linearlite-read-only.outcome == 'failure' ||
+          steps.write-patterns.outcome == 'failure' ||
+          steps.todo-app.outcome == 'failure'
+        run: |
+          echo "The following examples failed:"
+          if [ "${{ steps.remix.outcome }}" == "failure" ]; then
+            echo "- Remix example"
+          fi
+          if [ "${{ steps.nextjs.outcome }}" == "failure" ]; then
+            echo "- Next.js example"
+          fi
+          if [ "${{ steps.tanstack.outcome }}" == "failure" ]; then
+            echo "- TanStack example"
+          fi
+          if [ "${{ steps.react.outcome }}" == "failure" ]; then
+            echo "- React example"
+          fi
+          if [ "${{ steps.liveview.outcome }}" == "failure" ]; then
+            echo "- Phoenix LiveView example"
+          fi
+          if [ "${{ steps.yjs.outcome }}" == "failure" ]; then
+            echo "- Yjs example"
+          fi
+          if [ "${{ steps.linearlite-read-only.outcome }}" == "failure" ]; then
+            echo "- LinearLite read-only example"
+          fi
+          if [ "${{ steps.write-patterns.outcome }}" == "failure" ]; then
+            echo "- Write patterns example"
+          fi
+          if [ "${{ steps.todo-app.outcome }}" == "failure" ]; then
+            echo "- Todo app example"
+          fi
+          exit 1
 
   comment:
     if: github.event_name == 'pull_request' && needs.changed-files.outputs.has_changes == 'true'

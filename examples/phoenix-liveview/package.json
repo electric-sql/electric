@@ -6,10 +6,13 @@
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@playwright/test": "^1.52.0",
+    "playwright": "^1.52.0",
     "sst": "3.6.35",
     "typescript": "5.7.2"
   },
   "scripts": {
-    "deploy": "sst deploy --stage production"
+    "deploy": "sst deploy --stage production",
+    "test:browser": "playwright install && playwright test ./e2e/"
   }
 }

@@ -111,6 +111,7 @@ export const Example = () => {
           type="submit"
           className="button"
           onClick={() => addItemMut(uuidv4())}
+          value="add"
         >
           Add
         </button>
@@ -118,6 +119,7 @@ export const Example = () => {
           type="submit"
           className="button"
           onClick={() => clearItemsMut(items.length)}
+          value="clear"
         >
           Clear
         </button>

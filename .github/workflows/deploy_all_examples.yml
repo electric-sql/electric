@@ -78,3 +78,8 @@ jobs:
         run: |
           pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
           pnpm sst deploy --stage production
+
+  test:
+    name: Test Examples
+    needs: deploy
+    uses: ./.github/workflows/test_examples.yml
