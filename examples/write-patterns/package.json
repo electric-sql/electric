@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@playwright/test": "^1.52.0",
     "@types/react": "npm:types-react@rc",
     "@types/react-dom": "npm:types-react-dom@rc",
     "@types/uuid": "^10.0.0",
@@ -33,6 +34,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
     "rollup": "2.79.2",
+    "playwright": "^1.52.0",
     "typescript": "^5.5.3",
     "vite": "^5.3.4",
     "vite-plugin-pwa": "^0.21.0"
@@ -54,6 +56,7 @@
     "format": "eslint . --fix",
     "preview": "vite preview",
     "stylecheck": "eslint . --quiet",
+    "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
   "type": "module"
