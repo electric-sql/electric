@@ -15,10 +15,6 @@ test(`check initial sync succeeds`, async ({ page }) => {
     }
   })
 
-  page.on(`request`, (request) => {
-    console.log(`request`, request.url())
-  })
-
   // Listen for the initial shape request
   const shapeRequestPromise = page.waitForRequest(
     (request) =>
