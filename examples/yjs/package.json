@@ -19,7 +19,8 @@
     "build:client": "vite build src/client",
     "preview:client": "vite preview src/client",
     "start-all": "concurrently \"pnpm run dev:server\" \"pnpm run dev:client\"",
-    "build": "pnpm run build:client"
+    "build": "pnpm run build:client",
+    "test:browser": "playwright install && playwright test ./e2e/"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
@@ -41,6 +42,7 @@
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@playwright/test": "^1.52.0",
     "@types/pg": "^8.11.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -48,6 +50,7 @@
     "concurrently": "^8.2.2",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
+    "playwright": "^1.52.0",
     "tsx": "^4.7.1",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"

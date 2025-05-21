@@ -76,6 +76,14 @@ jobs:
           example_name: write-patterns
           example_url: https://write-patterns.examples.electric-sql.com
 
+      - name: Test yjs example
+        id: yjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: yjs
+          example_url: https://yjs.examples.electric-sql.com
+
       - name: Report test failures
         if: |
           steps.remix.outcome == 'failure' ||
@@ -85,7 +93,8 @@ jobs:
           steps.liveview.outcome == 'failure' ||
           steps.linearlite.outcome == 'failure' ||
           steps.proxy-auth.outcome == 'failure' ||
-          steps.write-patterns.outcome == 'failure'
+          steps.write-patterns.outcome == 'failure' ||
+          steps.yjs.outcome == 'failure'
         run: |
           echo "The following examples failed:"
           if [ "${{ steps.remix.outcome }}" == "failure" ]; then
@@ -111,5 +120,8 @@ jobs:
           fi
           if [ "${{ steps.write-patterns.outcome }}" == "failure" ]; then
             echo "- Write Patterns example"
+          fi
+          if [ "${{ steps.yjs.outcome }}" == "failure" ]; then
+            echo "- Yjs example"
           fi
           exit 1
