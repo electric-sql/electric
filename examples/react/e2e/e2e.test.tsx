@@ -17,7 +17,7 @@ test(`check Electric logo is displayed`, async ({ page }) => {
   expect(isVisible).toBe(true)
 })
 
-test(`check initial shape request succeeds`, async ({ page }) => {
+test(`check initial sync succeeds`, async ({ page }) => {
   expect(BASE_URL).toBeDefined()
 
   // Array to store console errors

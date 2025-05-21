@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 
 const BASE_URL = process.env.BASE_URL
 
-test(`check shape request succeeds`, async ({ page }) => {
+test(`check initial sync succeeds`, async ({ page }) => {
   expect(BASE_URL).toBeDefined()
 
   // Array to store console errors
