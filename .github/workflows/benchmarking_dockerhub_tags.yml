@@ -20,6 +20,7 @@ jobs:
     name: Build and test on PR comment
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4.2.2
       - name: Write fanout benchmark
         run: |
           curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/write_fanout/runs' \
