@@ -84,6 +84,14 @@ jobs:
           example_name: yjs
           example_url: https://yjs.examples.electric-sql.com
 
+      - name: Test todo-app example
+        id: todo-app
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          example_name: todo-app
+          example_url: https://todo-app.examples.electric-sql.com
+
       - name: Report test failures
         if: |
           steps.remix.outcome == 'failure' ||
