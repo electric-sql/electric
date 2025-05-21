@@ -36,6 +36,11 @@ test(`check initial shape request succeeds`, async ({ page }) => {
       request.url().includes(`/v1/shape`) && request.url().includes(`offset=-1`)
   )
 
+  const liveRequest = page.waitForRequest(
+    (request) =>
+      request.url().includes(`/v1/shape`) && request.url().includes(`live=true`)
+  )
+
   // Navigate to the page
   await page.goto(BASE_URL!)
 
@@ -45,6 +50,9 @@ test(`check initial shape request succeeds`, async ({ page }) => {
   // Verify the request was successful
   const response = await shapeRequest.response()
   expect(response?.status()).toBe(200)
+
+  // Eventually we will have finished the initial sync and make a live request
+  await liveRequest
 
   // Check that no errors were logged
   expect(consoleErrors).toHaveLength(0)
