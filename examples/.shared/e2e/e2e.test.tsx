@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 
 const BASE_URL = process.env.BASE_URL
 
-test(`check shape request succeeds`, async ({ page }) => {
+test(`check initial sync succeeds`, async ({ page }) => {
   expect(BASE_URL).toBeDefined()
 
   // Array to store console errors
@@ -16,13 +16,18 @@ test(`check shape request succeeds`, async ({ page }) => {
   })
 
   page.on(`request`, (request) => {
-    console.log(`Request URL: ${request.url()}`)
+    console.log(`request`, request.url())
   })
 
   // Listen for the initial shape request
   const shapeRequestPromise = page.waitForRequest(
     (request) =>
-      request.url().includes(`/v1/shape`) && !request.url().includes(`live=true`)
+      request.url().includes(`/shape`) && !request.url().includes(`live=true`)
+  )
+
+  const liveRequest = page.waitForRequest(
+    (request) =>
+      request.url().includes(`/shape`) && request.url().includes(`live=true`)
   )
 
   // Navigate to the page
@@ -34,6 +39,9 @@ test(`check shape request succeeds`, async ({ page }) => {
   // Verify the request was successful
   const response = await shapeRequest.response()
   expect(response?.status()).toBe(200)
+
+  // Eventually we will have finished the initial sync and make a live request
+  await liveRequest
 
   // Check that no errors were logged
   expect(consoleErrors).toHaveLength(0)

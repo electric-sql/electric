@@ -10,16 +10,19 @@
     "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
     "prepare": "sst install",
     "stylecheck": "eslint . --quiet",
+    "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@databases/pg-migrations": "^5.0.3",
+    "@playwright/test": "^1.52.0",
     "@types/node": "^20.14.10",
     "@types/pg": "^8.11.6",
     "camelcase": "^8.0.0",
     "dotenv": "^16.4.5",
     "eslint": "^8.57.0",
     "pg": "^8.13.1",
+    "playwright": "^1.52.0",
     "sst": "3.6.25",
     "typescript": "^5.5.3"
   }

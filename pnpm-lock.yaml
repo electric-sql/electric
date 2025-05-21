@@ -24,6 +24,9 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
+      '@playwright/test':
+        specifier: ^1.52.0
+        version: 1.52.0
       '@types/node':
         specifier: ^20.14.10
         version: 20.17.6
@@ -42,6 +45,9 @@ importers:
       pg:
         specifier: ^8.13.1
         version: 8.13.1
+      playwright:
+        specifier: ^1.52.0
+        version: 1.52.0
       sst:
         specifier: 3.6.25
         version: 3.6.25
@@ -269,9 +275,6 @@ importers:
       '@faker-js/faker':
         specifier: ^8.4.1
         version: 8.4.1
-      '@playwright/test':
-        specifier: ^1.52.0
-        version: 1.52.0
       '@tailwindcss/typography':
         specifier: ^0.5.10
         version: 0.5.15(tailwindcss@3.4.14)
@@ -347,9 +350,6 @@ importers:
       globals:
         specifier: ^15.13.0
         version: 15.13.0
-      playwright:
-        specifier: ^1.52.0
-        version: 1.52.0
       postcss:
         specifier: ^8.4.39
         version: 8.4.47
@@ -690,9 +690,6 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
-      '@playwright/test':
-        specifier: ^1.52.0
-        version: 1.52.0
       '@types/aws-lambda':
         specifier: 8.10.146
         version: 8.10.146
@@ -720,9 +717,6 @@ importers:
       eslint:
         specifier: ^8.57.0
         version: 8.57.1
-      playwright:
-        specifier: ^1.52.0
-        version: 1.52.0
       typescript:
         specifier: ^5.5.3
         version: 5.6.3
@@ -748,9 +742,6 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
-      '@playwright/test':
-        specifier: ^1.52.0
-        version: 1.52.0
       '@types/react':
         specifier: ^18.3.3
         version: 18.3.12
@@ -766,9 +757,6 @@ importers:
       eslint:
         specifier: ^8.57.0
         version: 8.57.1
-      playwright:
-        specifier: ^1.52.0
-        version: 1.52.0
       typescript:
         specifier: ^5.5.3
         version: 5.6.3
@@ -1023,9 +1011,6 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
-      '@playwright/test':
-        specifier: ^1.52.0
-        version: 1.52.0
       '@types/react':
         specifier: ^18.3.3
         version: 18.3.12
@@ -1068,9 +1053,6 @@ importers:
       pg:
         specifier: ^8.12.0
         version: 8.13.1
-      playwright:
-        specifier: ^1.52.0
-        version: 1.52.0
       shelljs:
         specifier: ^0.8.5
         version: 0.8.5
@@ -1135,9 +1117,6 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
-      '@playwright/test':
-        specifier: ^1.52.0
-        version: 1.52.0
       '@types/react':
         specifier: npm:types-react@rc
         version: types-react@19.0.0-rc.1
@@ -1159,9 +1138,6 @@ importers:
       eslint:
         specifier: ^8.57.0
         version: 8.57.1
-      playwright:
-        specifier: ^1.52.0
-        version: 1.52.0
       rollup:
         specifier: 2.79.2
         version: 2.79.2
@@ -1229,9 +1205,6 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
-      '@playwright/test':
-        specifier: ^1.52.0
-        version: 1.52.0
       '@types/pg':
         specifier: ^8.11.6
         version: 8.11.10
@@ -1253,9 +1226,6 @@ importers:
       eslint:
         specifier: ^8.57.0
         version: 8.57.1
-      playwright:
-        specifier: ^1.52.0
-        version: 1.52.0
       tsx:
         specifier: ^4.7.1
         version: 4.19.2
