@@ -17,7 +17,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: remix
+          test_folder: remix
           example_url: https://remix.examples.electric-sql.com
       
       - name: Test nextjs example
@@ -25,7 +25,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: nextjs
+          test_folder: nextjs
           example_url: https://nextjs.examples.electric-sql.com
       
       - name: Test tanstack example
@@ -33,7 +33,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: tanstack
+          test_folder: tanstack
           example_url: https://tanstack.examples.electric-sql.com
 
       - name: Test phoenix liveview example
@@ -41,7 +41,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: phoenix-liveview
+          test_folder: phoenix-liveview
           example_url: https://phoenix-liveview.examples.electric-sql.com
 
       - name: Test react example
@@ -49,7 +49,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://react.examples.electric-sql.com
 
       - name: Test linearlite example
@@ -57,7 +57,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://linearlite.examples.electric-sql.com
 
       - name: Test proxy-auth example
@@ -65,7 +65,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://proxy-auth.examples.electric-sql.com/?org_id=1
 
       - name: Test write-patterns example
@@ -73,7 +73,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://write-patterns.examples.electric-sql.com
 
       - name: Test yjs example
@@ -81,7 +81,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://yjs.examples.electric-sql.com
 
       - name: Test todo-app example
@@ -89,7 +89,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://todo-app.examples.electric-sql.com
 
       - name: Test notes example
@@ -97,7 +97,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://notes.examples.electric-sql.com
 
       - name: Test pixel art example
@@ -105,7 +105,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://pixel-art.examples.electric-sql.com
 
       - name: Test ai chat example
@@ -113,7 +113,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: .shared
+          test_folder: '.shared'
           example_url: https://electric-ai-chat.examples.electric-sql.com
 
       - name: Report test failures

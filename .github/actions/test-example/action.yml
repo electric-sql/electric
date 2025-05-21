@@ -2,11 +2,11 @@ name: Test Example
 description: 'Test a deployed example'
 
 inputs:
-  example_name:
-    description: 'Name of the example to test'
-    required: true
   example_url:
     description: 'URL of the deployed example'
+    required: true
+  test_folder:
+    description: 'Folder containing the tests to run'
     required: true
 
 runs:
@@ -27,7 +27,7 @@ runs:
       run: pnpm install --frozen-lockfile
     - name: Run browser tests
       if: inputs.example_url != ''
-      working-directory: examples/${{ inputs.example_name }}
+      working-directory: examples/${{ inputs.test_folder }}
       shell: bash
       run: pnpm test:browser
       env:

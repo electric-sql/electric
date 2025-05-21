@@ -149,7 +149,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: remix
+          test_folder: remix
           example_url: ${{ needs.deploy.outputs.remix || '' }}
       
       - name: Test nextjs example
@@ -157,7 +157,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: nextjs
+          test_folder: nextjs
           example_url: ${{ needs.deploy.outputs.nextjs || '' }}
       
       - name: Test tanstack example
@@ -165,7 +165,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: tanstack
+          test_folder: tanstack
           example_url: ${{ needs.deploy.outputs.tanstack || '' }}
       
       - name: Test react example
@@ -173,7 +173,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: react
+          test_folder: '.shared'
           example_url: ${{ needs.deploy.outputs.react || '' }}
 
       - name: Test phoenix liveview example
@@ -181,8 +181,40 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          example_name: phoenix-liveview
+          test_folder: phoenix-liveview
           example_url: ${{ needs.deploy.outputs.phoenix-liveview || '' }}
+
+      - name: Test yjs example
+        id: yjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.yjs || '' }}
+      
+      - name: Test linearlite read-only example
+        id: linearlite-read-only
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.linearlite-read-only || '' }}
+
+      - name: Test write patterns example
+        id: write-patterns
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.write-patterns || '' }}
+
+      - name: Test todo-app example
+        id: todo-app
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.todo-app || '' }}
 
       - name: Report test failures
         if: |
@@ -190,7 +222,11 @@ jobs:
           steps.nextjs.outcome == 'failure' ||
           steps.tanstack.outcome == 'failure' ||
           steps.react.outcome == 'failure' ||
-          steps.liveview.outcome == 'failure'
+          steps.liveview.outcome == 'failure' ||
+          steps.yjs.outcome == 'failure' ||
+          steps.linearlite-read-only.outcome == 'failure' ||
+          steps.write-patterns.outcome == 'failure' ||
+          steps.todo-app.outcome == 'failure'
         run: |
           echo "The following examples failed:"
           if [ "${{ steps.remix.outcome }}" == "failure" ]; then
@@ -207,6 +243,18 @@ jobs:
           fi
           if [ "${{ steps.liveview.outcome }}" == "failure" ]; then
             echo "- Phoenix LiveView example"
+          fi
+          if [ "${{ steps.yjs.outcome }}" == "failure" ]; then
+            echo "- Yjs example"
+          fi
+          if [ "${{ steps.linearlite-read-only.outcome }}" == "failure" ]; then
+            echo "- LinearLite read-only example"
+          fi
+          if [ "${{ steps.write-patterns.outcome }}" == "failure" ]; then
+            echo "- Write patterns example"
+          fi
+          if [ "${{ steps.todo-app.outcome }}" == "failure" ]; then
+            echo "- Todo app example"
           fi
           exit 1
 
