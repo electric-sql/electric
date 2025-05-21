@@ -75,6 +75,7 @@ export function createNeonDb({
         retry_count=$((retry_count + 1))
         if [ $retry_count -eq $max_retries ]; then
           echo "$body"
+          echo " Max retries reached"
           echo " FAILURE"
           exit 1
         fi
