@@ -139,6 +139,7 @@ jobs:
           fi
 
   test-examples:
+    name: Test examples
     needs: deploy
     runs-on: ubuntu-latest
     steps:
