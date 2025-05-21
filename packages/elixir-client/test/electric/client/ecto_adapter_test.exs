@@ -9,6 +9,7 @@ defmodule Electric.Client.EctoAdapterTest do
   alias Electric.Client
   alias Electric.Client.EctoAdapter
   alias Electric.Client.Message
+  alias Support.Money
   import Support.DbSetup
 
   @table_name Electric.Client.EctoAdapterTest.Config.table_name()
@@ -24,7 +25,7 @@ defmodule Electric.Client.EctoAdapterTest do
     schema Electric.Client.EctoAdapterTest.Config.table_name() do
       field(:name, :string)
       field(:amount, :integer)
-      field(:price, :decimal, source: :cost)
+      field(:price, Money, source: :cost)
       field(:visible, :boolean, default: true)
       timestamps()
     end
@@ -38,7 +39,7 @@ defmodule Electric.Client.EctoAdapterTest do
     schema "my_table" do
       field(:name, :string)
       field(:amount, :integer)
-      field(:price, :decimal, source: :cost)
+      field(:price, Money, source: :cost)
       field(:visible, :boolean, default: true)
       timestamps()
     end
@@ -58,7 +59,7 @@ defmodule Electric.Client.EctoAdapterTest do
       {"id", "uuid primary key"},
       {"name", "varchar(255)"},
       {"amount", "int4"},
-      {"cost", "numeric"},
+      {"cost", "int4"},
       {"visible", "boolean default true"},
       {"inserted_at", "timestamp without time zone"},
       {"updated_at", "timestamp without time zone"}
@@ -96,7 +97,8 @@ defmodule Electric.Client.EctoAdapterTest do
     end
 
     test "with where clause", %{column_names: column_names} = _ctx do
-      query = from(t in TestTable, where: t.price < 2.0 and t.amount > 3, select: t)
+      price1 = Decimal.new("2.0")
+      query = from(t in TestTable, where: t.price < ^price1 and t.amount > 3, select: t)
 
       assert %Electric.Client.ShapeDefinition{
                table: @table_name,
@@ -149,7 +151,7 @@ defmodule Electric.Client.EctoAdapterTest do
                "id" => "ecceb448-64ed-4279-9aea-795d2ae70153",
                "name" => "my name",
                "amount" => "123",
-               "cost" => "7.99",
+               "cost" => "7990000",
                "visible" => "true",
                "inserted_at" => "2016-03-24 17:53:17+00",
                "updated_at" => "2017-04-28 18:54:18+00"
