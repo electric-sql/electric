@@ -690,6 +690,9 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
+      '@playwright/test':
+        specifier: ^1.52.0
+        version: 1.52.0
       '@types/aws-lambda':
         specifier: 8.10.146
         version: 8.10.146
@@ -717,6 +720,9 @@ importers:
       eslint:
         specifier: ^8.57.0
         version: 8.57.1
+      playwright:
+        specifier: ^1.52.0
+        version: 1.52.0
       typescript:
         specifier: ^5.5.3
         version: 5.6.3
