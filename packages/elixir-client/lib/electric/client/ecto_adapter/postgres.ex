@@ -42,6 +42,19 @@ if Code.ensure_loaded?(Ecto) do
     defp handle_call(fun, _arity), do: {:fun, Atom.to_string(fun)}
 
     def where(%{wheres: wheres} = query, sources, bindings) do
+      type_map =
+        wheres
+        |> Enum.flat_map(fn %Ecto.Query.BooleanExpr{expr: expr} ->
+            collect_param_types(expr, query)
+          end)
+        |> Map.new()
+
+      bindings =
+        Enum.with_index(bindings, 1)
+        |> Enum.map(fn
+            {val, idx} -> dump_binding(Map.get(type_map, idx), val)
+          end)
+
       boolean("", wheres, sources, query, bindings)
     end
 
@@ -452,5 +465,45 @@ if Code.ensure_loaded?(Ecto) do
       |> Enum.at(idx - 1)
       |> bound_value()
     end
+
+    defp collect_param_types(
+         {op, _, [{{:., _, [{:&, _, [_]}, field]}, _, []}, {:^, _, [ix]}]},
+         %Ecto.Query{from: %Ecto.Query.FromExpr{source: {_, schema_mod}}} = _query
+       )
+       when op in @binary_ops and is_atom(field) do
+
+      ecto_type = schema_mod.__schema__(:type, field)
+      [{ix, ecto_type}]
+    end
+
+    defp collect_param_types({_, _, args}, query) when is_list(args) do
+      Enum.flat_map(args, &collect_param_types(&1, query))
+    end
+
+    defp collect_param_types(_, _), do: []
+
+    defp dump_binding(type, {value, _}) when is_list(value) do
+      Enum.map(value, &dump_binding(type, &1))
+    end
+
+    defp dump_binding({:parameterized, _} = type, {value, _}) do
+      case Ecto.Type.dump(type, value) do
+        {:ok, dumped} -> {literal(dumped), dumped}
+        :error ->
+          raise ArgumentError,
+                "cannot dump value #{inspect(value)} for type #{inspect(type)}"
+      end
+    end
+
+    defp dump_binding(_, value), do: value
+
+    defp literal(db_val) when is_binary(db_val) and byte_size(db_val) == 16 do
+      case Ecto.UUID.load(db_val) do
+        {:ok, uuid} -> uuid
+        :error -> literal(db_val)
+      end
+    end
+
+    defp literal(other), do: inspect(other)
   end
 end
