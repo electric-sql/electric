@@ -60,6 +60,14 @@ jobs:
           test_folder: '.shared'
           example_url: https://linearlite.examples.electric-sql.com
 
+      - name: Test linearlite read-only example
+        id: linearlite-read-only
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://linearlite-read-only.examples.electric-sql.com
+
       - name: Test proxy-auth example
         id: proxy-auth
         continue-on-error: true

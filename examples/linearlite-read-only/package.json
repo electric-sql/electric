@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "process-data": "node ./db/process_data.js",
     "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -56,6 +57,7 @@
     "@databases/pg": "^5.5.0",
     "@databases/pg-migrations": "^5.0.3",
     "@faker-js/faker": "^8.4.1",
+    "@playwright/test": "^1.52.0",
     "@tailwindcss/typography": "^0.5.10",
     "@types/jest": "^29.5.12",
     "@types/lodash.debounce": "^4.0.9",
@@ -78,6 +80,7 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.3",
     "fs-extra": "^10.0.0",
+    "playwright": "^1.52.0",
     "postcss": "^8.4.39",
     "sst": "3.6.35",
     "tailwindcss": "^3.4.4",
