@@ -865,6 +865,7 @@ defmodule Electric.Connection.Manager do
     if conn_opts[:ipv6] and
          String.starts_with?(error_message, "tcp connect (") and
          (String.ends_with?(error_message, "): non-existing domain - :nxdomain") or
+            String.ends_with?(error_message, "): host is unreachable - :ehostunreach") or
             String.ends_with?(error_message, "): network is unreachable - :enetunreach")) do
       Logger.warning(
         "Database connection failed to find valid IPv6 address for #{conn_opts[:hostname]} - falling back to IPv4"
