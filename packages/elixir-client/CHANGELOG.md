@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.4.1
+
+### Patch Changes
+
+- 99172f4: Update Electric dependency
+
 ## 0.4.0
 
 ### Minor Changes
