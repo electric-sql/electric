@@ -132,6 +132,7 @@ jobs:
           steps.react.outcome == 'failure' ||
           steps.liveview.outcome == 'failure' ||
           steps.linearlite.outcome == 'failure' ||
+          steps.linearlite-read-only.outcome == 'failure' ||
           steps.proxy-auth.outcome == 'failure' ||
           steps.write-patterns.outcome == 'failure' ||
           steps.yjs.outcome == 'failure' ||
@@ -158,6 +159,9 @@ jobs:
           fi
           if [ "${{ steps.linearlite.outcome }}" == "failure" ]; then
             echo "- LinearLite example"
+          fi
+          if [ "${{ steps.linearlite-read-only.outcome }}" == "failure" ]; then
+            echo "- LinearLite Read-Only example"
           fi
           if [ "${{ steps.proxy-auth.outcome }}" == "failure" ]; then
             echo "- Proxy Auth example"
