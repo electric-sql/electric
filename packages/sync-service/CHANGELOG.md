@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.15
+
+### Patch Changes
+
+- 0f4b7e6: Fix the issue with Electric not picking up values defined in environment variables.
+- 544a810: fix: add OTEL logging
+
 ## 1.0.14
 
 ### Patch Changes
