@@ -6,7 +6,9 @@
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
-  "dependencies": {},
+  "dependencies": {
+    "eventsource": "^4.0.0"
+  },
   "devDependencies": {
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",

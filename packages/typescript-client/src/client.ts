@@ -49,6 +49,15 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   OFFSET_QUERY_PARAM,
 ])
 
+export async function createEventSource(url: string): Promise<EventSource> {
+  if (typeof window === 'undefined') {
+    const { EventSource: NodeEventSource } = await import('eventsource')
+    return new NodeEventSource(url) as unknown as EventSource
+  } else {
+    return new EventSource(url)
+  }
+}
+
 type Replica = `full` | `default`
 
 /**
@@ -755,7 +764,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * Returns a promise that resolves when the connection is closed.
    */
   async #connectSSE(url: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>(async (resolve, reject) => {
       try {
         if (!this.#requestAbortController) {
           reject(
@@ -776,7 +785,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         // Create an EventSource instance
-        const eventSource = new EventSource(url)
+        const eventSource = await createEventSource(url)
 
         // Set up event handlers
         eventSource.onopen = () => {
