@@ -543,7 +543,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   defp response_body(%{body: body} = _response) do
-    Enum.into(body, [])
+    Enum.into(body, []) |> List.flatten()
   end
 
   describe "serve/1" do

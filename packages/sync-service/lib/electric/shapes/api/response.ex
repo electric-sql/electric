@@ -169,10 +169,7 @@ defmodule Electric.Shapes.Api.Response do
 
         response
       end,
-      fn
-        elems, response when is_list(elems) -> {elems, response}
-        elem, response -> {[elem], response}
-      end,
+      fn elem, response -> {[elem], response} end,
       &clean_up/1
     )
   end
