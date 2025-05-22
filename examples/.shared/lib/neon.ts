@@ -57,7 +57,7 @@ export function createNeonDb({
     retry_count=0
     
     while [ $retry_count -lt $max_retries ]; do
-      response=$(curl -f -w "\\n%{http_code}" "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
+      response=$(curl -f -s -w "\\n%{http_code}" "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
         -H 'Accept: application/json' \
         -H "Authorization: Bearer $NEON_API_KEY" \
         -H 'Content-Type: application/json' \
@@ -69,12 +69,10 @@ export function createNeonDb({
         }' 2>/dev/null)
       
       status_code=$(echo "$response" | tail -n1)
-      body=$(echo "$response" | sed '$d')
       
       if [ "$status_code" = "423" ]; then
         retry_count=$((retry_count + 1))
         if [ $retry_count -eq $max_retries ]; then
-          echo "$body"
           echo " Max retries reached"
           echo " FAILURE"
           exit 1
