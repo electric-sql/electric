@@ -455,8 +455,6 @@ defmodule Electric.Connection.Manager do
           exit(reason)
       end
 
-    dispatch_stack_event(:ready, state)
-
     # Remember the shape log collector pid for later because we want to tie the replication
     # client's lifetime to it.
     log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
@@ -552,8 +550,10 @@ defmodule Electric.Connection.Manager do
   def handle_info(
         {:timeout, _tref, {:replication_liveness_check, replication_client_pid}},
         %State{replication_client_pid: replication_client_pid} = state
-      ),
-      do: {:noreply, mark_connection_succeeded(state)}
+      ) do
+    dispatch_stack_event(:ready, state)
+    {:noreply, mark_connection_succeeded(state)}
+  end
 
   def handle_info(
         {:timeout, _tref, {:replication_liveness_check, _replication_client_pid}},
