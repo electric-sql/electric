@@ -21,15 +21,20 @@ defmodule Electric.Shapes.ConsumerTest do
 
   @receive_timeout 1_000
 
+  @base_inspector StubInspector.new(
+                    tables: [
+                      "test_table",
+                      "other_table",
+                      "something else",
+                      {"random", "definitely_different"}
+                    ],
+                    columns: [%{name: "id", type: "int8", pk_position: 0}]
+                  )
   @shape_handle1 "#{__MODULE__}-shape1"
-  @shape1 Shape.new!("public.test_table",
-            inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
-          )
+  @shape1 Shape.new!("public.test_table", inspector: @base_inspector)
 
   @shape_handle2 "#{__MODULE__}-shape2"
-  @shape2 Shape.new!("public.other_table",
-            inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
-          )
+  @shape2 Shape.new!("public.other_table", inspector: @base_inspector)
 
   @shape_position %{
     @shape_handle1 => %{
@@ -42,18 +47,15 @@ defmodule Electric.Shapes.ConsumerTest do
     }
   }
 
-  stub(Mock.Inspector, :load_column_info, fn
-    {"public", "test_table"}, _ ->
-      {:ok, [%{name: "id", type: "int8", pk_position: 0, is_generated: false}]}
-  end)
-
-  stub(Mock.Inspector, :load_relation, fn
-    tbl, _ -> StubInspector.load_relation(tbl, nil)
-  end)
-
   setup :with_stack_id_from_test
   setup :set_mox_from_context
   setup :verify_on_exit!
+
+  setup do
+    stub_with(Mock.Inspector, StubInspector)
+
+    :ok
+  end
 
   defp shape_status(shape_handle, ctx) do
     get_in(ctx, [:shape_position, shape_handle]) || raise "invalid shape_handle #{shape_handle}"
@@ -108,10 +110,7 @@ defmodule Electric.Shapes.ConsumerTest do
         ShapeLogCollector.start_link(
           stack_id: ctx.stack_id,
           persistent_kv: ctx.persistent_kv,
-          inspector:
-            Support.StubInspector.new([
-              %{name: "id", type: "int8", pk_position: 0}
-            ])
+          inspector: @base_inspector
         )
 
       ShapeLogCollector.start_processing(producer, Lsn.from_integer(0))
@@ -280,9 +279,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
     @tag shapes: %{
            @shape_handle1 =>
-             Shape.new!("public.test_table", where: "id != 1", inspector: {Mock.Inspector, []}),
+             Shape.new!("public.test_table", where: "id != 1", inspector: @base_inspector),
            @shape_handle2 =>
-             Shape.new!("public.test_table", where: "id = 1", inspector: {Mock.Inspector, []})
+             Shape.new!("public.test_table", where: "id = 1", inspector: @base_inspector)
          }
     test "doesn't append to log when change is irrelevant for active shapes", ctx do
       xid = 150
@@ -371,7 +370,12 @@ defmodule Electric.Shapes.ConsumerTest do
            @shape_handle1 =>
              Shape.new!("test_table",
                where: "id LIKE 'test'",
-               inspector: StubInspector.new([%{pk_position: 0, name: "id"}])
+               inspector:
+                 StubInspector.new(%{
+                   {"public", "test_table"} => %{
+                     columns: [%{name: "id", type: "text", pk_position: 0}]
+                   }
+                 })
              )
          }
     test "handles truncate when shape has a where clause", ctx do
@@ -441,13 +445,13 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     test "does not clean shapes if relation didn't change", ctx do
-      rel = %Relation{
-        # ensure relation OID does not match any of the shapes
-        id: @shape1.root_table_id + @shape2.root_table_id,
-        schema: "ranndom",
-        table: "definitely_different",
-        columns: []
-      }
+      rel =
+        %Relation{
+          id: :erlang.phash2({"random", "definitely_different"}),
+          schema: "random",
+          table: "definitely_different",
+          columns: []
+        }
 
       ref1 =
         Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
@@ -469,9 +473,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
     test "cleans shapes affected by a relation rename", ctx do
       {orig_schema, _} = @shape1.root_table
+      cleaned_oid = @shape1.root_table_id
 
       rel = %Relation{
-        id: @shape1.root_table_id,
+        id: cleaned_oid,
         schema: orig_schema,
         table: "definitely_different",
         columns: []
@@ -485,7 +490,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
-      |> expect(:clean, 1, fn _, _ -> true end)
+      |> expect(:clean, 1, fn ^cleaned_oid, _ -> true end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
       |> expect(:clean, 0, fn _, _ -> true end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
@@ -705,7 +710,7 @@ defmodule Electric.Shapes.ConsumerTest do
   describe "transaction handling with real storage" do
     @describetag :tmp_dir
     setup do
-      %{inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])}
+      %{inspector: @base_inspector}
     end
 
     setup [
@@ -725,7 +730,7 @@ defmodule Electric.Shapes.ConsumerTest do
         Support.ComponentSetup.with_shape_cache(
           Map.merge(ctx, %{
             pool: nil,
-            inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+            inspector: @base_inspector
           }),
           log_producer: ctx.shape_log_collector,
           run_with_conn_fn: &run_with_conn_noop/2,
@@ -891,7 +896,7 @@ defmodule Electric.Shapes.ConsumerTest do
       Support.ComponentSetup.with_shape_cache(
         Map.merge(ctx, %{
           pool: nil,
-          inspector: StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+          inspector: @base_inspector
         }),
         log_producer: ctx.shape_log_collector,
         run_with_conn_fn: &run_with_conn_noop/2

@@ -108,7 +108,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
 
-    {:ok, relation} = Inspector.load_relation("partitioned_items", ctx.inspector)
+    {:ok, relation} = Inspector.load_relation_info(shape.root_table_id, ctx.inspector)
 
     assert %{
              children: [
@@ -144,7 +144,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     assert_receive {^ref, :new_changes, _latest_log_offset}, 5000
 
-    {:ok, relation} = Inspector.load_relation("partitioned_items", ctx.inspector)
+    {:ok, relation} = Inspector.load_relation_info(shape.root_table_id, ctx.inspector)
 
     assert %{
              children: [

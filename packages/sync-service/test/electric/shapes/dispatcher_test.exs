@@ -7,9 +7,13 @@ defmodule Electric.Shapes.DispatcherTest do
   alias Electric.Shapes.Dispatcher, as: D
   alias Support.StubInspector
 
-  @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+  @inspector StubInspector.new(
+               tables: ["the_table", "another_table"],
+               columns: [%{name: "id", type: "int8", pk_position: 0}]
+             )
+
   @shape Shape.new!("the_table", where: "id = 1", inspector: @inspector)
-  @other_shape Shape.new!("the_table", where: "id = 2", inspector: @inspector)
+  @other_shape Shape.new!("another_table", where: "id = 2", inspector: @inspector)
 
   @transaction %Transaction{
     changes: [
@@ -193,7 +197,7 @@ defmodule Electric.Shapes.DispatcherTest do
     refute_receive {C, ^ref2, [{^event, _ctx}]}
     refute_receive {C, ^ref3, [{^event, _ctx}]}
     # none of the subscribers want the event, but we need to simulate the full cycle
-    # so the dispatcher should generate some fake demand. This goes to the 
+    # so the dispatcher should generate some fake demand. This goes to the
     # last subscriber, which is at the head of the list
     assert_receive {:"$gen_producer", {_pid, ^ref3}, {:ask, 1}}
     assert {:ok, 1, _dispatcher} = D.ask(1, c3, dispatcher)

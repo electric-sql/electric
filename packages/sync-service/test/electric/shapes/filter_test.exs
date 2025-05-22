@@ -13,11 +13,14 @@ defmodule Electric.Shapes.FilterTest do
   alias Electric.Shapes.Shape
   alias Support.StubInspector
 
-  @inspector StubInspector.new([
-               %{name: "id", type: "int8", pk_position: 0},
-               %{name: "number", type: "int8"},
-               %{name: "an_array", array_type: "int8"}
-             ])
+  @inspector StubInspector.new(
+               tables: ["t1", "t2", "t3", "table", "another_table", "the_table"],
+               columns: [
+                 %{name: "id", type: "int8", pk_position: 0},
+                 %{name: "number", type: "int8"},
+                 %{name: "an_array", array_type: "int8"}
+               ]
+             )
 
   describe "affected_shapes/2" do
     test "returns shapes affected by insert" do

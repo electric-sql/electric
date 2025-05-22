@@ -12,7 +12,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Shapes.Shape
   alias Electric.StatusMonitor
 
-  alias Support.StubInspector
   alias Support.RepatchExt
 
   import Support.ComponentSetup,
@@ -34,7 +33,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     :with_persistent_kv
   ]
 
-  @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+  @inspector Support.StubInspector.new(
+               tables: [{1234, {"public", "test_table"}}],
+               columns: [%{name: "id", type: "int8", pk_position: 0}]
+             )
+
   @shape Shape.new!("test_table", inspector: @inspector)
 
   def setup_log_collector(ctx) do
@@ -45,7 +48,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     # Start the ShapeLogCollector process
     opts = [
       stack_id: ctx.stack_id,
-      inspector: {Mock.Inspector, []},
+      inspector: {Mock.Inspector, elem(@inspector, 1)},
       persistent_kv: ctx.persistent_kv
     ]
 
@@ -69,7 +72,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       [
         storage: {Mock.Storage, []},
         chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-        inspector: {Mock.Inspector, []},
+        inspector: {Mock.Inspector, elem(@inspector, 1)},
         shape_status: Mock.ShapeStatus,
         publication_manager: ctx.publication_manager,
         log_producer: ShapeLogCollector.name(ctx.stack_id),
@@ -90,7 +93,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       parent = self()
 
       Mock.Inspector
-      |> stub(:load_relation, fn {"public", "test_table"}, _ ->
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:ok, {1234, {"public", "test_table"}}}
+      end)
+      |> stub(:load_relation_info, fn 1234, _ ->
         {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
       end)
       |> allow(self(), ctx.server)
@@ -119,11 +125,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       last_log_offset = LogOffset.new(lsn, 0)
 
       Mock.Inspector
-      |> stub(:load_relation, fn
-        {"public", "test_table"}, _ ->
-          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:ok, {1234, {"public", "test_table"}}}
       end)
-      |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
+      |> stub(:load_relation_info, fn 1234, _ ->
+        {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> stub(:load_column_info, fn 1234, _ ->
         {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
       end)
       |> allow(self(), ctx.server)
@@ -160,11 +168,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     @num_comparisons 10
     test "drops transactions if already processed", ctx do
       Mock.Inspector
-      |> stub(:load_relation, fn
-        {"public", "test_table"}, _ ->
-          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:ok, {1234, {"public", "test_table"}}}
       end)
-      |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
+      |> stub(:load_relation_info, fn 1234, _ ->
+        {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> stub(:load_column_info, fn 1234, _ ->
         {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
       end)
       |> allow(self(), ctx.server)
@@ -220,7 +230,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       parent = self()
 
       Mock.Inspector
-      |> stub(:load_relation, fn {"public", "test_table"}, _ ->
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:ok, {1234, {"public", "test_table"}}}
+      end)
+      |> stub(:load_relation_info, fn 1234, _ ->
         {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
       end)
       |> allow(self(), ctx.server)
@@ -245,19 +258,20 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       id = @shape.root_table_id
 
       Mock.Inspector
-      |> expect(:clean, 2, fn
-        {"public", "test_table"}, _ ->
-          :ok
-
-        {"public", "bar"}, _ ->
-          :ok
+      |> stub(:load_relation_oid, fn
+        {"public", "test_table"}, _ -> {:ok, {id, {"public", "test_table"}}}
+        {"public", "bar"}, _ -> {:ok, {1235, {"public", "bar"}}}
       end)
-      |> stub(:load_relation, fn
-        {"public", "test_table"}, _ ->
-          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      |> stub(:load_relation_info, fn
+        ^id, _ ->
+          {:ok, %{id: id, schema: "public", name: "test_table", parent: nil, children: nil}}
 
-        {"public", "bar"}, _ ->
+        1235, _ ->
           {:ok, %{id: 1235, schema: "public", name: "bar", parent: nil, children: nil}}
+      end)
+      |> expect(:clean, 2, fn
+        ^id, _ -> :ok
+        1235, _ -> :ok
       end)
       |> allow(self(), ctx.server)
 
@@ -298,7 +312,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     # Start the ShapeLogCollector process
     opts = [
       stack_id: ctx.stack_id,
-      inspector: {Mock.Inspector, []},
+      inspector: {Mock.Inspector, elem(@inspector, 1)},
       persistent_kv: ctx.persistent_kv
     ]
 
@@ -311,10 +325,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     Repatch.allow(self(), pid)
 
     Mock.Inspector
-    |> stub(:load_relation, fn {"public", "test_table"}, _ ->
+    |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+      {:ok, {1234, {"public", "test_table"}}}
+    end)
+    |> stub(:load_relation_info, fn 1234, _ ->
       {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
     end)
-    |> stub(:load_column_info, fn {"public", "test_table"}, _ ->
+    |> stub(:load_column_info, fn 1234, _ ->
       {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
     end)
     |> allow(self(), pid)

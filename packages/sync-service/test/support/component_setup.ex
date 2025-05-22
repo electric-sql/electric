@@ -169,20 +169,18 @@ defmodule Support.ComponentSetup do
   end
 
   def with_inspector(ctx) do
-    {:ok, server} =
-      EtsInspector.start_link(
-        stack_id: ctx.stack_id,
-        pool: ctx.db_conn,
-        persistent_kv: ctx.persistent_kv
+    server =
+      start_link_supervised!(
+        {EtsInspector,
+         stack_id: ctx.stack_id, pool: ctx.db_conn, persistent_kv: ctx.persistent_kv}
       )
 
-    pg_info_table = EtsInspector.get_column_info_table(stack_id: ctx.stack_id)
-    pg_relation_table = EtsInspector.get_relation_table(stack_id: ctx.stack_id)
+    pg_relation_table = EtsInspector.relation_table(stack_id: ctx.stack_id)
 
     %{
       inspector: {EtsInspector, stack_id: ctx.stack_id, server: server},
-      pg_info_table: pg_info_table,
-      pg_relation_table: pg_relation_table
+      pg_relation_table: pg_relation_table,
+      inspector_pid: server
     }
   end
 

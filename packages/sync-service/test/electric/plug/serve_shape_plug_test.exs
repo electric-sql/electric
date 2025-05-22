@@ -19,6 +19,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   @registry Registry.ServeShapePlugTest
 
+  @inspector Support.StubInspector.new(
+               tables: ["users"],
+               columns: [
+                 %{name: "id", type: "int8", pk_position: 0, type_id: {20, 1}},
+                 %{name: "value", type: "text", pk_position: nil, type_id: {28, 1}}
+               ]
+             )
+
   @test_shape %Shape{
     root_table: {"public", "users"},
     root_table_id: :erlang.phash2({"public", "users"}),
@@ -37,34 +45,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
   # Higher timeout is needed for some tests that tend to run slower on CI.
   @receive_timeout 2000
-
-  def load_column_info({"public", "users"}, _),
-    do:
-      {:ok,
-       [
-         %{
-           name: "id",
-           type: "int8",
-           type_id: {20, 1},
-           pk_position: 0,
-           array_dimensions: 0,
-           is_generated: false
-         },
-         %{
-           name: "value",
-           type: "text",
-           type_id: {28, 1},
-           pk_position: nil,
-           array_dimensions: 0,
-           is_generated: false
-         }
-       ]}
-
-  def load_column_info(_, _),
-    do: :table_not_found
-
-  def load_relation(tbl, _),
-    do: Support.StubInspector.load_relation(tbl, nil)
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -86,7 +66,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
         shape_cache: {Mock.ShapeCache, []},
         storage: {Mock.Storage, []},
-        inspector: {__MODULE__, []},
+        inspector: @inspector,
         registry: @registry,
         long_poll_timeout: long_poll_timeout(ctx),
         max_age: max_age(ctx),
@@ -172,7 +152,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
                "errors" => %{
-                 "table" => ["table not found"]
+                 "table" => [
+                   "Table \"_val1d_schëmaΦ$\".\"Φtàble\" does not exist. If the table name contains capitals or special characters you must quote it."
+                 ]
                }
              }
     end

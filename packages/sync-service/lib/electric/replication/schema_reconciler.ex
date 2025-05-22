@@ -80,8 +80,8 @@ defmodule Electric.Replication.SchemaReconciler do
          :ok <-
            shape_cache_mod.clean_all_shapes_for_relations(diverged_relations, shape_cache_args),
          :ok <-
-           Enum.each(diverged_relations, fn {_, rel} ->
-             Inspector.clean(rel, state.inspector)
+           Enum.each(diverged_relations, fn {oid, _} ->
+             Inspector.clean(oid, state.inspector)
            end),
          :ok <- PublicationManager.refresh_publication(stack_id: state.stack_id, forced?: true) do
       :ok

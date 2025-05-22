@@ -186,8 +186,8 @@ defmodule Electric.Shapes.Consumer do
         when code in ~w|undefined_function undefined_table undefined_column|a ->
           # Schema changed while we were creating stuff, which means shape is functionally invalid.
           # Return a 409 to trigger a fresh start with validation against the new schema.
-          %{shape: %{root_table: root_table}, inspector: inspector} = state
-          Inspector.clean(root_table, inspector)
+          %{shape: %Shape{root_table_id: root_table_id}, inspector: inspector} = state
+          Inspector.clean(root_table_id, inspector)
           Api.Error.must_refetch()
 
         error ->
@@ -238,7 +238,8 @@ defmodule Electric.Shapes.Consumer do
   # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
   # is a signal that we need to terminate the shape.
   defp handle_event(%Changes.Relation{}, state) do
-    %{shape: %{root_table: root_table}, inspector: inspector} = state
+    %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}, inspector: inspector} =
+      state
 
     Logger.info(
       "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
@@ -246,7 +247,7 @@ defmodule Electric.Shapes.Consumer do
 
     # We clean up the relation info from ETS as it has changed and we want
     # to source the fresh info from postgres for the next shape creation
-    Inspector.clean(root_table, inspector)
+    Inspector.clean(root_table_id, inspector)
 
     state =
       state

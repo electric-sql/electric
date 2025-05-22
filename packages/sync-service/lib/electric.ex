@@ -117,6 +117,20 @@ defmodule Electric do
   @type relation_id :: non_neg_integer()
   @type oid_relation :: {oid :: relation_id(), relation :: relation()}
 
+  @doc false
+  defguard is_relation(relation)
+           when is_tuple(relation) and tuple_size(relation) == 2 and
+                  is_binary(elem(relation, 0)) and
+                  is_binary(elem(relation, 1))
+
+  @doc false
+  defguard is_relation_id(oid) when is_integer(oid) and oid >= 0
+
+  defguard is_oid_relation(oid_relation)
+           when is_tuple(oid_relation) and tuple_size(oid_relation) == 2 and
+                  is_relation_id(elem(oid_relation, 0)) and
+                  is_relation(elem(oid_relation, 1))
+
   @current_vsn Mix.Project.config()[:version]
   def version do
     @current_vsn

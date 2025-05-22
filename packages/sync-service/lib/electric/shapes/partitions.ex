@@ -37,7 +37,7 @@ defmodule Electric.Shapes.Partitions do
   """
   @spec add_shape(t(), shape_id(), Electric.Shapes.Shape.t()) :: t()
   def add_shape(%__MODULE__{} = state, shape_id, shape) do
-    case Inspector.load_relation(shape.root_table, state.inspector) do
+    case Inspector.load_relation_info(shape.root_table_id, state.inspector) do
       {:ok, relation} ->
         children = List.wrap(Map.get(relation, :children, []))
 
@@ -60,9 +60,7 @@ defmodule Electric.Shapes.Partitions do
         end)
         |> update_active()
 
-      {:error, "ERROR 42P01 " <> _} ->
-        # https://www.postgresql.org/docs/current/errcodes-appendix.html
-        # 42P01 : undefined_table
+      :table_not_found ->
         # tables that don't exist will be caught later in the stack (hard to
         # run a snapshot against a non-existent table)
         state
@@ -117,13 +115,14 @@ defmodule Electric.Shapes.Partitions do
   def handle_relation(%__MODULE__{} = state, %Relation{} = relation) do
     table = table(relation)
 
-    case Inspector.load_relation(table, state.inspector) do
+    case Inspector.load_relation_info(relation.id, state.inspector) do
       {:ok, %{parent: {_, _} = parent}} ->
         # TODO: we should probabaly have a way to clean the inspector cache
         # just based on the relation, there's a chance that this results in
         # a query to pg just to then drop the info
-        with {:ok, parent_info} <- Inspector.load_relation(parent, state.inspector) do
-          Inspector.clean(parent_info, state.inspector)
+        with {:ok, {parent_id, _}} <-
+               Inspector.load_relation_oid(parent, state.inspector) do
+          Inspector.clean(parent_id, state.inspector)
         end
 
         state |> Map.update!(:partitions, &Map.put(&1, table, [parent])) |> update_active()

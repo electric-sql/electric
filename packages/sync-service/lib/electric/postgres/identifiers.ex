@@ -36,6 +36,9 @@ defmodule Electric.Postgres.Identifiers do
   Parse a PostgreSQL identifier, removing quotes if present and escaping internal ones
   and downcasing the identifier otherwise.
 
+  Postgres identifiers are limited to 63 characters - Postgres will truncate them,
+  but we'll fail if the identifier is too long to avoid api injection issues.
+
   ## Examples
 
       iex> Electric.Postgres.Identifiers.parse("FooBar")
@@ -62,19 +65,32 @@ defmodule Electric.Postgres.Identifiers do
       iex> Electric.Postgres.Identifiers.parse("")
       {:error, "Invalid zero-length delimited identifier"}
 
+      iex> Electric.Postgres.Identifiers.parse(for(_ <- 1..64, into: "", do: "a"))
+      {:error, "Identifier is too long (max length is #{@namedatalen})"}
+
       iex> Electric.Postgres.Identifiers.parse(~S|" "|)
       {:ok, " "}
 
       iex> Electric.Postgres.Identifiers.parse(~S|"Foo""Bar"|)
       {:ok, ~S|Foo"Bar|}
   """
-  @spec parse(binary(), boolean(), boolean()) :: {:ok, binary()} | {:error, term()}
-  def parse(ident, truncate \\ false, single_byte_encoding \\ false) when is_binary(ident) do
+  @spec parse(binary(), boolean()) :: {:ok, binary()} | {:error, term()}
+  def parse(ident, single_byte_encoding \\ false) when is_binary(ident) do
+    with {:ok, parsed} <- do_parse(ident, single_byte_encoding) do
+      if String.length(parsed) > @namedatalen do
+        {:error, "Identifier is too long (max length is #{@namedatalen})"}
+      else
+        {:ok, parsed}
+      end
+    end
+  end
+
+  defp do_parse(ident, single_byte_encoding) do
     if String.starts_with?(ident, ~S|"|) and String.ends_with?(ident, ~S|"|) do
       ident_unquoted = String.slice(ident, 1..-2//1)
       parse_quoted_identifier(ident_unquoted)
     else
-      parse_unquoted_identifier(ident, truncate, single_byte_encoding)
+      parse_unquoted_identifier(ident, single_byte_encoding)
     end
   end
 
@@ -97,15 +113,15 @@ defmodule Electric.Postgres.Identifiers do
       iex> Electric.Postgres.Identifiers.parse_unquoted_identifier("foob@r")
       {:error, ~S|Invalid unquoted identifier contains special characters: foob@r|}
   """
-  @spec parse(binary(), boolean(), boolean()) :: {:ok, binary()} | {:error, term()}
-  def parse_unquoted_identifier(ident, truncate \\ false, single_byte_encoding \\ false)
+  @spec parse_unquoted_identifier(binary(), boolean()) :: {:ok, binary()} | {:error, term()}
+  def parse_unquoted_identifier(ident, single_byte_encoding \\ false)
 
-  def parse_unquoted_identifier("", _, _), do: parse_quoted_identifier("")
+  def parse_unquoted_identifier("", _), do: parse_quoted_identifier("")
 
-  def parse_unquoted_identifier(ident, truncate, single_byte_encoding) do
-    unless valid_unquoted_identifier?(ident),
-      do: {:error, "Invalid unquoted identifier contains special characters: #{ident}"},
-      else: {:ok, downcase(ident, truncate, single_byte_encoding)}
+  def parse_unquoted_identifier(ident, single_byte_encoding) do
+    if valid_unquoted_identifier?(ident),
+      do: {:ok, downcase(ident, single_byte_encoding)},
+      else: {:error, "Invalid unquoted identifier contains special characters: #{ident}"}
   end
 
   defp contains_unescaped_quote?(string) do
@@ -151,9 +167,8 @@ defmodule Electric.Postgres.Identifiers do
   def parse_relation(ident) do
     case StringSplitter.split_outside_quotes(ident) do
       [table] ->
-        case parse(table) do
-          {:ok, parsed} -> {:ok, {"public", parsed}}
-          {:error, reason} -> {:error, reason}
+        with {:ok, parsed} <- parse(table) do
+          {:ok, {"public", parsed}}
         end
 
       [schema, table] ->
@@ -168,10 +183,7 @@ defmodule Electric.Postgres.Identifiers do
   end
 
   @doc """
-  Downcase the identifier and truncate if necessary, using
-  PostgreSQL's algorithm for downcasing.
-
-  Setting `truncate` to `true` will truncate the identifier to 63 characters
+  Downcase the identifier using PostgreSQL's algorithm for downcasing.
 
   Setting `single_byte_encoding` to `true` will downcase the identifier
   using single byte encoding
@@ -183,12 +195,10 @@ defmodule Electric.Postgres.Identifiers do
 
       iex> Electric.Postgres.Identifiers.downcase("FooBar")
       "foobar"
-      iex> Electric.Postgres.Identifiers.downcase(String.duplicate("a", 100), true)
-      String.duplicate("a", 63)
   """
-  def downcase(ident, truncate \\ false, single_byte_encoding \\ false)
+  def downcase(ident, single_byte_encoding \\ false)
 
-  def downcase(ident, false, single_byte_encoding) do
+  def downcase(ident, single_byte_encoding) do
     downcased_ident =
       ident
       |> String.to_charlist()
@@ -196,19 +206,6 @@ defmodule Electric.Postgres.Identifiers do
       |> List.to_string()
 
     downcased_ident
-  end
-
-  def downcase(ident, true, single_byte_encoding) do
-    downcased_ident = downcase(ident, false, single_byte_encoding)
-
-    truncated_ident =
-      if String.length(ident) >= @namedatalen do
-        String.slice(downcased_ident, 0, @namedatalen)
-      else
-        downcased_ident
-      end
-
-    truncated_ident
   end
 
   # Helper function to downcase a character
