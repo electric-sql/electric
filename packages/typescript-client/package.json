@@ -7,7 +7,7 @@
     "url": "https://github.com/electric-sql/electric/issues"
   },
   "dependencies": {
-    "eventsource": "^4.0.0"
+    "@microsoft/fetch-event-source": "^2.0.1"
   },
   "devDependencies": {
     "@types/pg": "^8.11.6",

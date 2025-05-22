@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@microsoft/fetch-event-source':
+    hash: jnddo7he65yxsfcfuvjeev6bre
+    path: patches/@microsoft__fetch-event-source.patch
+
 importers:
 
   .:
@@ -1318,9 +1323,9 @@ importers:
 
   packages/typescript-client:
     dependencies:
-      eventsource:
-        specifier: ^4.0.0
-        version: 4.0.0
+      '@microsoft/fetch-event-source':
+        specifier: ^2.0.1
+        version: 2.0.1(patch_hash=jnddo7he65yxsfcfuvjeev6bre)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64':
         specifier: ^4.18.1
@@ -3126,6 +3131,9 @@ packages:
 
   '@mdx-js/mdx@2.3.0':
     resolution: {integrity: sha512-jLuwRlz8DQfQNiUCJR50Y09CGPq3fLtmtUQfVrj79E0JWu3dvsVcxVIcfhR5h0iXu+/z++zDrYeiJqifRynJkA==}
+
+  '@microsoft/fetch-event-source@2.0.1':
+    resolution: {integrity: sha512-W6CLUJ2eBMw3Rec70qrsEW0jOm/3twwJv21mrmj2yORiaVmVYGS4sSS5yUwvQc1ZlDLYGPnClVWmUUMagKNsfA==}
 
   '@neondatabase/serverless@0.10.4':
     resolution: {integrity: sha512-2nZuh3VUO9voBauuh+IGYRhGU/MskWHt1IuZvHcJw6GLjDgtqj/KViKo7SIrLdGLdot7vFbiRRw+BgEy3wT9HA==}
@@ -6220,14 +6228,6 @@ packages:
 
   eventemitter3@5.0.1:
     resolution: {integrity: sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA==}
-
-  eventsource-parser@3.0.2:
-    resolution: {integrity: sha512-6RxOBZ/cYgd8usLwsEl+EC09Au/9BcmCKYF2/xbml6DNczf7nv0MQb+7BA2F+li6//I+28VNlQR37XfQtcAJuA==}
-    engines: {node: '>=18.0.0'}
-
-  eventsource@4.0.0:
-    resolution: {integrity: sha512-fvIkb9qZzdMxgZrEQDyll+9oJsyaVvY92I2Re+qK0qEJ+w5s0X3dtz+M0VAPOjP1gtU3iqWyjQ0G3nvd5CLZ2g==}
-    engines: {node: '>=20.0.0'}
 
   execa@5.1.1:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
@@ -11899,6 +11899,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@microsoft/fetch-event-source@2.0.1(patch_hash=jnddo7he65yxsfcfuvjeev6bre)': {}
+
   '@neondatabase/serverless@0.10.4':
     dependencies:
       '@types/pg': 8.11.6
@@ -15606,12 +15608,6 @@ snapshots:
   event-target-shim@5.0.1: {}
 
   eventemitter3@5.0.1: {}
-
-  eventsource-parser@3.0.2: {}
-
-  eventsource@4.0.0:
-    dependencies:
-      eventsource-parser: 3.0.2
 
   execa@5.1.1:
     dependencies:
