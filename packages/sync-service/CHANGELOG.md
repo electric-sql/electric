@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.16
+
+### Patch Changes
+
+- 51c91ac: fix: ensure cleanup and persistance of cached relation information is correct
+
 ## 1.0.15
 
 ### Patch Changes
