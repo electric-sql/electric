@@ -99,7 +99,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     GenServer.call(name(stack_id), {:termination_watchers, shape_handle})
   end
 
-  defp do_notify_reader_termination([], handle) do
+  defp do_notify_reader_termination([], _handle) do
     :ok
   end
 
