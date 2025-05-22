@@ -13,10 +13,7 @@ export async function GET(request: Request) {
   }
 
   if (process.env.ELECTRIC_SOURCE_SECRET) {
-    originUrl.searchParams.set(
-      `secret`,
-      process.env.ELECTRIC_SOURCE_SECRET
-    )
+    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
   }
 
   // authentication and authorization
