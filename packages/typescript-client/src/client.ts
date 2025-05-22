@@ -41,6 +41,7 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
 } from './constants'
+import { EventSourceMessage, fetchEventSource } from '@microsoft/fetch-event-source'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -48,15 +49,6 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
 ])
-
-export async function createEventSource(url: string): Promise<EventSource> {
-  if (typeof window === 'undefined') {
-    const { EventSource: NodeEventSource } = await import('eventsource')
-    return new NodeEventSource(url) as unknown as EventSource
-  } else {
-    return new EventSource(url)
-  }
-}
 
 type Replica = `full` | `default`
 
@@ -448,11 +440,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             continue
           }
 
-          if (
-            e instanceof FetchBackoffAbortError ||
-            e instanceof SSEConnectionAborted
-          )
-            break // interrupted
+          if (e instanceof FetchBackoffAbortError) break // interrupted
           if (!(e instanceof FetchError)) throw e // should never happen
 
           if (e.status == 409) {
@@ -691,8 +679,29 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
-    // TODO: don't forget to set this.#connected when the SSE connection is established
-    return this.#connectSSE(fetchUrl.toString())
+    
+    await fetchEventSource(fetchUrl.toString(), {
+      fetch: this.#fetchClient,
+      onopen: async (response) => {
+        this.#connected = true
+        await this.#onInitialResponse(response)
+      },
+      onmessage: (event: EventSourceMessage) => {
+        if (event.data) {
+          // Process the SSE message
+          // The event.data is a single JSON object, so we wrap it in an array
+          const messages = `[${event.data}]`
+          const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
+          console.log("onmessage", messages, schema)
+          this.#onMessages(messages, schema)
+        }
+      },
+      onerror: (error: Error) => {
+        // rethrow to close the SSE connection
+        throw error
+      },
+      signal: requestAbortController.signal,
+    })
   }
 
   subscribe(
@@ -803,87 +812,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
-  }
-
-  /**
-   * Connects to the server using Server-Sent Events.
-   * Returns a promise that resolves when the connection is closed.
-   */
-  async #connectSSE(url: string): Promise<void> {
-    // TODO: use the https://github.com/Azure/fetch-event-source library
-    //       onopen set this.#connected to true and also call this.#onInitialResponse
-    //       onmessage parse the message and call this.#onMessages
-    //       onerror reject the promise with an error and also close the SSE connection
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        if (!this.#requestAbortController) {
-          reject(
-            new Error(
-              `Request abort controller is not set - this should never happen`
-            )
-          )
-          return
-        }
-
-        if (this.#requestAbortController.signal.aborted) {
-          reject(
-            new SSEConnectionAborted(
-              `Connection aborted before SSE connection established`
-            )
-          )
-          return
-        }
-
-        // Create an EventSource instance
-        const eventSource = await createEventSource(url)
-
-        // Set up event handlers
-        eventSource.onopen = () => {
-          this.#connected = true
-        }
-
-        eventSource.onmessage = async (event: MessageEvent) => {
-          if (event.data) {
-            // Process the SSE message
-            // Provide an empty schema object if schema is undefined, which it
-            // should not be as we only get to SSE mode after being in normal mode
-            // and getting a schema from a header then.
-            // The event.data is a single JSON object, so we wrap it in an array
-            // to be consistent with the way we parse the response from the HTTP API.
-            const messages = `[${event.data}]`
-            const schema = this.#schema! // we know that it is not undefined because it is set by the preceding requests from the normal mode
-            await this.#onMessages(messages, schema)
-          }
-        }
-
-        eventSource.onerror = (_error: Event) => {
-          // Connection was closed or errored
-          // EventSource would normally automatically reconnect but want to close the
-          // connection and reconnect on the next outer loop iteration with the new
-          // url and offset.
-          // TODO: It may be that some errors we should elevate to the user
-          eventSource.close()
-          resolve()
-        }
-
-        // Listen for abort signals
-        const abortHandler = () => {
-          eventSource.close()
-          reject(new SSEConnectionAborted(`SSE connection aborted`))
-        }
-
-        this.#requestAbortController.signal.addEventListener(
-          `abort`,
-          abortHandler,
-          { once: true }
-        )
-      } catch (error) {
-        this.#sendErrorToSubscribers(
-          error instanceof Error ? error : new Error(String(error))
-        )
-        reject(error)
-      }
-    })
   }
 }
 
