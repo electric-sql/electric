@@ -111,10 +111,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     :"#{__MODULE__}:#{stack_id}"
   end
 
-  defp monitor_table(stack_id) do
-    :"#{__MODULE__}:#{stack_id}:monitor"
-  end
-
   @impl GenServer
   def init(%{stack_id: stack_id} = opts) do
     Process.set_label({:shape_monitor, stack_id})
@@ -134,14 +130,13 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         read_concurrency: true
       ])
 
-    monitor_table = :ets.new(monitor_table(stack_id), [])
-
     state = %{
       stack_id: stack_id,
       storage: storage,
       publication_manager: publication_manager,
       shape_status: shape_status,
-      monitor_table: monitor_table,
+      readers: %{},
+      writers: %{},
       reader_table: reader_table,
       on_remove: on_remove,
       on_cleanup: on_cleanup,
@@ -157,11 +152,11 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   @impl GenServer
   def handle_call({:register_reader, handle, pid}, _from, state) do
-    case :ets.lookup(state.monitor_table, pid) do
-      [{^pid, :reader, ^handle, _ref}] ->
+    case Map.get(state.readers, pid) do
+      {^handle, _ref} ->
         {:reply, :ok, state}
 
-      [{^pid, :reader, previous_handle, ref}] ->
+      {previous_handle, ref} ->
         # process has failed to de-register itself from previous_handle (maybe
         # due to exception - though the stream cleanup handlers run even
         # then...) and is re-registering itself for `handle`. Treat this an
@@ -174,7 +169,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
         {:reply, :ok, state}
 
-      [] ->
+      nil ->
         {:reply, :ok, register_reader_for_handle(state, handle, pid)}
     end
   end
@@ -186,16 +181,17 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   def handle_call({:register_writer, handle, shape, pid}, _from, state) do
-    supervisor = ConsumerSupervisor.whereis(state.stack_id, handle)
+    if supervisor = ConsumerSupervisor.whereis(state.stack_id, handle) do
+      case state.writers do
+        %{^pid => _handle} ->
+          {:reply, {:error, "process is already registered"}, state}
 
-    if supervisor do
-      if :ets.insert_new(state.monitor_table, {pid, :writer, handle, nil}) do
-        Process.monitor(pid, tag: {:down, :writer, handle})
-        Process.monitor(supervisor, tag: {:down, :writer_supervisor, handle, shape})
+        writers ->
+          writers = Map.put(writers, pid, handle)
+          Process.monitor(pid, tag: {:down, :writer, handle})
+          Process.monitor(supervisor, tag: {:down, :writer_supervisor, handle, shape})
 
-        {:reply, :ok, state}
-      else
-        {:reply, {:error, "process is already registered"}, state}
+          {:reply, :ok, %{state | writers: writers}}
       end
     else
       {:reply, {:error, "no supervisor registered for consumer"}, state}
@@ -240,20 +236,16 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @impl GenServer
   def handle_info({{:down, :writer, handle}, _ref, :process, pid, reason}, state)
       when not is_consumer_shutdown_with_data_retention?(reason) do
-    :ets.delete(state.monitor_table, pid)
-
     {:noreply,
-     state
+     %{state | writers: Map.delete(state.writers, pid)}
      |> notify_remove(handle, pid)
      |> Map.update!(:cleanup_handles, &MapSet.put(&1, handle))
      |> remove_reader_termination_watcher(handle, pid)}
   end
 
   def handle_info({{:down, :writer, handle}, _ref, :process, pid, _reason}, state) do
-    :ets.delete(state.monitor_table, pid)
-
     {:noreply,
-     state
+     %{state | writers: Map.delete(state.writers, pid)}
      |> notify_remove(handle, pid)
      |> remove_reader_termination_watcher(handle, pid)}
   end
@@ -295,16 +287,16 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   defp statistics(state) do
     handles =
-      state.monitor_table
-      |> :ets.select([{{:_, :reader, :"$1", :_}, [], [[:"$1"]]}])
-      |> MapSet.new(&hd/1)
+      state.readers
+      |> Map.values()
+      |> MapSet.new(&elem(&1, 0))
 
     %{readers: reader_count!(state.stack_id), shapes: MapSet.size(handles)}
   end
 
   defp register_reader_for_handle(state, handle, pid) do
     ref = Process.monitor(pid, tag: {:down, :reader})
-    :ets.insert(state.monitor_table, {pid, :reader, handle, ref})
+    readers = Map.put(state.readers, pid, {handle, ref})
 
     count = update_counter(state.stack_id, handle, 1)
 
@@ -312,7 +304,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       "register: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
     end)
 
-    record_telemetry(state)
+    record_telemetry(%{state | readers: readers})
   end
 
   defp add_reader_termination_watcher(shape_handle, pid, reason, state) do
@@ -343,23 +335,21 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   defp delete_reader_process(pid, state) do
-    case :ets.lookup(state.monitor_table, pid) do
-      [{^pid, :reader, handle, ref}] ->
+    case Map.pop(state.readers, pid, nil) do
+      {{handle, ref}, readers} ->
         # we get occasional :down messages with stale handles, maybe from
         # a race condition between a de/re-register and the down message.
         # it's important that we only deregister the active one, rather than
         # the stale one, otherwise the count of active clients differs from the
         # number of registered pids and shapes get deleted with active readers
 
-        state
+        %{state | readers: readers}
         |> handle_pid_termination(pid, handle, ref)
         |> notify_remove(handle, pid)
 
-      [] ->
+      {nil, _readers} ->
         state
     end
-  after
-    :ets.delete(state.monitor_table, pid)
   end
 
   defp handle_pid_termination(state, pid, handle, ref) do
