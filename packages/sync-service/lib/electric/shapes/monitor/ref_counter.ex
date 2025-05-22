@@ -306,7 +306,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     ref = Process.monitor(pid, tag: {:down, :reader})
     readers = Map.put(state.readers, pid, {handle, ref})
 
-    count = update_counter(state.stack_id, handle, 1)
+    _count = update_counter(state.stack_id, handle, 1)
 
     record_telemetry(%{state | readers: readers})
   end
@@ -356,7 +356,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end
   end
 
-  defp handle_pid_termination(state, pid, handle, ref) do
+  defp handle_pid_termination(state, _pid, handle, ref) do
     %{stack_id: stack_id, termination_watchers: termination_watchers} = state
 
     if is_reference(ref), do: Process.demonitor(ref, [:flush])
