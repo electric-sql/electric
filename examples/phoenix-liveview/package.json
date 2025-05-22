@@ -1,6 +1,7 @@
 {
   "name": "phoenix-liveview",
-  "version": "0.0.0",
+  "private": true,
+  "version": "0.0.1",
   "dependencies": {
     "camelcase": "^8.0.0"
   },
@@ -16,3 +17,4 @@
     "test:browser": "playwright install && playwright test ./e2e/"
   }
 }
+
