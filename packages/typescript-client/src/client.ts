@@ -317,7 +317,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
  * ```
  * const stream = new ShapeStream({
  *   url: `http://localhost:3000/v1/shape`,
- *   liveMode: 'sse'
+ *   experimentalLiveSse: true
  * })
  * ```
  *
