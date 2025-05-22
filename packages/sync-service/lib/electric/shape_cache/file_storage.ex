@@ -551,7 +551,7 @@ defmodule Electric.ShapeCache.FileStorage do
       fn -> {open_snapshot_chunk(opts, chunk_number), nil, ""} end,
       fn {{path, file}, eof_seen, incomplete_line} ->
         # even if you delete the file the file handle is still valid and will continue to return data
-        if !File.exists?(path), do: raise(Storage.Error, message: "Snapshot has been deleted")
+        # if !File.exists?(path), do: raise(Storage.Error, message: "Snapshot has been deleted")
 
         case IO.binread(file, :line) do
           {:error, reason} ->
