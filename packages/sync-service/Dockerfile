@@ -31,11 +31,13 @@ COPY rel /app/rel
 COPY lib /app/lib/
 
 COPY package.json /app/
-COPY config/*.exs /app/config/
-
+COPY config/config.exs /app/config/
 
 RUN mix compile
 RUN mix sentry.package_source_code
+
+COPY config/runtime.exs /app/config/
+
 RUN mix release
 
 RUN ls -l /app/_build
