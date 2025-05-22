@@ -113,18 +113,22 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
+  defp exists?(path) do
+    File.exists?(path, [:raw])
+  end
+
   @impl Electric.ShapeCache.Storage
   def initialise(%FS{} = opts) do
     stored_version = stored_version(opts)
     db = validate_db_process!(opts.db)
 
     if stored_version != opts.version || is_nil(pg_snapshot(opts)) ||
-         not File.exists?(shape_definition_path(opts)) ||
+         not exists?(shape_definition_path(opts)) ||
          not CubDB.has_key?(db, @snapshot_meta_key) do
       cleanup_internals!(opts)
     end
 
-    if File.exists?(old_snapshot_path(opts)) do
+    if exists?(old_snapshot_path(opts)) do
       # This shape has had the snapshot written before we started using the new format.
       # We need to move the old snapshot into the new format and store correct metadata
       # so that we know it's complete.
@@ -165,7 +169,7 @@ defmodule Electric.ShapeCache.FileStorage do
     case File.ls(shapes_dir) do
       {:ok, shape_handles} ->
         shape_handles
-        |> Enum.reject(&File.exists?(deletion_marker_path(shapes_dir, &1)))
+        |> Enum.reject(&exists?(deletion_marker_path(shapes_dir, &1)))
         |> Enum.reduce(%{}, fn shape_handle, acc ->
           shape_def_path =
             shape_definition_path(%{
@@ -550,9 +554,6 @@ defmodule Electric.ShapeCache.FileStorage do
     Stream.resource(
       fn -> {open_snapshot_chunk(opts, chunk_number), nil, ""} end,
       fn {{path, file}, eof_seen, incomplete_line} ->
-        # even if you delete the file the file handle is still valid and will continue to return data
-        # if !File.exists?(path), do: raise(Storage.Error, message: "Snapshot has been deleted")
-
         case IO.binread(file, :line) do
           {:error, reason} ->
             raise Storage.Error, message: "failed to read #{inspect(path)}: #{inspect(reason)}"
@@ -663,7 +664,7 @@ defmodule Electric.ShapeCache.FileStorage do
     path = snapshot_chunk_path(opts, chunk_number)
 
     cond do
-      File.exists?(path, [:raw]) ->
+      exists?(path) ->
         stream_snapshot_chunk!(opts, chunk_number)
 
       CubDB.has_key?(validate_db_process!(opts.db), @snapshot_meta_key) ->
