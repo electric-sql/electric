@@ -426,87 +426,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.options.subscribe
       ) {
         const { url, signal } = this.options
-
-        // Resolve headers and params in parallel
-        const [requestHeaders, params] = await Promise.all([
-          resolveHeaders(this.options.headers),
-          this.options.params
-            ? toInternalParams(convertWhereParamsToObj(this.options.params))
-            : undefined,
-        ])
-
-        // Validate params after resolution
-        if (params) {
-          validateParams(params)
-        }
-
-        const fetchUrl = new URL(url)
-
-        // Add PostgreSQL-specific parameters
-        if (params) {
-          if (params.table)
-            setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
-          if (params.where)
-            setQueryParam(fetchUrl, WHERE_QUERY_PARAM, params.where)
-          if (params.columns)
-            setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
-          if (params.replica)
-            setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
-          if (params.params)
-            setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
-
-          // Add any remaining custom parameters
-          const customParams = { ...params }
-          delete customParams.table
-          delete customParams.where
-          delete customParams.columns
-          delete customParams.replica
-          delete customParams.params
-
-          for (const [key, value] of Object.entries(customParams)) {
-            setQueryParam(fetchUrl, key, value)
-          }
-        }
-
-        // Add Electric's internal parameters
-        fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
-
-        if (this.#isUpToDate) {
-          if (!this.#isRefreshing) {
-            fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-          }
-          fetchUrl.searchParams.set(
-            LIVE_CACHE_BUSTER_QUERY_PARAM,
-            this.#liveCacheBuster
-          )
-        }
-
-        if (this.#shapeHandle) {
-          // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(
-            SHAPE_HANDLE_QUERY_PARAM,
-            this.#shapeHandle!
-          )
-        }
-
-        // sort query params in-place for stable URLs and improved cache hits
-        fetchUrl.searchParams.sort()
-
-        // Create a new AbortController for this request
-        this.#requestAbortController = new AbortController()
-
-        // If user provided a signal, listen to it and pass on the reason for the abort
-        let abortListener: (() => void) | undefined
-        if (signal) {
-          abortListener = () => {
-            this.#requestAbortController?.abort(signal.reason)
-          }
-          signal.addEventListener(`abort`, abortListener, { once: true })
-          if (signal.aborted) {
-            // If the signal is already aborted, abort the request immediately
-            this.#requestAbortController?.abort(signal.reason)
-          }
-        }
+        const { fetchUrl, requestHeaders } = await this.#constructUrl(url)
+        const abortListener = await this.#createAbortListener(signal)
+        const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
         // If using SSE mode we handle the connection differently using the
         // this.#connectSSE method which wraps the EventSource API.
@@ -531,7 +453,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         let response!: Response
         try {
           response = await this.#fetchClient(fetchUrl.toString(), {
-            signal: this.#requestAbortController.signal,
+            signal: requestAbortController.signal,
             headers: requestHeaders,
           })
           this.#connected = true
@@ -539,8 +461,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // Handle abort error triggered by refresh
           if (
             (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
-            this.#requestAbortController.signal.aborted &&
-            this.#requestAbortController.signal.reason ===
+            requestAbortController.signal.aborted &&
+            requestAbortController.signal.reason ===
               FORCE_DISCONNECT_AND_REFRESH
           ) {
             // Loop back to the top of the while loop to start a new request
@@ -646,6 +568,93 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } finally {
       this.#connected = false
       this.#tickPromiseRejecter?.()
+    }
+  }
+
+  async #constructUrl(url: string) {
+    // Resolve headers and params in parallel
+    const [requestHeaders, params] = await Promise.all([
+      resolveHeaders(this.options.headers),
+      this.options.params
+        ? toInternalParams(convertWhereParamsToObj(this.options.params))
+        : undefined,
+    ])
+
+    // Validate params after resolution
+    if (params) {
+      validateParams(params)
+    }
+
+    const fetchUrl = new URL(url)
+
+    // Add PostgreSQL-specific parameters
+    if (params) {
+      if (params.table) setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
+      if (params.where) setQueryParam(fetchUrl, WHERE_QUERY_PARAM, params.where)
+      if (params.columns)
+        setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
+      if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
+      if (params.params)
+        setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
+
+      // Add any remaining custom parameters
+      const customParams = { ...params }
+      delete customParams.table
+      delete customParams.where
+      delete customParams.columns
+      delete customParams.replica
+      delete customParams.params
+
+      for (const [key, value] of Object.entries(customParams)) {
+        setQueryParam(fetchUrl, key, value)
+      }
+    }
+
+    // Add Electric's internal parameters
+    fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+
+    if (this.#isUpToDate) {
+      if (!this.#isRefreshing) {
+        fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+      }
+      fetchUrl.searchParams.set(
+        LIVE_CACHE_BUSTER_QUERY_PARAM,
+        this.#liveCacheBuster
+      )
+    }
+
+    if (this.#shapeHandle) {
+      // This should probably be a header for better cache breaking?
+      fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
+    }
+
+    // sort query params in-place for stable URLs and improved cache hits
+    fetchUrl.searchParams.sort()
+
+    return {
+      fetchUrl,
+      requestHeaders,
+    }
+  }
+
+  async #createAbortListener(signal?: AbortSignal) {
+    // Create a new AbortController for this request
+    this.#requestAbortController = new AbortController()
+
+    // If user provided a signal, listen to it and pass on the reason for the abort
+    if (signal) {
+      const abortListener = () => {
+        this.#requestAbortController?.abort(signal.reason)
+      }
+
+      signal.addEventListener(`abort`, abortListener, { once: true })
+
+      if (signal.aborted) {
+        // If the signal is already aborted, abort the request immediately
+        this.#requestAbortController?.abort(signal.reason)
+      }
+
+      return abortListener
     }
   }
 
