@@ -976,12 +976,6 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "after restart" do
-    setup do
-      %{
-        inspector: Support.StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
-      }
-    end
-
     setup [
       :with_log_chunking,
       :with_registry,

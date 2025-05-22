@@ -88,12 +88,16 @@ defmodule Electric.ShapeCache.FileStorageTest do
   describe "get_all_stored_shapes" do
     setup do
       stub(Mock.Inspector, :load_column_info, fn
-        {"public", "test_table"}, _ ->
+        1234, _ ->
           {:ok, [%{name: "id", type: "int8", pk_position: 0, is_generated: false}]}
       end)
 
-      stub(Mock.Inspector, :load_relation, fn
-        tbl, _ -> StubInspector.load_relation(tbl, nil)
+      stub(Mock.Inspector, :load_relation_oid, fn
+        tbl, _ -> StubInspector.load_relation_oid(tbl, {%{tbl => 1234}, nil})
+      end)
+
+      stub(Mock.Inspector, :load_relation_info, fn
+        tbl, opts -> StubInspector.load_relation_info(tbl, opts)
       end)
 
       :ok

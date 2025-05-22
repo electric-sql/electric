@@ -8,7 +8,10 @@ defmodule Electric.Shapes.MonitorTest do
 
   import Support.ComponentSetup
 
-  @inspector StubInspector.new([%{name: "id", type: "int8", pk_position: 0}])
+  @inspector StubInspector.new(
+               tables: ["the_table"],
+               columns: [%{name: "id", type: "int8", pk_position: 0}]
+             )
   @shape Shape.new!("the_table", inspector: @inspector)
 
   setup [:with_stack_id_from_test, :with_in_memory_storage, :with_test_publication_manager]
