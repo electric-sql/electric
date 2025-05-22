@@ -176,6 +176,7 @@ describe(`Shape`, () => {
         table: issuesTableUrl,
       },
       signal: aborter.signal,
+      experimentalLiveSse: true,
       fetchClient: fetchWrapper,
     })
     const shape = new Shape(shapeStream)
