@@ -430,33 +430,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const abortListener = await this.#createAbortListener(signal)
         const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
-        // If using SSE mode we handle the connection differently using the
-        // this.#connectSSE method which wraps the EventSource API.
-        if (this.#isUpToDate && this.options.experimentalLiveSse) {
-          fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
-          try {
-            await this.#connectSSE(fetchUrl.toString())
-          } catch (error) {
-            if (error instanceof SSEConnectionAborted) {
-              break
-            }
-            this.#sendErrorToSubscribers(
-              error instanceof Error ? error : new Error(String(error))
-            )
-            throw error
-          }
-          // TODO: What should we do here? Is this the behaviour we want?
-          // Skip the regular fetch and continue the loop to reconnect if needed
-          continue
-        }
-
-        let response!: Response
         try {
-          response = await this.#fetchClient(fetchUrl.toString(), {
-            signal: requestAbortController.signal,
+          await this.#requestShape({
+            fetchUrl,
+            requestAbortController,
             headers: requestHeaders,
           })
-          this.#connected = true
         } catch (e) {
           // Handle abort error triggered by refresh
           if (
@@ -469,7 +448,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
             continue
           }
 
-          if (e instanceof FetchBackoffAbortError) break // interrupted
+          if (
+            e instanceof FetchBackoffAbortError ||
+            e instanceof SSEConnectionAborted
+          )
+            break // interrupted
           if (!(e instanceof FetchError)) throw e // should never happen
 
           if (e.status == 409) {
@@ -493,50 +476,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
             signal.removeEventListener(`abort`, abortListener)
           }
           this.#requestAbortController = undefined
-        }
-
-        const { headers, status } = response
-        const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
-        if (shapeHandle) {
-          this.#shapeHandle = shapeHandle
-        }
-
-        const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
-        if (lastOffset) {
-          this.#lastOffset = lastOffset as Offset
-        }
-
-        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
-        if (liveCacheBuster) {
-          this.#liveCacheBuster = liveCacheBuster
-        }
-
-        const getSchema = (): Schema => {
-          const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
-          return schemaHeader ? JSON.parse(schemaHeader) : {}
-        }
-        this.#schema = this.#schema ?? getSchema()
-
-        // NOTE: 204s are deprecated, the Electric server should not
-        // send these in latest versions but this is here for backwards
-        // compatibility
-        if (status === 204) {
-          // There's no content so we are live and up to date
-          this.#lastSyncedAt = Date.now()
-        }
-
-        const messages = (await response.text()) || `[]`
-        const batch = this.#messageParser.parse(messages, this.#schema)
-
-        // Update isUpToDate
-        if (batch.length > 0) {
-          const lastMessage = batch[batch.length - 1]
-          if (isUpToDateMessage(lastMessage)) {
-            this.#lastSyncedAt = Date.now()
-            this.#isUpToDate = true
-          }
-
-          await this.#publish(batch)
         }
 
         this.#tickPromiseResolver?.()
@@ -658,6 +597,104 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
+  async #onInitialResponse(response: Response) {
+    const { headers, status } = response
+    const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+    if (shapeHandle) {
+      this.#shapeHandle = shapeHandle
+    }
+
+    const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
+    if (lastOffset) {
+      this.#lastOffset = lastOffset as Offset
+    }
+
+    const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
+    if (liveCacheBuster) {
+      this.#liveCacheBuster = liveCacheBuster
+    }
+
+    const getSchema = (): Schema => {
+      const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
+      return schemaHeader ? JSON.parse(schemaHeader) : {}
+    }
+    this.#schema = this.#schema ?? getSchema()
+
+    // NOTE: 204s are deprecated, the Electric server should not
+    // send these in latest versions but this is here for backwards
+    // compatibility
+    if (status === 204) {
+      // There's no content so we are live and up to date
+      this.#lastSyncedAt = Date.now()
+    }
+  }
+
+  async #onMessages(messages: string, schema: Schema) {
+    const batch = this.#messageParser.parse(messages, schema)
+
+    // Update isUpToDate
+    if (batch.length > 0) {
+      const lastMessage = batch[batch.length - 1]
+      if (isUpToDateMessage(lastMessage)) {
+        this.#lastSyncedAt = Date.now()
+        this.#isUpToDate = true
+      }
+
+      await this.#publish(batch)
+    }
+  }
+
+  /**
+   * Requests the shape from the server using either long polling or SSE.
+   * Upon receiving a successfull response, the #onInitialResponse method is called.
+   * Afterwards, the #onMessages method is called for all the incoming updates.
+   * @param opts - The options for the request.
+   * @returns A promise that resolves when the request is complete (i.e. the long poll receives a response or the SSE connection is closed).
+   */
+  async #requestShape(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    if (this.#isUpToDate && this.options.experimentalLiveSse) {
+      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
+      return this.#requestShapeSSE(opts)
+    }
+
+    return this.#requestShapeLongPoll(opts)
+  }
+
+  async #requestShapeLongPoll(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    const { fetchUrl, requestAbortController, headers } = opts
+    
+    const response = await this.#fetchClient(fetchUrl.toString(), {
+      signal: requestAbortController.signal,
+      headers,
+    })
+
+    this.#connected = true
+    await this.#onInitialResponse(response)
+    
+    const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
+    const messages = (await response.text()) || `[]`
+    
+    await this.#onMessages(messages, schema)
+  }
+
+  async #requestShapeSSE(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    const { fetchUrl, requestAbortController, headers } = opts
+    // TODO: don't forget to set this.#connected when the SSE connection is established
+    return this.#connectSSE(fetchUrl.toString())
+  }
+
   subscribe(
     callback: (messages: Message<T>[]) => MaybePromise<void>,
     onError: (error: Error) => void = () => {}
@@ -773,6 +810,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * Returns a promise that resolves when the connection is closed.
    */
   async #connectSSE(url: string): Promise<void> {
+    // TODO: use the https://github.com/Azure/fetch-event-source library
+    //       onopen set this.#connected to true and also call this.#onInitialResponse
+    //       onmessage parse the message and call this.#onMessages
+    //       onerror reject the promise with an error and also close the SSE connection
     return new Promise<void>(async (resolve, reject) => {
       try {
         if (!this.#requestAbortController) {
@@ -802,41 +843,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         eventSource.onmessage = async (event: MessageEvent) => {
-          try {
-            if (event.data) {
-              // Process the SSE message
-              // Provide an empty schema object if schema is undefined, which it
-              // should not be as we only get to SSE mode after being in normal mode
-              // and getting a schema from a header then.
-              // The event.data is a single JSON object, so we wrap it in an array
-              // to be consistent with the way we parse the response from the HTTP API.
-              // TODO: Is this needed?
-              const batch = this.#messageParser.parse(
-                `[${event.data}]`,
-                this.#schema || {}
-              )
-
-              if (batch.length > 0) {
-                const lastMessage = batch[batch.length - 1]
-                if (isUpToDateMessage(lastMessage)) {
-                  const upToDateMsg = lastMessage as typeof lastMessage & {
-                    headers: { global_last_seen_lsn: string }
-                  }
-                  this.#lastSyncedAt = Date.now()
-                  this.#isUpToDate = true
-                  this.#lastOffset =
-                    `${upToDateMsg.headers.global_last_seen_lsn}_0` as Offset
-                  // TODO: we also need the cache buster `cursor` value
-                }
-
-                await this.#publish(batch)
-              }
-            }
-          } catch (error) {
-            // Handle parsing errors
-            this.#sendErrorToSubscribers(
-              error instanceof Error ? error : new Error(String(error))
-            )
+          if (event.data) {
+            // Process the SSE message
+            // Provide an empty schema object if schema is undefined, which it
+            // should not be as we only get to SSE mode after being in normal mode
+            // and getting a schema from a header then.
+            // The event.data is a single JSON object, so we wrap it in an array
+            // to be consistent with the way we parse the response from the HTTP API.
+            const messages = `[${event.data}]`
+            const schema = this.#schema! // we know that it is not undefined because it is set by the preceding requests from the normal mode
+            await this.#onMessages(messages, schema)
           }
         }
 
