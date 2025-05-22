@@ -525,10 +525,21 @@ defmodule Electric.Shapes.Api do
 
       {:error, error} ->
         # Errors will be logged further up the stack
+        message =
+          case error do
+            msg when is_binary(msg) ->
+              msg
+
+            %{__exception__: true} ->
+              Exception.format(:error, error, [])
+
+            term ->
+              inspect(term)
+          end
 
         Response.error(
           request,
-          "Unable to retrieve shape log: #{Exception.format(:error, error, [])}",
+          "Unable to retrieve shape log: #{message}",
           status: 500
         )
     end
