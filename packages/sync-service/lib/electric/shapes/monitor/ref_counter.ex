@@ -99,7 +99,15 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     GenServer.call(name(stack_id), {:termination_watchers, shape_handle})
   end
 
+  defp do_notify_reader_termination([], handle) do
+    :ok
+  end
+
   defp do_notify_reader_termination(pids, handle) when is_list(pids) do
+    Logger.debug(fn ->
+      "notifying #{length(pids)} processes of shape #{inspect(handle)} release"
+    end)
+
     Enum.each(pids, &do_notify_reader_termination(&1, handle))
   end
 
@@ -300,10 +308,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
     count = update_counter(state.stack_id, handle, 1)
 
-    Logger.debug(fn ->
-      "register: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
-    end)
-
     record_telemetry(%{state | readers: readers})
   end
 
@@ -359,20 +363,11 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
     stack_id
     |> update_counter(handle, -1)
-    |> tap(fn count ->
-      Logger.debug(fn ->
-        "deregister: #{inspect(pid)}, #{count} registered processes for shape #{inspect(handle)}"
-      end)
-    end)
     |> case do
       0 ->
         {pids, termination_watchers} = Map.pop(termination_watchers, handle, [])
 
         :ets.delete(table(stack_id), handle)
-
-        Logger.debug(fn ->
-          "notifying #{length(pids)} of shape #{inspect(handle)} release"
-        end)
 
         do_notify_reader_termination(pids, handle)
 
