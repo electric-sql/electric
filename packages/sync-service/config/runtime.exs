@@ -288,5 +288,18 @@ if Electric.telemetry_enabled?() do
         service: %{name: service_name, version: Electric.version()},
         instance: %{id: instance_id}
       }
+
+    config :electric, :logger, [
+      {:handler, :otel_log_handler, OtelMetricExporter.LogHandler,
+       %{
+         config: %{
+           metadata_map: %{
+             request_id: "http.request_id",
+             stack_id: "source_id",
+             shape_handle: "shape.handle"
+           }
+         }
+       }}
+    ]
   end
 end

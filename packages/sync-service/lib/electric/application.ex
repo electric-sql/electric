@@ -34,6 +34,8 @@ defmodule Electric.Application do
   def children_application do
     :erlang.system_flag(:backtrace_depth, 50)
 
+    Logger.add_handlers(:electric)
+
     if Code.ensure_loaded?(Electric.Telemetry.Sentry) do
       Electric.Telemetry.Sentry.add_logger_handler()
     end
