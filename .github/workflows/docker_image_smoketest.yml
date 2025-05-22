@@ -3,7 +3,7 @@ name: Electric Docker Image Smoke Test
 on:
   pull_request:
     paths:
-      - "packages/sync-service"
+      - "packages/sync-service/**"
     paths-ignore:
       - "**/README.md"
 
