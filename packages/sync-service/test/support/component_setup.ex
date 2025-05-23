@@ -200,8 +200,9 @@ defmodule Support.ComponentSetup do
     storage = {FileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
 
     stack_events_registry = Electric.stack_events_registry()
+    ref = make_ref()
+    Electric.StackSupervisor.subscribe_to_debug_stack_events(stack_events_registry, stack_id, ref)
 
-    ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
     publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 
     stack_supervisor =
@@ -231,7 +232,7 @@ defmodule Support.ComponentSetup do
 
     # allow a reasonable time for full stack setup to account for
     # potential CI slowness, including PG
-    assert_receive {:stack_status, ^ref, :ready}, 2000
+    assert_receive {:debug_stack_status, ^ref, :ready_to_start_streaming}, 2000
 
     %{
       stack_id: stack_id,

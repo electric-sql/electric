@@ -63,7 +63,13 @@ defmodule Electric.Connection.ConnectionManagerTest do
           significant: false
         )
 
-      Registry.register(stack_events_registry, {:stack_status, stack_id}, nil)
+      Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
+
+      Electric.StackSupervisor.subscribe_to_debug_stack_events(
+        stack_events_registry,
+        stack_id,
+        nil
+      )
 
       %{conn_sup: conn_sup, connection_opts: connection_opts, replication_opts: replication_opts}
     end
@@ -129,7 +135,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
   defp wait_until_active(stack_id) do
     assert_receive {:stack_status, _, :waiting_for_connection_lock}
     assert_receive {:stack_status, _, :connection_lock_acquired}
-    assert_receive {:stack_status, _, :ready}
+    assert_receive {:debug_stack_status, _, :ready_to_start_streaming}
     StatusMonitor.wait_until_active(stack_id, 1000)
     assert StatusMonitor.status(stack_id) == :active
   end

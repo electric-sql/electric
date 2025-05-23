@@ -455,6 +455,8 @@ defmodule Electric.Connection.Manager do
           exit(reason)
       end
 
+    dispatch_debug_stack_event(:ready_to_start_streaming, state)
+
     # Remember the shape log collector pid for later because we want to tie the replication
     # client's lifetime to it.
     log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
@@ -1219,6 +1221,14 @@ defmodule Electric.Connection.Manager do
 
   defp dispatch_stack_event(event, state) do
     Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      event
+    )
+  end
+
+  defp dispatch_debug_stack_event(event, state) do
+    Electric.StackSupervisor.dispatch_debug_stack_event(
       state.stack_events_registry,
       state.stack_id,
       event

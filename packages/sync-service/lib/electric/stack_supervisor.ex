@@ -167,6 +167,11 @@ defmodule Electric.StackSupervisor do
     ref
   end
 
+  def subscribe_to_debug_stack_events(registry, stack_id, ref) do
+    {:ok, _pid} = Registry.register(registry, {:debug_stack_status, stack_id}, ref)
+    ref
+  end
+
   def dispatch_stack_event(registry \\ Electric.stack_events_registry(), stack_id, event)
 
   # noop if there's no registry running
@@ -178,6 +183,14 @@ defmodule Electric.StackSupervisor do
     Registry.dispatch(registry, {:stack_status, stack_id}, fn entries ->
       for {pid, ref} <- entries do
         send(pid, {:stack_status, ref, event})
+      end
+    end)
+  end
+
+  def dispatch_debug_stack_event(registry, stack_id, event) do
+    Registry.dispatch(registry, {:debug_stack_status, stack_id}, fn entries ->
+      for {pid, ref} <- entries do
+        send(pid, {:debug_stack_status, ref, event})
       end
     end)
   end
