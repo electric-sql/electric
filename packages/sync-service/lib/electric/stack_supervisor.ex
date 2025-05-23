@@ -172,6 +172,10 @@ defmodule Electric.StackSupervisor do
     ref
   end
 
+  def unsubscribe_from_stack_events(registry, stack_id) do
+    Registry.unregister(registry, {:stack_status, stack_id})
+  end
+
   def dispatch_stack_event(registry \\ Electric.stack_events_registry(), stack_id, event)
 
   # noop if there's no registry running
