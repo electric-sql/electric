@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.17
+
+### Patch Changes
+
+- eed575c: Avoid using GenServers for calculating total disk size for telemetry purposes.
+- a37f01b: fix: make sure shape hash collisions aren't causing issues
+- 5c62f37: Properly handle response stream interruptions with reason `:closed`.
+
 ## 1.0.16
 
 ### Patch Changes

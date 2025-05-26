@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.5.0
+
+### Minor Changes
+
+- bdb031e: Allow server errors to be streamed to the consumer rather than raising
+
 ## 0.4.1
 
 ### Patch Changes
