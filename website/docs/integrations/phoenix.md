@@ -14,7 +14,7 @@ image: /img/integrations/electric-phoenix.jpg
 
 ## Electric and Phoenix
 
-Electric is [developed in Elixir](/product/electric#how-does-it-work) and provides [an Elixir client](/docs/api/clients/elixir) and deep Phoenix-framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) libarary.
+Electric is [developed in Elixir](/product/electric#how-does-it-work) and provides [an Elixir client](/docs/api/clients/elixir) and deep Phoenix-framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) library.
 
 ### Phoenix.Sync
 
