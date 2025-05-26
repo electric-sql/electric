@@ -317,8 +317,18 @@ defmodule Electric.Shapes.Api do
 
     # TODO: discuss returning a 307 redirect rather than a 409, the client
     # will have to detect this and throw out old data
+
+    # In SSE mode we send the must refetch object as an event
+    # instead of a singleton array containing that object
+    must_refetch =
+      if request.params.experimental_live_sse do
+        hd(@must_refetch)
+      else
+        @must_refetch
+      end
+
     {:error,
-     Response.error(request, @must_refetch,
+     Response.error(request, must_refetch,
        handle: active_shape_handle,
        status: 409
      )}
@@ -610,10 +620,9 @@ defmodule Electric.Shapes.Api do
       last_message_time: last_message_time,
       request:
         %{
-          api:
-            %{
-              keepalive_interval: keepalive_interval
-            } = api,
+          api: %{
+            keepalive_interval: keepalive_interval
+          },
           handle: shape_handle,
           new_changes_ref: ref
         } = request,
@@ -664,7 +673,7 @@ defmodule Electric.Shapes.Api do
 
       {^ref, :shape_rotation} ->
         must_refetch = %{headers: %{control: "must-refetch"}}
-        message = encode_message(api, must_refetch)
+        message = encode_message(request, must_refetch)
 
         {message, %{state | mode: :done}}
 
@@ -793,11 +802,7 @@ defmodule Electric.Shapes.Api do
     encode(api, :log, stream)
   end
 
-  @spec encode_message(Api.t() | Request.t(), term()) :: Enum.t()
-  def encode_message(%Api{} = api, message) do
-    encode(api, :message, message)
-  end
-
+  @spec encode_message(Request.t(), term()) :: Enum.t()
   def encode_message(
         %Request{api: api, params: %{live: true, experimental_live_sse: true}},
         message
