@@ -658,7 +658,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
-    
     const response = await this.#fetchClient(fetchUrl.toString(), {
       signal: requestAbortController.signal,
       headers,
@@ -679,9 +678,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
-    
     await fetchEventSource(fetchUrl.toString(), {
-      fetch: this.#fetchClient,
+      headers,
+      fetch,
       onopen: async (response) => {
         this.#connected = true
         await this.#onInitialResponse(response)
@@ -692,7 +691,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // The event.data is a single JSON object, so we wrap it in an array
           const messages = `[${event.data}]`
           const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
-          console.log("onmessage", messages, schema)
           this.#onMessages(messages, schema)
         }
       },
