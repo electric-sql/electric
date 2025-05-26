@@ -6,14 +6,14 @@ defmodule Electric.Shapes.Consumer do
   import Electric.Postgres.Xid, only: [compare: 2]
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
-  alias Electric.Replication.LogOffset
-  alias Electric.Shapes.Api
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache
   alias Electric.ShapeCache.LogChunker
+  alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
@@ -63,11 +63,16 @@ defmodule Electric.Shapes.Consumer do
     )
   end
 
+  @impl GenStage
+
   def init(config) do
     Process.set_label({:consumer, config.shape_handle})
 
-    %{log_producer: producer, storage: storage, shape_status: {shape_status, shape_status_state}} =
-      config
+    %{
+      log_producer: producer,
+      storage: storage,
+      shape_status: {shape_status, shape_status_state}
+    } = config
 
     metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
     Logger.metadata(metadata)
@@ -105,12 +110,17 @@ defmodule Electric.Shapes.Consumer do
         snapshot_started: false,
         awaiting_snapshot_start: [],
         buffer: [],
-        monitors: []
+        monitors: [],
+        cleaned?: false
       })
+
+    :ok =
+      Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
 
     {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
   end
 
+  @impl GenStage
   def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
     {:reply, {:ok, offset}, [], state}
   end
@@ -120,17 +130,17 @@ defmodule Electric.Shapes.Consumer do
     {:reply, ref, [], %{state | monitors: [{pid, ref} | monitors]}}
   end
 
-  def handle_call(:clean_and_stop, _from, state) do
+  def handle_call(:stop_and_clean, _from, state) do
     # Waiter will receive this response if the snapshot wasn't done yet, but
     # given that this is definitely a cleanup call, a 409 is appropriate
     # as old shape handle is no longer valid
-    state =
-      reply_to_snapshot_waiters(state, {:error, Api.Error.must_refetch()})
 
-    # TODO: ensure cleanup occurs after snapshot is done/failed/interrupted to avoid
-    # any race conditions and leftover data
-    cleanup(state)
-    {:stop, :normal, :ok, state}
+    state =
+      state
+      |> reply_to_snapshot_waiters({:error, Api.Error.must_refetch()})
+      |> terminate_safely()
+
+    {:reply, :ok, [], state}
   end
 
   def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
@@ -143,6 +153,7 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
   end
 
+  @impl GenStage
   def handle_cast(
         {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list}},
         %{shape_handle: shape_handle} = state
@@ -198,9 +209,12 @@ defmodule Electric.Shapes.Consumer do
           error
       end
 
-    state = reply_to_snapshot_waiters(state, {:error, error})
-    cleanup(state)
-    {:stop, :normal, state}
+    state =
+      state
+      |> reply_to_snapshot_waiters({:error, error})
+      |> terminate_safely()
+
+    {:noreply, [], state}
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
@@ -209,27 +223,26 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, [], state}
   end
 
+  @impl GenStage
+  def handle_info(
+        {Electric.Shapes.Monitor, :reader_termination, handle, reason},
+        %{shape_handle: handle} = state
+      ) do
+    # Triggered as a result of `Electric.Shapes.Monitor.notify_reader_termination/3`
+    # when all readers have terminated.
+    {:stop, reason, state}
+  end
+
+  @impl GenStage
   def terminate(reason, state) do
     Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
 
-    state =
-      reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
-
-    if is_error?(reason) do
-      cleanup(state)
-    end
-
-    state
+    reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
-
-  defp is_error?(:normal), do: false
-  defp is_error?(:killed), do: false
-  defp is_error?(:shutdown), do: false
-  defp is_error?({:shutdown, _}), do: false
-  defp is_error?(_), do: true
 
   # `Shapes.Dispatcher` only works with single-events, so we can safely assert
   # that here
+  @impl GenStage
   def handle_events([{event, trace_context}], _from, state) do
     OpenTelemetry.set_current_context(trace_context)
     handle_event(event, state)
@@ -252,10 +265,9 @@ defmodule Electric.Shapes.Consumer do
     state =
       state
       |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
-      |> notify_shape_rotation()
-      |> cleanup()
+      |> terminate_safely()
 
-    {:stop, :normal, state}
+    {:noreply, [], state}
   end
 
   # Buffer incoming transactions until we know our pg_snapshot
@@ -277,13 +289,8 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_txns(txns, state) do
-    case Enum.reduce_while(txns, state, &handle_txn/2) do
-      {:truncate, state} ->
-        {:stop, {:shutdown, :truncate}, state}
-
-      state ->
-        {:noreply, [], state}
-    end
+    state = Enum.reduce_while(txns, state, &handle_txn/2)
+    {:noreply, [], state}
   end
 
   defp handle_txn(txn, %{pg_snapshot: %{filter_txns?: false}} = state) do
@@ -376,11 +383,9 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        state
-        |> cleanup()
-        |> notify_shape_rotation()
+        terminate_safely(state)
 
-        {:halt, {:truncate, notify(txn, %{state | log_state: @initial_log_state})}}
+        {:halt, notify(txn, %{state | log_state: @initial_log_state})}
 
       num_changes > 0 ->
         {log_entries, new_log_state, last_log_offset} =
@@ -489,17 +494,22 @@ defmodule Electric.Shapes.Consumer do
     %{state | pg_snapshot: pg_snapshot}
   end
 
-  defp cleanup(state) do
+  # termination and cleanup is now done in stages.
+  # 1. register that we want the shape data to be cleaned up.
+  # 2. request a notification when all active shape data reads are complete
+  # 3. exit the process when we receive that notification
+  defp terminate_safely(state, reason \\ {:shutdown, :cleanup}) do
     %{
-      shape_status: {shape_status, shape_status_state},
-      publication_manager: {publication_manager, publication_manager_opts}
+      stack_id: stack_id,
+      shape_handle: shape_handle,
+      shape_status: {shape_status, shape_status_state}
     } = state
 
-    shape_status.remove_shape(shape_status_state, state.shape_handle)
-    publication_manager.remove_shape(state.shape, publication_manager_opts)
-    ShapeCache.Storage.cleanup!(state.storage)
+    shape_status.remove_shape(shape_status_state, shape_handle)
 
-    state
+    :ok = Electric.Shapes.Monitor.notify_reader_termination(stack_id, shape_handle, reason)
+
+    notify_shape_rotation(state)
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
@@ -582,6 +592,10 @@ defmodule Electric.Shapes.Consumer do
       "shape.root_table": shape.root_table,
       "shape.where": shape.where
     ]
+  end
+
+  defp calculate_replication_lag(%Transaction{commit_timestamp: nil}) do
+    0
   end
 
   defp calculate_replication_lag(%Transaction{commit_timestamp: commit_timestamp}) do

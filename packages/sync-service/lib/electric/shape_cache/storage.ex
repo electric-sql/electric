@@ -5,6 +5,10 @@ defmodule Electric.ShapeCache.Storage do
   alias Electric.Shapes.Querying
   alias Electric.Replication.LogOffset
 
+  defmodule Error do
+    defexception [:message]
+  end
+
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin :: Electric.ShapeCacheBehaviour.xmin()
   @type pg_snapshot :: %{

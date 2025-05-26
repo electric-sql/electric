@@ -7,10 +7,12 @@ defmodule Electric.Replication.PublicationManager do
   alias Electric.Replication.Eval.Expr
   alias Electric.Shapes.Shape
 
-  @callback name(binary() | Keyword.t()) :: atom()
-  @callback recover_shape(Shape.t(), Keyword.t()) :: :ok
-  @callback add_shape(Shape.t(), Keyword.t()) :: :ok
-  @callback remove_shape(Shape.t(), Keyword.t()) :: :ok
+  @callback name(binary() | Keyword.t()) :: term()
+  @callback recover_shape(Electric.ShapeCacheBehaviour.shape_handle(), Shape.t(), Keyword.t()) ::
+              :ok
+  @callback add_shape(Electric.ShapeCacheBehaviour.shape_handle(), Shape.t(), Keyword.t()) :: :ok
+  @callback remove_shape(Electric.ShapeCacheBehaviour.shape_handle(), Shape.t(), Keyword.t()) ::
+              :ok
   @callback refresh_publication(Keyword.t()) :: :ok
 
   defstruct [
@@ -22,6 +24,7 @@ defmodule Electric.Replication.PublicationManager do
     :scheduled_updated_ref,
     :retries,
     :waiters,
+    :tracked_shape_handles,
     :publication_name,
     :db_pool,
     :pg_version,
@@ -40,6 +43,7 @@ defmodule Electric.Replication.PublicationManager do
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
+           tracked_shape_handles: MapSet.t(),
            publication_name: String.t(),
            db_pool: term(),
            pg_version: non_neg_integer(),
@@ -93,6 +97,9 @@ defmodule Electric.Replication.PublicationManager do
             server: [type: :any, required: false]
           )
 
+  @behaviour __MODULE__
+
+  @impl __MODULE__
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -102,33 +109,33 @@ defmodule Electric.Replication.PublicationManager do
     name(stack_id)
   end
 
-  @spec add_shape(Shape.t(), Keyword.t()) :: :ok
-  def add_shape(shape, opts \\ []) do
+  @impl __MODULE__
+  def add_shape(shape_id, shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
-    case GenServer.call(server, {:add_shape, shape}) do
+    case GenServer.call(server, {:add_shape, shape_id, shape}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
   end
 
-  @spec recover_shape(Shape.t(), Keyword.t()) :: :ok
-  def recover_shape(shape, opts \\ []) do
+  @impl __MODULE__
+  def recover_shape(shape_id, shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:recover_shape, shape})
+    GenServer.call(server, {:recover_shape, shape_id, shape})
   end
 
-  @spec remove_shape(Shape.t(), Keyword.t()) :: :ok
-  def remove_shape(shape, opts \\ []) do
+  @impl __MODULE__
+  def remove_shape(shape_id, shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
-    case GenServer.call(server, {:remove_shape, shape}) do
+    case GenServer.call(server, {:remove_shape, shape_id, shape}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
   end
 
-  @spec refresh_publication(Keyword.t()) :: :ok
+  @impl __MODULE__
   def refresh_publication(opts \\ []) do
     server = Access.get(opts, :server, name(opts))
     timeout = Access.get(opts, :timeout, 10_000)
@@ -171,6 +178,7 @@ defmodule Electric.Replication.PublicationManager do
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
+      tracked_shape_handles: MapSet.new(),
       update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
@@ -189,18 +197,30 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @impl true
-  def handle_call({:add_shape, shape}, from, state) do
-    state = update_relation_filters_for_shape(shape, :add, state)
-    state = add_waiter(from, state)
-    state = schedule_update_publication(state.update_debounce_timeout, state)
-    {:noreply, state}
+  def handle_call({:add_shape, shape_handle, shape}, from, state) do
+    if is_tracking_shape_handle?(shape_handle, state) do
+      Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
+      {:reply, :ok, state}
+    else
+      state = track_shape_handle(shape_handle, state)
+      state = update_relation_filters_for_shape(shape, :add, state)
+      state = add_waiter(from, state)
+      state = schedule_update_publication(state.update_debounce_timeout, state)
+      {:noreply, state}
+    end
   end
 
-  def handle_call({:remove_shape, shape}, from, state) do
-    state = update_relation_filters_for_shape(shape, :remove, state)
-    state = add_waiter(from, state)
-    state = schedule_update_publication(state.update_debounce_timeout, state)
-    {:noreply, state}
+  def handle_call({:remove_shape, shape_handle, shape}, from, state) do
+    if not is_tracking_shape_handle?(shape_handle, state) do
+      Logger.debug("Shape already not tracked: #{inspect(shape_handle)}")
+      {:reply, :ok, state}
+    else
+      state = untrack_shape_handle(shape_handle, state)
+      state = update_relation_filters_for_shape(shape, :remove, state)
+      state = add_waiter(from, state)
+      state = schedule_update_publication(state.update_debounce_timeout, state)
+      {:noreply, state}
+    end
   end
 
   def handle_call({:refresh_publication, forced?}, from, state) do
@@ -209,9 +229,15 @@ defmodule Electric.Replication.PublicationManager do
     {:noreply, state}
   end
 
-  def handle_call({:recover_shape, shape}, _from, state) do
-    state = update_relation_filters_for_shape(shape, :add, state)
-    {:reply, :ok, state}
+  def handle_call({:recover_shape, shape_handle, shape}, _from, state) do
+    if is_tracking_shape_handle?(shape_handle, state) do
+      Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
+      {:reply, :ok, state}
+    else
+      state = track_shape_handle(shape_handle, state)
+      state = update_relation_filters_for_shape(shape, :add, state)
+      {:reply, :ok, state}
+    end
   end
 
   defguardp is_fatal(err)
@@ -527,5 +553,26 @@ defmodule Electric.Replication.PublicationManager do
   defp reply_to_waiters(reply, %__MODULE__{waiters: waiters} = state) do
     for from <- waiters, do: GenServer.reply(from, reply)
     %{state | waiters: []}
+  end
+
+  defp track_shape_handle(
+         shape_handle,
+         %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
+       ) do
+    %__MODULE__{state | tracked_shape_handles: MapSet.put(tracked_shape_handles, shape_handle)}
+  end
+
+  defp untrack_shape_handle(
+         shape_handle,
+         %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
+       ) do
+    %__MODULE__{state | tracked_shape_handles: MapSet.delete(tracked_shape_handles, shape_handle)}
+  end
+
+  defp is_tracking_shape_handle?(
+         shape_handle,
+         %__MODULE__{tracked_shape_handles: tracked_shape_handles}
+       ) do
+    MapSet.member?(tracked_shape_handles, shape_handle)
   end
 end

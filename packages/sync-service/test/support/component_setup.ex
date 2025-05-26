@@ -12,10 +12,40 @@ defmodule Support.ComponentSetup do
   defmodule NoopPublicationManager do
     @behaviour Electric.Replication.PublicationManager
     def name(_), do: :pub_man
-    def add_shape(_shape, _opts), do: :ok
-    def recover_shape(_shape, _opts), do: :ok
-    def remove_shape(_shape, _opts), do: :ok
+    def add_shape(_handle, _shape, _opts), do: :ok
+    def recover_shape(_handle, _shape, _opts), do: :ok
+    def remove_shape(_handle, _shape, _opts), do: :ok
     def refresh_publication(_opts), do: :ok
+  end
+
+  defmodule TestPublicationManager do
+    @behaviour Electric.Replication.PublicationManager
+
+    def new do
+      {__MODULE__, %{parent: self()}}
+    end
+
+    def name(_), do: TestPublicationManager
+
+    def add_shape(handle, shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :add_shape, handle, shape})
+      :ok
+    end
+
+    def recover_shape(handle, shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :recover_shape, handle, shape})
+      :ok
+    end
+
+    def remove_shape(handle, shape, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :remove_shape, handle, shape})
+      :ok
+    end
+
+    def refresh_publication(%{parent: parent}) do
+      send(parent, {TestPublicationManager, :refresh_publication})
+      :ok
+    end
   end
 
   def with_stack_id_from_test(ctx) do
@@ -93,6 +123,10 @@ defmodule Support.ComponentSetup do
       publication_manager:
         {Electric.Replication.PublicationManager, stack_id: ctx.stack_id, server: server}
     }
+  end
+
+  def with_test_publication_manager(_ctx) do
+    %{publication_manager: TestPublicationManager.new()}
   end
 
   def with_noop_publication_manager(_ctx) do
@@ -189,6 +223,69 @@ defmodule Support.ComponentSetup do
     %{}
   end
 
+  defmodule NoopShapeStatus do
+    def initialise(_), do: {:ok, []}
+    def list_shapes(_), do: []
+    def get_existing_shape(_, _), do: nil
+    def add_shape(_, _), do: {:ok, "handle"}
+    def initialise_shape(_, _, _, _), do: :ok
+    def set_snapshot_xmin(_, _, _), do: :ok
+    def mark_snapshot_started(_, _), do: :ok
+    def snapshot_started?(_, _), do: false
+    def remove_shape(_, _), do: {:ok, nil}
+  end
+
+  def with_shape_monitor(ctx) do
+    alias Electric.ShapeCache.ShapeStatus
+
+    storage =
+      Map.get_lazy(ctx, :storage, fn ->
+        %{storage: storage} = with_in_memory_storage(ctx)
+
+        storage
+      end)
+
+    publication_manager =
+      Map.get_lazy(ctx, :publication_manager, fn ->
+        %{publication_manager: publication_manager} = with_test_publication_manager(ctx)
+        publication_manager
+      end)
+
+    shape_status =
+      {ShapeStatus,
+       %ShapeStatus{
+         shape_meta_table: Electric.ShapeCache.get_shape_meta_table(stack_id: ctx.stack_id)
+       }}
+
+    start_link_supervised!(
+      {Electric.Shapes.Monitor,
+       Keyword.merge(monitor_config(ctx),
+         stack_id: ctx.stack_id,
+         storage: storage,
+         publication_manager: publication_manager,
+         shape_status: shape_status
+       )}
+    )
+
+    %{storage: storage, publication_manager: publication_manager}
+  end
+
+  defp monitor_config(ctx) do
+    parent = self()
+
+    on_remove =
+      Map.get(ctx, :on_shape_remove, fn handle, _pid ->
+        send(parent, {Electric.Shapes.Monitor, :remove, handle})
+      end)
+
+    on_cleanup =
+      Map.get(ctx, :on_shape_cleanup, fn handle ->
+        send(parent, {Electric.Shapes.Monitor, :cleanup, handle})
+      end)
+
+    [on_remove: on_remove, on_cleanup: on_cleanup]
+  end
+
   def with_complete_stack(ctx) do
     stack_id = full_test_name(ctx)
 
@@ -224,7 +321,10 @@ defmodule Support.ComponentSetup do
            max_restarts: 0,
            pool_size: 2
          ],
-         tweaks: [registry_partitions: 1]},
+         tweaks: [
+           registry_partitions: 1,
+           monitor_opts: monitor_config(ctx)
+         ]},
         restart: :temporary,
         significant: false
       )

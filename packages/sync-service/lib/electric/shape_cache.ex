@@ -72,6 +72,13 @@ defmodule Electric.ShapeCache do
             ]
           )
 
+  # under load some of the storage functions, particularly the create calls,
+  # can take a long time to complete (I've seen 20s locally, just due to minor
+  # filesystem calls like `ls` taking multiple seconds). Most complete in a
+  # timely manner but rather than raise for the edge cases and generate
+  # unnecessary noise let's just cover those tail timings with our timeout.
+  @call_timeout 30_000
+
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -106,7 +113,7 @@ defmodule Electric.ShapeCache do
       shape_state
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]})
+      GenStage.call(server, {:create_or_wait_shape_handle, shape, opts[:otel_ctx]}, @call_timeout)
     end
   end
 
@@ -123,7 +130,7 @@ defmodule Electric.ShapeCache do
   @spec clean_shape(shape_handle(), Access.t()) :: :ok
   def clean_shape(shape_handle, opts) do
     server = Access.get(opts, :server, name(opts))
-    GenStage.call(server, {:clean, shape_handle})
+    GenStage.call(server, {:clean, shape_handle}, @call_timeout)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -171,7 +178,8 @@ defmodule Electric.ShapeCache do
           :exit, {:noproc, _} ->
             # The fact that we got the shape handle means we know the shape exists, and the process should
             # exist too. We can get here if registry didn't propagate registration across partitions yet, so
-            # we'll just retry.
+            # we'll just retry after waiting for a short time to avoid busy waiting.
+            Process.sleep(50)
             await_snapshot_start(shape_handle, opts)
         end
     end
@@ -186,7 +194,7 @@ defmodule Electric.ShapeCache do
       true
     else
       server = Access.get(opts, :server, name(opts))
-      GenStage.call(server, {:wait_shape_handle, shape_handle})
+      GenStage.call(server, {:wait_shape_handle, shape_handle}, @call_timeout)
     end
   end
 
@@ -229,7 +237,7 @@ defmodule Electric.ShapeCache do
 
     last_processed_lsn =
       if opts[:purge_all_shapes?] do
-        clean_up_all_shapes(state)
+        purge_all_shapes(state)
         Lsn.from_integer(0)
       else
         recover_shapes(state, opts.recover_shape_timeout)
@@ -243,11 +251,11 @@ defmodule Electric.ShapeCache do
       :ok = publication_manager.refresh_publication(publication_manager_opts)
     rescue
       error ->
-        clean_up_all_shapes(state)
+        purge_all_shapes(state)
         reraise error, __STACKTRACE__
     catch
       :exit, reason ->
-        clean_up_all_shapes(state)
+        purge_all_shapes(state)
         exit(reason)
     end
 
@@ -279,7 +287,9 @@ defmodule Electric.ShapeCache do
         {shape_state, state}
       else
         {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
+
         {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
+
         send(self(), :maybe_expire_shapes)
         {{shape_handle, latest_offset}, state}
       end
@@ -307,8 +317,10 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call(:clean_all_shapes, _from, state) do
-    Logger.info("Cleaning up all shapes")
+    Logger.warning("Purging all shapes.")
+
     clean_up_all_shapes(state)
+
     {:reply, :ok, state}
   end
 
@@ -368,32 +380,51 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_handle) do
-    try do
-      Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-        state.consumer_supervisor,
-        state.stack_id,
-        shape_handle
-      )
-    after
-      # another failsafe for ensuring data is cleaned if consumer fails to
-      # clean itself - this is not guaranteed to run in case of an actual exit
-      # but provides an additional safeguard
+    # remove the shape immediately so new clients are redirected elsewhere
+    deregister_shape(shape_handle, state)
 
-      unsafe_cleanup_shape!(shape_handle, state)
-    end
+    Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
+      state.consumer_supervisor,
+      state.stack_id,
+      shape_handle
+    )
 
     :ok
   end
 
-  defp clean_up_all_shapes(state) do
+  # reset shape storage before any consumer have been started
+  defp purge_all_shapes(state) do
     Logger.warning("Purging all shapes.")
 
-    shape_handles =
-      state.shape_status_state |> state.shape_status.list_shapes() |> Enum.map(&elem(&1, 0))
+    for {shape_handle, shape} <- shape_handles(state) do
+      purge_shape(state, shape_handle, shape)
+    end
 
-    for shape_handle <- shape_handles do
+    state
+  end
+
+  defp purge_shape(state, shape_handle, shape) do
+    case Electric.Shapes.ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
+      :noproc ->
+        # if the consumer isn't running then we can just delete things gratuitously
+        :ok = Electric.Shapes.Monitor.purge_shape(state.stack_id, shape_handle, shape)
+
+      :ok ->
+        # if it is running then the stop_and_clean process will cleanup properly
+        :ok
+    end
+
+    state
+  end
+
+  defp clean_up_all_shapes(state) do
+    for {shape_handle, _shape} <- shape_handles(state) do
       clean_up_shape(state, shape_handle)
     end
+  end
+
+  defp shape_handles(state) do
+    state.shape_status_state |> state.shape_status.list_shapes()
   end
 
   defp recover_shapes(state, timeout) do
@@ -422,17 +453,11 @@ defmodule Electric.ShapeCache do
         lsn
 
       nil ->
-        Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-          state.consumer_supervisor,
-          state.stack_id,
-          shape_handle
-        )
-
-        unsafe_cleanup_shape!(shape_handle, state)
-
         Logger.error(
           "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
         )
+
+        purge_shape(state, shape_handle, shape)
 
         []
     end
@@ -441,55 +466,60 @@ defmodule Electric.ShapeCache do
   defp start_and_recover_shape(shape_handle, shape, state) do
     %{publication_manager: {publication_manager, publication_manager_opts}} = state
 
-    {:ok, latest_offset} = start_shape(shape_handle, shape, state)
+    case start_shape(shape_handle, shape, state) do
+      {:ok, latest_offset} ->
+        publication_manager.recover_shape(shape_handle, shape, publication_manager_opts)
+        [LogOffset.extract_lsn(latest_offset)]
 
-    # recover publication filter state
-    publication_manager.recover_shape(shape, publication_manager_opts)
-    [LogOffset.extract_lsn(latest_offset)]
+      :error ->
+        []
+    end
   catch
+    # exception can only come from the receover_shape call
+    # if the shape consumer failed to start for some reason
+    # start_shape/4 will have returned an error
     kind, reason when kind in [:exit, :error] ->
       Logger.error(
         "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
       )
 
       # clean up corrupted data to avoid persisting bad state
-      unsafe_cleanup_shape!(shape_handle, state)
+      purge_shape(state, shape_handle, shape)
       []
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
-    with {:ok, _pid} <-
-           Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
-             state.consumer_supervisor,
-             stack_id: state.stack_id,
-             inspector: state.inspector,
-             shape_handle: shape_handle,
-             shape: shape,
-             shape_status: {state.shape_status, state.shape_status_state},
-             storage: state.storage,
-             publication_manager: state.publication_manager,
-             chunk_bytes_threshold: state.chunk_bytes_threshold,
-             log_producer: state.log_producer,
-             registry: state.registry,
-             db_pool: state.db_pool,
-             run_with_conn_fn: state.run_with_conn_fn,
-             create_snapshot_fn: state.create_snapshot_fn,
-             otel_ctx: otel_ctx
-           ) do
-      consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
-      {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
-      {:ok, latest_offset}
+    case Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
+           state.consumer_supervisor,
+           stack_id: state.stack_id,
+           inspector: state.inspector,
+           shape_handle: shape_handle,
+           shape: shape,
+           shape_status: {state.shape_status, state.shape_status_state},
+           storage: state.storage,
+           publication_manager: state.publication_manager,
+           chunk_bytes_threshold: state.chunk_bytes_threshold,
+           log_producer: state.log_producer,
+           registry: state.registry,
+           db_pool: state.db_pool,
+           run_with_conn_fn: state.run_with_conn_fn,
+           create_snapshot_fn: state.create_snapshot_fn,
+           otel_ctx: otel_ctx
+         ) do
+      {:ok, _supervisor_pid} ->
+        consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
+        {:ok, _latest_offset} = Shapes.Consumer.initial_state(consumer)
+
+      {:error, _reason} = error ->
+        Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
+        # purge because we know the consumer isn't running
+        purge_shape(state, shape_handle, shape)
+        :error
     end
   end
 
-  defp unsafe_cleanup_shape!(shape_handle, state) do
-    # Remove the handle from the shape status
+  defp deregister_shape(shape_handle, state) do
     state.shape_status.remove_shape(state.shape_status_state, shape_handle)
-
-    # Cleanup the storage for the shape
-    shape_handle
-    |> Electric.ShapeCache.Storage.for_shape(state.storage)
-    |> Electric.ShapeCache.Storage.unsafe_cleanup!()
   end
 
   def get_shape_meta_table(opts),

@@ -37,6 +37,10 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     name(stack_id, shape_handle)
   end
 
+  def whereis(stack_id, shape_handle) do
+    GenServer.whereis(name(stack_id, shape_handle))
+  end
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       config = Map.new(opts)
@@ -44,22 +48,34 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     end
   end
 
-  def clean_and_stop(%{
+  def stop_and_clean(%{
         stack_id: stack_id,
         shape_handle: shape_handle
       }) do
+    stop_and_clean(stack_id, shape_handle)
+  end
+
+  def stop_and_clean(stack_id, shape_handle) do
     # if consumer is present, terminate it gracefully, otherwise terminate supervisor
     consumer = Electric.Shapes.Consumer.name(stack_id, shape_handle)
 
     case GenServer.whereis(consumer) do
-      nil -> Supervisor.stop(name(stack_id, shape_handle))
-      consumer_pid when is_pid(consumer_pid) -> GenServer.call(consumer_pid, :clean_and_stop)
+      nil ->
+        try do
+          Supervisor.stop(name(stack_id, shape_handle))
+
+          :noproc
+        catch
+          :exit, {:noproc, _} -> :noproc
+        end
+
+      consumer_pid when is_pid(consumer_pid) ->
+        GenServer.call(consumer_pid, :stop_and_clean, 30_000)
     end
   end
 
   def init(config) when is_map(config) do
-    %{shape_handle: shape_handle, storage: {_, _} = storage, shape: shape} =
-      config
+    %{shape_handle: shape_handle, storage: {_, _} = storage, shape: shape} = config
 
     Process.set_label({:consumer_supervisor, shape_handle})
     metadata = [stack_id: config.stack_id, shape_handle: shape_handle]

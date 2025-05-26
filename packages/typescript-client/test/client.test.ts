@@ -43,13 +43,14 @@ function mockVisibilityApi() {
 }
 
 describe(`Shape`, () => {
-  it(`should sync an empty shape`, async ({ issuesTableUrl }) => {
+  it(`should sync an empty shape`, async ({ issuesTableUrl, aborter }) => {
     const start = Date.now()
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
 
@@ -60,7 +61,7 @@ describe(`Shape`, () => {
     expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
   })
 
-  it(`should throw on a reserved parameter`, async () => {
+  it(`should throw on a reserved parameter`, async ({ aborter }) => {
     expect(() => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
@@ -69,6 +70,7 @@ describe(`Shape`, () => {
           // @ts-expect-error should not allow reserved parameters
           live: `false`,
         },
+        signal: aborter.signal,
       })
       new Shape(shapeStream)
     }).toThrowErrorMatchingSnapshot()
@@ -334,6 +336,7 @@ describe(`Shape`, () => {
 
   it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     let fetchShouldFail = false
     const shapeStream = new ShapeStream({
@@ -341,6 +344,7 @@ describe(`Shape`, () => {
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
       fetchClient: async (_input, _init) => {
         if (fetchShouldFail)
           throw new FetchError(
@@ -381,6 +385,7 @@ describe(`Shape`, () => {
 
   it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     const { pause, resume } = mockVisibilityApi()
 
@@ -389,6 +394,7 @@ describe(`Shape`, () => {
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
     })
 
     const unsubscribe = shapeStream.subscribe(() => unsubscribe())
@@ -405,6 +411,7 @@ describe(`Shape`, () => {
   it(`should support pausing the stream and resuming it`, async ({
     issuesTableUrl,
     insertIssues,
+    aborter,
   }) => {
     const { pause, resume } = mockVisibilityApi()
     const shapeStream = new ShapeStream({
@@ -412,6 +419,7 @@ describe(`Shape`, () => {
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
 
@@ -486,6 +494,7 @@ describe(`Shape`, () => {
 
   it(`should not throw error if an error handler is provided`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     const mockErrorHandler = vi.fn()
     const shapeStream = new ShapeStream({
@@ -493,6 +502,7 @@ describe(`Shape`, () => {
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
       fetchClient: async (_input, _init) => {
         return new Response(undefined, {
           status: 401,
@@ -508,6 +518,7 @@ describe(`Shape`, () => {
 
   it(`should retry on error if error handler returns modified params`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     // This test creates a shapestream but provides wrong query params
     // the fetch client therefore returns a 401 status code
@@ -530,6 +541,7 @@ describe(`Shape`, () => {
         table: issuesTableUrl,
         todo: `fail`,
       },
+      signal: aborter.signal,
       fetchClient: async (input, _init) => {
         const url = new URL(input as string | URL)
         if (url.searchParams.get(`todo`) === `fail`) {
@@ -553,6 +565,7 @@ describe(`Shape`, () => {
 
   it(`should retry on error if error handler returns modified headers`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     // This test creates a shapestream but provides invalid auth credentials
     // the fetch client therefore returns a 401 status code
@@ -577,6 +590,7 @@ describe(`Shape`, () => {
       headers: {
         Authorization: `invalid credentials`,
       },
+      signal: aborter.signal,
       fetchClient: async (input, init) => {
         const headers = init?.headers as Record<string, string>
         if (headers && headers.Authorization === `valid credentials`) {
@@ -595,7 +609,10 @@ describe(`Shape`, () => {
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
   })
 
-  it(`should support async error handler`, async ({ issuesTableUrl }) => {
+  it(`should support async error handler`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
     let authChanged: () => void
     const authChangePromise = new Promise<void>((res) => {
       authChanged = res
@@ -619,6 +636,7 @@ describe(`Shape`, () => {
       headers: {
         Authorization: `invalid credentials`,
       },
+      signal: aborter.signal,
       fetchClient: async (input, init) => {
         const headers = init?.headers as Record<string, string>
         if (headers && headers.Authorization === `valid credentials`) {
@@ -644,6 +662,7 @@ describe(`Shape`, () => {
 
   it(`should stop fetching and report an error if response is missing required headers`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     let url: string = ``
     let error1: Error, error2: Error
@@ -653,6 +672,7 @@ describe(`Shape`, () => {
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
       fetchClient: async (input, _init) => {
         url = input.toString()
         const headers = new Headers()
@@ -684,6 +704,7 @@ describe(`Shape`, () => {
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
       fetchClient: async (input, _init) => {
         url = input.toString()
         const headers = new Headers()
@@ -713,6 +734,7 @@ describe(`Shape`, () => {
 
   it(`should set isConnected to false after fetch if not subscribed`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
@@ -720,6 +742,7 @@ describe(`Shape`, () => {
         table: issuesTableUrl,
       },
       subscribe: false,
+      signal: aborter.signal,
     })
 
     await waitForFetch(shapeStream)
@@ -755,11 +778,11 @@ describe(`Shape`, () => {
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
       fetchClient: async (input, init) => {
         await sleep(20)
         return fetch(input, init)
       },
-      signal: aborter.signal,
     })
     const shape = new Shape(shapeStream)
 
@@ -829,6 +852,7 @@ describe(`Shape`, () => {
 
   it(`should support function-based params and headers`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     const mockParamFn = vi.fn().mockReturnValue(`test-value`)
     const mockAsyncParamFn = vi.fn().mockResolvedValue(`test-value`)
@@ -845,6 +869,7 @@ describe(`Shape`, () => {
       headers: {
         'X-Custom-Header': mockHeaderFn,
       },
+      signal: aborter.signal,
     })
     const shape1 = new Shape(shapeStream1)
     await shape1.value
@@ -862,6 +887,7 @@ describe(`Shape`, () => {
       headers: {
         'X-Custom-Header': mockAsyncHeaderFn,
       },
+      signal: aborter.signal,
     })
     const shape2 = new Shape(shapeStream2)
     await shape2.value
@@ -998,12 +1024,14 @@ describe(`Shape`, () => {
 describe(`Shape - backwards compatible`, () => {
   it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
     issuesTableUrl,
+    aborter,
   }) => {
     const shapeStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,
       params: {
         table: issuesTableUrl,
       },
+      signal: aborter.signal,
       fetchClient: async (_input, _init) => {
         await sleep(20)
         return new Response(null, {

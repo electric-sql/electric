@@ -212,11 +212,15 @@ defmodule Electric.Shapes.Api do
   def delete_shape(%Request{handle: handle} = request) when is_binary(handle) do
     :ok = Shapes.clean_shape(handle, request.api)
 
-    %Response{status: 202, body: []}
+    # Delete responses don't need to have cleanup operations appended
+    # after the body has been read, so mark them as finalized
+    Response.final(%Response{status: 202, body: []})
   end
 
   def delete_shape(%Request{handle: nil} = request) do
-    Response.error(request, "Shape not found", status: 404)
+    request
+    |> Response.error("Shape not found", status: 404)
+    |> Response.final()
   end
 
   @spec delete_shape(Plug.Conn.t()) :: Plug.Conn.t()
@@ -232,6 +236,7 @@ defmodule Electric.Shapes.Api do
 
   defp seek(%Request{} = request) do
     request
+    |> register_shape_subscriber()
     |> listen_for_new_changes()
     |> determine_global_last_seen_lsn()
     |> determine_log_chunk_offset()
@@ -334,6 +339,19 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  defp register_shape_subscriber(%Request{handle: nil} = request) do
+    request
+  end
+
+  defp register_shape_subscriber(%Request{} = request) do
+    %{api: %{stack_id: stack_id}, handle: handle} = request
+    :ok = Electric.Shapes.Monitor.register_reader(stack_id, handle)
+
+    Logger.debug(fn -> "Registering subscriber for shape #{inspect(handle)}" end)
+
+    request
+  end
+
   defp listen_for_new_changes(%Request{params: %{live: false}} = request) do
     request
   end
@@ -405,9 +423,9 @@ defmodule Electric.Shapes.Api do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      response = do_serve_shape_log(request)
-      clean_up_change_listener(request)
-      response
+      request
+      |> do_serve_shape_log()
+      |> Response.ensure_cleanup()
     end)
   end
 
@@ -415,13 +433,11 @@ defmodule Electric.Shapes.Api do
     response =
       case if_not_modified(conn, request) do
         {:halt, response} ->
-          response
+          Response.ensure_cleanup(response)
 
         {:cont, request} ->
           serve_shape_log(request)
       end
-
-    clean_up_change_listener(request)
 
     conn
     |> Plug.Conn.assign(:response, response)
@@ -432,7 +448,12 @@ defmodule Electric.Shapes.Api do
     etag = Response.etag(request.response, quote: false)
 
     if etag in if_none_match(conn) do
-      %{response: response} = Request.update_response(request, &%{&1 | status: 304, body: []})
+      %{response: response} =
+        Request.update_response(
+          request,
+          &%{&1 | status: 304, body: []}
+        )
+
       {:halt, response}
     else
       {:cont, request}
@@ -497,12 +518,28 @@ defmodule Electric.Shapes.Api do
       {:error, %Api.Error{} = error} ->
         Response.error(request, error.message, status: error.status)
 
+      {:error, :unknown} ->
+        # the shape has been deleted between the request validation and the attempt
+        # to resturn the log stream
+        Response.error(request, @must_refetch, status: 409)
+
       {:error, error} ->
         # Errors will be logged further up the stack
+        message =
+          case error do
+            msg when is_binary(msg) ->
+              msg
+
+            %{__exception__: true} ->
+              Exception.format(:error, error, [])
+
+            term ->
+              inspect(term)
+          end
 
         Response.error(
           request,
-          "Unable to retrieve shape log: #{Exception.format(:error, error, [])}",
+          "Unable to retrieve shape log: #{message}",
           status: 500
         )
     end
@@ -548,19 +585,6 @@ defmodule Electric.Shapes.Api do
         end
     end
   end
-
-  defp clean_up_change_listener(%Request{handle: shape_handle} = request)
-       when not is_nil(shape_handle) do
-    %{api: %{registry: registry}} = request
-
-    # Ensure registry is still runnning and unregister handle
-    if Process.whereis(registry) != nil,
-      do: Registry.unregister(registry, shape_handle)
-
-    request
-  end
-
-  defp clean_up_change_listener(%Request{} = request), do: request
 
   defp no_change_response(%Request{} = request) do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
@@ -610,15 +634,16 @@ defmodule Electric.Shapes.Api do
   end
 
   @spec encode_message(Api.t() | Request.t(), term()) :: Enum.t()
-  def encode_message(%Api{} = api, message) do
-    encode(api, :message, message)
-  end
-
   def encode_message(%Request{api: api}, message) do
     encode(api, :message, message)
   end
 
-  defp encode(%Api{encoder: encoder}, type, message) when type in [:message, :log] do
+  def encode_message(%Api{} = api, message) do
+    encode(api, :message, message)
+  end
+
+  defp encode(%Api{encoder: encoder}, type, message)
+       when type in [:message, :log] do
     apply(encoder, type, [message])
   end
 

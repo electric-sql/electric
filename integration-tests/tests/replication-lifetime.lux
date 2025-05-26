@@ -38,7 +38,7 @@
       generate_series(1, $num_items_per_batch);
     """
     ??INSERT 0 $num_items_per_batch
-    
+
   # Initialize a shape and collect the offset
   [shell client]
     [invoke shape_get_snapshot $table_name]
@@ -100,6 +100,6 @@
 ## PG with WAL close to end of 64-bit LSN range
 [invoke setup_pg_with_lsn "FFFFFFFF000000FF"]
 [invoke validate_data_replication "items_wal_end"]
-  
+
 [cleanup]
   [invoke teardown]

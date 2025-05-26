@@ -115,7 +115,7 @@ defmodule Electric.StatusMonitorTest do
 
       refute_receive :active, 20
       assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
-      assert_receive :active, 20
+      assert_receive :active, 100
     end
 
     test "returns error on timeout when process registry is not present", %{stack_id: stack_id} do

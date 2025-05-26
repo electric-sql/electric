@@ -26,9 +26,10 @@
       postgres:14-alpine \
         -c wal_level=logical ${config_opts}
 
+    [timeout 15]
     ??PostgreSQL init process complete; ready for start up.
     ??database system is ready to accept connections
-  
+
     # Reset the failure pattern to avoid false failures when Electric tries to create an already
     # existing publication or replication slot.
     -
@@ -41,7 +42,7 @@
 [macro setup_pg_with_pooler]
   [invoke setup_pg]
 
-  [shell "pg_pooler"]
+  [shell pg_pooler]
     -$fail_pattern
 
     !docker run \
@@ -165,7 +166,7 @@
 [endmacro]
 
 [macro capture_stack_supervisor_pid]
-  ?pid=(<\d+\.\d+\.\d+>) \[debug\] The single StackSupervisor is initializing...
+  ?pid=(<\d+\.\d+\.\d+>) \[debug\] StackSupervisor for stack "single_stack" is initializing
   # All interactive commands and matches are performed within a single IEx session,
   # so we can assign local variables here which is less of a hassle than using lux variables.
   !stack_supervisor_pid = :erlang.list_to_pid(~c"$1")

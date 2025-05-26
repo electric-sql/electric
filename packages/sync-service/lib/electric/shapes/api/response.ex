@@ -32,7 +32,8 @@ defmodule Electric.Shapes.Api.Response do
     params: %Api.Params{},
     status: 200,
     trace_attrs: %{},
-    body: []
+    body: [],
+    finalized?: false
   ]
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
@@ -72,6 +73,7 @@ defmodule Electric.Shapes.Api.Response do
       |> Keyword.put_new(:status, 400)
       |> Keyword.put(:body, error_body(api, message, args))
       |> Keyword.put(:api, api)
+      |> Keyword.put(:finalized?, true)
 
     struct(__MODULE__, opts)
   end
@@ -84,7 +86,19 @@ defmodule Electric.Shapes.Api.Response do
       |> Keyword.put(:shape_definition, request.params.shape_definition)
       |> Keyword.put(:api, request.api)
 
-    struct(__MODULE__, opts)
+    response = struct(__MODULE__, opts)
+
+    # if the request has been registered then we need to clean it up
+    # by appending the cleanup/1 operation after the response stream
+    if is_pid(request.new_changes_pid) do
+      ensure_cleanup(response)
+    else
+      final(response)
+    end
+  end
+
+  def final(%__MODULE__{} = response) do
+    %{response | finalized?: true}
   end
 
   def invalid_request(api_or_request, args) do
@@ -108,15 +122,84 @@ defmodule Electric.Shapes.Api.Response do
 
   @spec send(Plug.Conn.t(), t()) :: Plug.Conn.t()
   def send(%Plug.Conn{} = conn, %__MODULE__{chunked: false} = response) do
+    validate_response_finalized!(response)
+
     conn
     |> put_resp_headers(response)
     |> Plug.Conn.send_resp(response.status, Enum.into(response.body, []))
   end
 
   def send(%Plug.Conn{} = conn, %__MODULE__{} = response) do
+    validate_response_finalized!(response)
+
     conn
     |> put_resp_headers(response)
     |> send_stream(response)
+  end
+
+  # append the cleanup operations onto the end of the stream for every response
+  # by concating a dummy stream with only an `after` function.
+  #
+  # the cleanup **has** to come after the body has been read, not when we
+  # return the body to the conn otherwise we'd be reducing the active reader
+  # count either before or during the period when the client is reading the
+  # response.
+  def ensure_cleanup(%__MODULE__{finalized?: true} = response) do
+    response
+  end
+
+  def ensure_cleanup(%__MODULE__{} = response) do
+    %{response | finalized?: true, body: append_cleanup_operation(response)}
+  end
+
+  defp append_cleanup_operation(%{body: body} = response) do
+    request_pid = self()
+
+    Stream.transform(
+      body,
+      fn ->
+        # ensure that we read the response from the same process that created it
+        # because otherwise the clean up operations will run on the wrong process
+        # and we may end up with dangling readers in the global state unless the
+        # request process exits. We could allow for reading from other processes
+        # but that doesn't seem to be a requirement ATM and if we can avoid the
+        # complexity it's worth it.
+        if request_pid != self(),
+          do: raise("Response body must be read in same process as request")
+
+        response
+      end,
+      fn elem, response -> {[elem], response} end,
+      &clean_up/1
+    )
+  end
+
+  defp clean_up(response) do
+    response
+    |> clean_up_change_listener()
+    |> clean_up_shape_subscriber()
+  end
+
+  defp clean_up_change_listener(%__MODULE__{handle: shape_handle} = response)
+       when not is_nil(shape_handle) do
+    %{api: %{registry: registry}} = response
+    # Ensure registry is still runnning and unregister handle
+    if Process.whereis(registry) != nil,
+      do: Registry.unregister(registry, shape_handle)
+
+    response
+  end
+
+  defp clean_up_change_listener(%__MODULE__{} = response), do: response
+
+  defp clean_up_shape_subscriber(%__MODULE__{handle: nil} = response) do
+    response
+  end
+
+  defp clean_up_shape_subscriber(%__MODULE__{} = response) do
+    %{api: %{stack_id: stack_id}, handle: handle} = response
+    :ok = Electric.Shapes.Monitor.unregister_reader(stack_id, handle)
+    response
   end
 
   defp put_resp_headers(conn, response) do
@@ -251,12 +334,23 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.put_resp_header(conn, @electric_offset_header, "#{offset}")
   end
 
-  defp send_stream(%Plug.Conn{} = conn, %__MODULE__{body: stream, status: status} = response) do
+  defp validate_response_finalized!(%__MODULE__{finalized?: false} = _response) do
+    raise "Send of un-finalized response"
+  end
+
+  defp validate_response_finalized!(%__MODULE__{finalized?: true} = _response) do
+    :ok
+  end
+
+  defp send_stream(%Plug.Conn{} = conn, %__MODULE__{status: status} = response) do
+    validate_response_finalized!(response)
+
     stack_id = Api.stack_id(response)
     conn = Plug.Conn.send_chunked(conn, status)
 
     {conn, bytes_sent} =
-      Enum.reduce_while(stream, {conn, 0}, fn chunk, {conn, bytes_sent} ->
+      response.body
+      |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
         OpenTelemetry.with_span(

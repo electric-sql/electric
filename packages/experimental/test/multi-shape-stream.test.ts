@@ -21,6 +21,7 @@ describe(`MultiShapeStream`, () => {
   it(`should sync multiple empty shapes`, async ({
     issuesTableUrl,
     clearIssuesShape,
+    aborter,
   }) => {
     const start = Date.now()
     const multiShapeStream = new MultiShapeStream<{
@@ -34,6 +35,7 @@ describe(`MultiShapeStream`, () => {
             table: issuesTableUrl,
             where: `priority <= 10`,
           },
+          signal: aborter.signal,
         },
         shape2: {
           url: `${BASE_URL}/v1/shape`,
@@ -41,6 +43,7 @@ describe(`MultiShapeStream`, () => {
             table: issuesTableUrl,
             where: `priority > 10`,
           },
+          signal: aborter.signal,
         },
       },
     })
@@ -243,6 +246,7 @@ describe(`MultiShapeStream`, () => {
     issuesTableUrl,
     insertIssues,
     waitForIssues,
+    aborter,
   }) => {
     const multiShapeStream = new MultiShapeStream<{
       shape1: IssueRow
@@ -253,6 +257,7 @@ describe(`MultiShapeStream`, () => {
           params: {
             table: issuesTableUrl,
           },
+          signal: aborter.signal,
         },
       },
     })
