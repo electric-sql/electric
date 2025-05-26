@@ -268,7 +268,7 @@ defmodule Electric.Shapes.Api.Response do
               {:ok, conn} ->
                 {:cont, {conn, bytes_sent + chunk_size}}
 
-              {:error, "closed"} ->
+              {:error, reason} when reason in ["closed", :closed] ->
                 error_str = "Connection closed unexpectedly while streaming response"
                 conn = Plug.Conn.assign(conn, :error_str, error_str)
                 {:halt, {conn, bytes_sent}}
