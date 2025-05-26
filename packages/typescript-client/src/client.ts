@@ -41,7 +41,10 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
 } from './constants'
-import { EventSourceMessage, fetchEventSource } from '@microsoft/fetch-event-source'
+import {
+  EventSourceMessage,
+  fetchEventSource,
+} from '@microsoft/fetch-event-source'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -665,10 +668,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#connected = true
     await this.#onInitialResponse(response)
-    
+
     const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const messages = (await response.text()) || `[]`
-    
+
     await this.#onMessages(messages, schema)
   }
 
