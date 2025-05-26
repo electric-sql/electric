@@ -274,7 +274,7 @@ describe(`Shape`, () => {
           )
           return resolve()
         }
-        throw new Error(`Received more data updates (${dataUpdateCount}) than expected`)
+        throw new Error(`Received more data updates than expected`)
       })
     })
   })
@@ -359,9 +359,7 @@ describe(`Shape`, () => {
           )
           return resolve()
         }
-        throw new Error(
-          `Received more data updates (${dataUpdateCount}) than expected`
-        )
+        throw new Error(`Received more data updates than expected`)
       })
     })
   })
