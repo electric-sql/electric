@@ -882,10 +882,3 @@ function convertWhereParamsToObj(
   }
   return allPgParams
 }
-
-class SSEConnectionAborted extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = `SSEConnectionAborted`
-  }
-}
