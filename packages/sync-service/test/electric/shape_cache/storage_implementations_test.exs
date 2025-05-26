@@ -1,5 +1,6 @@
 defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
 
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
@@ -732,6 +733,19 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         storage.set_shape_definition(@shape, shape_opts)
 
         assert Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts}) > 2300
+      end
+
+      test "returns the total disk usage with FS failures", %{module: storage} = context do
+        {:ok, %{opts: shape_opts, shared_opts: opts}} = start_storage(context)
+        storage.initialise(shape_opts)
+        storage.set_shape_definition(@shape, shape_opts)
+
+        Repatch.patch(File, :ls, fn _ -> {:error, :enoent} end)
+        assert 0 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
+
+        Repatch.cleanup()
+        Repatch.patch(File, :stat, fn _ -> {:error, :enoent} end)
+        assert 0 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
       end
     end
   end
