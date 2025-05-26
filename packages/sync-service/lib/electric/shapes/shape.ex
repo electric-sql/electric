@@ -61,12 +61,17 @@ defmodule Electric.Shapes.Shape do
           storage: %{required(String.t()) => String.t()}
         }
 
+  def comparable(%__MODULE__{} = shape),
+    do: shape |> Map.drop([:table_info, :storage])
+
   def hash(%__MODULE__{} = shape),
-    do: shape |> Map.drop([:table_info, :storage]) |> :erlang.phash2()
+    do: shape |> comparable() |> :erlang.phash2()
 
   def generate_id(%__MODULE__{} = shape) do
     hash = hash(shape)
-    {hash, "#{hash}-#{DateTime.utc_now() |> DateTime.to_unix(:millisecond)}"}
+
+    # Use microseconds to essentially avoid collisions within the same millisecond when we have a hash collision
+    {hash, "#{hash}-#{DateTime.utc_now() |> DateTime.to_unix(:microsecond)}"}
   end
 
   @doc """
