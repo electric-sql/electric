@@ -54,6 +54,7 @@ describe(`Shape`, () => {
         table: issuesTableUrl,
       },
       signal: aborter.signal,
+      experimentalLiveSse: true,
     })
     const shape = new Shape(shapeStream)
 
@@ -92,6 +93,74 @@ describe(`Shape`, () => {
         table: issuesTableUrl,
       },
       signal: aborter.signal,
+    })
+    const shape = new Shape(shapeStream)
+    const rows = await shape.rows
+
+    expect(rows).toEqual(expectedValue1)
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
+    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
+
+    await sleep(105)
+    expect(shape.lastSynced()).toBeGreaterThanOrEqual(100)
+
+    // FIXME: might get notified before all changes are submitted
+    const intermediate = Date.now()
+    const hasNotified = new Promise((resolve) => {
+      shape.subscribe(resolve)
+    })
+    const [id2] = await insertIssues({ title: `other title` })
+    const [id3] = await insertIssues({ title: `other title2` })
+    await deleteIssue({ id: id3, title: `other title2` })
+    // Test an update too because we're sending patches that should be correctly merged in
+    await updateIssue({ id: id2, title: `new title` })
+    await waitForIssues({ numChangesExpected: 5 })
+    await vi.waitUntil(() => hasNotified)
+
+    const expectedValue2 = [
+      ...expectedValue1,
+      {
+        id: id2,
+        title: `new title`,
+        priority: 10,
+      },
+    ]
+
+    await vi.waitFor(() => expect(shape.currentRows).toEqual(expectedValue2))
+    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(intermediate)
+    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
+    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
+
+    shape.unsubscribeAll()
+  })
+
+  it(`should continually sync a shape/table also with SSE`, async ({
+    issuesTableUrl,
+    insertIssues,
+    deleteIssue,
+    updateIssue,
+    waitForIssues,
+    aborter,
+  }) => {
+    const [id] = await insertIssues({ title: `test title` })
+
+    const expectedValue1 = [
+      {
+        id: id,
+        title: `test title`,
+        priority: 10,
+      },
+    ]
+
+    const start = Date.now()
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      experimentalLiveSse: true,
     })
     const shape = new Shape(shapeStream)
     const rows = await shape.rows
@@ -176,7 +245,6 @@ describe(`Shape`, () => {
         table: issuesTableUrl,
       },
       signal: aborter.signal,
-      experimentalLiveSse: true,
       fetchClient: fetchWrapper,
     })
     const shape = new Shape(shapeStream)
@@ -206,7 +274,94 @@ describe(`Shape`, () => {
           )
           return resolve()
         }
-        throw new Error(`Received more data updates than expected`)
+        throw new Error(`Received more data updates (${dataUpdateCount}) than expected`)
+      })
+    })
+  })
+
+  it(`should resync from scratch on a shape rotation even with SSE`, async ({
+    issuesTableUrl,
+    insertIssues,
+    deleteIssue,
+    waitForIssues,
+    clearIssuesShape,
+    aborter,
+  }) => {
+    const id1 = uuidv4()
+    const id2 = uuidv4()
+    await insertIssues({ id: id1, title: `foo1` })
+
+    const expectedValue1 = [
+      {
+        id: id1,
+        title: `foo1`,
+        priority: 10,
+      },
+    ]
+
+    const expectedValue2 = [
+      {
+        id: id2,
+        title: `foo2`,
+        priority: 10,
+      },
+    ]
+
+    const start = Date.now()
+    let rotationTime: number = Infinity
+    let fetchPausePromise = Promise.resolve()
+    const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+      await fetchPausePromise
+      return await fetch(...args)
+    }
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      experimentalLiveSse: true,
+      fetchClient: fetchWrapper,
+    })
+    const shape = new Shape(shapeStream)
+    let dataUpdateCount = 0
+    await new Promise<void>((resolve, reject) => {
+      setTimeout(() => reject(`Timed out waiting for data changes`), 1000)
+      shape.subscribe(async ({ rows }) => {
+        dataUpdateCount++
+        if (dataUpdateCount === 1) {
+          expect(rows).toEqual(expectedValue1)
+          expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
+
+          // clear the shape and modify the data after the initial request
+          fetchPausePromise = Promise.resolve().then(async () => {
+            await deleteIssue({ id: id1, title: `foo1` })
+            await insertIssues({ id: id2, title: `foo2` })
+            await waitForIssues({ numChangesExpected: 3 })
+            await clearIssuesShape(shapeStream.shapeHandle)
+          })
+
+          rotationTime = Date.now()
+          return
+        } else if (dataUpdateCount === 2) {
+          // Delete of the first row is received
+          expect(rows).toEqual([])
+          expect(shape.lastSynced()).toBeLessThanOrEqual(
+            Date.now() - rotationTime
+          )
+          return
+        } else if (dataUpdateCount === 3) {
+          // Insert of the second row is received
+          expect(rows).toEqual(expectedValue2)
+          expect(shape.lastSynced()).toBeLessThanOrEqual(
+            Date.now() - rotationTime
+          )
+          return resolve()
+        }
+        throw new Error(
+          `Received more data updates (${dataUpdateCount}) than expected`
+        )
       })
     })
   })
