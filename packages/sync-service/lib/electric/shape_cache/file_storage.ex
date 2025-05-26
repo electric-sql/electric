@@ -191,11 +191,7 @@ defmodule Electric.ShapeCache.FileStorage do
       {:ok, shape_handles} ->
         shape_handles
         |> Enum.map(&for_shape(&1, opts))
-        |> Enum.map(fn fs ->
-          maybe_get_size(shape_definition_path(fs)) +
-            get_all_chunk_sizes(fs) +
-            maybe_get_size(CubDB.current_db_file(fs.db))
-        end)
+        |> Enum.map(&maybe_get_size(&1.data_dir))
         |> Enum.sum()
 
       _ ->
@@ -203,17 +199,22 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
-  defp get_all_chunk_sizes(%FS{} = opts) do
-    case File.ls(opts.snapshot_dir) do
-      {:ok, chunk_files} -> chunk_files |> Enum.map(&maybe_get_size/1) |> Enum.sum()
-      _ -> 0
-    end
-  end
-
   defp maybe_get_size(path) do
     case File.stat(path) do
-      {:ok, stat} -> stat.size
-      {:error, _} -> 0
+      {:ok, %File.Stat{type: :regular, size: size}} ->
+        size
+
+      {:ok, %File.Stat{type: :directory}} ->
+        case File.ls(path) do
+          {:ok, files} ->
+            files |> Enum.map(&maybe_get_size(Path.join(path, &1))) |> Enum.sum()
+
+          {:error, _} ->
+            0
+        end
+
+      _ ->
+        0
     end
   end
 
