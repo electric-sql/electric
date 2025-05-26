@@ -93,7 +93,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec add_shape(t(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   def add_shape(state, shape) do
-    {hash, shape_handle} = Shape.generate_id(shape)
+    {_, shape_handle} = Shape.generate_id(shape)
     # For fresh snapshots we're setting "latest" offset to be a highest possible virtual offset,
     # which is needed because while the snapshot is being made we DON'T update this ETS table.
     # We could, but that would required making the Storage know about this module and I don't like that.
@@ -103,7 +103,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert_new(
         state.shape_meta_table,
         [
-          {{@shape_hash_lookup, hash}, shape_handle},
+          {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
           {{@shape_meta_data, shape_handle}, shape, nil, offset,
            :erlang.monotonic_time(:microsecond)}
           | Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
@@ -176,9 +176,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec get_existing_shape(table(), Shape.t()) :: nil | {shape_handle(), LogOffset.t()}
   def get_existing_shape(meta_table, %Shape{} = shape) do
-    hash = Shape.hash(shape)
-
-    case :ets.select(meta_table, [{{{@shape_hash_lookup, hash}, :"$1"}, [true], [:"$1"]}]) do
+    case :ets.select(meta_table, [
+           {{{@shape_hash_lookup, Shape.comparable(shape)}, :"$1"}, [true], [:"$1"]}
+         ]) do
       [] ->
         nil
 
@@ -322,11 +322,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
         state.shape_meta_table,
         Enum.concat([
           Enum.flat_map(shapes, fn {shape_handle, shape} ->
-            hash = Shape.hash(shape)
             relations = Shape.list_relations(shape)
 
             [
-              {{@shape_hash_lookup, hash}, shape_handle},
+              {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
               {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first(),
                :erlang.monotonic_time(:microsecond)}
               | Enum.map(relations, fn {oid, _} ->

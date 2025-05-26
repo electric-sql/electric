@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCacheTest do
   use ExUnit.Case, async: true
   use Support.Mock
+  use Repatch.ExUnit
 
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
@@ -93,6 +94,31 @@ defmodule Electric.ShapeCacheTest do
       {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert shape_handle1 == shape_handle2
+    end
+
+    test "should not return the same shape_handle for different shapes despite hash collision", %{
+      shape_cache_opts: opts
+    } do
+      alias Electric.Replication.Eval.Parser
+
+      shape1 = @shape
+
+      shape2 = %Shape{
+        @shape
+        | where: Parser.parse_and_validate_expression!("id = 2", refs: %{["id"] => :int8})
+      }
+
+      # We're forcing a hash collision here via a patch to avoid writing a brittle test.
+      Repatch.patch(Shape, :hash, [mode: :shared], fn _ -> 1234 end)
+      Repatch.allow(self(), Process.whereis(opts[:server]))
+
+      # Ensure there's a collision
+      assert Shape.hash(shape1) == Shape.hash(shape2)
+
+      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape1, opts)
+      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, opts)
+
+      assert shape_handle1 != shape_handle2
     end
   end
 
