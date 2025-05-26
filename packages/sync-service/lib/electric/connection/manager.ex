@@ -455,8 +455,6 @@ defmodule Electric.Connection.Manager do
           exit(reason)
       end
 
-    dispatch_stack_event(:ready, state)
-
     # Remember the shape log collector pid for later because we want to tie the replication
     # client's lifetime to it.
     log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
@@ -483,6 +481,7 @@ defmodule Electric.Connection.Manager do
     # Everything is ready to start accepting and processing logical messages from Postgres.
     Logger.info("Starting replication from postgres")
     Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
+    dispatch_stack_event(:ready, state)
 
     state = %State{
       state
