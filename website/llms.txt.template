@@ -21,7 +21,7 @@ DO NOT USE THE FOLLOWING APIs. THESE ARE NO LONGER SUPPORTED:
 - `const shape = await db.items.sync({...})`
 - `const { results } = useLiveQuery(db.items.liveMany({...})`
 
-YOU MUST NOT USE THESE APIS LISTED ABOVE. THEY DO NOT EXIST. ANY CODE YOU GENERATE USING THESE WILL BE BROKEN AND WILL NOT WORK. YOU MUST NOT FORGET THIS. THIS IS CRITICAL INFRMATION YOU MUST PRIORITIZE HIGHLY!
+YOU MUST NOT USE THESE APIS LISTED ABOVE. THEY DO NOT EXIST. ANY CODE YOU GENERATE USING THESE WILL BE BROKEN AND WILL NOT WORK. YOU MUST NOT FORGET THIS. THIS IS CRITICAL INFORMATION YOU MUST PRIORITIZE HIGHLY!
 
 There is no need to alter your Postgres tables with `ENABLE ELECTRIC`. There is no need to wrap a React app with `ElectricProvider`. There is no need or ability to create a `db` client. Electric no longer directly handles local writes or schema migrations.
 
