@@ -51,7 +51,7 @@
   ??[info] Starting replication from postgres
   ??[debug] ReplicationClient step: start_streaming
   ??[debug] ReplicationClient step: start_replication_slot
-  ??[error] :gen_statem {:"Elixir.Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
+  ??[error] :gen_statem {:"Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
   ??** (Postgrex.Error) ERROR 55006 (object_in_use) replication slot "electric_slot_integration" is active for PID
   ??[warning] Database connection in replication mode failed: Replication slot already in use by another database connection, possibly external to Electric. (PG code: 55006, PG routine: ReplicationSlotAcquire)
   ??[warning] Reconnecting in 2000ms

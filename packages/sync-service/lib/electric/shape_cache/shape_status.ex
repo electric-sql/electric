@@ -150,13 +150,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
           @shape_meta_shape_pos
         )
 
-      hash = Shape.hash(shape)
-
       :ets.select_delete(
         state.shape_meta_table,
         [
           {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
-          {{{@shape_hash_lookup, hash}, shape_handle}, [], [true]},
+          {{{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle}, [], [true]},
           {{{@snapshot_started, shape_handle}, :_}, [], [true]}
           | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
               {{{@shape_relation_lookup, oid, shape_handle}, :_}, [], [true]}
