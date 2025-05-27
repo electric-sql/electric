@@ -97,9 +97,54 @@ defmodule Support.DbSetup do
     {:ok, %{pg_version: pg_version}}
   end
 
-  def with_shared_db(_ctx) do
-    config = Application.fetch_env!(:electric, :replication_connection_opts)
+  @doc """
+  Creates a database that is shared between all tests in the module
+  """
+  def with_shared_db(ctx) do
+    replication_config = Application.fetch_env!(:electric, :replication_connection_opts)
+    {:ok, utility_pool} = start_db_pool(replication_config)
+    Process.unlink(utility_pool)
+
+    on_exit(fn ->
+      Process.link(utility_pool)
+      GenServer.stop(utility_pool)
+    end)
+
+    full_db_name = inspect(ctx.module)
+    db_name_hash = small_hash(full_db_name)
+
+    # Truncate the database name to 63 characters, use hash to guarantee uniqueness
+    db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..50)}"
+    escaped_db_name = :binary.replace(db_name, ~s'"', ~s'""', [:global])
+
+    %Postgrex.Result{rows: [[exists]]} =
+      Postgrex.query!(
+        utility_pool,
+        "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)",
+        [db_name]
+      )
+
+    if not exists do
+      Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
+
+      Enum.each(database_settings(ctx), fn setting ->
+        Postgrex.query!(utility_pool, "ALTER DATABASE \"#{db_name}\" SET #{setting}", [])
+      end)
+
+      ExUnit.after_suite(fn _ ->
+        {:ok, utility_pool} = start_db_pool(replication_config)
+        drop_database(utility_pool, escaped_db_name)
+        GenServer.stop(utility_pool)
+      end)
+    end
+
+    config =
+      replication_config
+      |> Keyword.put(:database, db_name)
+      |> Keyword.merge(List.wrap(ctx[:connection_opt_overrides]))
+
     {:ok, pool} = start_db_pool(config)
+
     {:ok, %{pool: pool, db_config: config, db_conn: pool}}
   end
 
