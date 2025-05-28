@@ -4,32 +4,33 @@ defmodule PgInterop.Interval.PostgresAndSQLParser do
   """
   alias PgInterop.Interval
 
-  @parse_part_regexes [
-    unmarked_end: ~r/(?<=\s|^)(?<second>(?:\+|-)?\s*\d+(?:\.\d+)?)(?=\s*$)/,
-    microsecond:
-      ~r/(?<=\s|^)(?<microsecond>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:us|usecs?|microseconds?)(?=\s|$)/,
-    millisecond:
-      ~r/(?<=\s|^)(?<millisecond>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:ms|msecs?|milliseconds?)(?=\s|$)/,
-    second: ~r/(?<=\s|^)(?<second>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:s|secs?|seconds?)(?=\s|$)/,
-    minute: ~r/(?<=\s|^)(?<minute>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:m|mins?|minutes?)(?=\s|$)/,
-    hour: ~r/(?<=\s|^)(?<hour>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:h|hours?)(?=\s|$)/,
-    day: ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:d|days?)(?=\s|$)/,
-    week: ~r/(?<=\s|^)(?<week>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:w|weeks?)(?=\s|$)/,
-    month: ~r/(?<=\s|^)(?<month>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:m|mons?|months?)(?=\s|$)/,
-    year: ~r/(?<=\s|^)(?<year>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:y|years?)(?=\s|$)/,
-    decade: ~r/(?<=\s|^)(?<decade>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:decs?|decades?)(?=\s|$)/,
-    century:
-      ~r/(?<=\s|^)(?<century>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:c|cent|century|centuries)(?=\s|$)/,
-    millennium:
-      ~r/(?<=\s|^)(?<millennium>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:mils|millenniums)(?=\s|$)/,
-    sql_ym: ~r/(?<=\s|^)(?<sign>\+|-)?\s*(?<year>\d+)-(?<month>\-?\d+)(?=\s|$)/,
-    sql_dhm:
-      ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)?\s+(?<sign>\+|-)?\s*(?<hour>\d+):(?<minute>\d+)(?=\s|$)/,
-    sql_dhms:
-      ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)?\s+(?<sign>\+|-)?\s*(?<hour>\d+):(?<minute>\d+):(?<second>\d+(?:\.\d+)?)(?=\s|$)/,
-    sql_dms:
-      ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)?\s+(?<sign>\+|-)?\s*(?<minute>\d+):(?<second>\d+\.\d+)(?=\s|$)/
-  ]
+  defp parse_part_regexes,
+    do: [
+      unmarked_end: ~r/(?<=\s|^)(?<second>(?:\+|-)?\s*\d+(?:\.\d+)?)(?=\s*$)/,
+      microsecond:
+        ~r/(?<=\s|^)(?<microsecond>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:us|usecs?|microseconds?)(?=\s|$)/,
+      millisecond:
+        ~r/(?<=\s|^)(?<millisecond>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:ms|msecs?|milliseconds?)(?=\s|$)/,
+      second: ~r/(?<=\s|^)(?<second>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:s|secs?|seconds?)(?=\s|$)/,
+      minute: ~r/(?<=\s|^)(?<minute>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:m|mins?|minutes?)(?=\s|$)/,
+      hour: ~r/(?<=\s|^)(?<hour>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:h|hours?)(?=\s|$)/,
+      day: ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:d|days?)(?=\s|$)/,
+      week: ~r/(?<=\s|^)(?<week>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:w|weeks?)(?=\s|$)/,
+      month: ~r/(?<=\s|^)(?<month>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:m|mons?|months?)(?=\s|$)/,
+      year: ~r/(?<=\s|^)(?<year>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:y|years?)(?=\s|$)/,
+      decade: ~r/(?<=\s|^)(?<decade>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:decs?|decades?)(?=\s|$)/,
+      century:
+        ~r/(?<=\s|^)(?<century>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:c|cent|century|centuries)(?=\s|$)/,
+      millennium:
+        ~r/(?<=\s|^)(?<millennium>(?:\+|-)?\s*\d+(?:\.\d+)?)\s*(?:mils|millenniums)(?=\s|$)/,
+      sql_ym: ~r/(?<=\s|^)(?<sign>\+|-)?\s*(?<year>\d+)-(?<month>\-?\d+)(?=\s|$)/,
+      sql_dhm:
+        ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)?\s+(?<sign>\+|-)?\s*(?<hour>\d+):(?<minute>\d+)(?=\s|$)/,
+      sql_dhms:
+        ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)?\s+(?<sign>\+|-)?\s*(?<hour>\d+):(?<minute>\d+):(?<second>\d+(?:\.\d+)?)(?=\s|$)/,
+      sql_dms:
+        ~r/(?<=\s|^)(?<day>(?:\+|-)?\s*\d+(?:\.\d+)?)?\s+(?<sign>\+|-)?\s*(?<minute>\d+):(?<second>\d+\.\d+)(?=\s|$)/
+    ]
 
   @doc """
   Parses an Postgres classic and SQL formatted duration string into
@@ -105,7 +106,7 @@ defmodule PgInterop.Interval.PostgresAndSQLParser do
 
   def parse(str) do
     {parsed_parts, rest} =
-      Enum.map_reduce(@parse_part_regexes, str, fn {key, regex}, str ->
+      Enum.map_reduce(parse_part_regexes(), str, fn {key, regex}, str ->
         {{key, Regex.named_captures(regex, str)}, Regex.replace(regex, str, "")}
       end)
 
