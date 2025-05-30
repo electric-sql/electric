@@ -94,7 +94,7 @@ defmodule Electric.Postgres.LockConnection do
     # semantics.
     #
     # Issuing a statement that would cause a syntax error on a regular connection is a surefire
-    # to ensure the connection is running in the correct mode.
+    # way to ensure the connection is running in the correct mode.
     send(self(), :identify_system)
 
     {:noreply, state}
