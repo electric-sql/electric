@@ -132,6 +132,15 @@ defmodule Electric.DbConnectionError do
     maybe_database_does_not_exist(error) || unknown_error(error)
   end
 
+  def from_error(%Postgrex.Error{postgres: %{code: :syntax_error, pg_code: "42601"}} = error) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :syntax_error,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
   def from_error(error), do: unknown_error(error)
 
   def format_original_error(%DbConnectionError{original_error: error}) do
