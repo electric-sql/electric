@@ -52,17 +52,39 @@ export function createNeonDb({
 
   const ownerName = `neondb_owner`
 
-  const createCommand = `curl -f -s "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
-    -H 'Accept: application/json' \
-    -H "Authorization: Bearer $NEON_API_KEY" \
-    -H 'Content-Type: application/json' \
-    -d '{
-      "database": {
-        "name": "'$DATABASE_NAME'",
-        "owner_name": "${ownerName}"
-      }
-    }' \
-    && echo " SUCCESS" || echo " FAILURE"`
+  const createCommand = `
+    max_retries=10
+    retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+      response=$(curl -f -s -w "\\n%{http_code}" "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases" \
+        -H 'Accept: application/json' \
+        -H "Authorization: Bearer $NEON_API_KEY" \
+        -H 'Content-Type: application/json' \
+        -d '{
+          "database": {
+            "name": "'$DATABASE_NAME'",
+            "owner_name": "${ownerName}"
+          }
+        }' 2>/dev/null)
+      
+      status_code=$(echo "$response" | tail -n1)
+      
+      if [ "$status_code" = "423" ]; then
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -eq $max_retries ]; then
+          echo " Max retries reached"
+          echo " FAILURE"
+          exit 1
+        fi
+        # Random sleep between 1-5 seconds
+        sleep $((RANDOM % 5 + 1))
+        continue
+      fi
+      
+      echo " SUCCESS"
+      exit 0
+    done`
 
   const updateCommand = `echo "Cannot update Neon database with this provisioning method SUCCESS"`
 

@@ -11,7 +11,7 @@ export const Example = () => {
     params: {
       table: `items`,
       source_id: import.meta.env.VITE_ELECTRIC_SOURCE_ID,
-      source_secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
+      secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
     },
   })
 
