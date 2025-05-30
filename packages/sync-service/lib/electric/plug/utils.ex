@@ -71,7 +71,7 @@ defmodule Electric.Plug.Utils do
     next_interval = ceil(diff_in_seconds / long_poll_timeout_sec) * long_poll_timeout_sec
 
     if "#{next_interval}" == prev_interval do
-      next_interval + Enum.random(0..3_600)
+      next_interval + Enum.random(1..3_600)
     else
       next_interval
     end
