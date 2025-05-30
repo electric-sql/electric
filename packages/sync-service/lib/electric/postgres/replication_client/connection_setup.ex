@@ -55,32 +55,13 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp pg_info_query(state) do
     Logger.debug("ReplicationClient step: pg_info_query")
-
-    query = """
-    SELECT
-      current_setting('server_version_num') server_version_num,
-      (pg_control_system()).system_identifier,
-      (pg_control_checkpoint()).timeline_id
-    """
-
+    query = "SELECT current_setting('server_version_num') server_version_num"
     {:query, query, state}
   end
 
   defp pg_info_result([%Postgrex.Result{} = result], state) do
-    %{rows: [[version_str, system_identifier, timeline_id]]} = result
-
-    Logger.info(
-      "Postgres server version = #{version_str}, " <>
-        "system identifier = #{system_identifier}, " <>
-        "timeline_id = #{timeline_id}"
-    )
-
-    Electric.Connection.Manager.pg_info_looked_up(
-      state.connection_manager,
-      {String.to_integer(version_str), system_identifier, timeline_id}
-    )
-
-    state
+    %{rows: [[version_str]]} = result
+    {%{server_version_num: String.to_integer(version_str)}, state}
   end
 
   defp create_publication_query(state) do

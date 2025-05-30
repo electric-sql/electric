@@ -111,6 +111,8 @@ defmodule Electric.Connection.Manager do
       :pg_system_identifier,
       # PostgreSQL timeline ID
       :pg_timeline_id,
+      # PostgreSQL's current WAL flush position at lock connection startup
+      :pg_wal_flush_lsn,
       # ID used for process labeling and sibling discovery
       :stack_id,
       # Registry used for stack events
@@ -212,8 +214,12 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :replication_client_streamed_first_message)
   end
 
-  def pg_info_looked_up(manager, pg_info) do
-    GenServer.cast(manager, {:pg_info_looked_up, pg_info})
+  def pg_system_info_obtained(manager, system_info) do
+    GenServer.cast(manager, {:pg_system_info_obtained, system_info})
+  end
+
+  def pg_info_obtained(manager, pg_info) do
+    GenServer.cast(manager, {:pg_info_obtained, pg_info})
   end
 
   # Used for testing the responsiveness of the manager process
@@ -832,24 +838,35 @@ defmodule Electric.Connection.Manager do
     {:noreply, state}
   end
 
-  def handle_cast({:pg_info_looked_up, {server_version, system_identifier, timeline_id}}, state) do
+  def handle_cast({:pg_system_info_obtained, info}, state) do
+    {:noreply,
+     %State{
+       state
+       | pg_system_identifier: info.system_identifier,
+         pg_timeline_id: info.timeline_id,
+         pg_wal_flush_lsn: info.current_wal_flush_lsn
+     }}
+  end
+
+  def handle_cast({:pg_info_obtained, %{server_version_num: server_version}}, state) do
+    Logger.info(
+      "Postgres server version = #{server_version}, " <>
+        "system identifier = #{state.pg_system_identifier}, " <>
+        "timeline_id = #{state.pg_timeline_id}"
+    )
+
     :telemetry.execute(
       [:electric, :postgres, :info_looked_up],
       %{
         pg_version: server_version,
-        pg_system_identifier: system_identifier,
-        pg_timeline_id: timeline_id
+        pg_system_identifier: state.pg_system_identifier,
+        pg_timeline_id: state.pg_timeline_id,
+        pg_wal_flush_lsn: state.pg_wal_flush_lsn
       },
       %{stack_id: state.stack_id}
     )
 
-    {:noreply,
-     %State{
-       state
-       | pg_version: server_version,
-         pg_system_identifier: system_identifier,
-         pg_timeline_id: timeline_id
-     }}
+    {:noreply, %State{state | pg_version: server_version}}
   end
 
   @impl true

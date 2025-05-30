@@ -36,11 +36,23 @@ defmodule Electric.Postgres.LockConnection do
   def start_link(opts) do
     {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
 
+    # Start the lock connection in logical replication mode to side-step any connection pooler
+    # that may be sitting between us and the Postgres server.
+    #
+    # We cannot get desired semantics of session-level advisory locks when connecting to
+    # Postgres through a pooler that runs in transaction mode (such as PGBouncer running in
+    # front of Neon). Starting a connection in replication mode ensures that it will be a
+    # direct connection to the database, so it can take a session-level advisory lock whose
+    # lifetime will be tied to the connection's lifetime.
+    connection_opts =
+      connection_opts
+      |> Electric.Utils.deobfuscate_password()
+      |> connection_opts_with_logical_replication()
+
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      [timeout: :infinity, auto_reconnect: false, sync_connect: false] ++
-        Electric.Utils.deobfuscate_password(connection_opts)
+      [timeout: :infinity, auto_reconnect: false, sync_connect: false] ++ connection_opts
     )
   end
 
@@ -58,6 +70,8 @@ defmodule Electric.Postgres.LockConnection do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
+    Logger.debug("Opening lock connection")
+
     state = %State{
       connection_manager: opts.connection_manager,
       lock_name: opts.lock_name,
@@ -71,11 +85,26 @@ defmodule Electric.Postgres.LockConnection do
   @impl true
   def handle_connect(state) do
     notify_connection_opened(state)
-    send(self(), :acquire_lock)
+
+    # Verify that the connection has been opened in replication mode.
+    #
+    # If there's a pooler running in front of the Postgres server, it may have simply ignored
+    # the replication=database connection parameter, defeating the purpose of us requesting the
+    # replication mode in the first place which is to get the desired session-level locking
+    # semantics.
+    #
+    # Issuing a statement that would cause a syntax error on a regular connection is a surefire
+    # way to ensure the connection is running in the correct mode.
+    send(self(), :identify_system)
+
     {:noreply, state}
   end
 
   @impl true
+  def handle_info(:identify_system, state) do
+    {:query, "IDENTIFY_SYSTEM", state}
+  end
+
   def handle_info(:acquire_lock, state) do
     if state.lock_acquired do
       notify_lock_acquired(state)
@@ -91,6 +120,32 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   @impl true
+  def handle_result([%Postgrex.Result{command: :identify} = result], state) do
+    # [db] postgres:postgres=> IDENTIFY_SYSTEM;
+    #       systemid       │ timeline │  xlogpos  │  dbname
+    # ─────────────────────┼──────────┼───────────┼──────────
+    #  7506979529870965272 │        1 │ 0/220AE10 │ postgres
+    # (1 row)
+    [[systemid, timeline, xlogpos, _dbname]] = result.rows
+
+    notify_system_identified(state, %{
+      system_identifier: systemid,
+      timeline_id: timeline,
+      current_wal_flush_lsn: xlogpos
+    })
+
+    # Now proceed to the actual lock acquisition.
+    send(self(), :acquire_lock)
+
+    {:noreply, state}
+  end
+
+  def handle_result(%Postgrex.Error{postgres: %{code: :syntax_error}} = error, _state) do
+    # Postgrex.SimpleConnection does not support {:stop, ...} or {:shutdown, ...} return values
+    # from callback functions, so we raise here and let the connection manager handle the error.
+    raise error
+  end
+
   def handle_result([%Postgrex.Result{columns: ["pg_advisory_lock"]}], state) do
     Logger.info("Lock acquired from postgres with name #{state.lock_name}")
     notify_lock_acquired(state)
@@ -114,6 +169,10 @@ defmodule Electric.Postgres.LockConnection do
 
   defp notify_connection_opened(%State{connection_manager: manager}) do
     Connection.Manager.lock_connection_started(manager)
+  end
+
+  defp notify_system_identified(%State{connection_manager: manager}, info) do
+    Connection.Manager.pg_system_info_obtained(manager, info)
   end
 
   defp notify_lock_acquisition_error(error, %State{connection_manager: manager}) do
@@ -143,4 +202,12 @@ defmodule Electric.Postgres.LockConnection do
        do: true
 
   defp is_expected_error?(_), do: false
+
+  defp connection_opts_with_logical_replication(connection_opts) do
+    update_in(
+      connection_opts,
+      [:parameters],
+      fn params -> params |> List.wrap() |> Keyword.put(:replication, "database") end
+    )
+  end
 end
