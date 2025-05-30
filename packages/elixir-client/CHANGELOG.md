@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.5.1
+
+### Patch Changes
+
+- 0928065: Allow for using a custom Finch pool in the Elixir client
+
 ## 0.5.0
 
 ### Minor Changes
