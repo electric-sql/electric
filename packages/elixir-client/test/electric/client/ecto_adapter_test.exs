@@ -9,6 +9,7 @@ defmodule Electric.Client.EctoAdapterTest do
   alias Electric.Client
   alias Electric.Client.EctoAdapter
   alias Electric.Client.Message
+  alias Support.Money
   import Support.DbSetup
 
   @table_name Electric.Client.EctoAdapterTest.Config.table_name()
@@ -25,6 +26,7 @@ defmodule Electric.Client.EctoAdapterTest do
       field(:name, :string)
       field(:amount, :integer)
       field(:price, :decimal, source: :cost)
+      field(:net_price, Money)
       field(:visible, :boolean, default: true)
       timestamps()
     end
@@ -39,6 +41,7 @@ defmodule Electric.Client.EctoAdapterTest do
       field(:name, :string)
       field(:amount, :integer)
       field(:price, :decimal, source: :cost)
+      field(:net_price, Money)
       field(:visible, :boolean, default: true)
       timestamps()
     end
@@ -59,6 +62,7 @@ defmodule Electric.Client.EctoAdapterTest do
       {"name", "varchar(255)"},
       {"amount", "int4"},
       {"cost", "numeric"},
+      {"net_price", "int8"},
       {"visible", "boolean default true"},
       {"inserted_at", "timestamp without time zone"},
       {"updated_at", "timestamp without time zone"}
@@ -96,11 +100,18 @@ defmodule Electric.Client.EctoAdapterTest do
     end
 
     test "with where clause", %{column_names: column_names} = _ctx do
-      query = from(t in TestTable, where: t.price < 2.0 and t.amount > 3, select: t)
+      price1 = Decimal.new("2.0")
+      net_price1 = Decimal.new("2.5")
+
+      query =
+        from(t in TestTable,
+          where: t.price < ^price1 and t.net_price < ^net_price1 and t.amount > 3,
+          select: t
+        )
 
       assert %Electric.Client.ShapeDefinition{
                table: @table_name,
-               where: ~s[(("cost" < 2.0) AND ("amount" > 3))],
+               where: ~s[((("cost" < 2.0) AND ("net_price" < 2500000)) AND ("amount" > 3))],
                columns: ^column_names,
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(query)
@@ -150,6 +161,7 @@ defmodule Electric.Client.EctoAdapterTest do
                "name" => "my name",
                "amount" => "123",
                "cost" => "7.99",
+               "net_price" => "8990000",
                "visible" => "true",
                "inserted_at" => "2016-03-24 17:53:17+00",
                "updated_at" => "2017-04-28 18:54:18+00"
@@ -160,6 +172,7 @@ defmodule Electric.Client.EctoAdapterTest do
                name: "my name",
                visible: true,
                price: Decimal.new("7.99"),
+               net_price: Decimal.new("8.99"),
                updated_at: ~N[2017-04-28 18:54:18]
              }
     end
@@ -183,23 +196,27 @@ defmodule Electric.Client.EctoAdapterTest do
         )
 
       price1 = Decimal.new("7.99")
+      net_price1 = Decimal.new("8.99")
 
       value1 = %TestTable{
         id: "ecceb448-64ed-4279-9aea-795d2ae70153",
         amount: 123,
         name: "my name",
         visible: true,
-        price: price1
+        price: price1,
+        net_price: net_price1
       }
 
       price2 = Decimal.new("129.99")
+      net_price2 = Decimal.new("130.99")
 
       value2 = %TestTable{
         id: "1c493c89-ce0e-4816-a9e0-8704f21d2d09",
         amount: 387,
         name: "precious thing",
         visible: false,
-        price: price2
+        price: price2,
+        net_price: net_price2
       }
 
       Support.Repo.insert(value1)
@@ -214,6 +231,7 @@ defmodule Electric.Client.EctoAdapterTest do
                name: "my name",
                visible: true,
                price: ^price1,
+               net_price: ^net_price1,
                inserted_at: %NaiveDateTime{},
                updated_at: %NaiveDateTime{}
              } = message.value
@@ -226,6 +244,7 @@ defmodule Electric.Client.EctoAdapterTest do
                name: "precious thing",
                visible: false,
                price: ^price2,
+               net_price: ^net_price2,
                inserted_at: %NaiveDateTime{},
                updated_at: %NaiveDateTime{}
              } = message.value
