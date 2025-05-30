@@ -126,11 +126,13 @@ defmodule Electric.Postgres.LockConnection do
     # ─────────────────────┼──────────┼───────────┼──────────
     #  7506979529870965272 │        1 │ 0/220AE10 │ postgres
     # (1 row)
-    [[systemid, timeline_id, xlogpos, dbname]] = result.rows
+    [[systemid, timeline, xlogpos, _dbname]] = result.rows
 
-    Logger.info(
-      "Postgres unique system ID = #{systemid}, Timeline ID= #{timeline_id}, xlogpos = #{xlogpos}, dbname = #{dbname}"
-    )
+    notify_system_identified(state, %{
+      system_identifier: systemid,
+      timeline_id: timeline,
+      current_wal_flush_lsn: xlogpos
+    })
 
     # Now proceed to the actual lock acquisition.
     send(self(), :acquire_lock)
@@ -138,12 +140,7 @@ defmodule Electric.Postgres.LockConnection do
     {:noreply, state}
   end
 
-  def handle_result(
-        %Postgrex.Error{
-          postgres: %{code: :syntax_error, message: "syntax error at or near \"IDENTIFY_SYSTEM\""}
-        } = error,
-        _state
-      ) do
+  def handle_result(%Postgrex.Error{postgres: %{code: :syntax_error}} = error, _state) do
     # Postgrex.SimpleConnection does not support {:stop, ...} or {:shutdown, ...} return values
     # from callback functions, so we raise here and let the connection manager handle the error.
     raise error
@@ -172,6 +169,10 @@ defmodule Electric.Postgres.LockConnection do
 
   defp notify_connection_opened(%State{connection_manager: manager}) do
     Connection.Manager.lock_connection_started(manager)
+  end
+
+  defp notify_system_identified(%State{connection_manager: manager}, info) do
+    Connection.Manager.pg_system_info_obtained(manager, info)
   end
 
   defp notify_lock_acquisition_error(error, %State{connection_manager: manager}) do
