@@ -70,6 +70,8 @@ defmodule Electric.Postgres.LockConnection do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
+    Logger.debug("Opening lock connection")
+
     state = %State{
       connection_manager: opts.connection_manager,
       lock_name: opts.lock_name,
@@ -83,11 +85,26 @@ defmodule Electric.Postgres.LockConnection do
   @impl true
   def handle_connect(state) do
     notify_connection_opened(state)
-    send(self(), :acquire_lock)
+
+    # Verify that the connection has been opened in replication mode.
+    #
+    # If there's a pooler running in front of the Postgres server, it may have simply ignored
+    # the replication=database connection parameter, defeating the purpose of us requesting the
+    # replication mode in the first place which is to get the desired session-level locking
+    # semantics.
+    #
+    # Issuing a statement that would cause a syntax error on a regular connection is a surefire
+    # to ensure the connection is running in the correct mode.
+    send(self(), :identify_system)
+
     {:noreply, state}
   end
 
   @impl true
+  def handle_info(:identify_system, state) do
+    {:query, "IDENTIFY_SYSTEM", state}
+  end
+
   def handle_info(:acquire_lock, state) do
     if state.lock_acquired do
       notify_lock_acquired(state)
@@ -103,6 +120,35 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   @impl true
+  def handle_result([%Postgrex.Result{command: :identify} = result], state) do
+    # [db] postgres:postgres=> IDENTIFY_SYSTEM;
+    #       systemid       │ timeline │  xlogpos  │  dbname
+    # ─────────────────────┼──────────┼───────────┼──────────
+    #  7506979529870965272 │        1 │ 0/220AE10 │ postgres
+    # (1 row)
+    [[systemid, timeline_id, xlogpos, dbname]] = result.rows
+
+    Logger.info(
+      "Postgres unique system ID = #{systemid}, Timeline ID= #{timeline_id}, xlogpos = #{xlogpos}, dbname = #{dbname}"
+    )
+
+    # Now proceed to the actual lock acquisition.
+    send(self(), :acquire_lock)
+
+    {:noreply, state}
+  end
+
+  def handle_result(
+        %Postgrex.Error{
+          postgres: %{code: :syntax_error, message: "syntax error at or near \"IDENTIFY_SYSTEM\""}
+        } = error,
+        _state
+      ) do
+    # Postgrex.SimpleConnection does not support {:stop, ...} or {:shutdown, ...} return values
+    # from callback functions, so we raise here and let the connection manager handle the error.
+    raise error
+  end
+
   def handle_result([%Postgrex.Result{columns: ["pg_advisory_lock"]}], state) do
     Logger.info("Lock acquired from postgres with name #{state.lock_name}")
     notify_lock_acquired(state)
