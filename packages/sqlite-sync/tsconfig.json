@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@electric-sql/sqlite-sync": ["./src"],
+      "@electric-sql/client": ["../typescript-client/src"],
+      "@electric-sql/experimental": ["../experimental/src"]
+    },
+    "lib": ["ESNext", "DOM"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
