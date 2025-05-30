@@ -36,11 +36,23 @@ defmodule Electric.Postgres.LockConnection do
   def start_link(opts) do
     {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
 
+    # Start the lock connection in logical replication mode to side-step any connection pooler
+    # that may be sitting between us and the Postgres server.
+    #
+    # We cannot get desired semantics of session-level advisory locks when connecting to
+    # Postgres through a pooler that runs in transaction mode (such as PGBouncer running in
+    # front of Neon). Starting a connection in replication mode ensures that it will be a
+    # direct connection to the database, so it can take a session-level advisory lock whose
+    # lifetime will be tied to the connection's lifetime.
+    connection_opts =
+      connection_opts
+      |> Electric.Utils.deobfuscate_password()
+      |> connection_opts_with_logical_replication()
+
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      [timeout: :infinity, auto_reconnect: false, sync_connect: false] ++
-        Electric.Utils.deobfuscate_password(connection_opts)
+      [timeout: :infinity, auto_reconnect: false, sync_connect: false] ++ connection_opts
     )
   end
 
@@ -143,4 +155,12 @@ defmodule Electric.Postgres.LockConnection do
        do: true
 
   defp is_expected_error?(_), do: false
+
+  defp connection_opts_with_logical_replication(connection_opts) do
+    update_in(
+      connection_opts,
+      [:parameters],
+      fn params -> params |> List.wrap() |> Keyword.put(:replication, "database") end
+    )
+  end
 end
