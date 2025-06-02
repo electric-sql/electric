@@ -50,6 +50,10 @@ defmodule Electric.Postgres.Configuration do
 
       used_filters = Map.drop(new_filters, changed_relations)
 
+      Logger.debug(
+        "Altering publication (pg version #{inspect(pg_version)})\n - changed relations: #{inspect(changed_relations, limit: :infinity)}\n - using filters #{inspect(used_filters, limit: :infinity)}"
+      )
+
       if pg_version < @pg_15 do
         alter_pub_set_whole_tables!(conn, publication_name, used_filters)
       else
@@ -65,6 +69,10 @@ defmodule Electric.Postgres.Configuration do
     end)
     |> case do
       {:ok, missing_relations} ->
+        Logger.debug(
+          "Configured publication, with missing relations #{inspect(missing_relations)}"
+        )
+
         missing_relations
 
       {:error, reason} ->

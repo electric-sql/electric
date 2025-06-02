@@ -251,6 +251,8 @@ defmodule Electric.Replication.PublicationManager do
       ) do
     state = %{state | scheduled_updated_ref: nil, retries: 0}
 
+    Logger.debug("Trying to update publication, with state #{inspect(state, limit: :infinity)}")
+
     case update_publication(state) do
       {:ok, state, missing_relations} ->
         if missing_relations != [] do
@@ -283,6 +285,7 @@ defmodule Electric.Replication.PublicationManager do
         state = reply_to_waiters({:error, err}, state)
         {:noreply, %{state | next_update_forced?: false}}
     end
+    |> tap(&Logger.debug("Updated publication, with result #{inspect(&1, limit: :infinity)}"))
   end
 
   @spec schedule_update_publication(timeout(), boolean(), state()) :: state()
