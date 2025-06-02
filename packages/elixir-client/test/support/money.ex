@@ -21,7 +21,7 @@ defmodule Support.Money do
   end
 
   def load(nil, _, _), do: {:ok, nil}
-  def load(val, _, _), do: :error
+  def load(_, _, _), do: :error
 
   @impl Ecto.ParameterizedType
   def dump(%Decimal{} = decimal_val, _, _) do
