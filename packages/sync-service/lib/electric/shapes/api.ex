@@ -802,6 +802,18 @@ defmodule Electric.Shapes.Api do
     encode(api, :log, stream)
   end
 
+  # Error messages are encoded normally, even when using SSE
+  # because they are returned on the original fetch request
+  # with a status code that is not 2xx.
+  @spec encode_error_message(Api.t() | Request.t(), term()) :: Enum.t()
+  def encode_error_message(%Api{} = api, message) do
+    encode(api, :message, message)
+  end
+
+  def encode_error_message(%Request{api: api}, message) do
+    encode(api, :message, message)
+  end
+
   @spec encode_message(Request.t(), term()) :: Enum.t()
   def encode_message(
         %Request{api: api, params: %{live: true, experimental_live_sse: true}},
