@@ -122,6 +122,35 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(%Postgrex.Error{postgres: %{code: :admin_shutdown, severity: "FATAL"}} = error) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :database_server_shutting_down,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(
+        %Postgrex.Error{postgres: %{code: :cannot_connect_now, severity: "FATAL"}} = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :database_server_unavailable,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(%Postgrex.Error{message: "ssl not available"} = error) do
+    %DbConnectionError{
+      message: "Database server not configured to accept SSL connections",
+      type: :connection_closed,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
     maybe_database_does_not_exist(error) || unknown_error(error)
   end
