@@ -26,7 +26,7 @@ interface Header {
 export type Operation = `insert` | `update` | `delete`
 
 export type ControlMessage = {
-  headers: Header & { control: `up-to-date` | `must-refetch` }
+  headers: Header & { control: `up-to-date` | `must-refetch`, global_last_seen_lsn?: string }
 }
 
 export type ChangeMessage<T extends Row<unknown> = Row> = {

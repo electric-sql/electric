@@ -7,7 +7,7 @@ import {
   GetExtensions,
 } from './types'
 import { MessageParser, Parser } from './parser'
-import { isUpToDateMessage } from './helpers'
+import { getOffset, isUpToDateMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -627,6 +627,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (batch.length > 0) {
       const lastMessage = batch[batch.length - 1]
       if (isUpToDateMessage(lastMessage)) {
+        if (this.options.experimentalLiveSse) {
+          const offset = getOffset(lastMessage)
+          if (offset) {
+            this.#lastOffset = offset
+          }
+        }
         this.#lastSyncedAt = Date.now()
         this.#isUpToDate = true
       }
