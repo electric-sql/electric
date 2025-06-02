@@ -184,10 +184,14 @@ defmodule Electric.Postgres.ReplicationClient do
     {current_step, next_step, extra_info, return_val} =
       ConnectionSetup.process_query_result(result_list_or_error, state)
 
+    if current_step == :query_pg_info,
+      do: notify_pg_info_obtained(state, extra_info)
+
     if current_step == :create_slot and extra_info == :created_new_slot,
       do: notify_created_new_slot(state)
 
-    if next_step == :ready_to_stream, do: notify_ready_to_stream(state)
+    if next_step == :ready_to_stream,
+      do: notify_ready_to_stream(state)
 
     return_val
   end
@@ -375,25 +379,28 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp update_applied_wal(state, wal) when is_number(wal), do: state
 
-  defp notify_connection_opened(%State{connection_manager: connection_manager} = state) do
-    :ok = Electric.Connection.Manager.replication_client_started(connection_manager)
+  defp notify_connection_opened(%State{connection_manager: manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_started(manager)
     state
   end
 
-  defp notify_created_new_slot(%State{connection_manager: connection_manager} = state) do
-    :ok = Electric.Connection.Manager.replication_client_created_new_slot(connection_manager)
+  defp notify_pg_info_obtained(%State{connection_manager: manager} = state, pg_info) do
+    :ok = Electric.Connection.Manager.pg_info_obtained(manager, pg_info)
     state
   end
 
-  defp notify_ready_to_stream(%State{connection_manager: connection_manager} = state) do
-    :ok = Electric.Connection.Manager.replication_client_ready_to_stream(connection_manager)
+  defp notify_created_new_slot(%State{connection_manager: manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_created_new_slot(manager)
     state
   end
 
-  defp notify_seen_first_message(%State{connection_manager: connection_manager} = state) do
-    :ok =
-      Electric.Connection.Manager.replication_client_streamed_first_message(connection_manager)
+  defp notify_ready_to_stream(%State{connection_manager: manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_ready_to_stream(manager)
+    state
+  end
 
+  defp notify_seen_first_message(%State{connection_manager: manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_streamed_first_message(manager)
     state
   end
 end
