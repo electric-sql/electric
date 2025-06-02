@@ -42,7 +42,21 @@ if Code.ensure_loaded?(Ecto) do
     defp handle_call(fun, _arity), do: {:fun, Atom.to_string(fun)}
 
     def where(%{wheres: wheres} = query, sources, bindings) do
-      boolean("", wheres, sources, query, bindings)
+      processed_bindings = process_bindings(query, bindings)
+      boolean("", wheres, sources, query, processed_bindings)
+    end
+
+    defp process_bindings(%{wheres: wheres} = query, bindings) do
+      type_map =
+        wheres
+        |> Enum.flat_map(&collect_param_types(&1.expr, query))
+        |> Map.new()
+
+      bindings
+      |> Enum.with_index(1)
+      |> Enum.map(fn {val, idx} ->
+        dump_binding(Map.get(type_map, idx), val)
+      end)
     end
 
     defp boolean(_name, [], _sources, _query, _bindings), do: []
@@ -452,5 +466,87 @@ if Code.ensure_loaded?(Ecto) do
       |> Enum.at(idx - 1)
       |> bound_value()
     end
+
+    defp collect_param_types(
+           {op, _, [{{:., _, [{:&, _, [_]}, field]}, _, []}, {:^, _, [ix]}]},
+           %{from: %Ecto.Query.FromExpr{source: {_, schema_mod}}}
+         )
+         when op in @binary_ops and is_atom(field) do
+      ecto_type = schema_mod.__schema__(:type, field)
+      [{ix, ecto_type}]
+    end
+
+    defp collect_param_types({:fragment, _, parts}, query) do
+      Enum.flat_map(parts, &collect_fragment_part_types(&1, parts, query))
+    end
+
+    defp collect_param_types({_, _, args}, query) when is_list(args) do
+      Enum.flat_map(args, &collect_param_types(&1, query))
+    end
+
+    defp collect_param_types(_, _), do: []
+
+    defp collect_fragment_part_types(
+           {:expr, {:splice, _, [{:^, _, [idx, length]}]}},
+           parts,
+           query
+         ) do
+      case find_field_type_in_fragment(parts, query) do
+        nil -> []
+        field_type -> Enum.map(idx..(idx + length - 1), &{&1, field_type})
+      end
+    end
+
+    defp collect_fragment_part_types(
+           {:expr, {:^, _, [idx]}},
+           parts,
+           query
+         ) do
+      case find_field_type_in_fragment(parts, query) do
+        nil -> []
+        field_type -> [{idx, field_type}]
+      end
+    end
+
+    defp collect_fragment_part_types({:raw, _}, _, _), do: []
+
+    defp collect_fragment_part_types({:expr, expr}, _, query),
+      do: collect_param_types(expr, query)
+
+    defp find_field_type_in_fragment(fragment_parts, query) do
+      Enum.find_value(fragment_parts, fn
+        {:expr, {{:., _, [{:&, _, [0]}, field]}, _, []}} when is_atom(field) ->
+          case query do
+            %{from: %Ecto.Query.FromExpr{source: {_, schema_mod}}} ->
+              schema_mod.__schema__(:type, field)
+
+            _ ->
+              nil
+          end
+
+        _ ->
+          nil
+      end)
+    end
+
+    defp dump_binding(type, {value, _}) when is_list(value) do
+      Enum.map(value, &dump_binding(type, &1))
+    end
+
+    defp dump_binding({:parameterized, _} = type, {value, _}) do
+      case Ecto.Type.dump(type, value) do
+        {:ok, dumped} when is_binary(dumped) and byte_size(dumped) == 16 ->
+          {Ecto.UUID.load!(dumped), dumped}
+
+        {:ok, dumped} ->
+          {dumped, dumped}
+
+        :error ->
+          raise ArgumentError,
+                "cannot dump value #{inspect(value)} for type #{inspect(type)}"
+      end
+    end
+
+    defp dump_binding(_, value), do: value
   end
 end

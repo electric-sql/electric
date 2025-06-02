@@ -99,6 +99,25 @@ if Code.ensure_loaded?(Ecto) do
       end
     end
 
+    defp cast_to({:parameterized, {_, _}} = type) do
+      fn
+        nil ->
+          nil
+
+        value ->
+          decoded_value =
+            case Jason.decode(value) do
+              {:ok, decoded} -> decoded
+              {:error, _} -> value
+            end
+
+          case Ecto.Type.load(type, decoded_value) do
+            {:ok, loaded} -> loaded
+            :error -> raise Ecto.CastError, type: type, value: value
+          end
+      end
+    end
+
     defp cast_to(type) do
       fn
         nil -> nil
