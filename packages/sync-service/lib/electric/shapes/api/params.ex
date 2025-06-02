@@ -45,6 +45,11 @@ defmodule Electric.Shapes.Api.Params do
     field(:handle, :string)
     field(:live, :boolean, default: false)
     field(:where, :string)
+
+    # XXX
+    field(:order_by, :string)
+    field(:limit, :integer)
+
     field(:columns, ColumnList)
     field(:shape_definition, :string)
     field(:replica, Ecto.Enum, values: [:default, :full], default: :default)
@@ -169,6 +174,8 @@ defmodule Electric.Shapes.Api.Params do
   defp define_shape(%Ecto.Changeset{} = changeset, api) do
     table = fetch_change!(changeset, :table)
     where = fetch_field!(changeset, :where)
+    order_by = fetch_field!(changeset, :order_by)
+    limit = fetch_field!(changeset, :limit)
     columns = get_change(changeset, :columns, nil)
     replica = fetch_field!(changeset, :replica)
     params = fetch_field!(changeset, :params)
@@ -177,6 +184,8 @@ defmodule Electric.Shapes.Api.Params do
     case Shape.new(
            table,
            where: where,
+           order_by: order_by,
+           limit: limit,
            params: params,
            columns: columns,
            replica: replica,

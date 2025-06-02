@@ -27,10 +27,20 @@ defmodule Electric.Shapes.Querying do
       where =
         if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
 
+      order_by =
+        if not is_nil(shape.order_by), do: " ORDER BY " <> shape.order_by, else: ""
+
+      limit =
+        if not is_nil(shape.limit), do: " LIMIT #{shape.limit} ", else: ""
+
       {json_like_select, params} = json_like_select(shape)
 
       query =
-        Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
+        Postgrex.prepare!(
+          conn,
+          table,
+          ~s|SELECT #{json_like_select} FROM #{table} #{where} #{order_by} #{limit}|
+        )
 
       Postgrex.stream(conn, query, params)
       |> Stream.flat_map(& &1.rows)
