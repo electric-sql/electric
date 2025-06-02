@@ -29,10 +29,7 @@ const blogSidebarItems = await posts.map(post => ({
 export default defineConfig({
   lang: 'en',
   title: "ElectricSQL",
-  description: `
-    Electric is a Postgres sync engine. It solves the
-    hard problems of sync so that you don't have to.
-  `,
+  description: "Electric is a Postgres sync engine. It solves the hard problems of sync so that you don't have to.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
