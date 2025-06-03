@@ -239,6 +239,15 @@ defmodule Electric.Client do
           endpoint: URI.t(),
           fetch: {module(), term()}
         }
+  if Code.ensure_loaded?(Ecto) do
+    @type ecto_shape() :: Ecto.Queryable.t() | Ecto.Changeset.t() | (map() -> Ecto.Changeset.t())
+
+    # queryable is a schema module, an ecto query, a function that returns a changeset
+    # or a changeset
+    defguardp is_ecto_shape(ecto_queryable)
+              when is_atom(ecto_queryable) or is_struct(ecto_queryable, Ecto.Query) or
+                     is_function(ecto_queryable, 1) or is_struct(ecto_queryable, Ecto.Changeset)
+  end
 
   @doc """
   Create a new client.
@@ -356,6 +365,20 @@ defmodule Electric.Client do
       end
     end
 
+    defp validate_queryable!(%Ecto.Query{} = query), do: query
+    defp validate_queryable!(%Ecto.Changeset{} = changeset), do: changeset
+
+    defp validate_queryable!(changeset_fun) when is_function(changeset_fun, 1) do
+      changeset_fun.(%{})
+      |> validate_queryable!()
+    end
+
+    defp validate_queryable!(other) do
+      raise ArgumentError,
+        message:
+          "Expected an Ecto.Schema module, %Ecto.Query{} struct, a 1-arity function returning an %Ecto.Changeset{} or an %Ecto.Changeset{} but got #{inspect(other)}"
+    end
+
     @doc """
     Create a [`ShapeDefinition`](`Electric.Client.ShapeDefinition`) from an `Ecto` query.
 
@@ -364,20 +387,26 @@ defmodule Electric.Client do
 
         iex> query = from(t in MyApp.Todo, where: t.completed == false)
         iex> Elixir.Client.shape!(query)
-        %Electric.Client.ShapeDefinition{table: "todos" where: "(\\"completed\\" = FALSE)"}
+        %Electric.Client.ShapeDefinition{table: "todos", where: "(\\"completed\\" = FALSE)"}
+
+    Also takes an `Ecto.Changeset` or 1-arity function returning an `Ecto.Changeset`:
+
+        iex> Elixir.Client.shape!(&MyApp.Todo.changeset/1)
+        %Electric.Client.ShapeDefinition{table: "todos", columns: ["title", "completed"]}
+
+    Passing a changeset will filter the table columns according to the applied
+    validations so if you want a shape to include a column, you must ensure
+    that it has some kind of validation, using e.g.
+    `Ecto.Changeset.validate_required/2`
 
     Values from the Electric change stream will be mapped to instances of the
     passed `Ecto.Schema` module.
     """
-    @spec shape!(Ecto.Queryable.t()) :: ShapeDefinition.t() | no_return()
-    def shape!(queryable) when is_atom(queryable) do
+    @spec shape!(ecto_shape()) :: ShapeDefinition.t() | no_return()
+    def shape!(queryable) when is_ecto_shape(queryable) do
       queryable
       |> validate_queryable!()
-      |> Electric.Client.EctoAdapter.shape_from_query!()
-    end
-
-    def shape!(%Ecto.Query{} = query) do
-      Electric.Client.EctoAdapter.shape_from_query!(query)
+      |> Electric.Client.EctoAdapter.shape!()
     end
   end
 
@@ -389,10 +418,8 @@ defmodule Electric.Client do
   @doc """
   A shortcut to [`ShapeDefinition.new!/2`](`Electric.Client.ShapeDefinition.new!/2`).
   """
-  def shape!(table_or_query, opts \\ [])
-
   @spec shape!(String.t(), ShapeDefinition.options()) :: ShapeDefinition.t() | no_return()
-  def shape!(table_name, opts) when is_binary(table_name) do
+  def shape!(table_name, opts \\ []) when is_binary(table_name) do
     ShapeDefinition.new!(table_name, opts)
   end
 
@@ -448,7 +475,7 @@ defmodule Electric.Client do
   end
 
   if Code.ensure_loaded?(Ecto) do
-    @spec stream(t(), String.t() | Ecto.Queryable.t()) :: Enumerable.t(message())
+    @spec stream(t(), String.t() | ecto_shape()) :: Enumerable.t(message())
   else
     @spec stream(t(), String.t()) :: Enumerable.t(message())
   end
@@ -482,14 +509,9 @@ defmodule Electric.Client do
   @spec stream(t(), shape(), stream_options()) :: Enumerable.t(message())
 
   if Code.ensure_loaded?(Ecto) do
-    def stream(%Client{} = client, queryable, opts) when is_atom(queryable) do
+    def stream(%Client{} = client, queryable, opts) when is_ecto_shape(queryable) do
       shape_definition = shape!(queryable)
 
-      stream(client, shape_definition, opts)
-    end
-
-    def stream(%Client{} = client, %Ecto.Query{} = query, opts) do
-      shape_definition = shape!(query)
       stream(client, shape_definition, opts)
     end
   end

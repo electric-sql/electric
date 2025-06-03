@@ -14,42 +14,43 @@ defmodule Electric.Client.ShapeDefinition do
 
   defstruct @public_keys ++ [parser: {Electric.Client.ValueMapper, []}]
 
-  @schema NimbleOptions.new!(
-            where: [
-              type: {:or, [nil, :string]},
-              required: false,
-              default: nil,
-              doc: "Filter the table according to the where clause."
-            ],
-            columns: [
-              type: {:or, [nil, {:list, :string}]},
-              default: nil,
-              doc:
-                "List of columns to include in the shape. Must include all primary keys. If `nil` this is equivalent to all columns (`SELECT *`)"
-            ],
-            namespace: [
-              type: {:or, [nil, :string]},
-              required: false,
-              default: nil,
-              doc:
-                "The namespace the table belongs to. If `nil` then Postgres will use whatever schema is the default (usually `public`)."
-            ],
-            params: [
-              type: {:or, [nil, {:map, :pos_integer, :string}, {:list, :string}]},
-              default: nil,
-              doc:
-                "Values of positional parameters in the where clause. These will substitute `$i` placeholder in the where clause."
-            ],
-            parser: [
-              type: :mod_arg,
-              default: {Electric.Client.ValueMapper, []},
-              doc: """
-              A `{module, args}` tuple specifying the `Electric.Client.ValueMapper`
-              implementation to use for mapping values from the sync stream into Elixir
-              terms.
-              """
-            ]
-          )
+  @schema_opts [
+    where: [
+      type: {:or, [nil, :string]},
+      required: false,
+      default: nil,
+      doc: "Filter the table according to the where clause."
+    ],
+    columns: [
+      type: {:or, [nil, {:list, :string}]},
+      default: nil,
+      doc:
+        "List of columns to include in the shape. Must include all primary keys. If `nil` this is equivalent to all columns (`SELECT *`)"
+    ],
+    namespace: [
+      type: {:or, [nil, :string]},
+      required: false,
+      default: nil,
+      doc:
+        "The namespace the table belongs to. If `nil` then Postgres will use whatever schema is the default (usually `public`)."
+    ],
+    params: [
+      type: {:or, [nil, {:map, :pos_integer, :string}, {:list, :string}]},
+      default: nil,
+      doc:
+        "Values of positional parameters in the where clause. These will substitute `$i` placeholder in the where clause."
+    ],
+    parser: [
+      type: :mod_arg,
+      default: {Electric.Client.ValueMapper, []},
+      doc: """
+      A `{module, args}` tuple specifying the `Electric.Client.ValueMapper`
+      implementation to use for mapping values from the sync stream into Elixir
+      terms.
+      """
+    ]
+  ]
+  @schema NimbleOptions.new!(@schema_opts)
 
   @type t :: %__MODULE__{
           namespace: String.t() | nil,
@@ -61,6 +62,9 @@ defmodule Electric.Client.ShapeDefinition do
 
   @type option :: unquote(NimbleOptions.option_typespec(@schema))
   @type options :: [option()]
+
+  @doc false
+  def schema_definition, do: @schema_opts
 
   @spec new(String.t() | keyword()) :: {:ok, t()} | {:error, term()}
   def new(table_name) when is_binary(table_name) do
