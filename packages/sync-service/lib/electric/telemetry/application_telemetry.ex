@@ -30,8 +30,15 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     def init(opts) do
       Process.set_label(:application_telemetry_supervisor)
 
-      [telemetry_poller_child_spec(opts) | exporter_child_specs(opts)]
+      [
+        system_monitor_child_spec(opts),
+        telemetry_poller_child_spec(opts) | exporter_child_specs(opts)
+      ]
       |> Supervisor.init(strategy: :one_for_one)
+    end
+
+    defp system_monitor_child_spec(opts) do
+      {Electric.Telemetry.SystemMonitor, opts}
     end
 
     defp telemetry_poller_child_spec(opts) do
@@ -189,7 +196,13 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       [
         last_value("system.load_percent.avg1"),
         last_value("system.load_percent.avg5"),
-        last_value("system.load_percent.avg15")
+        last_value("system.load_percent.avg15"),
+        sum("vm.monitor.long_message_queue.present", tags: [:process_type]),
+        distribution("vm.monitor.long_schedule.timeout",
+          tags: [:process_type],
+          unit: :millisecond
+        ),
+        distribution("vm.monitor.long_gc.timeout", tags: [:process_type], unit: :millisecond)
       ] ++
         prometheus_metrics() ++
         memory_by_process_type_metrics(opts)

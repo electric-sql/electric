@@ -24,7 +24,7 @@ defmodule Electric.Debug.Process do
     |> Enum.take(count)
   end
 
-  defp type_and_memory(pid) do
+  def type_and_memory(pid) do
     info = Process.info(pid, [:dictionary, :initial_call, :label, :memory])
     %{type: process_type(pid, info), memory: memory_from_info(info)}
   end

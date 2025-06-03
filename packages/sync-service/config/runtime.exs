@@ -293,6 +293,7 @@ if Electric.telemetry_enabled?() do
       {:handler, :otel_log_handler, OtelMetricExporter.LogHandler,
        %{
          config: %{
+           resource: %{name: "logs"},
            metadata_map: %{
              request_id: "http.request_id",
              stack_id: "source_id",
