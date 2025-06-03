@@ -342,6 +342,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #error: unknown = null
 
   readonly #fetchClient: typeof fetch
+  readonly #sseFetchClient: typeof fetch
   readonly #messageParser: MessageParser<T>
 
   readonly #subscribers = new Map<
@@ -366,6 +367,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromise?: Promise<void>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
+  #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -380,18 +382,32 @@ export class ShapeStream<T extends Row<unknown> = Row>
       options.fetchClient ??
       ((...args: Parameters<typeof fetch>) => fetch(...args))
 
-    const fetchWithBackoffClient = createFetchWithBackoff(baseFetchClient, {
+    const backOffOpts = {
       ...(options.backoffOptions ?? BackoffDefaults),
       onFailedAttempt: () => {
         this.#connected = false
         options.backoffOptions?.onFailedAttempt?.()
       },
-    })
+    }
+    const fetchWithBackoffClient = createFetchWithBackoff(
+      baseFetchClient,
+      backOffOpts
+    )
 
     this.#fetchClient = createFetchWithConsumedMessages(
       createFetchWithResponseHeadersCheck(
         createFetchWithChunkBuffer(fetchWithBackoffClient)
       )
+    )
+
+    const sseFetchWithBackoffClient = createFetchWithBackoff(
+      baseFetchClient,
+      backOffOpts,
+      true
+    )
+
+    this.#sseFetchClient = createFetchWithResponseHeadersCheck(
+      createFetchWithChunkBuffer(sseFetchWithBackoffClient)
     )
   }
 
@@ -620,14 +636,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
-  async #onMessages(messages: string, schema: Schema) {
+  async #onMessages(messages: string, schema: Schema, isSseMessage = false) {
     const batch = this.#messageParser.parse(messages, schema)
 
     // Update isUpToDate
     if (batch.length > 0) {
       const lastMessage = batch[batch.length - 1]
       if (isUpToDateMessage(lastMessage)) {
-        if (this.options.experimentalLiveSse) {
+        if (isSseMessage) {
+          // Only use the offset from the up-to-date message if this was an SSE message.
+          // If we would use this offset from a regular fetch, then it will be wrong
+          // and we will get an "offset is out of bounds for this shape" error
           const offset = getOffset(lastMessage)
           if (offset) {
             this.#lastOffset = offset
@@ -687,6 +706,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
+    const fetch = this.#sseFetchClient
     await fetchEventSource(fetchUrl.toString(), {
       headers,
       fetch,
@@ -700,7 +720,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // The event.data is a single JSON object, so we wrap it in an array
           const messages = `[${event.data}]`
           const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
-          this.#onMessages(messages, schema)
+          this.#onMessages(messages, schema, true)
         }
       },
       onerror: (error: Error) => {
@@ -788,18 +808,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isRefreshing = false
   }
 
-  async #publish(messages: Message<T>[]): Promise<void> {
-    await Promise.all(
-      Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
-        try {
-          await callback(messages)
-        } catch (err) {
-          queueMicrotask(() => {
-            throw err
-          })
-        }
-      })
+  async #publish(messages: Message<T>[]): Promise<void[]> {
+    // We process messages asynchronously
+    // but SSE's `onmessage` handler is synchronous.
+    // We use a promise chain to ensure that the handlers
+    // execute sequentially in the order the messages were received.
+    this.#messageChain = this.#messageChain.then(() =>
+      Promise.all(
+        Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
+          try {
+            await callback(messages)
+          } catch (err) {
+            queueMicrotask(() => {
+              throw err
+            })
+          }
+        })
+      )
     )
+
+    return this.#messageChain
   }
 
   #sendErrorToSubscribers(error: Error) {
