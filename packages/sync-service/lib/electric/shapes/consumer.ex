@@ -15,6 +15,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
+  alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
 
@@ -181,33 +182,15 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast(
-        {:snapshot_failed, shape_handle, error, stacktrace},
+        {:snapshot_failed, shape_handle, %SnapshotError{} = error},
         %{shape_handle: shape_handle} = state
       ) do
-    error =
-      case error do
-        %DBConnection.ConnectionError{reason: :queue_timeout} ->
-          Logger.warning(
-            "Snapshot creation failed for #{shape_handle} because of a connection pool queue timeout"
-          )
-
-          error
-
-        %Postgrex.Error{postgres: %{code: code}}
-        when code in ~w|undefined_function undefined_table undefined_column|a ->
-          # Schema changed while we were creating stuff, which means shape is functionally invalid.
-          # Return a 409 to trigger a fresh start with validation against the new schema.
-          %{shape: %Shape{root_table_id: root_table_id}, inspector: inspector} = state
-          Inspector.clean(root_table_id, inspector)
-          Api.Error.must_refetch()
-
-        error ->
-          Logger.error(
-            "Snapshot creation failed for #{shape_handle} because of:\n#{Exception.format(:error, error, stacktrace)}"
-          )
-
-          error
-      end
+    if error.type == :schema_changed do
+      # Schema changed while we were creating stuff, which means shape is functionally invalid.
+      # Return a 409 to trigger a fresh start with validation against the new schema.
+      %{shape: %Shape{root_table_id: root_table_id}, inspector: inspector} = state
+      Inspector.clean(root_table_id, inspector)
+    end
 
     state =
       state

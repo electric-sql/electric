@@ -1,6 +1,4 @@
 defmodule Electric.DbConnectionError do
-  require Logger
-
   defexception [:message, :type, :original_error, :retry_may_fix?]
 
   alias Electric.DbConnectionError

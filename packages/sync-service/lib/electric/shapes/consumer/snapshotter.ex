@@ -4,6 +4,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes
   alias Electric.Shapes.Querying
+  alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -83,15 +84,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   error ->
                     GenServer.cast(
                       consumer,
-                      {:snapshot_failed, shape_handle, error, __STACKTRACE__}
+                      {:snapshot_failed, shape_handle, SnapshotError.from_error(error)}
                     )
                 catch
                   :exit, {:timeout, {GenServer, :call, _}} ->
                     GenServer.cast(
                       consumer,
-                      {:snapshot_failed, shape_handle,
-                       %RuntimeError{message: "Timed out while waiting for a table lock"},
-                       __STACKTRACE__}
+                      {:snapshot_failed, shape_handle, SnapshotError.table_lock_timeout()}
                     )
                 end
               end

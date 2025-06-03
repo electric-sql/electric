@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Api do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.LogOffset
   alias Electric.Shapes
+  alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
 
   alias __MODULE__
@@ -522,6 +523,16 @@ defmodule Electric.Shapes.Api do
         # the shape has been deleted between the request validation and the attempt
         # to resturn the log stream
         Response.error(request, @must_refetch, status: 409)
+
+      {:error, %SnapshotError{type: :schema_changed}} ->
+        error = Api.Error.must_refetch()
+        Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
+        Response.error(request, error.message, status: error.status)
+
+      {:error, %SnapshotError{} = error} ->
+        Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
+
+        Response.error(request, error.message, status: error.status)
 
       {:error, error} ->
         # Errors will be logged further up the stack
