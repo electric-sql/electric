@@ -3,10 +3,20 @@ defmodule Electric.DbConnectionError do
 
   alias Electric.DbConnectionError
 
-  def from_error(
-        %DBConnection.ConnectionError{message: "tcp recv: connection timed out - :etimedout"} =
-          error
-      ) do
+  def from_error(error) do
+    case connection_error(error) do
+      nil ->
+        {:error, :not_recognised}
+
+      connection_error ->
+        {:ok, connection_error}
+    end
+  end
+
+  defp connection_error(
+         %DBConnection.ConnectionError{message: "tcp recv: connection timed out - :etimedout"} =
+           error
+       ) do
     %DbConnectionError{
       message: "connection timed out while trying to connect to the database",
       type: :connection_timeout,
@@ -15,13 +25,13 @@ defmodule Electric.DbConnectionError do
     }
   end
 
-  def from_error(%DBConnection.ConnectionError{message: message} = error)
-      when message in [
-             "tcp recv (idle): closed",
-             "ssl recv (idle): closed",
-             "tcp recv: closed",
-             "ssl recv: closed"
-           ] do
+  defp connection_error(%DBConnection.ConnectionError{message: message} = error)
+       when message in [
+              "tcp recv (idle): closed",
+              "ssl recv (idle): closed",
+              "tcp recv: closed",
+              "ssl recv: closed"
+            ] do
     %DbConnectionError{
       message: "connection closed while connecting to the database",
       type: :connection_closed,
@@ -30,11 +40,11 @@ defmodule Electric.DbConnectionError do
     }
   end
 
-  def from_error(%DBConnection.ConnectionError{} = error) do
+  defp connection_error(%DBConnection.ConnectionError{} = error) do
     maybe_nxdomain_error(error) || maybe_connection_refused_error(error)
   end
 
-  def from_error(%Postgrex.Error{postgres: %{code: :invalid_password}} = error) do
+  defp connection_error(%Postgrex.Error{postgres: %{code: :invalid_password}} = error) do
     %DbConnectionError{
       message: error.postgres.message,
       type: :invalid_username_or_password,
@@ -43,7 +53,7 @@ defmodule Electric.DbConnectionError do
     }
   end
 
-  def from_error(_error), do: nil
+  defp connection_error(_error), do: nil
 
   defp maybe_nxdomain_error(error) do
     ~r/\((?<domain>[^:]+).*\): non-existing domain - :nxdomain/

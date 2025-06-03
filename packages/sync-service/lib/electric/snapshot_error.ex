@@ -16,15 +16,15 @@ defmodule Electric.SnapshotError do
 
   def from_error(error) do
     case DbConnectionError.from_error(error) do
-      nil ->
-        snapshot_error(error)
-
-      error ->
+      {:ok, error} ->
         %SnapshotError{
           message: error.message,
           type: error.type,
           status: 503
         }
+
+      {:error, :not_recognised} ->
+        snapshot_error(error)
     end
   end
 

@@ -8,16 +8,16 @@ defmodule Electric.ReplicationError do
 
   def from_error(error) do
     case DbConnectionError.from_error(error) do
-      nil ->
-        replication_error(error)
-
-      error ->
+      {:ok, error} ->
         %ReplicationError{
           message: error.message,
           type: error.type,
           original_error: error.original_error,
           retry_may_fix?: error.retry_may_fix?
         }
+
+      {:error, :not_recognised} ->
+        replication_error(error)
     end
   end
 
