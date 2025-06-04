@@ -14,6 +14,9 @@ defmodule Electric.Client.ShapeDefinition do
 
   defstruct @public_keys ++ [parser: {Electric.Client.ValueMapper, []}]
 
+  # only allow things that are trivially convertable to strings
+  @params_types {:or, [:string, :integer, :float, :boolean]}
+
   @schema_opts [
     where: [
       type: {:or, [nil, :string]},
@@ -35,7 +38,7 @@ defmodule Electric.Client.ShapeDefinition do
         "The namespace the table belongs to. If `nil` then Postgres will use whatever schema is the default (usually `public`)."
     ],
     params: [
-      type: {:or, [nil, {:map, :pos_integer, :string}, {:list, :string}]},
+      type: {:or, [nil, {:map, :pos_integer, @params_types}, {:list, @params_types}]},
       default: nil,
       doc:
         "Values of positional parameters in the where clause. These will substitute `$i` placeholder in the where clause."
@@ -186,6 +189,7 @@ defmodule Electric.Client.ShapeDefinition do
       is_list(columns)
     )
     |> maybe_add_where_params(:params, params, format)
+    |> normalize_keys(format)
   end
 
   defp params_columns_list(columns, :query) when is_list(columns) do
@@ -222,5 +226,13 @@ defmodule Electric.Client.ShapeDefinition do
 
   defp put_param_map(input, key, params, :json) do
     Map.put(input, key, params)
+  end
+
+  defp normalize_keys(params, :query) do
+    Map.new(params, fn {k, v} -> {to_string(k), v} end)
+  end
+
+  defp normalize_keys(params, :json) do
+    params
   end
 end

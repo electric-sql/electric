@@ -48,40 +48,49 @@ defmodule Electric.Client.ShapeDefinitionTest do
       assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
 
       assert ShapeDefinition.params(shape, format: :query) == %{
-               columns: "id,size,cost",
-               table: "my_table"
+               "columns" => "id,size,cost",
+               "table" => "my_table"
              }
 
       assert ShapeDefinition.params(shape) == %{
-               columns: "id,size,cost",
-               table: "my_table"
+               "columns" => "id,size,cost",
+               "table" => "my_table"
              }
     end
 
     test "returns params as separate key-value pairs when params is a list" do
-      assert {:ok, shape} = ShapeDefinition.new("my_table", where: "id = $1", params: ["id1"])
+      assert {:ok, shape} =
+               ShapeDefinition.new("my_table",
+                 where: "id = $1 and value > $2",
+                 params: ["id1", 2]
+               )
 
       assert ShapeDefinition.params(shape, format: :query) == %{
                "params[1]" => "id1",
-               where: "id = $1",
-               table: "my_table"
+               "params[2]" => "2",
+               "where" => "id = $1 and value > $2",
+               "table" => "my_table"
              }
     end
 
     test "returns params as separate key-value pairs when params is an object" do
       assert {:ok, shape} =
-               ShapeDefinition.new("my_table", where: "id = $1", params: %{1 => "id1"})
+               ShapeDefinition.new("my_table",
+                 where: "id = $1 and value > $2",
+                 params: %{1 => "id1", 2 => 2}
+               )
 
       assert ShapeDefinition.params(shape, format: :query) == %{
                "params[1]" => "id1",
-               where: "id = $1",
-               table: "my_table"
+               "params[2]" => "2",
+               "where" => "id = $1 and value > $2",
+               "table" => "my_table"
              }
     end
   end
 
   describe "params/2 with `:json` formatting" do
-    test "returns column names joined by comma" do
+    test "returns column names as a list" do
       assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
 
       assert ShapeDefinition.params(shape, format: :json) == %{
@@ -91,26 +100,35 @@ defmodule Electric.Client.ShapeDefinitionTest do
     end
 
     test "returns params as separate key-value pairs when params is a list" do
-      assert {:ok, shape} = ShapeDefinition.new("my_table", where: "id = $1", params: ["id1"])
+      assert {:ok, shape} =
+               ShapeDefinition.new("my_table",
+                 where: "id = $1 and amount > $2",
+                 params: ["id1", 2]
+               )
 
       assert ShapeDefinition.params(shape, format: :json) == %{
                params: %{
-                 "1" => "id1"
+                 "1" => "id1",
+                 "2" => "2"
                },
-               where: "id = $1",
+               where: "id = $1 and amount > $2",
                table: "my_table"
              }
     end
 
     test "returns params as separate key-value pairs when params is an object" do
       assert {:ok, shape} =
-               ShapeDefinition.new("my_table", where: "id = $1", params: %{1 => "id1"})
+               ShapeDefinition.new("my_table",
+                 where: "id = $1 and value > $2",
+                 params: %{1 => "id1", 2 => 2}
+               )
 
       assert ShapeDefinition.params(shape, format: :json) == %{
                params: %{
-                 "1" => "id1"
+                 "1" => "id1",
+                 "2" => "2"
                },
-               where: "id = $1",
+               where: "id = $1 and value > $2",
                table: "my_table"
              }
     end

@@ -459,7 +459,7 @@ defmodule Electric.ClientTest do
 
     test "schema module", ctx do
       %{client: %{params: params}} = Client.stream(ctx.client, TestTable)
-      assert %{table: "test_table", columns: "id,name,amount,cost"} = params
+      assert %{"table" => "test_table", "columns" => "id,name,amount,cost"} = params
     end
 
     test "ecto query", ctx do
@@ -469,7 +469,11 @@ defmodule Electric.ClientTest do
 
       %{client: %{params: params}} = Client.stream(ctx.client, query)
 
-      assert %{table: "test_table", where: "(\"cost\" > 10)", columns: "id,name,amount,cost"} =
+      assert %{
+               "table" => "test_table",
+               "where" => "(\"cost\" > 10)",
+               "columns" => "id,name,amount,cost"
+             } =
                params
     end
 
@@ -477,7 +481,7 @@ defmodule Electric.ClientTest do
       %{client: %{params: params}} =
         Client.stream(ctx.client, &TestTable.changeset/1)
 
-      assert %{table: "test_table", columns: "id,name,amount,cost"} =
+      assert %{"table" => "test_table", "columns" => "id,name,amount,cost"} =
                params
     end
 
@@ -486,7 +490,7 @@ defmodule Electric.ClientTest do
 
       %{client: %{params: params}} = Client.stream(ctx.client, changeset)
 
-      assert %{table: "test_table", columns: "id,name,amount,cost"} =
+      assert %{"table" => "test_table", "columns" => "id,name,amount,cost"} =
                params
     end
   end

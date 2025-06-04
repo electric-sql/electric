@@ -57,10 +57,10 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       Map.merge(
         request.params,
         %{
-          offset: to_string(request.offset),
-          handle: request.shape_handle,
-          live: request.live,
-          replica: request.replica
+          "offset" => to_string(request.offset),
+          "handle" => request.shape_handle,
+          "live" => request.live,
+          "replica" => request.replica
         }
       )
     end
