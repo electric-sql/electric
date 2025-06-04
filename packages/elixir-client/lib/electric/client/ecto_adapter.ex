@@ -6,16 +6,18 @@ if Code.ensure_loaded?(Ecto) do
 
     @behaviour Electric.Client.ValueMapper
 
-    def shape!(schema) when is_atom(schema), do: shape_from_query!(schema)
-    def shape!(%Ecto.Query{} = query), do: shape_from_query!(query)
-    def shape!(%Ecto.Changeset{} = changeset), do: shape_from_changeset!(changeset)
+    def shape!(schema, opts \\ [])
 
-    def shape!(changeset_fun) when is_function(changeset_fun, 1),
-      do: shape_from_changeset!(changeset_fun)
+    def shape!(schema, opts) when is_atom(schema), do: shape_from_query!(schema, opts)
+    def shape!(%Ecto.Query{} = query, opts), do: shape_from_query!(query, opts)
+    def shape!(%Ecto.Changeset{} = changeset, opts), do: shape_from_changeset!(changeset, opts)
+
+    def shape!(changeset_fun, opts) when is_function(changeset_fun, 1),
+      do: shape_from_changeset!(changeset_fun, opts)
 
     @doc false
     @spec shape_from_query!(Ecto.Queryable.t()) :: ShapeDefinition.t()
-    def shape_from_query!(queryable) do
+    def shape_from_query!(queryable, opts \\ []) do
       query = Ecto.Queryable.to_query(queryable)
 
       validate_query!(query)
@@ -27,11 +29,12 @@ if Code.ensure_loaded?(Ecto) do
       columns = query_columns(query)
       where = where(query)
 
-      ShapeDefinition.new!(table_name,
-        namespace: namespace,
-        where: where,
-        columns: columns,
-        parser: {__MODULE__, struct}
+      ShapeDefinition.new!(
+        table_name,
+        merge_shape_opts(
+          [namespace: namespace, where: where, columns: columns, parser: {__MODULE__, struct}],
+          opts
+        )
       )
     end
 
@@ -84,14 +87,19 @@ if Code.ensure_loaded?(Ecto) do
         |> Enum.map(&schema.__schema__(:field_source, &1))
         |> Enum.map(&to_string/1)
 
-      shape_opts = Keyword.take(opts, Keyword.keys(ShapeDefinition.schema_definition()))
-
       ShapeDefinition.new!(
         table_name,
-        shape_opts
-        |> Keyword.put_new(:namespace, namespace)
-        |> Keyword.merge(columns: columns)
+        merge_shape_opts(
+          [columns: columns, parser: {__MODULE__, schema}, namespace: namespace],
+          opts
+        )
       )
+    end
+
+    defp merge_shape_opts(base, overrides) do
+      Keyword.merge(base, overrides, fn _key, base, over ->
+        if is_nil(over), do: base, else: over
+      end)
     end
 
     defp table_name(%{
