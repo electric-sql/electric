@@ -7,7 +7,7 @@ import {
   GetExtensions,
 } from './types'
 import { MessageParser, Parser } from './parser'
-import { isUpToDateMessage } from './helpers'
+import { getOffset, isUpToDateMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -41,6 +41,10 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
 } from './constants'
+import {
+  EventSourceMessage,
+  fetchEventSource,
+} from '@microsoft/fetch-event-source'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -308,7 +312,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
  * ```
  * const stream = new ShapeStream({
  *   url: `http://localhost:3000/v1/shape`,
- *   liveMode: 'sse'
+ *   experimentalLiveSse: true
  * })
  * ```
  *
@@ -338,6 +342,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #error: unknown = null
 
   readonly #fetchClient: typeof fetch
+  readonly #sseFetchClient: typeof fetch
   readonly #messageParser: MessageParser<T>
 
   readonly #subscribers = new Map<
@@ -362,6 +367,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromise?: Promise<void>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
+  #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -376,18 +382,32 @@ export class ShapeStream<T extends Row<unknown> = Row>
       options.fetchClient ??
       ((...args: Parameters<typeof fetch>) => fetch(...args))
 
-    const fetchWithBackoffClient = createFetchWithBackoff(baseFetchClient, {
+    const backOffOpts = {
       ...(options.backoffOptions ?? BackoffDefaults),
       onFailedAttempt: () => {
         this.#connected = false
         options.backoffOptions?.onFailedAttempt?.()
       },
-    })
+    }
+    const fetchWithBackoffClient = createFetchWithBackoff(
+      baseFetchClient,
+      backOffOpts
+    )
 
     this.#fetchClient = createFetchWithConsumedMessages(
       createFetchWithResponseHeadersCheck(
         createFetchWithChunkBuffer(fetchWithBackoffClient)
       )
+    )
+
+    const sseFetchWithBackoffClient = createFetchWithBackoff(
+      baseFetchClient,
+      backOffOpts,
+      true
+    )
+
+    this.#sseFetchClient = createFetchWithResponseHeadersCheck(
+      createFetchWithChunkBuffer(sseFetchWithBackoffClient)
     )
   }
 
@@ -417,121 +437,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.options.subscribe
       ) {
         const { url, signal } = this.options
+        const { fetchUrl, requestHeaders } = await this.#constructUrl(url)
+        const abortListener = await this.#createAbortListener(signal)
+        const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
-        // Resolve headers and params in parallel
-        const [requestHeaders, params] = await Promise.all([
-          resolveHeaders(this.options.headers),
-          this.options.params
-            ? toInternalParams(convertWhereParamsToObj(this.options.params))
-            : undefined,
-        ])
-
-        // Validate params after resolution
-        if (params) {
-          validateParams(params)
-        }
-
-        const fetchUrl = new URL(url)
-
-        // Add PostgreSQL-specific parameters
-        if (params) {
-          if (params.table)
-            setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
-          if (params.where)
-            setQueryParam(fetchUrl, WHERE_QUERY_PARAM, params.where)
-          if (params.columns)
-            setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
-          if (params.replica)
-            setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
-          if (params.params)
-            setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
-
-          // Add any remaining custom parameters
-          const customParams = { ...params }
-          delete customParams.table
-          delete customParams.where
-          delete customParams.columns
-          delete customParams.replica
-          delete customParams.params
-
-          for (const [key, value] of Object.entries(customParams)) {
-            setQueryParam(fetchUrl, key, value)
-          }
-        }
-
-        // Add Electric's internal parameters
-        fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
-
-        if (this.#isUpToDate) {
-          if (!this.#isRefreshing) {
-            fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-          }
-          fetchUrl.searchParams.set(
-            LIVE_CACHE_BUSTER_QUERY_PARAM,
-            this.#liveCacheBuster
-          )
-        }
-
-        if (this.#shapeHandle) {
-          // This should probably be a header for better cache breaking?
-          fetchUrl.searchParams.set(
-            SHAPE_HANDLE_QUERY_PARAM,
-            this.#shapeHandle!
-          )
-        }
-
-        // sort query params in-place for stable URLs and improved cache hits
-        fetchUrl.searchParams.sort()
-
-        // Create a new AbortController for this request
-        this.#requestAbortController = new AbortController()
-
-        // If user provided a signal, listen to it and pass on the reason for the abort
-        let abortListener: (() => void) | undefined
-        if (signal) {
-          abortListener = () => {
-            this.#requestAbortController?.abort(signal.reason)
-          }
-          signal.addEventListener(`abort`, abortListener, { once: true })
-          if (signal.aborted) {
-            // If the signal is already aborted, abort the request immediately
-            this.#requestAbortController?.abort(signal.reason)
-          }
-        }
-
-        // If using SSE mode we handle the connection differently using the
-        // this.#connectSSE method which wraps the EventSource API.
-        if (this.#isUpToDate && this.options.experimentalLiveSse) {
-          fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
-          try {
-            await this.#connectSSE(fetchUrl.toString())
-          } catch (error) {
-            if (error instanceof SSEConnectionAborted) {
-              break
-            }
-            this.#sendErrorToSubscribers(
-              error instanceof Error ? error : new Error(String(error))
-            )
-            throw error
-          }
-          // TODO: What should we do here? Is this the behaviour we want?
-          // Skip the regular fetch and continue the loop to reconnect if needed
-          continue
-        }
-
-        let response!: Response
         try {
-          response = await this.#fetchClient(fetchUrl.toString(), {
-            signal: this.#requestAbortController.signal,
+          await this.#requestShape({
+            fetchUrl,
+            requestAbortController,
             headers: requestHeaders,
           })
-          this.#connected = true
         } catch (e) {
           // Handle abort error triggered by refresh
           if (
             (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
-            this.#requestAbortController.signal.aborted &&
-            this.#requestAbortController.signal.reason ===
+            requestAbortController.signal.aborted &&
+            requestAbortController.signal.reason ===
               FORCE_DISCONNECT_AND_REFRESH
           ) {
             // Loop back to the top of the while loop to start a new request
@@ -564,50 +485,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#requestAbortController = undefined
         }
 
-        const { headers, status } = response
-        const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
-        if (shapeHandle) {
-          this.#shapeHandle = shapeHandle
-        }
-
-        const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
-        if (lastOffset) {
-          this.#lastOffset = lastOffset as Offset
-        }
-
-        const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
-        if (liveCacheBuster) {
-          this.#liveCacheBuster = liveCacheBuster
-        }
-
-        const getSchema = (): Schema => {
-          const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
-          return schemaHeader ? JSON.parse(schemaHeader) : {}
-        }
-        this.#schema = this.#schema ?? getSchema()
-
-        // NOTE: 204s are deprecated, the Electric server should not
-        // send these in latest versions but this is here for backwards
-        // compatibility
-        if (status === 204) {
-          // There's no content so we are live and up to date
-          this.#lastSyncedAt = Date.now()
-        }
-
-        const messages = (await response.text()) || `[]`
-        const batch = this.#messageParser.parse(messages, this.#schema)
-
-        // Update isUpToDate
-        if (batch.length > 0) {
-          const lastMessage = batch[batch.length - 1]
-          if (isUpToDateMessage(lastMessage)) {
-            this.#lastSyncedAt = Date.now()
-            this.#isUpToDate = true
-          }
-
-          await this.#publish(batch)
-        }
-
         this.#tickPromiseResolver?.()
       }
     } catch (err) {
@@ -637,6 +514,239 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } finally {
       this.#connected = false
       this.#tickPromiseRejecter?.()
+    }
+  }
+
+  async #constructUrl(url: string) {
+    // Resolve headers and params in parallel
+    const [requestHeaders, params] = await Promise.all([
+      resolveHeaders(this.options.headers),
+      this.options.params
+        ? toInternalParams(convertWhereParamsToObj(this.options.params))
+        : undefined,
+    ])
+
+    // Validate params after resolution
+    if (params) {
+      validateParams(params)
+    }
+
+    const fetchUrl = new URL(url)
+
+    // Add PostgreSQL-specific parameters
+    if (params) {
+      if (params.table) setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
+      if (params.where) setQueryParam(fetchUrl, WHERE_QUERY_PARAM, params.where)
+      if (params.columns)
+        setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
+      if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
+      if (params.params)
+        setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
+
+      // Add any remaining custom parameters
+      const customParams = { ...params }
+      delete customParams.table
+      delete customParams.where
+      delete customParams.columns
+      delete customParams.replica
+      delete customParams.params
+
+      for (const [key, value] of Object.entries(customParams)) {
+        setQueryParam(fetchUrl, key, value)
+      }
+    }
+
+    // Add Electric's internal parameters
+    fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+
+    if (this.#isUpToDate) {
+      if (!this.#isRefreshing) {
+        fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+      }
+      fetchUrl.searchParams.set(
+        LIVE_CACHE_BUSTER_QUERY_PARAM,
+        this.#liveCacheBuster
+      )
+    }
+
+    if (this.#shapeHandle) {
+      // This should probably be a header for better cache breaking?
+      fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
+    }
+
+    // sort query params in-place for stable URLs and improved cache hits
+    fetchUrl.searchParams.sort()
+
+    return {
+      fetchUrl,
+      requestHeaders,
+    }
+  }
+
+  async #createAbortListener(signal?: AbortSignal) {
+    // Create a new AbortController for this request
+    this.#requestAbortController = new AbortController()
+
+    // If user provided a signal, listen to it and pass on the reason for the abort
+    if (signal) {
+      const abortListener = () => {
+        this.#requestAbortController?.abort(signal.reason)
+      }
+
+      signal.addEventListener(`abort`, abortListener, { once: true })
+
+      if (signal.aborted) {
+        // If the signal is already aborted, abort the request immediately
+        this.#requestAbortController?.abort(signal.reason)
+      }
+
+      return abortListener
+    }
+  }
+
+  async #onInitialResponse(response: Response) {
+    const { headers, status } = response
+    const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+    if (shapeHandle) {
+      this.#shapeHandle = shapeHandle
+    }
+
+    const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
+    if (lastOffset) {
+      this.#lastOffset = lastOffset as Offset
+    }
+
+    const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
+    if (liveCacheBuster) {
+      this.#liveCacheBuster = liveCacheBuster
+    }
+
+    const getSchema = (): Schema => {
+      const schemaHeader = headers.get(SHAPE_SCHEMA_HEADER)
+      return schemaHeader ? JSON.parse(schemaHeader) : {}
+    }
+    this.#schema = this.#schema ?? getSchema()
+
+    // NOTE: 204s are deprecated, the Electric server should not
+    // send these in latest versions but this is here for backwards
+    // compatibility
+    if (status === 204) {
+      // There's no content so we are live and up to date
+      this.#lastSyncedAt = Date.now()
+    }
+  }
+
+  async #onMessages(messages: string, schema: Schema, isSseMessage = false) {
+    const batch = this.#messageParser.parse(messages, schema)
+
+    // Update isUpToDate
+    if (batch.length > 0) {
+      const lastMessage = batch[batch.length - 1]
+      if (isUpToDateMessage(lastMessage)) {
+        if (isSseMessage) {
+          // Only use the offset from the up-to-date message if this was an SSE message.
+          // If we would use this offset from a regular fetch, then it will be wrong
+          // and we will get an "offset is out of bounds for this shape" error
+          const offset = getOffset(lastMessage)
+          if (offset) {
+            this.#lastOffset = offset
+          }
+        }
+        this.#lastSyncedAt = Date.now()
+        this.#isUpToDate = true
+      }
+
+      await this.#publish(batch)
+    }
+  }
+
+  /**
+   * Requests the shape from the server using either long polling or SSE.
+   * Upon receiving a successfull response, the #onInitialResponse method is called.
+   * Afterwards, the #onMessages method is called for all the incoming updates.
+   * @param opts - The options for the request.
+   * @returns A promise that resolves when the request is complete (i.e. the long poll receives a response or the SSE connection is closed).
+   */
+  async #requestShape(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    if (
+      this.#isUpToDate &&
+      this.options.experimentalLiveSse &&
+      !this.#isRefreshing
+    ) {
+      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
+      return this.#requestShapeSSE(opts)
+    }
+
+    return this.#requestShapeLongPoll(opts)
+  }
+
+  async #requestShapeLongPoll(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    const { fetchUrl, requestAbortController, headers } = opts
+    const response = await this.#fetchClient(fetchUrl.toString(), {
+      signal: requestAbortController.signal,
+      headers,
+    })
+
+    this.#connected = true
+    await this.#onInitialResponse(response)
+
+    const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
+    const res = await response.text()
+    const messages = res || `[]`
+
+    await this.#onMessages(messages, schema)
+  }
+
+  async #requestShapeSSE(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    const { fetchUrl, requestAbortController, headers } = opts
+    const fetch = this.#sseFetchClient
+    try {
+      await fetchEventSource(fetchUrl.toString(), {
+        headers,
+        fetch,
+        onopen: async (response: Response) => {
+          this.#connected = true
+          await this.#onInitialResponse(response)
+        },
+        onmessage: (event: EventSourceMessage) => {
+          if (event.data) {
+            // Process the SSE message
+            // The event.data is a single JSON object, so we wrap it in an array
+            const messages = `[${event.data}]`
+            const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
+            this.#onMessages(messages, schema, true)
+          }
+        },
+        onerror: (error: Error) => {
+          // rethrow to close the SSE connection
+          throw error
+        },
+        signal: requestAbortController.signal,
+      })
+    } catch (error) {
+      if (requestAbortController.signal.aborted) {
+        // During an SSE request, the fetch might have succeeded
+        // and we are parsing the incoming stream.
+        // If the abort happens while we're parsing the stream,
+        // then it won't be caught by our `createFetchWithBackoff` wrapper
+        // and instead we will get a raw AbortError here
+        // which we need to turn into a `FetchBackoffAbortError`
+        // such that #start handles it correctly.
+        throw new FetchBackoffAbortError()
+      }
+      throw error
     }
   }
 
@@ -717,18 +827,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isRefreshing = false
   }
 
-  async #publish(messages: Message<T>[]): Promise<void> {
-    await Promise.all(
-      Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
-        try {
-          await callback(messages)
-        } catch (err) {
-          queueMicrotask(() => {
-            throw err
-          })
-        }
-      })
+  async #publish(messages: Message<T>[]): Promise<void[]> {
+    // We process messages asynchronously
+    // but SSE's `onmessage` handler is synchronous.
+    // We use a promise chain to ensure that the handlers
+    // execute sequentially in the order the messages were received.
+    this.#messageChain = this.#messageChain.then(() =>
+      Promise.all(
+        Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
+          try {
+            await callback(messages)
+          } catch (err) {
+            queueMicrotask(() => {
+              throw err
+            })
+          }
+        })
+      )
     )
+
+    return this.#messageChain
   }
 
   #sendErrorToSubscribers(error: Error) {
@@ -748,108 +866,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
-  }
-
-  /**
-   * Connects to the server using Server-Sent Events.
-   * Returns a promise that resolves when the connection is closed.
-   */
-  async #connectSSE(url: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        if (!this.#requestAbortController) {
-          reject(
-            new Error(
-              `Request abort controller is not set - this should never happen`
-            )
-          )
-          return
-        }
-
-        if (this.#requestAbortController.signal.aborted) {
-          reject(
-            new SSEConnectionAborted(
-              `Connection aborted before SSE connection established`
-            )
-          )
-          return
-        }
-
-        // Create an EventSource instance
-        const eventSource = new EventSource(url)
-
-        // Set up event handlers
-        eventSource.onopen = () => {
-          this.#connected = true
-        }
-
-        eventSource.onmessage = async (event: MessageEvent) => {
-          try {
-            if (event.data) {
-              // Process the SSE message
-              // Provide an empty schema object if schema is undefined, which it
-              // should not be as we only get to SSE mode after being in normal mode
-              // and getting a schema from a header then.
-              // The event.data is a single JSON object, so we wrap it in an array
-              // to be consistent with the way we parse the response from the HTTP API.
-              // TODO: Is this needed?
-              const batch = this.#messageParser.parse(
-                `[${event.data}]`,
-                this.#schema || {}
-              )
-
-              if (batch.length > 0) {
-                const lastMessage = batch[batch.length - 1]
-                if (isUpToDateMessage(lastMessage)) {
-                  const upToDateMsg = lastMessage as typeof lastMessage & {
-                    headers: { global_last_seen_lsn: string }
-                  }
-                  this.#lastSyncedAt = Date.now()
-                  this.#isUpToDate = true
-                  this.#lastOffset =
-                    `${upToDateMsg.headers.global_last_seen_lsn}_0` as Offset
-                  // TODO: we also need the cache buster `cursor` value
-                }
-
-                await this.#publish(batch)
-              }
-            }
-          } catch (error) {
-            // Handle parsing errors
-            this.#sendErrorToSubscribers(
-              error instanceof Error ? error : new Error(String(error))
-            )
-          }
-        }
-
-        eventSource.onerror = (_error: Event) => {
-          // Connection was closed or errored
-          // EventSource would normally automatically reconnect but want to close the
-          // connection and reconnect on the next outer loop iteration with the new
-          // url and offset.
-          // TODO: It may be that some errors we should elevate to the user
-          eventSource.close()
-          resolve()
-        }
-
-        // Listen for abort signals
-        const abortHandler = () => {
-          eventSource.close()
-          reject(new SSEConnectionAborted(`SSE connection aborted`))
-        }
-
-        this.#requestAbortController.signal.addEventListener(
-          `abort`,
-          abortHandler,
-          { once: true }
-        )
-      } catch (error) {
-        this.#sendErrorToSubscribers(
-          error instanceof Error ? error : new Error(String(error))
-        )
-        reject(error)
-      }
-    })
   }
 }
 
@@ -918,11 +934,4 @@ function convertWhereParamsToObj(
     }
   }
   return allPgParams
-}
-
-class SSEConnectionAborted extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = `SSEConnectionAborted`
-  }
 }
