@@ -3,12 +3,12 @@ defmodule Electric.Client.ShapeDefinition do
   Struct for defining a shape.
 
       iex> ShapeDefinition.new("items", where: "something = true")
-      {:ok, %ShapeDefinition{table: "items", where: "something = true"}}
+      {:ok, %ShapeDefinition{table: "items", where: "something = true", replica: :default}}
   """
 
   alias Electric.Client.Util
 
-  @public_keys [:namespace, :table, :columns, :where, :params]
+  @public_keys [:namespace, :table, :columns, :where, :params, :replica]
   @derive {Jason.Encoder, only: @public_keys}
   @enforce_keys [:table]
 
@@ -42,6 +42,16 @@ defmodule Electric.Client.ShapeDefinition do
       default: nil,
       doc:
         "Values of positional parameters in the where clause. These will substitute `$i` placeholder in the where clause."
+    ],
+    replica: [
+      type: {:in, [:default, :full]},
+      default: :default,
+      doc: """
+      Modifies the data sent in update and delete change messages.
+
+      When set to `:full` the entire row will be sent for updates and deletes,
+      not just the changed columns.
+      """
     ],
     parser: [
       type: :mod_arg,
@@ -95,9 +105,17 @@ defmodule Electric.Client.ShapeDefinition do
          where: Access.get(opts, :where),
          columns: Access.get(opts, :columns),
          namespace: Access.get(opts, :namespace),
+         replica: Access.get(opts, :replica),
          parser: Access.get(opts, :parser),
          params: Access.get(opts, :params)
        }}
+    end
+  end
+
+  def new!(opts) when is_list(opts) do
+    case new(opts) do
+      {:ok, shape} -> shape
+      {:error, %NimbleOptions.ValidationError{} = error} -> raise error
     end
   end
 
@@ -175,29 +193,53 @@ defmodule Electric.Client.ShapeDefinition do
   def matches?(_term1, _term2), do: false
 
   @doc false
-  @spec params(t(), [{:format, :query | :json}]) :: Electric.Client.Fetch.Request.params()
+  @spec params(t(), [{:format, :query | :json | :keyword}]) ::
+          Electric.Client.Fetch.Request.params()
   def params(%__MODULE__{} = shape, opts \\ []) do
-    %{where: where, columns: columns, params: params} = shape
-    table_name = url_table_name(shape)
+    %{where: where, columns: columns, params: params, replica: replica} = shape
     format = Keyword.get(opts, :format, :query)
 
-    %{table: table_name}
+    shape
+    |> table_params(format)
     |> Util.map_put_if(:where, where, is_binary(where))
     |> Util.map_put_if(
       :columns,
       fn -> params_columns_list(columns, format) end,
       is_list(columns)
     )
+    |> maybe_add_replica(replica, format)
     |> maybe_add_where_params(:params, params, format)
     |> normalize_keys(format)
+  end
+
+  defp table_params(shape, :keyword) do
+    Map.take(shape, [:table, :namespace])
+    |> Map.reject(&is_nil(elem(&1, 1)))
+  end
+
+  defp table_params(shape, _format) do
+    %{table: url_table_name(shape)}
   end
 
   defp params_columns_list(columns, :query) when is_list(columns) do
     Enum.join(columns, ",")
   end
 
-  defp params_columns_list(columns, :json) when is_list(columns) do
+  defp params_columns_list(columns, format)
+       when is_list(columns) and format in [:json, :keyword] do
     columns
+  end
+
+  defp maybe_add_replica(input, :default, _format) do
+    input
+  end
+
+  defp maybe_add_replica(input, replica, :keyword) when is_atom(replica) do
+    Map.put(input, :replica, replica)
+  end
+
+  defp maybe_add_replica(input, replica, _) when is_atom(replica) do
+    Map.put(input, :replica, to_string(replica))
   end
 
   defp maybe_add_where_params(input, _, nil, _), do: input
@@ -224,7 +266,7 @@ defmodule Electric.Client.ShapeDefinition do
     |> Map.merge(input)
   end
 
-  defp put_param_map(input, key, params, :json) do
+  defp put_param_map(input, key, params, format) when format in [:json, :keyword] do
     Map.put(input, key, params)
   end
 
@@ -234,5 +276,9 @@ defmodule Electric.Client.ShapeDefinition do
 
   defp normalize_keys(params, :json) do
     params
+  end
+
+  defp normalize_keys(params, :keyword) do
+    Map.to_list(params)
   end
 end

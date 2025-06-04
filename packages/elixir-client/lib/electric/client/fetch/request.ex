@@ -13,6 +13,10 @@ defmodule Electric.Client.Fetch.Request do
     :shape_handle,
     :live,
     :next_cursor,
+    # `replica` does not belong here, it's part of the shape definition that we
+    # receive via the client params. the other keys in this struct are part
+    # of consuming a stream rather than defining the shape.
+    # kept for backwards compatibility
     replica: :default,
     method: :get,
     offset: Client.Offset.before_all(),

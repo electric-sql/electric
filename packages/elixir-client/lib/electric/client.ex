@@ -451,7 +451,7 @@ defmodule Electric.Client do
   - Using a full shape definition:
 
         {:ok, client} = Electric.Client.new(base_url: "http://localhost:3000")
-        {:ok, shape} = Electric.Client.shape("todos", where: "completed = false")
+        {:ok, shape} = Electric.Client.shape("todos", where: "completed = false", replica: :full)
         stream = Electric.Client.stream(client, shape)
 
   - Or with an `Ecto` query or `Ecto.Schema` struct:

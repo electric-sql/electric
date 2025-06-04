@@ -332,6 +332,73 @@ defmodule Electric.ClientTest do
       refute_receive _
     end
 
+    test "accepts replica: full setting on shape definition", ctx do
+      {:ok, shape} = Electric.Client.shape(ctx.tablename, replica: :full)
+      {:ok, id1} = insert_item(ctx, title: "Changing item")
+      stream = Client.stream(ctx.client, shape)
+
+      parent = self()
+
+      {:ok, _task} =
+        start_supervised(
+          {Task,
+           fn ->
+             stream
+             |> Stream.each(&send(parent, {:stream, 1, &1}))
+             |> Stream.run()
+           end},
+          id: {:stream, 1}
+        )
+
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
+      assert_receive {:stream, 1, up_to_date()}
+
+      :ok = update_item(ctx, id1, value: 999)
+
+      assert_receive {:stream, 1,
+                      %ChangeMessage{
+                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"},
+                        old_value: %{"value" => 0}
+                      }},
+                     500
+
+      assert_receive {:stream, 1, up_to_date()}
+    end
+
+    test "stream setting of replica overrides shape", ctx do
+      # for backwards compatibility
+      {:ok, shape} = Electric.Client.shape(ctx.tablename, replica: :default)
+      {:ok, id1} = insert_item(ctx, title: "Changing item")
+      stream = Client.stream(ctx.client, shape, replica: :full)
+
+      parent = self()
+
+      {:ok, _task} =
+        start_supervised(
+          {Task,
+           fn ->
+             stream
+             |> Stream.each(&send(parent, {:stream, 1, &1}))
+             |> Stream.run()
+           end},
+          id: {:stream, 1}
+        )
+
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
+      assert_receive {:stream, 1, up_to_date()}
+
+      :ok = update_item(ctx, id1, value: 999)
+
+      assert_receive {:stream, 1,
+                      %ChangeMessage{
+                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"},
+                        old_value: %{"value" => 0}
+                      }},
+                     500
+
+      assert_receive {:stream, 1, up_to_date()}
+    end
+
     test "params are appended to all requests" do
       params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
 
