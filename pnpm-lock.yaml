@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@microsoft/fetch-event-source':
-    hash: jnddo7he65yxsfcfuvjeev6bre
+    hash: lgwcujj3mimdfutlwueisfm32u
     path: patches/@microsoft__fetch-event-source.patch
 
 importers:
@@ -1325,7 +1325,7 @@ importers:
     dependencies:
       '@microsoft/fetch-event-source':
         specifier: ^2.0.1
-        version: 2.0.1(patch_hash=jnddo7he65yxsfcfuvjeev6bre)
+        version: 2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64':
         specifier: ^4.18.1
@@ -11899,7 +11899,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@microsoft/fetch-event-source@2.0.1(patch_hash=jnddo7he65yxsfcfuvjeev6bre)': {}
+  '@microsoft/fetch-event-source@2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)': {}
 
   '@neondatabase/serverless@0.10.4':
     dependencies:
