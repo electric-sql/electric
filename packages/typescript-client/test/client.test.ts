@@ -83,73 +83,79 @@ describe(`Shape`, () => {
     }
   )
 
-  it.for(fetchAndSse)(`should continually sync a shape/table (liveSSE=$experimentalLiveSse)`, async ({ experimentalLiveSse }, {
-    issuesTableUrl,
-    insertIssues,
-    deleteIssue,
-    updateIssue,
-    waitForIssues,
-    aborter,
-  }) => {
-    const [id] = await insertIssues({ title: `test title` })
-
-    const expectedValue1 = [
+  it.for(fetchAndSse)(
+    `should continually sync a shape/table (liveSSE=$experimentalLiveSse)`,
+    async (
+      { experimentalLiveSse },
       {
-        id: id,
-        title: `test title`,
-        priority: 10,
-      },
-    ]
+        issuesTableUrl,
+        insertIssues,
+        deleteIssue,
+        updateIssue,
+        waitForIssues,
+        aborter,
+      }
+    ) => {
+      const [id] = await insertIssues({ title: `test title` })
 
-    const start = Date.now()
-    const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      signal: aborter.signal,
-      experimentalLiveSse,
-    })
-    const shape = new Shape(shapeStream)
-    const rows = await shape.rows
+      const expectedValue1 = [
+        {
+          id: id,
+          title: `test title`,
+          priority: 10,
+        },
+      ]
 
-    expect(rows).toEqual(expectedValue1)
-    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
-    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
-    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
+      const start = Date.now()
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        experimentalLiveSse,
+      })
+      const shape = new Shape(shapeStream)
+      const rows = await shape.rows
 
-    await sleep(105)
-    expect(shape.lastSynced()).toBeGreaterThanOrEqual(100)
+      expect(rows).toEqual(expectedValue1)
+      expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+      expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
+      expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
-    // FIXME: might get notified before all changes are submitted
-    const intermediate = Date.now()
-    const hasNotified = new Promise((resolve) => {
-      shape.subscribe(resolve)
-    })
-    const [id2] = await insertIssues({ title: `other title` })
-    const [id3] = await insertIssues({ title: `other title2` })
-    await deleteIssue({ id: id3, title: `other title2` })
-    // Test an update too because we're sending patches that should be correctly merged in
-    await updateIssue({ id: id2, title: `new title` })
-    await waitForIssues({ numChangesExpected: 5 })
-    await vi.waitUntil(() => hasNotified)
+      await sleep(105)
+      expect(shape.lastSynced()).toBeGreaterThanOrEqual(100)
 
-    const expectedValue2 = [
-      ...expectedValue1,
-      {
-        id: id2,
-        title: `new title`,
-        priority: 10,
-      },
-    ]
+      // FIXME: might get notified before all changes are submitted
+      const intermediate = Date.now()
+      const hasNotified = new Promise((resolve) => {
+        shape.subscribe(resolve)
+      })
+      const [id2] = await insertIssues({ title: `other title` })
+      const [id3] = await insertIssues({ title: `other title2` })
+      await deleteIssue({ id: id3, title: `other title2` })
+      // Test an update too because we're sending patches that should be correctly merged in
+      await updateIssue({ id: id2, title: `new title` })
+      await waitForIssues({ numChangesExpected: 5 })
+      await vi.waitUntil(() => hasNotified)
 
-    await vi.waitFor(() => expect(shape.currentRows).toEqual(expectedValue2))
-    expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(intermediate)
-    expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
-    expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
+      const expectedValue2 = [
+        ...expectedValue1,
+        {
+          id: id2,
+          title: `new title`,
+          priority: 10,
+        },
+      ]
 
-    shape.unsubscribeAll()
-  })
+      await vi.waitFor(() => expect(shape.currentRows).toEqual(expectedValue2))
+      expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(intermediate)
+      expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
+      expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
+
+      shape.unsubscribeAll()
+    }
+  )
 
   it.for(fetchAndSse)(
     `should resync from scratch on a shape rotation (liveSSE=$experimentalLiveSse)`,

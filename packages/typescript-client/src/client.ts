@@ -672,17 +672,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
     requestAbortController: AbortController
     headers: Record<string, string>
   }): Promise<void> {
-      if (
-        this.#isUpToDate &&
-        this.options.experimentalLiveSse &&
-        !this.#isRefreshing
-      ) {
-          opts.fetchUrl.searchParams.set(
-            EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
-            `true`
-          )
-        return this.#requestShapeSSE(opts)
-      }
+    if (
+      this.#isUpToDate &&
+      this.options.experimentalLiveSse &&
+      !this.#isRefreshing
+    ) {
+      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
+      return this.#requestShapeSSE(opts)
+    }
 
     return this.#requestShapeLongPoll(opts)
   }
@@ -703,7 +700,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
-    const messages = (res) || `[]`
+    const messages = res || `[]`
 
     await this.#onMessages(messages, schema)
   }
@@ -719,7 +716,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       await fetchEventSource(fetchUrl.toString(), {
         headers,
         fetch,
-        onopen: async (response) => {
+        onopen: async (response: Response) => {
           this.#connected = true
           await this.#onInitialResponse(response)
         },
