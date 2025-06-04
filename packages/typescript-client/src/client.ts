@@ -672,10 +672,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     requestAbortController: AbortController
     headers: Record<string, string>
   }): Promise<void> {
-    if (this.#isUpToDate && this.options.experimentalLiveSse) {
-      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
-      return this.#requestShapeSSE(opts)
-    }
+      if (
+        this.#isUpToDate &&
+        this.options.experimentalLiveSse &&
+        !this.#isRefreshing
+      ) {
+          opts.fetchUrl.searchParams.set(
+            EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
+            `true`
+          )
+        return this.#requestShapeSSE(opts)
+      }
 
     return this.#requestShapeLongPoll(opts)
   }
@@ -695,7 +702,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     await this.#onInitialResponse(response)
 
     const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
-    const messages = (await response.text()) || `[]`
+    const res = await response.text()
+    const messages = (res) || `[]`
 
     await this.#onMessages(messages, schema)
   }
@@ -707,28 +715,42 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
     const fetch = this.#sseFetchClient
-    await fetchEventSource(fetchUrl.toString(), {
-      headers,
-      fetch,
-      onopen: async (response) => {
-        this.#connected = true
-        await this.#onInitialResponse(response)
-      },
-      onmessage: (event: EventSourceMessage) => {
-        if (event.data) {
-          // Process the SSE message
-          // The event.data is a single JSON object, so we wrap it in an array
-          const messages = `[${event.data}]`
-          const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
-          this.#onMessages(messages, schema, true)
-        }
-      },
-      onerror: (error: Error) => {
-        // rethrow to close the SSE connection
-        throw error
-      },
-      signal: requestAbortController.signal,
-    })
+    try {
+      await fetchEventSource(fetchUrl.toString(), {
+        headers,
+        fetch,
+        onopen: async (response) => {
+          this.#connected = true
+          await this.#onInitialResponse(response)
+        },
+        onmessage: (event: EventSourceMessage) => {
+          if (event.data) {
+            // Process the SSE message
+            // The event.data is a single JSON object, so we wrap it in an array
+            const messages = `[${event.data}]`
+            const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
+            this.#onMessages(messages, schema, true)
+          }
+        },
+        onerror: (error: Error) => {
+          // rethrow to close the SSE connection
+          throw error
+        },
+        signal: requestAbortController.signal,
+      })
+    } catch (error) {
+      if (requestAbortController.signal.aborted) {
+        // During an SSE request, the fetch might have succeeded
+        // and we are parsing the incoming stream.
+        // If the abort happens while we're parsing the stream,
+        // then it won't be caught by our `createFetchWithBackoff` wrapper
+        // and instead we will get a raw AbortError here
+        // which we need to turn into a `FetchBackoffAbortError`
+        // such that #start handles it correctly.
+        throw new FetchBackoffAbortError()
+      }
+      throw error
+    }
   }
 
   subscribe(
