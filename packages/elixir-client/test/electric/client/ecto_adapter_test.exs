@@ -283,6 +283,14 @@ defmodule Electric.Client.EctoAdapterTest do
                Enum.sort(["id", "city", "temp_lo", "temp_hi", "prcp", "meta"])
     end
 
+    test "raises if changeset function returns something other than a Changeset" do
+      changeset_fun = fn _params -> %TestTable{} end
+
+      assert_raise ArgumentError, fn ->
+        EctoAdapter.shape_from_changeset!(changeset_fun)
+      end
+    end
+
     defmodule User do
       defstruct [:name, :email, :age]
     end
@@ -440,6 +448,12 @@ defmodule Electric.Client.EctoAdapterTest do
                inserted_at: %NaiveDateTime{},
                updated_at: %NaiveDateTime{}
              } = message.value
+    end
+
+    test "raises if passed a module that isn't an ecto schema", ctx do
+      assert_raise ArgumentError, fn ->
+        stream(ctx, __MODULE__)
+      end
     end
   end
 

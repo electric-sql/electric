@@ -112,18 +112,28 @@ defmodule Electric.Client.ShapeDefinition do
     end
   end
 
+  def new(table, _opts) do
+    {:error, "Missing or invalid table: #{inspect(table)}"}
+  end
+
   def new!(opts) when is_list(opts) do
-    case new(opts) do
-      {:ok, shape} -> shape
-      {:error, %NimbleOptions.ValidationError{} = error} -> raise error
-    end
+    opts
+    |> new()
+    |> raise_for_invalid!()
   end
 
   @spec new!(String.t(), options()) :: t() | no_return()
   def new!(table_name, opts \\ []) do
-    case new(table_name, opts) do
+    table_name
+    |> new(opts)
+    |> raise_for_invalid!()
+  end
+
+  defp raise_for_invalid!(result) do
+    case result do
       {:ok, shape} -> shape
       {:error, %NimbleOptions.ValidationError{} = error} -> raise error
+      {:error, message} when is_binary(message) -> raise ArgumentError, message: message
     end
   end
 

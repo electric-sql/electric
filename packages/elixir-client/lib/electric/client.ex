@@ -373,12 +373,6 @@ defmodule Electric.Client do
       |> validate_queryable!()
     end
 
-    defp validate_queryable!(other) do
-      raise ArgumentError,
-        message:
-          "Expected an Ecto.Schema module, %Ecto.Query{} struct, a 1-arity function returning an %Ecto.Changeset{} or an %Ecto.Changeset{} but got #{inspect(other)}"
-    end
-
     @doc """
     Create a [`ShapeDefinition`](`Electric.Client.ShapeDefinition`) from an `Ecto` query.
 

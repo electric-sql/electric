@@ -5,7 +5,7 @@ defmodule Electric.Client.ShapeDefinitionTest do
 
   doctest ShapeDefinition, import: true
 
-  describe "new" do
+  describe "new/2" do
     test "includes columns" do
       assert {:ok, shape} = ShapeDefinition.new("my_table", columns: ["id", "size", "cost"])
       assert shape.columns == ["id", "size", "cost"]
@@ -13,6 +13,14 @@ defmodule Electric.Client.ShapeDefinitionTest do
 
     test "errors if column list is invalid" do
       assert {:error, _} = ShapeDefinition.new("my_table", columns: "id")
+    end
+  end
+
+  describe "new!/1" do
+    test "raises for invalid config" do
+      assert_raise ArgumentError, fn ->
+        ShapeDefinition.new!(columns: ["id"])
+      end
     end
   end
 
