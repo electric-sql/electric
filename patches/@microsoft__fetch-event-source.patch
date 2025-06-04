@@ -1,8 +1,8 @@
 diff --git a/lib/cjs/fetch.js b/lib/cjs/fetch.js
-index ab40f1eeff0ec0a30043e45478f81cd1dc845adb..7cc2b684e40da2aac93c140d58f40ee4db8dd986 100644
+index ab40f1eeff0ec0a30043e45478f81cd1dc845adb..47be859185ab0276954300f06b1c74eafae62ba7 100644
 --- a/lib/cjs/fetch.js
 +++ b/lib/cjs/fetch.js
-@@ -26,18 +26,20 @@ function fetchEventSource(input, _a) {
+@@ -26,31 +26,33 @@ function fetchEventSource(input, _a) {
          let curRequestController;
          function onVisibilityChange() {
              curRequestController.abort();
@@ -27,8 +27,30 @@ index ab40f1eeff0ec0a30043e45478f81cd1dc845adb..7cc2b684e40da2aac93c140d58f40ee4
              curRequestController.abort();
          }
          inputSignal === null || inputSignal === void 0 ? void 0 : inputSignal.addEventListener('abort', () => {
-@@ -70,8 +72,8 @@ function fetchEventSource(input, _a) {
-                 if (!curRequestController.signal.aborted) {
+             dispose();
+-            resolve();
+         });
+         const fetch = inputFetch !== null && inputFetch !== void 0 ? inputFetch : window.fetch;
+         const onopen = inputOnOpen !== null && inputOnOpen !== void 0 ? inputOnOpen : defaultOnOpen;
+         async function create() {
+             var _a;
+             curRequestController = new AbortController();
++            const sig = inputSignal.aborted ? inputSignal : curRequestController.signal
+             try {
+-                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: curRequestController.signal }));
++                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: sig }));
+                 await onopen(response);
+                 await parse_1.getBytes(response.body, parse_1.getLines(parse_1.getMessages(id => {
+                     if (id) {
+@@ -67,11 +69,14 @@ function fetchEventSource(input, _a) {
+                 resolve();
+             }
+             catch (err) {
+-                if (!curRequestController.signal.aborted) {
++                if (sig.aborted) {
++                    dispose();
++                    reject(err);
++                } else if (!curRequestController.signal.aborted) {
                      try {
                          const interval = (_a = onerror === null || onerror === void 0 ? void 0 : onerror(err)) !== null && _a !== void 0 ? _a : retryInterval;
 -                        window.clearTimeout(retryTimer);
@@ -39,10 +61,10 @@ index ab40f1eeff0ec0a30043e45478f81cd1dc845adb..7cc2b684e40da2aac93c140d58f40ee4
                      catch (innerErr) {
                          dispose();
 diff --git a/lib/esm/fetch.js b/lib/esm/fetch.js
-index 31eb2278da53ba79d9fc78ea32d69f2d15f325ff..f0b503da8cb52feffc7fe02c81dac50252f8842c 100644
+index 31eb2278da53ba79d9fc78ea32d69f2d15f325ff..5c56bd9909f89156e4176b14f07c4e35edf91220 100644
 --- a/lib/esm/fetch.js
 +++ b/lib/esm/fetch.js
-@@ -23,18 +23,20 @@ export function fetchEventSource(input, _a) {
+@@ -23,31 +23,33 @@ export function fetchEventSource(input, _a) {
          let curRequestController;
          function onVisibilityChange() {
              curRequestController.abort();
@@ -67,8 +89,30 @@ index 31eb2278da53ba79d9fc78ea32d69f2d15f325ff..f0b503da8cb52feffc7fe02c81dac502
              curRequestController.abort();
          }
          inputSignal === null || inputSignal === void 0 ? void 0 : inputSignal.addEventListener('abort', () => {
-@@ -67,8 +69,8 @@ export function fetchEventSource(input, _a) {
-                 if (!curRequestController.signal.aborted) {
+             dispose();
+-            resolve();
+         });
+         const fetch = inputFetch !== null && inputFetch !== void 0 ? inputFetch : window.fetch;
+         const onopen = inputOnOpen !== null && inputOnOpen !== void 0 ? inputOnOpen : defaultOnOpen;
+         async function create() {
+             var _a;
+             curRequestController = new AbortController();
++            const sig = inputSignal.aborted ? inputSignal : curRequestController.signal
+             try {
+-                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: curRequestController.signal }));
++                const response = await fetch(input, Object.assign(Object.assign({}, rest), { headers, signal: sig }));
+                 await onopen(response);
+                 await getBytes(response.body, getLines(getMessages(id => {
+                     if (id) {
+@@ -64,11 +66,14 @@ export function fetchEventSource(input, _a) {
+                 resolve();
+             }
+             catch (err) {
+-                if (!curRequestController.signal.aborted) {
++                if (sig.aborted) {
++                    dispose();
++                    reject(err);
++                } else if (!curRequestController.signal.aborted) {
                      try {
                          const interval = (_a = onerror === null || onerror === void 0 ? void 0 : onerror(err)) !== null && _a !== void 0 ? _a : retryInterval;
 -                        window.clearTimeout(retryTimer);
