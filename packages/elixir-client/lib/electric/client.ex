@@ -369,8 +369,7 @@ defmodule Electric.Client do
     defp validate_queryable!(%Ecto.Changeset{} = changeset), do: changeset
 
     defp validate_queryable!(changeset_fun) when is_function(changeset_fun, 1) do
-      changeset_fun.(%{})
-      |> validate_queryable!()
+      changeset_fun
     end
 
     @doc """
