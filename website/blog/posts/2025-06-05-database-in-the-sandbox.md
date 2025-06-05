@@ -53,7 +53,7 @@ Yet to make the most basic functional app work, you need to ... install system p
 
 ### Breaking encapsulation
 
-Now ... there is a solution built into the platforms for this. That is to connect your [Supabase](https://supabase.com) and [Neon](https://neon.com) account, depending on which app builder you're using:
+Now ... there is a solution built into the platforms for this. That is to connect your [Supabase](https://supabase.com) or [Neon](https://neon.com) account, depending on which app builder you're using:
 
 <figure>
   <img src="/img/blog/database-in-the-sandbox/supabase-prompt.png"
@@ -91,7 +91,7 @@ If you dig into a platform like Bolt, you'll see it runs the full development en
   </a>
 </figure>
 
-[PGlite](https://pglite.dev) is an embeddable Postgres database that's designed to run inside the web browser. With the recent addition of the new [PGlite Socket](https://pglite.dev/docs/pglite-socket) library, it can now also happliy run inside a WebContainer in a way that's compatible with existing Postgres drivers.
+[PGlite](https://pglite.dev) is an embeddable Postgres database that's designed to run inside the web browser. With the recent addition of the new [PGlite Socket](https://pglite.dev/docs/pglite-socket) library, it can now also happily run inside a WebContainer in a way that's compatible with existing Postgres drivers.
 
 The steps to adapting a standard app to use it are simple enough to [one-shot prompt](https://pglite.dev/docs/pglite-socket#llm-usage):
 
