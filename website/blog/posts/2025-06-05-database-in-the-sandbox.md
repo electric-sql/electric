@@ -118,7 +118,7 @@ There is no friction. There is no infra. It just works, out of the box.
 
 ### Pathway to production
 
-There's nothing in this approach that prevents running against a hosted database in production. The prompt in the example above literally tells the AI to wrap the Postgres config in an conditional that looks a bit like this:
+There's nothing in this approach that prevents running against a hosted database in production. The prompt in the example above literally tells the AI to wrap the Postgres config in a conditional that looks a bit like this:
 
 ```ts
 const sql =
