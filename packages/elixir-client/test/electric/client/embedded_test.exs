@@ -202,4 +202,24 @@ defmodule Electric.Client.EmbeddedTest do
       _msgs = stream(%{ctx | shape: shape}, 4)
     end
   end
+
+  test "is able to read response body in separate processes", ctx do
+    parent = self()
+
+    {:ok, _id1} = insert_item(ctx)
+    {:ok, _id2} = insert_item(ctx)
+    {:ok, _id3} = insert_item(ctx)
+
+    stream = stream(ctx, live: false)
+
+    {:ok, _} =
+      Task.start_link(fn ->
+        Enum.each(stream, &send(parent, {:msg, &1}))
+      end)
+
+    assert_receive {:msg, %ChangeMessage{}}, 1000
+    assert_receive {:msg, %ChangeMessage{}}, 1000
+    assert_receive {:msg, %ChangeMessage{}}, 1000
+    assert_receive {:msg, up_to_date()}, 1000
+  end
 end
