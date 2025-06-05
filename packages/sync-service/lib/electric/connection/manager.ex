@@ -87,6 +87,7 @@ defmodule Electric.Connection.Manager do
       :shared_connection_opts,
       # Database connection pool options
       :pool_opts,
+      :pool_ref,
       # Options specific to `Electric.Timeline`
       :timeline_opts,
       # Options passed to the Replication.Supervisor's start_link() function
@@ -247,6 +248,7 @@ defmodule Electric.Connection.Manager do
         current_phase: :connection_setup,
         current_step: {:start_lock_connection, nil},
         pool_opts: pool_opts,
+        pool_ref: make_ref(),
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         connection_backoff: {ConnectionBackoff.init(1000, 10_000), nil},
@@ -381,13 +383,16 @@ defmodule Electric.Connection.Manager do
     # See https://github.com/electric-sql/electric/issues/1554
     conn_opts = pooled_connection_opts(state) |> Electric.Utils.deobfuscate_password()
 
+    pool_size = Keyword.get(state.pool_opts, :pool_size, 2)
+
     {:ok, pool_pid} =
       Postgrex.start_link(
         state.pool_opts ++
           [
-            backoff_type: :exp,
-            max_restarts: 3,
+            backoff_type: :stop,
+            max_restarts: pool_size * 3,
             max_seconds: 5,
+            connection_listeners: {[self()], state.pool_ref},
             # Assume the manager connection might be pooled, so use unnamed prepared
             # statements to avoid issues with the pooler
             #
@@ -680,6 +685,20 @@ defmodule Electric.Connection.Manager do
     end
 
     {:noreply, %State{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
+  end
+
+  def handle_info({:pool_conn_down, _ref, :process, _pid, {:shutdown, error}}, state) do
+    Logger.warning("Pooled connection terminated with reason: #{inspect(error)}")
+    {:noreply, state}
+  end
+
+  def handle_info({:connected, conn_pid, ref}, %State{pool_ref: ref} = state) do
+    Process.monitor(conn_pid, tag: :pool_conn_down)
+    {:noreply, state}
+  end
+
+  def handle_info({:disconnected, _pid, ref}, %State{pool_ref: ref} = state) do
+    {:noreply, state}
   end
 
   @impl true
