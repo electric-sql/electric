@@ -17,10 +17,18 @@ defmodule Electric.Replication.Eval.Parser do
         concat(["#Const(", to_doc(value, opts), ")"])
       end
     end
+
+    defimpl Electric.Shapes.Shape.Comparable do
+      def comparable(%Const{} = const), do: %{const | location: 0}
+    end
   end
 
   defmodule UnknownConst do
     defstruct [:value, :meta, location: 0]
+
+    defimpl Electric.Shapes.Shape.Comparable do
+      def comparable(%UnknownConst{} = unknown_const), do: %{unknown_const | location: 0}
+    end
   end
 
   defmodule Ref do
@@ -33,6 +41,10 @@ defmodule Electric.Replication.Eval.Parser do
         concat(["#Ref(", Enum.join(path, "."), ")"])
       end
     end
+
+    defimpl Electric.Shapes.Shape.Comparable do
+      def comparable(%Ref{} = ref), do: %{ref | location: 0}
+    end
   end
 
   defmodule Array do
@@ -44,6 +56,10 @@ defmodule Electric.Replication.Eval.Parser do
       def inspect(%Array{elements: elements}, opts) do
         concat(["#Array(", to_doc(elements, opts), ")"])
       end
+    end
+
+    defimpl Electric.Shapes.Shape.Comparable do
+      def comparable(%Array{} = array), do: %{array | location: 0}
     end
   end
 
@@ -69,6 +85,13 @@ defmodule Electric.Replication.Eval.Parser do
       def inspect(%Func{args: args, name: name}, opts) do
         concat(["Func(", name, ")", to_doc(args, opts)])
       end
+    end
+
+    defimpl Electric.Shapes.Shape.Comparable do
+      alias Electric.Shapes.Shape.Comparable
+
+      def comparable(%Func{} = func),
+        do: %{func | location: 0, args: Enum.map(func.args, &Comparable.comparable/1)}
     end
   end
 
