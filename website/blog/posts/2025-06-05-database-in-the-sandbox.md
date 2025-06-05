@@ -12,10 +12,6 @@ post: true
 bolt_app_slug: sb1-2sqiinaz
 ---
 
-<script setup>
-  import Tweet from 'vue-tweet'
-</script>
-
 <style scoped>
   video {
     width: 100%;
@@ -30,7 +26,7 @@ AI app builders like [Bolt](https://bolt.new), [Lovable](https://lovable.dev) an
 [PGlite](https://pglite.dev) is a Postgres database that runs inside your dev environment. With it, you can one-shot database-driven apps that run without leaving the sandbox. So you can vibe code real apps without even thinking about infra.
 
 > [!Warning] ✨ Try it on Bolt.new
-> Copy the one-shot [prompt examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this Bolt app](https://bolt.new/~/sb1-tgukxuwd).
+> Copy the one-shot [prompt&nbsp;examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this&nbsp;Bolt&nbsp;app](https://bolt.new/~/sb1-tgukxuwd).
 
 ## More play, less infra
 
@@ -61,7 +57,7 @@ Now ... there is a solution built into the platforms for this. That is to connec
 
 <figure>
   <img src="/img/blog/database-in-the-sandbox/supabase-prompt.png"
-      style="max-width: 512px" />
+      style="max-width: 512px; width: 100%" />
 </figure>
 
 Once connected, you can create a database and then wire in the credentials. Sometimes the AI does this for you. In other cases, it writes unhelpful keys into your `.env` file and you have to debug getting the right connection string into your database driver.
@@ -72,7 +68,7 @@ For example, using Bolt, you can click a button to fork, aka duplicate, your app
 
 <figure style="margin-top: 0">
   <img src="/img/blog/database-in-the-sandbox/duplicate.png"
-      style="max-width: 560px" />
+      style="max-width: 560px; width: 100%" />
 </figure>
 
 Do you want the fork to connect to the same database instance? Or a different one? If it's the same database, there's no isolation. Bugs in one version of the app will cause bugs in another. Schema changes in one will break the other.
@@ -90,7 +86,7 @@ If you dig into a platform like Bolt, you'll see it runs the full development en
 <figure>
   <a href="https://pglite.dev" class="no-visual">
     <img src="/img/blog/database-in-the-sandbox/pglite.png"
-        style="border-radius: 16px"
+        style="border-radius: 16px; width: 100%; max-width: 512px"
     />
   </a>
 </figure>
@@ -148,4 +144,4 @@ That means having a database inside your sandbox. No glue, no friction, no exter
 This is the future of AI app building. Vibe coding with a database in the sandbox. Unlocked by [PGlite](https://pglite.dev).
 
 > [!Warning] ✨ Try it on Bolt.new
-> Copy the one-shot [prompt examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this Bolt app](https://bolt.new/~/sb1-tgukxuwd).
+> Copy the one-shot [prompt&nbsp;examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this&nbsp;Bolt&nbsp;app](https://bolt.new/~/sb1-tgukxuwd).
