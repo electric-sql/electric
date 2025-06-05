@@ -75,7 +75,7 @@ For example, using Bolt, you can click a button to fork, aka duplicate, your app
       style="max-width: 560px" />
 </figure>
 
-Do you want the fork to connect to the same database instance? Or a different one? If it's the same database, there's no isolation. Bugs in one version of the app will cause bugs in another.
+Do you want the fork to connect to the same database instance? Or a different one? If it's the same database, there's no isolation. Bugs in one version of the app will cause bugs in another. Schema changes in one will break the other.
 
 If you're creating the fork to play around and then throw away, you probably want a clean database. But how do you bootstrap that with the same content? How do you clean up the database when you throw away the fork?
 
@@ -85,7 +85,7 @@ This stuff is meant to be simple and automated. But with an external database, i
 
 What if ... instead of connecting the app to an external database, you could just have the database inside the sandbox?
 
-If you dig into a platform like Bolt, you'll see it runs the app backend inside a [WebContainer](https://webcontainers.io). What if the database was *also* able to run inside the WebContainer? Well, with PGlite, it can.
+If you dig into a platform like Bolt, you'll see it runs the full development environment, with both front-end *and* back-end services, inside a [WebContainer](https://webcontainers.io). What if the database was *also* able to run inside the WebContainer? Well, with PGlite, it can.
 
 <figure>
   <a href="https://pglite.dev" class="no-visual">
