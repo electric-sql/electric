@@ -533,7 +533,8 @@ defmodule Electric.Shapes.Api do
       {:error, %SnapshotError{} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
 
-        if error.type == :unknown && DbConnectionError.from_error(error.original_error).type == :unknown do
+        if error.type == :unknown &&
+             DbConnectionError.from_error(error.original_error).type == :unknown do
           Logger.error("Unknown error while creating snapshot: #{inspect(error.original_error)}")
           Response.error(request, error.message, status: 500)
         else

@@ -8,7 +8,7 @@ defmodule Electric.SnapshotError do
   def table_lock_timeout do
     %SnapshotError{
       type: :table_lock_timeout,
-      message: "Timed out while waiting for a table lock"
+      message: "Snapshot timed out while waiting for a table lock"
     }
   end
 
