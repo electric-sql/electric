@@ -179,7 +179,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def pool_name(opts) do
-    name(Access.fetch!(opts, :stack_id))
+    pool_name(Access.fetch!(opts, :stack_id))
   end
 
   def drop_replication_slot_on_stop(manager) do
