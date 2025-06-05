@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Api do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.LogOffset
   alias Electric.Shapes
+  alias Electric.DbConnectionError
   alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
 
@@ -529,15 +530,15 @@ defmodule Electric.Shapes.Api do
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
-      {:error, %SnapshotError{type: :unknown} = error} ->
-        Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
-
-        Response.error(request, error.message, status: 500)
-
       {:error, %SnapshotError{} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
 
-        Response.error(request, error.message, status: 503, known_error: true)
+        if error.type == :unknown && DbConnectionError.from_error(error.original_error).type == :unknown do
+          Logger.error("Unknown error while creating snapshot: #{inspect(error.original_error)}")
+          Response.error(request, error.message, status: 500)
+        else
+          Response.error(request, error.message, status: 503, known_error: true)
+        end
 
       {:error, error} ->
         # Errors will be logged further up the stack

@@ -1,10 +1,9 @@
 defmodule Electric.SnapshotError do
   require Logger
 
-  alias Electric.DbConnectionError
   alias Electric.SnapshotError
 
-  defexception [:message, :type]
+  defexception [:message, :type, :original_error]
 
   def table_lock_timeout do
     %SnapshotError{
@@ -13,40 +12,28 @@ defmodule Electric.SnapshotError do
     }
   end
 
-  def from_error(error) do
-    case DbConnectionError.from_error(error) do
-      %{type: :unknown} ->
-        snapshot_error(error)
-
-      error ->
-        %SnapshotError{
-          message: error.message,
-          type: error.type
-        }
-    end
-  end
-
-  defp snapshot_error(%DBConnection.ConnectionError{reason: :queue_timeout}) do
+  def from_error(%DBConnection.ConnectionError{reason: :queue_timeout} = error) do
     %SnapshotError{
       type: :queue_timeout,
-      message: "Snapshot creation failed because of a connection pool queue timeout"
+      message: "Snapshot creation failed because of a connection pool queue timeout",
+      original_error: error
     }
   end
 
-  defp snapshot_error(%Postgrex.Error{postgres: %{code: code}})
-       when code in ~w|undefined_function undefined_table undefined_column|a do
+  def from_error(%Postgrex.Error{postgres: %{code: code}} = error)
+      when code in ~w|undefined_function undefined_table undefined_column|a do
     %SnapshotError{
       type: :schema_changed,
-      message: "Schema changed while creating snapshot"
+      message: "Schema changed while creating snapshot",
+      original_error: error
     }
   end
 
-  defp snapshot_error(error) do
-    Logger.error("Electric.SnapshotError unknown error: #{inspect(error)}")
-
+  def from_error(error) do
     %SnapshotError{
       type: :unknown,
-      message: "Unknown error while creating snapshot: #{inspect(error)}"
+      message: "Unknown error while creating snapshot: #{inspect(error)}",
+      original_error: error
     }
   end
 end
