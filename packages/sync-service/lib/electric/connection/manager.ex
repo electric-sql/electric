@@ -126,7 +126,7 @@ defmodule Electric.Connection.Manager do
 
   use GenServer
   alias Electric.Connection.Manager.ConnectionBackoff
-  alias Electric.ReplicationError
+  alias Electric.DbConnectionError
   alias Electric.StatusMonitor
 
   require Logger
@@ -631,7 +631,7 @@ defmodule Electric.Connection.Manager do
     error =
       reason
       |> strip_exit_signal_stacktrace()
-      |> ReplicationError.from_error()
+      |> DbConnectionError.from_error()
 
     Logger.warning(
       "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
@@ -641,7 +641,7 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(
       {:connection_error,
        %{
-         error: ReplicationError.format_original_error(error),
+         error: DbConnectionError.format_original_error(error),
          type: error.type,
          message: error.message
        }},
@@ -908,7 +908,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp shutdown_or_reconnect(error, state) do
-    error = ReplicationError.from_error(error)
+    error = DbConnectionError.from_error(error)
 
     with false <- drop_slot_and_restart(error, state),
          false <- stop_if_fatal_error(error, state) do
@@ -930,7 +930,7 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(
       {:database_connection_failed,
        %{
-         error: ReplicationError.format_original_error(error),
+         error: DbConnectionError.format_original_error(error),
          type: error.type,
          message: message,
          total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
@@ -996,7 +996,7 @@ defmodule Electric.Connection.Manager do
   defp pg_error_extra_info(_), do: ""
 
   defp drop_slot_and_restart(
-         %ReplicationError{type: :replication_slot_invalidated} = error,
+         %DbConnectionError{type: :replication_slot_invalidated} = error,
          state
        ) do
     Logger.warning(error.message)
@@ -1006,7 +1006,7 @@ defmodule Electric.Connection.Manager do
        %{
          type: :database_slot_exceeded_max_size,
          message: error.message,
-         error: ReplicationError.format_original_error(error)
+         error: DbConnectionError.format_original_error(error)
        }},
       state
     )
@@ -1031,11 +1031,11 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  defp dispatch_fatal_error_and_shutdown(%ReplicationError{} = error, state) do
+  defp dispatch_fatal_error_and_shutdown(%DbConnectionError{} = error, state) do
     dispatch_stack_event(
       {:config_error,
        %{
-         error: ReplicationError.format_original_error(error),
+         error: DbConnectionError.format_original_error(error),
          message: error.message,
          type: error.type
        }},

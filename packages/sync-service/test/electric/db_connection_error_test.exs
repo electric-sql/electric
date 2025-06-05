@@ -1,7 +1,7 @@
-defmodule Electric.ReplicationErrorTest do
+defmodule Electric.DbConnectionErrorTest do
   use ExUnit.Case, async: true
 
-  alias Electric.ReplicationError
+  alias Electric.DbConnectionError
 
   describe "from_error/1" do
     test "with an invalid username or password error" do
@@ -21,12 +21,12 @@ defmodule Electric.ReplicationErrorTest do
         query: nil
       }
 
-      assert %ReplicationError{
+      assert %DbConnectionError{
                message: ~s|password authentication failed for user "postgres"|,
                type: :invalid_username_or_password,
                original_error: error,
                retry_may_fix?: false
-             } == ReplicationError.from_error(error)
+             } == DbConnectionError.from_error(error)
     end
 
     test "with insufficient privileges error" do
@@ -47,12 +47,12 @@ defmodule Electric.ReplicationErrorTest do
         query: nil
       }
 
-      assert %ReplicationError{
+      assert %DbConnectionError{
                message: "User does not have the REPLICATION attribute. " <> _,
                type: :insufficient_privileges,
                original_error: ^error,
                retry_may_fix?: false
-             } = ReplicationError.from_error(error)
+             } = DbConnectionError.from_error(error)
     end
 
     test "with an invalid domain error" do
@@ -62,12 +62,12 @@ defmodule Electric.ReplicationErrorTest do
         reason: :error
       }
 
-      assert %ReplicationError{
+      assert %DbConnectionError{
                message: "domain does not exist: dbserver.example",
                type: :nxdomain,
                original_error: error,
                retry_may_fix?: false
-             } == ReplicationError.from_error(error)
+             } == DbConnectionError.from_error(error)
     end
 
     test "with a tcp timeout error" do
@@ -77,12 +77,12 @@ defmodule Electric.ReplicationErrorTest do
         reason: :error
       }
 
-      assert %ReplicationError{
+      assert %DbConnectionError{
                message: "connection timed out while trying to connect to the database",
                type: :connection_timeout,
                original_error: error,
                retry_may_fix?: true
-             } == ReplicationError.from_error(error)
+             } == DbConnectionError.from_error(error)
     end
 
     test "with tcp closed error" do
@@ -92,12 +92,12 @@ defmodule Electric.ReplicationErrorTest do
         reason: :error
       }
 
-      assert %ReplicationError{
+      assert %DbConnectionError{
                message: "connection closed while connecting to the database",
                type: :connection_closed,
                original_error: error,
                retry_may_fix?: true
-             } == ReplicationError.from_error(error)
+             } == DbConnectionError.from_error(error)
     end
 
     test "with a connection refused error" do
@@ -107,12 +107,12 @@ defmodule Electric.ReplicationErrorTest do
         reason: :error
       }
 
-      assert %ReplicationError{
+      assert %DbConnectionError{
                message: "connection refused while trying to connect to localhost:54321",
                type: :connection_refused,
                original_error: error,
                retry_may_fix?: false
-             } == ReplicationError.from_error(error)
+             } == DbConnectionError.from_error(error)
     end
   end
 end
