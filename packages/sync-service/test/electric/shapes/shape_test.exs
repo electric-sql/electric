@@ -571,7 +571,12 @@ defmodule Electric.Shapes.ShapeTest do
          %{inspector: inspector} do
       tests = [
         {"(FALSE)", ["false", "(false)", " false "]},
-        {"(VALUE IN (1,2,3))", ["value in (1, 2, 3)", ~s[("value" in (1, 2, 3))]]}
+        {"(VALUE IN (1,2,3))", ["value in (1, 2, 3)", ~s[("value" in (1, 2, 3))]]},
+        {~S|time '20:00:00' + date '2024-01-01'|,
+         [
+           ~S|((TIME '20:00:00') + (DATE '2024-01-01'))|,
+           ~S| (((time  '20:00:00')  +  (date  '2024-01-01')))|
+         ]}
       ]
 
       shape_fun = fn where ->
