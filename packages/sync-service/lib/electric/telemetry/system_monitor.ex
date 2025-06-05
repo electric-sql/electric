@@ -24,7 +24,7 @@ defmodule Electric.Telemetry.SystemMonitor do
       "Long GC detected for pid #{inspect(gc_pid)}: took #{Keyword.fetch!(info, :timeout)}ms. #{inspect(info, limit: :infinity)}"
     )
 
-    %{type: type} = Electric.Debug.Process.type_and_memory(gc_pid)
+    type = Electric.Debug.Process.type(gc_pid)
 
     :telemetry.execute([:vm, :monitor, :long_gc], Map.new(info), %{process_type: type})
     {:noreply, state}
@@ -49,7 +49,7 @@ defmodule Electric.Telemetry.SystemMonitor do
       "Long schedule detected for pid #{inspect(pid)}, took #{Keyword.fetch!(info, :timeout)}ms"
     )
 
-    %{type: type} = Electric.Debug.Process.type_and_memory(pid)
+    type = Electric.Debug.Process.type(pid)
 
     :telemetry.execute(
       [:vm, :monitor, :long_schedule],
@@ -63,7 +63,7 @@ defmodule Electric.Telemetry.SystemMonitor do
   def handle_info({:monitor, pid, :long_message_queue, true}, state) do
     Logger.debug("Long message queue detected for pid #{inspect(pid)}")
 
-    %{type: type} = Electric.Debug.Process.type_and_memory(pid)
+    type = Electric.Debug.Process.type(pid)
 
     :telemetry.execute([:vm, :monitor, :long_message_queue], %{present: 1}, %{process_type: type})
 
