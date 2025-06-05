@@ -4,13 +4,12 @@ defmodule Electric.SnapshotError do
   alias Electric.DbConnectionError
   alias Electric.SnapshotError
 
-  defexception [:message, :type, :status]
+  defexception [:message, :type]
 
   def table_lock_timeout do
     %SnapshotError{
       type: :table_lock_timeout,
-      message: "Timed out while waiting for a table lock",
-      status: 503
+      message: "Timed out while waiting for a table lock"
     }
   end
 
@@ -22,8 +21,7 @@ defmodule Electric.SnapshotError do
       error ->
         %SnapshotError{
           message: error.message,
-          type: error.type,
-          status: 503
+          type: error.type
         }
     end
   end
@@ -31,8 +29,7 @@ defmodule Electric.SnapshotError do
   defp snapshot_error(%DBConnection.ConnectionError{reason: :queue_timeout}) do
     %SnapshotError{
       type: :queue_timeout,
-      message: "Snapshot creation failed because of a connection pool queue timeout",
-      status: 503
+      message: "Snapshot creation failed because of a connection pool queue timeout"
     }
   end
 
@@ -49,8 +46,7 @@ defmodule Electric.SnapshotError do
 
     %SnapshotError{
       type: :unknown,
-      message: "Unknown error while creating snapshot: #{inspect(error)}",
-      status: 500
+      message: "Unknown error while creating snapshot: #{inspect(error)}"
     }
   end
 end

@@ -529,13 +529,15 @@ defmodule Electric.Shapes.Api do
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
+      {:error, %SnapshotError{type: :unknown} = error} ->
+        Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
+
+        Response.error(request, error.message, status: 500)
+
       {:error, %SnapshotError{} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
 
-        Response.error(request, error.message,
-          status: error.status,
-          known_error: error.type != :unknown
-        )
+        Response.error(request, error.message, status: 503, known_error: true)
 
       {:error, error} ->
         # Errors will be logged further up the stack
