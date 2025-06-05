@@ -11,6 +11,7 @@ defmodule Electric.Shapes.Api.Response do
   @electric_offset_header "electric-offset"
   @electric_schema_header "electric-schema"
   @electric_up_to_date_header "electric-up-to-date"
+  @electric_known_error_header "electric-known-error"
 
   # List of all Electric-specific headers that may be included in API responses
   @electric_headers [
@@ -18,13 +19,15 @@ defmodule Electric.Shapes.Api.Response do
     @electric_handle_header,
     @electric_offset_header,
     @electric_schema_header,
-    @electric_up_to_date_header
+    @electric_up_to_date_header,
+    @electric_known_error_header
   ]
 
   defstruct [
     :handle,
     :offset,
     :shape_definition,
+    :known_error,
     api: %Api{},
     chunked: false,
     up_to_date: false,
@@ -211,6 +214,7 @@ defmodule Electric.Shapes.Api.Response do
     |> put_schema_header(response)
     |> put_up_to_date_header(response)
     |> put_offset_header(response)
+    |> put_known_error_header(response)
   end
 
   defp put_shape_handle_header(conn, %__MODULE__{handle: nil}) do
@@ -332,6 +336,14 @@ defmodule Electric.Shapes.Api.Response do
 
   defp put_offset_header(conn, %__MODULE__{offset: offset}) do
     Plug.Conn.put_resp_header(conn, @electric_offset_header, "#{offset}")
+  end
+
+  defp put_known_error_header(conn, %__MODULE__{known_error: nil}) do
+    conn
+  end
+
+  defp put_known_error_header(conn, %__MODULE__{known_error: known_error}) do
+    Plug.Conn.put_resp_header(conn, @electric_known_error_header, "#{known_error}")
   end
 
   defp validate_response_finalized!(%__MODULE__{finalized?: false} = _response) do

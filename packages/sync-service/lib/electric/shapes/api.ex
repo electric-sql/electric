@@ -532,7 +532,10 @@ defmodule Electric.Shapes.Api do
       {:error, %SnapshotError{} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
 
-        Response.error(request, error.message, status: error.status)
+        Response.error(request, error.message,
+          status: error.status,
+          known_error: error.type != :unknown
+        )
 
       {:error, error} ->
         # Errors will be logged further up the stack
