@@ -50,6 +50,12 @@ defmodule Electric.Postgres.Configuration do
 
       used_filters = Map.drop(new_filters, changed_relations)
 
+      if changed_relations != [],
+        do:
+          Logger.info(
+            "Configuring publication #{publication_name} to include #{map_size(used_filters)} tables - skipping altered tables #{inspect(changed_relations)}"
+          )
+
       if pg_version < @pg_15 do
         alter_pub_set_whole_tables!(conn, publication_name, used_filters)
       else
@@ -139,13 +145,17 @@ defmodule Electric.Postgres.Configuration do
       |> Enum.map(&Utils.relation_to_sql/1)
       |> MapSet.new()
 
+    to_drop = MapSet.difference(prev_published_tables, new_published_tables)
+    to_add = MapSet.difference(new_published_tables, prev_published_tables)
+
+    Logger.info(
+      "Configuring publication #{publication_name} to drop #{inspect(Enum.to_list(to_drop))} tables, and add #{inspect(Enum.to_list(to_add))} tables",
+      publication_alter_drop_tables: Enum.to_list(to_drop),
+      publication_alter_add_tables: Enum.to_list(to_add)
+    )
+
     alter_ops =
-      Enum.concat(
-        MapSet.difference(new_published_tables, prev_published_tables)
-        |> Enum.map(&{&1, "ADD"}),
-        MapSet.difference(prev_published_tables, new_published_tables)
-        |> Enum.map(&{&1, "DROP"})
-      )
+      Enum.concat(Enum.map(to_add, &{&1, "ADD"}), Enum.map(to_drop, &{&1, "DROP"}))
 
     for {table, op} <- alter_ops do
       Postgrex.query!(conn, "SAVEPOINT before_publication", [])
@@ -244,6 +254,11 @@ defmodule Electric.Postgres.Configuration do
   defp make_alter_publication_query(publication_name, filters) do
     case Map.values(filters) do
       [] ->
+        Logger.info(
+          "Configuring publication #{publication_name} to DROP ALL TABLES",
+          publication_alter_set_tables: []
+        )
+
         """
         DO $$
         DECLARE
@@ -267,6 +282,11 @@ defmodule Electric.Postgres.Configuration do
 
       filters ->
         base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
+
+        Logger.info(
+          "Configuring publication #{publication_name} to SET tables #{inspect(Enum.map(filters, & &1.relation))}",
+          publication_alter_set_tables: Enum.map(filters, &Utils.relation_to_sql(&1.relation))
+        )
 
         tables =
           filters

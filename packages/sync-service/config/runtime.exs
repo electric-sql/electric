@@ -297,7 +297,13 @@ if Electric.telemetry_enabled?() do
            metadata_map: %{
              request_id: "http.request_id",
              stack_id: "source_id",
-             shape_handle: "shape.handle"
+             shape_handle: "shape.handle",
+             received_transaction_xid: "received.transaction.xid",
+             received_transaction_num_changes: "received.transaction.num_changes",
+             received_transaction_lsn: "received.transaction.lsn",
+             publication_alter_drop_tables: "publication.alter.drop_tables",
+             publication_alter_add_tables: "publication.alter.add_tables",
+             publication_alter_set_tables: "publication.alter.set_tables"
            }
          }
        }}

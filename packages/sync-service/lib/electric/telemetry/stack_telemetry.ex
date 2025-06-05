@@ -246,6 +246,9 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
           unit: :millisecond,
           keep: for_stack
         ),
+        distribution("electric.postgres.replication.transaction_received.operations",
+          keep: for_stack
+        ),
         distribution("electric.storage.transaction_stored.replication_lag",
           unit: :millisecond,
           keep: for_stack

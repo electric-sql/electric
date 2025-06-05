@@ -330,9 +330,11 @@ defmodule Electric.ShapeCache do
       state.shape_status_state
       |> state.shape_status.list_shape_handles_for_relations(relations)
 
-    Logger.info(fn ->
-      "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
-    end)
+    if relations != [] do
+      Logger.info(fn ->
+        "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
+      end)
+    end
 
     Enum.each(affected_shapes, fn shape_handle ->
       clean_up_shape(state, shape_handle)

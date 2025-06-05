@@ -270,7 +270,10 @@ defmodule Electric.Replication.PublicationManager do
            state
            | committed_relation_filters: committed_filters,
              next_update_forced?: false,
-             prepared_relation_filters: relation_filters
+             # We're setting "prepared" filters to the committed filters, despite us maybe dropping missing relations from these filters.
+             # This is correct, because for every filter we're dropping, we're also removing the shape from the shape cache,
+             # which eventually will do the same thing - this lowers the number of attempted alterations to the DB where we do nothing
+             prepared_relation_filters: committed_filters
          }}
 
       {:error, err} when retries < @max_retries and not is_fatal(err) ->
@@ -317,8 +320,10 @@ defmodule Electric.Replication.PublicationManager do
            next_update_forced?: forced?
          } = state
        )
-       when current_filters == committed_filters and not forced?,
-       do: {:ok, state, []}
+       when current_filters == committed_filters and not forced? do
+    Logger.debug("No changes to publication, skipping update")
+    {:ok, state, []}
+  end
 
   defp update_publication(
          %__MODULE__{
@@ -335,6 +340,7 @@ defmodule Electric.Replication.PublicationManager do
     # If row filtering is disabled, we only care about changes in actual relations
     # included in the publication
     if not forced? and Map.keys(current_filters) == Map.keys(committed_filters) do
+      Logger.debug("No changes to publication, skipping update")
       {:ok, state, []}
     else
       try do

@@ -151,7 +151,13 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.transaction_message.duration_µs": receive_time
     )
 
-    Logger.info("Received transaction #{xid} from Postgres at #{lsn}")
+    Logger.info(
+      "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}",
+      received_transaction_xid: xid,
+      received_transaction_num_changes: txn.num_changes,
+      received_transaction_lsn: lsn
+    )
+
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
 
     OpenTelemetry.timed_fun("shape_log_collector.handle_transaction.duration_µs", fn ->
