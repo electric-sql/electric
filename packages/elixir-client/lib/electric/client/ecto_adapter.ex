@@ -6,9 +6,18 @@ if Code.ensure_loaded?(Ecto) do
 
     @behaviour Electric.Client.ValueMapper
 
+    def shape!(schema, opts \\ [])
+
+    def shape!(schema, opts) when is_atom(schema), do: shape_from_query!(schema, opts)
+    def shape!(%Ecto.Query{} = query, opts), do: shape_from_query!(query, opts)
+    def shape!(%Ecto.Changeset{} = changeset, opts), do: shape_from_changeset!(changeset, opts)
+
+    def shape!(changeset_fun, opts) when is_function(changeset_fun, 1),
+      do: shape_from_changeset!(changeset_fun, opts)
+
     @doc false
     @spec shape_from_query!(Ecto.Queryable.t()) :: ShapeDefinition.t()
-    def shape_from_query!(queryable) do
+    def shape_from_query!(queryable, opts \\ []) do
       query = Ecto.Queryable.to_query(queryable)
 
       validate_query!(query)
@@ -20,12 +29,77 @@ if Code.ensure_loaded?(Ecto) do
       columns = query_columns(query)
       where = where(query)
 
-      ShapeDefinition.new!(table_name,
-        namespace: namespace,
-        where: where,
-        columns: columns,
-        parser: {__MODULE__, struct}
+      ShapeDefinition.new!(
+        table_name,
+        merge_shape_opts(
+          [namespace: namespace, where: where, columns: columns, parser: {__MODULE__, struct}],
+          opts
+        )
       )
+    end
+
+    @shape_from_changeset_opts_schema ShapeDefinition.schema_definition()
+                                      |> Keyword.drop([:columns])
+                                      |> NimbleOptions.new!()
+
+    @type shape_from_changeset_opts() :: [
+            unquote(NimbleOptions.option_typespec(@shape_from_changeset_opts_schema))
+          ]
+
+    @spec shape_from_changeset!(
+            (map() -> Ecto.Changeset.t()) | Ecto.Changeset.t(),
+            shape_from_changeset_opts()
+          ) :: ShapeDefinition.t()
+    def shape_from_changeset!(changeset_or_fun, opts \\ [])
+
+    def shape_from_changeset!(%Ecto.Changeset{} = changeset, opts) do
+      generate_shape_from_changeset(changeset, opts)
+    end
+
+    def shape_from_changeset!(changeset_fun, opts) when is_function(changeset_fun, 1) do
+      case changeset_fun.(%{}) do
+        %Ecto.Changeset{} = changeset ->
+          generate_shape_from_changeset(changeset, opts)
+
+        invalid ->
+          raise ArgumentError,
+            message:
+              "Changeset function returned #{inspect(invalid)}, was expecting an Ecto.Changeset struct"
+      end
+    end
+
+    defp generate_shape_from_changeset(%Ecto.Changeset{data: %schema{}} = changeset, opts) do
+      if !function_exported?(schema, :__schema__, 1),
+        do:
+          raise(ArgumentError,
+            message:
+              "cannot generate a shape from a schema-less changeset. Use #{inspect(ShapeDefinition)}.new/2"
+          )
+
+      table_name = schema.__schema__(:source)
+      namespace = schema.__schema__(:prefix)
+      pks = schema.__schema__(:primary_key)
+
+      columns =
+        [pks, changeset.required, Keyword.keys(changeset.validations)]
+        |> Enum.concat()
+        |> Enum.uniq()
+        |> Enum.map(&schema.__schema__(:field_source, &1))
+        |> Enum.map(&to_string/1)
+
+      ShapeDefinition.new!(
+        table_name,
+        merge_shape_opts(
+          [columns: columns, parser: {__MODULE__, schema}, namespace: namespace],
+          opts
+        )
+      )
+    end
+
+    defp merge_shape_opts(base, overrides) do
+      Keyword.merge(base, overrides, fn _key, base, over ->
+        if is_nil(over), do: base, else: over
+      end)
     end
 
     defp table_name(%{

@@ -6,6 +6,7 @@ end
 defmodule Electric.Client.EctoAdapterTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Client.ShapeDefinition
   alias Electric.Client
   alias Electric.Client.EctoAdapter
   alias Electric.Client.Message
@@ -30,6 +31,12 @@ defmodule Electric.Client.EctoAdapterTest do
       field(:visible, :boolean, default: true)
       timestamps()
     end
+
+    def changeset(data \\ %__MODULE__{}, params) do
+      Ecto.Changeset.cast(data, params, [:name, :amount, :price])
+      |> Ecto.Changeset.validate_required([:name, :amount, :price])
+      |> Ecto.Changeset.validate_number(:price, greater_than_or_equal_to: 10)
+    end
   end
 
   defmodule NamespacedTable do
@@ -43,7 +50,57 @@ defmodule Electric.Client.EctoAdapterTest do
       field(:price, :decimal, source: :cost)
       field(:net_price, Money)
       field(:visible, :boolean, default: true)
+      field(:virtual, :string, virtual: true)
       timestamps()
+    end
+  end
+
+  defmodule Weather do
+    use Ecto.Schema
+    import Ecto.Changeset
+
+    schema "weather" do
+      field(:city, :string)
+      field(:temp_lo, :integer)
+      field(:temp_hi, :integer)
+      field(:prcp, :float, default: 0.0)
+
+      has_many(:history, History)
+
+      embeds_one :meta, Meta do
+        field(:type, Ecto.Enum, values: [:foo, :bar, :baz])
+      end
+    end
+
+    def changeset(weather \\ %__MODULE__{}, data) do
+      weather
+      |> cast(data, [:city, :temp_lo, :temp_hi, :prcp])
+      |> validate_required([:city, :temp_lo, :temp_hi])
+      |> validate_number(:prcp, greater_than_or_equal_to: 0)
+      # meta only appears in the shape if required: true
+      |> cast_embed(:meta, required: true)
+      |> cast_assoc(:history)
+    end
+  end
+
+  defmodule History do
+    use Ecto.Schema
+    import Ecto.Changeset
+
+    schema "history" do
+      field(:date, :date)
+      field(:temp_lo, :integer)
+      field(:temp_hi, :integer)
+      field(:prcp, :float, default: 0.0)
+
+      belongs_to(:weather, Weather)
+    end
+
+    def changeset(history \\ %__MODULE__{}, data) do
+      history
+      |> cast(data, [:date, :temp_lo, :temp_hi, :prcp])
+      |> validate_required([:date, :temp_lo, :temp_hi])
+      |> validate_number(:prcp, greater_than_or_equal_to: 0)
     end
   end
 
@@ -150,6 +207,149 @@ defmodule Electric.Client.EctoAdapterTest do
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(Ecto.Query.put_query_prefix(TestTable, "hamster"))
     end
+
+    test "uses changeset information to define table + columns", _ctx do
+      assert %Electric.Client.ShapeDefinition{} =
+               shape = EctoAdapter.shape_from_changeset!(&TestTable.changeset/1)
+
+      assert Enum.sort(shape.columns) == ~w[amount cost id name]
+      assert shape.table == @table_name
+    end
+
+    test "allows custom namespace", _ctx do
+      assert %Electric.Client.ShapeDefinition{} =
+               shape =
+               EctoAdapter.shape_from_changeset!(&TestTable.changeset/1, namespace: "unsettling")
+
+      assert shape.namespace == "unsettling"
+    end
+
+    test "allows for custom where clause with params and parser", _ctx do
+      assert %Electric.Client.ShapeDefinition{} =
+               shape =
+               EctoAdapter.shape_from_changeset!(&TestTable.changeset/1,
+                 where: "name = $1",
+                 params: ["a name"],
+                 parser: {__MODULE__, []}
+               )
+
+      assert Enum.sort(shape.columns) == ~w[amount cost id name]
+
+      assert %ShapeDefinition{
+               where: "name = $1",
+               params: ["a name"],
+               parser: {__MODULE__, []}
+             } = shape
+    end
+
+    test "allows passing a custom changeset/1 function", _ctx do
+      changeset_fun =
+        fn params ->
+          Ecto.Changeset.cast(
+            %TestTable{},
+            params,
+            [:name, :price]
+          )
+          |> Ecto.Changeset.validate_required([:name])
+          |> Ecto.Changeset.validate_number(:price, greater_than_or_equal_to: 10)
+        end
+
+      assert %Electric.Client.ShapeDefinition{} =
+               shape = EctoAdapter.shape_from_changeset!(changeset_fun)
+
+      assert Enum.sort(shape.columns) == ~w[cost id name]
+      assert shape.table == @table_name
+    end
+
+    test "allows passing a changeset", _ctx do
+      changeset =
+        %TestTable{}
+        |> Ecto.Changeset.cast(%{}, [:name, :price])
+        |> Ecto.Changeset.validate_required([:name])
+        |> Ecto.Changeset.validate_number(:price, greater_than_or_equal_to: 10)
+
+      assert %Electric.Client.ShapeDefinition{} =
+               shape = EctoAdapter.shape_from_changeset!(changeset)
+
+      assert Enum.sort(shape.columns) == ~w[cost id name]
+      assert shape.table == @table_name
+    end
+
+    test "supports complex changesets", _ctx do
+      assert %Electric.Client.ShapeDefinition{} =
+               shape = EctoAdapter.shape_from_changeset!(&Weather.changeset/1)
+
+      assert Enum.sort(shape.columns) ==
+               Enum.sort(["id", "city", "temp_lo", "temp_hi", "prcp", "meta"])
+    end
+
+    test "raises if changeset function returns something other than a Changeset" do
+      changeset_fun = fn _params -> %TestTable{} end
+
+      assert_raise ArgumentError, fn ->
+        EctoAdapter.shape_from_changeset!(changeset_fun)
+      end
+    end
+
+    defmodule User do
+      defstruct [:name, :email, :age]
+    end
+
+    # no point supporting schemaless changesets - you might as well just
+    # call ShapeDefinition.new/2
+    test "raises if given a schemaless changeset", _ctx do
+      changeset =
+        {%User{}, %{name: :string, email: :string, age: :integer}}
+        |> Ecto.Changeset.cast(%{}, [:name, :email, :age])
+        |> Ecto.Changeset.validate_required([:name, :email, :age])
+        |> Ecto.Changeset.validate_number(:age, greater_than: 0)
+
+      assert_raise ArgumentError, fn ->
+        EctoAdapter.shape_from_changeset!(changeset)
+      end
+    end
+
+    test "derives correct namespace from changeset + schema", _ctx do
+      changeset_fun =
+        fn params ->
+          Ecto.Changeset.cast(
+            %NamespacedTable{},
+            params,
+            [:name, :amount, :price, :visible]
+          )
+          |> Ecto.Changeset.validate_required([:name, :amount, :price, :visible])
+          |> Ecto.Changeset.validate_number(:price, greater_than_or_equal_to: 10)
+        end
+
+      assert %Electric.Client.ShapeDefinition{} =
+               shape =
+               EctoAdapter.shape_from_changeset!(changeset_fun)
+
+      assert Enum.sort(shape.columns) == ~w[amount cost id name visible]
+      assert shape.table == "my_table"
+      assert shape.namespace == "myapp"
+    end
+
+    test "ignores virtual fields", _ctx do
+      changeset_fun =
+        fn params ->
+          Ecto.Changeset.cast(
+            %NamespacedTable{},
+            params,
+            [:name, :amount, :price, :virtual]
+          )
+          |> Ecto.Changeset.validate_required([:name, :amount, :price])
+          |> Ecto.Changeset.validate_number(:price, greater_than_or_equal_to: 10)
+        end
+
+      assert %Electric.Client.ShapeDefinition{} =
+               shape =
+               EctoAdapter.shape_from_changeset!(changeset_fun)
+
+      assert Enum.sort(shape.columns) == ~w[amount cost id name]
+      assert shape.table == "my_table"
+      assert shape.namespace == "myapp"
+    end
   end
 
   describe "ValueMapper.for_schema/2" do
@@ -248,6 +448,12 @@ defmodule Electric.Client.EctoAdapterTest do
                inserted_at: %NaiveDateTime{},
                updated_at: %NaiveDateTime{}
              } = message.value
+    end
+
+    test "raises if passed a module that isn't an ecto schema", ctx do
+      assert_raise ArgumentError, fn ->
+        stream(ctx, __MODULE__)
+      end
     end
   end
 

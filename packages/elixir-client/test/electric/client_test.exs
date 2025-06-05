@@ -113,7 +113,7 @@ defmodule Electric.ClientTest do
     end
   end
 
-  describe "stream/1" do
+  describe "stream/2" do
     setup :with_unique_table
 
     setup(ctx) do
@@ -332,6 +332,73 @@ defmodule Electric.ClientTest do
       refute_receive _
     end
 
+    test "accepts replica: full setting on shape definition", ctx do
+      {:ok, shape} = Electric.Client.shape(ctx.tablename, replica: :full)
+      {:ok, id1} = insert_item(ctx, title: "Changing item")
+      stream = Client.stream(ctx.client, shape)
+
+      parent = self()
+
+      {:ok, _task} =
+        start_supervised(
+          {Task,
+           fn ->
+             stream
+             |> Stream.each(&send(parent, {:stream, 1, &1}))
+             |> Stream.run()
+           end},
+          id: {:stream, 1}
+        )
+
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
+      assert_receive {:stream, 1, up_to_date()}
+
+      :ok = update_item(ctx, id1, value: 999)
+
+      assert_receive {:stream, 1,
+                      %ChangeMessage{
+                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"},
+                        old_value: %{"value" => 0}
+                      }},
+                     500
+
+      assert_receive {:stream, 1, up_to_date()}
+    end
+
+    test "stream setting of replica overrides shape", ctx do
+      # for backwards compatibility
+      {:ok, shape} = Electric.Client.shape(ctx.tablename, replica: :default)
+      {:ok, id1} = insert_item(ctx, title: "Changing item")
+      stream = Client.stream(ctx.client, shape, replica: :full)
+
+      parent = self()
+
+      {:ok, _task} =
+        start_supervised(
+          {Task,
+           fn ->
+             stream
+             |> Stream.each(&send(parent, {:stream, 1, &1}))
+             |> Stream.run()
+           end},
+          id: {:stream, 1}
+        )
+
+      assert_receive {:stream, 1, %ChangeMessage{value: %{"id" => ^id1}}}, 5000
+      assert_receive {:stream, 1, up_to_date()}
+
+      :ok = update_item(ctx, id1, value: 999)
+
+      assert_receive {:stream, 1,
+                      %ChangeMessage{
+                        value: %{"id" => ^id1, "value" => 999, "title" => "Changing item"},
+                        old_value: %{"value" => 0}
+                      }},
+                     500
+
+      assert_receive {:stream, 1, up_to_date()}
+    end
+
     test "params are appended to all requests" do
       params = %{my_goal: "unknowable", my_reasons: "inscrutable"}
 
@@ -430,6 +497,68 @@ defmodule Electric.ClientTest do
       )
 
       assert [%Client.Error{message: %{"message" => "not right"}}] = Enum.to_list(stream)
+    end
+  end
+
+  defmodule TestTable do
+    use Ecto.Schema
+
+    schema "test_table" do
+      field(:name, :string)
+      field(:amount, :integer)
+      field(:price, :decimal, source: :cost)
+    end
+
+    def changeset(data \\ %__MODULE__{}, params) do
+      Ecto.Changeset.cast(data, params, [:name, :amount, :price])
+      |> Ecto.Changeset.validate_required([:name, :amount, :price])
+      |> Ecto.Changeset.validate_number(:price, greater_than_or_equal_to: 10)
+    end
+  end
+
+  describe "Ecto defined shapes" do
+    setup do
+      {:ok, client} =
+        Client.new(base_url: "http://localhost:3000")
+
+      %{client: client}
+    end
+
+    test "schema module", ctx do
+      %{client: %{params: params}} = Client.stream(ctx.client, TestTable)
+      assert %{"table" => "test_table", "columns" => "id,name,amount,cost"} = params
+    end
+
+    test "ecto query", ctx do
+      import Ecto.Query
+
+      query = from(t in TestTable, where: t.price > 10)
+
+      %{client: %{params: params}} = Client.stream(ctx.client, query)
+
+      assert %{
+               "table" => "test_table",
+               "where" => "(\"cost\" > 10)",
+               "columns" => "id,name,amount,cost"
+             } =
+               params
+    end
+
+    test "changeset function", ctx do
+      %{client: %{params: params}} =
+        Client.stream(ctx.client, &TestTable.changeset/1)
+
+      assert %{"table" => "test_table", "columns" => "id,name,amount,cost"} =
+               params
+    end
+
+    test "changeset", ctx do
+      changeset = TestTable.changeset(%{})
+
+      %{client: %{params: params}} = Client.stream(ctx.client, changeset)
+
+      assert %{"table" => "test_table", "columns" => "id,name,amount,cost"} =
+               params
     end
   end
 
