@@ -1,4 +1,4 @@
-defmodule Electric.FatalErrorTest do
+defmodule Electric.DbConnectionErrorTest do
   use ExUnit.Case, async: true
 
   alias Electric.DbConnectionError
