@@ -30,7 +30,7 @@ AI app builders like [Bolt](https://bolt.new), [Lovable](https://lovable.dev) an
 [PGlite](https://pglite.dev) is a Postgres database that runs inside your dev environment. With it, you can one-shot database-driven apps that run without leaving the sandbox. So you can vibe code real apps without even thinking about infra.
 
 > [!Warning] ✨ Try it on Bolt.new
-> Copy the one-shot [prompt examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this Bolt app](https://bolt.new/~/sb1-2sqiinaz).
+> Copy the one-shot [prompt examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this Bolt app](https://bolt.new/~/sb1-tgukxuwd).
 
 ## More play, less infra
 
@@ -38,7 +38,7 @@ AI app builders like [Bolt](https://bolt.new), [Lovable](https://lovable.dev) an
 
 Apps tend to be backed by a database. Usually [Postgres](https://www.postgresql.org). So, when an AI app builder generates a new app, it needs to be connected to a database in order to actually work.
 
-For example, here's Bolt.new promoted to create a "wish list" app using Vite and Node.js (about as standard a stack as you can get). It one-shots the code fine but fails to run the app because it doesn't have a database connected:
+For example, here's Bolt.new prompted to create a "wish list" app using Vite and Node.js (about as standard a stack as you can get). It one-shots the code fine but fails to run the app because it doesn't have a database connected:
 
 <figure>
   <video class="w-full" controls
@@ -148,4 +148,4 @@ That means having a database inside your sandbox. No glue, no friction, no exter
 This is the future of AI app building. Vibe coding with a database in the sandbox. Unlocked by [PGlite](https://pglite.dev).
 
 > [!Warning] ✨ Try it on Bolt.new
-> Copy the one-shot [prompt examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this Bolt app](https://bolt.new/~/sb1-2sqiinaz).
+> Copy the one-shot [prompt examples](https://pglite.dev/docs/pglite-socket#llm-usage) from the PGlite docs. Or fork [this Bolt app](https://bolt.new/~/sb1-tgukxuwd).
