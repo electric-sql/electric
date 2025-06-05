@@ -47,7 +47,63 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     assert_where(where(TestTable, nd: ^nd), ~s[("nd" = '2024-10-23T14:36:39'::timestamp)])
     assert_where(where(TestTable, ud: ^ud), ~s[("ud" = '2024-10-23T14:36:39Z'::timestamptz)])
     assert_where(where(TestTable, dd: ^dd), ~s[("dd" = '2024-10-23'::date)])
+
     assert_where(where(TestTable, mm: ^mm), ~s[("mm" = 199990000)])
+  end
+
+  test "where IN (...)" do
+    values_ii = [1, 2, 3]
+    values_ss = ["1", "2", "3"]
+    values_dd = [~D[2024-10-23], ~D[2024-10-24], ~D[2024-10-25]]
+    values_ff = [3.14, 2.71, 6.626]
+    values_mm = [Decimal.new("3.14"), Decimal.new("2.71"), Decimal.new("6.626")]
+    values_mm2 = [Decimal.new("9.99")]
+    ff = 3.14
+
+    assert_where(from(t in TestTable) |> where([t], t.ii in [1, 2, 3]), ~s|("ii" IN (1,2,3))|)
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.ss in ["1", "2", "3"]),
+      ~s|("ss" IN ('1','2','3'))|
+    )
+
+    assert_where(from(t in TestTable) |> where([t], t.ii in ^values_ii), ~s|("ii" IN (1,2,3))|)
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.ss in ^values_ss),
+      ~s|("ss" IN ('1','2','3'))|
+    )
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.ff in ^values_ff),
+      ~s|("ff" IN (3.14::float,2.71::float,6.626::float))|
+    )
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.mm in ^values_mm),
+      ~s|("mm" IN (3140000,2710000,6626000))|
+    )
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.mm in ^values_mm or t.mm in ^values_mm2),
+      ~s|("mm" IN (3140000,2710000,6626000) OR "mm" IN (9990000))|
+    )
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.ss in ^values_ss and t.ii in ^values_ii),
+      ~s|("ss" IN ('1','2','3') AND "ii" IN (1,2,3))|
+    )
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.dd in ^values_dd),
+      ~s|("dd" IN ('2024-10-23'::date,'2024-10-24'::date,'2024-10-25'::date))|
+    )
+
+    assert_where(
+      from(t in TestTable)
+      |> where([t], (t.ss in ^values_ss and t.ii in ^values_ii) or t.ff == ^ff),
+      ~s|(("ss" IN ('1','2','3') AND "ii" IN (1,2,3)) OR ("ff" = 3.14::float))|
+    )
   end
 
   test "fragment" do
@@ -74,6 +130,15 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
         where: fragment("? > ? AND ? < ?", t.mm, ^mm_min, t.mm, ^mm_max)
       ),
       ~s[("mm" > 123450000 AND "mm" < 678900000)]
+    )
+
+    uu = "364e61cf-cebd-4dff-89a0-8ff3462d36c7"
+
+    assert_where(
+      from(t in TestTable,
+        where: fragment("? = ?", t.uu, ^uu)
+      ),
+      ~s[("uu" = '364e61cf-cebd-4dff-89a0-8ff3462d36c7')]
     )
   end
 
