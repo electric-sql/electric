@@ -37,21 +37,36 @@ yarn add @electric-sql/vue
 
 ### `useShape`
 
-The [`useShape`](https://github.com/electric-sql/electric/blob/main/packages/vue-composables/src/use-shape.ts) composable binds a materialized [Shape](/docs/api/clients/typescript#shape) to reactive references:
+#### Reactive Shape
+
+The [`useShape`](https://github.com/electric-sql/electric/blob/main/packages/vue-composables/src/use-shape.ts) returns a reactive [Shape](/docs/api/clients/typescript#shape):
+
+```ts
+interface UseShapeResult<T> {
+  data: Ref<T[]> // Reactive array of rows
+  shape: Shape<T> // Underlying Shape instance
+  stream: ShapeStream<T> // Underlying ShapeStream instance
+  isLoading: Ref<boolean> // Loading state indicator
+  lastSyncedAt: Ref<number | undefined> // Timestamp of last sync
+  error: Ref<Shape<T>["error"]> // Error state
+  isError: Ref<boolean> // Error indicator
+}
+```
+
+All data-related properties are Vue reactive references, enabling automatic component updates when data changes.
 
 ```vue
 <script setup lang="ts">
-  import { useShape } from '@electric-sql/vue'
+import { useShape } from "@electric-sql/vue"
 
-  type Item = { title: string }
+type Item = { title: string }
 
-  // Use the composable
-  const items = useShape<Item>({
-    url: `http://localhost:3000/v1/shape`,
-    params: {
-      table: 'items'
-    }
-  })
+const items = useShape<Item>({
+  url: `http://localhost:3000/v1/shape`,
+  params: {
+    table: "items",
+  },
+})
 </script>
 
 <template>
@@ -75,35 +90,17 @@ Configure your shape subscription with these parameters:
 - `columns` - Optional array of column names to select
 
 ```ts
-const items = useShape<{id: number, title: string}>({
-    url: `http://localhost:3000/v1/shape`,
-    params: {
-        table: 'items',
-        where: "status = 'active'",
-        columns: ['id', 'title']
-    }
+const items = useShape<{ id: number; title: string }>({
+  url: `http://localhost:3000/v1/shape`,
+  params: {
+    table: "items",
+    where: "status = 'active'",
+    columns: ["id", "title"],
+  },
 })
 ```
 
 > **Note**: Join queries are not currently supported. For data relationships, see the [Table Joins](#shape-joins) section.
-
-#### Return Value
-
-The `useShape` composable returns an object with reactive properties:
-
-```ts
-interface UseShapeResult<T> {
-    data: Ref<T[]>                      // Reactive array of rows
-    shape: Shape<T>                     // Underlying Shape instance
-    stream: ShapeStream<T>              // Underlying ShapeStream instance
-    isLoading: Ref<boolean>             // Loading state indicator
-    lastSyncedAt: Ref<number | undefined> // Timestamp of last sync
-    error: Ref<Shape<T>['error']>       // Error state
-    isError: Ref<boolean>               // Error indicator
-}
-```
-
-All data-related properties are Vue reactive references, enabling automatic component updates when data changes.
 
 ### Utility Functions
 
@@ -112,14 +109,14 @@ All data-related properties are Vue reactive references, enabling automatic comp
 Preload shape data before component rendering:
 
 ```ts
-import { preloadShape } from '@electric-sql/vue'
+import { preloadShape } from "@electric-sql/vue"
 
 // Inside a router guard or async setup
 const itemsData = await preloadShape({
-    url: `http://localhost:3000/v1/shape`,
-    params: {
-        table: 'items'
-    }
+  url: `http://localhost:3000/v1/shape`,
+  params: {
+    table: "items",
+  },
 })
 ```
 
@@ -130,12 +127,12 @@ This function is useful for ensuring data is available before mounting component
 Low-level utilities for direct stream and shape management:
 
 ```ts
-import { getShapeStream, getShape } from '@electric-sql/vue'
+import { getShapeStream, getShape } from "@electric-sql/vue"
 
 // Get or create a stream from cache
 const stream = getShapeStream<Item>({
-    url: `http://localhost:3000/v1/shape`,
-    params: { table: 'items' }
+  url: `http://localhost:3000/v1/shape`,
+  params: { table: "items" },
 })
 
 // Get or create a shape from cache
@@ -152,18 +149,18 @@ Implement a custom fetch client for specialized networking needs:
 
 ```ts
 const items = useShape<Item>({
-    url: `http://localhost:3000/v1/shape`,
-    params: { table: 'items' },
-    fetchClient: async (input, init) => {
-        // Add authentication headers
-        return fetch(input, {
-            ...init,
-            headers: {
-                ...init?.headers,
-                'Authorization': `Bearer ${yourAuthToken}`
-            }
-        })
-    }
+  url: `http://localhost:3000/v1/shape`,
+  params: { table: "items" },
+  fetchClient: async (input, init) => {
+    // Add authentication headers
+    return fetch(input, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${yourAuthToken}`,
+      },
+    })
+  },
 })
 ```
 
@@ -173,19 +170,19 @@ Manage subscription lifecycle with `AbortController`:
 
 ```vue
 <script setup lang="ts">
-  import { useShape } from '@electric-sql/vue'
-  import { onUnmounted } from 'vue'
+import { useShape } from "@electric-sql/vue"
+import { onUnmounted } from "vue"
 
-  const controller = new AbortController()
+const controller = new AbortController()
 
-  const items = useShape({
-    url: `http://localhost:3000/v1/shape`,
-    params: { table: 'items' },
-    signal: controller.signal
-  })
+const items = useShape({
+  url: `http://localhost:3000/v1/shape`,
+  params: { table: "items" },
+  signal: controller.signal,
+})
 
-  // Clean up when component unmounts
-  onUnmounted(() => controller.abort())
+// Clean up when component unmounts
+onUnmounted(() => controller.abort())
 </script>
 ```
 
@@ -198,51 +195,49 @@ You can read more on shapes [here](/docs/guides/shapes).
 
 ```vue
 <script setup lang="ts">
-  import { useShape } from '@electric-sql/vue'
-  import { computed } from 'vue'
+import { useShape } from "@electric-sql/vue"
+import { computed } from "vue"
 
-  // Define clear data types
-  type User = {
-    id: string
-    name: string
-    email: string
-  }
+// Define clear data types
+type User = {
+  id: string
+  name: string
+  email: string
+}
 
-  type Post = {
-    id: string
-    user_id: string
-    title: string
-    content: string
-    created_at: string
-  }
+type Post = {
+  id: string
+  user_id: string
+  title: string
+  content: string
+  created_at: string
+}
 
-  // Subscribe to both tables
-  const users = useShape<User>({
-    url: 'http://localhost:3000/v1/shape',
-    params: { table: 'users' }
-  })
+// Subscribe to both tables
+const users = useShape<User>({
+  url: "http://localhost:3000/v1/shape",
+  params: { table: "users" },
+})
 
-  const posts = useShape<Post>({
-    url: 'http://localhost:3000/v1/shape',
-    params: { table: 'posts' }
-  })
+const posts = useShape<Post>({
+  url: "http://localhost:3000/v1/shape",
+  params: { table: "posts" },
+})
 
-  // Create efficient computed join
-  const usersWithPosts = computed(() => {
-    // Only run join when data is available
-    if (users.isLoading.value || posts.isLoading.value) return []
+// Create efficient computed join
+const usersWithPosts = computed(() => {
+  // Only run join when data is available
+  if (users.isLoading.value || posts.isLoading.value) return []
 
-    // Map users to include their posts
-    return users.data.value.map(user => ({
-      ...user,
-      posts: posts.data.value.filter(post => post.user_id === user.id)
-    }))
-  })
+  // Map users to include their posts
+  return users.data.value.map((user) => ({
+    ...user,
+    posts: posts.data.value.filter((post) => post.user_id === user.id),
+  }))
+})
 
-  // Simple loading state
-  const isLoading = computed(() =>
-      users.isLoading.value || posts.isLoading.value
-  )
+// Simple loading state
+const isLoading = computed(() => users.isLoading.value || posts.isLoading.value)
 </script>
 
 <template>
@@ -265,11 +260,7 @@ You can read more on shapes [here](/docs/guides/shapes).
             No posts yet
           </div>
 
-          <div
-              v-for="post in user.posts"
-              :key="post.id"
-              class="post-card"
-          >
+          <div v-for="post in user.posts" :key="post.id" class="post-card">
             <h4>{{ post.title }}</h4>
             <p>{{ post.content }}</p>
             <div class="post-date">
@@ -296,3 +287,6 @@ You can read more on shapes [here](/docs/guides/shapes).
 - Apply specific `where` clauses to limit data volume
 - Consider using `AbortController` to terminate unused subscriptions
 - Move complex data transformations to computed properties
+
+You can read more on Shape Performance [here](/docs/guides/shapes).
+
