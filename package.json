@@ -20,5 +20,10 @@
   },
   "devDependencies": {
     "glob": "^10.3.10"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@microsoft/fetch-event-source": "patches/@microsoft__fetch-event-source.patch"
+    }
   }
 }
