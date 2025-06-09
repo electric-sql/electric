@@ -119,7 +119,7 @@ if Code.ensure_loaded?(Ecto) do
     end
 
     defp expr({:in, _, [left, {:^, _, [ix, _]}]}, sources, query, bindings) do
-      [expr(left, sources, query, bindings), " = ANY($", Integer.to_string(ix + 1), ?)]
+      [expr({:in, [], [left, bound_value(bindings, ix)]}, sources, query, bindings)]
     end
 
     # defp expr({:in, _, [left, %Ecto.SubQuery{} = subquery]}, sources, query) do
@@ -476,6 +476,14 @@ if Code.ensure_loaded?(Ecto) do
       [{ix, ecto_type}]
     end
 
+    defp collect_param_types(
+           {:in, _, [{{:., _, [{:&, _, [_]}, field]}, _, []}, {:^, _, [ix, _len]}]},
+           %{from: %Ecto.Query.FromExpr{source: {_, schema_mod}}}
+         ) do
+      ecto_type = schema_mod.__schema__(:type, field)
+      [{ix, ecto_type}]
+    end
+
     defp collect_param_types({:fragment, _, parts}, query) do
       Enum.flat_map(parts, &collect_fragment_part_types(&1, parts, query))
     end
@@ -529,15 +537,15 @@ if Code.ensure_loaded?(Ecto) do
       end)
     end
 
-    defp dump_binding(type, {value, _}) when is_list(value) do
-      Enum.map(value, &dump_binding(type, &1))
+    defp dump_binding({:parameterized, _} = type, {value, cast}) when is_list(value) do
+      value
+      |> Enum.zip(cast)
+      |> Enum.map(&dump_binding(type, &1))
+      |> Enum.unzip()
     end
 
-    defp dump_binding({:parameterized, _} = type, {value, _}) do
+    defp dump_binding({:parameterized, _} = type, {value, _cast}) do
       case Ecto.Type.dump(type, value) do
-        {:ok, dumped} when is_binary(dumped) and byte_size(dumped) == 16 ->
-          {Ecto.UUID.load!(dumped), dumped}
-
         {:ok, dumped} ->
           {dumped, dumped}
 
