@@ -1,4 +1,4 @@
-import { ChangeMessage, ControlMessage, Message, Row } from './types'
+import { ChangeMessage, ControlMessage, Message, Offset, Row } from './types'
 
 /**
  * Type guard for checking {@link Message} is {@link ChangeMessage}.
@@ -50,4 +50,16 @@ export function isUpToDateMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage & { up_to_date: true } {
   return isControlMessage(message) && message.headers.control === `up-to-date`
+}
+
+/**
+ * Parses the LSN from the up-to-date message and turns it into an offset.
+ * The LSN is only present in the up-to-date control message when in SSE mode.
+ * If we are not in SSE mode this function will return undefined.
+ */
+export function getOffset(message: ControlMessage): Offset | undefined {
+  const lsn = Number(message.headers.global_last_seen_lsn)
+  if (lsn && !isNaN(lsn)) {
+    return `${lsn}_0`
+  }
 }

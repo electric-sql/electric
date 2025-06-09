@@ -86,7 +86,7 @@ defmodule Electric.Shapes.Api.Response do
         message
       end
 
-    Api.encode_message(api_or_request, body)
+    Api.encode_error_message(api_or_request, body)
   end
 
   @spec send(Plug.Conn.t(), t()) :: Plug.Conn.t()
