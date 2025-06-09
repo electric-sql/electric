@@ -172,9 +172,9 @@ defmodule Electric.ShapeCache do
           GenServer.call(server, :await_snapshot_start, 15_000)
         catch
           :exit, {:timeout, {GenServer, :call, _}} ->
-            # Please notes that this timeout is not due to the query taking too long. The Snapshotter
-            # has it's own timeout and `await_snapshot_start/2` will return with a timeout error if the
-            # query is too slow (over 5 seconds).
+            # Please note that :await_snapshot_start can also return a timeout error as well
+            # as the call timing out and being handled here. A timeout error will be returned
+            # by :await_snapshot_start if the PublicationManager queries take longer than 5 seconds.
             Logger.error("Failed to await snapshot start for shape #{shape_handle}: timeout")
             {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
 
