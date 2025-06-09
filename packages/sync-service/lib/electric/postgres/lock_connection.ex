@@ -32,6 +32,10 @@ defmodule Electric.Postgres.LockConnection do
     ]
   end
 
+  def name(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  end
+
   @spec start_link(options()) :: {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
   def start_link(opts) do
     {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
@@ -49,10 +53,13 @@ defmodule Electric.Postgres.LockConnection do
       |> Electric.Utils.deobfuscate_password()
       |> connection_opts_with_logical_replication()
 
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      [timeout: :infinity, auto_reconnect: false, sync_connect: false] ++ connection_opts
+      [timeout: :infinity, auto_reconnect: false, sync_connect: false, name: name(stack_id)] ++
+        connection_opts
     )
   end
 
