@@ -54,8 +54,9 @@ defmodule Electric.Postgres.LockConnectionTest do
 
       assert_lock_acquired()
 
-      # try to grab the same with another
-      new_stack_id = :"#{stack_id}_new"
+      # try to grab the same lock using a different connection
+      new_stack_id = stack_id <> "_new"
+      _registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
 
       assert {:ok, _pid} =
                LockConnection.start_link(

@@ -170,6 +170,20 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  if Mix.env() == :test do
+    def from_error(:shutdown) do
+      %DbConnectionError{
+        message: "Test database connection has beed shutdown",
+        type: :shutdown,
+        original_error: :shutdown,
+        # We don't want for this error to be treated as fatal because what would interfere with the
+        # supervision startup/shutdown setup in tests. We just treat it as a retryable DB error
+        # and let the test code control supervision tree orchestration.
+        retry_may_fix?: true
+      }
+    end
+  end
+
   def from_error(error), do: unknown_error(error)
 
   def format_original_error(%DbConnectionError{original_error: error}) do
