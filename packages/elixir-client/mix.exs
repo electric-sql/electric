@@ -57,6 +57,7 @@ defmodule Electric.Client.MixProject do
       {:postgrex, "~> 0.19", only: [:dev, :test], override: true},
       {:postgresql_uri, "~> 0.1", only: [:test]},
       {:uuid, "~> 1.1", only: [:test]},
+      {:ecto_ulid, "~> 0.3", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
