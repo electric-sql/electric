@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Api.Response do
   @electric_offset_header "electric-offset"
   @electric_schema_header "electric-schema"
   @electric_up_to_date_header "electric-up-to-date"
-  @electric_known_error_header "electric-known-error"
+  @electric_known_error_header "electric-internal-known-error"
 
   # List of all Electric-specific headers that may be included in API responses
   @electric_headers [
