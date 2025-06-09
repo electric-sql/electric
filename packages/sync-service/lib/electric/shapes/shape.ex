@@ -2,12 +2,18 @@ defmodule Electric.Shapes.Shape do
   @moduledoc """
   Struct describing the requested shape
   """
-  require Logger
   alias Electric.Replication.Eval.Expr
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
   alias Electric.Shapes.WhereClause
+
+  require Logger
+
+  defprotocol Comparable do
+    @spec comparable(t()) :: t()
+    def comparable(term)
+  end
 
   @default_replica :default
 
@@ -61,8 +67,15 @@ defmodule Electric.Shapes.Shape do
           storage: %{required(String.t()) => String.t()}
         }
 
-  def comparable(%__MODULE__{} = shape),
-    do: shape |> Map.drop([:table_info, :storage])
+  def comparable(%__MODULE__{} = shape) do
+    shape
+    |> Map.drop([:table_info, :storage])
+    |> Map.update!(:where, fn
+      nil -> nil
+      %Expr{} = expr -> Electric.Shapes.Shape.Comparable.comparable(expr)
+      statement when is_binary(statement) -> statement
+    end)
+  end
 
   def hash(%__MODULE__{} = shape),
     do: shape |> comparable() |> :erlang.phash2()

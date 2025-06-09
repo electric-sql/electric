@@ -67,6 +67,12 @@ defmodule Electric.Replication.Eval.Expr do
 
   def from_json_safe(_),
     do: {:error, "Incorrect serialized format: keys must be `version`, `query`, `used_refs`"}
+
+  defimpl Electric.Shapes.Shape.Comparable do
+    def comparable(%Electric.Replication.Eval.Expr{} = expr) do
+      %{expr | eval: Electric.Shapes.Shape.Comparable.comparable(expr.eval)}
+    end
+  end
 end
 
 defimpl Jason.Encoder, for: Electric.Replication.Eval.Expr do

@@ -504,4 +504,98 @@ defmodule Electric.Shapes.ShapeTest do
       assert shape_old_decoded == shape_v1
     end
   end
+
+  describe "comparable/1" do
+    setup do
+      [
+        inspector:
+          Support.StubInspector.new(
+            tables: ["the_table", "another_table"],
+            columns: [
+              %{name: "id", type: "int8", pk_position: 0},
+              %{name: "value", type: "int8", pk_position: nil},
+              %{name: "size", type: "int8", pk_position: nil}
+            ]
+          )
+      ]
+    end
+
+    defp assert_shapes_equal(shape1, shape2) do
+      assert Shape.comparable(shape1) == Shape.comparable(shape2)
+      assert Shape.comparable(shape1) === Shape.comparable(shape2)
+    end
+
+    defp do_assert_shape_comparable(serialized_shape, reference_shape) do
+      assert {:ok, json} = Jason.encode(serialized_shape)
+      assert {:ok, serialized_shape} = Jason.decode!(json) |> Shape.from_json_safe()
+
+      assert_shapes_equal(serialized_shape, reference_shape)
+    end
+
+    defp assert_shape_comparable(serialized_shape, reference_shape) do
+      assert_shapes_equal(serialized_shape, reference_shape)
+
+      do_assert_shape_comparable(serialized_shape, reference_shape)
+      do_assert_shape_comparable(reference_shape, serialized_shape)
+    end
+
+    test "equal shapes compare as equal", %{inspector: inspector} do
+      assert {:ok, %Shape{} = shape1} =
+               Shape.new(~S|the_table|, where: "false", inspector: inspector)
+
+      assert {:ok, %Shape{} = shape2} =
+               Shape.new(~S|the_table|, where: "false", inspector: inspector)
+
+      assert_shape_comparable(shape1, shape2)
+    end
+
+    test "equal shapes compare as equal after json serialization", %{inspector: inspector} do
+      assert {:ok, %Shape{} = shape1} =
+               Shape.new(~S|the_table|,
+                 where: "(FALSE)",
+                 columns: ["id", "value", "size"],
+                 inspector: inspector
+               )
+
+      assert {:ok, %Shape{} = shape2} =
+               Shape.new(~S|the_table|,
+                 where: "(FALSE)",
+                 columns: ["id", "value", "size"],
+                 inspector: inspector
+               )
+
+      assert_shape_comparable(shape1, shape2)
+    end
+
+    test "equal shapes with equivalent but not identical where clauses compare as equal after json serialization",
+         %{inspector: inspector} do
+      tests = [
+        {"(FALSE)", ["false", "(false)", " false "]},
+        {"(VALUE IN (1,2,3))", ["value in (1, 2, 3)", ~s[("value" in (1, 2, 3))]]},
+        {~S|time '20:00:00' + date '2024-01-01'|,
+         [
+           ~S|((TIME '20:00:00') + (DATE '2024-01-01'))|,
+           ~S| (((time  '20:00:00')  +  (date  '2024-01-01')))|
+         ]}
+      ]
+
+      shape_fun = fn where ->
+        Shape.new(~S|the_table|,
+          where: where,
+          columns: ["id", "value", "size"],
+          inspector: inspector
+        )
+      end
+
+      for {base, wheres} <- tests do
+        assert {:ok, %Shape{} = shape1} = shape_fun.(base)
+
+        for where <- wheres do
+          assert {:ok, %Shape{} = shape2} = shape_fun.(where)
+
+          assert_shape_comparable(shape1, shape2)
+        end
+      end
+    end
+  end
 end
