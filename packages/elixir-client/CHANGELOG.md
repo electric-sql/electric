@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.6.1
+
+### Patch Changes
+
+- 67b8172: Add support for array parameters in ecto where clauses
+
 ## 0.6.0
 
 ### Minor Changes
