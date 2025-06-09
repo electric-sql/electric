@@ -192,12 +192,76 @@ if Code.ensure_loaded?(Ecto) do
       end
     end
 
-    defp cast_to(type) do
-      fn
-        nil -> nil
-        value -> Ecto.Type.cast!(type, value)
+    defp cast_to(type) when is_atom(type) do
+      with {:module, _} <- Code.ensure_loaded(type),
+           true <- function_exported?(type, :type, 0),
+           true <- function_exported?(type, :load, 1) do
+        case type.type() do
+          :uuid -> &cast_uuid(&1, type)
+          _type -> &cast_ecto(type, &1)
+        end
+      else
+        _ -> &cast_ecto(type, &1)
       end
     end
+
+    defp cast_ecto(_type, nil), do: nil
+
+    defp cast_ecto(type, value) do
+      Ecto.Type.cast!(type, value)
+    end
+
+    defp cast_uuid(nil, _type), do: nil
+
+    # this is mostly to support Ecto.ULID who's `cast/1` function assumes a
+    # base32 encoded value (unlike Ecto.UUID which supports both string- and
+    # binary-encoded values). so instead of using `cast/1`, we convert the
+    # string to a binary and use `load/1` (uuid's always come through the
+    # replication stream string-encoded).
+    defp cast_uuid(
+           <<a1, a2, a3, a4, a5, a6, a7, a8, ?-, b1, b2, b3, b4, ?-, c1, c2, c3, c4, ?-, d1, d2,
+             d3, d4, ?-, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12>> = orig_value,
+           type
+         ) do
+      case type.load(
+             <<d(a1)::4, d(a2)::4, d(a3)::4, d(a4)::4, d(a5)::4, d(a6)::4, d(a7)::4, d(a8)::4,
+               d(b1)::4, d(b2)::4, d(b3)::4, d(b4)::4, d(c1)::4, d(c2)::4, d(c3)::4, d(c4)::4,
+               d(d1)::4, d(d2)::4, d(d3)::4, d(d4)::4, d(e1)::4, d(e2)::4, d(e3)::4, d(e4)::4,
+               d(e5)::4, d(e6)::4, d(e7)::4, d(e8)::4, d(e9)::4, d(e10)::4, d(e11)::4, d(e12)::4>>
+           ) do
+        {:ok, value} ->
+          value
+
+        :error ->
+          raise Ecto.CastError, type: type, value: orig_value
+      end
+    end
+
+    @compile {:inline, d: 1}
+
+    defp d(?0), do: 0
+    defp d(?1), do: 1
+    defp d(?2), do: 2
+    defp d(?3), do: 3
+    defp d(?4), do: 4
+    defp d(?5), do: 5
+    defp d(?6), do: 6
+    defp d(?7), do: 7
+    defp d(?8), do: 8
+    defp d(?9), do: 9
+    defp d(?A), do: 10
+    defp d(?B), do: 11
+    defp d(?C), do: 12
+    defp d(?D), do: 13
+    defp d(?E), do: 14
+    defp d(?F), do: 15
+    defp d(?a), do: 10
+    defp d(?b), do: 11
+    defp d(?c), do: 12
+    defp d(?d), do: 13
+    defp d(?e), do: 14
+    defp d(?f), do: 15
+    defp d(_), do: throw(:error)
 
     @problematic_clauses [
       joins: "JOIN",
