@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.0.19
+
+### Patch Changes
+
+- 0c6578d: Fix bug in Shape.comparable/1 preventing client shapes matching existing ones loaded from storage
+
 ## 1.0.18
 
 ### Patch Changes
