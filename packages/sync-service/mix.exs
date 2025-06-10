@@ -84,6 +84,7 @@ defmodule Electric.MixProject do
         {:electric_cubdb, "~> 2.0"},
         {:dotenvy, "~> 1.1"},
         {:ecto, "~> 3.12"},
+        {:exqlite, "~> 0.31"},
         {:gen_stage, "~> 1.2"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
