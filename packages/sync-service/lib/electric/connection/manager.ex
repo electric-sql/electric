@@ -643,7 +643,8 @@ defmodule Electric.Connection.Manager do
        %{
          error: DbConnectionError.format_original_error(error),
          type: error.type,
-         message: error.message
+         message: error.message,
+         total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
        }},
       state
     )
@@ -928,7 +929,7 @@ defmodule Electric.Connection.Manager do
     )
 
     dispatch_stack_event(
-      {:database_connection_failed,
+      {:connection_error,
        %{
          error: DbConnectionError.format_original_error(error),
          type: error.type,
