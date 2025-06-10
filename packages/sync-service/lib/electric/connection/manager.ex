@@ -111,8 +111,6 @@ defmodule Electric.Connection.Manager do
       :pg_system_identifier,
       # PostgreSQL timeline ID
       :pg_timeline_id,
-      # PostgreSQL's current WAL flush position at lock connection startup
-      :pg_wal_flush_lsn,
       # ID used for process labeling and sibling discovery
       :stack_id,
       # Registry used for stack events
@@ -843,8 +841,7 @@ defmodule Electric.Connection.Manager do
      %State{
        state
        | pg_system_identifier: info.system_identifier,
-         pg_timeline_id: info.timeline_id,
-         pg_wal_flush_lsn: info.current_wal_flush_lsn
+         pg_timeline_id: info.timeline_id
      }}
   end
 
@@ -860,8 +857,7 @@ defmodule Electric.Connection.Manager do
       %{
         pg_version: server_version,
         pg_system_identifier: state.pg_system_identifier,
-        pg_timeline_id: state.pg_timeline_id,
-        pg_wal_flush_lsn: state.pg_wal_flush_lsn
+        pg_timeline_id: state.pg_timeline_id
       },
       %{stack_id: state.stack_id}
     )
