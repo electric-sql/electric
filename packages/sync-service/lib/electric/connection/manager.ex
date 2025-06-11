@@ -571,9 +571,12 @@ defmodule Electric.Connection.Manager do
       ),
       do: {:noreply, state}
 
-  # Special-case the explicit shutdown of the supervision tree
+  # Special-case the explicit shutdown of the supervision tree.
+  #
+  # Supervisors send `:shutdown` exit signals to its children when they themselves are shutting
+  # down. We don't need to react to this signal coming from any of our linked processes, just
+  # ignore it.
   def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
-  def handle_info({:EXIT, _, {:shutdown, _}}, state), do: {:noreply, state}
 
   # A process exited as it was trying to open a database connection.
   def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
