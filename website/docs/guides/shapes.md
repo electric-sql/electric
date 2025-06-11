@@ -258,7 +258,7 @@ You can upvote and discuss adding support for include trees here:
 
 Shape definitions are currently immutable.
 
-Once a shape subscription has been started, it's definition cannot be changed. If you want to change the data in a shape, you need to start a new subscription.
+Once a shape subscription has been started, its definition cannot be changed. If you want to change the data in a shape, you need to start a new subscription.
 
 You can upvote and discuss adding support for mutable shapes here:
 
