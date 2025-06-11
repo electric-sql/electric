@@ -128,14 +128,20 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     !is_nil(Electric.Shapes.Consumer.whereis(stack_id, shape_handle))
   end
 
-  # don't spam test logs with failures due to process shutdown
   if @env == :test do
+    # don't spam test logs with failures due to process shutdown
     defp log_error(:exit, _message) do
       :ok
     end
+  else
+    # don't spam sentry with errors caused by shutdown order (i.e. when the
+    # publication manager has been shutdown)
+    defp log_error(:exit, message) do
+      Logger.log(:warning, message)
+    end
   end
 
-  defp log_error(_kind, message) do
-    Logger.error(message)
+  defp log_error(:error, message) do
+    Logger.log(:error, message)
   end
 end
