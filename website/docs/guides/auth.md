@@ -81,7 +81,7 @@ The two patterns we recommend and describe below, with code and examples, are:
 
 The simplest pattern is to authorise Shape requests using a reverse-proxy.
 
-The proxy can be your API, or a seperate proxy service or edge-function. When you make a request to sync a shape, route it via your API/proxy, validate the user credentials and shape parameters, and then only proxy the data through if authorized.
+The proxy can be your API, or a separate proxy service or edge-function. When you make a request to sync a shape, route it via your API/proxy, validate the user credentials and shape parameters, and then only proxy the data through if authorized.
 
 For example:
 
