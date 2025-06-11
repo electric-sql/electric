@@ -3,7 +3,7 @@ defmodule Support.Money do
 
   @impl Ecto.ParameterizedType
   def init(opts) do
-    {:ok, opts}
+    opts
   end
 
   @impl Ecto.ParameterizedType

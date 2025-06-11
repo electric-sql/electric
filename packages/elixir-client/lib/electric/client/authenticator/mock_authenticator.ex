@@ -22,7 +22,7 @@ defmodule Electric.Client.Authenticator.MockAuthenticator do
   end
 
   defp shape_hash(params, config) do
-    auth_hash([:table, :columns, :where], params, config)
+    auth_hash(["table", "columns", "where"], params, config)
   end
 
   defp put_request_params(request, hash) do
