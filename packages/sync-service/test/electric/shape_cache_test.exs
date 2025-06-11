@@ -127,6 +127,23 @@ defmodule Electric.ShapeCacheTest do
 
       assert shape_handle1 != shape_handle2
     end
+
+    test "should not return the same shape_handle for all columns and selected columns", %{
+      shape_cache_opts: opts
+    } do
+      alias Electric.Replication.Eval.Parser
+
+      shape1 = @shape
+
+      shape2 = Shape.new!("items", inspector: @stub_inspector, columns: ["id", "value"])
+
+      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, opts)
+      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape1, opts)
+
+      assert shape_handle1 != shape_handle2
+
+      assert {^shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, opts)
+    end
   end
 
   describe "get_or_create_shape_handle/2 shape initialization" do

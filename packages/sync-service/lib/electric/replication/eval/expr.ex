@@ -70,7 +70,7 @@ defmodule Electric.Replication.Eval.Expr do
 
   defimpl Electric.Shapes.Shape.Comparable do
     def comparable(%Electric.Replication.Eval.Expr{} = expr) do
-      %{expr | eval: Electric.Shapes.Shape.Comparable.comparable(expr.eval)}
+      {:eval_expr, expr.query, expr.returns}
     end
   end
 end
