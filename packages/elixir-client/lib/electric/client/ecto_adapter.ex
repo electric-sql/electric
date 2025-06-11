@@ -239,29 +239,16 @@ if Code.ensure_loaded?(Ecto) do
 
     @compile {:inline, d: 1}
 
-    defp d(?0), do: 0
-    defp d(?1), do: 1
-    defp d(?2), do: 2
-    defp d(?3), do: 3
-    defp d(?4), do: 4
-    defp d(?5), do: 5
-    defp d(?6), do: 6
-    defp d(?7), do: 7
-    defp d(?8), do: 8
-    defp d(?9), do: 9
-    defp d(?A), do: 10
-    defp d(?B), do: 11
-    defp d(?C), do: 12
-    defp d(?D), do: 13
-    defp d(?E), do: 14
-    defp d(?F), do: 15
-    defp d(?a), do: 10
-    defp d(?b), do: 11
-    defp d(?c), do: 12
-    defp d(?d), do: 13
-    defp d(?e), do: 14
-    defp d(?f), do: 15
-    defp d(_), do: throw(:error)
+    for {r, o} <- [{?0..?9, 0}, {?A..?F, 10}, {?a..?f, 10}], {c, i} <- Enum.with_index(r, o) do
+      defp d(unquote(c)), do: unquote(i)
+    end
+
+    defp d(c) do
+      raise Ecto.CastError,
+        type: Ecto.UUID,
+        value: to_string([c]),
+        message: "Invalid char in UUID \"#{[c]}\""
+    end
 
     @problematic_clauses [
       joins: "JOIN",
