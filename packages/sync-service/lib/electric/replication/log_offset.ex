@@ -123,9 +123,16 @@ defmodule Electric.Replication.LogOffset do
                   (offset1.tx_offset == offset2.tx_offset and
                      offset1.op_offset < offset2.op_offset)
 
+  defguard is_log_offset_lte(offset1, offset2)
+           when offset1.tx_offset < offset2.tx_offset or
+                  (offset1.tx_offset == offset2.tx_offset and
+                     offset1.op_offset <= offset2.op_offset)
+
   defguard is_min_offset(offset) when offset.tx_offset == -1
 
   defguard is_virtual_offset(offset) when offset.tx_offset == 0
+
+  defguard is_real_offset(offset) when offset.tx_offset > 0
 
   @doc """
   An offset that is smaller than all offsets in the log.
@@ -198,6 +205,10 @@ defmodule Electric.Replication.LogOffset do
   @spec to_tuple(t) :: {int64(), non_neg_integer()}
   def to_tuple(%LogOffset{tx_offset: tx_offset, op_offset: op_offset}) do
     {tx_offset, op_offset}
+  end
+
+  def to_int128(%LogOffset{tx_offset: tx_offset, op_offset: op_offset}) do
+    <<tx_offset::64, op_offset::64>>
   end
 
   @doc """

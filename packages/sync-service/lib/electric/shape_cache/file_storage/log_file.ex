@@ -239,13 +239,14 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
     end
   end
 
-  defp stream_jsons(log_file_path, start_position, end_position, exclusive_min_offset) do
+  def stream_jsons(log_file_path, start_position, end_position, exclusive_min_offset) do
     # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
     file = File.open!(log_file_path, [:read, :raw])
 
     try do
       with {:ok, data} <- :file.pread(file, start_position, end_position - start_position) do
-        extract_jsons_from_binary(data, exclusive_min_offset)
+        {jsons, _} = extract_jsons_from_binary(data, exclusive_min_offset, nil)
+        jsons
       else
         :eof -> raise "unexpected end of file"
         {:error, reason} -> raise "error reading file: #{inspect(reason)}"
@@ -255,9 +256,44 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
     end
   end
 
-  @spec extract_jsons_from_binary(binary(), LogOffset.t()) :: Enumerable.t(String.t())
-  defp extract_jsons_from_binary(binary, exclusive_min_offset, acc \\ [])
-  defp extract_jsons_from_binary(<<>>, _, acc), do: Enum.reverse(acc)
+  def stream_jsons_until_offset(
+        log_file_path,
+        start_position,
+        exclusive_min_offset,
+        inclusive_max_offset
+      ) do
+    Stream.resource(
+      fn ->
+        file = File.open!(log_file_path, [:read, :raw])
+        {:ok, ^start_position} = :file.position(file, start_position)
+        {file, ""}
+      end,
+      fn
+        {file, binary_rest} ->
+          case :file.read(file, 4096) do
+            {:ok, data} ->
+              {jsons, rest} =
+                extract_jsons_from_binary(
+                  binary_rest <> data,
+                  exclusive_min_offset,
+                  inclusive_max_offset
+                )
+
+              # If we got data but couldn't read any JSONs, we're at the end of the file with a partial write
+              if jsons != [], do: {jsons, {file, rest}}, else: {:halt, {file, ""}}
+
+            :eof ->
+              {:halt, {file, binary_rest}}
+          end
+      end,
+      &File.close(elem(&1, 0))
+    )
+  end
+
+  @spec extract_jsons_from_binary(binary(), LogOffset.t(), LogOffset.t() | nil) ::
+          Enumerable.t(String.t())
+  defp extract_jsons_from_binary(binary, exclusive_min_offset, inclusive_max_offset, acc \\ [])
+  defp extract_jsons_from_binary(<<>>, _, _, acc), do: {Enum.reverse(acc), ""}
 
   defp extract_jsons_from_binary(
          <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
@@ -266,18 +302,40 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
            tx_offset: tx_offset2,
            op_offset: op_offset2
          } = log_offset,
+         inclusive_max_offset,
          acc
        )
        when tx_offset1 < tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 <= op_offset2),
-       do: extract_jsons_from_binary(rest, log_offset, acc)
+       do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, acc)
+
+  defp extract_jsons_from_binary(
+         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, json::binary-size(json_size), _::binary>>,
+         log_offset,
+         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = inclusive_max_offset,
+         acc
+       )
+       when tx_offset1 > tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 >= op_offset2),
+       do:
+         extract_jsons_from_binary(
+           "",
+           log_offset,
+           IO.inspect(inclusive_max_offset,
+             label: "bounded: #{inspect({tx_offset1, op_offset1})}"
+           ),
+           [json | acc]
+         )
 
   defp extract_jsons_from_binary(
          <<_::128, key_size::32, _::binary-size(key_size), _::8, _flag::8, json_size::64,
            json::binary-size(json_size), rest::binary>>,
          log_offset,
+         inclusive_max_offset,
          acc
        ),
-       do: extract_jsons_from_binary(rest, log_offset, [json | acc])
+       do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, [json | acc])
+
+  defp extract_jsons_from_binary(rest, _, _, acc), do: {Enum.reverse(acc), rest}
 
   defp get_op_type(:insert), do: ?i
   defp get_op_type(:update), do: ?u

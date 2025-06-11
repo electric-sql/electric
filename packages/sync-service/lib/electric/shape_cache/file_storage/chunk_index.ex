@@ -24,9 +24,10 @@ defmodule Electric.ShapeCache.FileStorage.ChunkIndex do
   @spec write_from_stream(
           Enumerable.t(LogFile.log_item_with_sizes()),
           path :: String.t(),
-          chunk_size :: non_neg_integer
+          chunk_size :: non_neg_integer,
+          opts :: Keyword.t()
         ) :: Enumerable.t(LogFile.log_item_with_sizes())
-  def write_from_stream(stream, path, chunk_size) do
+  def write_from_stream(stream, path, chunk_size, opts \\ []) do
     Utils.stream_add_side_effect(
       stream,
       # agg is {file, write_position, byte_count, last_seen_offset}
@@ -53,13 +54,32 @@ defmodule Electric.ShapeCache.FileStorage.ChunkIndex do
       end,
       fn {file, pos, _, last_offset} = acc ->
         # Finish writing the last entry if there is one
-        if not is_nil(last_offset),
+        if Keyword.get(opts, :finish_last_entry, true) and not is_nil(last_offset),
           do: IO.binwrite(file, <<LogFile.offset(last_offset)::binary, pos::64>>)
 
         acc
       end,
       &File.close(elem(&1, 0))
     )
+  end
+
+  def read_chunk_file(path) do
+    File.open!(path, [:read, :raw], fn file ->
+      Stream.unfold(file, fn file ->
+        case :file.read(file, @chunk_entry_size) do
+          {:ok, <<min_tx::64, min_op::64, start_pos::64, max_tx::64, max_op::64, end_pos::64>>} ->
+            {{{LogOffset.new(min_tx, min_op), LogOffset.new(max_tx, max_op)},
+              {start_pos, end_pos}}, file}
+
+          {:ok, <<min_tx::64, min_op::64, start_pos::64>>} ->
+            {{{LogOffset.new(min_tx, min_op), nil}, {start_pos, nil}}, file}
+
+          :eof ->
+            nil
+        end
+      end)
+      |> Enum.to_list()
+    end)
   end
 
   @doc """
@@ -71,19 +91,33 @@ defmodule Electric.ShapeCache.FileStorage.ChunkIndex do
   @spec fetch_chunk(path :: String.t(), LogOffset.t()) ::
           {:ok, max_offset :: LogOffset.t(),
            {start_position :: non_neg_integer, end_position :: non_neg_integer}}
+          | {:ok, nil, {start_position :: non_neg_integer, nil}}
           | :error
   def fetch_chunk(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
     file = File.open!(chunk_file_path, [:read, :raw])
     {:ok, size} = :file.position(file, :eof)
+    file_complete? = rem(size, @chunk_entry_size) == 0
 
     try do
       case do_binary_search(file, 0, div(size, @chunk_entry_size) - 1, exclusive_min_offset) do
-        {:ok, max_offset, start_pos, end_pos} -> {:ok, max_offset, {start_pos, end_pos}}
-        nil -> :error
+        {:ok, max_offset, start_pos, end_pos} ->
+          {:ok, max_offset, {start_pos, end_pos}}
+
+        nil ->
+          if file_complete?,
+            do: :error,
+            else: {:ok, nil, {get_last_chunk_start_pos(file, size), nil}}
       end
     after
       File.close(file)
     end
+  end
+
+  defp get_last_chunk_start_pos(file, size) do
+    {:ok, <<_min_tx::64, _min_op::64, start_pos::64>>} =
+      :file.pread(file, size - div(@chunk_entry_size, 2), div(@chunk_entry_size, 2))
+
+    start_pos
   end
 
   defp do_binary_search(file, left, right, %LogOffset{} = target)
