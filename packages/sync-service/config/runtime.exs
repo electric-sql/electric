@@ -215,7 +215,8 @@ config :electric,
       "ELECTRIC_PUBLICATION_ALTER_DEBOUNCE_TIME",
       &Electric.Config.parse_human_readable_time!/1,
       nil
-    )
+    ),
+  process_registry_partitions: env!("ELECTRIC_TWEAKS_PROCESS_REGISTRY_PARTITIONS", :integer, nil)
 
 if Electric.telemetry_enabled?() do
   config :sentry,

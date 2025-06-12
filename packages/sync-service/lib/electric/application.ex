@@ -129,7 +129,10 @@ defmodule Electric.Application do
       telemetry_opts:
         telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts),
       max_shapes: get_env(opts, :max_shapes),
-      tweaks: [publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms)]
+      tweaks: [
+        publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms),
+        registry_partitions: get_env(opts, :process_registry_partitions)
+      ]
     )
   end
 
