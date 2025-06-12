@@ -3,6 +3,7 @@ if Code.ensure_loaded?(Ecto) do
     @moduledoc false
 
     alias Electric.Client.ShapeDefinition
+    alias Electric.Client.EctoAdapter.ArrayDecoder
 
     @behaviour Electric.Client.ValueMapper
 
@@ -164,7 +165,8 @@ if Code.ensure_loaded?(Ecto) do
       )
     end
 
-    defp cast_to(:boolean) do
+    @doc false
+    def cast_to(:boolean) do
       fn
         nil -> nil
         "t" -> true
@@ -173,7 +175,7 @@ if Code.ensure_loaded?(Ecto) do
       end
     end
 
-    defp cast_to({:parameterized, {_, _}} = type) do
+    def cast_to({:parameterized, {_, _}} = type) do
       fn
         nil ->
           nil
@@ -192,7 +194,14 @@ if Code.ensure_loaded?(Ecto) do
       end
     end
 
-    defp cast_to(type) when is_atom(type) do
+    def cast_to({:array, type}) do
+      fn
+        nil -> nil
+        value -> ArrayDecoder.decode!(value, type)
+      end
+    end
+
+    def cast_to(type) when is_atom(type) do
       with {:module, _} <- Code.ensure_loaded(type),
            true <- function_exported?(type, :type, 0),
            true <- function_exported?(type, :load, 1) do
@@ -206,6 +215,18 @@ if Code.ensure_loaded?(Ecto) do
     end
 
     defp cast_ecto(_type, nil), do: nil
+
+    defp cast_ecto(:map, value) do
+      Jason.decode!(value)
+    end
+
+    defp cast_ecto(:bitstring, value) when is_binary(value) do
+      <<String.to_integer(value, 2)::size(byte_size(value))>>
+    end
+
+    defp cast_ecto(:binary, "\\x" <> value) when is_binary(value) do
+      Base.decode16!(value, case: :lower)
+    end
 
     defp cast_ecto(type, value) do
       Ecto.Type.cast!(type, value)
