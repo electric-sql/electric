@@ -89,6 +89,8 @@ defmodule Electric.Shapes.Monitor do
       shape_status: shape_status
     } = opts
 
+    Process.set_label({:shapes_monitor, stack_id})
+
     children = [
       {__MODULE__.CleanupTaskSupervisor, stack_id: stack_id},
       {__MODULE__.RefCounter,

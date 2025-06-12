@@ -121,7 +121,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   @impl GenServer
   def init(%{stack_id: stack_id} = opts) do
-    Process.set_label({:shape_monitor, stack_id})
+    Process.set_label({:shapes_monitor, :ref_counter, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 

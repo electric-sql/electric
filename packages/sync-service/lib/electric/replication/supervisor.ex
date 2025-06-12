@@ -9,8 +9,6 @@ defmodule Electric.Replication.Supervisor do
 
   def start_link(opts) do
     name = Access.get(opts, :name, name(opts))
-
-    # TODO: naming this is not necessary
     Supervisor.start_link(__MODULE__, opts, name: name)
   end
 
