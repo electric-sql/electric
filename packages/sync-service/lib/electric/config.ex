@@ -67,7 +67,9 @@ defmodule Electric.Config do
     otel_per_process_metrics?: false,
     telemetry_top_process_count: 5,
     ## Memory
-    shape_hibernate_after: :timer.seconds(30)
+    shape_hibernate_after: :timer.seconds(30),
+    ## Performance tweaks
+    publication_alter_debounce_ms: 0
   ]
 
   @installation_id_key "electric_installation_id"
