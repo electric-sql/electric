@@ -96,6 +96,7 @@ defmodule Electric.StackSupervisor do
                      "tweaks to the behaviour of parts of the supervision tree, used mostly for tests",
                    default: [],
                    keys: [
+                     publication_alter_debounce_ms: [type: :non_neg_integer, default: 0],
                      registry_partitions: [type: :non_neg_integer, required: false],
                      monitor_opts: [
                        type: :keyword_list,
