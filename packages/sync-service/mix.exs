@@ -96,6 +96,8 @@ defmodule Electric.MixProject do
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
         {:telemetry_poller, "~> 1.2"},
+        # tls_certificate_check is required by otel_exporter_otlp
+        {:tls_certificate_check, "~> 1.27"},
         {:tz, "~> 0.28"}
       ],
       dev_and_test_deps(),
