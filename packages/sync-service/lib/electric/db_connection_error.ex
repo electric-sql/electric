@@ -122,6 +122,35 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(%Postgrex.Error{postgres: %{code: :admin_shutdown, severity: "FATAL"}} = error) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :database_server_shutting_down,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(
+        %Postgrex.Error{postgres: %{code: :cannot_connect_now, severity: "FATAL"}} = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :database_server_unavailable,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(%Postgrex.Error{message: "ssl not available"} = error) do
+    %DbConnectionError{
+      message: "Database server not configured to accept SSL connections",
+      type: :connection_closed,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
     maybe_database_does_not_exist(error) || unknown_error(error)
   end
@@ -139,6 +168,20 @@ defmodule Electric.DbConnectionError do
       original_error: error,
       retry_may_fix?: false
     }
+  end
+
+  if Mix.env() == :test do
+    def from_error(:shutdown) do
+      %DbConnectionError{
+        message: "Test database connection has beed shutdown",
+        type: :shutdown,
+        original_error: :shutdown,
+        # We don't want for this error to be treated as fatal because what would interfere with the
+        # supervision startup/shutdown setup in tests. We just treat it as a retryable DB error
+        # and let the test code control supervision tree orchestration.
+        retry_may_fix?: true
+      }
+    end
   end
 
   def from_error(error), do: unknown_error(error)
