@@ -56,7 +56,7 @@ defmodule Electric.Application do
       children_library(),
       application_telemetry(config),
       [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
-      api_server_children(),
+      api_server_children([]),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])
   end
@@ -225,7 +225,7 @@ defmodule Electric.Application do
         Bandit,
         plug: {Electric.Plug.UtilityRouter, []},
         port: port,
-        thousand_island_options: bandit_options([])
+        thousand_island_options: thousand_island_options([])
       }
     ]
   end
@@ -247,11 +247,18 @@ defmodule Electric.Application do
   def api_server(Bandit, opts) do
     router_opts = api_plug_opts(opts)
 
+    ti_opts =
+      if num_acceptors = get_env(opts, :http_api_num_acceptors) do
+        [num_acceptors: num_acceptors]
+      else
+        []
+      end
+
     [
       {Bandit,
        plug: {Electric.Plug.Router, router_opts},
        port: get_env(opts, :service_port),
-       thousand_island_options: bandit_options(opts)}
+       thousand_island_options: thousand_island_options(opts ++ ti_opts)}
     ]
   end
 
@@ -264,20 +271,23 @@ defmodule Electric.Application do
     ]
   end
 
-  defp api_server_children do
-    if Electric.Config.get_env(:enable_http_api) do
-      api_server()
+  defp api_server_children(opts) do
+    if get_env(opts, :enable_http_api) do
+      api_server(opts)
     else
       []
     end
   end
 
-  defp bandit_options(opts) do
-    if get_env(opts, :listen_on_ipv6?) do
-      [transport_options: [:inet6]]
-    else
-      []
-    end
+  defp thousand_island_options(opts) do
+    acceptor_opts = Keyword.take(opts, [:num_acceptors])
+
+    transport_opts =
+      if get_env(opts, :listen_on_ipv6?) do
+        [transport_options: [:inet6]]
+      end
+
+    concat_opts([acceptor_opts, transport_opts])
   end
 
   defp cowboy_options(opts) do
@@ -306,5 +316,11 @@ defmodule Electric.Application do
       long_message_queue_disable_threshold:
         get_env(opts, :telemetry_long_message_queue_disable_threshold)
     ]
+  end
+
+  defp concat_opts(list_of_kw_lists) do
+    list_of_kw_lists
+    |> Enum.map(&List.wrap/1)
+    |> Enum.concat()
   end
 end
