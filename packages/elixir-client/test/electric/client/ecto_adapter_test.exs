@@ -29,6 +29,23 @@ defmodule Electric.Client.EctoAdapterTest do
       field(:price, :decimal, source: :cost)
       field(:net_price, Money)
       field(:visible, :boolean, default: true)
+      field(:metadata, :map, default: %{})
+      field(:string_list, {:array, :string}, default: [])
+      field(:int_list, {:array, :integer}, default: [])
+      field(:map_list, {:array, :map}, default: [])
+      field(:time, :time)
+      field(:bits, :bitstring)
+      field(:blob, :binary)
+
+      embeds_one :mushroom, Mushroom do
+        field(:name, :string)
+        field(:color, :string)
+      end
+
+      embeds_many :reasons, Reason do
+        field(:justifications, {:array, :string})
+      end
+
       timestamps()
     end
 
@@ -114,6 +131,10 @@ defmodule Electric.Client.EctoAdapterTest do
     end
   end
 
+  defp column_names(module) do
+    Enum.map(module.__schema__(:fields), &to_string(module.__schema__(:field_source, &1)))
+  end
+
   setup do
     {:ok, client} =
       Client.new(base_url: Application.fetch_env!(:electric_client, :electric_url))
@@ -131,21 +152,28 @@ defmodule Electric.Client.EctoAdapterTest do
       {"cost", "numeric"},
       {"net_price", "int8"},
       {"visible", "boolean default true"},
+      {"metadata", "jsonb default '{}'::jsonb"},
+      {"string_list", "text[] default '{}'::text[]"},
+      {"int_list", "int8[] default '{}'::int8[]"},
+      {"map_list", "jsonb[] default '{}'::jsonb[]"},
+      {"mushroom", "jsonb"},
+      {"reasons", "jsonb"},
+      {"time", "time"},
+      {"bits", "varbit"},
+      {"blob", "bytea"},
       {"inserted_at", "timestamp without time zone"},
       {"updated_at", "timestamp without time zone"}
     ]
 
-    column_names = Enum.map(columns, &elem(&1, 0))
-
     with_table(@table_name, columns)
-    |> Map.put(:column_names, column_names)
   end
 
   import Ecto.Query
 
   describe "shape_from_query!/1" do
-    test "schema module", %{column_names: column_names} = _ctx do
+    test "schema module" do
       query = TestTable
+      column_names = column_names(TestTable)
 
       assert %Electric.Client.ShapeDefinition{
                table: @table_name,
@@ -155,8 +183,9 @@ defmodule Electric.Client.EctoAdapterTest do
              } = EctoAdapter.shape_from_query!(query)
     end
 
-    test "full table", %{column_names: column_names} = _ctx do
+    test "full table" do
       query = from(t in TestTable)
+      column_names = column_names(TestTable)
 
       assert %Electric.Client.ShapeDefinition{
                table: @table_name,
@@ -166,9 +195,10 @@ defmodule Electric.Client.EctoAdapterTest do
              } = EctoAdapter.shape_from_query!(query)
     end
 
-    test "with where clause", %{column_names: column_names} = _ctx do
+    test "with where clause" do
       price1 = Decimal.new("2.0")
       net_price1 = Decimal.new("2.5")
+      column_names = column_names(TestTable)
 
       query =
         from(t in TestTable,
@@ -198,7 +228,9 @@ defmodule Electric.Client.EctoAdapterTest do
       end)
     end
 
-    test "table namespaces", %{column_names: column_names} = _ctx do
+    test "table namespaces" do
+      column_names = column_names(NamespacedTable)
+
       assert %Electric.Client.ShapeDefinition{
                namespace: "myapp",
                table: "my_table",
@@ -208,7 +240,9 @@ defmodule Electric.Client.EctoAdapterTest do
              } = EctoAdapter.shape_from_query!(NamespacedTable)
     end
 
-    test "prefixed queries", %{column_names: column_names} = _ctx do
+    test "prefixed queries" do
+      column_names = column_names(TestTable)
+
       assert %Electric.Client.ShapeDefinition{
                namespace: "hamster",
                table: @table_name,
@@ -373,6 +407,14 @@ defmodule Electric.Client.EctoAdapterTest do
                "cost" => "7.99",
                "net_price" => "8990000",
                "visible" => "true",
+               "metadata" => ~s|{"a":[1,2]}|,
+               "mushroom" =>
+                 ~s|{"id":"3dda6337-8bf5-4dbc-91e4-92baba4a8f3d", "name":"earthstar","color":"white"}|,
+               "reasons" =>
+                 ~s|[{"id":"cac2ecc0-ba53-4e6c-8d29-eba2280453e7","justifications":["worth it","don't care"]}]|,
+               "string_list" => "{a,b,{c,d}}",
+               "int_list" => "{1}",
+               "map_list" => ~s[{"{\\"a\\":1}"}],
                "inserted_at" => "2016-03-24 17:53:17+00",
                "updated_at" => "2017-04-28 18:54:18+00"
              }) == %TestTable{
@@ -383,6 +425,21 @@ defmodule Electric.Client.EctoAdapterTest do
                visible: true,
                price: Decimal.new("7.99"),
                net_price: Decimal.new("8.99"),
+               metadata: %{"a" => [1, 2]},
+               mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
+                 id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
+                 name: "earthstar",
+                 color: "white"
+               },
+               reasons: [
+                 %Electric.Client.EctoAdapterTest.TestTable.Reason{
+                   id: "cac2ecc0-ba53-4e6c-8d29-eba2280453e7",
+                   justifications: ["worth it", "don't care"]
+                 }
+               ],
+               string_list: ["a", "b", ["c", "d"]],
+               int_list: [1],
+               map_list: [%{"a" => 1}],
                updated_at: ~N[2017-04-28 18:54:18]
              }
     end
@@ -414,7 +471,25 @@ defmodule Electric.Client.EctoAdapterTest do
         name: "my name",
         visible: true,
         price: price1,
-        net_price: net_price1
+        net_price: net_price1,
+        metadata: %{m1: true, m2: "m2"},
+        mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
+          id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
+          name: "earthstar",
+          color: "white"
+        },
+        reasons: [
+          %Electric.Client.EctoAdapterTest.TestTable.Reason{
+            id: "cac2ecc0-ba53-4e6c-8d29-eba2280453e7",
+            justifications: ["worth it", "don't care"]
+          }
+        ],
+        string_list: ["a\"", "b", nil, "NULL"],
+        int_list: [1, 2, nil],
+        map_list: [%{a: "a"}, %{b: "b"}],
+        time: ~T[12:34:56],
+        bits: <<6221::16>>,
+        blob: <<1, 2, 3, 45>>
       }
 
       price2 = Decimal.new("129.99")
@@ -426,7 +501,11 @@ defmodule Electric.Client.EctoAdapterTest do
         name: "precious thing",
         visible: false,
         price: price2,
-        net_price: net_price2
+        net_price: net_price2,
+        metadata: %{m1: false, m3: "m3"},
+        string_list: ["c", "d"],
+        int_list: [3, 4],
+        map_list: [%{c: 3}, %{d: 4}]
       }
 
       Support.Repo.insert(value1)
@@ -443,7 +522,24 @@ defmodule Electric.Client.EctoAdapterTest do
                price: ^price1,
                net_price: ^net_price1,
                inserted_at: %NaiveDateTime{},
-               updated_at: %NaiveDateTime{}
+               updated_at: %NaiveDateTime{},
+               string_list: ["a\"", "b", nil, "NULL"],
+               int_list: [1, 2, nil],
+               map_list: [%{"a" => "a"}, %{"b" => "b"}],
+               mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
+                 id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
+                 name: "earthstar",
+                 color: "white"
+               },
+               reasons: [
+                 %Electric.Client.EctoAdapterTest.TestTable.Reason{
+                   id: "cac2ecc0-ba53-4e6c-8d29-eba2280453e7",
+                   justifications: ["worth it", "don't care"]
+                 }
+               ],
+               time: ~T[12:34:56],
+               bits: <<6221::16>>,
+               blob: <<1, 2, 3, 45>>
              } = message.value
 
       assert_receive {:stream, %Message.ChangeMessage{} = message}, 500
@@ -456,7 +552,10 @@ defmodule Electric.Client.EctoAdapterTest do
                price: ^price2,
                net_price: ^net_price2,
                inserted_at: %NaiveDateTime{},
-               updated_at: %NaiveDateTime{}
+               updated_at: %NaiveDateTime{},
+               string_list: ["c", "d"],
+               int_list: [3, 4],
+               map_list: [%{"c" => 3}, %{"d" => 4}]
              } = message.value
     end
 
