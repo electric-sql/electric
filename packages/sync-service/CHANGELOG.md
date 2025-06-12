@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.20
+
+### Patch Changes
+
+- a148509: Only warn when publication manager exits during shape cleanup
+- 7e8c4f4: Retire obsolete stack event 'database_connection_failed' in favour of 'connection_error'
+- 68ba7ed: fix: ensure correct shape lookup & comparison
+
 ## 1.0.19
 
 ### Patch Changes

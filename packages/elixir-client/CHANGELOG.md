@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.6.2
+
+### Patch Changes
+
+- 3f43346: Support generating shape definitions from Ecto.Changeset structs, add replica mode to client ShapeDefinitions, ensure client parameters are always of type %{binary() => binary()} and expose some options schema information for use in Phoenix.Sync
+
 ## 0.6.1
 
 ### Patch Changes
