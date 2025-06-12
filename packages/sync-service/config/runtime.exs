@@ -202,7 +202,13 @@ config :electric,
   profile_where_clauses?: env!("ELECTRIC_PROFILE_WHERE_CLAUSES", :boolean, false),
   persistent_kv: persistent_kv_spec,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil),
-  secret: secret
+  secret: secret,
+  publication_alter_debounce_ms:
+    env!(
+      "ELECTRIC_PUBLICATION_ALTER_DEBOUNCE_TIME",
+      &Electric.Config.parse_human_readable_time!/1,
+      nil
+    )
 
 if Electric.telemetry_enabled?() do
   config :sentry,

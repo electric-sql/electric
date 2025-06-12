@@ -128,7 +128,8 @@ defmodule Electric.Application do
       chunk_bytes_threshold: get_env(opts, :chunk_bytes_threshold),
       telemetry_opts:
         telemetry_opts([instance_id: instance_id, installation_id: installation_id] ++ opts),
-      max_shapes: get_env(opts, :max_shapes)
+      max_shapes: get_env(opts, :max_shapes),
+      tweaks: [publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms)]
     )
   end
 
