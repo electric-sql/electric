@@ -16,7 +16,6 @@
   -
 
   ?? [emergency] Electric requires wal_level >= logical
-  ?? [notice] Application electric exited: shutdown
 
 [cleanup]
   [invoke teardown]
