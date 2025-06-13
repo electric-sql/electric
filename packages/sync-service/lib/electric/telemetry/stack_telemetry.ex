@@ -217,7 +217,9 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         last_value("electric.storage.used", unit: {:byte, :kilobyte}, keep: for_stack(opts)),
         last_value("electric.shapes.total_shapes.count", keep: for_stack(opts)),
         last_value("electric.postgres.replication.wal_size", unit: :byte, keep: for_stack(opts)),
-        counter("electric.postgres.replication.transaction_received.count", keep: for_stack(opts)),
+        counter("electric.postgres.replication.transaction_received.count",
+          keep: for_stack(opts)
+        ),
         sum("electric.postgres.replication.transaction_received.bytes",
           unit: :byte,
           keep: for_stack(opts)
