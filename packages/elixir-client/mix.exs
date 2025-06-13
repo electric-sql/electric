@@ -17,15 +17,6 @@ defmodule Electric.Client.MixProject do
       package: package(),
       source_url: "#{@github_repo}/tree/main/packages/elixir-client",
       homepage_url: "https://electric-sql.com",
-      preferred_cli_env: [
-        dialyzer: :test,
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "coveralls.cobertura": :test,
-        "coveralls.lcov": :test
-      ],
       test_coverage: [
         tool: ExCoveralls,
         ignore_modules: [
@@ -42,6 +33,20 @@ defmodule Electric.Client.MixProject do
     [
       extra_applications: [:logger],
       mod: {Electric.Client.Application, []}
+    ]
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        dialyzer: :test,
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.post": :test,
+        "coveralls.html": :test,
+        "coveralls.cobertura": :test,
+        "coveralls.lcov": :test
+      ]
     ]
   end
 

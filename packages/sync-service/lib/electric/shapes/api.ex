@@ -380,7 +380,7 @@ defmodule Electric.Shapes.Api do
   end
 
   defp determine_global_last_seen_lsn(%Request{} = request) do
-    %Request{request | global_last_seen_lsn: get_global_last_seen_lsn(request)}
+    %{request | global_last_seen_lsn: get_global_last_seen_lsn(request)}
   end
 
   # If chunk offsets are available, use those instead of the latest available
@@ -590,7 +590,7 @@ defmodule Electric.Shapes.Api do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
       update_attrs(request, %{ot_is_empty_response: true})
 
-    %Response{
+    %{
       response
       | status: 200,
         no_changes: true,
