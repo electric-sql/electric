@@ -420,7 +420,7 @@ defmodule Electric.Replication.PublicationManager do
             "Row filtering is not supported, falling back to relation-based filtering"
           )
 
-          update_publication(%__MODULE__{
+          update_publication(%{
             state
             | # disable row filtering and reset committed filters
               row_filtering_enabled: false,
@@ -486,22 +486,22 @@ defmodule Electric.Replication.PublicationManager do
               acc
 
             {@relation_column, nil}, acc ->
-              %RelationFilter{acc | selected_columns: nil}
+              %{acc | selected_columns: nil}
 
             {@relation_column, _col}, %{selected_columns: nil} = acc ->
               acc
 
             {@relation_column, col}, %{selected_columns: cols} = acc ->
-              %RelationFilter{acc | selected_columns: [col | cols]}
+              %{acc | selected_columns: [col | cols]}
 
             {@relation_where, nil}, acc ->
-              %RelationFilter{acc | where_clauses: nil}
+              %{acc | where_clauses: nil}
 
             {@relation_where, _where}, %{where_clauses: nil} = acc ->
               acc
 
             {@relation_where, where}, %{where_clauses: wheres} = acc ->
-              %RelationFilter{acc | where_clauses: [where | wheres]}
+              %{acc | where_clauses: [where | wheres]}
           end
         )
     end
@@ -591,14 +591,14 @@ defmodule Electric.Replication.PublicationManager do
          shape_handle,
          %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
        ) do
-    %__MODULE__{state | tracked_shape_handles: MapSet.put(tracked_shape_handles, shape_handle)}
+    %{state | tracked_shape_handles: MapSet.put(tracked_shape_handles, shape_handle)}
   end
 
   defp untrack_shape_handle(
          shape_handle,
          %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
        ) do
-    %__MODULE__{state | tracked_shape_handles: MapSet.delete(tracked_shape_handles, shape_handle)}
+    %{state | tracked_shape_handles: MapSet.delete(tracked_shape_handles, shape_handle)}
   end
 
   defp is_tracking_shape_handle?(

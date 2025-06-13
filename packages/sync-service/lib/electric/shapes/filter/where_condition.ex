@@ -116,7 +116,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   def remove_shape(%WhereCondition{} = condition, shape_id) do
-    %WhereCondition{
+    %{
       condition
       | indexes: remove_shape_from_indexes(condition.indexes, shape_id),
         other_shapes: Map.delete(condition.other_shapes, shape_id)

@@ -1106,7 +1106,7 @@ defmodule Electric.Replication.Eval.Parser do
 
       # But if all are consts and either function is not strict or there are no nils, we can try applying
       true ->
-        try_applying(%Func{func | args: args})
+        try_applying(%{func | args: args})
     end
   end
 
@@ -1240,7 +1240,7 @@ defmodule Electric.Replication.Eval.Parser do
 
   defp to_binary_operators(%Func{args: [arg | args]} = func) do
     # The function has more than two arguments, reduce the number of arguments to two: the first argument and a binary operator
-    %Func{func | args: [arg, to_binary_operators(%Func{func | args: args})]}
+    %{func | args: [arg, to_binary_operators(%{func | args: args})]}
   end
 
   defp rebuild_query_with_substituted_params(query, {original_params, resolved_params}) do
