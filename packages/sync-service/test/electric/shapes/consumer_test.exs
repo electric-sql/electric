@@ -514,7 +514,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       refute_receive {:DOWN, _, :process, _, _}
 
-      rel_changed = %Relation{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
+      rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
@@ -556,7 +556,7 @@ defmodule Electric.Shapes.ConsumerTest do
       live_ref = make_ref()
       Registry.register(ctx.registry, @shape_handle1, live_ref)
 
-      rel_changed = %Relation{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
+      rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
 
       Mock.Inspector
       |> expect(:clean, 1, fn _, _ -> true end)
