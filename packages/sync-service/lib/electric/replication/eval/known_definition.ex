@@ -185,21 +185,28 @@ defmodule Electric.Replication.Eval.KnownDefinition do
   end
 
   # e.g.: + int4 -> int4
-  @unary_op_regex ~r/^(?<operator>[+\-*\/<>=~!@#%^&|`?]+) (?<type>[[:alnum:]*_]+) -> (?<return_type>[[:alnum:]*_]+)$/
+  defp unary_op_regex,
+    do:
+      ~r/^(?<operator>[+\-*\/<>=~!@#%^&|`?]+) (?<type>[[:alnum:]*_]+) -> (?<return_type>[[:alnum:]*_]+)$/
+
   # e.g.: int4 + int4 -> int4
-  @binary_op_regex ~r/^(?<type1>[[:alnum:]*_]+) (?<operator>[+\-*\/<>=~!@#%^&|`?]+) (?<type2>[[:alnum:]*_]+) -> (?<return_type>[[:alnum:]*_]+)$/
+  defp binary_op_regex,
+    do:
+      ~r/^(?<type1>[[:alnum:]*_]+) (?<operator>[+\-*\/<>=~!@#%^&|`?]+) (?<type2>[[:alnum:]*_]+) -> (?<return_type>[[:alnum:]*_]+)$/
+
   # e.g.: ceil(float4) -> int4
-  @func_regex ~r/^(?<name>[[:alnum:]*_]+)\((?<args>[^\)]*)\) -> (?<return_type>[[:alnum:]*_]+)/
+  defp func_regex,
+    do: ~r/^(?<name>[[:alnum:]*_]+)\((?<args>[^\)]*)\) -> (?<return_type>[[:alnum:]*_]+)/
 
   defp parse_definition(operator_or_func, caller) do
     cond do
-      Regex.match?(@unary_op_regex, operator_or_func) ->
+      Regex.match?(unary_op_regex(), operator_or_func) ->
         parse_unary_operator(operator_or_func)
 
-      Regex.match?(@binary_op_regex, operator_or_func) ->
+      Regex.match?(binary_op_regex(), operator_or_func) ->
         parse_binary_operator(operator_or_func)
 
-      Regex.match?(@func_regex, operator_or_func) ->
+      Regex.match?(func_regex(), operator_or_func) ->
         parse_function(operator_or_func)
 
       true ->
@@ -212,7 +219,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
   defp parse_unary_operator(operator) do
     %{"operator" => operator, "type" => type, "return_type" => return} =
-      Regex.named_captures(@unary_op_regex, operator)
+      Regex.named_captures(unary_op_regex(), operator)
 
     %{
       kind: :operator,
@@ -225,7 +232,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
   defp parse_binary_operator(operator) do
     %{"operator" => operator, "type1" => type1, "type2" => type2, "return_type" => return} =
-      Regex.named_captures(@binary_op_regex, operator)
+      Regex.named_captures(binary_op_regex(), operator)
 
     %{
       kind: :operator,
@@ -238,7 +245,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
   defp parse_function(function) do
     %{"name" => name, "args" => args, "return_type" => return} =
-      Regex.named_captures(@func_regex, function)
+      Regex.named_captures(func_regex(), function)
 
     # TODO: doesn't support default or optional arguments
     arg_types =
