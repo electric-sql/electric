@@ -35,6 +35,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     selected_columns: ["id", "value"],
     flags: %{selects_all_columns: true}
   }
+
   @test_shape_handle "test-shape-handle"
   @test_opts %{foo: "bar"}
   @before_all_offset LogOffset.before_all()
@@ -262,6 +263,37 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert get_resp_header(conn, "electric-handle") == [@test_shape_handle]
+    end
+
+    test "returns limited results", ctx do
+      test_shape = %{@test_shape | limit: 0}
+
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn ^test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      next_offset = LogOffset.increment(@first_offset)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
+        @first_offset
+      end)
+      |> expect(:get_log_stream, fn @before_all_offset, @first_offset, @test_opts ->
+        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+      end)
+
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users", "limit" => 0}, "?offset=-1")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 200
+
+      assert Jason.decode!(conn.resp_body) == []
     end
 
     test "snapshot has correct cache control headers", ctx do
