@@ -39,6 +39,16 @@ defmodule Electric.Client.EctoAdapterTest do
     end
   end
 
+  defmodule ULIDTable do
+    use Ecto.Schema
+
+    @primary_key {:id, Ecto.ULID, autogenerate: true}
+
+    schema Electric.Client.EctoAdapterTest.Config.table_name() do
+      field(:name, :string)
+    end
+  end
+
   defmodule NamespacedTable do
     use Ecto.Schema
 
@@ -464,5 +474,51 @@ defmodule Electric.Client.EctoAdapterTest do
     assert %TestTable{visible: true} = mapper.(%{"visible" => "true"})
     assert %TestTable{visible: false} = mapper.(%{"visible" => "f"})
     assert %TestTable{visible: false} = mapper.(%{"visible" => "false"})
+  end
+
+  @tag :ulid
+  test "ULID type is supported", ctx do
+    parent = self()
+
+    query = from(t in ULIDTable)
+    stream = stream(ctx, query)
+
+    {:ok, _task} =
+      start_supervised(
+        {Task,
+         fn ->
+           stream
+           |> Stream.each(&send(parent, {:stream, &1}))
+           |> Stream.run()
+         end}
+      )
+
+    value1 = %ULIDTable{
+      id: "01JXA4NTH1T8AMDD59DSMBNP6N",
+      name: "value1"
+    }
+
+    value2 = %ULIDTable{
+      id: "01JXA5469C68QNGM0N5YA0XNSN",
+      name: "value2"
+    }
+
+    Support.Repo.insert(value1)
+    Support.Repo.insert(value2)
+
+    assert_receive {:stream, %Message.ControlMessage{control: :up_to_date}}, 5000
+    assert_receive {:stream, %Message.ChangeMessage{} = message}, 5000
+
+    assert %ULIDTable{
+             id: "01JXA4NTH1T8AMDD59DSMBNP6N",
+             name: "value1"
+           } = message.value
+
+    assert_receive {:stream, %Message.ChangeMessage{} = message}, 5000
+
+    assert %ULIDTable{
+             id: "01JXA5469C68QNGM0N5YA0XNSN",
+             name: "value2"
+           } = message.value
   end
 end
