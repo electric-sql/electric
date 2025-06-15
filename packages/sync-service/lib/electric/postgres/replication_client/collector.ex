@@ -146,11 +146,11 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   def handle_message(%LR.Commit{lsn: commit_lsn}, %__MODULE__{transaction: txn} = state)
       when not is_nil(txn) and commit_lsn == txn.lsn do
-    {%Transaction{
+    {%{
        txn
        | changes: Enum.reverse(txn.changes),
          last_log_offset: LogOffset.new(txn.lsn, max(0, state.tx_op_index - 2))
-     }, %__MODULE__{state | transaction: nil, tx_op_index: nil}}
+     }, %{state | transaction: nil, tx_op_index: nil}}
   end
 
   @spec data_tuple_to_map([LR.Relation.Column.t()], list(String.t())) :: %{
