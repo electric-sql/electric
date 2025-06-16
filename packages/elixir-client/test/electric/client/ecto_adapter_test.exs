@@ -1,8 +1,3 @@
-defmodule Electric.Client.EctoAdapterTest.Config do
-  @table_name "test_table_#{System.os_time(:millisecond)}"
-  def table_name, do: @table_name
-end
-
 defmodule Electric.Client.EctoAdapterTest do
   use ExUnit.Case, async: true
 
@@ -13,8 +8,6 @@ defmodule Electric.Client.EctoAdapterTest do
   alias Support.Money
   import Support.DbSetup
 
-  @table_name Electric.Client.EctoAdapterTest.Config.table_name()
-
   defp stream(ctx, query) do
     Client.stream(ctx.client, query)
   end
@@ -23,12 +16,29 @@ defmodule Electric.Client.EctoAdapterTest do
     use Ecto.Schema
 
     @primary_key {:id, :binary_id, autogenerate: true}
-    schema Electric.Client.EctoAdapterTest.Config.table_name() do
+    schema "test_table" do
       field(:name, :string)
       field(:amount, :integer)
       field(:price, :decimal, source: :cost)
       field(:net_price, Money)
       field(:visible, :boolean, default: true)
+      field(:metadata, :map, default: %{})
+      field(:string_list, {:array, :string}, default: [])
+      field(:int_list, {:array, :integer}, default: [])
+      field(:map_list, {:array, :map}, default: [])
+      field(:time, :time)
+      field(:bits, :bitstring)
+      field(:blob, :binary)
+
+      embeds_one :mushroom, Mushroom do
+        field(:name, :string)
+        field(:color, :string)
+      end
+
+      embeds_many :reasons, Reason do
+        field(:justifications, {:array, :string})
+      end
+
       timestamps()
     end
 
@@ -36,6 +46,16 @@ defmodule Electric.Client.EctoAdapterTest do
       Ecto.Changeset.cast(data, params, [:name, :amount, :price])
       |> Ecto.Changeset.validate_required([:name, :amount, :price])
       |> Ecto.Changeset.validate_number(:price, greater_than_or_equal_to: 10)
+    end
+  end
+
+  defmodule ULIDTable do
+    use Ecto.Schema
+
+    @primary_key {:id, Ecto.ULID, autogenerate: true}
+
+    schema "ulid_table" do
+      field(:name, :string)
     end
   end
 
@@ -104,6 +124,10 @@ defmodule Electric.Client.EctoAdapterTest do
     end
   end
 
+  defp column_names(module) do
+    Enum.map(module.__schema__(:fields), &to_string(module.__schema__(:field_source, &1)))
+  end
+
   setup do
     {:ok, client} =
       Client.new(base_url: Application.fetch_env!(:electric_client, :electric_url))
@@ -114,6 +138,8 @@ defmodule Electric.Client.EctoAdapterTest do
   setup do
     {:ok, _} = start_supervised(Support.Repo)
 
+    table_name = "test_table_#{<<System.monotonic_time(:microsecond)::64>> |> Base.encode16()}"
+
     columns = [
       {"id", "uuid primary key"},
       {"name", "varchar(255)"},
@@ -121,44 +147,53 @@ defmodule Electric.Client.EctoAdapterTest do
       {"cost", "numeric"},
       {"net_price", "int8"},
       {"visible", "boolean default true"},
+      {"metadata", "jsonb default '{}'::jsonb"},
+      {"string_list", "text[] default '{}'::text[]"},
+      {"int_list", "int8[] default '{}'::int8[]"},
+      {"map_list", "jsonb[] default '{}'::jsonb[]"},
+      {"mushroom", "jsonb"},
+      {"reasons", "jsonb"},
+      {"time", "time"},
+      {"bits", "varbit"},
+      {"blob", "bytea"},
       {"inserted_at", "timestamp without time zone"},
       {"updated_at", "timestamp without time zone"}
     ]
 
-    column_names = Enum.map(columns, &elem(&1, 0))
-
-    with_table(@table_name, columns)
-    |> Map.put(:column_names, column_names)
+    with_table(table_name, columns)
   end
 
   import Ecto.Query
 
   describe "shape_from_query!/1" do
-    test "schema module", %{column_names: column_names} = _ctx do
+    test "schema module" do
       query = TestTable
+      column_names = column_names(TestTable)
 
       assert %Electric.Client.ShapeDefinition{
-               table: @table_name,
+               table: "test_table",
                columns: ^column_names,
                where: nil,
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(query)
     end
 
-    test "full table", %{column_names: column_names} = _ctx do
+    test "full table" do
       query = from(t in TestTable)
+      column_names = column_names(TestTable)
 
       assert %Electric.Client.ShapeDefinition{
-               table: @table_name,
+               table: "test_table",
                where: nil,
                columns: ^column_names,
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(query)
     end
 
-    test "with where clause", %{column_names: column_names} = _ctx do
+    test "with where clause" do
       price1 = Decimal.new("2.0")
       net_price1 = Decimal.new("2.5")
+      column_names = column_names(TestTable)
 
       query =
         from(t in TestTable,
@@ -167,7 +202,7 @@ defmodule Electric.Client.EctoAdapterTest do
         )
 
       assert %Electric.Client.ShapeDefinition{
-               table: @table_name,
+               table: "test_table",
                where: ~s[((("cost" < 2.0) AND ("net_price" < 2500000)) AND ("amount" > 3))],
                columns: ^column_names,
                parser: {EctoAdapter, TestTable}
@@ -188,7 +223,9 @@ defmodule Electric.Client.EctoAdapterTest do
       end)
     end
 
-    test "table namespaces", %{column_names: column_names} = _ctx do
+    test "table namespaces" do
+      column_names = column_names(NamespacedTable)
+
       assert %Electric.Client.ShapeDefinition{
                namespace: "myapp",
                table: "my_table",
@@ -198,14 +235,39 @@ defmodule Electric.Client.EctoAdapterTest do
              } = EctoAdapter.shape_from_query!(NamespacedTable)
     end
 
-    test "prefixed queries", %{column_names: column_names} = _ctx do
+    test "prefixed queries" do
+      column_names = column_names(TestTable)
+
       assert %Electric.Client.ShapeDefinition{
                namespace: "hamster",
-               table: @table_name,
+               table: "test_table",
                where: nil,
                columns: ^column_names,
                parser: {EctoAdapter, TestTable}
              } = EctoAdapter.shape_from_query!(Ecto.Query.put_query_prefix(TestTable, "hamster"))
+    end
+
+    test "supports custom table names with schema" do
+      column_names = column_names(TestTable)
+
+      assert %Electric.Client.ShapeDefinition{
+               namespace: nil,
+               table: "overridden",
+               where: nil,
+               columns: ^column_names,
+               parser: {EctoAdapter, TestTable}
+             } = EctoAdapter.shape_from_query!({"overridden", TestTable})
+
+      assert %Electric.Client.ShapeDefinition{
+               namespace: nil,
+               table: "overridden",
+               where: "(\"visible\" = TRUE)",
+               columns: ^column_names,
+               parser: {EctoAdapter, TestTable}
+             } =
+               EctoAdapter.shape_from_query!(
+                 from(t in {"overridden", TestTable}, where: t.visible == true)
+               )
     end
 
     test "uses changeset information to define table + columns", _ctx do
@@ -213,7 +275,7 @@ defmodule Electric.Client.EctoAdapterTest do
                shape = EctoAdapter.shape_from_changeset!(&TestTable.changeset/1)
 
       assert Enum.sort(shape.columns) == ~w[amount cost id name]
-      assert shape.table == @table_name
+      assert shape.table == "test_table"
     end
 
     test "allows custom namespace", _ctx do
@@ -258,7 +320,7 @@ defmodule Electric.Client.EctoAdapterTest do
                shape = EctoAdapter.shape_from_changeset!(changeset_fun)
 
       assert Enum.sort(shape.columns) == ~w[cost id name]
-      assert shape.table == @table_name
+      assert shape.table == "test_table"
     end
 
     test "allows passing a changeset", _ctx do
@@ -272,7 +334,7 @@ defmodule Electric.Client.EctoAdapterTest do
                shape = EctoAdapter.shape_from_changeset!(changeset)
 
       assert Enum.sort(shape.columns) == ~w[cost id name]
-      assert shape.table == @table_name
+      assert shape.table == "test_table"
     end
 
     test "supports complex changesets", _ctx do
@@ -363,6 +425,14 @@ defmodule Electric.Client.EctoAdapterTest do
                "cost" => "7.99",
                "net_price" => "8990000",
                "visible" => "true",
+               "metadata" => ~s|{"a":[1,2]}|,
+               "mushroom" =>
+                 ~s|{"id":"3dda6337-8bf5-4dbc-91e4-92baba4a8f3d", "name":"earthstar","color":"white"}|,
+               "reasons" =>
+                 ~s|[{"id":"cac2ecc0-ba53-4e6c-8d29-eba2280453e7","justifications":["worth it","don't care"]}]|,
+               "string_list" => "{a,b,{c,d}}",
+               "int_list" => "{1}",
+               "map_list" => ~s[{"{\\"a\\":1}"}],
                "inserted_at" => "2016-03-24 17:53:17+00",
                "updated_at" => "2017-04-28 18:54:18+00"
              }) == %TestTable{
@@ -373,6 +443,21 @@ defmodule Electric.Client.EctoAdapterTest do
                visible: true,
                price: Decimal.new("7.99"),
                net_price: Decimal.new("8.99"),
+               metadata: %{"a" => [1, 2]},
+               mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
+                 id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
+                 name: "earthstar",
+                 color: "white"
+               },
+               reasons: [
+                 %Electric.Client.EctoAdapterTest.TestTable.Reason{
+                   id: "cac2ecc0-ba53-4e6c-8d29-eba2280453e7",
+                   justifications: ["worth it", "don't care"]
+                 }
+               ],
+               string_list: ["a", "b", ["c", "d"]],
+               int_list: [1],
+               map_list: [%{"a" => 1}],
                updated_at: ~N[2017-04-28 18:54:18]
              }
     end
@@ -382,7 +467,7 @@ defmodule Electric.Client.EctoAdapterTest do
     test "maps db changes to structs", ctx do
       parent = self()
 
-      query = from(t in TestTable)
+      query = from(t in {ctx.tablename, TestTable})
       stream = stream(ctx, query)
 
       {:ok, _task} =
@@ -398,26 +483,52 @@ defmodule Electric.Client.EctoAdapterTest do
       price1 = Decimal.new("7.99")
       net_price1 = Decimal.new("8.99")
 
-      value1 = %TestTable{
-        id: "ecceb448-64ed-4279-9aea-795d2ae70153",
-        amount: 123,
-        name: "my name",
-        visible: true,
-        price: price1,
-        net_price: net_price1
-      }
+      value1 =
+        %TestTable{
+          id: "ecceb448-64ed-4279-9aea-795d2ae70153",
+          amount: 123,
+          name: "my name",
+          visible: true,
+          price: price1,
+          net_price: net_price1,
+          metadata: %{m1: true, m2: "m2"},
+          mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
+            id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
+            name: "earthstar",
+            color: "white"
+          },
+          reasons: [
+            %Electric.Client.EctoAdapterTest.TestTable.Reason{
+              id: "cac2ecc0-ba53-4e6c-8d29-eba2280453e7",
+              justifications: ["worth it", "don't care"]
+            }
+          ],
+          string_list: ["a\"", "b", nil, "NULL"],
+          int_list: [1, 2, nil],
+          map_list: [%{a: "a"}, %{b: "b"}],
+          time: ~T[12:34:56],
+          bits: <<6221::16>>,
+          blob: <<1, 2, 3, 45>>
+        }
+        |> Ecto.put_meta(source: ctx.tablename)
 
       price2 = Decimal.new("129.99")
       net_price2 = Decimal.new("130.99")
 
-      value2 = %TestTable{
-        id: "1c493c89-ce0e-4816-a9e0-8704f21d2d09",
-        amount: 387,
-        name: "precious thing",
-        visible: false,
-        price: price2,
-        net_price: net_price2
-      }
+      value2 =
+        %TestTable{
+          id: "1c493c89-ce0e-4816-a9e0-8704f21d2d09",
+          amount: 387,
+          name: "precious thing",
+          visible: false,
+          price: price2,
+          net_price: net_price2,
+          metadata: %{m1: false, m3: "m3"},
+          string_list: ["c", "d"],
+          int_list: [3, 4],
+          map_list: [%{c: 3}, %{d: 4}]
+        }
+        |> Ecto.put_meta(source: ctx.tablename)
 
       Support.Repo.insert(value1)
       Support.Repo.insert(value2)
@@ -433,7 +544,24 @@ defmodule Electric.Client.EctoAdapterTest do
                price: ^price1,
                net_price: ^net_price1,
                inserted_at: %NaiveDateTime{},
-               updated_at: %NaiveDateTime{}
+               updated_at: %NaiveDateTime{},
+               string_list: ["a\"", "b", nil, "NULL"],
+               int_list: [1, 2, nil],
+               map_list: [%{"a" => "a"}, %{"b" => "b"}],
+               mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
+                 id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
+                 name: "earthstar",
+                 color: "white"
+               },
+               reasons: [
+                 %Electric.Client.EctoAdapterTest.TestTable.Reason{
+                   id: "cac2ecc0-ba53-4e6c-8d29-eba2280453e7",
+                   justifications: ["worth it", "don't care"]
+                 }
+               ],
+               time: ~T[12:34:56],
+               bits: <<6221::16>>,
+               blob: <<1, 2, 3, 45>>
              } = message.value
 
       assert_receive {:stream, %Message.ChangeMessage{} = message}, 500
@@ -446,7 +574,10 @@ defmodule Electric.Client.EctoAdapterTest do
                price: ^price2,
                net_price: ^net_price2,
                inserted_at: %NaiveDateTime{},
-               updated_at: %NaiveDateTime{}
+               updated_at: %NaiveDateTime{},
+               string_list: ["c", "d"],
+               int_list: [3, 4],
+               map_list: [%{"c" => 3}, %{"d" => 4}]
              } = message.value
     end
 
@@ -464,5 +595,55 @@ defmodule Electric.Client.EctoAdapterTest do
     assert %TestTable{visible: true} = mapper.(%{"visible" => "true"})
     assert %TestTable{visible: false} = mapper.(%{"visible" => "f"})
     assert %TestTable{visible: false} = mapper.(%{"visible" => "false"})
+  end
+
+  @tag :ulid
+  test "ULID type is supported", ctx do
+    parent = self()
+
+    query = from(t in {ctx.tablename, ULIDTable})
+    stream = stream(ctx, query)
+
+    {:ok, _task} =
+      start_supervised(
+        {Task,
+         fn ->
+           stream
+           |> Stream.each(&send(parent, {:stream, &1}))
+           |> Stream.run()
+         end}
+      )
+
+    value1 =
+      %ULIDTable{
+        id: "01JXA4NTH1T8AMDD59DSMBNP6N",
+        name: "value1"
+      }
+      |> Ecto.put_meta(source: ctx.tablename)
+
+    value2 =
+      %ULIDTable{
+        id: "01JXA5469C68QNGM0N5YA0XNSN",
+        name: "value2"
+      }
+      |> Ecto.put_meta(source: ctx.tablename)
+
+    Support.Repo.insert(value1)
+    Support.Repo.insert(value2)
+
+    assert_receive {:stream, %Message.ControlMessage{control: :up_to_date}}, 5000
+    assert_receive {:stream, %Message.ChangeMessage{} = message}, 5000
+
+    assert %ULIDTable{
+             id: "01JXA4NTH1T8AMDD59DSMBNP6N",
+             name: "value1"
+           } = message.value
+
+    assert_receive {:stream, %Message.ChangeMessage{} = message}, 5000
+
+    assert %ULIDTable{
+             id: "01JXA5469C68QNGM0N5YA0XNSN",
+             name: "value2"
+           } = message.value
   end
 end
