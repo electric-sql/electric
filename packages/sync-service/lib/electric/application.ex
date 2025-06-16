@@ -225,7 +225,7 @@ defmodule Electric.Application do
         Bandit,
         plug: {Electric.Plug.UtilityRouter, []},
         port: port,
-        thousand_island_options: thousand_island_options([])
+        thousand_island_options: thousand_island_options(num_acceptors: 1)
       }
     ]
   end
