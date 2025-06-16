@@ -4,7 +4,8 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoder do
   def decode!("{}", _type), do: []
 
   def decode!(encoded_array, type) when is_binary(encoded_array) do
-    {"", [result]} = decode_array(encoded_array, [], {EctoAdapter.cast_to(type), encoded_array})
+    {"", [result]} =
+      decode_array(encoded_array, [], {EctoAdapter.cast_to(type), type, encoded_array})
 
     result
   end
@@ -53,8 +54,8 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoder do
   defp decode_elem(<<c::utf8, rest::bitstring>>, acc, state),
     do: decode_elem(rest, [acc | <<c::utf8>>], state)
 
-  defp decode_elem("", _acc, {_cast_fun, source}) do
-    raise ArgumentError, message: "malformed array: #{source}"
+  defp decode_elem("", _acc, {_cast_fun, type, source}) do
+    raise Ecto.CastError, type: {:array, type}, value: source
   end
 
   ##############################
@@ -68,13 +69,13 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoder do
   defp decode_quoted_elem(<<c::utf8, rest::bitstring>>, acc, state),
     do: decode_quoted_elem(rest, [acc | <<c::utf8>>], state)
 
-  defp decode_quoted_elem("", _acc, {_cast_fun, source}) do
-    raise ArgumentError, message: "malformed array: #{source}"
+  defp decode_quoted_elem("", _acc, {_cast_fun, type, source}) do
+    raise Ecto.CastError, type: {:array, type}, value: source
   end
 
   ##############################
 
-  defp cast(iodata, {cast_fun, _source}) do
+  defp cast(iodata, {cast_fun, _type, _source}) do
     iodata
     |> IO.iodata_to_binary()
     |> case do
@@ -83,7 +84,7 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoder do
     end
   end
 
-  defp cast_quoted(iodata, {cast_fun, _source}) do
+  defp cast_quoted(iodata, {cast_fun, _type, _source}) do
     iodata
     |> IO.iodata_to_binary()
     |> cast_fun.()
