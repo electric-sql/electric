@@ -520,7 +520,7 @@ defmodule Electric.Shapes.Api do
 
       {:error, :unknown} ->
         # the shape has been deleted between the request validation and the attempt
-        # to resturn the log stream
+        # to return the log stream
         Response.error(request, @must_refetch, status: 409)
 
       {:error, error} ->
