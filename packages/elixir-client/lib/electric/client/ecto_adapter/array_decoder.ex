@@ -47,9 +47,6 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoder do
   defp decode_elem(<<",", _::bitstring>> = rest, acc, state),
     do: {rest, cast(acc, state)}
 
-  defp decode_elem(<<"{", rest::bitstring>>, [], state),
-    do: decode_array(rest, [], state)
-
   defp decode_elem(<<"}", _::bitstring>> = rest, acc, state),
     do: {rest, cast(acc, state)}
 
@@ -57,7 +54,7 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoder do
     do: decode_elem(rest, [acc | <<c::utf8>>], state)
 
   defp decode_elem("", _acc, {_cast_fun, source}) do
-    raise "malformed array #{inspect(source)}"
+    raise ArgumentError, message: "malformed array: #{source}"
   end
 
   ##############################
@@ -72,7 +69,7 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoder do
     do: decode_quoted_elem(rest, [acc | <<c::utf8>>], state)
 
   defp decode_quoted_elem("", _acc, {_cast_fun, source}) do
-    raise "malformed array #{inspect(source)}"
+    raise ArgumentError, message: "malformed array: #{source}"
   end
 
   ##############################

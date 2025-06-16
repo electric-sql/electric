@@ -59,4 +59,14 @@ defmodule Electric.Client.EctoAdapter.ArrayDecoderTest do
              [%{}, %{}]
            ]
   end
+
+  test "raises if the array is invalid" do
+    assert_raise ArgumentError, "malformed array: {a,b,c\"", fn ->
+      ArrayDecoder.decode!(~s[{a,b,c"], :string)
+    end
+
+    assert_raise ArgumentError, "malformed array: {a,b,\"", fn ->
+      ArrayDecoder.decode!(~s[{a,b,"], :string)
+    end
+  end
 end
