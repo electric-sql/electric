@@ -87,6 +87,8 @@ defmodule Electric.Connection.Manager do
       :shared_connection_opts,
       # Database connection pool options
       :pool_opts,
+      # Unique ref for matching on :connected and :disconnected events the connection pool
+      :pool_ref,
       # Options specific to `Electric.Timeline`
       :timeline_opts,
       # Options passed to the Replication.Supervisor's start_link() function
@@ -245,6 +247,7 @@ defmodule Electric.Connection.Manager do
         current_phase: :connection_setup,
         current_step: {:start_lock_connection, nil},
         pool_opts: pool_opts,
+        pool_ref: make_ref(),
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         connection_backoff: {ConnectionBackoff.init(1000, 10_000), nil},
@@ -371,28 +374,30 @@ defmodule Electric.Connection.Manager do
           pool_pid: nil
         } = state
       ) do
-    # Use default backoff strategy for connections to prevent pool from shutting down
-    # in the case of a connection error. Deleting a shape while its still generating
-    # its snapshot from the db can trigger this as the snapshot process and the storage
-    # process are both terminated when the shape is removed.
-    #
-    # See https://github.com/electric-sql/electric/issues/1554
+    pool_size = Keyword.get(state.pool_opts, :pool_size, 2)
     conn_opts = pooled_connection_opts(state) |> Electric.Utils.deobfuscate_password()
 
+    pool_config =
+      [
+        # Disable automatic reconnection for pooled connections making them terminate on
+        # error. This lets us observe connection errors by configuring the current process
+        # as a connection listener in the pool.
+        # The value for `max_restarts` is based on the pool size so the pool supervisor
+        # doesn't shutdown unless all pooled connections fall into a restart loop within
+        # the 5 second grace interval.
+        backoff_type: :stop,
+        max_restarts: pool_size * 3,
+        max_seconds: 5,
+        connection_listeners: {[self()], state.pool_ref},
+        # Assume the manager connection might be pooled, so use unnamed prepared
+        # statements to avoid issues with the pooler
+        #
+        # See https://hexdocs.pm/postgrex/0.19.3/readme.html#pgbouncer
+        prepare: :unnamed
+      ]
+
     {:ok, pool_pid} =
-      Postgrex.start_link(
-        state.pool_opts ++
-          [
-            backoff_type: :exp,
-            max_restarts: 3,
-            max_seconds: 5,
-            # Assume the manager connection might be pooled, so use unnamed prepared
-            # statements to avoid issues with the pooler
-            #
-            # See https://hexdocs.pm/postgrex/0.19.3/readme.html#pgbouncer
-            prepare: :unnamed
-          ] ++ conn_opts
-      )
+      Postgrex.start_link(pool_config ++ state.pool_opts ++ conn_opts)
 
     # NOTE(alco): We're jumping ahead of ourselves here a bit because at this point we don't
     # yet have a confirmation that the connection pool has succeeded in opening a database
@@ -564,9 +569,12 @@ defmodule Electric.Connection.Manager do
       ),
       do: {:noreply, state}
 
-  # Special-case the explicit shutdown of the supervision tree
+  # Special-case the explicit shutdown of the supervision tree.
+  #
+  # Supervisors send `:shutdown` exit signals to its children when they themselves are shutting
+  # down. We don't need to react to this signal coming from any of our linked processes, just
+  # ignore it.
   def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
-  def handle_info({:EXIT, _, {:shutdown, _}}, state), do: {:noreply, state}
 
   # A process exited as it was trying to open a database connection.
   def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
@@ -679,6 +687,43 @@ defmodule Electric.Connection.Manager do
     end
 
     {:noreply, %State{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
+  end
+
+  # The following two messages are sent by the DBConnection library because we've configured
+  # the connection manager process as connection listener for the DB connection pool.
+  def handle_info({:connected, conn_pid, ref}, %State{pool_ref: ref} = state) do
+    Process.monitor(conn_pid, tag: :pool_conn_down)
+    {:noreply, state}
+  end
+
+  def handle_info({:disconnected, _pid, ref}, %State{pool_ref: ref} = state) do
+    {:noreply, state}
+  end
+
+  # When a pooled connection terminates, we can report its exit reason the same way we do for
+  # replication and lock connections.
+  def handle_info({:pool_conn_down, _ref, :process, _pid, {:shutdown, exit_reason}}, state) do
+    error = DbConnectionError.from_error(exit_reason)
+
+    dispatch_stack_event(
+      {:connection_error,
+       %{
+         error: DbConnectionError.format_original_error(error),
+         type: error.type,
+         message: error.message
+       }},
+      state
+    )
+
+    # If the error is of an unknown type, it would have already been logged by DbConnectionError itself.
+    if error.type != :unknown do
+      Logger.warning(
+        "Pooled database connection encountered an error: " <>
+          DbConnectionError.format_original_error(error)
+      )
+    end
+
+    {:noreply, state}
   end
 
   @impl true

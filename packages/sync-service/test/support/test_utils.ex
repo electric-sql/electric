@@ -37,7 +37,7 @@ defmodule Support.TestUtils do
   end
 
   def full_test_name(ctx) do
-    "#{ctx.module} #{ctx.test}"
+    "#{inspect(ctx.module)} #{ctx.test}"
   end
 
   def ins(opts) do

@@ -55,7 +55,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_registry(ctx) do
-    registry_name = :"#{Registry.ShapeChanges}:#{ctx.stack_id}"
+    registry_name = :"#{inspect(Registry.ShapeChanges)}:#{ctx.stack_id}"
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
     %{registry: registry_name}
