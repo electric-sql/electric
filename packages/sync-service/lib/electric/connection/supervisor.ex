@@ -75,6 +75,7 @@ defmodule Electric.Connection.Supervisor do
     replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
     persistent_kv = Keyword.fetch!(opts, :persistent_kv)
+    tweaks = Keyword.fetch!(opts, :tweaks)
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
@@ -82,7 +83,8 @@ defmodule Electric.Connection.Supervisor do
       {Electric.Replication.PublicationManager,
        stack_id: stack_id,
        publication_name: Keyword.fetch!(replication_opts, :publication_name),
-       db_pool: Keyword.fetch!(db_pool_opts, :name)}
+       db_pool: Keyword.fetch!(db_pool_opts, :name),
+       update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0)}
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector,

@@ -204,9 +204,14 @@ defmodule Electric.Replication.PublicationManager do
     else
       state = track_shape_handle(shape_handle, state)
       state = update_relation_filters_for_shape(shape, :add, state)
-      state = add_waiter(from, state)
-      state = schedule_update_publication(state.update_debounce_timeout, state)
-      {:noreply, state}
+
+      if update_needed?(state) do
+        state = add_waiter(from, state)
+        state = schedule_update_publication(state.update_debounce_timeout, state)
+        {:noreply, state}
+      else
+        {:reply, :ok, state}
+      end
     end
   end
 
@@ -217,16 +222,25 @@ defmodule Electric.Replication.PublicationManager do
     else
       state = untrack_shape_handle(shape_handle, state)
       state = update_relation_filters_for_shape(shape, :remove, state)
-      state = add_waiter(from, state)
-      state = schedule_update_publication(state.update_debounce_timeout, state)
-      {:noreply, state}
+
+      if update_needed?(state) do
+        state = add_waiter(from, state)
+        state = schedule_update_publication(state.update_debounce_timeout, state)
+        {:noreply, state}
+      else
+        {:reply, :ok, state}
+      end
     end
   end
 
   def handle_call({:refresh_publication, forced?}, from, state) do
-    state = add_waiter(from, state)
-    state = schedule_update_publication(state.update_debounce_timeout, forced?, state)
-    {:noreply, state}
+    if forced? or update_needed?(state) do
+      state = add_waiter(from, state)
+      state = schedule_update_publication(state.update_debounce_timeout, forced?, state)
+      {:noreply, state}
+    else
+      {:reply, :ok, state}
+    end
   end
 
   def handle_call({:recover_shape, shape_handle, shape}, _from, state) do
@@ -306,6 +320,18 @@ defmodule Electric.Replication.PublicationManager do
          %__MODULE__{scheduled_updated_ref: _} = state
        ),
        do: %{state | next_update_forced?: forced? or state.next_update_forced?}
+
+  defp update_needed?(%__MODULE__{
+         prepared_relation_filters: commited,
+         committed_relation_filters: prepared,
+         row_filtering_enabled: row_filtering_enabled
+       }) do
+    cond do
+      prepared == commited -> false
+      not row_filtering_enabled and Map.keys(prepared) == Map.keys(commited) -> false
+      true -> true
+    end
+  end
 
   # Updates are forced when we're doing periodic checks: we expect no changes to the filters,
   # but we'll write them anyway because that'll verify that no tables have been dropped/renamed
