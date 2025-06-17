@@ -250,7 +250,7 @@ defmodule Electric.StackSupervisor do
   end
 
   def registry_name(stack_id) do
-    :"#{Registry.ShapeChanges}:#{stack_id}"
+    :"#{inspect(Registry.ShapeChanges)}:#{stack_id}"
   end
 
   @impl true

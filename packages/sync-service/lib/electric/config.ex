@@ -25,6 +25,10 @@ defmodule Electric.Config.Defaults do
   defp storage_dir do
     Electric.Config.get_env(:storage_dir)
   end
+
+  def process_registry_partitions do
+    System.schedulers_online()
+  end
 end
 
 defmodule Electric.Config do
@@ -73,7 +77,9 @@ defmodule Electric.Config do
     ## Memory
     shape_hibernate_after: :timer.seconds(30),
     ## Performance tweaks
-    publication_alter_debounce_ms: 0
+    publication_alter_debounce_ms: 0,
+    ## Misc
+    process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0
   ]
 
   @installation_id_key "electric_installation_id"
