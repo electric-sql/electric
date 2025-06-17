@@ -59,14 +59,14 @@ defmodule Electric.Replication.ShapeLogCollector do
     timer = IntervalTimer.start_interval("message_to_collector")
     trace_context = OpenTelemetry.get_current_context()
     timer = GenStage.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
-    intervals = IntervalTimer.intervals(timer)
+    durations = IntervalTimer.durations(timer)
 
-    for {name, duration} <- intervals do
-      OpenTelemetry.add_span_attributes("#{name}.duration_µs": duration)
+    for {interval_name, duration} <- durations do
+      OpenTelemetry.add_span_attributes("#{interval_name}.duration_µs": duration)
     end
 
     OpenTelemetry.add_span_attributes(
-      "new_txn_intervals.total_duration_µs": IntervalTimer.total_time(intervals)
+      "new_txn_intervals.total_duration_µs": IntervalTimer.total_time(durations)
     )
 
     :ok

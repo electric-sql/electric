@@ -19,7 +19,7 @@ defmodule Electric.Telemetry.IntervalTimerTest do
         ProcessIntervalTimer.start_interval("C")
         Process.sleep(@c_time)
 
-        ProcessIntervalTimer.intervals()
+        ProcessIntervalTimer.durations()
       end)
 
     assert [{"A", a_time}, {"B", b_time}, {"C", c_time}] = intervals
