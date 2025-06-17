@@ -1,7 +1,7 @@
 defmodule Electric.Telemetry.IntervalTimerTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Telemetry.IntervalTimer
+  alias Electric.Telemetry.ProcessIntervalTimer
 
   @a_time 2
   @b_time 5
@@ -12,14 +12,14 @@ defmodule Electric.Telemetry.IntervalTimerTest do
   test "times how long each interval takes" do
     {total, intervals} =
       :timer.tc(fn ->
-        IntervalTimer.start("A")
+        ProcessIntervalTimer.start("A")
         Process.sleep(@a_time)
-        IntervalTimer.start("B")
+        ProcessIntervalTimer.start("B")
         Process.sleep(@b_time)
-        IntervalTimer.start("C")
+        ProcessIntervalTimer.start("C")
         Process.sleep(@c_time)
 
-        IntervalTimer.intervals()
+        ProcessIntervalTimer.intervals()
       end)
 
     assert [{"A", a_time}, {"B", b_time}, {"C", c_time}] = intervals
