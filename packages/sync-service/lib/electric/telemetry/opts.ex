@@ -10,7 +10,11 @@ defmodule Electric.Telemetry.Opts do
       otel_metrics?: [type: :boolean, default: false],
       otel_export_period: [type: :integer, default: :timer.seconds(30)],
       otel_per_process_metrics?: [type: :boolean, default: false],
-      top_process_count: [type: :integer, default: 5]
+      top_process_count: [type: :integer, default: 5],
+      long_gc_threshold: [type: :integer, default: 5],
+      long_schedule_threshold: [type: :integer, default: 500],
+      long_message_queue_enable_threshold: [type: :integer, default: 1000],
+      long_message_queue_disable_threshold: [type: :integer, default: 100]
     ]
   end
 end

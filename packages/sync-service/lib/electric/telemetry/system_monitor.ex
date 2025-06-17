@@ -6,12 +6,12 @@ defmodule Electric.Telemetry.SystemMonitor do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  def init(_) do
-    # Monitor for: GC taking more than 500ms, process not interrupted for more than 500ms, message queue length > 1000
+  def init(opts) do
     :erlang.system_monitor(self(),
-      long_gc: 500,
-      long_schedule: 500,
-      long_message_queue: {100, 1000}
+      long_gc: opts.long_gc_threshold,
+      long_schedule: opts.long_schedule_threshold,
+      long_message_queue:
+        {opts.long_message_queue_disable_threshold, opts.long_message_queue_enable_threshold}
     )
 
     :timer.send_interval(2000, :report_long_queues)
