@@ -295,7 +295,13 @@ defmodule Electric.Application do
       otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint)),
       otel_export_period: get_env(opts, :otel_export_period),
       otel_per_process_metrics?: get_env(opts, :otel_per_process_metrics?),
-      top_process_count: get_env(opts, :telemetry_top_process_count)
+      top_process_count: get_env(opts, :telemetry_top_process_count),
+      long_gc_threshold: get_env(opts, :telemetry_long_gc_threshold),
+      long_schedule_threshold: get_env(opts, :telemetry_long_schedule_threshold),
+      long_message_queue_enable_threshold:
+        get_env(opts, :telemetry_long_message_queue_enable_threshold),
+      long_message_queue_disable_threshold:
+        get_env(opts, :telemetry_long_message_queue_disable_threshold)
     ]
   end
 end

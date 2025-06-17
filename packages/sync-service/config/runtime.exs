@@ -188,6 +188,13 @@ config :electric,
   otel_export_period: otel_export_period,
   otel_per_process_metrics?: env!("ELECTRIC_OTEL_PER_PROCESS_METRICS", :boolean, nil),
   telemetry_top_process_count: env!("ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT", :integer, nil),
+  telemetry_long_gc_threshold: env!("ELECTRIC_TELEMETRY_LONG_GC_THRESHOLD", :integer, nil),
+  telemetry_long_schedule_threshold:
+    env!("ELECTRIC_TELEMETRY_LONG_SCHEDULE_THRESHOLD", :integer, nil),
+  telemetry_long_message_queue_enable_threshold:
+    env!("ELECTRIC_TELEMETRY_LONG_MESSAGE_QUEUE_ENABLE_THRESHOLD", :integer, nil),
+  telemetry_long_message_queue_disable_threshold:
+    env!("ELECTRIC_TELEMETRY_LONG_MESSAGE_QUEUE_DISABLE_THRESHOLD", :integer, nil),
   telemetry_statsd_host: statsd_host,
   prometheus_port: prometheus_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
