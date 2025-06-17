@@ -66,7 +66,7 @@ defmodule Electric.Config do
     otel_export_period: :timer.seconds(30),
     otel_per_process_metrics?: false,
     telemetry_top_process_count: 5,
-    telemetry_long_gc_threshold: 5,
+    telemetry_long_gc_threshold: 500,
     telemetry_long_schedule_threshold: 500,
     telemetry_long_message_queue_enable_threshold: 1000,
     telemetry_long_message_queue_disable_threshold: 100,
