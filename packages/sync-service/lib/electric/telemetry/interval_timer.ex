@@ -1,4 +1,9 @@
 defmodule Electric.Telemetry.IntervalTimer do
+  @moduledoc """
+  Times intervals between calls to `start_interval/2`. This is useful when it is difficult to wrap an interval in a span, the state
+  can just be passed around instead, or kept in the process memory using `ProcessIntervalTimer`.
+  """
+
   @default_state []
 
   def start_interval(state \\ nil, interval) do
@@ -30,6 +35,10 @@ defmodule Electric.Telemetry.IntervalTimer do
 end
 
 defmodule Electric.Telemetry.ProcessIntervalTimer do
+  @moduledoc """
+  Times intervals between calls to `start_interval/2`. This is useful when it is difficult to wrap an interval in a span, the state
+  is stored in the process memory, allowing it to be accessed from any function on the process.
+  """
   alias Electric.Telemetry.IntervalTimer
 
   @state_key :timed_intervals
