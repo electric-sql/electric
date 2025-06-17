@@ -26,6 +26,7 @@ defmodule Electric.Shapes.Dispatcher do
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.ProcessIntervalTimer
 
   defmodule State do
     defstruct [:waiting, :pending, :subscribers, :filter, :partitions, :pids]
@@ -134,35 +135,33 @@ defmodule Electric.Shapes.Dispatcher do
   end
 
   def dispatch([event], _length, %State{waiting: 0, subscribers: subscribers} = state) do
-    {partitions, event} =
-      OpenTelemetry.timed_fun("partitions.handle_event.duration_µs", fn ->
-        Partitions.handle_event(state.partitions, event)
+    ProcessIntervalTimer.start_interval("partitions.handle_event")
+    {partitions, event} = Partitions.handle_event(state.partitions, event)
+
+    ProcessIntervalTimer.start_interval("dispatcher.dispatch")
+    context = OpenTelemetry.get_current_context()
+
+    {waiting, pending} =
+      state.filter
+      |> Filter.affected_shapes(event)
+      |> Enum.reduce({0, MapSet.new()}, fn {pid, ref} = subscriber, {waiting, pending} ->
+        Process.send(pid, {:"$gen_consumer", {self(), ref}, [{event, context}]}, [:noconnect])
+        {waiting + 1, MapSet.put(pending, subscriber)}
       end)
+      |> case do
+        {0, _pending} ->
+          # even though no subscriber wants the event, we still need to generate demand
+          # so that we can complete the loop in the log collector
+          [{subscriber, _selector} | _] = subscribers
+          send(self(), {:"$gen_producer", subscriber, {:ask, 1}})
+          {1, MapSet.new([subscriber])}
 
-    OpenTelemetry.timed_fun("dispatcher.dispatch.duration_µs", fn ->
-      context = OpenTelemetry.get_current_context()
+        {waiting, pending} ->
+          {waiting, pending}
+      end
 
-      {waiting, pending} =
-        state.filter
-        |> Filter.affected_shapes(event)
-        |> Enum.reduce({0, MapSet.new()}, fn {pid, ref} = subscriber, {waiting, pending} ->
-          Process.send(pid, {:"$gen_consumer", {self(), ref}, [{event, context}]}, [:noconnect])
-          {waiting + 1, MapSet.put(pending, subscriber)}
-        end)
-        |> case do
-          {0, _pending} ->
-            # even though no subscriber wants the event, we still need to generate demand
-            # so that we can complete the loop in the log collector
-            [{subscriber, _selector} | _] = subscribers
-            send(self(), {:"$gen_producer", subscriber, {:ask, 1}})
-            {1, MapSet.new([subscriber])}
-
-          {waiting, pending} ->
-            {waiting, pending}
-        end
-
-      {:ok, [], %State{state | partitions: partitions, waiting: waiting, pending: pending}}
-    end)
+    ProcessIntervalTimer.start_interval("gen_stage.post_dispatch")
+    {:ok, [], %State{state | partitions: partitions, waiting: waiting, pending: pending}}
   end
 
   @impl GenStage.Dispatcher

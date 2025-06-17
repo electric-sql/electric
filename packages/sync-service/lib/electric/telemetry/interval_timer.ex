@@ -1,11 +1,21 @@
 defmodule Electric.Telemetry.IntervalTimer do
-  def start(state, interval) do
-    [{interval, time()} | state]
+  @default_state []
+
+  def start_interval(state \\ nil, interval) do
+    [{interval, time()} | state || @default_state]
   end
 
   def intervals(state) do
     calculate_intervals([time() | state])
     |> Enum.reverse()
+  end
+
+  def total_time([]), do: 0
+
+  def total_time(intervals) do
+    intervals
+    |> Enum.map(fn {_, duration} -> duration end)
+    |> Enum.sum()
   end
 
   defp calculate_intervals([end_time, {interval, start_time} | rest]) do
@@ -32,8 +42,12 @@ defmodule Electric.Telemetry.ProcessIntervalTimer do
     Process.put(@state_key, state)
   end
 
-  def start(interval) do
-    IntervalTimer.start(state(), interval)
+  def wipe_state do
+    Process.delete(@state_key)
+  end
+
+  def start_interval(interval) do
+    IntervalTimer.start_interval(state(), interval)
     |> set_state()
   end
 

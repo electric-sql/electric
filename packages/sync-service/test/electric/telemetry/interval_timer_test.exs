@@ -12,11 +12,11 @@ defmodule Electric.Telemetry.IntervalTimerTest do
   test "times how long each interval takes" do
     {total, intervals} =
       :timer.tc(fn ->
-        ProcessIntervalTimer.start("A")
+        ProcessIntervalTimer.start_interval("A")
         Process.sleep(@a_time)
-        ProcessIntervalTimer.start("B")
+        ProcessIntervalTimer.start_interval("B")
         Process.sleep(@b_time)
-        ProcessIntervalTimer.start("C")
+        ProcessIntervalTimer.start_interval("C")
         Process.sleep(@c_time)
 
         ProcessIntervalTimer.intervals()

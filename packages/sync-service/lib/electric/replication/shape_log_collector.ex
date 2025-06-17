@@ -14,6 +14,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.IntervalTimer
+  alias Electric.Telemetry.ProcessIntervalTimer
 
   require Logger
 
@@ -54,14 +56,26 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
+    timer = IntervalTimer.start_interval("message_to_collector")
     trace_context = OpenTelemetry.get_current_context()
-    call_time = :erlang.monotonic_time(:microsecond)
-    GenStage.call(server, {:new_txn, txn, trace_context, call_time}, :infinity)
+    timer = GenStage.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
+    intervals = IntervalTimer.intervals(timer)
+
+    for {name, duration} <- intervals do
+      OpenTelemetry.add_span_attributes("#{name}.duration_µs": duration)
+    end
+
+    OpenTelemetry.add_span_attributes(
+      "new_txn_intervals.total_duration_µs": IntervalTimer.total_time(intervals)
+    )
+
+    :ok
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
     trace_context = OpenTelemetry.get_current_context()
     GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
+    :ok
   end
 
   def init(opts) do
@@ -118,7 +132,9 @@ defmodule Electric.Replication.ShapeLogCollector do
       state.stack_id
     )
 
-    GenServer.reply(producer, :ok)
+    ProcessIntervalTimer.start_interval("message_from_collector")
+    GenServer.reply(producer, ProcessIntervalTimer.state())
+    ProcessIntervalTimer.wipe_state()
 
     {:noreply, [], %{state | producer: nil}}
   end
@@ -139,17 +155,13 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call(
-        {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, call_time},
+        {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, timer},
         from,
         state
       ) do
-    receive_time = :erlang.monotonic_time(:microsecond) - call_time
-
+    timer = IntervalTimer.start_interval(timer, "new_txn_handle_call")
+    ProcessIntervalTimer.set_state(timer)
     OpenTelemetry.set_current_context(trace_context)
-
-    OpenTelemetry.add_span_attributes(
-      "shape_log_collector.transaction_message.duration_µs": receive_time
-    )
 
     Logger.info(
       "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}",
@@ -210,6 +222,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         Enum.map(changes, &Changes.fill_key(&1, pk_cols_of_relations[&1.relation]))
       end)
 
+    ProcessIntervalTimer.start_interval("gen_stage_receive_txn")
     # we don't reply to this call. we only reply when we receive demand from
     # the consumers, signifying that every one has processed this txn
     {:noreply, [txn], %{state | producer: from} |> put_last_processed_lsn(txn.lsn)}
@@ -241,7 +254,9 @@ defmodule Electric.Replication.ShapeLogCollector do
           "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
         end)
 
-        {:reply, :ok, [], %{state | tracked_relations: tracker_state}}
+        timer = ProcessIntervalTimer.state()
+        ProcessIntervalTimer.wipe_state()
+        {:reply, timer, [], %{state | tracked_relations: tracker_state}}
 
       _ ->
         {:noreply, [updated_rel], %{state | producer: from, tracked_relations: tracker_state}}
@@ -250,7 +265,9 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   defp drop_transaction(state) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    {:reply, :ok, [], state}
+    timer = ProcessIntervalTimer.state()
+    ProcessIntervalTimer.wipe_state()
+    {:reply, timer, [], state}
   end
 
   defp remove_subscription(from, %{subscriptions: {count, set}} = state) do
