@@ -11,7 +11,7 @@ defmodule Support.DbSetup do
   def with_unique_db(ctx) do
     replication_config = Application.fetch_env!(:electric, :replication_connection_opts)
     query_config = Application.fetch_env!(:electric, :query_connection_opts)
-    {:ok, utility_pool} = start_db_pool(replication_config)
+    {:ok, utility_pool} = start_utility_pool(replication_config)
     Process.unlink(utility_pool)
 
     full_db_name = to_string(ctx.test)
@@ -45,7 +45,7 @@ defmodule Support.DbSetup do
       |> Keyword.put(:database, db_name)
       |> Keyword.merge(List.wrap(ctx[:connection_opt_overrides]))
 
-    {:ok, pool} = start_db_pool(updated_replication_config)
+    pool = start_db_pool!(updated_replication_config)
 
     {:ok,
      %{
@@ -102,7 +102,7 @@ defmodule Support.DbSetup do
   """
   def with_shared_db(ctx) do
     replication_config = Application.fetch_env!(:electric, :replication_connection_opts)
-    {:ok, utility_pool} = start_db_pool(replication_config)
+    {:ok, utility_pool} = start_utility_pool(replication_config)
     Process.unlink(utility_pool)
 
     on_exit(fn ->
@@ -132,7 +132,7 @@ defmodule Support.DbSetup do
       end)
 
       ExUnit.after_suite(fn _ ->
-        {:ok, utility_pool} = start_db_pool(replication_config)
+        {:ok, utility_pool} = start_utility_pool(replication_config)
         drop_database(utility_pool, escaped_db_name)
         GenServer.stop(utility_pool)
       end)
@@ -143,7 +143,7 @@ defmodule Support.DbSetup do
       |> Keyword.put(:database, db_name)
       |> Keyword.merge(List.wrap(ctx[:connection_opt_overrides]))
 
-    {:ok, pool} = start_db_pool(config)
+    pool = start_db_pool!(config)
 
     {:ok, %{pool: pool, db_config: config, db_conn: pool}}
   end
@@ -214,7 +214,14 @@ defmodule Support.DbSetup do
       |> Base.encode64()
       |> String.replace_trailing("==", "")
 
-  defp start_db_pool(connection_opts) do
+  defp start_db_pool!(connection_opts) do
+    start_opts =
+      Keyword.merge(@postgrex_start_opts, Electric.Utils.deobfuscate_password(connection_opts))
+
+    start_link_supervised!({Postgrex, start_opts})
+  end
+
+  defp start_utility_pool(connection_opts) do
     start_opts =
       Keyword.merge(@postgrex_start_opts, Electric.Utils.deobfuscate_password(connection_opts))
 
