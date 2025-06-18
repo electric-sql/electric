@@ -97,6 +97,9 @@ defmodule Electric.Connection.Manager do
       :replication_client_pid,
       # Timer reference for the periodic replication client status check
       :replication_client_timer,
+      # This flag is set whenever the timer that checks the replication client's status trips
+      # and the client still hasn't finished configuration its connection by then.
+      :replication_client_blocked_by_pending_transaction?,
       # PID of the Postgres connection lock
       :lock_connection_pid,
       # Timer reference for the periodic lock status check
@@ -360,6 +363,7 @@ defmodule Electric.Connection.Manager do
     state = %State{
       state
       | replication_client_pid: pid,
+        replication_client_blocked_by_pending_transaction?: false,
         current_step: {:start_replication_client, :connecting}
     }
 
@@ -532,8 +536,18 @@ defmodule Electric.Connection.Manager do
         "before it can create the replication slot."
     end)
 
+    if not state.replication_client_blocked_by_pending_transaction? do
+      dispatch_stack_event(:replication_slot_creation_blocked_by_pending_trasactions, state)
+    end
+
     tref = schedule_periodic_connection_status_check(:replication_client)
-    state = %State{state | replication_client_timer: tref}
+
+    state = %State{
+      state
+      | replication_client_timer: tref,
+        replication_client_blocked_by_pending_transaction?: true
+    }
+
     {:noreply, state}
   end
 
@@ -842,6 +856,8 @@ defmodule Electric.Connection.Manager do
       state.stack_id,
       state.replication_client_pid
     )
+
+    state = %{state | replication_client_blocked_by_pending_transaction?: false}
 
     case phase do
       :connection_setup ->
