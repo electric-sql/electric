@@ -106,10 +106,14 @@ defmodule Electric.Connection.ConnectionManagerTest do
         connection_opts: ctx.connection_opts,
         connection_manager: self(),
         lock_name: Keyword.fetch!(ctx.replication_opts, :slot_name),
-        stack_id: stack_id
+        stack_id: stack_id,
+        name: :"#{inspect(Electric.Postgres.LockConnection)}_#{stack_id}_alt_lock"
       ]
 
-      Electric.Postgres.LockConnection.start_link(lock_opts)
+      start_supervised!(%{
+        id: :alt_lock,
+        start: {Electric.Postgres.LockConnection, :start_link, [lock_opts]}
+      })
 
       monitor = monitor_replication_client(stack_id)
 

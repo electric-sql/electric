@@ -58,7 +58,12 @@ defmodule Electric.Postgres.LockConnection do
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      [timeout: :infinity, auto_reconnect: false, sync_connect: false, name: name(stack_id)] ++
+      [
+        timeout: :infinity,
+        auto_reconnect: false,
+        sync_connect: false,
+        name: opts[:name] || name(stack_id)
+      ] ++
         connection_opts
     )
   end
