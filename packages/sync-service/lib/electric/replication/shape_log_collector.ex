@@ -92,7 +92,9 @@ defmodule Electric.Replication.ShapeLogCollector do
       Map.merge(opts, %{
         subscriptions: {0, MapSet.new()},
         persistent_replication_data_opts: persistent_replication_data_opts,
-        tracked_relations: tracker_state
+        tracked_relations: tracker_state,
+        partitions: Partitions.new(Keyword.new(opts)),
+        filter: Filter.new(Keyword.new(opts))
       })
 
     {:ok, state}
@@ -110,7 +112,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       %{
         state
         | partitions: Partitions.add_shape(state.partitions, from, shape),
-          filter: Filter.add_shape(state.filter, from, shape)
+          filter: Filter.add_shape(state.filter, pid, shape)
       }
       |> Map.update!(:subscriptions, fn {count, set} ->
         {count + 1, MapSet.put(set, from)}
@@ -262,7 +264,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, state}
   end
 
-  defp remove_subscription(from, %{subscriptions: {count, set}} = state) do
+  defp remove_subscription({pid, _} = from, %{subscriptions: {count, set}} = state) do
     subscriptions =
       if MapSet.member?(set, from) do
         {count - 1, MapSet.delete(set, from)}
@@ -277,7 +279,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     %{
       state
       | subscriptions: subscriptions,
-        filter: Filter.remove_shape(state.filter, from),
+        filter: Filter.remove_shape(state.filter, pid),
         partitions: Partitions.remove_shape(state.partitions, from)
     }
     |> log_subscription_status()

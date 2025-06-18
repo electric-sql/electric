@@ -1,5 +1,5 @@
 defmodule Electric.Shapes.Consumer do
-  use GenStage,
+  use GenServer,
     restart: :temporary,
     significant: true
 
@@ -11,6 +11,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Api
@@ -39,7 +40,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def initial_state(consumer) do
-    GenStage.call(consumer, :initial_state, 30_000)
+    GenServer.call(consumer, :initial_state, 30_000)
   end
 
   @doc false
@@ -49,7 +50,7 @@ defmodule Electric.Shapes.Consumer do
   # a notification
   @spec monitor(String.t(), ShapeCache.shape_handle(), pid()) :: reference()
   def monitor(stack_id, shape_handle, pid \\ self()) do
-    GenStage.call(name(stack_id, shape_handle), {:monitor, pid})
+    GenServer.call(name(stack_id, shape_handle), {:monitor, pid})
   end
 
   @spec whereis(String.t(), ShapeCache.shape_handle()) :: pid() | nil
@@ -58,13 +59,13 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def start_link(config) when is_map(config) do
-    GenStage.start_link(__MODULE__, config,
+    GenServer.start_link(__MODULE__, config,
       name: name(config),
       hibernate_after: Electric.Config.get_env(:shape_hibernate_after)
     )
   end
 
-  @impl GenStage
+  @impl GenServer
 
   def init(config) do
     Process.set_label({:consumer, config.shape_handle})
@@ -118,17 +119,19 @@ defmodule Electric.Shapes.Consumer do
     :ok =
       Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
 
-    {:consumer, state, subscribe_to: [{producer, [max_demand: 1, shape: config.shape]}]}
+    ShapeLogCollector.subscribe(producer, config.shape)
+
+    {:ok, state}
   end
 
-  @impl GenStage
+  @impl GenServer
   def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
-    {:reply, {:ok, offset}, [], state}
+    {:reply, {:ok, offset}, state}
   end
 
   def handle_call({:monitor, pid}, _from, %{monitors: monitors} = state) do
     ref = make_ref()
-    {:reply, ref, [], %{state | monitors: [{pid, ref} | monitors]}}
+    {:reply, ref, %{state | monitors: [{pid, ref} | monitors]}}
   end
 
   def handle_call(:stop_and_clean, _from, state) do
@@ -141,20 +144,26 @@ defmodule Electric.Shapes.Consumer do
       |> reply_to_snapshot_waiters({:error, Api.Error.must_refetch()})
       |> terminate_safely()
 
-    {:reply, :ok, [], state}
+    {:reply, :ok, state}
   end
 
   def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
-    {:reply, :started, [], state}
+    {:reply, :started, state}
   end
 
   def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
     Logger.debug("Starting a wait on the snapshot #{state.shape_handle} for #{inspect(from)}}")
 
-    {:noreply, [], %{state | awaiting_snapshot_start: [from | waiters]}}
+    {:noreply, %{state | awaiting_snapshot_start: [from | waiters]}}
   end
 
-  @impl GenStage
+  @impl GenServer
+  def handle_call({:handle_event, event, trace_context}, _from, state) do
+    OpenTelemetry.set_current_context(trace_context)
+    handle_event(event, state)
+  end
+
+  @impl GenServer
   def handle_cast(
         {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list}},
         %{shape_handle: shape_handle} = state
@@ -178,7 +187,7 @@ defmodule Electric.Shapes.Consumer do
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
     Logger.debug("Snapshot started shape_handle: #{shape_handle}")
     state = set_snapshot_started(state)
-    {:noreply, [], state}
+    {:noreply, state}
   end
 
   def handle_cast(
@@ -197,16 +206,16 @@ defmodule Electric.Shapes.Consumer do
       |> reply_to_snapshot_waiters({:error, error})
       |> terminate_safely()
 
-    {:noreply, [], state}
+    {:noreply, state}
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
     state = set_pg_snapshot(state.pg_snapshot, state)
     state = set_snapshot_started(state)
-    {:noreply, [], state}
+    {:noreply, state}
   end
 
-  @impl GenStage
+  @impl GenServer
   def handle_info(
         {Electric.Shapes.Monitor, :reader_termination, handle, reason},
         %{shape_handle: handle} = state
@@ -216,19 +225,11 @@ defmodule Electric.Shapes.Consumer do
     {:stop, reason, state}
   end
 
-  @impl GenStage
+  @impl GenServer
   def terminate(reason, state) do
     Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
-  end
-
-  # `Shapes.Dispatcher` only works with single-events, so we can safely assert
-  # that here
-  @impl GenStage
-  def handle_events([{event, trace_context}], _from, state) do
-    OpenTelemetry.set_current_context(trace_context)
-    handle_event(event, state)
   end
 
   # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
@@ -250,7 +251,7 @@ defmodule Electric.Shapes.Consumer do
       |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
       |> terminate_safely()
 
-    {:noreply, [], state}
+    {:noreply, state}
   end
 
   # Buffer incoming transactions until we know our pg_snapshot
@@ -259,7 +260,7 @@ defmodule Electric.Shapes.Consumer do
       "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
     end)
 
-    {:noreply, [], %{state | buffer: state.buffer ++ [txn]}}
+    {:noreply, %{state | buffer: state.buffer ++ [txn]}}
   end
 
   defp handle_event(%Transaction{} = txn, %{pg_snapshot: %{xmin: xmin, xmax: xmax}} = state) do
@@ -273,7 +274,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txns(txns, state) do
     state = Enum.reduce_while(txns, state, &handle_txn/2)
-    {:noreply, [], state}
+    {:noreply, state}
   end
 
   defp handle_txn(txn, %{pg_snapshot: %{filter_txns?: false}} = state) do
@@ -500,7 +501,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: waiters} = state, reply) do
-    for client <- List.wrap(waiters), not is_nil(client), do: GenStage.reply(client, reply)
+    for client <- List.wrap(waiters), not is_nil(client), do: GenServer.reply(client, reply)
     %{state | awaiting_snapshot_start: []}
   end
 
