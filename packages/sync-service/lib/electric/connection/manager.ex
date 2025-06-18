@@ -64,6 +64,7 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, :configuring_connection}
             | :start_connection_pool
             | :start_shapes_supervisor
+            | :waiting_for_consumers
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
             | :waiting_for_streaming_confirmation
@@ -191,6 +192,10 @@ defmodule Electric.Connection.Manager do
 
   def lock_connection_started(manager) do
     GenServer.cast(manager, :lock_connection_started)
+  end
+
+  def consumers_ready(stack_id) do
+    GenServer.cast(name(stack_id), :consumers_ready)
   end
 
   def exclusive_connection_lock_acquisition_failed(manager, error) do
@@ -476,11 +481,11 @@ defmodule Electric.Connection.Manager do
     state = %State{
       state
       | shape_log_collector_pid: log_collector_pid,
-        current_step: {:start_replication_client, :start_streaming},
+        current_step: :waiting_for_consumers,
         purge_all_shapes?: false
     }
 
-    {:noreply, state, {:continue, :start_streaming}}
+    {:noreply, state}
   end
 
   def handle_continue(
@@ -875,6 +880,17 @@ defmodule Electric.Connection.Manager do
         state = %{state | current_step: {:start_replication_client, :start_streaming}}
         {:noreply, state, {:continue, :start_streaming}}
     end
+  end
+
+  def handle_cast(
+        :consumers_ready,
+        %State{
+          current_phase: :connection_setup,
+          current_step: :waiting_for_consumers
+        } = state
+      ) do
+    state = %State{state | current_step: {:start_replication_client, :start_streaming}}
+    {:noreply, state, {:continue, :start_streaming}}
   end
 
   def handle_cast(

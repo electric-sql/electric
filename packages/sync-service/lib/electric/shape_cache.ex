@@ -266,7 +266,9 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def handle_continue({:consumers_ready, last_processed_lsn}, state) do
-    ShapeLogCollector.start_processing(state.log_producer, last_processed_lsn)
+    ShapeLogCollector.set_last_processed_lsn(state.log_producer, last_processed_lsn)
+    Electric.Connection.Manager.consumers_ready(state.stack_id)
+
     {:noreply, state}
   end
 

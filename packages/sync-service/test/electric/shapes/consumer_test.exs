@@ -118,7 +118,7 @@ defmodule Electric.Shapes.ConsumerTest do
           inspector: @base_inspector
         )
 
-      ShapeLogCollector.start_processing(producer, Lsn.from_integer(0))
+      ShapeLogCollector.set_last_processed_lsn(producer, Lsn.from_integer(0))
 
       consumers =
         for {shape_handle, shape} <- ctx.shapes do
