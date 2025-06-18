@@ -6,12 +6,12 @@ defmodule Electric.Telemetry.IntervalTimer do
 
   @default_state []
 
-  def start_interval(state \\ nil, interval) do
-    [{interval, time()} | state || @default_state]
+  def start_interval(state \\ nil, interval_name) do
+    [{interval_name, time()} | state || @default_state]
   end
 
   def durations(state) do
-    calculate_durations([time() | state])
+    calculate_durations(state, time())
     |> Enum.reverse()
   end
 
@@ -23,11 +23,14 @@ defmodule Electric.Telemetry.IntervalTimer do
     |> Enum.sum()
   end
 
-  defp calculate_durations([end_time, {interval, start_time} | rest]) do
-    [{interval, end_time - start_time} | calculate_durations([start_time | rest])]
+  defp calculate_durations([{interval_name, start_time} | rest], end_time) do
+    duration = {interval_name, end_time - start_time}
+    # since we're moving backwards through the intervals, the next interval's end time
+    # is this interval's start time:
+    [duration | calculate_durations(rest, _next_interval_end_time = start_time)]
   end
 
-  defp calculate_durations([_end_time]), do: []
+  defp calculate_durations([], _), do: []
 
   defp time do
     System.monotonic_time(:microsecond)
