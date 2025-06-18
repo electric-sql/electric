@@ -1133,7 +1133,7 @@ defmodule Electric.ShapeCacheTest do
       # Should fail to start shape cache and clean up shapes
       Process.flag(:trap_exit, true)
 
-      assert_raise MatchError, ~r/%RuntimeError{message: \"failed recovery\"/, fn ->
+      assert_raise RuntimeError, ~r/\*\* \(RuntimeError\) failed recovery/, fn ->
         restart_shape_cache(%{
           context
           | publication_manager: {Mock.PublicationManager, []}
@@ -1223,51 +1223,9 @@ defmodule Electric.ShapeCacheTest do
       )
     end
 
-    defp stop_shape_cache(ctx) do
-      %{shape_cache: {shape_cache, shape_cache_opts}} = ctx
-
-      consumers =
-        case shape_cache.list_shapes(Map.new(shape_cache_opts)) do
-          :error ->
-            []
-
-          shapes ->
-            for {shape_handle, _} <- shapes do
-              pid = Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
-              {pid, Process.monitor(pid)}
-            end
-        end
-
-      if Enum.count(consumers) > 0 do
-        Shapes.DynamicConsumerSupervisor.stop_all_consumers(ctx.consumer_supervisor)
-      end
-
-      for {pid, ref} <- consumers do
-        assert_receive {:DOWN, ^ref, :process, ^pid, _}
-      end
-
-      stop_processes([
-        shape_cache_opts[:server],
-        ctx.shape_log_collector,
-        ctx.consumer_supervisor
-      ])
-    end
-
-    defp stop_processes(process_names) do
-      processes =
-        for name <- process_names, pid = GenServer.whereis(name) do
-          Process.unlink(pid)
-          Process.monitor(pid)
-          Process.exit(pid, :kill)
-          {pid, name}
-        end
-
-      for {pid, name} <- processes do
-        receive do
-          {:DOWN, _, :process, ^pid, :killed} -> :process_killed
-        after
-          500 -> raise "#{name} process not killed"
-        end
+    defp stop_shape_cache(_ctx) do
+      for name <- [ShapeCache, ShapeLogCollector, Shapes.DynamicConsumerSupervisor] do
+        stop_supervised(name)
       end
     end
   end
