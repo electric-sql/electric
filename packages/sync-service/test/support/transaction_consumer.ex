@@ -1,12 +1,12 @@
 defmodule Support.TransactionConsumer do
-  use GenStage
+  use GenServer
 
   alias Electric.Replication.Changes.{Transaction, Relation}
 
   import ExUnit.Assertions
 
   def start_link(opts) do
-    GenStage.start_link(__MODULE__, opts)
+    GenServer.start_link(__MODULE__, opts)
   end
 
   def assert_consume(consumers, evts, timeout \\ 100) do
@@ -42,18 +42,13 @@ defmodule Support.TransactionConsumer do
     {:ok, parent} = Keyword.fetch(opts, :parent)
     {:ok, id} = Keyword.fetch(opts, :id)
     shape = Keyword.fetch!(opts, :shape)
+    Electric.Replication.ShapeLogCollector.subscribe(producer, shape)
 
-    {:consumer, {id, nil, parent}, subscribe_to: [{producer, [shape: shape]}]}
+    {:ok, {id, parent}}
   end
 
-  def handle_subscribe(:producer, _options, from, {id, _, parent}) do
-    GenStage.ask(from, 1)
-    {:manual, {id, from, parent}}
-  end
-
-  def handle_events([{txn, _ctx}], _from, {id, subscription, parent}) do
+  def handle_call({:handle_event, txn, _ctx}, _from, {id, parent}) do
     send(parent, {__MODULE__, {id, self()}, [txn]})
-    GenStage.ask(subscription, 1)
     {:noreply, [], {id, subscription, parent}}
   end
 end
