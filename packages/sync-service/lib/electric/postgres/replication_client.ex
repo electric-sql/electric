@@ -215,6 +215,12 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply, state}
   end
 
+  # This callback is invoked when the connection process receives a shutdown signal.
+  def handle_info({:EXIT, _pid, :shutdown}, _state) do
+    Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
+    {:disconnect, :shutdown}
+  end
+
   # The implementation of Postgrex.ReplicationConnection doesn't give us a convenient way to
   # check whether the START_REPLICATION_SLOT statement succeeded before switching the
   # connection into streaming mode. Returning {:query, "START_REPLICATION_SLOT ...", state}

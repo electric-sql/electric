@@ -470,11 +470,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
   defp start_client(ctx, overrides \\ []) do
     ctx = Enum.into(overrides, ctx)
 
-    {:ok, client_pid} =
-      ReplicationClient.start_link(
-        stack_id: ctx.stack_id,
-        replication_opts: ctx.replication_opts
-      )
+    client_pid =
+      start_link_supervised!(%{
+        id: ReplicationClient,
+        start:
+          {ReplicationClient, :start_link,
+           [[stack_id: ctx.stack_id, replication_opts: ctx.replication_opts]]}
+      })
 
     conn_mgr = ctx.connection_manager
     assert_receive {^conn_mgr, :streaming_started}, @assert_receive_db_timeout
