@@ -78,16 +78,24 @@ defmodule Electric.Shapes.MonitorTest do
 
       pids =
         for handle <- Enum.take(random_handle_stream, n) do
-          {:ok, pid} =
-            Task.start_link(fn ->
-              :ok = Monitor.register_reader(stack_id, handle)
+          pid =
+            start_link_supervised!(%{
+              id: {:reader, System.monotonic_time(:microsecond), handle},
+              start:
+                {Task, :start_link,
+                 [
+                   fn ->
+                     :ok = Monitor.register_reader(stack_id, handle)
 
-              send(parent, {:ready, self()})
+                     send(parent, {:ready, self()})
 
-              receive do
-                _ -> :ok
-              end
-            end)
+                     receive do
+                       _ -> :ok
+                     end
+                   end
+                 ]},
+              restart: :temporary
+            })
 
           assert_receive {:ready, ^pid}
 

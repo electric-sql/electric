@@ -7,7 +7,7 @@ defmodule Electric.ConcurrentStreamTest do
   describe "stream_to_end/2" do
     setup %{tmp_dir: tmp_dir, test: test} do
       db = :"cubdb_#{test}"
-      CubDB.start_link(data_dir: tmp_dir, name: db)
+      start_link_supervised!({CubDB, data_dir: tmp_dir, name: db})
       {:ok, %{db: db}}
     end
 
