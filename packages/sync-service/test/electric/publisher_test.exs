@@ -39,18 +39,20 @@ defmodule Electric.PublisherTest do
   defmodule TestSubscriber do
     use Electric.Subscriber
 
-    def start_link(publisher, name) do
-      Subscriber.start_link(__MODULE__, publisher, name)
+    def start_link(publisher, name, opts \\ []) do
+      Subscriber.start_link(__MODULE__, publisher, {name, opts})
     end
 
-    def init(name) do
+    def init({name, opts}) do
       :ets.new(name, [:protected, :named_table, :ordered_set])
-      {:ok, %{table: name, event_index: 0}}
+      {:ok, %{table: name, event_index: 0, opts: opts}}
     end
 
     def handle_event(message, state) do
-      # Sleep to ilicit race conditions
-      Process.sleep(10)
+      if state.opts[:on_event] do
+        state.opts[:on_event].(message)
+      end
+
       :ets.insert(state.table, {state.event_index, message})
       {:noreply, %{state | event_index: state.event_index + 1}}
     end
@@ -69,5 +71,34 @@ defmodule Electric.PublisherTest do
     TestPublisher.publish(publisher, 2)
     assert TestSubscriber.received(:sub1) == [1, 2]
     assert TestSubscriber.received(:sub2) == [1, 2]
+  end
+
+  test "publish call does not return until all subscibers have processed the event" do
+    {:ok, publisher} = TestPublisher.start_link()
+
+    on_event = fn _ ->
+      receive do
+        :finish_processing_event -> :ok
+      end
+    end
+
+    {:ok, sub1} =
+      TestSubscriber.start_link(publisher, :sub1, on_event: on_event)
+
+    {:ok, sub2} =
+      TestSubscriber.start_link(publisher, :sub2, on_event: on_event)
+
+    pid = self()
+
+    Task.async(fn ->
+      TestPublisher.publish(publisher, 1)
+      send(pid, :publish_finished)
+    end)
+
+    refute_receive :publish_finished, 10
+    send(sub2, :finish_processing_event)
+    refute_receive :publish_finished, 10
+    send(sub1, :finish_processing_event)
+    assert_receive :publish_finished
   end
 end
