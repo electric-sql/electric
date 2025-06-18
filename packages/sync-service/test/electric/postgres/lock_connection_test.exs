@@ -18,13 +18,19 @@ defmodule Electric.Postgres.LockConnectionTest do
     } do
       log =
         capture_log(fn ->
-          assert {:ok, _pid} =
-                   LockConnection.start_link(
-                     connection_opts: config,
-                     connection_manager: self(),
-                     lock_name: @lock_name,
-                     stack_id: stack_id
-                   )
+          start_supervised!(%{
+            id: :lock1,
+            start:
+              {LockConnection, :start_link,
+               [
+                 [
+                   connection_opts: config,
+                   connection_manager: self(),
+                   lock_name: @lock_name,
+                   stack_id: stack_id
+                 ]
+               ]}
+          })
 
           assert_lock_acquired()
         end)
@@ -44,33 +50,45 @@ defmodule Electric.Postgres.LockConnectionTest do
 
     test "should wait if lock is already acquired", %{db_config: config, stack_id: stack_id} do
       # grab lock with one connection
-      assert {:ok, pid1} =
-               LockConnection.start_link(
-                 connection_opts: config,
-                 connection_manager: self(),
-                 lock_name: @lock_name,
-                 stack_id: stack_id
-               )
+      start_supervised!(%{
+        id: :lock1,
+        start:
+          {LockConnection, :start_link,
+           [
+             [
+               connection_opts: config,
+               connection_manager: self(),
+               lock_name: @lock_name,
+               stack_id: stack_id
+             ]
+           ]}
+      })
 
       assert_lock_acquired()
 
       # try to grab the same lock using a different connection
       new_stack_id = stack_id <> "_new"
-      _registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
+      start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
 
-      assert {:ok, _pid} =
-               LockConnection.start_link(
-                 connection_opts: config,
-                 connection_manager: self(),
-                 lock_name: @lock_name,
-                 stack_id: new_stack_id
-               )
+      start_supervised!(%{
+        id: :lock2,
+        start:
+          {LockConnection, :start_link,
+           [
+             [
+               connection_opts: config,
+               connection_manager: self(),
+               lock_name: @lock_name,
+               stack_id: new_stack_id
+             ]
+           ]}
+      })
 
       # should fail to grab it
       refute_lock_acquired()
 
       # should immediately grab it once previous lock is released
-      GenServer.stop(pid1)
+      stop_supervised!(:lock1)
       assert_lock_acquired()
     end
   end

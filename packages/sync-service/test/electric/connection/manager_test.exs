@@ -102,12 +102,14 @@ defmodule Electric.Connection.ConnectionManagerTest do
       wait_until_active(stack_id)
 
       # Start another lock process so that when ConnectionManager exits it is not able to restore its readiness immediately.
+      new_stack_id = stack_id <> "_new"
+      _registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
+
       lock_opts = [
         connection_opts: ctx.connection_opts,
         connection_manager: self(),
         lock_name: Keyword.fetch!(ctx.replication_opts, :slot_name),
-        stack_id: stack_id,
-        name: :"#{inspect(Electric.Postgres.LockConnection)}_#{stack_id}_alt_lock"
+        stack_id: new_stack_id
       ]
 
       start_supervised!(%{
