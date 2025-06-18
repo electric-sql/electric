@@ -101,22 +101,32 @@ defmodule Support.ComponentSetup do
   def with_publication_manager(ctx) do
     server = :"publication_manager_#{full_test_name(ctx)}"
 
-    start_link_supervised!(
-      {Electric.Replication.PublicationManager,
-       name: server,
-       stack_id: ctx.stack_id,
-       publication_name: ctx.publication_name,
-       update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
-       db_pool: ctx.pool,
-       pg_version: Access.get(ctx, :pg_version, nil),
-       configure_tables_for_replication_fn:
-         Access.get(
-           ctx,
-           :configure_tables_for_replication_fn,
-           &Electric.Postgres.Configuration.configure_publication!/5
-         ),
-       shape_cache: Access.get(ctx, :shape_cache, {Electric.ShapeCache, [stack_id: ctx.stack_id]})}
-    )
+    start_link_supervised!(%{
+      id: server,
+      start: {
+        Electric.Replication.PublicationManager,
+        :start_link,
+        [
+          [
+            name: server,
+            stack_id: ctx.stack_id,
+            publication_name: ctx.publication_name,
+            update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
+            db_pool: ctx.pool,
+            pg_version: Access.get(ctx, :pg_version, nil),
+            configure_tables_for_replication_fn:
+              Access.get(
+                ctx,
+                :configure_tables_for_replication_fn,
+                &Electric.Postgres.Configuration.configure_publication!/5
+              ),
+            shape_cache:
+              Access.get(ctx, :shape_cache, {Electric.ShapeCache, [stack_id: ctx.stack_id]})
+          ]
+        ]
+      },
+      restart: :temporary
+    })
 
     %{
       publication_manager:

@@ -240,7 +240,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       ctx: ctx,
       opts: opts
     } do
-      GenServer.stop(opts[:server])
+      stop_supervised!(opts[:server])
 
       test_id = self()
 
