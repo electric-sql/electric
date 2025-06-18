@@ -151,12 +151,19 @@ defmodule Support.ComponentSetup do
       ]
       |> Keyword.merge(additional_opts)
 
-    start_link_supervised!(
-      {Electric.Shapes.DynamicConsumerSupervisor,
-       name: consumer_supervisor, stack_id: ctx.stack_id}
-    )
+    start_link_supervised!(%{
+      id: consumer_supervisor,
+      start: {
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_link,
+        [[name: consumer_supervisor, stack_id: ctx.stack_id]]
+      }
+    })
 
-    start_link_supervised!({ShapeCache, start_opts})
+    start_link_supervised!(%{
+      id: start_opts[:name],
+      start: {ShapeCache, :start_link, [start_opts]}
+    })
 
     shape_meta_table = ShapeCache.get_shape_meta_table(stack_id: ctx.stack_id)
 
@@ -182,12 +189,16 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_log_collector(ctx) do
-    start_link_supervised!(
-      {ShapeLogCollector,
-       stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv}
-    )
+    name = ShapeLogCollector.name(ctx.stack_id)
 
-    %{shape_log_collector: ShapeLogCollector.name(ctx.stack_id)}
+    start_link_supervised!(%{
+      id: name,
+      start:
+        {ShapeLogCollector, :start_link,
+         [[stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]]}
+    })
+
+    %{shape_log_collector: name}
   end
 
   def with_slot_name_and_stream_id(_ctx) do

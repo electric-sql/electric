@@ -1223,8 +1223,12 @@ defmodule Electric.ShapeCacheTest do
       )
     end
 
-    defp stop_shape_cache(_ctx) do
-      for name <- [ShapeCache, ShapeLogCollector, Shapes.DynamicConsumerSupervisor] do
+    defp stop_shape_cache(ctx) do
+      for name <- [
+            ctx.shape_cache_opts[:server],
+            ctx.consumer_supervisor,
+            ctx.shape_log_collector
+          ] do
         stop_supervised(name)
       end
     end
