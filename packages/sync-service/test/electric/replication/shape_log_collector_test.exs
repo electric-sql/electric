@@ -81,7 +81,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         registry: registry_name
       ]
 
-    {:ok, shape_cache_pid} = Electric.ShapeCache.start_link(shape_cache_opts)
+    shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
 
     %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
   end
@@ -103,13 +103,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       consumers =
         Enum.map(1..3, fn id ->
-          {:ok, consumer} =
-            Support.TransactionConsumer.start_link(
-              id: id,
-              parent: parent,
-              producer: ctx.server,
-              shape: @shape
-            )
+          consumer =
+            start_link_supervised!(%{
+              id: {:consumer, id},
+              start:
+                {Support.TransactionConsumer, :start_link,
+                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]}
+            })
 
           {id, consumer}
         end)
@@ -240,13 +240,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       consumers =
         Enum.map(1..3, fn id ->
-          {:ok, consumer} =
-            Support.TransactionConsumer.start_link(
-              id: id,
-              parent: parent,
-              producer: ctx.server,
-              shape: @shape
-            )
+          consumer =
+            start_link_supervised!(%{
+              id: {:consumer, id},
+              start:
+                {Support.TransactionConsumer, :start_link,
+                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]}
+            })
 
           {id, consumer}
         end)
@@ -338,12 +338,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     consumer_id = "test_consumer"
 
-    {:ok, consumer} =
-      Support.TransactionConsumer.start_link(
-        id: consumer_id,
-        parent: self(),
-        producer: pid,
-        shape: @shape
+    consumer =
+      start_link_supervised!(
+        {Support.TransactionConsumer,
+         id: consumer_id, parent: self(), producer: pid, shape: @shape}
       )
 
     consumers = [{consumer_id, consumer}]
