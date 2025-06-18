@@ -27,7 +27,7 @@ defmodule Electric.ShapeCache.FileStorageTest do
       )
 
     shape_opts = FileStorage.for_shape(@shape_handle, opts)
-    {:ok, pid} = FileStorage.start_link(shape_opts)
+    pid = start_link_supervised!({FileStorage, shape_opts})
     {:ok, %{opts: shape_opts, shared_opts: opts, pid: pid, storage: {FileStorage, shape_opts}}}
   end
 
