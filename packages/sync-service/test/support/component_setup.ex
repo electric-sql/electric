@@ -157,12 +157,14 @@ defmodule Support.ComponentSetup do
         Electric.Shapes.DynamicConsumerSupervisor,
         :start_link,
         [[name: consumer_supervisor, stack_id: ctx.stack_id]]
-      }
+      },
+      restart: :temporary
     })
 
     start_link_supervised!(%{
       id: start_opts[:name],
-      start: {ShapeCache, :start_link, [start_opts]}
+      start: {ShapeCache, :start_link, [start_opts]},
+      restart: :temporary
     })
 
     shape_meta_table = ShapeCache.get_shape_meta_table(stack_id: ctx.stack_id)
@@ -195,7 +197,8 @@ defmodule Support.ComponentSetup do
       id: name,
       start:
         {ShapeLogCollector, :start_link,
-         [[stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]]}
+         [[stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]]},
+      restart: :temporary
     })
 
     %{shape_log_collector: name}

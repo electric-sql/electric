@@ -108,7 +108,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
               id: {:consumer, id},
               start:
                 {Support.TransactionConsumer, :start_link,
-                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]}
+                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]},
+              restart: :temporary
             })
 
           {id, consumer}
@@ -245,7 +246,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
               id: {:consumer, id},
               start:
                 {Support.TransactionConsumer, :start_link,
-                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]}
+                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]},
+              restart: :temporary
             })
 
           {id, consumer}

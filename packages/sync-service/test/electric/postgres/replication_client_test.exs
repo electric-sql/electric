@@ -475,7 +475,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
         id: ReplicationClient,
         start:
           {ReplicationClient, :start_link,
-           [[stack_id: ctx.stack_id, replication_opts: ctx.replication_opts]]}
+           [[stack_id: ctx.stack_id, replication_opts: ctx.replication_opts]]},
+        restart: :temporary
       })
 
     conn_mgr = ctx.connection_manager
