@@ -33,10 +33,10 @@ defmodule Electric.Replication.ShapeLogCollector do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def start_processing(server, last_processed_lsn) do
+  def set_last_processed_lsn(server, last_processed_lsn) do
     # Allow 60s for this call as it may need to wait for thousands of restored shapes
     # to subscribe before it returns.
-    GenStage.call(server, {:start_processing, last_processed_lsn}, 60_000)
+    GenStage.call(server, {:set_last_processed_lsn, last_processed_lsn}, 60_000)
   end
 
   # use `GenStage.call/2` here to make the event processing synchronous.
@@ -87,10 +87,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         tracked_relations: tracker_state
       })
 
-    # start in demand: :accumulate mode so that the ShapeCache is able to start
-    # all active consumers before we start sending transactions
-    {:producer, state,
-     dispatcher: {Electric.Shapes.Dispatcher, inspector: state.inspector}, demand: :accumulate}
+    {:producer, state, dispatcher: {Electric.Shapes.Dispatcher, inspector: state.inspector}}
   end
 
   def handle_subscribe(:consumer, _opts, from, state) do
@@ -131,9 +128,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, [], remove_subscription(from, state)}
   end
 
-  def handle_call({:start_processing, lsn}, _from, state) do
+  def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
     LsnTracker.init(lsn, state.stack_id)
-    GenStage.demand(self(), :forward)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, [], Map.put(state, :last_processed_lsn, lsn)}
   end

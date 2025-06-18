@@ -352,7 +352,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     prev_lsn = Lsn.increment(start_lsn, -1)
     next_lsn = Lsn.increment(start_lsn, +1)
 
-    ShapeLogCollector.start_processing(pid, start_lsn)
+    ShapeLogCollector.set_last_processed_lsn(pid, start_lsn)
 
     assert start_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
 
