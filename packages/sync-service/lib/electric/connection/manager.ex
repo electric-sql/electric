@@ -593,10 +593,17 @@ defmodule Electric.Connection.Manager do
   # Supervisors send `:shutdown` exit signals to its children when they themselves are shutting
   # down. We don't need to react to this signal coming from any of our linked processes, just
   # ignore it.
-  def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _, :shutdown}, state) do
+    Logger.debug("Connection manager #{inspect(self())} received shutdown signal, stopping")
+    {:noreply, state}
+  end
 
   # A process exited as it was trying to open a database connection.
   def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
+    Logger.debug(
+      "Connection manager #{inspect(self())} received EXIT signal from #{inspect(pid)} :: #{inspect(reason)} during connection_setup phase"
+    )
+
     # Try repairing the connection opts and try connecting again. If we're already using noSSL
     # and IPv4, the error will be propagated to a `shutdown_or_reconnect()` function call
     # further down below.
@@ -637,6 +644,10 @@ defmodule Electric.Connection.Manager do
         {:EXIT, pid, reason},
         %State{replication_client_pid: pid, current_phase: :running} = state
       ) do
+    Logger.debug(
+      "Connection manager #{inspect(self())} received EXIT signal from replication client #{inspect(pid)} :: #{inspect(reason)}"
+    )
+
     state = nillify_pid(state, pid)
     error = strip_exit_signal_stacktrace(reason)
 
@@ -653,6 +664,10 @@ defmodule Electric.Connection.Manager do
   # bunch of them is the database server going offline or shutting down. Stop
   # Connection.Manager to allow its supervisor to restart it in the initial state.
   def handle_info({:EXIT, pid, reason}, state) do
+    Logger.debug(
+      "Connection manager #{inspect(self())} received EXIT signal from #{inspect(pid)} :: #{inspect(reason)}"
+    )
+
     error =
       reason
       |> strip_exit_signal_stacktrace()
