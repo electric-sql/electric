@@ -28,6 +28,10 @@
 [invoke setup_electric]
 
 [shell electric]
+  # Slightly larger timeout than the default because we're going to match against warnings that
+  # are logged after 10 seconds of idling.
+  [timeout 12]
+
   ??[info] Acquiring lock from postgres with name electric_slot_integration
   ??[info] Lock acquired from postgres with name electric_slot_integration
 
@@ -37,6 +41,7 @@
 
   ??[debug] Starting replication client for stack single_stack
   ??[debug] ReplicationClient step: create_slot
+  ??[warning] Waiting for the replication connection setup to complete...
 
 # Terminate Electric. Even though it closes all database connections, there still remains a
 # live backend in Postgres blocked on the `CREATE_REPLICATION_SLOT` statement. However, the
