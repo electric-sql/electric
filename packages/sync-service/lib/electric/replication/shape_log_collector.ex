@@ -68,8 +68,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def subscribe(server, shape) do
-    # TODO: will all subscribers be subscribing async on init? if so this may need have a larger timeout
-    # if not, does :set_last_processed_lsn need 60s?
     GenServer.call(server, {:subscribe, shape})
   end
 
