@@ -37,9 +37,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def set_last_processed_lsn(server, last_processed_lsn) do
-    # Allow 60s for this call as it may need to wait for thousands of restored shapes
-    # to subscribe before it returns.
-    GenServer.call(server, {:set_last_processed_lsn, last_processed_lsn}, 60_000)
+    GenServer.call(server, {:set_last_processed_lsn, last_processed_lsn})
   end
 
   # use `GenServer.call/2` here to make the event processing synchronous.
