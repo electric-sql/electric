@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 1.0.21
+
+### Patch Changes
+
+- 50f3ddc: Add env vars to configure telemetry: ELECTRIC_TELEMETRY_LONG_GC_THRESHOLD, ELECTRIC_TELEMETRY_LONG_SCHEDULE_THRESHOLD, ELECTRIC_TELEMETRY_LONG_MESSAGE_QUEUE_ENABLE_THRESHOLD and ELECTRIC_TELEMETRY_LONG_MESSAGE_QUEUE_DISABLE_THRESHOLD
+- 4a6e5b1: Observe errors hit by connections in the DB pool and turn them into stack events.
+- 7267fe3: Fix issue where replication traffic slows down shape restoration
+- cd31539: Return 503 from API on snapshot timeout or connection error
+- 37c5902: feat: allow publication alter debounce to be configurable
+
 ## 1.0.20
 
 ### Patch Changes
