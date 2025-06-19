@@ -101,23 +101,32 @@ defmodule Support.ComponentSetup do
   def with_publication_manager(ctx) do
     server = :"publication_manager_#{full_test_name(ctx)}"
 
-    {:ok, _} =
-      Electric.Replication.PublicationManager.start_link(
-        name: server,
-        stack_id: ctx.stack_id,
-        publication_name: ctx.publication_name,
-        update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
-        db_pool: ctx.pool,
-        pg_version: Access.get(ctx, :pg_version, nil),
-        configure_tables_for_replication_fn:
-          Access.get(
-            ctx,
-            :configure_tables_for_replication_fn,
-            &Electric.Postgres.Configuration.configure_publication!/5
-          ),
-        shape_cache:
-          Access.get(ctx, :shape_cache, {Electric.ShapeCache, [stack_id: ctx.stack_id]})
-      )
+    start_link_supervised!(%{
+      id: server,
+      start: {
+        Electric.Replication.PublicationManager,
+        :start_link,
+        [
+          [
+            name: server,
+            stack_id: ctx.stack_id,
+            publication_name: ctx.publication_name,
+            update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
+            db_pool: ctx.pool,
+            pg_version: Access.get(ctx, :pg_version, nil),
+            configure_tables_for_replication_fn:
+              Access.get(
+                ctx,
+                :configure_tables_for_replication_fn,
+                &Electric.Postgres.Configuration.configure_publication!/5
+              ),
+            shape_cache:
+              Access.get(ctx, :shape_cache, {Electric.ShapeCache, [stack_id: ctx.stack_id]})
+          ]
+        ]
+      },
+      restart: :temporary
+    })
 
     %{
       publication_manager:
@@ -152,13 +161,21 @@ defmodule Support.ComponentSetup do
       ]
       |> Keyword.merge(additional_opts)
 
-    {:ok, _pid} =
-      Electric.Shapes.DynamicConsumerSupervisor.start_link(
-        name: consumer_supervisor,
-        stack_id: ctx.stack_id
-      )
+    start_link_supervised!(%{
+      id: consumer_supervisor,
+      start: {
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_link,
+        [[name: consumer_supervisor, stack_id: ctx.stack_id]]
+      },
+      restart: :temporary
+    })
 
-    {:ok, _pid} = ShapeCache.start_link(start_opts)
+    start_link_supervised!(%{
+      id: start_opts[:name],
+      start: {ShapeCache, :start_link, [start_opts]},
+      restart: :temporary
+    })
 
     shape_meta_table = ShapeCache.get_shape_meta_table(stack_id: ctx.stack_id)
 
@@ -184,14 +201,17 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_log_collector(ctx) do
-    {:ok, _} =
-      ShapeLogCollector.start_link(
-        stack_id: ctx.stack_id,
-        inspector: ctx.inspector,
-        persistent_kv: ctx.persistent_kv
-      )
+    name = ShapeLogCollector.name(ctx.stack_id)
 
-    %{shape_log_collector: ShapeLogCollector.name(ctx.stack_id)}
+    start_link_supervised!(%{
+      id: name,
+      start:
+        {ShapeLogCollector, :start_link,
+         [[stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]]},
+      restart: :temporary
+    })
+
+    %{shape_log_collector: name}
   end
 
   def with_slot_name_and_stream_id(_ctx) do

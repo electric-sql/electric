@@ -6,12 +6,10 @@ defmodule Electric.ProcessRegistryTest do
 
   describe "alive?/2" do
     test "should return false for inexistent process" do
-      {:ok, _} =
-        ProcessRegistry.start_link(
-          name: ProcessRegistry.registry_name(@stack_id),
-          keys: :duplicate,
-          stack_id: @stack_id
-        )
+      start_link_supervised!(
+        {ProcessRegistry,
+         name: ProcessRegistry.registry_name(@stack_id), keys: :duplicate, stack_id: @stack_id}
+      )
 
       assert false == ProcessRegistry.alive?(@stack_id, "bar")
     end

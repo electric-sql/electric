@@ -111,12 +111,11 @@ defmodule Electric.Shapes.ConsumerTest do
           ]
         })
 
-      {:ok, producer} =
-        ShapeLogCollector.start_link(
-          stack_id: ctx.stack_id,
-          persistent_kv: ctx.persistent_kv,
-          inspector: @base_inspector
-        )
+      producer =
+        start_link_supervised!({
+          ShapeLogCollector,
+          stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
+        })
 
       ShapeLogCollector.set_last_processed_lsn(producer, Lsn.from_integer(0))
 
@@ -811,12 +810,12 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref = ctx.consumer_supervisor |> GenServer.whereis() |> Process.monitor()
       # Stop the consumer and the shape cache server to simulate a restart
-      Supervisor.stop(ctx.consumer_supervisor)
+      stop_supervised!(ctx.consumer_supervisor)
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
       assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}
 
       ref = shape_cache_opts[:server] |> GenServer.whereis() |> Process.monitor()
-      GenServer.stop(shape_cache_opts[:server])
+      stop_supervised!(shape_cache_opts[:server])
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
 
       # Restart the shape cache and the consumers
