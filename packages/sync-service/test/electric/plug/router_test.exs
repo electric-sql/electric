@@ -1470,11 +1470,12 @@ defmodule Electric.Plug.RouterTest do
         end)
 
       # This can't alter the publication, so crashes
-      assert %{status: 500, resp_body: body} =
+      assert %{status: 503, resp_body: body} =
                conn("GET", "/v1/shape?table=items&offset=-1")
                |> Router.call(opts)
 
-      assert %{"message" => "Unable to retrieve shape log" <> _} = Jason.decode!(body)
+      assert %{"message" => "Snapshot timed out while waiting for a table lock"} =
+               Jason.decode!(body)
 
       # Now we can continue
       send(child, :continue)

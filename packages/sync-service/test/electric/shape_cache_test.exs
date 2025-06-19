@@ -452,7 +452,7 @@ defmodule Electric.ShapeCacheTest do
         with_log(fn ->
           {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
 
-          assert {:error, %Electric.Shapes.Api.Error{status: 409}} =
+          assert {:error, %Electric.SnapshotError{type: :schema_changed}} =
                    ShapeCache.await_snapshot_start(shape_handle, opts)
 
           shape_handle
@@ -785,7 +785,7 @@ defmodule Electric.ShapeCacheTest do
 
             GenServer.cast(
               parent,
-              {:snapshot_failed, shape_handle, %RuntimeError{message: "expected error"}, []}
+              {:snapshot_failed, shape_handle, %Electric.SnapshotError{message: "expected error"}}
             )
           end
         )
@@ -800,15 +800,10 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:await_snapshot_start, _pid}
 
-      log =
-        capture_log(fn ->
-          assert_receive {:waiting_point, ref, pid}
-          send(pid, {:continue, ref})
+      assert_receive {:waiting_point, ref, pid}
+      send(pid, {:continue, ref})
 
-          assert {:error, %RuntimeError{message: "expected error"}} = Task.await(task)
-        end)
-
-      assert log =~ "Snapshot creation failed for #{shape_handle}"
+      assert {:error, %Electric.SnapshotError{message: "expected error"}} = Task.await(task)
     end
 
     test "should stop awaiting if shape process dies unexpectedly", ctx do
