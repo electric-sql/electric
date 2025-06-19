@@ -37,10 +37,9 @@ defmodule Electric.StackSupervisor do
       ]
     else
       [
-        restart: :transient,
+        restart: :transient
         # Make StackSupervisor `significant` so that in the case that electric is in single-stack mode, the stack stopping
         # will stop the entire Electric application (since `auto_shutdown` is set to `:any_significant` in `Application`).
-        significant: true
       ]
     end
 
@@ -372,6 +371,6 @@ defmodule Electric.StackSupervisor do
           telemetry_span_attrs
         )
 
-    Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end
