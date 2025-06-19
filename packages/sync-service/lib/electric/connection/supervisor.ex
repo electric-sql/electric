@@ -23,7 +23,7 @@ defmodule Electric.Connection.Supervisor do
   # The `restart: :transient, significant: true` combo allows for shutting the supervisor down
   # and signalling the parent supervisor to shut itself down as well if that one has
   # `:auto_shutdown` set to `:any_significant` or `:all_significant`.
-  use Supervisor, restart: :transient, significant: true
+  use Supervisor, restart: :transient
 
   require Logger
 
