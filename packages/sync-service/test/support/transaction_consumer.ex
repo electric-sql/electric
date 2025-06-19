@@ -49,6 +49,6 @@ defmodule Support.TransactionConsumer do
 
   def handle_call({:handle_event, txn, _ctx}, _from, {id, parent}) do
     send(parent, {__MODULE__, {id, self()}, [txn]})
-    {:noreply, [], {id, parent}}
+    {:reply, :ok, {id, parent}}
   end
 end
