@@ -160,7 +160,7 @@ defmodule Electric.Shapes.Consumer do
   @impl GenServer
   def handle_call({:handle_event, event, trace_context}, _from, state) do
     OpenTelemetry.set_current_context(trace_context)
-    handle_event(event, state)
+    {:reply, :ok, handle_event(event, state)}
   end
 
   @impl GenServer
@@ -181,7 +181,7 @@ defmodule Electric.Shapes.Consumer do
       }
       |> set_pg_snapshot(state)
 
-    handle_txns(state.buffer, %{state | buffer: []})
+    {:noreply, handle_txns(state.buffer, %{state | buffer: []})}
   end
 
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
@@ -246,12 +246,9 @@ defmodule Electric.Shapes.Consumer do
     # to source the fresh info from postgres for the next shape creation
     Inspector.clean(root_table_id, inspector)
 
-    state =
-      state
-      |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
-      |> terminate_safely()
-
-    {:noreply, state}
+    state
+    |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
+    |> terminate_safely()
   end
 
   # Buffer incoming transactions until we know our pg_snapshot
@@ -260,7 +257,7 @@ defmodule Electric.Shapes.Consumer do
       "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
     end)
 
-    {:noreply, %{state | buffer: state.buffer ++ [txn]}}
+    %{state | buffer: state.buffer ++ [txn]}
   end
 
   defp handle_event(%Transaction{} = txn, %{pg_snapshot: %{xmin: xmin, xmax: xmax}} = state) do
@@ -273,8 +270,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_txns(txns, state) do
-    state = Enum.reduce_while(txns, state, &handle_txn/2)
-    {:noreply, state}
+    Enum.reduce_while(txns, state, &handle_txn/2)
   end
 
   defp handle_txn(txn, %{pg_snapshot: %{filter_txns?: false}} = state) do
