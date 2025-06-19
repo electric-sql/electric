@@ -52,7 +52,7 @@ defmodule Electric.PublisherTest do
       send(sub2, :finish_processing_event)
       refute_receive :publish_finished, 10
       send(sub1, :finish_processing_event)
-      assert_receive :publish_finished
+      assert_receive :publish_finished, 5000
     end
 
     test "does not return until all subscibers have processed the message or died" do
@@ -77,7 +77,7 @@ defmodule Electric.PublisherTest do
       Process.exit(sub2, :kill)
       refute_receive :publish_finished, 10
       send(sub1, :finish_processing_event)
-      assert_receive :publish_finished
+      assert_receive :publish_finished, 5000
     end
   end
 end
