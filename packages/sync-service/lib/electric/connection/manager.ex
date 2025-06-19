@@ -295,7 +295,7 @@ defmodule Electric.Connection.Manager do
         if is_nil(shared_connection_opts), do: populate_connection_opts(in_connection_opts)
       end)
 
-    %State{
+    %{
       state
       | shared_connection_opts: shared_connection_opts,
         connection_opts: connection_opts,
@@ -325,7 +325,7 @@ defmodule Electric.Connection.Manager do
     # progress via the :lock_connection_started and :exclusive_connection_lock_acquired casts.
     {:ok, pid} = Electric.Postgres.LockConnection.start_link(opts)
 
-    state = %State{
+    state = %{
       state
       | lock_connection_pid: pid,
         current_step: {:start_lock_connection, :connecting}
@@ -365,7 +365,7 @@ defmodule Electric.Connection.Manager do
     # cast would follow soon afterwards.
     {:ok, pid} = Electric.Postgres.ReplicationClient.start_link(opts)
 
-    state = %State{
+    state = %{
       state
       | replication_client_pid: pid,
         replication_client_blocked_by_pending_transaction?: false,
@@ -415,7 +415,7 @@ defmodule Electric.Connection.Manager do
     Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
     state = mark_connection_succeeded(state)
 
-    state = %State{state | pool_pid: pool_pid, current_step: :start_shapes_supervisor}
+    state = %{state | pool_pid: pool_pid, current_step: :start_shapes_supervisor}
     {:noreply, state, {:continue, :start_shapes_supervisor}}
   end
 
@@ -478,7 +478,7 @@ defmodule Electric.Connection.Manager do
     log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
     Process.monitor(log_collector_pid)
 
-    state = %State{
+    state = %{
       state
       | shape_log_collector_pid: log_collector_pid,
         current_step: :waiting_for_consumers,
@@ -501,7 +501,7 @@ defmodule Electric.Connection.Manager do
     Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
     dispatch_stack_event(:ready, state)
 
-    state = %State{
+    state = %{
       state
       | current_phase: :running,
         current_step: :waiting_for_streaming_confirmation
@@ -521,7 +521,7 @@ defmodule Electric.Connection.Manager do
       ) do
     Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
     tref = schedule_periodic_connection_status_check(:lock_connection)
-    state = %State{state | lock_connection_timer: tref}
+    state = %{state | lock_connection_timer: tref}
     {:noreply, state}
   end
 
@@ -547,7 +547,7 @@ defmodule Electric.Connection.Manager do
 
     tref = schedule_periodic_connection_status_check(:replication_client)
 
-    state = %State{
+    state = %{
       state
       | replication_client_timer: tref,
         replication_client_blocked_by_pending_transaction?: true
@@ -568,7 +568,7 @@ defmodule Electric.Connection.Manager do
         {:timeout, tref, {:retry_connection, step}},
         %State{connection_backoff: {conn_backoff, tref}} = state
       ) do
-    state = %State{state | connection_backoff: {conn_backoff, nil}}
+    state = %{state | connection_backoff: {conn_backoff, nil}}
     handle_continue(step, state)
   end
 
@@ -640,7 +640,7 @@ defmodule Electric.Connection.Manager do
     state = nillify_pid(state, pid)
     error = strip_exit_signal_stacktrace(reason)
 
-    state = %State{
+    state = %{
       state
       | current_phase: :restarting_replication_client,
         current_step: {:start_replication_client, nil}
@@ -705,7 +705,7 @@ defmodule Electric.Connection.Manager do
       drop_slot(state)
     end
 
-    {:noreply, %State{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
+    {:noreply, %{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
   end
 
   # The following two messages are sent by the DBConnection library because we've configured
@@ -747,7 +747,7 @@ defmodule Electric.Connection.Manager do
 
   @impl true
   def handle_cast(:drop_replication_slot_on_stop, state) do
-    {:noreply, %State{state | drop_slot_requested: true}}
+    {:noreply, %{state | drop_slot_requested: true}}
   end
 
   def handle_cast(
@@ -761,7 +761,7 @@ defmodule Electric.Connection.Manager do
     state = mark_connection_succeeded(state)
     tref = schedule_periodic_connection_status_check(:lock_connection)
 
-    state = %State{
+    state = %{
       state
       | lock_connection_timer: tref,
         current_step: {:start_lock_connection, :acquiring_lock}
@@ -801,7 +801,7 @@ defmodule Electric.Connection.Manager do
     # As soon as we acquire the connection lock, we try to start the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to open a replication connection should be reported ASAP.
-    state = %State{state | current_step: {:start_replication_client, nil}}
+    state = %{state | current_step: {:start_replication_client, nil}}
     {:noreply, state, {:continue, :start_replication_client}}
   end
 
@@ -833,7 +833,7 @@ defmodule Electric.Connection.Manager do
       ) do
     # When the replication slot is created for the first time or recreated at any point, we
     # must invalidate all shapes to ensure transactional continuity and prevent missed changes.
-    {:noreply, %State{state | purge_all_shapes?: true}}
+    {:noreply, %{state | purge_all_shapes?: true}}
   end
 
   def handle_cast(
@@ -910,13 +910,13 @@ defmodule Electric.Connection.Manager do
       {:replication_liveness_check, state.replication_client_pid}
     )
 
-    state = %State{state | current_step: :streaming}
+    state = %{state | current_step: :streaming}
     {:noreply, state}
   end
 
   def handle_cast({:pg_system_info_obtained, info}, state) do
     {:noreply,
-     %State{
+     %{
        state
        | pg_system_identifier: info.system_identifier,
          pg_timeline_id: info.timeline_id
@@ -940,7 +940,7 @@ defmodule Electric.Connection.Manager do
       %{stack_id: state.stack_id}
     )
 
-    {:noreply, %State{state | pg_version: server_version}}
+    {:noreply, %{state | pg_version: server_version}}
   end
 
   @impl true
@@ -1133,7 +1133,7 @@ defmodule Electric.Connection.Manager do
     {time, conn_backoff} = ConnectionBackoff.fail(conn_backoff)
     tref = :erlang.start_timer(time, self(), {:retry_connection, step})
     Logger.warning("Reconnecting in #{inspect(time)}ms")
-    %State{state | connection_backoff: {conn_backoff, tref}}
+    %{state | connection_backoff: {conn_backoff, tref}}
   end
 
   defp mark_connection_succeeded(%State{connection_backoff: {conn_backoff, tref}} = state) do
@@ -1143,7 +1143,7 @@ defmodule Electric.Connection.Manager do
       Logger.info("Reconnection succeeded after #{inspect(total_retry_time)}ms")
     end
 
-    %State{state | connection_backoff: {conn_backoff, tref}}
+    %{state | connection_backoff: {conn_backoff, tref}}
   end
 
   defp populate_ssl_opts(connection_opts) do
@@ -1247,15 +1247,15 @@ defmodule Electric.Connection.Manager do
          %State{shared_connection_opts: nil, replication_opts: replication_opts} = state
        )
        when step in [:start_lock_connection, :start_replication_client] do
-    %State{state | replication_opts: put_in(replication_opts, [:connection_opts], conn_opts)}
+    %{state | replication_opts: put_in(replication_opts, [:connection_opts], conn_opts)}
   end
 
   defp update_connection_opts(_step, conn_opts, %State{shared_connection_opts: nil} = state) do
-    %State{state | connection_opts: conn_opts}
+    %{state | connection_opts: conn_opts}
   end
 
   defp update_connection_opts(_step, conn_opts, state) do
-    %State{state | shared_connection_opts: conn_opts}
+    %{state | shared_connection_opts: conn_opts}
   end
 
   defp lookup_log_collector_pid(shapes_supervisor) do
@@ -1316,22 +1316,22 @@ defmodule Electric.Connection.Manager do
   end
 
   defp nillify_pid(%State{lock_connection_pid: pid} = state, pid),
-    do: %State{state | lock_connection_pid: nil}
+    do: %{state | lock_connection_pid: nil}
 
   defp nillify_pid(%State{replication_client_pid: pid} = state, pid),
-    do: %State{state | replication_client_pid: nil}
+    do: %{state | replication_client_pid: nil}
 
   defp nillify_pid(%State{pool_pid: pid} = state, pid),
-    do: %State{state | pool_pid: nil}
+    do: %{state | pool_pid: nil}
 
   defp nillify_pid(%State{shape_log_collector_pid: pid} = state, pid),
-    do: %State{state | shape_log_collector_pid: nil}
+    do: %{state | shape_log_collector_pid: nil}
 
   defp nillify_timer(%State{lock_connection_timer: tref} = state, tref),
-    do: %State{state | lock_connection_timer: nil}
+    do: %{state | lock_connection_timer: nil}
 
   defp nillify_timer(%State{replication_client_timer: tref} = state, tref),
-    do: %State{state | replication_client_timer: nil}
+    do: %{state | replication_client_timer: nil}
 
   defp nillify_timer(state, _tref), do: state
 end

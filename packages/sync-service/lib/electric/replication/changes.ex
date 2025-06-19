@@ -309,14 +309,11 @@ defmodule Electric.Replication.Changes do
   """
   @spec filter_columns(change(), [String.t()]) :: change()
   def filter_columns(%NewRecord{} = change, columns_to_keep) do
-    %NewRecord{
-      change
-      | record: change.record |> Map.take(columns_to_keep)
-    }
+    %{change | record: change.record |> Map.take(columns_to_keep)}
   end
 
   def filter_columns(%UpdatedRecord{} = change, columns_to_keep) do
-    %UpdatedRecord{
+    %{
       change
       | old_record: change.old_record |> Map.take(columns_to_keep),
         record: change.record |> Map.take(columns_to_keep),
@@ -327,10 +324,7 @@ defmodule Electric.Replication.Changes do
   end
 
   def filter_columns(%DeletedRecord{} = change, columns_to_keep) do
-    %DeletedRecord{
-      change
-      | old_record: change.old_record |> Map.take(columns_to_keep)
-    }
+    %{change | old_record: change.old_record |> Map.take(columns_to_keep)}
   end
 
   def filter_columns(change, _), do: change

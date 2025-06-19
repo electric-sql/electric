@@ -2,7 +2,7 @@
 
 [include _macros.luxinc]
 
-[global pg_container_name=poold-connections__pg]
+[global pg_container_name=pooled-connections__pg]
 
 ###
 
