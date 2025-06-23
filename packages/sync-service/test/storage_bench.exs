@@ -234,11 +234,12 @@ Benchee.init(
     setup_storage.("#{base_dir}/sqlite_storage", sqlite_storage, setup_write_n_chunks),
   after_scenario: teardown_storage
 })
-|> Benchee.collect()
-|> Benchee.statistics()
-|> Benchee.load()
-|> Benchee.relative_statistics()
-|> Benchee.Formatter.output(Benchee.Formatters.Console)
+
+# |> Benchee.collect()
+# |> Benchee.statistics()
+# |> Benchee.load()
+# |> Benchee.relative_statistics()
+# |> Benchee.Formatter.output(Benchee.Formatters.Console)
 
 # Test 3 - High concurrency reads from same shape
 
@@ -278,8 +279,9 @@ Benchee.init(
     setup_storage.("#{base_dir}/sqlite_storage", sqlite_storage, setup_write_n_chunks),
   after_scenario: teardown_storage
 })
-|> Benchee.collect()
-|> Benchee.statistics()
-|> Benchee.load()
-|> Benchee.relative_statistics()
-|> Benchee.Formatter.output(Benchee.Formatters.Console)
+
+# |> Benchee.collect()
+# |> Benchee.statistics()
+# |> Benchee.load()
+# |> Benchee.relative_statistics()
+# |> Benchee.Formatter.output(Benchee.Formatters.Console)

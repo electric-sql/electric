@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.PureFileStorage do
+  alias Electric.ShapeCache.PureFileStorage.FileOwner
   alias Electric.ShapeCache.FileStorage.LogFile
   alias Electric.ShapeCache.FileStorage.ChunkIndex
   alias __MODULE__, as: FS
@@ -23,13 +24,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :data_dir,
     :log_dir,
     :metadata_dir,
+    :write_server,
     version: @version
   ]
 
   def start_link(opts) do
     initialise_filesystem(opts)
 
-    :ignore
+    FileOwner.start_link(opts)
   end
 
   @impl Electric.ShapeCache.Storage
@@ -56,14 +58,20 @@ defmodule Electric.ShapeCache.PureFileStorage do
       shape_handle: shape_handle,
       data_dir: data_dir,
       log_dir: Path.join([data_dir, "log"]),
-      metadata_dir: metadata_dir_path(opts, shape_handle)
+      metadata_dir: metadata_dir_path(opts, shape_handle),
+      write_server: name(opts.stack_id, shape_handle)
     }
+  end
+
+  def name(stack_id, shape_handle) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
   @impl Electric.ShapeCache.Storage
   def initialise(%FS{} = opts) do
     if requires_full_cleanup?(opts), do: cleanup_internals!(opts)
     initialise_filesystem(opts)
+    FileOwner.open_files(opts)
     :ok
   end
 
@@ -124,7 +132,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp pg_snapshot(opts), do: read_metadata(opts, :pg_snapshot)
   # TODO: might be slightly wrong
-  defp latest_offset(opts),
+  def latest_offset(opts),
     do: read_metadata(opts, :latest_offset) || LogOffset.last_before_real_offsets()
 
   @impl Electric.ShapeCache.Storage
@@ -192,62 +200,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   @impl Electric.ShapeCache.Storage
   def append_to_log!(log_items, %FS{} = opts) do
-    latest_offset = latest_offset(opts)
-
-    Stream.transform(
-      Enum.to_list(log_items),
-      fn ->
-        {
-          File.open!(log_path(opts), [:append, :raw]),
-          file_size_if_exists(log_path(opts)),
-          File.open!(chunk_index_path(opts), [:append, :raw]),
-          file_size_if_exists(chunk_index_path(opts)) > 0,
-          latest_offset
-        }
-      end,
-      fn
-        {:chunk_boundary, offset}, {log_file, position, chunk_file, true, latest_offset} ->
-          IO.binwrite(
-            chunk_file,
-            <<LogOffset.to_int128(offset)::binary, position::64,
-              LogOffset.to_int128(offset)::binary, position::64>>
-          )
-
-          {[], {log_file, position, chunk_file, true, latest_offset}}
-
-        # Assumes monotonicity of the log offsets
-        {offset, _, _, _}, acc when is_log_offset_lte(offset, latest_offset) ->
-          {[], acc}
-
-        {offset, key, op_type, json_log_item},
-        {log_file, position, chunk_file, chunk_file_initialized?, _} ->
-          if not chunk_file_initialized? do
-            IO.binwrite(chunk_file, <<LogOffset.to_int128(offset)::binary, position::64>>)
-          end
-
-          key_size = byte_size(key)
-          json_size = byte_size(json_log_item)
-
-          iodata = [
-            LogOffset.to_int128(offset),
-            <<key_size::32>>,
-            key,
-            <<get_op_type(op_type)::8, 0::8, json_size::64>>,
-            json_log_item
-          ]
-
-          IO.binwrite(log_file, iodata)
-
-          # Assumes monotonicity of the log offsets and that the stream is ordered
-          {[], {log_file, position + key_size + json_size + 30, chunk_file, true, offset}}
-      end,
-      fn {_, _, _, _, latest_offset} = acc ->
-        write_metadata(opts, :latest_offset, latest_offset)
-        {[], acc}
-      end,
-      &close_all_files/1
-    )
-    |> Stream.run()
+    FileOwner.append_to_log(opts, log_items)
   end
 
   @impl Electric.ShapeCache.Storage
@@ -468,13 +421,29 @@ defmodule Electric.ShapeCache.PureFileStorage do
     Path.join([log_dir, "snapshot_chunk.#{chunk_number}.jsonl"])
   end
 
-  defp log_path(%FS{log_dir: log_dir}), do: Path.join([log_dir, "log.bin"])
-  defp chunk_index_path(%FS{log_dir: log_dir}), do: Path.join([log_dir, "chunk_index.bin"])
+  def log_path(%FS{log_dir: log_dir}), do: Path.join([log_dir, "log.bin"])
+  def chunk_index_path(%FS{log_dir: log_dir}), do: Path.join([log_dir, "chunk_index.bin"])
 
   # @special_keys [:shape_definition, :latest_offset]
 
   # Write/read helpers
-  defp write_metadata(%FS{metadata_dir: dir}, key, value) do
+
+  def write_metadata(%FS{metadata_dir: dir}, :latest_offset, %LogOffset{} = value) do
+    with :ok <-
+           write(Path.join([dir, "latest_offset.bin.tmp"]), LogOffset.to_int128(value), [
+             :write,
+             :sync
+           ]),
+         :ok <-
+           rename!(
+             Path.join([dir, "latest_offset.bin.tmp"]),
+             Path.join([dir, "latest_offset.bin"])
+           ) do
+      :ok
+    end
+  end
+
+  def write_metadata(%FS{metadata_dir: dir}, key, value) do
     to_write =
       case read(Path.join([dir, "metadata.bin"])) do
         {:ok, data} ->
@@ -490,7 +459,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
           raise Storage.Error, message: "Failed to write metadata: #{inspect(reason)}"
       end
 
-    with :ok <- write(Path.join([dir, "metadata.bin.tmp"]), to_write, [:exclusive]),
+    with :ok <- write(Path.join([dir, "metadata.bin.tmp"]), to_write, [:write]),
          :ok <- rename!(Path.join([dir, "metadata.bin.tmp"]), Path.join([dir, "metadata.bin"])) do
       :ok
     end
@@ -534,7 +503,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp file_size_if_exists(path) do
+  def file_size_if_exists(path) do
     case file_size(path) do
       {:ok, result} -> result
       {:error, :enoent} -> 0
