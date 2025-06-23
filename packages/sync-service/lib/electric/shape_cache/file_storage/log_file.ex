@@ -279,8 +279,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
                   inclusive_max_offset
                 )
 
-              # If we got data but couldn't read any JSONs, we're at the end of the file with a partial write
-              if jsons != [], do: {jsons, {file, rest}}, else: {:halt, {file, ""}}
+              {jsons, {file, rest}}
 
             :eof ->
               {:halt, {file, binary_rest}}
@@ -306,7 +305,13 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
          acc
        )
        when tx_offset1 < tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 <= op_offset2),
-       do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, acc)
+       do:
+         extract_jsons_from_binary(
+           rest,
+           log_offset,
+           inclusive_max_offset,
+           acc
+         )
 
   defp extract_jsons_from_binary(
          <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
@@ -320,9 +325,7 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
          extract_jsons_from_binary(
            "",
            log_offset,
-           IO.inspect(inclusive_max_offset,
-             label: "bounded: #{inspect({tx_offset1, op_offset1})}"
-           ),
+           inclusive_max_offset,
            [json | acc]
          )
 
@@ -335,7 +338,8 @@ defmodule Electric.ShapeCache.FileStorage.LogFile do
        ),
        do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, [json | acc])
 
-  defp extract_jsons_from_binary(rest, _, _, acc), do: {Enum.reverse(acc), rest}
+  defp extract_jsons_from_binary(rest, _, _, acc),
+    do: {Enum.reverse(acc), rest}
 
   defp get_op_type(:insert), do: ?i
   defp get_op_type(:update), do: ?u
