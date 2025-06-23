@@ -85,7 +85,7 @@ function Component({ project }) {
     }
   })
 
-  return <List issues="data" />
+  return <List issues={data} />
 }
 ```
 
