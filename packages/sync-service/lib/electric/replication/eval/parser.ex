@@ -426,11 +426,10 @@ defmodule Electric.Replication.Eval.Parser do
         nil ->
           {fun, name, strict?} =
             case bool_op do
-              # select null or true => t
-              :OR_EXPR -> {&Kernel.or/2, "or", false}
-              # select null and true => null
+              # OR can handle nulls sometimes
+              # e.g. select null or true => t
+              :OR_EXPR -> {&pg_or/2, "or", false}
               :AND_EXPR -> {&Kernel.and/2, "and", true}
-              # select not null => null
               :NOT_EXPR -> {&Kernel.not/1, "not", true}
             end
 
@@ -699,7 +698,11 @@ defmodule Electric.Replication.Eval.Parser do
              &find_operator_func(["="], [expr.lexpr, &1], expr.location, env)
            ),
          {:ok, reduced} <-
-           build_bool_chain(%{name: "or", impl: &Kernel.or/2}, comparisons, expr.location) do
+           build_bool_chain(
+             %{name: "or", impl: &pg_or/2, strict?: false},
+             comparisons,
+             expr.location
+           ) do
       # x NOT IN y is exactly equivalent to NOT (x IN y)
       case name do
         ["="] -> {:ok, reduced}
@@ -776,7 +779,11 @@ defmodule Electric.Replication.Eval.Parser do
            find_operator_func(["<="], [expr.lexpr, right_bound], expr.location, env),
          comparisons = [left_comparison, right_comparison],
          {:ok, reduced} <-
-           build_bool_chain(%{name: "and", impl: &Kernel.and/2}, comparisons, expr.location) do
+           build_bool_chain(
+             %{name: "and", impl: &Kernel.and/2, strict?: true},
+             comparisons,
+             expr.location
+           ) do
       {:ok, reduced}
     end
   end
@@ -786,7 +793,7 @@ defmodule Electric.Replication.Eval.Parser do
     with {:ok, comparison1} <- between(expr, left_bound, right_bound, env),
          {:ok, comparison2} <- between(expr, right_bound, left_bound, env) do
       build_bool_chain(
-        %{name: "or", impl: &Kernel.or/2},
+        %{name: "or", impl: &pg_or/2, strict?: false},
         [comparison1, comparison2],
         expr.location
       )
@@ -801,7 +808,8 @@ defmodule Electric.Replication.Eval.Parser do
          name: op.name,
          type: :bool,
          args: [acc, comparison],
-         location: location
+         location: location,
+         strict?: op.strict?
        }
      end)}
   end
@@ -1312,4 +1320,12 @@ defmodule Electric.Replication.Eval.Parser do
   defp replace_refs(anything_with_children, children, _) do
     {:ok, Map.merge(anything_with_children, children)}
   end
+
+  # postgres OR behaviour is peculiar, we have:
+  # true or null -> true
+  # false or null -> null
+  defp pg_or(nil, true), do: true
+  defp pg_or(nil, _b), do: nil
+  defp pg_or(a, nil), do: pg_or(nil, a)
+  defp pg_or(a, b), do: Kernel.or(a, b)
 end
