@@ -424,11 +424,14 @@ defmodule Electric.Replication.Eval.Parser do
     with {:ok, args} <- cast_unknowns(args, List.duplicate(:bool, length(args)), env) do
       case Enum.find(args, &(not Env.implicitly_castable?(env, &1.type, :bool))) do
         nil ->
-          {fun, name} =
+          {fun, name, strict?} =
             case bool_op do
-              :OR_EXPR -> {&Kernel.or/2, "or"}
-              :AND_EXPR -> {&Kernel.and/2, "and"}
-              :NOT_EXPR -> {&Kernel.not/1, "not"}
+              # select null or true => t
+              :OR_EXPR -> {&Kernel.or/2, "or", false}
+              # select null and true => null
+              :AND_EXPR -> {&Kernel.and/2, "and", true}
+              # select not null => null
+              :NOT_EXPR -> {&Kernel.not/1, "not", true}
             end
 
           {:ok,
@@ -437,7 +440,8 @@ defmodule Electric.Replication.Eval.Parser do
              name: name,
              type: :bool,
              args: args,
-             location: expr.location
+             location: expr.location,
+             strict?: strict?
            }
            |> to_binary_operators()}
 
