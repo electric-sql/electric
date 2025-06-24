@@ -150,7 +150,8 @@ defmodule Electric.Replication.PostgresInterop.Casting do
   @spec pg_or(boolean() | nil, boolean() | nil) :: boolean() | nil
   def pg_or(a, b)
   def pg_or(nil, true), do: true
-  def pg_or(nil, _b), do: nil
-  def pg_or(a, nil), do: pg_or(nil, a)
+  def pg_or(nil, _), do: nil
+  def pg_or(true, nil), do: true
+  def pg_or(_, nil), do: nil
   def pg_or(a, b), do: Kernel.or(a, b)
 end
