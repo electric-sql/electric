@@ -69,6 +69,15 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["test"] => 2})
     end
 
+    test "can evaluate OR expression with nil values" do
+      assert {:ok, true} =
+               ~S|foo = 1 OR bar = 1|
+               |> Parser.parse_and_validate_expression!(
+                 refs: %{["foo"] => :int4, ["bar"] => :int4}
+               )
+               |> Runner.execute(%{["foo"] => 1, ["bar"] => nil})
+    end
+
     test "should work with array types" do
       assert {:ok, [[1, 2], [3, 4]]} =
                ~S|ARRAY[ARRAY[1, x], ARRAY['3', 2 + 2]]|
