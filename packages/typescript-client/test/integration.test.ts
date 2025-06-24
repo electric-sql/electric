@@ -377,7 +377,6 @@ describe(`HTTP Sync`, () => {
     })
     let secondRowId = ``
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
-      console.log(`got message ${nth}:`, msg)
       if (!isChangeMessage(msg)) return
       shapeData.set(msg.key, msg.value)
 
