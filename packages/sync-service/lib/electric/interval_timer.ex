@@ -1,6 +1,9 @@
 defmodule Electric.Telemetry.IntervalTimer do
   @moduledoc """
-  Times intervals between calls to `start_interval/2`
+  Times intervals between calls to `start_interval/2`. This is useful if you
+  want to find out which part of a process took the longest time. It works
+  out simpler than wrapping each part of the process in a timer, and
+  guarentees no gaps in the timings.
   """
 
   @default_state []
