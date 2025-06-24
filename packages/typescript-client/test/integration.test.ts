@@ -360,10 +360,12 @@ describe(`HTTP Sync`, () => {
     issuesTableKey,
     updateIssue,
     insertIssues,
+    waitForIssues,
   }) => {
     // With initial data
     const rowId = uuidv4()
     await insertIssues({ id: rowId, title: `original insert` })
+    await waitForIssues({ numChangesExpected: 1 })
 
     const shapeData = new Map()
     const issueStream = new ShapeStream({
@@ -375,6 +377,7 @@ describe(`HTTP Sync`, () => {
     })
     let secondRowId = ``
     await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
+      console.log(`got message ${nth}:`, msg)
       if (!isChangeMessage(msg)) return
       shapeData.set(msg.key, msg.value)
 

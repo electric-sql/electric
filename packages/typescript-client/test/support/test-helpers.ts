@@ -44,7 +44,7 @@ export function forEachMessage<T extends Row<unknown>>(
             message as Message<T>,
             messageIdx
           )
-          if (`operation` in message.headers) messageIdx++
+          if (isChangeMessage(message)) messageIdx++
         } catch (e) {
           controller.abort()
           return reject(e)
@@ -59,13 +59,17 @@ export async function waitForTransaction({
   table,
   numChangesExpected,
   shapeStreamOptions,
+  aborter,
 }: {
   baseUrl: string
   table: string
   numChangesExpected?: number
   shapeStreamOptions?: Partial<ShapeStreamOptions>
+  aborter?: AbortController
 }): Promise<Pick<ShapeStreamOptions, `offset` | `handle`>> {
-  const aborter = new AbortController()
+  const waitAborter = new AbortController()
+  if (aborter?.signal.aborted) waitAborter.abort()
+  else aborter?.signal.addEventListener(`abort`, () => waitAborter.abort())
   const issueStream = new ShapeStream({
     ...(shapeStreamOptions ?? {}),
     url: `${baseUrl}/v1/shape`,
@@ -73,13 +77,13 @@ export async function waitForTransaction({
       ...(shapeStreamOptions?.params ?? {}),
       table,
     },
-    signal: aborter.signal,
+    signal: waitAborter.signal,
     subscribe: true,
   })
 
   numChangesExpected ??= 1
   let numChangesSeen = 0
-  await forEachMessage(issueStream, aborter, (res, msg) => {
+  await forEachMessage(issueStream, waitAborter, (res, msg) => {
     if (isChangeMessage(msg)) {
       numChangesSeen++
     }

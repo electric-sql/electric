@@ -142,7 +142,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
     use((handle?: string) => clearShape(issuesTableUrl, { handle }))
   },
 
-  waitForIssues: ({ issuesTableUrl, baseUrl }, use) =>
+  waitForIssues: ({ issuesTableUrl, baseUrl, aborter }, use) =>
     use(
       ({
         numChangesExpected,
@@ -156,6 +156,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
           table: issuesTableUrl,
           shapeStreamOptions,
           numChangesExpected,
+          aborter,
         })
     ),
 })
