@@ -69,6 +69,43 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["test"] => 2})
     end
 
+    test "can evaluate OR expression with nil values" do
+      for {foo, bar} <- [{1, nil}, {nil, 1}] do
+        assert {:ok, true} =
+                 ~S|foo = 1 OR bar = 1|
+                 |> Parser.parse_and_validate_expression!(
+                   refs: %{["foo"] => :int4, ["bar"] => :int4}
+                 )
+                 |> Runner.execute(%{["foo"] => foo, ["bar"] => bar})
+      end
+
+      for {foo, bar} <- [{2, nil}, {nil, 2}] do
+        assert {:ok, nil} =
+                 ~S|foo = 1 OR bar = 1|
+                 |> Parser.parse_and_validate_expression!(
+                   refs: %{["foo"] => :int4, ["bar"] => :int4}
+                 )
+                 |> Runner.execute(%{["foo"] => foo, ["bar"] => bar})
+      end
+    end
+
+    test "can evaluate IN expression with nil values" do
+      assert {:ok, true} =
+               ~S|1 IN (NULL, 1)|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+
+      assert {:ok, nil} =
+               ~S|2 IN (1, NULL)|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+
+      assert {:ok, nil} =
+               ~S|NULL IN (NULL, 1)|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+    end
+
     test "should work with array types" do
       assert {:ok, [[1, 2], [3, 4]]} =
                ~S|ARRAY[ARRAY[1, x], ARRAY['3', 2 + 2]]|
