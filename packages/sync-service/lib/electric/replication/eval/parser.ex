@@ -1320,12 +1320,4 @@ defmodule Electric.Replication.Eval.Parser do
   defp replace_refs(anything_with_children, children, _) do
     {:ok, Map.merge(anything_with_children, children)}
   end
-
-  # postgres OR behaviour is peculiar, we have:
-  # true or null -> true
-  # false or null -> null
-  defp pg_or(nil, true), do: true
-  defp pg_or(nil, _b), do: nil
-  defp pg_or(a, nil), do: pg_or(nil, a)
-  defp pg_or(a, b), do: Kernel.or(a, b)
 end

@@ -125,4 +125,32 @@ defmodule Electric.Replication.PostgresInterop.Casting do
   end
 
   def ilike?(text, pattern), do: like?(text, pattern, true)
+
+  @doc """
+  The Postgres OR operator, which has some specific behaviour when
+  comparing NULLs with booleans.
+
+  ## Examples
+
+      iex> pg_or(true, false)
+      true
+
+      iex> pg_or(false, false)
+      false
+
+      iex> pg_or(nil, true)
+      true
+
+      iex> pg_or(nil, false)
+      nil
+
+      iex> pg_or(nil, nil)
+      nil
+  """
+  @spec pg_or(boolean() | nil, boolean() | nil) :: boolean() | nil
+  def pg_or(a, b)
+  def pg_or(nil, true), do: true
+  def pg_or(nil, _b), do: nil
+  def pg_or(a, nil), do: pg_or(nil, a)
+  def pg_or(a, b), do: Kernel.or(a, b)
 end
