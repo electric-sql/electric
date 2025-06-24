@@ -17,6 +17,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.IntervalTimer
 
   require Logger
 
@@ -55,16 +56,20 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
+    timer = IntervalTimer.start_interval("shape_log_collector.transaction_message")
+
     trace_context = OpenTelemetry.get_current_context()
-    call_time = :erlang.monotonic_time(:microsecond)
 
-    send_reponse_time =
-      GenServer.call(server, {:new_txn, txn, trace_context, call_time}, :infinity)
+    timer = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
-    response_time = :erlang.monotonic_time(:microsecond) - send_reponse_time
+    durations = IntervalTimer.durations(timer)
+
+    for {interval_name, duration} <- durations do
+      OpenTelemetry.add_span_attributes("#{interval_name}.duration_µs": duration)
+    end
 
     OpenTelemetry.add_span_attributes(
-      "shape_log_collector.transaction_message_response.duration_µs": response_time
+      "shape_log_collector.transaction.total_duration_µs": IntervalTimer.total_time(durations)
     )
 
     :ok
@@ -139,33 +144,30 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call(
-        {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, call_time},
-        from,
+        {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, timer},
+        _from,
         state
       ) do
-    receive_time = :erlang.monotonic_time(:microsecond) - call_time
+    timer =
+      IntervalTimer.start_interval(timer, "shape_log_collector.logging")
 
     OpenTelemetry.set_current_context(trace_context)
 
-    OpenTelemetry.add_span_attributes(
-      "shape_log_collector.transaction_message.duration_µs": receive_time
+    Logger.info(
+      "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}",
+      received_transaction_xid: xid,
+      received_transaction_num_changes: txn.num_changes,
+      received_transaction_lsn: lsn
     )
 
-    OpenTelemetry.timed_fun("shape_log_collector.logging.duration_µs", fn ->
-      Logger.info(
-        "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}",
-        received_transaction_xid: xid,
-        received_transaction_num_changes: txn.num_changes,
-        received_transaction_lsn: lsn
-      )
+    Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
 
-      Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
-    end)
+    {state, timer} = handle_transaction(txn, timer, state)
 
-    state = handle_transaction(txn, from, state)
+    timer =
+      IntervalTimer.start_interval(timer, "shape_log_collector.transaction_message_response")
 
-    send_reponse_time = :erlang.monotonic_time(:microsecond)
-    {:reply, send_reponse_time, state}
+    {:reply, timer, state}
   end
 
   def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do
@@ -178,53 +180,51 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   # If no-one is listening to the replication stream, then just return without
   # emitting the transaction.
-  defp handle_transaction(txn, _from, %{subscriptions: {0, _}} = state) do
+  defp handle_transaction(txn, timer, %{subscriptions: {0, _}} = state) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    state
+    {state, timer}
   end
 
   # If we've already processed a transaction, then drop it without processing
-  defp handle_transaction(txn, _from, %{last_processed_lsn: last_processed_lsn} = state)
+  defp handle_transaction(txn, timer, %{last_processed_lsn: last_processed_lsn} = state)
        when not Lsn.is_larger(txn.lsn, last_processed_lsn) do
     Logger.debug(fn ->
       "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_processed_lsn}"
     end)
 
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    state
+    {state, timer}
   end
 
-  defp handle_transaction(txn, _from, state) do
+  defp handle_transaction(txn, timer, state) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
-    state =
-      OpenTelemetry.timed_fun("shape_log_collector.handle_transaction.duration_µs", fn ->
-        pk_cols_of_relations =
-          for relation <- txn.affected_relations, into: %{} do
-            {:ok, {oid, _}} = Inspector.load_relation_oid(relation, state.inspector)
-            {:ok, info} = Inspector.load_column_info(oid, state.inspector)
-            pk_cols = Inspector.get_pk_cols(info)
-            {relation, pk_cols}
-          end
+    timer = IntervalTimer.start_interval(timer, "shape_log_collector.handle_transaction")
 
-        txn =
-          Map.update!(txn, :changes, fn changes ->
-            Enum.map(changes, &Changes.fill_key(&1, pk_cols_of_relations[&1.relation]))
-          end)
+    pk_cols_of_relations =
+      for relation <- txn.affected_relations, into: %{} do
+        {:ok, {oid, _}} = Inspector.load_relation_oid(relation, state.inspector)
+        {:ok, info} = Inspector.load_column_info(oid, state.inspector)
+        pk_cols = Inspector.get_pk_cols(info)
+        {relation, pk_cols}
+      end
 
-        put_last_processed_lsn(state, txn.lsn)
+    txn =
+      Map.update!(txn, :changes, fn changes ->
+        Enum.map(changes, &Changes.fill_key(&1, pk_cols_of_relations[&1.relation]))
       end)
 
-    publish(state, txn)
+    state = put_last_processed_lsn(state, txn.lsn)
+
+    publish(state, timer, txn)
   end
 
-  defp publish(state, event) do
-    {partitions, event} =
-      OpenTelemetry.timed_fun("partitions.handle_event.duration_µs", fn ->
-        Partitions.handle_event(state.partitions, event)
-      end)
+  defp publish(state, timer, event) do
+    timer = IntervalTimer.start_interval(timer, "partitions.handle_event")
+    {partitions, event} = Partitions.handle_event(state.partitions, event)
 
+    timer = IntervalTimer.start_interval(timer, "shape_log_collector.affected_shapes")
     affected_shapes = Filter.affected_shapes(state.filter, event)
     affected_shape_count = MapSet.size(affected_shapes)
 
@@ -232,21 +232,18 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.affected_shape_count": affected_shape_count
     )
 
-    if affected_shape_count > 0 do
-      OpenTelemetry.timed_fun("shape_log_collector.publish.duration_µs", fn ->
-        context = OpenTelemetry.get_current_context()
-        Publisher.publish(affected_shapes, {:handle_event, event, context})
-      end)
-    end
+    timer = IntervalTimer.start_interval(timer, "shape_log_collector.publish")
+    context = OpenTelemetry.get_current_context()
+    Publisher.publish(affected_shapes, {:handle_event, event, context})
 
-    OpenTelemetry.timed_fun("shape_log_collector.set_last_processed_lsn.duration_µs", fn ->
-      LsnTracker.set_last_processed_lsn(
-        state.last_processed_lsn,
-        state.stack_id
-      )
-    end)
+    timer = IntervalTimer.start_interval(timer, "shape_log_collector.set_last_processed_lsn")
 
-    %{state | partitions: partitions}
+    LsnTracker.set_last_processed_lsn(
+      state.last_processed_lsn,
+      state.stack_id
+    )
+
+    {%{state | partitions: partitions}, timer}
   end
 
   defp handle_relation(rel, _from, state) do
@@ -278,7 +275,10 @@ defmodule Electric.Replication.ShapeLogCollector do
         %{state | tracked_relations: tracker_state}
 
       _ ->
-        %{state | tracked_relations: tracker_state} |> publish(updated_rel)
+        {state, _timer} =
+          publish(%{state | tracked_relations: tracker_state}, _timer = nil, updated_rel)
+
+        state
     end
   end
 
