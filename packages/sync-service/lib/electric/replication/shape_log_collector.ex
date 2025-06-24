@@ -64,13 +64,12 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     durations = IntervalTimer.durations(timer)
 
-    for {interval_name, duration} <- durations do
-      OpenTelemetry.add_span_attributes("#{interval_name}.duration_µs": duration)
-    end
-
-    OpenTelemetry.add_span_attributes(
-      "shape_log_collector.transaction.total_duration_µs": IntervalTimer.total_time(durations)
-    )
+    OpenTelemetry.add_span_attributes([
+      {:"shape_log_collector.transaction.total_duration_µs", IntervalTimer.total_time(durations)}
+      | for {interval_name, duration} <- durations do
+          {:"#{interval_name}.duration_µs", duration}
+        end
+    ])
 
     :ok
   end
