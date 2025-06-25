@@ -965,6 +965,95 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     @tag long_poll_timeout: 100
+    test "picks up changes missed between loading shape and listening for changes", ctx do
+      next_offset = LogOffset.increment(@test_offset)
+
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        # Simulate new changes arriving the moment we load the shape
+        Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+          send(pid, {ref, :new_changes, next_offset})
+        end)
+
+        {@test_shape_handle, @test_offset}
+      end)
+      # any subsequent get shape calls should return the new offset
+      |> stub(:get_shape, fn @test_shape_handle, _opts -> {@test_shape_handle, next_offset} end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> stub(:get_chunk_end_log_offset, fn _, @test_opts -> nil end)
+      |> stub(:get_log_stream, fn
+        @test_offset, _, @test_opts ->
+          []
+
+        ^next_offset, _, @test_opts ->
+          [
+            Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
+          ]
+      end)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@test_offset}",
+                   handle: @test_shape_handle,
+                   live: true
+                 }
+               )
+
+      assert response = Api.serve_shape_log(request)
+
+      assert response.status == 200
+
+      assert [
+               %{"key" => "log1"},
+               %{headers: %{control: "up-to-date"}}
+             ] = response_body(response)
+    end
+
+    @tag long_poll_timeout: 100
+    test "picks up shape rotation missed between loading shape and listening for changes", ctx do
+      Mock.ShapeCache
+      |> expect(:get_shape, fn @test_shape, _opts ->
+        # Simulate shape rotating a moment after we load the shape
+        Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+          send(pid, {ref, :shape_rotation})
+        end)
+
+        {@test_shape_handle, @test_offset}
+      end)
+      # subsequent calls to get shape should not return the shape as it is gone
+      |> stub(:get_shape, fn @test_shape, _opts -> nil end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      |> stub(:get_chunk_end_log_offset, fn _, @test_opts -> nil end)
+      |> stub(:get_log_stream, fn @test_offset, _, @test_opts -> [] end)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@test_offset}",
+                   handle: @test_shape_handle,
+                   live: true
+                 }
+               )
+
+      assert response = Api.serve_shape_log(request)
+      assert response.status == 409
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
+    end
+
+    @tag long_poll_timeout: 100
     test "sends an up-to-date response after a timeout if no changes are observed", ctx do
       Mock.ShapeCache
       |> expect(:get_shape, fn @test_shape, _opts ->
