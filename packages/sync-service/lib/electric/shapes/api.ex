@@ -566,11 +566,32 @@ defmodule Electric.Shapes.Api do
   defp hold_until_change(%Request{} = request) do
     %{
       new_changes_ref: ref,
+      last_offset: last_offset,
       handle: shape_handle,
-      api: %{long_poll_timeout: long_poll_timeout}
+      params: %{shape_definition: shape_def},
+      api: %{long_poll_timeout: long_poll_timeout} = api
     } = request
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
+
+    # Between loading the shape info and registering as a listener for new changes,
+    # there is a short time period where information might be lost, so we check our
+    # mailbox and then do an explicit check if nothing is present
+    case Shapes.get_shape(api, shape_def) do
+      {^shape_handle, ^last_offset} ->
+        # no-op, shape is still present and unchanged
+        nil
+
+      {^shape_handle, latest_log_offset}
+      when is_log_offset_lt(last_offset, latest_log_offset) ->
+        send(self(), {ref, :new_changes, latest_log_offset})
+
+      {other_shape_handle, _} when other_shape_handle != shape_handle ->
+        send(self(), {ref, :shape_rotation, other_shape_handle})
+
+      nil ->
+        send(self(), {ref, :shape_rotation})
+    end
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->
@@ -581,11 +602,14 @@ defmodule Electric.Shapes.Api do
         |> determine_up_to_date()
         |> do_serve_shape_log()
 
-      {^ref, :shape_rotation} ->
+      {^ref, :shape_rotation, new_handle} ->
         Response.error(request, @must_refetch,
-          handle: shape_handle,
+          handle: new_handle,
           status: 409
         )
+
+      {^ref, :shape_rotation} ->
+        Response.error(request, @must_refetch, status: 409)
     after
       # If we timeout, return an up-to-date message
       long_poll_timeout ->
