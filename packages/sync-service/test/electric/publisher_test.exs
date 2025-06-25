@@ -5,6 +5,8 @@ defmodule Electric.PublisherTest do
   alias Electric.PublisherTest.TestSubscriber
 
   defmodule TestSubscriber do
+    use GenServer
+
     def start_link(on_message) do
       GenServer.start_link(__MODULE__, on_message)
     end
@@ -32,7 +34,11 @@ defmodule Electric.PublisherTest do
     end
 
     test "does not return until all subscibers have processed the message" do
+      pid = self()
+
       on_message = fn :test_message ->
+        send(pid, :message_received)
+
         receive do
           :finish_processing_message -> :ok
         end
@@ -41,22 +47,27 @@ defmodule Electric.PublisherTest do
       {:ok, sub1} = TestSubscriber.start_link(on_message)
       {:ok, sub2} = TestSubscriber.start_link(on_message)
 
-      pid = self()
-
       Task.async(fn ->
         Publisher.publish([sub1, sub2], :test_message)
         send(pid, :publish_finished)
       end)
+
+      assert_receive :message_received
+      assert_receive :message_received
 
       refute_receive :publish_finished, 10
       send(sub2, :finish_processing_message)
       refute_receive :publish_finished, 10
       send(sub1, :finish_processing_message)
-      assert_receive :publish_finished, 5000
+      assert_receive :publish_finished
     end
 
     test "does not return until all subscibers have processed the message or died" do
+      pid = self()
+
       on_message = fn :test_message ->
+        send(pid, :message_received)
+
         receive do
           :finish_processing_message -> :ok
         end
@@ -71,13 +82,16 @@ defmodule Electric.PublisherTest do
         Publisher.publish([sub1, sub2], :test_message)
         send(pid, :publish_finished)
       end)
+
+      assert_receive :message_received
+      assert_receive :message_received
 
       refute_receive :publish_finished, 10
       Process.unlink(sub2)
       Process.exit(sub2, :kill)
       refute_receive :publish_finished, 10
       send(sub1, :finish_processing_message)
-      assert_receive :publish_finished, 5000
+      assert_receive :publish_finished
     end
   end
 end
