@@ -177,9 +177,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns 400 when offset is out of bounds", ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
 
       invalid_offset = LogOffset.increment(@test_offset)
 
@@ -376,9 +374,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns log when offset is >= 0", ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
       |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
 
@@ -439,9 +435,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "returns 304 Not Modified when If-None-Match matches ETag",
          ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
 
       Mock.Storage
@@ -458,7 +452,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "the 304 response includes caching headers that are appropriate for the offset", ctx do
       Mock.ShapeCache
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> expect(:get_shape, 3, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
 
       Mock.Storage
       |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
@@ -490,9 +484,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "handles live updates", ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
       |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
 
@@ -566,9 +558,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "handles shape rotation", ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
       |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
 
@@ -614,9 +604,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "sends an up-to-date response after a timeout if no changes are observed",
          ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
       |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
 
@@ -657,9 +645,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",
          ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn "foo", _opts -> false end)
 
       Mock.Storage
