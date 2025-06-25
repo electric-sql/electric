@@ -32,14 +32,14 @@ defmodule Electric.PublisherTest do
     end
 
     test "does not return until all subscibers have processed the message" do
-      on_event = fn :test_message ->
+      on_message = fn :test_message ->
         receive do
-          :finish_processing_event -> :ok
+          :finish_processing_message -> :ok
         end
       end
 
-      {:ok, sub1} = TestSubscriber.start_link(on_event)
-      {:ok, sub2} = TestSubscriber.start_link(on_event)
+      {:ok, sub1} = TestSubscriber.start_link(on_message)
+      {:ok, sub2} = TestSubscriber.start_link(on_message)
 
       pid = self()
 
@@ -49,21 +49,21 @@ defmodule Electric.PublisherTest do
       end)
 
       refute_receive :publish_finished, 10
-      send(sub2, :finish_processing_event)
+      send(sub2, :finish_processing_message)
       refute_receive :publish_finished, 10
-      send(sub1, :finish_processing_event)
+      send(sub1, :finish_processing_message)
       assert_receive :publish_finished, 5000
     end
 
     test "does not return until all subscibers have processed the message or died" do
-      on_event = fn :test_message ->
+      on_message = fn :test_message ->
         receive do
-          :finish_processing_event -> :ok
+          :finish_processing_message -> :ok
         end
       end
 
-      {:ok, sub1} = TestSubscriber.start_link(on_event)
-      {:ok, sub2} = TestSubscriber.start_link(on_event)
+      {:ok, sub1} = TestSubscriber.start_link(on_message)
+      {:ok, sub2} = TestSubscriber.start_link(on_message)
 
       pid = self()
 
@@ -76,7 +76,7 @@ defmodule Electric.PublisherTest do
       Process.unlink(sub2)
       Process.exit(sub2, :kill)
       refute_receive :publish_finished, 10
-      send(sub1, :finish_processing_event)
+      send(sub1, :finish_processing_message)
       assert_receive :publish_finished, 5000
     end
   end
