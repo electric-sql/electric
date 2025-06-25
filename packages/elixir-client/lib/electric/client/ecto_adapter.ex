@@ -110,11 +110,28 @@ if Code.ensure_loaded?(Ecto) do
       {table_name, query_prefix || source_prefix, struct}
     end
 
+    defp query_columns(%{select: %Ecto.Query.SelectExpr{take: %{0 => {action, columns}}}})
+         when action in [:any, :map, :struct] do
+      Enum.map(columns, &to_string/1)
+    end
+
+    defp query_columns(%{select: %Ecto.Query.SelectExpr{expr: [{{:., _, _}, [], []} | _] = expr}}) do
+      map_expr_columns(expr)
+    end
+
+    defp query_columns(%{select: %Ecto.Query.SelectExpr{expr: {:{}, [], [_ | _] = expr}}}) do
+      map_expr_columns(expr)
+    end
+
     defp query_columns(%{from: %{source: {_table_name, struct}}}) do
       Enum.map(
         struct.__schema__(:fields),
         &to_string(struct.__schema__(:field_source, &1))
       )
+    end
+
+    defp map_expr_columns(expr) do
+      for {{:., [], [{:&, [], [0]}, name]}, [], []} <- expr, do: to_string(name)
     end
 
     @doc false
