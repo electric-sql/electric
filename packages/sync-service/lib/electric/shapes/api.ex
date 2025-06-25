@@ -577,51 +577,21 @@ defmodule Electric.Shapes.Api do
     # Between loading the shape info and registering as a listener for new changes,
     # there is a short time period where information might be lost, so we check our
     # mailbox and then do an explicit check if nothing is present
-    hold_until_change_with_timeout(
-      request,
-      0,
-      fn ->
-        case Shapes.get_shape(api, shape_def) do
-          {^shape_handle, ^last_offset} ->
-            # no-op, shape is still present and unchanged
-            nil
+    case Shapes.get_shape(api, shape_def) do
+      {^shape_handle, ^last_offset} ->
+        # no-op, shape is still present and unchanged
+        nil
 
-          {^shape_handle, latest_log_offset}
-          when is_log_offset_lt(last_offset, latest_log_offset) ->
-            send(self(), {ref, :new_changes, latest_log_offset})
+      {^shape_handle, latest_log_offset}
+      when is_log_offset_lt(last_offset, latest_log_offset) ->
+        send(self(), {ref, :new_changes, latest_log_offset})
 
-          {other_shape_handle, _} when other_shape_handle != shape_handle ->
-            send(self(), {ref, :shape_rotation, other_shape_handle})
+      {other_shape_handle, _} when other_shape_handle != shape_handle ->
+        send(self(), {ref, :shape_rotation, other_shape_handle})
 
-          nil ->
-            send(self(), {ref, :shape_rotation})
-        end
-
-        hold_until_change_with_timeout(
-          request,
-          # If we timeout, return an up-to-date message
-          long_poll_timeout,
-          fn ->
-            # Ensure stack is ready after a long poll timeout, as it might
-            # have failed during this period
-            case hold_until_stack_ready(request.api) do
-              :ok ->
-                request
-                |> update_attrs(%{ot_is_long_poll_timeout: true})
-                |> determine_global_last_seen_lsn()
-                |> no_change_response()
-
-              {:error, response} ->
-                response
-            end
-          end
-        )
-      end
-    )
-  end
-
-  defp hold_until_change_with_timeout(%Request{} = request, timeout, on_timeout_fn) do
-    %{new_changes_ref: ref} = request
+      nil ->
+        send(self(), {ref, :shape_rotation})
+    end
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->
@@ -641,7 +611,20 @@ defmodule Electric.Shapes.Api do
       {^ref, :shape_rotation} ->
         Response.error(request, @must_refetch, status: 409)
     after
-      timeout -> on_timeout_fn.()
+      # If we timeout, return an up-to-date message
+      long_poll_timeout ->
+        # Ensure stack is ready after a long poll timeout, as it might
+        # have failed during this period
+        case hold_until_stack_ready(request.api) do
+          :ok ->
+            request
+            |> update_attrs(%{ot_is_long_poll_timeout: true})
+            |> determine_global_last_seen_lsn()
+            |> no_change_response()
+
+          {:error, response} ->
+            response
+        end
     end
   end
 
