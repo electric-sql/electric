@@ -18,6 +18,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Telemetry.IntervalTimer
+  alias Electric.Telemetry.ProcessIntervalTimer
 
   require Logger
 
@@ -148,7 +149,8 @@ defmodule Electric.Replication.ShapeLogCollector do
         _from,
         state
       ) do
-    state = record_interval_start(%{state | timer: timer}, "shape_log_collector.logging")
+    ProcessIntervalTimer.set_state(timer)
+    ProcessIntervalTimer.start_interval("shape_log_collector.logging")
 
     OpenTelemetry.set_current_context(trace_context)
 
@@ -161,12 +163,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
 
-    state =
-      state
-      |> handle_transaction(txn)
-      |> record_interval_start("shape_log_collector.transaction_message_response")
+    state = handle_transaction(state, txn)
 
-    {:reply, state.timer, %{state | timer: nil}}
+    ProcessIntervalTimer.start_interval("shape_log_collector.transaction_message_response")
+
+    {:reply, ProcessIntervalTimer.extract_state(), %{state | timer: nil}}
   end
 
   def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do
@@ -199,7 +200,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp handle_transaction(state, txn) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
-    state = record_interval_start(state, "shape_log_collector.handle_transaction")
+    ProcessIntervalTimer.start_interval("shape_log_collector.handle_transaction")
 
     pk_cols_of_relations =
       for relation <- txn.affected_relations, into: %{} do
@@ -220,10 +221,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp publish(state, event) do
-    state = record_interval_start(state, "partitions.handle_event")
+    ProcessIntervalTimer.start_interval("partitions.handle_event")
     {partitions, event} = Partitions.handle_event(state.partitions, event)
 
-    state = record_interval_start(state, "shape_log_collector.affected_shapes")
+    ProcessIntervalTimer.start_interval("shape_log_collector.affected_shapes")
     affected_shapes = Filter.affected_shapes(state.filter, event)
     affected_shape_count = MapSet.size(affected_shapes)
 
@@ -231,11 +232,11 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.affected_shape_count": affected_shape_count
     )
 
-    state = record_interval_start(state, "shape_log_collector.publish")
+    ProcessIntervalTimer.start_interval("shape_log_collector.publish")
     context = OpenTelemetry.get_current_context()
     Publisher.publish(affected_shapes, {:handle_event, event, context})
 
-    state = record_interval_start(state, "shape_log_collector.set_last_processed_lsn")
+    ProcessIntervalTimer.start_interval("shape_log_collector.set_last_processed_lsn")
 
     LsnTracker.set_last_processed_lsn(
       state.last_processed_lsn,
@@ -274,7 +275,9 @@ defmodule Electric.Replication.ShapeLogCollector do
         %{state | tracked_relations: tracker_state}
 
       _ ->
-        publish(%{state | tracked_relations: tracker_state}, updated_rel)
+        state = publish(%{state | tracked_relations: tracker_state}, updated_rel)
+        ProcessIntervalTimer.wipe_state()
+        state
     end
   end
 
@@ -312,12 +315,4 @@ defmodule Electric.Replication.ShapeLogCollector do
        do: %{state | last_processed_lsn: lsn}
 
   defp put_last_processed_lsn(state, _lsn), do: state
-
-  # Don't record the interval if the timer has not been setup
-  defp record_interval_start(%{timer: nil} = state, _interval_name), do: state
-
-  defp record_interval_start(state, interval_name) do
-    timer = IntervalTimer.start_interval(state.timer, interval_name)
-    %{state | timer: timer}
-  end
 end

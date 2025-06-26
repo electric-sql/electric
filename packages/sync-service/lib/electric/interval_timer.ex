@@ -38,3 +38,40 @@ defmodule Electric.Telemetry.IntervalTimer do
     System.monotonic_time(:microsecond)
   end
 end
+
+defmodule Electric.Telemetry.ProcessIntervalTimer do
+  @moduledoc """
+  Times intervals between calls to `start_interval/2`. This is useful when it is difficult to wrap an interval in a span, the state
+  is stored in the process memory, allowing it to be accessed from any function on the process.
+  """
+  alias Electric.Telemetry.IntervalTimer
+
+  @state_key :timed_intervals
+
+  def state do
+    Process.get(@state_key, [])
+  end
+
+  def set_state(state) do
+    Process.put(@state_key, state)
+  end
+
+  def extract_state do
+    state = state()
+    wipe_state()
+    state
+  end
+
+  def wipe_state do
+    Process.delete(@state_key)
+  end
+
+  def start_interval(interval_name) do
+    IntervalTimer.start_interval(state(), interval_name)
+    |> set_state()
+  end
+
+  def durations do
+    IntervalTimer.durations(state())
+  end
+end
