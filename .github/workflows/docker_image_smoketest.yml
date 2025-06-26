@@ -1,8 +1,14 @@
 name: Electric Docker Image Smoke Test
 
 on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "website/**"
+      - "**/README.md"
   pull_request:
     paths-ignore:
+      - "website/**"
       - "**/README.md"
 
 jobs:
