@@ -22,10 +22,42 @@ defmodule Electric.DbConnectionError do
              "tcp recv (idle): closed",
              "ssl recv (idle): closed",
              "tcp recv: closed",
-             "ssl recv: closed"
+             "ssl recv: closed",
+             "tcp async recv: closed",
+             "ssl async recv: closed",
+             "tcp async_recv: closed",
+             "ssl async_recv: closed"
            ] do
     %DbConnectionError{
       message: "connection closed while connecting to the database",
+      type: :connection_closed,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(%DBConnection.ConnectionError{message: message} = error)
+      when message in [
+             "tcp recv (idle): timeout",
+             "ssl recv (idle): timeout",
+             "tcp recv: timeout",
+             "ssl recv: timeout"
+           ] do
+    %DbConnectionError{
+      message: "connection timed out while connecting to the database",
+      type: :connection_closed,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(%DBConnection.ConnectionError{message: message} = error)
+      when message in [
+             "tcp send: closed",
+             "ssl send: closed"
+           ] do
+    %DbConnectionError{
+      message: "connection closed while talking to the database",
       type: :connection_closed,
       original_error: error,
       retry_may_fix?: true
@@ -152,7 +184,8 @@ defmodule Electric.DbConnectionError do
   end
 
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
-    maybe_database_does_not_exist(error) || unknown_error(error)
+    maybe_database_does_not_exist(error) || maybe_compute_quota_exceeded(error) ||
+      unknown_error(error)
   end
 
   def from_error(
@@ -209,6 +242,21 @@ defmodule Electric.DbConnectionError do
         original_error: error,
         retry_may_fix?: false
       }
+    end
+  end
+
+  defp maybe_compute_quota_exceeded(error) do
+    case error.postgres.message do
+      "Your account or project has exceeded the compute time quota" <> _ ->
+        %DbConnectionError{
+          message: error.postgres.message,
+          type: :compute_quota_exceeded,
+          original_error: error,
+          retry_may_fix?: false
+        }
+
+      _ ->
+        nil
     end
   end
 
