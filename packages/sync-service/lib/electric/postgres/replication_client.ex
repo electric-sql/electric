@@ -221,6 +221,11 @@ defmodule Electric.Postgres.ReplicationClient do
     {:disconnect, :shutdown}
   end
 
+  # Some other exit reason we're not expecting: disconnect and shut down.
+  def handle_info({:EXIT, _pid, reason}, _state) do
+    {:disconnect, reason}
+  end
+
   # The implementation of Postgrex.ReplicationConnection doesn't give us a convenient way to
   # check whether the START_REPLICATION_SLOT statement succeeded before switching the
   # connection into streaming mode. Returning {:query, "START_REPLICATION_SLOT ...", state}
