@@ -160,6 +160,10 @@ defmodule Electric.Telemetry.OpenTelemetry do
     |> set_interval_timer()
   end
 
+  @doc """
+  Records the interval timings as attributes in the current span
+  and wipes the interval timer from process memory.
+  """
   def stop_and_save_intervals(opts) do
     timer = opts[:timer] || extract_interval_timer()
     durations = IntervalTimer.durations(timer)
@@ -180,15 +184,28 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
   @interval_timer_key :electric_otel_interval_timer
 
+  @doc """
+  Set the interval timer for the current process.
+  """
   @spec set_interval_timer(IntervalTimer.t()) :: :ok
   def set_interval_timer(timer) do
     Process.put(@interval_timer_key, timer)
   end
 
+  @doc """
+  Wipe the current interval timer from process memory.
+  """
   def wipe_interval_timer do
     Process.delete(@interval_timer_key)
   end
 
+  @doc """
+  Removes the current interval timer from prcess memory and returns it.
+
+  Useful if you want to time intervals over multiple processes,
+  extract the timer, pass it to another process, and then
+  use `set_interval_timer/1` to restore it in the new process.
+  """
   @spec extract_interval_timer() :: IntervalTimer.t()
   def extract_interval_timer do
     timer = get_interval_timer()
