@@ -181,7 +181,7 @@ defmodule PgInterop.Interval do
 
   def from_days(days) when is_float(days) do
     full_days = floor(days)
-    %Interval{from_hours((days - full_days) * 24) | days: full_days}
+    %{from_hours((days - full_days) * 24) | days: full_days}
   end
 
   @doc """
@@ -260,7 +260,7 @@ defmodule PgInterop.Interval do
   """
   def from_months(months) do
     full_months = floor(months)
-    %Interval{from_days((months - full_months) * 30) | months: full_months}
+    %{from_days((months - full_months) * 30) | months: full_months}
   end
 
   @doc """

@@ -182,7 +182,7 @@ defmodule Electric.Replication.LogOffset do
       :eq
   """
   def increment(%LogOffset{op_offset: op_offset} = log_offset, increment \\ 1) do
-    %LogOffset{log_offset | op_offset: op_offset + increment}
+    %{log_offset | op_offset: op_offset + increment}
   end
 
   @doc """

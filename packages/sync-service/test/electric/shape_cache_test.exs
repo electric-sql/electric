@@ -110,7 +110,7 @@ defmodule Electric.ShapeCacheTest do
 
       shape1 = @shape
 
-      shape2 = %Shape{
+      shape2 = %{
         @shape
         | where: Parser.parse_and_validate_expression!("id = 2", refs: %{["id"] => :int8})
       }
@@ -442,7 +442,7 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "correctly propagates the error", %{shape_cache_opts: opts} do
-      shape = %Shape{
+      shape = %{
         @shape
         | root_table: {"public", "nonexistent"},
           root_table_id: 2
