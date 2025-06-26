@@ -33,6 +33,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   require OpenTelemetry.SemanticConventions.Trace
 
   alias Electric.Telemetry.OptionalSpans
+  alias Electric.Telemetry.IntervalTimer
 
   @typep span_name :: String.t()
   @typep attr_name :: String.t()
@@ -127,6 +128,100 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec get_stack_span_attrs(String.t()) :: map()
   def get_stack_span_attrs(stack_id) do
     :persistent_term.get(:"electric_otel_attributes_#{stack_id}", %{})
+  end
+
+  @doc """
+  Records that an interval with the given `interval_name` has started.
+
+  This is useful if you want to find out which part of a process took
+  the longest time. It works out simpler than wrapping each part of
+  the process in a timer, and guarentees no gaps in the timings.
+
+  Once a number of intervals have been started, call
+  `stop_and_save_intervals()` to record the interval timings as
+  attributes in the current span.
+
+  e.g.
+
+  ```elixir
+  OpenTelemetry.start_interval("quick_sleep")
+  Process.sleep(1)
+  OpenTelemetry.start_interval("longer_sleep")
+  Process.sleep(2)
+  OpenTelemetry.stop_and_save_intervals(total_attribute: "total_sleep_µs")
+  ```
+  will add the following attributes to the current span:
+    quick_sleep.duration_µs: 1000
+    longer_sleep.duration_µs: 2000
+    total_sleep_µs: 3000
+  """
+  @spec start_interval(binary()) :: :ok
+  def start_interval(interval_name) do
+    IntervalTimer.start_interval(get_interval_timer(), interval_name)
+    |> set_interval_timer()
+  end
+
+  @doc """
+  Records the interval timings as attributes in the current span
+  and wipes the interval timer from process memory.
+
+  Options:
+  - `:timer` - the interval timer to use. If not provided, the timer
+    is extracted from the process memory.
+  - `:total_attribute` - the name of the attribute to store the total
+    time across all intervals. If not provided no total time is recorded.
+  """
+  def stop_and_save_intervals(opts) do
+    timer = opts[:timer] || extract_interval_timer()
+    durations = IntervalTimer.durations(timer)
+
+    total_attribute =
+      case opts[:total_attribute] do
+        nil -> []
+        attr_name -> [{attr_name, IntervalTimer.total_time(durations)}]
+      end
+
+    add_span_attributes(
+      total_attribute ++
+        for {interval_name, duration} <- durations do
+          {:"#{interval_name}.duration_µs", duration}
+        end
+    )
+  end
+
+  @interval_timer_key :electric_otel_interval_timer
+
+  @doc """
+  Set the interval timer for the current process.
+  """
+  @spec set_interval_timer(IntervalTimer.t()) :: :ok
+  def set_interval_timer(timer) do
+    Process.put(@interval_timer_key, timer)
+  end
+
+  @doc """
+  Wipe the current interval timer from process memory.
+  """
+  def wipe_interval_timer do
+    Process.delete(@interval_timer_key)
+  end
+
+  @doc """
+  Removes the current interval timer from prcess memory and returns it.
+
+  Useful if you want to time intervals over multiple processes,
+  extract the timer, pass it to another process, and then
+  use `set_interval_timer/1` to restore it in the new process.
+  """
+  @spec extract_interval_timer() :: IntervalTimer.t()
+  def extract_interval_timer do
+    timer = get_interval_timer()
+    wipe_interval_timer()
+    timer
+  end
+
+  defp get_interval_timer do
+    Process.get(@interval_timer_key, [])
   end
 
   @doc """
