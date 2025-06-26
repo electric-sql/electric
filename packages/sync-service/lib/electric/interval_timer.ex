@@ -4,9 +4,15 @@ defmodule Electric.Telemetry.IntervalTimer do
   want to find out which part of a process took the longest time. It works
   out simpler than wrapping each part of the process in a timer, and
   guarentees no gaps in the timings.
+
+  The simplest way to use the timer is to store the timer state in the 
+  process memory, see `OpenTelemetry.start_interval`. This module should
+  only be used directly if you do not want to use the process memory.
   """
 
   @default_state []
+
+  @type t() :: [{binary(), non_neg_integer()}]
 
   def start_interval(state \\ nil, interval_name) do
     [{interval_name, time()} | state || @default_state]
@@ -36,42 +42,5 @@ defmodule Electric.Telemetry.IntervalTimer do
 
   defp time do
     System.monotonic_time(:microsecond)
-  end
-end
-
-defmodule Electric.Telemetry.ProcessIntervalTimer do
-  @moduledoc """
-  Times intervals between calls to `start_interval/2`. This is useful when it is difficult to wrap an interval in a span, the state
-  is stored in the process memory, allowing it to be accessed from any function on the process.
-  """
-  alias Electric.Telemetry.IntervalTimer
-
-  @state_key :timed_intervals
-
-  def state do
-    Process.get(@state_key, [])
-  end
-
-  def set_state(state) do
-    Process.put(@state_key, state)
-  end
-
-  def extract_state do
-    state = state()
-    wipe_state()
-    state
-  end
-
-  def wipe_state do
-    Process.delete(@state_key)
-  end
-
-  def start_interval(interval_name) do
-    IntervalTimer.start_interval(state(), interval_name)
-    |> set_state()
-  end
-
-  def durations do
-    IntervalTimer.durations(state())
   end
 end

@@ -18,7 +18,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Telemetry.IntervalTimer
-  alias Electric.Telemetry.ProcessIntervalTimer
 
   require Logger
 
@@ -58,19 +57,14 @@ defmodule Electric.Replication.ShapeLogCollector do
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
     timer = IntervalTimer.start_interval("shape_log_collector.transaction_message")
-
     trace_context = OpenTelemetry.get_current_context()
 
     timer = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
-    durations = IntervalTimer.durations(timer)
-
-    OpenTelemetry.add_span_attributes([
-      {:"shape_log_collector.transaction.total_duration_µs", IntervalTimer.total_time(durations)}
-      | for {interval_name, duration} <- durations do
-          {:"#{interval_name}.duration_µs", duration}
-        end
-    ])
+    OpenTelemetry.stop_and_save_intervals(
+      timer: timer,
+      total_attribute: :"shape_log_collector.transaction.total_duration_µs"
+    )
 
     :ok
   end
@@ -149,8 +143,8 @@ defmodule Electric.Replication.ShapeLogCollector do
         _from,
         state
       ) do
-    ProcessIntervalTimer.set_state(timer)
-    ProcessIntervalTimer.start_interval("shape_log_collector.logging")
+    OpenTelemetry.set_interval_timer(timer)
+    OpenTelemetry.start_interval("shape_log_collector.logging")
 
     OpenTelemetry.set_current_context(trace_context)
 
@@ -165,9 +159,9 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     state = handle_transaction(state, txn)
 
-    ProcessIntervalTimer.start_interval("shape_log_collector.transaction_message_response")
+    OpenTelemetry.start_interval("shape_log_collector.transaction_message_response")
 
-    {:reply, ProcessIntervalTimer.extract_state(), %{state | timer: nil}}
+    {:reply, OpenTelemetry.extract_interval_timer(), %{state | timer: nil}}
   end
 
   def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do
@@ -200,7 +194,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp handle_transaction(state, txn) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
-    ProcessIntervalTimer.start_interval("shape_log_collector.handle_transaction")
+    OpenTelemetry.start_interval("shape_log_collector.handle_transaction")
 
     pk_cols_of_relations =
       for relation <- txn.affected_relations, into: %{} do
@@ -221,10 +215,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp publish(state, event) do
-    ProcessIntervalTimer.start_interval("partitions.handle_event")
+    OpenTelemetry.start_interval("partitions.handle_event")
     {partitions, event} = Partitions.handle_event(state.partitions, event)
 
-    ProcessIntervalTimer.start_interval("shape_log_collector.affected_shapes")
+    OpenTelemetry.start_interval("shape_log_collector.affected_shapes")
     affected_shapes = Filter.affected_shapes(state.filter, event)
     affected_shape_count = MapSet.size(affected_shapes)
 
@@ -232,11 +226,11 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.affected_shape_count": affected_shape_count
     )
 
-    ProcessIntervalTimer.start_interval("shape_log_collector.publish")
+    OpenTelemetry.start_interval("shape_log_collector.publish")
     context = OpenTelemetry.get_current_context()
     Publisher.publish(affected_shapes, {:handle_event, event, context})
 
-    ProcessIntervalTimer.start_interval("shape_log_collector.set_last_processed_lsn")
+    OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
 
     LsnTracker.set_last_processed_lsn(
       state.last_processed_lsn,
@@ -276,7 +270,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
       _ ->
         state = publish(%{state | tracked_relations: tracker_state}, updated_rel)
-        ProcessIntervalTimer.wipe_state()
+        OpenTelemetry.wipe_interval_timer()
         state
     end
   end

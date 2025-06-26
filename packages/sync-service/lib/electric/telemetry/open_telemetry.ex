@@ -33,6 +33,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   require OpenTelemetry.SemanticConventions.Trace
 
   alias Electric.Telemetry.OptionalSpans
+  alias Electric.Telemetry.IntervalTimer
 
   @typep span_name :: String.t()
   @typep attr_name :: String.t()
@@ -127,6 +128,52 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec get_stack_span_attrs(String.t()) :: map()
   def get_stack_span_attrs(stack_id) do
     :persistent_term.get(:"electric_otel_attributes_#{stack_id}", %{})
+  end
+
+  @spec start_interval(binary()) :: :ok
+  def start_interval(interval_name) do
+    IntervalTimer.start_interval(get_interval_timer(), interval_name)
+    |> set_interval_timer()
+  end
+
+  def stop_and_save_intervals(opts) do
+    timer = opts[:timer] || extract_interval_timer()
+    durations = IntervalTimer.durations(timer)
+
+    total_attribute =
+      case opts[:total_attribute] do
+        nil -> []
+        attr_name -> [{attr_name, IntervalTimer.total_time(durations)}]
+      end
+
+    add_span_attributes(
+      total_attribute ++
+        for {interval_name, duration} <- durations do
+          {:"#{interval_name}.duration_µs", duration}
+        end
+    )
+  end
+
+  @interval_timer_key :electric_otel_interval_timer
+
+  @spec set_interval_timer(IntervalTimer.t()) :: :ok
+  def set_interval_timer(timer) do
+    Process.put(@interval_timer_key, timer)
+  end
+
+  def wipe_interval_timer do
+    Process.delete(@interval_timer_key)
+  end
+
+  @spec extract_interval_timer() :: IntervalTimer.t()
+  def extract_interval_timer do
+    timer = get_interval_timer()
+    wipe_interval_timer()
+    timer
+  end
+
+  defp get_interval_timer do
+    Process.get(@interval_timer_key, [])
   end
 
   @doc """
