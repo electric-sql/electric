@@ -71,33 +71,47 @@ defmodule Electric.DbConnectionErrorTest do
     end
 
     test "with a tcp timeout error" do
-      error = %DBConnection.ConnectionError{
-        message: "tcp recv: connection timed out - :etimedout",
-        severity: :error,
-        reason: :error
-      }
+      for message <- [
+            "tcp recv: connection timed out - :etimedout",
+            "ssl recv (idle): timeout",
+            "tcp recv: timeout"
+          ] do
+        error = %DBConnection.ConnectionError{
+          message: message,
+          severity: :error,
+          reason: :error
+        }
 
-      assert %DbConnectionError{
-               message: "connection timed out while trying to connect to the database",
-               type: :connection_timeout,
-               original_error: error,
-               retry_may_fix?: true
-             } == DbConnectionError.from_error(error)
+        assert %DbConnectionError{
+                 message: "connection timed out",
+                 type: :connection_timeout,
+                 original_error: error,
+                 retry_may_fix?: true
+               } == DbConnectionError.from_error(error)
+      end
     end
 
     test "with tcp closed error" do
-      error = %DBConnection.ConnectionError{
-        message: "tcp recv (idle): closed",
-        severity: :error,
-        reason: :error
-      }
+      for message <- [
+            "tcp recv (idle): closed",
+            "ssl recv (idle): closed",
+            "tcp recv: closed",
+            "ssl recv: closed",
+            "ssl async_recv: closed"
+          ] do
+        error = %DBConnection.ConnectionError{
+          message: message,
+          severity: :error,
+          reason: :error
+        }
 
-      assert %DbConnectionError{
-               message: "connection closed while connecting to the database",
-               type: :connection_closed,
-               original_error: error,
-               retry_may_fix?: true
-             } == DbConnectionError.from_error(error)
+        assert %DbConnectionError{
+                 message: "connection closed while connecting to the database",
+                 type: :connection_closed,
+                 original_error: error,
+                 retry_may_fix?: true
+               } == DbConnectionError.from_error(error)
+      end
     end
 
     test "with a connection refused error" do
@@ -110,6 +124,30 @@ defmodule Electric.DbConnectionErrorTest do
       assert %DbConnectionError{
                message: "connection refused while trying to connect to localhost:54321",
                type: :connection_refused,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with compute quota exceeded error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message:
+            "Your account or project has exceeded the compute time quota. Upgrade your plan to increase limits.",
+          unknown: "FATAL",
+          severity: "FATAL",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 "Your account or project has exceeded the compute time quota. Upgrade your plan to increase limits.",
+               type: :compute_quota_exceeded,
                original_error: error,
                retry_may_fix?: false
              } == DbConnectionError.from_error(error)
