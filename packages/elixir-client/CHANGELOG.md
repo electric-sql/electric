@@ -1,5 +1,12 @@
 # @core/elixir-client
 
+## 0.6.3
+
+### Patch Changes
+
+- 6ed4a27: Fix mapping of Ecto.ULID columns
+- 6ed4a27: Add support for casting array and map fields to the Ecto.Adapter
+
 ## 0.6.2
 
 ### Patch Changes
