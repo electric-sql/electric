@@ -130,6 +130,30 @@ defmodule Electric.Telemetry.OpenTelemetry do
     :persistent_term.get(:"electric_otel_attributes_#{stack_id}", %{})
   end
 
+  @doc """
+  Records that an interval with the given `interval_name` has started.
+
+  This is useful if you want to find out which part of a process took
+  the longest time. It works out simpler than wrapping each part of
+  the process in a timer, and guarentees no gaps in the timings.
+
+  Once a number of intervals have been started, call
+  `stop_and_save_intervals()` to record the interval timings as
+  attributes in the current span.
+
+  e.g.
+
+  ```elixir
+  OpenTelemetry.start_interval("quick_sleep")
+  Process.sleep(1)
+  OpenTelemetry.start_interval("longer_sleep")
+  Process.sleep(2)
+  OpenTelemetry.stop_and_save_intervals()
+  ```
+  will add the following attributes to the current span:
+    quick_sleep.duration_µs: 1000
+    longer_sleep.duration_µs: 2000
+  """
   @spec start_interval(binary()) :: :ok
   def start_interval(interval_name) do
     IntervalTimer.start_interval(get_interval_timer(), interval_name)
