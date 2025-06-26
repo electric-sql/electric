@@ -144,9 +144,11 @@ defmodule Electric.Replication.ShapeLogCollector do
         state
       ) do
     OpenTelemetry.set_interval_timer(timer)
-    OpenTelemetry.start_interval("shape_log_collector.logging")
 
+    OpenTelemetry.start_interval("shape_log_collector.set_current_context")
     OpenTelemetry.set_current_context(trace_context)
+
+    OpenTelemetry.start_interval("shape_log_collector.logging")
 
     Logger.info(
       "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}",
