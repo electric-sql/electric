@@ -148,11 +148,12 @@ defmodule Electric.Telemetry.OpenTelemetry do
   Process.sleep(1)
   OpenTelemetry.start_interval("longer_sleep")
   Process.sleep(2)
-  OpenTelemetry.stop_and_save_intervals()
+  OpenTelemetry.stop_and_save_intervals(total_attribute: "total_sleep_µs")
   ```
   will add the following attributes to the current span:
     quick_sleep.duration_µs: 1000
     longer_sleep.duration_µs: 2000
+    total_sleep_µs: 3000
   """
   @spec start_interval(binary()) :: :ok
   def start_interval(interval_name) do
@@ -163,6 +164,12 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @doc """
   Records the interval timings as attributes in the current span
   and wipes the interval timer from process memory.
+
+  Options:
+  - `:timer` - the interval timer to use. If not provided, the timer
+    is extracted from the process memory.
+  - `:total_attribute` - the name of the attribute to store the total
+    time across all intervals. If not provided no total time is recorded.
   """
   def stop_and_save_intervals(opts) do
     timer = opts[:timer] || extract_interval_timer()
