@@ -47,10 +47,10 @@ function mockVisibilityApi() {
   }
 }
 
-describe(`Shape`, () => {
-  it.for(fetchAndSse)(
-    `should sync an empty shape (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+describe.for(fetchAndSse)(
+  `Shape  (liveSSE=$experimentalLiveSse)`,
+  ({ experimentalLiveSse }) => {
+    it(`should sync an empty shape`, async ({ issuesTableUrl, aborter }) => {
       const start = Date.now()
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
@@ -67,12 +67,9 @@ describe(`Shape`, () => {
       expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
       expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
       expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should throw on a reserved parameter (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { aborter }) => {
+    it(`should throw on a reserved parameter`, async ({ aborter }) => {
       expect(() => {
         const shapeStream = new ShapeStream({
           url: `${BASE_URL}/v1/shape`,
@@ -86,15 +83,13 @@ describe(`Shape`, () => {
         })
         new Shape(shapeStream)
       }).toThrowErrorMatchingSnapshot()
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should notify with the initial value (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { issuesTableUrl, insertIssues, aborter }
-    ) => {
+    it(`should notify with the initial value`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
       const [id] = await insertIssues({ title: `test title` })
 
       const start = Date.now()
@@ -116,22 +111,16 @@ describe(`Shape`, () => {
       expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
       expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
       expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should continually sync a shape/table (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      {
-        issuesTableUrl,
-        insertIssues,
-        deleteIssue,
-        updateIssue,
-        waitForIssues,
-        aborter,
-      }
-    ) => {
+    it(`should continually sync a shape/table`, async ({
+      issuesTableUrl,
+      insertIssues,
+      deleteIssue,
+      updateIssue,
+      waitForIssues,
+      aborter,
+    }) => {
       const [id] = await insertIssues({ title: `test title` })
 
       const expectedValue1 = [
@@ -190,22 +179,16 @@ describe(`Shape`, () => {
       expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - intermediate)
 
       shape.unsubscribeAll()
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should resync from scratch on a shape rotation (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      {
-        issuesTableUrl,
-        insertIssues,
-        deleteIssue,
-        waitForIssues,
-        clearIssuesShape,
-        aborter,
-      }
-    ) => {
+    it(`should resync from scratch on a shape rotation`, async ({
+      issuesTableUrl,
+      insertIssues,
+      deleteIssue,
+      waitForIssues,
+      clearIssuesShape,
+      aborter,
+    }) => {
       const id1 = uuidv4()
       const id2 = uuidv4()
       await insertIssues({ id: id1, title: `foo1` })
@@ -273,15 +256,13 @@ describe(`Shape`, () => {
           throw new Error(`Received more data updates than expected`)
         })
       })
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should notify subscribers when the value changes (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { issuesTableUrl, insertIssues, aborter }
-    ) => {
+    it(`should notify subscribers when the value changes`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
       const [id] = await insertIssues({ title: `test title` })
 
       const start = Date.now()
@@ -320,12 +301,9 @@ describe(`Shape`, () => {
       expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
 
       shape.unsubscribeAll()
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should support unsubscribe (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should support unsubscribe`, async ({ issuesTableUrl, aborter }) => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: {
@@ -344,12 +322,9 @@ describe(`Shape`, () => {
 
       expect(shape.numSubscribers).toBe(0)
       expect(subFn).not.toHaveBeenCalled()
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should expose connection status (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl }) => {
+    it(`should expose connection status`, async ({ issuesTableUrl }) => {
       const aborter = new AbortController()
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
@@ -372,12 +347,12 @@ describe(`Shape`, () => {
       // Abort the shape stream and check connectivity status
       aborter.abort()
       await vi.waitFor(() => expect(shapeStream.isConnected()).false)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should set isConnected to false on fetch error and back on true when fetch succeeds again (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       let fetchShouldFail = false
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
@@ -422,12 +397,12 @@ describe(`Shape`, () => {
 
       fetchShouldFail = false
       await vi.waitFor(() => expect(shapeStream.isConnected()).true)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should set isConnected to false when the stream is paused an back on true when the fetch succeeds again (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       const { pause, resume } = mockVisibilityApi()
 
       const shapeStream = new ShapeStream({
@@ -448,15 +423,13 @@ describe(`Shape`, () => {
 
       resume()
       await vi.waitFor(() => expect(shapeStream.isConnected()).true)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should support pausing the stream and resuming it (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { issuesTableUrl, insertIssues, aborter }
-    ) => {
+    it(`should support pausing the stream and resuming it`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
       const { pause, resume } = mockVisibilityApi()
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
@@ -535,12 +508,12 @@ describe(`Shape`, () => {
           priority: 10,
         },
       ])
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should not throw error if an error handler is provided (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should not throw error if an error handler is provided`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       const mockErrorHandler = vi.fn()
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
@@ -560,12 +533,12 @@ describe(`Shape`, () => {
       await waitForFetch(shapeStream)
       expect(mockErrorHandler.mock.calls.length).toBe(1)
       expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should retry on error if error handler returns modified params (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should retry on error if error handler returns modified params`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       // This test creates a shapestream but provides wrong query params
       // the fetch client therefore returns a 401 status code
       // the custom error handler handles it by correcting the query param
@@ -608,12 +581,12 @@ describe(`Shape`, () => {
       await waitForFetch(shapeStream)
       expect(mockErrorHandler.mock.calls.length).toBe(1)
       expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should retry on error if error handler returns modified headers (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should retry on error if error handler returns modified headers`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       // This test creates a shapestream but provides invalid auth credentials
       // the fetch client therefore returns a 401 status code
       // the custom error handler handles it by replacing the credentials with valid credentials
@@ -655,12 +628,12 @@ describe(`Shape`, () => {
       await waitForFetch(shapeStream)
       expect(mockErrorHandler.mock.calls.length).toBe(1)
       expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should support async error handler (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should support async error handler`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       let authChanged: () => void
       const authChangePromise = new Promise<void>((res) => {
         authChanged = res
@@ -707,12 +680,12 @@ describe(`Shape`, () => {
       await authChangePromise
       // give some time for the error handler to modify the authorization header
       await vi.waitFor(() => expect(shapeStream.isConnected()).true)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should stop fetching and report an error if response is missing required headers (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should stop fetching and report an error if response is missing required headers`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       let url: string = ``
       let error1: Error, error2: Error
 
@@ -783,12 +756,12 @@ describe(`Shape`, () => {
         )
       })
       expect(shapeStreamLive.isConnected()).false
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should set isConnected to false after fetch if not subscribed (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should set isConnected to false after fetch if not subscribed`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: {
@@ -804,12 +777,12 @@ describe(`Shape`, () => {
       // We should no longer be connected because
       // the initial fetch finished and we've not subscribed to changes
       await vi.waitFor(() => expect(shapeStream.isConnected()).false)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should expose isLoading status (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should expose isLoading status`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: {
@@ -828,12 +801,9 @@ describe(`Shape`, () => {
       await waitForFetch(shapeStream)
 
       expect(shapeStream.isLoading()).false
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should expose lastOffset (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should expose lastOffset`, async ({ issuesTableUrl, aborter }) => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: {
@@ -853,15 +823,15 @@ describe(`Shape`, () => {
       await waitForFetch(shapeStream)
 
       shape.unsubscribeAll()
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should honour replica: full (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { issuesTableUrl, insertIssues, updateIssue, clearIssuesShape, aborter }
-    ) => {
+    it(`should honour replica: full`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      clearIssuesShape,
+      aborter,
+    }) => {
       const [id] = await insertIssues({ title: `first title` })
 
       const shapeStream = new ShapeStream({
@@ -911,12 +881,12 @@ describe(`Shape`, () => {
         // changed by the updates: 'full' param
         await clearIssuesShape(shapeStream.shapeHandle)
       }
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should support function-based params and headers (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    it(`should support function-based params and headers`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       const mockParamFn = vi.fn().mockReturnValue(`test-value`)
       const mockAsyncParamFn = vi.fn().mockResolvedValue(`test-value`)
       const mockHeaderFn = vi.fn().mockReturnValue(`test-value`)
@@ -963,15 +933,15 @@ describe(`Shape`, () => {
       // Verify the resolved values
       expect(await resolveValue(mockParamFn())).toBe(`test-value`)
       expect(await resolveValue(mockAsyncParamFn())).toBe(`test-value`)
-    }
-  )
+    })
 
-  it.for(fetchAndSse)(
-    `should support forceDisconnectAndRefresh() to force a sync (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { issuesTableUrl, insertIssues, updateIssue, waitForIssues, aborter }
-    ) => {
+    it(`should support forceDisconnectAndRefresh() to force a sync`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      waitForIssues,
+      aborter,
+    }) => {
       // Create initial data
       const [id] = await insertIssues({ title: `initial title` })
       await waitForIssues({ numChangesExpected: 1 })
@@ -1085,14 +1055,17 @@ describe(`Shape`, () => {
       // Verify we return to normal processing (long polling)
       await vi.waitFor(() => expect(pendingRequests.length).toBe(1)) // New long poll
       expect(pendingRequests[0][0].toString()).toContain(`live=true`)
-    }
-  )
-})
+    })
+  }
+)
 
-describe(`Shape - backwards compatible`, () => {
-  it.for(fetchAndSse)(
-    `should set isConnected to false on fetch error and back on true when fetch succeeds again (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+describe.for(fetchAndSse)(
+  `Shape - backwards compatible (liveSSE=$experimentalLiveSse)`,
+  ({ experimentalLiveSse }) => {
+    it(`should set isConnected to false on fetch error and back on true when fetch succeeds again`, async ({
+      issuesTableUrl,
+      aborter,
+    }) => {
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: {
@@ -1122,9 +1095,9 @@ describe(`Shape - backwards compatible`, () => {
       await sleep(400)
 
       expect(shapeStream.lastSyncedAt()).closeTo(Date.now(), 200)
-    }
-  )
-})
+    })
+  }
+)
 
 function waitForFetch(stream: ShapeStream): Promise<void> {
   let unsub = () => {}
