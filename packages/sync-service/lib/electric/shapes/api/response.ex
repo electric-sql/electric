@@ -278,9 +278,16 @@ defmodule Electric.Shapes.Api.Response do
 
   # For live SSE requests we want to cache for just under the
   # sse_timeout, in order to enable request collapsing.
-  defp put_cache_headers(conn, %__MODULE__{params: %{live: true, experimental_live_sse: true}, api: api}) do
+  defp put_cache_headers(conn, %__MODULE__{
+         params: %{live: true, experimental_live_sse: true},
+         api: api
+       }) do
     conn
-    |> put_cache_header("cache-control", "public, max-age=#{max(1, div(api.sse_timeout, 1000) - 1)}", api)
+    |> put_cache_header(
+      "cache-control",
+      "public, max-age=#{max(1, div(api.sse_timeout, 1000) - 1)}",
+      api
+    )
   end
 
   # For live requests we want short cache lifetimes and to update the live cursor
