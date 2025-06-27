@@ -326,7 +326,8 @@ defmodule Electric.Shapes.Api do
     # TODO: discuss returning a 307 redirect rather than a 409, the client
     # will have to detect this and throw out old data
 
-    error = Api.Error.must_refetch(request.params.experimental_live_sse)
+    %{params: %{experimental_live_sse: in_sse?}} = request
+    error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
 
     {:error,
      Response.error(request, error.message,
