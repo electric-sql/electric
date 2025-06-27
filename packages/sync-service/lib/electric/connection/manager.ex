@@ -600,13 +600,13 @@ defmodule Electric.Connection.Manager do
     # Try repairing the connection opts and try connecting again. If we're already using noSSL
     # and IPv4, the error will be propagated to a `shutdown_or_reconnect()` function call
     # further down below.
-    error = strip_exit_signal_stacktrace(reason)
     state = nillify_pid(state, pid)
+
     {step, _} = state.current_step
     conn_opts = connection_opts_for_step(step, state)
 
     repaired_conn_opts =
-      case error do
+      case reason do
         %Postgrex.Error{message: "ssl not available"} ->
           maybe_fallback_to_no_ssl(conn_opts)
 
@@ -625,7 +625,7 @@ defmodule Electric.Connection.Manager do
       state = update_connection_opts(step, repaired_conn_opts, state)
       {:noreply, state, {:continue, step}}
     else
-      shutdown_or_reconnect(error, state)
+      shutdown_or_reconnect(reason, state)
     end
   end
 
@@ -638,7 +638,6 @@ defmodule Electric.Connection.Manager do
         %State{replication_client_pid: pid, current_phase: :running} = state
       ) do
     state = nillify_pid(state, pid)
-    error = strip_exit_signal_stacktrace(reason)
 
     state = %{
       state
@@ -646,7 +645,7 @@ defmodule Electric.Connection.Manager do
         current_step: {:start_replication_client, nil}
     }
 
-    shutdown_or_reconnect(error, state)
+    shutdown_or_reconnect(reason, state)
   end
 
   # The most likely reason for any database connection to get closed after we've already opened a
@@ -982,7 +981,10 @@ defmodule Electric.Connection.Manager do
   end
 
   defp shutdown_or_reconnect(error, state) do
-    error = DbConnectionError.from_error(error)
+    error =
+      error
+      |> strip_exit_signal_stacktrace()
+      |> DbConnectionError.from_error()
 
     with false <- drop_slot_and_restart(error, state),
          false <- stop_if_fatal_error(error, state) do
@@ -1297,13 +1299,29 @@ defmodule Electric.Connection.Manager do
     :erlang.start_timer(@connection_status_check_interval, self(), {:check_status, type})
   end
 
-  # It's possible that the exit signal received from the replication client process includes a
-  # stacktrace. I haven't found the rule that would describe when the stacktrace is to be
-  # expected or not. This implementation is based on empirical evidence.
-  defp strip_exit_signal_stacktrace(signal) do
-    case signal do
-      {reason, stacktrace} when is_list(stacktrace) -> reason
-      reason -> reason
+  # It's possible that the exit signal received from an exiting process includes a
+  # stacktrace. This happens when the process crashes due an exception getting raised as
+  # opposed to exiting with a custom reason in an orderly fashion.
+  defp strip_exit_signal_stacktrace(error) do
+    case error do
+      {reason, stacktrace} when is_list(stacktrace) ->
+        if stacktrace?(stacktrace) do
+          reason
+        else
+          error
+        end
+
+      _ ->
+        error
+    end
+  end
+
+  defp stacktrace?(val) do
+    try do
+      _ = Exception.format_stacktrace(val)
+      true
+    rescue
+      _ -> false
     end
   end
 
