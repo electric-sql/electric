@@ -1017,12 +1017,6 @@ importers:
       '@databases/pg-migrations':
         specifier: ^5.0.3
         version: 5.0.3(typescript@5.6.3)
-      '@types/react':
-        specifier: ^18.3.3
-        version: 18.3.12
-      '@types/react-dom':
-        specifier: ^18.3.0
-        version: 18.3.1
       '@vitejs/plugin-vue':
         specifier: ^5.2.3
         version: 5.2.3(vite@5.4.10(@types/node@20.17.6)(terser@5.36.0))(vue@3.5.13(typescript@5.6.3))

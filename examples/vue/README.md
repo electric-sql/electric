@@ -22,7 +22,7 @@ pnpm run -r build
 Navigate back to this directory:
 
 ```shell
-cd examples/react
+cd examples/vue
 ```
 
 Start the example backend services using [Docker Compose](https://docs.docker.com/compose/):
