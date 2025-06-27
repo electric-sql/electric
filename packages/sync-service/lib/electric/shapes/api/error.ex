@@ -1,28 +1,22 @@
 defmodule Electric.Shapes.Api.Error do
   defstruct [:message, :status]
 
+  @must_refetch %{headers: %{control: "must-refetch"}}
+
   @doc """
-  When responding to client HTTP requests `must_refetch` should be called with `true`
-  if the fetch request is using SSE mode and `false` if not.
-  This ensures that the message is correctly formatted for the client
-  since SSE expects single events but long polling expects an array of messages.
-  IMPORTANT: Only use the version without arguments outside of HTTP requests.
+  When responding to client HTTP requests, the value of the `experimental_live_sse` option
+  passed to `must_refetch/1` (based on whether the fetch request is using SSE mode or not)
+  determines the formatting of the response body: SSE clients expect single events but long
+  polling clients expect an array of messages.
   """
-  def must_refetch(true) do
-    # In SSE mode we send individual events
-    # instead of an array of messages
-    %__MODULE__{
-      message: %{headers: %{control: "must-refetch"}},
-      status: 409
-    }
-  end
+  def must_refetch(opts) do
+    message =
+      if Keyword.get(opts, :experimental_sse_mode, false) do
+        @must_refetch
+      else
+        [@must_refetch]
+      end
 
-  def must_refetch(false) do
-    %__MODULE__{
-      message: [%{headers: %{control: "must-refetch"}}],
-      status: 409
-    }
+    %__MODULE__{message: message, status: 409}
   end
-
-  def must_refetch(), do: must_refetch(false)
 end

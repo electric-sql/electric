@@ -141,7 +141,7 @@ defmodule Electric.Shapes.Consumer do
 
     state =
       state
-      |> reply_to_snapshot_waiters({:error, Api.Error.must_refetch()})
+      |> reply_to_snapshot_waiters({:error, Api.Error.must_refetch([])})
       |> terminate_safely()
 
     {:reply, :ok, state}
