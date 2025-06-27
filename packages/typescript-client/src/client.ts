@@ -498,6 +498,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         fetchUrl,
         requestAbortController,
         headers: requestHeaders,
+        resumingFromPause: true,
       })
     } catch (e) {
       // Handle abort error triggered by refresh
@@ -705,11 +706,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
+    resumingFromPause?: boolean
   }): Promise<void> {
     if (
       this.#isUpToDate &&
       this.options.experimentalLiveSse &&
-      !this.#isRefreshing
+      !this.#isRefreshing &&
+      !opts.resumingFromPause
     ) {
       opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
       return this.#requestShapeSSE(opts)
@@ -777,7 +780,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // then it won't be caught by our `createFetchWithBackoff` wrapper
         // and instead we will get a raw AbortError here
         // which we need to turn into a `FetchBackoffAbortError`
-        // such that #start handles it correctly.
+        // such that #start handles it correctly.`
         throw new FetchBackoffAbortError()
       }
       throw error

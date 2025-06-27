@@ -425,114 +425,118 @@ describe(`Shape`, () => {
     }
   )
 
-  it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
-    issuesTableUrl,
-    aborter,
-  }) => {
-    const { pause, resume } = mockVisibilityApi()
+  it.for(fetchAndSse)(
+    `should set isConnected to false when the stream is paused an back on true when the fetch succeeds again (liveSSE=$experimentalLiveSse)`,
+    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+      const { pause, resume } = mockVisibilityApi()
 
-    const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      signal: aborter.signal,
-    })
-
-    const unsubscribe = shapeStream.subscribe(() => unsubscribe())
-
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
-
-    pause()
-    await vi.waitFor(() => expect(shapeStream.isConnected()).false)
-
-    resume()
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
-  })
-
-  it(`should support pausing the stream and resuming it`, async ({
-    issuesTableUrl,
-    insertIssues,
-    aborter,
-  }) => {
-    const { pause, resume } = mockVisibilityApi()
-    const shapeStream = new ShapeStream({
-      url: `${BASE_URL}/v1/shape`,
-      params: {
-        table: issuesTableUrl,
-      },
-      signal: aborter.signal,
-    })
-    const shape = new Shape(shapeStream)
-
-    function makePromise<T>() {
-      let resolve: (value: T) => void = () => {}
-
-      const promise = new Promise<T>((res) => {
-        resolve = res
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        experimentalLiveSse,
       })
 
-      return {
-        promise,
-        resolve,
-      }
+      const unsubscribe = shapeStream.subscribe(() => unsubscribe())
+
+      await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+
+      pause()
+      await vi.waitFor(() => expect(shapeStream.isConnected()).false)
+
+      resume()
+      await vi.waitFor(() => expect(shapeStream.isConnected()).true)
     }
+  )
 
-    const promises = [makePromise<Row[]>(), makePromise<Row[]>()]
-    let i = 0
+  it.for(fetchAndSse)(
+    `should support pausing the stream and resuming it (liveSSE=$experimentalLiveSse)`,
+    async (
+      { experimentalLiveSse },
+      { issuesTableUrl, insertIssues, aborter }
+    ) => {
+      const { pause, resume } = mockVisibilityApi()
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        experimentalLiveSse,
+      })
+      const shape = new Shape(shapeStream)
 
-    shape.subscribe(({ rows }) => {
-      const prom = promises[i]
-      if (prom) {
-        prom.resolve(rows)
+      function makePromise<T>() {
+        let resolve: (value: T) => void = () => {}
+
+        const promise = new Promise<T>((res) => {
+          resolve = res
+        })
+
+        return {
+          promise,
+          resolve,
+        }
       }
-      i++
-    })
 
-    // Insert an issue
-    const [id] = await insertIssues({ title: `test title` })
+      const promises = [makePromise<Row[]>(), makePromise<Row[]>()]
+      let i = 0
 
-    const expectedValue = [
-      {
-        id: id,
-        title: `test title`,
-        priority: 10,
-      },
-    ]
+      shape.subscribe(({ rows }) => {
+        const prom = promises[i]
+        if (prom) {
+          prom.resolve(rows)
+        }
+        i++
+      })
 
-    // Wait for the update to arrive
-    const value = await promises[0].promise
+      // Insert an issue
+      const [id] = await insertIssues({ title: `test title` })
 
-    expect(value).toEqual(expectedValue)
+      const expectedValue = [
+        {
+          id: id,
+          title: `test title`,
+          priority: 10,
+        },
+      ]
 
-    pause()
-    await vi.waitFor(() => expect(shapeStream.isConnected()).false)
+      // Wait for the update to arrive
+      const value = await promises[0].promise
 
-    // Now that the stream is paused, insert another issue
-    const [id2] = await insertIssues({ title: `other title` })
+      expect(value).toEqual(expectedValue)
 
-    // The update should not arrive while paused
-    const timeout = new Promise((resolve) =>
-      setTimeout(() => resolve(`timeout`), 100)
-    )
-    await expect(Promise.race([promises[1].promise, timeout])).resolves.toBe(
-      `timeout`
-    )
+      pause()
+      await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
-    // Resume the stream
-    resume()
+      // Now that the stream is paused, insert another issue
+      const [id2] = await insertIssues({ title: `other title` })
 
-    // Now the update should arrive
-    const value2 = await promises[1].promise
-    expect(value2).toEqual([
-      ...expectedValue,
-      {
-        id: id2,
-        title: `other title`,
-        priority: 10,
-      },
-    ])
-  })
+      // The update should not arrive while paused
+      const timeout = new Promise((resolve) =>
+        setTimeout(() => resolve(`timeout`), 100)
+      )
+      await expect(Promise.race([promises[1].promise, timeout])).resolves.toBe(
+        `timeout`
+      )
+
+      // Resume the stream
+      resume()
+
+      // Now the update should arrive
+      const value2 = await promises[1].promise
+      expect(value2).toEqual([
+        ...expectedValue,
+        {
+          id: id2,
+          title: `other title`,
+          priority: 10,
+        },
+      ])
+    }
+  )
 
   it.for(fetchAndSse)(
     `should not throw error if an error handler is provided (liveSSE=$experimentalLiveSse)`,
