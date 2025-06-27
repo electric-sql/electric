@@ -10,7 +10,7 @@ defmodule Electric.Shapes do
   @doc """
   Get the snapshot followed by the log.
   """
-  def get_merged_log_stream(config, shape_handle, opts) do
+  def get_merged_log_stream(config, shape_handle, experimental_live_sse, opts) do
     {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
     storage = shape_storage(config, shape_handle)
     offset = Access.get(opts, :since, LogOffset.before_all())
@@ -23,7 +23,7 @@ defmodule Electric.Shapes do
     else
       # If we have a shape handle, but no shape, it means the shape was deleted. Send a 409
       # and expect the client to retry - if the state of the world allows, it'll get a new handle.
-      {:error, Electric.Shapes.Api.Error.must_refetch()}
+      {:error, Electric.Shapes.Api.Error.must_refetch(experimental_live_sse)}
     end
   end
 

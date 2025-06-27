@@ -71,7 +71,6 @@ defmodule Electric.Shapes.Api do
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
   @offset_out_of_bounds %{offset: ["out of bounds for this shape"]}
-  @must_refetch [%{headers: %{control: "must-refetch"}}]
 
   # Need to implement Access behaviour because we use that to extract config
   # when using shapes api
@@ -327,19 +326,12 @@ defmodule Electric.Shapes.Api do
     # TODO: discuss returning a 307 redirect rather than a 409, the client
     # will have to detect this and throw out old data
 
-    # In SSE mode we send the must refetch object as an event
-    # instead of a singleton array containing that object
-    must_refetch =
-      if request.params.experimental_live_sse do
-        hd(@must_refetch)
-      else
-        @must_refetch
-      end
+    error = Api.Error.must_refetch(request.params.experimental_live_sse)
 
     {:error,
-     Response.error(request, must_refetch,
+     Response.error(request, error.message,
        handle: active_shape_handle,
-       status: 409
+       status: error.status
      )}
   end
 
@@ -505,12 +497,15 @@ defmodule Electric.Shapes.Api do
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
       global_last_seen_lsn: global_last_seen_lsn,
-      params: %{offset: offset, live: live?},
+      params: %{offset: offset, live: live?, experimental_live_sse: experimental_live_sse},
       api: api,
       response: response
     } = request
 
-    case Shapes.get_merged_log_stream(api, shape_handle, since: offset, up_to: chunk_end_offset) do
+    case Shapes.get_merged_log_stream(api, shape_handle, experimental_live_sse,
+           since: offset,
+           up_to: chunk_end_offset
+         ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do
           request
@@ -539,10 +534,11 @@ defmodule Electric.Shapes.Api do
       {:error, :unknown} ->
         # the shape has been deleted between the request validation and the attempt
         # to return the log stream
-        Response.error(request, @must_refetch, status: 409)
+        error = Api.Error.must_refetch(experimental_live_sse)
+        Response.error(request, error.message, status: error.status)
 
       {:error, %SnapshotError{type: :schema_changed}} ->
-        error = Api.Error.must_refetch()
+        error = Api.Error.must_refetch(experimental_live_sse)
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
@@ -592,7 +588,7 @@ defmodule Electric.Shapes.Api do
       new_changes_ref: ref,
       last_offset: last_offset,
       handle: shape_handle,
-      params: %{shape_definition: shape_def},
+      params: %{shape_definition: shape_def, experimental_live_sse: experimental_live_sse},
       api: %{long_poll_timeout: long_poll_timeout} = api
     } = request
 
@@ -627,13 +623,16 @@ defmodule Electric.Shapes.Api do
         |> do_serve_shape_log()
 
       {^ref, :shape_rotation, new_handle} ->
-        Response.error(request, @must_refetch,
+        error = Api.Error.must_refetch(experimental_live_sse)
+
+        Response.error(request, error.message,
           handle: new_handle,
-          status: 409
+          status: error.status
         )
 
       {^ref, :shape_rotation} ->
-        Response.error(request, @must_refetch, status: 409)
+        error = Api.Error.must_refetch(experimental_live_sse)
+        Response.error(request, error.message, status: error.status)
     after
       # If we timeout, return an up-to-date message
       long_poll_timeout ->
@@ -722,7 +721,12 @@ defmodule Electric.Shapes.Api do
         # as per `determine_log_chunk_offset/1`.
         end_offset = updated_request.chunk_end_offset
 
-        case Shapes.get_merged_log_stream(updated_request.api, shape_handle,
+        experimental_live_sse = true
+
+        case Shapes.get_merged_log_stream(
+               updated_request.api,
+               shape_handle,
+               experimental_live_sse,
                since: since_offset,
                up_to: end_offset
              ) do
