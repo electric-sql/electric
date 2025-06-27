@@ -79,11 +79,11 @@ describe(`Shape`, () => {
           params: {
             table: `foo`,
             // @ts-expect-error should not allow reserved parameters
-          live: `false`,
+            live: `false`,
           },
           experimentalLiveSse,
           signal: aborter.signal,
-      })
+        })
         new Shape(shapeStream)
       }).toThrowErrorMatchingSnapshot()
     }

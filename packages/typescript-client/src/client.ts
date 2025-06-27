@@ -486,7 +486,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#state = `active`
 
     const { url, signal } = this.options
-    const { fetchUrl, requestHeaders } = await this.#constructUrl(url, resumingFromPause)
+    const { fetchUrl, requestHeaders } = await this.#constructUrl(
+      url,
+      resumingFromPause
+    )
     const abortListener = await this.#createAbortListener(signal)
     const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
