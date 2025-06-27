@@ -1,3 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Shape > should throw on a reserved parameter 1`] = `[ReservedParamError: Cannot use reserved Electric parameter names in custom params: live]`;
+exports[`Shape  (liveSSE=false) > should throw on a reserved parameter 1`] = `[ReservedParamError: Cannot use reserved Electric parameter names in custom params: live]`;
+
+exports[`Shape  (liveSSE=true) > should throw on a reserved parameter 1`] = `[ReservedParamError: Cannot use reserved Electric parameter names in custom params: live]`;
