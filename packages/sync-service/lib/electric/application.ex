@@ -14,7 +14,7 @@ defmodule Electric.Application do
 
       Supervisor.start_link(
         children_application(),
-        [auto_shutdown: :any_significant] ++ supervisor_opts
+        supervisor_opts
       )
     end
   end
