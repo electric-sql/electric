@@ -17,8 +17,6 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
 
   alias Electric.Postgres.Lsn
 
-  import Bitwise, only: [<<<: 2, band: 2]
-
   @doc """
   Parses logical replication messages from Postgres pgoutput plugin
 
@@ -186,13 +184,13 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
   end
 
   defp decode_message_impl(
-         <<"T", number_of_relations::integer-32, options::integer-8, column_ids::binary>>
+         <<"T", number_of_relations::integer-32, options::bitstring-8, column_ids::binary>>
        ) do
     truncated_relations =
       for relation_id_bin <- column_ids |> :binary.bin_to_list() |> Enum.chunk_every(4),
           do: relation_id_bin |> :binary.list_to_bin() |> :binary.decode_unsigned()
 
-    decoded_options = decode_bitflags(options, [{1, :restart_identity}, {0, :cascade}])
+    decoded_options = decode_truncate_options(options)
 
     %Truncate{
       number_of_relations: number_of_relations,
@@ -272,13 +270,13 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
 
   defp decode_lsn(bin), do: Lsn.decode_bin(bin)
 
-  defp decode_bitflags(bitfield, flag_defs) do
-    Enum.reduce(flag_defs, [], fn {flag_pos, flag_val}, acc ->
-      if band(bitfield, 1 <<< flag_pos) > 0 do
-        [flag_val | acc]
-      else
-        acc
-      end
-    end)
+  defp decode_truncate_options(<<_::6, restart_identity::1, cascade::1>>) do
+    Enum.reject(
+      [
+        if(cascade == 1, do: :cascade),
+        if(restart_identity == 1, do: :restart_identity)
+      ],
+      &is_nil/1
+    )
   end
 end
