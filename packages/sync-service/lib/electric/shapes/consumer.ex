@@ -10,10 +10,8 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
-  alias Electric.ShapeCache.LogChunker
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
   alias Electric.SnapshotError
@@ -22,16 +20,7 @@ defmodule Electric.Shapes.Consumer do
 
   require Logger
 
-  @initial_log_state %{current_chunk_byte_size: 0, current_txn_bytes: 0}
-  @type log_state :: %{
-          current_chunk_byte_size: non_neg_integer(),
-          current_txn_bytes: non_neg_integer()
-        }
-
-  def name(%{
-        stack_id: stack_id,
-        shape_handle: shape_handle
-      }) do
+  def name(%{stack_id: stack_id, shape_handle: shape_handle}) do
     name(stack_id, shape_handle)
   end
 
@@ -69,6 +58,7 @@ defmodule Electric.Shapes.Consumer do
 
   def init(config) do
     Process.set_label({:consumer, config.shape_handle})
+    Process.flag(:trap_exit, true)
 
     %{
       log_producer: producer,
@@ -80,10 +70,7 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    :ok = ShapeCache.Storage.initialise(storage)
-
-    # Store the shape definition to ensure we can restore it
-    :ok = ShapeCache.Storage.set_shape_definition(config.shape, storage)
+    writer = ShapeCache.Storage.init_writer!(storage, config.shape)
 
     {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
@@ -107,13 +94,13 @@ defmodule Electric.Shapes.Consumer do
       Map.merge(config, %{
         latest_offset: normalized_latest_offset,
         pg_snapshot: pg_snapshot,
-        log_state: @initial_log_state,
         inspector: config.inspector,
         snapshot_started: false,
         awaiting_snapshot_start: [],
         buffer: [],
         monitors: [],
-        cleaned?: false
+        cleaned?: false,
+        writer: writer
       })
 
     :ok =
@@ -225,9 +212,22 @@ defmodule Electric.Shapes.Consumer do
     {:stop, reason, state}
   end
 
+  def handle_info({ShapeCache.Storage, message}, state) do
+    writer = ShapeCache.Storage.apply_message(state.writer, message)
+    {:noreply, %{state | writer: writer}}
+  end
+
+  # We're trapping exists so that `terminate` is called to clean up the writer,
+  # otherwise we respect the OTP exit protocol.
+  def handle_info({:EXIT, _from, reason}, state) do
+    {:stop, reason, state}
+  end
+
   @impl GenServer
   def terminate(reason, state) do
     Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
+
+    ShapeCache.Storage.terminate(state.writer)
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
@@ -328,34 +328,18 @@ defmodule Electric.Shapes.Consumer do
     end)
   end
 
-  defp do_handle_txn(%Transaction{} = txn, state) do
+  defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
     %{
       shape: shape,
       shape_handle: shape_handle,
-      log_state: log_state,
-      chunk_bytes_threshold: chunk_bytes_threshold,
       shape_status: {shape_status, shape_status_state},
-      storage: storage
+      writer: writer
     } = state
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
-    %{xid: xid, changes: changes, lsn: _lsn} = txn
-
-    {relevant_changes, {num_changes, has_truncate?}} =
-      Enum.flat_map_reduce(changes, {0, false}, fn
-        %Changes.TruncatedRelation{}, _ ->
-          {:halt, {0, true}}
-
-        change, {ops, false} ->
-          case Shape.convert_change(shape, change) do
-            [] -> {[], {ops, false}}
-            [change] -> {[change], {ops + 1, false}}
-          end
-      end)
-
-    cond do
-      has_truncate? ->
+    case filter_changes(changes, shape) do
+      :includes_truncate ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
         #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
@@ -365,20 +349,23 @@ defmodule Electric.Shapes.Consumer do
 
         terminate_safely(state)
 
-        {:halt, notify(txn, %{state | log_state: @initial_log_state})}
+        {:halt, notify(txn, state)}
 
-      num_changes > 0 ->
-        {log_entries, new_log_state, last_log_offset} =
-          prepare_log_entries(relevant_changes, xid, shape, log_state, chunk_bytes_threshold)
+      {_, 0, _} ->
+        Logger.debug(fn ->
+          "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
+        end)
 
+        {:cont, state}
+
+      {changes, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
 
-        # TODO: what's a graceful way to handle failure to append to log?
-        #       Right now we'll just fail everything
-        :ok = ShapeCache.Storage.append_to_log!(log_entries, storage)
+        {lines, total_size} = prepare_log_entries(changes, xid, shape)
+        writer = ShapeCache.Storage.append_to_log!(lines, writer)
 
         OpenTelemetry.add_span_attributes(%{
-          num_bytes: new_log_state.current_txn_bytes,
+          num_bytes: total_size,
           actual_num_changes: num_changes
         })
 
@@ -393,7 +380,7 @@ defmodule Electric.Shapes.Consumer do
           [:electric, :storage, :transaction_stored],
           %{
             duration: System.monotonic_time() - timestamp,
-            bytes: new_log_state.current_txn_bytes,
+            bytes: total_size,
             count: 1,
             operations: num_changes,
             replication_lag: lag
@@ -401,14 +388,7 @@ defmodule Electric.Shapes.Consumer do
           Map.new(shape_attrs(state.shape_handle, state.shape))
         )
 
-        {:cont, notify(txn, %{state | log_state: new_log_state})}
-
-      true ->
-        Logger.debug(fn ->
-          "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
-        end)
-
-        {:cont, state}
+        {:cont, notify(txn, %{state | writer: writer})}
     end
   end
 
@@ -509,61 +489,37 @@ defmodule Electric.Shapes.Consumer do
     state
   end
 
-  @spec prepare_log_entries(
-          Enumerable.t(Electric.Replication.Changes.data_change()),
-          non_neg_integer() | nil,
-          Shape.t(),
-          log_state(),
-          non_neg_integer()
-        ) :: {Enumerable.t(ShapeCache.Storage.log_item()), log_state(), LogOffset.t()}
-  defp prepare_log_entries(
-         changes,
-         xid,
-         shape,
-         log_state,
-         chunk_bytes_threshold
-       ) do
-    log_state = %{
-      current_chunk_byte_size: log_state.current_chunk_byte_size,
-      current_txn_bytes: 0,
-      last_log_offset: LogOffset.before_all()
-    }
+  # Apply shape filter to keep only relevant changes, returning the list of changes.
+  # Marks the last change, and infers the last offset after possible splits.
+  defp filter_changes(changes, shape, change_acc \\ [], total_ops_acc \\ 0)
+  defp filter_changes([], _shape, [], 0), do: {[], 0, nil}
 
-    {log_items, new_log_state} =
-      changes
-      |> Stream.flat_map(
-        &LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation), shape.replica)
-      )
-      |> Utils.flat_map_reduce_mark_last(log_state, fn {offset, log_item},
-                                                       last?,
-                                                       %{
-                                                         current_chunk_byte_size: chunk_size,
-                                                         current_txn_bytes: txn_bytes
-                                                       } = state ->
-        json_log_item =
-          if(last?, do: put_in(log_item, [:headers, :last], true), else: log_item)
-          |> Jason.encode!()
+  defp filter_changes([], _shape, [change | rest], total_ops),
+    do:
+      {Enum.reverse([%{change | last?: true} | rest]), total_ops,
+       LogItems.expected_offset_after_split(change)}
 
-        item_byte_size = byte_size(json_log_item)
+  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _),
+    do: :includes_truncate
 
-        state = %{state | current_txn_bytes: txn_bytes + item_byte_size, last_log_offset: offset}
-        line_tuple = {offset, log_item.key, log_item.headers.operation, json_log_item}
+  defp filter_changes([change | rest], shape, change_acc, total_ops) do
+    case Shape.convert_change(shape, change) do
+      [] -> filter_changes(rest, shape, change_acc, total_ops)
+      [change] -> filter_changes(rest, shape, [change | change_acc], total_ops + 1)
+    end
+  end
 
-        case LogChunker.fit_into_chunk(item_byte_size, chunk_size, chunk_bytes_threshold) do
-          {:ok, new_chunk_size} ->
-            {[line_tuple], %{state | current_chunk_byte_size: new_chunk_size}}
-
-          {:threshold_exceeded, new_chunk_size} ->
-            {
-              [line_tuple, {:chunk_boundary, offset}],
-              %{state | current_chunk_byte_size: new_chunk_size}
-            }
-        end
-      end)
-
-    {last_log_offset, new_log_state} = Map.pop!(new_log_state, :last_log_offset)
-
-    {log_items, new_log_state, last_log_offset}
+  defp prepare_log_entries(changes, xid, shape) do
+    changes
+    |> Stream.flat_map(
+      &LogItems.from_change(&1, xid, Shape.pk(shape, &1.relation), shape.replica)
+    )
+    |> Enum.map_reduce(0, fn {offset, %{key: key, headers: %{operation: operation}} = log_item},
+                             total_size ->
+      json_line = Jason.encode!(log_item)
+      line_tuple = {offset, key, operation, json_line}
+      {line_tuple, total_size + byte_size(json_line)}
+    end)
   end
 
   defp shape_attrs(shape_handle, shape) do

@@ -1,4 +1,5 @@
 defmodule Electric.ShapeCache.Storage do
+  @moduledoc false
   import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
 
   alias Electric.Shapes.Shape
@@ -10,7 +11,6 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type xmin :: Electric.ShapeCacheBehaviour.xmin()
   @type pg_snapshot :: %{
           xmin: pos_integer(),
           xmax: pos_integer(),
@@ -21,6 +21,7 @@ defmodule Electric.ShapeCache.Storage do
 
   @type compiled_opts :: term()
   @type shape_opts :: term()
+  @type writer_state :: term()
 
   @type storage :: {module(), compiled_opts()}
   @type shape_storage :: {module(), shape_opts()}
@@ -29,7 +30,6 @@ defmodule Electric.ShapeCache.Storage do
   @type log_item ::
           {LogOffset.t(), key :: String.t(), operation_type :: operation_type(),
            Querying.json_iodata()}
-          | {:chunk_boundary | LogOffset.t()}
   @type log :: Enumerable.t(Querying.json_iodata())
 
   @type row :: list()
@@ -40,14 +40,14 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Initialise shape-specific opts from the shared, global, configuration"
   @callback for_shape(shape_handle(), compiled_opts()) :: shape_opts()
 
+  @doc "Start any stack-wide processes required for storage to operate"
+  @callback stack_start_link(compiled_opts()) :: GenServer.on_start()
+
   @doc "Start any processes required to run the storage backend"
   @callback start_link(shape_opts()) :: GenServer.on_start()
 
-  @doc "Run any initial setup tasks"
-  @callback initialise(shape_opts()) :: :ok
-
-  @doc "Store the shape definition"
-  @callback set_shape_definition(Shape.t(), shape_opts()) :: :ok
+  @doc "Prepare the in-process writer state, returning an accumulator."
+  @callback init_writer!(shape_opts(), shape_definition :: Shape.t()) :: writer_state()
 
   @doc "Retrieve all stored shapes"
   @callback get_all_stored_shapes(compiled_opts()) ::
@@ -90,7 +90,8 @@ defmodule Electric.ShapeCache.Storage do
   If the backend fails to write within the expected time, or some other error
   occurs, then this should raise.
   """
-  @callback append_to_log!(Enumerable.t(log_item()), shape_opts()) :: :ok | no_return()
+  @callback append_to_log!(Enumerable.t(log_item()), writer_state()) ::
+              writer_state() | no_return()
 
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(offset :: LogOffset.t(), max_offset :: LogOffset.t(), shape_opts()) ::
@@ -105,27 +106,58 @@ defmodule Electric.ShapeCache.Storage do
   """
   @callback get_chunk_end_log_offset(LogOffset.t(), shape_opts()) :: LogOffset.t() | nil
 
-  @doc "Clean up snapshots/logs for a shape handle"
-  @callback cleanup!(shape_opts()) :: :ok
+  @doc """
+  Close all active resources and persist any pending writes on system/process shutdown
+  """
+  @callback terminate(writer_state()) :: term()
 
   @doc """
   Clean up snapshots/logs for a shape handle by deleting whole directory.
 
-  Does not require any extra storage processes to be running, but should only
-  be used if the shape is known to not be in use to avoid concurrency issues.
+  Is expected to be only called once the storage has been stopped.
   """
-  @callback unsafe_cleanup!(shape_opts()) :: :ok
+  @callback cleanup!(shape_opts()) :: any()
+
+  @doc """
+  Compact some prefix of the log collapsing together update operations
+  """
+  @callback compact(shape_opts()) :: :ok
+
+  @doc """
+  Compact operations in the log up to the given offset
+  """
+  @callback compact(shape_opts(), LogOffset.t()) :: :ok
 
   @behaviour __MODULE__
 
   @last_log_offset LogOffset.last()
 
+  @doc """
+  Apply a message to the writer state.
+
+  In-process writer may send messages to self, in the form of
+  `{#{__MODULE__}, message}`, which must be handled using this function
+  and the return of the function must be used as the new writer state.
+  """
+  def apply_message({mod, writer_state}, {m, f, a}) do
+    {mod, apply(m, f, [writer_state | a])}
+  end
+
   @spec child_spec(shape_storage()) :: Supervisor.child_spec()
   def child_spec({module, shape_opts}) do
     %{
-      id: module,
+      id: {module, :stack_wide},
       start: {module, :start_link, [shape_opts]},
       restart: :transient
+    }
+  end
+
+  @spec stack_child_spec(storage()) :: Supervisor.child_spec()
+  def stack_child_spec({module, compiled_opts}) do
+    %{
+      id: module,
+      start: {module, :stack_start_link, [compiled_opts]},
+      restart: :permanent
     }
   end
 
@@ -140,18 +172,18 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
+  def stack_start_link({mod, opts}) do
+    mod.stack_start_link(opts)
+  end
+
+  @impl __MODULE__
   def start_link({mod, shape_opts}) do
     mod.start_link(shape_opts)
   end
 
   @impl __MODULE__
-  def initialise({mod, shape_opts}) do
-    mod.initialise(shape_opts)
-  end
-
-  @impl __MODULE__
-  def set_shape_definition(shape, {mod, shape_opts}) do
-    mod.set_shape_definition(shape, shape_opts)
+  def init_writer!({mod, shape_opts}, shape_definition) do
+    {mod, mod.init_writer!(shape_opts, shape_definition)}
   end
 
   @impl __MODULE__
@@ -191,7 +223,7 @@ defmodule Electric.ShapeCache.Storage do
 
   @impl __MODULE__
   def append_to_log!(log_items, {mod, shape_opts}) do
-    mod.append_to_log!(log_items, shape_opts)
+    {mod, mod.append_to_log!(log_items, shape_opts)}
   end
 
   @impl __MODULE__
@@ -206,17 +238,19 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
+  def terminate({mod, writer_state}) do
+    mod.terminate(writer_state)
+  end
+
+  @impl __MODULE__
   def cleanup!({mod, shape_opts}) do
     mod.cleanup!(shape_opts)
   end
 
   @impl __MODULE__
-  def unsafe_cleanup!({mod, shape_opts}) do
-    mod.unsafe_cleanup!(shape_opts)
-  end
-
   def compact({mod, shape_opts}), do: mod.compact(shape_opts)
 
+  @impl __MODULE__
   def compact({mod, shape_opts}, offset) when is_struct(offset, LogOffset),
     do: mod.compact(shape_opts, offset)
 end

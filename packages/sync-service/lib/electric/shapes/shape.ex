@@ -64,13 +64,13 @@ defmodule Electric.Shapes.Shape do
           version: non_neg_integer(),
           root_table: json_relation(),
           root_table_id: non_neg_integer(),
-          root_pk: [String.t(), ...],
+          root_pks: [String.t(), ...],
           root_column_count: non_neg_integer(),
           where: String.t(),
           selected_columns: [String.t(), ...],
           flags: %{optional(flag()) => boolean()},
           replica: String.t(),
-          storage: %{required(String.t()) => String.t()}
+          storage: storage_config() | nil
         }
 
   @doc """

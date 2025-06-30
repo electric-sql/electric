@@ -3,9 +3,10 @@ defmodule Support.ComponentSetup do
   import ExUnit.Assertions
   import Support.TestUtils, only: [full_test_name: 1]
 
+  alias Electric.ShapeCache.Storage
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
-  alias Electric.ShapeCache.FileStorage
+  alias Electric.ShapeCache.PureFileStorage
   alias Electric.ShapeCache.InMemoryStorage
   alias Electric.Postgres.Inspector.EtsInspector
 
@@ -79,14 +80,13 @@ defmodule Support.ComponentSetup do
     %{pool: :no_pool}
   end
 
-  def with_cub_db_storage(ctx) do
-    storage_opts =
-      FileStorage.shared_opts(
-        storage_dir: ctx.tmp_dir,
-        stack_id: ctx.stack_id
-      )
+  def with_pure_file_storage(ctx) do
+    storage =
+      Storage.shared_opts({PureFileStorage, storage_dir: ctx.tmp_dir, stack_id: ctx.stack_id})
 
-    %{storage: {FileStorage, storage_opts}}
+    start_supervised!(Storage.stack_child_spec(storage), restart: :temporary)
+
+    %{storage: storage}
   end
 
   def with_persistent_kv(_ctx) do
@@ -314,7 +314,7 @@ defmodule Support.ComponentSetup do
       pid: start_supervised!(Electric.PersistentKV.Memory, restart: :temporary)
     }
 
-    storage = {FileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
+    storage = {PureFileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
 
     stack_events_registry = Electric.stack_events_registry()
 

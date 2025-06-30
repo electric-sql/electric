@@ -83,14 +83,8 @@ defmodule Electric.ShapeCache.FileStorage do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
-  def child_spec(%FS{} = opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      type: :worker,
-      restart: :permanent
-    }
-  end
+  @impl Electric.ShapeCache.Storage
+  def stack_start_link(_), do: :ignore
 
   @impl Electric.ShapeCache.Storage
   def start_link(%FS{cubdb_dir: dir, db: db} = opts) do
@@ -118,7 +112,7 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def initialise(%FS{} = opts) do
+  def init_writer!(%FS{} = opts, shape_definition) do
     stored_version = stored_version(opts)
     db = validate_db_process!(opts.db)
 
@@ -137,14 +131,16 @@ defmodule Electric.ShapeCache.FileStorage do
     end
 
     CubDB.put(db, @version_key, @version)
+    set_shape_definition(shape_definition, opts)
+
+    opts
   end
 
   defp old_snapshot_path(opts) do
     Path.join([opts.snapshot_dir, "snapshot.jsonl"])
   end
 
-  @impl Electric.ShapeCache.Storage
-  def set_shape_definition(shape, %FS{} = opts) do
+  defp set_shape_definition(shape, %FS{} = opts) do
     file_path = shape_definition_path(opts)
     encoded_shape = Jason.encode!(shape)
 
@@ -401,7 +397,7 @@ defmodule Electric.ShapeCache.FileStorage do
       error -> raise(error)
     end
 
-    :ok
+    opts
   end
 
   @impl Electric.ShapeCache.Storage
@@ -443,6 +439,7 @@ defmodule Electric.ShapeCache.FileStorage do
   def get_log_stream(%LogOffset{} = offset, max_offset, %FS{} = opts),
     do: stream_log_chunk(offset, max_offset, opts)
 
+  @impl Electric.ShapeCache.Storage
   def compact(%FS{} = opts) do
     opts.db
     |> validate_db_process!()
@@ -464,6 +461,7 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
+  @impl Electric.ShapeCache.Storage
   def compact(%FS{} = opts, %LogOffset{} = upper_bound) do
     # We consider log before the stored upper bound live & uncompacted. This means that concurrent readers
     # will be able to read out everything they want while the compaction is happening and we're only
@@ -751,15 +749,10 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def cleanup!(%FS{} = opts) do
-    # can't delete the data_dir here because the CubDb instance is still running,
-    # and trying to delete the parent directory will fail since the files inside
-    # are still in use
-    :ok = cleanup_internals!(opts)
-  end
+  def terminate(%FS{} = _opts), do: :ok
 
   @impl Electric.ShapeCache.Storage
-  def unsafe_cleanup!(%FS{} = opts) do
+  def cleanup!(%FS{} = opts) do
     # do a quick touch operation to exclude this directory from `get_all_stored_shapes`
     marker_file = deletion_marker_path(opts.base_path, opts.shape_handle)
 
