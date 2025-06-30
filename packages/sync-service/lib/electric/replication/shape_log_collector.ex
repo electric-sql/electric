@@ -99,8 +99,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         persistent_replication_data_opts: persistent_replication_data_opts,
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
-        filter: Filter.new(Keyword.new(opts)),
-        timer: nil
+        filter: Filter.new(Keyword.new(opts))
       })
 
     {:ok, state}
@@ -163,7 +162,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.start_interval("shape_log_collector.transaction_message_response")
 
-    {:reply, OpenTelemetry.extract_interval_timer(), %{state | timer: nil}}
+    {:reply, OpenTelemetry.extract_interval_timer(), state}
   end
 
   def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do
