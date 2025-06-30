@@ -132,10 +132,8 @@ defmodule Support.PgExpressionGenerator do
 
     op_generators
     |> Enum.concat([
+      # this applies to every type
       {:unary_op, is_null_op_gen()}
-      # {:comparison_op, comparison_op_gen()},
-      # {:range_op, range_comparison_op_gen()},
-      # {:membership_op, membership_op_gen()}
     ])
     |> Enum.map(fn
       {:combine_op, op_gen} -> compose_op(type_gen, op_gen)
