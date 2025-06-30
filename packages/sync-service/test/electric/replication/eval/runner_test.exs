@@ -185,14 +185,47 @@ defmodule Electric.Replication.Eval.RunnerTest do
     end
   end
 
-  describe "execute/2 property test" do
-    setup [:with_unique_db]
+  describe "execute/2 against PG results" do
+    setup [:with_shared_db]
 
-    property "PostgreSQL clause behaves the same in both implementations", %{pool: pool} do
+    @max_runs 10_000
+    @max_run_time 1_000
+
+    property "numeric expressions", %{pool: pool} do
       check all(
-              clause <- PgExpressionGenerator.postgres_expression(),
-              max_runs: 1_000_000,
-              max_run_time: 600
+              clause <- PgExpressionGenerator.numeric_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    property "string expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.string_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    property "bool expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.bool_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    property "array expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.array_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
             ) do
         assert_runner_and_oracle_match(clause, pool)
       end

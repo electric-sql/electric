@@ -17,7 +17,7 @@ defmodule Support.PgExpressionGenerator do
   defp str_gen,
     do:
       StreamData.string(:ascii, max_length: 10)
-      |> map(&"'#{String.replace(&1, "'", "''")}'")
+      |> map(&"'#{String.replace(&1, "'", "''") |> String.replace("\\", "\\\\")}'")
 
   defp array_gen(type_gen, opts) do
     dimension = Access.get(opts, :dimension, 1)
@@ -149,7 +149,7 @@ defmodule Support.PgExpressionGenerator do
     |> one_of()
   end
 
-  defp numeric_expression_gen do
+  def numeric_expression do
     one_of([
       expression_gen(numeric_gen() |> nullable_type_gen(), [
         {:combine_op, numeric_op_gen()},
@@ -180,7 +180,7 @@ defmodule Support.PgExpressionGenerator do
     ])
   end
 
-  defp string_expression_gen do
+  def string_expression do
     expression_gen(str_gen() |> nullable_type_gen(), [
       {:combine_op, string_op_gen()},
       {:function_op, string_function_op_gen()},
@@ -192,7 +192,7 @@ defmodule Support.PgExpressionGenerator do
     ])
   end
 
-  defp bool_expression_gen do
+  def bool_expression do
     expression_gen(bool_gen() |> nullable_type_gen(), [
       {:comparison_op, bool_comparison_op_gen()},
       {:unary_op, bool_unary_op_gen()},
@@ -205,7 +205,7 @@ defmodule Support.PgExpressionGenerator do
     ])
   end
 
-  defp array_expression_gen(opts \\ []) do
+  def array_expression(opts \\ []) do
     max_dimensions = Access.get(opts, :max_dimensions, 3)
 
     Enum.zip(
@@ -235,19 +235,13 @@ defmodule Support.PgExpressionGenerator do
     |> one_of
   end
 
-  defp datatype_expression_gen() do
+  def datatype_expression() do
     [
-      numeric_expression_gen(),
-      string_expression_gen(),
-      bool_expression_gen(),
-      array_expression_gen()
+      numeric_expression(),
+      string_expression(),
+      bool_expression(),
+      array_expression()
     ]
     |> one_of()
   end
-
-  @doc """
-  Generates a Postgres expression stream that can be used in
-  StreamData property tests.
-  """
-  def postgres_expression, do: datatype_expression_gen()
 end
