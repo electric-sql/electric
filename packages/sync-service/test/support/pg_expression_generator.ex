@@ -133,7 +133,7 @@ defmodule Support.PgExpressionGenerator do
     op_generators
     |> Enum.concat([
       # this applies to every type
-      {:unary_op, is_null_op_gen()}
+      {:predicate_op, is_null_op_gen()}
     ])
     |> Enum.map(fn
       {:combine_op, op_gen} -> compose_op(type_gen, op_gen)
@@ -145,6 +145,17 @@ defmodule Support.PgExpressionGenerator do
       {:function_op, op_gen} -> compose_function_op(type_gen, op_gen)
     end)
     |> one_of()
+  end
+
+  defp nested_expression_gen(type_gen, ops, opts) do
+    max_nesting = Access.get(opts, :max_nesting, 3)
+
+    Enum.map(1..max_nesting, fn nest_level ->
+      Enum.reduce(1..nest_level, type_gen, fn _, gen ->
+        expression_gen(gen |> map(&"(#{&1})"), ops)
+      end)
+    end)
+    |> one_of
   end
 
   def numeric_expression do
@@ -195,6 +206,18 @@ defmodule Support.PgExpressionGenerator do
       # {:range_op, range_comparison_op_gen()},
       # {:membership_op, membership_op_gen()}
     ])
+  end
+
+  def complex_bool_expression do
+    nested_expression_gen(
+      bool_expression(),
+      [
+        {:combine_op, bool_comparison_op_gen()},
+        {:unary_op, bool_unary_op_gen()},
+        {:predicate_op, predicate_op_gen()}
+      ],
+      max_nesting: 5
+    )
   end
 
   def array_expression(opts \\ []) do

@@ -221,6 +221,16 @@ defmodule Electric.Replication.Eval.RunnerTest do
       end
     end
 
+    property "complex bool expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.complex_bool_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
     property "array expressions", %{pool: pool} do
       check all(
               clause <- PgExpressionGenerator.array_expression(),
