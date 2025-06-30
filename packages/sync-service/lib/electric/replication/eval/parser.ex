@@ -1,4 +1,6 @@
 defmodule Electric.Replication.Eval.Parser do
+  require Logger
+
   alias Electric.Replication.Eval.Walker
   alias Electric.Utils
   alias Electric.Replication.PostgresInterop.Casting
@@ -1152,7 +1154,7 @@ defmodule Electric.Replication.Eval.Parser do
      }}
   rescue
     e ->
-      IO.puts(Exception.format(:error, e, __STACKTRACE__))
+      Logger.warning(Exception.format(:error, e, __STACKTRACE__))
       {:error, {func.location, "Failed to apply function to constant arguments"}}
   end
 
