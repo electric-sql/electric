@@ -47,6 +47,7 @@ defmodule Electric.Config do
     # set enable_http_api: false to turn off the HTTP server totally
     enable_http_api: true,
     long_poll_timeout: 20_000,
+    http_api_num_acceptors: nil,
     cache_max_age: 60,
     cache_stale_age: 60 * 5,
     chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
