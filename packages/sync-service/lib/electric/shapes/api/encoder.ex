@@ -56,6 +56,36 @@ defmodule Electric.Shapes.Api.Encoder.JSON do
   end
 end
 
+defmodule Electric.Shapes.Api.Encoder.SSE do
+  @behaviour Electric.Shapes.Api.Encoder
+
+  @impl Electric.Shapes.Api.Encoder
+  def log(item_stream) do
+    # Note that, unlike the JSON log encoder, this doesn't currently use
+    # `Stream.chunk_every/1`.
+    #
+    # This is because it's only handling live events and is usually used
+    # for small updates (the point of enabling SSE mode is to avoid request
+    # overhead when consuming small changes).
+
+    item_stream
+    |> Stream.flat_map(&message/1)
+  end
+
+  @impl Electric.Shapes.Api.Encoder
+  def message(message) do
+    ["data: ", ensure_json(message), "\n\n"]
+  end
+
+  defp ensure_json(json) when is_binary(json) do
+    json
+  end
+
+  defp ensure_json(term) do
+    Jason.encode_to_iodata!(term)
+  end
+end
+
 defmodule Electric.Shapes.Api.Encoder.Term do
   @behaviour Electric.Shapes.Api.Encoder
 

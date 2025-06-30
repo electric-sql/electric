@@ -8,6 +8,7 @@ defmodule Electric.Shapes.Api.Params do
   import Ecto.Changeset
 
   @tmp_compaction_flag :experimental_compaction
+  @tmp_sse_flag :experimental_live_sse
 
   @primary_key false
   defmodule ColumnList do
@@ -50,6 +51,7 @@ defmodule Electric.Shapes.Api.Params do
     field(:replica, Ecto.Enum, values: [:default, :full], default: :default)
     field(:params, {:map, :string}, default: %{})
     field(@tmp_compaction_flag, :boolean, default: false)
+    field(@tmp_sse_flag, :boolean, default: false)
   end
 
   @type t() :: %__MODULE__{}
@@ -61,6 +63,7 @@ defmodule Electric.Shapes.Api.Params do
     |> cast_offset()
     |> validate_handle_with_offset()
     |> validate_live_with_offset()
+    |> validate_live_sse()
     |> cast_root_table(api)
     |> apply_action(:validate)
     |> convert_error(api)
@@ -147,6 +150,20 @@ defmodule Electric.Shapes.Api.Params do
       changeset
     else
       validate_exclusion(changeset, :live, [true], message: "can't be true when offset == -1")
+    end
+  end
+
+  def validate_live_sse(%Ecto.Changeset{valid?: false} = changeset), do: changeset
+
+  def validate_live_sse(%Ecto.Changeset{} = changeset) do
+    live = get_field(changeset, :live)
+
+    if live do
+      changeset
+    else
+      validate_exclusion(changeset, @tmp_sse_flag, [true],
+        message: "can't be true unless live is also true"
+      )
     end
   end
 

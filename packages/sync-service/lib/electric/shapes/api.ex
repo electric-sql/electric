@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Api do
   alias __MODULE__
   alias __MODULE__.Request
   alias __MODULE__.Response
+  alias __MODULE__.SseState
 
   import Electric.Replication.LogOffset, only: [is_log_offset_lt: 2]
 
@@ -27,7 +28,9 @@ defmodule Electric.Shapes.Api do
       required: true
     ],
     allow_shape_deletion: [type: :boolean],
+    keepalive_interval: [type: :integer],
     long_poll_timeout: [type: :integer],
+    sse_timeout: [type: :integer],
     max_age: [type: :integer],
     stack_ready_timeout: [type: :integer],
     stale_age: [type: :integer],
@@ -50,12 +53,15 @@ defmodule Electric.Shapes.Api do
     :stack_id,
     :storage,
     allow_shape_deletion: false,
+    keepalive_interval: 21_000,
     long_poll_timeout: 20_000,
+    sse_timeout: 60_000,
     max_age: 60,
     stack_ready_timeout: 5_000,
     stale_age: 300,
     send_cache_headers?: true,
     encoder: Electric.Shapes.Api.Encoder.JSON,
+    sse_encoder: Electric.Shapes.Api.Encoder.SSE,
     configured: false
   ]
 
@@ -65,7 +71,6 @@ defmodule Electric.Shapes.Api do
   # Aliasing for pattern matching
   @before_all_offset LogOffset.before_all()
   @offset_out_of_bounds %{offset: ["out of bounds for this shape"]}
-  @must_refetch [%{headers: %{control: "must-refetch"}}]
 
   # Need to implement Access behaviour because we use that to extract config
   # when using shapes api
@@ -320,10 +325,14 @@ defmodule Electric.Shapes.Api do
 
     # TODO: discuss returning a 307 redirect rather than a 409, the client
     # will have to detect this and throw out old data
+
+    %{params: %{experimental_live_sse: in_sse?}} = request
+    error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+
     {:error,
-     Response.error(request, @must_refetch,
+     Response.error(request, error.message,
        handle: active_shape_handle,
-       status: 409
+       status: error.status
      )}
   end
 
@@ -489,17 +498,21 @@ defmodule Electric.Shapes.Api do
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
       global_last_seen_lsn: global_last_seen_lsn,
-      params: %{offset: offset, live: live?},
+      params: %{offset: offset, live: live?, experimental_live_sse: in_sse?},
       api: api,
       response: response
     } = request
 
-    case Shapes.get_merged_log_stream(api, shape_handle, since: offset, up_to: chunk_end_offset) do
+    case Shapes.get_merged_log_stream(api, shape_handle,
+           since: offset,
+           up_to: chunk_end_offset,
+           experimental_live_sse: in_sse?
+         ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do
           request
           |> update_attrs(%{ot_is_immediate_response: false})
-          |> hold_until_change()
+          |> handle_live_request()
         else
           up_to_date_lsn =
             if live? do
@@ -512,9 +525,9 @@ defmodule Electric.Shapes.Api do
               max(global_last_seen_lsn, chunk_end_offset.tx_offset)
             end
 
-          body = Stream.concat([log, maybe_up_to_date(request, up_to_date_lsn)])
+          log_stream = Stream.concat(log, maybe_up_to_date(request, up_to_date_lsn))
 
-          %{response | chunked: true, body: encode_log(request, body)}
+          %{response | chunked: true, body: encode_log(request, log_stream)}
         end
 
       {:error, %Api.Error{} = error} ->
@@ -523,10 +536,11 @@ defmodule Electric.Shapes.Api do
       {:error, :unknown} ->
         # the shape has been deleted between the request validation and the attempt
         # to return the log stream
-        Response.error(request, @must_refetch, status: 409)
+        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+        Response.error(request, error.message, status: error.status)
 
       {:error, %SnapshotError{type: :schema_changed}} ->
-        error = Api.Error.must_refetch()
+        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
@@ -563,12 +577,20 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  defp handle_live_request(%Request{params: %{experimental_live_sse: true}} = request) do
+    stream_sse_events(request)
+  end
+
+  defp handle_live_request(%Request{} = request) do
+    hold_until_change(request)
+  end
+
   defp hold_until_change(%Request{} = request) do
     %{
       new_changes_ref: ref,
       last_offset: last_offset,
       handle: shape_handle,
-      params: %{shape_definition: shape_def},
+      params: %{shape_definition: shape_def, experimental_live_sse: in_sse?},
       api: %{long_poll_timeout: long_poll_timeout} = api
     } = request
 
@@ -603,13 +625,16 @@ defmodule Electric.Shapes.Api do
         |> do_serve_shape_log()
 
       {^ref, :shape_rotation, new_handle} ->
-        Response.error(request, @must_refetch,
+        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+
+        Response.error(request, error.message,
           handle: new_handle,
-          status: 409
+          status: error.status
         )
 
       {^ref, :shape_rotation} ->
-        Response.error(request, @must_refetch, status: 409)
+        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+        Response.error(request, error.message, status: error.status)
     after
       # If we timeout, return an up-to-date message
       long_poll_timeout ->
@@ -627,6 +652,160 @@ defmodule Electric.Shapes.Api do
         end
     end
   end
+
+  defp stream_sse_events(%Request{} = request) do
+    %{
+      new_changes_ref: ref,
+      handle: shape_handle,
+      api: %{keepalive_interval: keepalive_interval, sse_timeout: sse_timeout},
+      params: %{offset: since_offset}
+    } = request
+
+    Logger.debug(
+      "Client #{inspect(self())} is streaming SSE for changes to #{shape_handle} since #{inspect(since_offset)}"
+    )
+
+    # Set up timer for SSE comment as keep-alive
+    keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
+    # Set up timer for SSE timeout
+    timeout_ref = Process.send_after(self(), {:sse_timeout, ref}, sse_timeout)
+
+    # Stream changes as SSE events for the duration of the timer.
+    sse_event_stream =
+      Stream.resource(
+        fn ->
+          %SseState{
+            mode: :receive,
+            request: request,
+            stream: nil,
+            since_offset: since_offset,
+            last_message_time: System.monotonic_time(:millisecond),
+            keepalive_ref: keepalive_ref
+          }
+        end,
+        &next_sse_event/1,
+        fn %SseState{keepalive_ref: latest_keepalive_ref} ->
+          Process.cancel_timer(latest_keepalive_ref)
+          Process.cancel_timer(timeout_ref)
+        end
+      )
+
+    response = %{request.response | chunked: true, body: sse_event_stream}
+
+    %{response | trace_attrs: Map.put(response.trace_attrs || %{}, :ot_is_sse_response, true)}
+  end
+
+  defp next_sse_event(%SseState{mode: :receive} = state) do
+    %{
+      keepalive_ref: keepalive_ref,
+      last_message_time: last_message_time,
+      request:
+        %{
+          api: %{
+            keepalive_interval: keepalive_interval
+          },
+          handle: shape_handle,
+          new_changes_ref: ref
+        } = request,
+      since_offset: since_offset
+    } = state
+
+    receive do
+      {^ref, :new_changes, latest_log_offset} ->
+        updated_request =
+          %{request | last_offset: latest_log_offset}
+          |> determine_global_last_seen_lsn()
+          |> determine_log_chunk_offset()
+          |> determine_up_to_date()
+
+        # This is usually but not always the `latest_log_offset`
+        # as per `determine_log_chunk_offset/1`.
+        end_offset = updated_request.chunk_end_offset
+
+        in_sse? = true
+
+        case Shapes.get_merged_log_stream(
+               updated_request.api,
+               shape_handle,
+               since: since_offset,
+               up_to: end_offset,
+               experimental_live_sse: in_sse?
+             ) do
+          {:ok, log} ->
+            Process.cancel_timer(keepalive_ref)
+
+            control_messages = maybe_up_to_date(updated_request, end_offset.tx_offset)
+            message_stream = Stream.concat(log, control_messages)
+            encoded_stream = encode_log(updated_request, message_stream)
+
+            current_time = System.monotonic_time(:millisecond)
+
+            new_keepalive_ref =
+              Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
+            {[],
+             %{
+               state
+               | mode: :emit,
+                 stream: encoded_stream,
+                 since_offset: end_offset,
+                 last_message_time: current_time,
+                 keepalive_ref: new_keepalive_ref
+             }}
+
+          {:error, _error} ->
+            {[], state}
+        end
+
+      {^ref, :shape_rotation} ->
+        must_refetch = %{headers: %{control: "must-refetch"}}
+        message = encode_message(request, must_refetch)
+
+        {message, %{state | mode: :done}}
+
+      {:sse_keepalive, ^ref} ->
+        current_time = System.monotonic_time(:millisecond)
+        time_since_last_message = current_time - last_message_time
+
+        if time_since_last_message >= keepalive_interval do
+          new_keepalive_ref =
+            Process.send_after(self(), {:sse_keepalive, ref}, keepalive_interval)
+
+          {[": keep-alive\n\n"],
+           %{state | last_message_time: current_time, keepalive_ref: new_keepalive_ref}}
+        else
+          # Not time to send a keep-alive yet, schedule for the remaining time
+          remaining_time = keepalive_interval - time_since_last_message
+          new_keepalive_ref = Process.send_after(self(), {:sse_keepalive, ref}, remaining_time)
+
+          {[], %{state | keepalive_ref: new_keepalive_ref}}
+        end
+
+      {:sse_timeout, ^ref} ->
+        {[], %{state | mode: :done}}
+    end
+  end
+
+  defp next_sse_event(%SseState{mode: :emit} = state) do
+    %{stream: stream} = state
+
+    # Can change the number taken to adjust the grouping. Currently three
+    # because there's typically 3 elements per SSE -- the actual message
+    # and the "data: " and "\n\n" delimiters around it.
+    #
+    # The JSON encoder groups stream elements by 500. So perhaps this
+    # could be a larger number for more efficiency?
+    case StreamSplit.take_and_drop(stream, 3) do
+      {[], _tail} ->
+        {[], %{state | mode: :receive, stream: nil}}
+
+      {head, tail} ->
+        {head, %{state | stream: tail}}
+    end
+  end
+
+  defp next_sse_event(%SseState{mode: :done} = state), do: {:halt, state}
 
   defp no_change_response(%Request{} = request) do
     %{response: response, global_last_seen_lsn: global_last_seen_lsn} =
@@ -671,22 +850,45 @@ defmodule Electric.Shapes.Api do
   def stack_id(%Api{stack_id: stack_id}), do: stack_id
   def stack_id(%{api: %{stack_id: stack_id}}), do: stack_id
 
+  defp encode_log(%Request{api: api, params: %{live: true, experimental_live_sse: true}}, stream) do
+    encode_sse(api, :log, stream)
+  end
+
   defp encode_log(%Request{api: api}, stream) do
     encode(api, :log, stream)
   end
 
-  @spec encode_message(Api.t() | Request.t(), term()) :: Enum.t()
-  def encode_message(%Request{api: api}, message) do
+  # Error messages are encoded normally, even when using SSE
+  # because they are returned on the original fetch request
+  # with a status code that is not 2xx.
+  @spec encode_error_message(Api.t() | Request.t(), term()) :: Enum.t()
+  def encode_error_message(%Api{} = api, message) do
     encode(api, :message, message)
   end
 
-  def encode_message(%Api{} = api, message) do
+  def encode_error_message(%Request{api: api}, message) do
+    encode(api, :message, message)
+  end
+
+  @spec encode_message(Request.t(), term()) :: Enum.t()
+  def encode_message(
+        %Request{api: api, params: %{live: true, experimental_live_sse: true}},
+        message
+      ) do
+    encode_sse(api, :message, message)
+  end
+
+  def encode_message(%Request{api: api}, message) do
     encode(api, :message, message)
   end
 
   defp encode(%Api{encoder: encoder}, type, message)
        when type in [:message, :log] do
     apply(encoder, type, [message])
+  end
+
+  defp encode_sse(%Api{sse_encoder: sse_encoder}, type, message) when type in [:message, :log] do
+    apply(sse_encoder, type, [message])
   end
 
   def schema(%Response{

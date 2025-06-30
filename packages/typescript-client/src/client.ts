@@ -7,7 +7,7 @@ import {
   GetExtensions,
 } from './types'
 import { MessageParser, Parser } from './parser'
-import { isUpToDateMessage } from './helpers'
+import { getOffset, isUpToDateMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -40,7 +40,12 @@ import {
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
+  EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
 } from './constants'
+import {
+  EventSourceMessage,
+  fetchEventSource,
+} from '@microsoft/fetch-event-source'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -245,6 +250,11 @@ export interface ShapeStreamOptions<T = never> {
    */
   subscribe?: boolean
 
+  /**
+   * Experimental support for Server-Sent Events (SSE) for live updates.
+   */
+  experimentalLiveSse?: boolean
+
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
@@ -284,8 +294,9 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 }
 
 /**
- * Reads updates to a shape from Electric using HTTP requests and long polling. Notifies subscribers
- * when new messages come in. Doesn't maintain any history of the
+ * Reads updates to a shape from Electric using HTTP requests and long polling or
+ * Server-Sent Events (SSE).
+ * Notifies subscribers when new messages come in. Doesn't maintain any history of the
  * log but does keep track of the offset position and is the best way
  * to consume the HTTP `GET /v1/shape` api.
  *
@@ -297,6 +308,14 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
  * const stream = new ShapeStream(options)
  * stream.subscribe(messages => {
  *   // messages is 1 or more row updates
+ * })
+ * ```
+ *
+ * To use Server-Sent Events (SSE) for real-time updates:
+ * ```
+ * const stream = new ShapeStream({
+ *   url: `http://localhost:3000/v1/shape`,
+ *   experimentalLiveSse: true
  * })
  * ```
  *
@@ -326,6 +345,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #error: unknown = null
 
   readonly #fetchClient: typeof fetch
+  readonly #sseFetchClient: typeof fetch
   readonly #messageParser: MessageParser<T>
 
   readonly #subscribers = new Map<
@@ -351,6 +371,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromise?: Promise<void>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
+  #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -365,18 +386,32 @@ export class ShapeStream<T extends Row<unknown> = Row>
       options.fetchClient ??
       ((...args: Parameters<typeof fetch>) => fetch(...args))
 
-    const fetchWithBackoffClient = createFetchWithBackoff(baseFetchClient, {
+    const backOffOpts = {
       ...(options.backoffOptions ?? BackoffDefaults),
       onFailedAttempt: () => {
         this.#connected = false
         options.backoffOptions?.onFailedAttempt?.()
       },
-    })
+    }
+    const fetchWithBackoffClient = createFetchWithBackoff(
+      baseFetchClient,
+      backOffOpts
+    )
 
     this.#fetchClient = createFetchWithConsumedMessages(
       createFetchWithResponseHeadersCheck(
         createFetchWithChunkBuffer(fetchWithBackoffClient)
       )
+    )
+
+    const sseFetchWithBackoffClient = createFetchWithBackoff(
+      baseFetchClient,
+      backOffOpts,
+      true
+    )
+
+    this.#sseFetchClient = createFetchWithResponseHeadersCheck(
+      createFetchWithChunkBuffer(sseFetchWithBackoffClient)
     )
 
     this.#subscribeToVisibilityChanges()
@@ -436,6 +471,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async #requestShape(): Promise<void> {
     if (this.#state === `pause-requested`) {
       this.#state = `paused`
+
       return
     }
 
@@ -450,7 +486,70 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#state = `active`
 
     const { url, signal } = this.options
+    const { fetchUrl, requestHeaders } = await this.#constructUrl(
+      url,
+      resumingFromPause
+    )
+    const abortListener = await this.#createAbortListener(signal)
+    const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
+    try {
+      await this.#fetchShape({
+        fetchUrl,
+        requestAbortController,
+        headers: requestHeaders,
+        resumingFromPause: true,
+      })
+    } catch (e) {
+      // Handle abort error triggered by refresh
+      if (
+        (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
+        requestAbortController.signal.aborted &&
+        requestAbortController.signal.reason === FORCE_DISCONNECT_AND_REFRESH
+      ) {
+        // Start a new request
+        return this.#requestShape()
+      }
+
+      if (e instanceof FetchBackoffAbortError) {
+        if (
+          requestAbortController.signal.aborted &&
+          requestAbortController.signal.reason === PAUSE_STREAM
+        ) {
+          this.#state = `paused`
+        }
+        return // interrupted
+      }
+      if (!(e instanceof FetchError)) throw e // should never happen
+
+      if (e.status == 409) {
+        // Upon receiving a 409, we should start from scratch
+        // with the newly provided shape handle
+        const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+        this.#reset(newShapeHandle)
+        await this.#publish(e.json as Message<T>[])
+        return this.#requestShape()
+      } else {
+        // Notify subscribers
+        this.#sendErrorToSubscribers(e)
+
+        // errors that have reached this point are not actionable without
+        // additional user input, such as 400s or failures to read the
+        // body of a response, so we exit the loop
+        throw e
+      }
+    } finally {
+      if (abortListener && signal) {
+        signal.removeEventListener(`abort`, abortListener)
+      }
+      this.#requestAbortController = undefined
+    }
+
+    this.#tickPromiseResolver?.()
+    return this.#requestShape()
+  }
+
+  async #constructUrl(url: string, resumingFromPause: boolean) {
     // Resolve headers and params in parallel
     const [requestHeaders, params] = await Promise.all([
       resolveHeaders(this.options.headers),
@@ -513,75 +612,34 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // sort query params in-place for stable URLs and improved cache hits
     fetchUrl.searchParams.sort()
 
+    return {
+      fetchUrl,
+      requestHeaders,
+    }
+  }
+
+  async #createAbortListener(signal?: AbortSignal) {
     // Create a new AbortController for this request
     this.#requestAbortController = new AbortController()
 
     // If user provided a signal, listen to it and pass on the reason for the abort
-    let abortListener: (() => void) | undefined
     if (signal) {
-      abortListener = () => {
+      const abortListener = () => {
         this.#requestAbortController?.abort(signal.reason)
       }
+
       signal.addEventListener(`abort`, abortListener, { once: true })
+
       if (signal.aborted) {
         // If the signal is already aborted, abort the request immediately
         this.#requestAbortController?.abort(signal.reason)
       }
+
+      return abortListener
     }
+  }
 
-    let response!: Response
-    try {
-      response = await this.#fetchClient(fetchUrl.toString(), {
-        signal: this.#requestAbortController.signal,
-        headers: requestHeaders,
-      })
-      this.#connected = true
-    } catch (e) {
-      // Handle abort error triggered by refresh
-      if (
-        (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
-        this.#requestAbortController.signal.aborted &&
-        this.#requestAbortController.signal.reason ===
-          FORCE_DISCONNECT_AND_REFRESH
-      ) {
-        // Loop back to the top of the while loop to start a new request
-        return this.#requestShape()
-      }
-
-      if (e instanceof FetchBackoffAbortError) {
-        if (
-          this.#requestAbortController.signal.aborted &&
-          this.#requestAbortController.signal.reason === PAUSE_STREAM
-        ) {
-          this.#state = `paused`
-        }
-        return // interrupted
-      }
-      if (!(e instanceof FetchError)) throw e // should never happen
-
-      if (e.status == 409) {
-        // Upon receiving a 409, we should start from scratch
-        // with the newly provided shape handle
-        const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
-        this.#reset(newShapeHandle)
-        await this.#publish(e.json as Message<T>[])
-        return this.#requestShape()
-      } else {
-        // Notify subscribers
-        this.#sendErrorToSubscribers(e)
-
-        // errors that have reached this point are not actionable without
-        // additional user input, such as 400s or failures to read the
-        // body of a response, so we exit the loop
-        throw e
-      }
-    } finally {
-      if (abortListener && signal) {
-        signal.removeEventListener(`abort`, abortListener)
-      }
-      this.#requestAbortController = undefined
-    }
-
+  async #onInitialResponse(response: Response) {
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
     if (shapeHandle) {
@@ -611,23 +669,122 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // There's no content so we are live and up to date
       this.#lastSyncedAt = Date.now()
     }
+  }
 
-    const messages = (await response.text()) || `[]`
-    const batch = this.#messageParser.parse(messages, this.#schema)
+  async #onMessages(messages: string, schema: Schema, isSseMessage = false) {
+    const batch = this.#messageParser.parse(messages, schema)
 
     // Update isUpToDate
     if (batch.length > 0) {
       const lastMessage = batch[batch.length - 1]
       if (isUpToDateMessage(lastMessage)) {
+        if (isSseMessage) {
+          // Only use the offset from the up-to-date message if this was an SSE message.
+          // If we would use this offset from a regular fetch, then it will be wrong
+          // and we will get an "offset is out of bounds for this shape" error
+          const offset = getOffset(lastMessage)
+          if (offset) {
+            this.#lastOffset = offset
+          }
+        }
         this.#lastSyncedAt = Date.now()
         this.#isUpToDate = true
       }
 
       await this.#publish(batch)
     }
+  }
 
-    this.#tickPromiseResolver?.()
-    return this.#requestShape()
+  /**
+   * Fetches the shape from the server using either long polling or SSE.
+   * Upon receiving a successfull response, the #onInitialResponse method is called.
+   * Afterwards, the #onMessages method is called for all the incoming updates.
+   * @param opts - The options for the request.
+   * @returns A promise that resolves when the request is complete (i.e. the long poll receives a response or the SSE connection is closed).
+   */
+  async #fetchShape(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+    resumingFromPause?: boolean
+  }): Promise<void> {
+    if (
+      this.#isUpToDate &&
+      this.options.experimentalLiveSse &&
+      !this.#isRefreshing &&
+      !opts.resumingFromPause
+    ) {
+      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
+      return this.#requestShapeSSE(opts)
+    }
+
+    return this.#requestShapeLongPoll(opts)
+  }
+
+  async #requestShapeLongPoll(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    const { fetchUrl, requestAbortController, headers } = opts
+    const response = await this.#fetchClient(fetchUrl.toString(), {
+      signal: requestAbortController.signal,
+      headers,
+    })
+
+    this.#connected = true
+    await this.#onInitialResponse(response)
+
+    const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
+    const res = await response.text()
+    const messages = res || `[]`
+
+    await this.#onMessages(messages, schema)
+  }
+
+  async #requestShapeSSE(opts: {
+    fetchUrl: URL
+    requestAbortController: AbortController
+    headers: Record<string, string>
+  }): Promise<void> {
+    const { fetchUrl, requestAbortController, headers } = opts
+    const fetch = this.#sseFetchClient
+    try {
+      await fetchEventSource(fetchUrl.toString(), {
+        headers,
+        fetch,
+        onopen: async (response: Response) => {
+          this.#connected = true
+          await this.#onInitialResponse(response)
+        },
+        onmessage: (event: EventSourceMessage) => {
+          if (event.data) {
+            // Process the SSE message
+            // The event.data is a single JSON object, so we wrap it in an array
+            const messages = `[${event.data}]`
+            const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
+            this.#onMessages(messages, schema, true)
+          }
+        },
+        onerror: (error: Error) => {
+          // rethrow to close the SSE connection
+          throw error
+        },
+        signal: requestAbortController.signal,
+      })
+    } catch (error) {
+      if (requestAbortController.signal.aborted) {
+        // During an SSE request, the fetch might have succeeded
+        // and we are parsing the incoming stream.
+        // If the abort happens while we're parsing the stream,
+        // then it won't be caught by our `createFetchWithBackoff` wrapper
+        // and instead we will get a raw AbortError here
+        // which we need to turn into a `FetchBackoffAbortError`
+        // such that #start handles it correctly.`
+        throw new FetchBackoffAbortError()
+      }
+      throw error
+    }
   }
 
   #pause() {
@@ -724,18 +881,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isRefreshing = false
   }
 
-  async #publish(messages: Message<T>[]): Promise<void> {
-    await Promise.all(
-      Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
-        try {
-          await callback(messages)
-        } catch (err) {
-          queueMicrotask(() => {
-            throw err
-          })
-        }
-      })
+  async #publish(messages: Message<T>[]): Promise<void[]> {
+    // We process messages asynchronously
+    // but SSE's `onmessage` handler is synchronous.
+    // We use a promise chain to ensure that the handlers
+    // execute sequentially in the order the messages were received.
+    this.#messageChain = this.#messageChain.then(() =>
+      Promise.all(
+        Array.from(this.#subscribers.values()).map(async ([callback, __]) => {
+          try {
+            await callback(messages)
+          } catch (err) {
+            queueMicrotask(() => {
+              throw err
+            })
+          }
+        })
+      )
     )
+
+    return this.#messageChain
   }
 
   #sendErrorToSubscribers(error: Error) {

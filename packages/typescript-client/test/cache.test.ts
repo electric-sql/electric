@@ -66,7 +66,7 @@ const it = testWithIssuesTable.extend<{
   },
 })
 
-describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
+describe(`HTTP Proxy Cache`, () => {
   it(`should get a short max-age cache-conrol header in live mode`, async ({
     insertIssues,
     proxyCacheBaseUrl,
@@ -269,10 +269,10 @@ describe(`HTTP Proxy Cache`, { timeout: 30000 }, () => {
 
     expect(staleRes.status).toBe(200)
     expect(getCacheStatus(staleRes)).toBe(CacheStatus.REVALIDATED)
-  })
+  }, 10_000)
 })
 
-describe(`HTTP Initial Data Caching`, { timeout: 30000 }, () => {
+describe(`HTTP Initial Data Caching`, () => {
   it(`tells client to resync when shape is out of scope`, async ({
     proxyCacheBaseUrl,
     issuesTableUrl,

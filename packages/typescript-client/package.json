@@ -6,6 +6,9 @@
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
+  "dependencies": {
+    "@microsoft/fetch-event-source": "^2.0.1"
+  },
   "devDependencies": {
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
@@ -24,7 +27,7 @@
     "tsup": "^8.0.1",
     "typescript": "^5.5.2",
     "uuid": "^10.0.0",
-    "vitest": "^2.0.2"
+    "vitest": "^3.0.0"
   },
   "type": "module",
   "exports": {
