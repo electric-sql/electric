@@ -154,7 +154,6 @@ defmodule Support.PgExpressionGenerator do
       expression_gen(numeric_gen() |> nullable_type_gen(), [
         {:combine_op, numeric_op_gen()},
         {:unary_op, numeric_unary_op_gen()},
-        {:range_op, range_comparison_op_gen()},
         {:comparison_op, comparison_op_gen()},
         {:range_op, range_comparison_op_gen()},
         {:membership_op, membership_op_gen()}
@@ -162,8 +161,6 @@ defmodule Support.PgExpressionGenerator do
       expression_gen(int_gen() |> nullable_type_gen(), [
         {:combine_op, int_op_gen()},
         {:unary_op, int_unary_op_gen()},
-        {:range_op, range_comparison_op_gen()},
-        {:range_op, range_comparison_op_gen()},
         {:comparison_op, comparison_op_gen()},
         {:range_op, range_comparison_op_gen()},
         {:membership_op, membership_op_gen()}
@@ -171,8 +168,6 @@ defmodule Support.PgExpressionGenerator do
       expression_gen(double_gen() |> nullable_type_gen(), [
         {:combine_op, numeric_op_gen()},
         {:unary_op, double_unary_op_gen()},
-        {:range_op, range_comparison_op_gen()},
-        {:range_op, range_comparison_op_gen()},
         {:comparison_op, comparison_op_gen()},
         {:range_op, range_comparison_op_gen()},
         {:membership_op, membership_op_gen()}
@@ -185,7 +180,6 @@ defmodule Support.PgExpressionGenerator do
       {:combine_op, string_op_gen()},
       {:function_op, string_function_op_gen()},
       {:comparison_op, string_comparison_op_gen()},
-      {:range_op, range_comparison_op_gen()},
       {:comparison_op, comparison_op_gen()},
       {:range_op, range_comparison_op_gen()},
       {:membership_op, membership_op_gen()}
