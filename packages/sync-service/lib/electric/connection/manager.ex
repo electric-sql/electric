@@ -725,7 +725,7 @@ defmodule Electric.Connection.Manager do
     error = DbConnectionError.from_error(exit_reason)
 
     dispatch_stack_event(
-      {:connection_error,
+      {:pool_connection_error,
        %{
          error: DbConnectionError.format_original_error(error),
          type: error.type,
