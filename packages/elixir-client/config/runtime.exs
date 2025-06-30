@@ -13,14 +13,14 @@ if config_env() == :test do
   electric_url = System.get_env("ELECTRIC_URL", default_electric_url)
 
   config :electric_client,
-    database_config: connection_opts |> Electric.Utils.deobfuscate_password(),
+    database_config: connection_opts,
     electric_url: electric_url
 
   config :electric_client, Support.Repo, url: database_url
 
   config :electric,
     start_in_library_mode: false,
-    replication_connection_opts: Electric.Utils.obfuscate_password(connection_opts),
+    replication_connection_opts: connection_opts,
     # enable the http api so that the client tests against a real endpoint can
     # run against our embedded electric instance.
     enable_http_api: true,
