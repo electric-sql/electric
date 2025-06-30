@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.5
+
+### Patch Changes
+
+- c59000f: Add experimental SSE support.
+
 ## 1.0.4
 
 ### Patch Changes
