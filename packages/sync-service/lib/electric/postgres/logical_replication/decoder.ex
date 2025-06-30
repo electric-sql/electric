@@ -184,18 +184,13 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
   end
 
   defp decode_message_impl(
-         <<"T", number_of_relations::integer-32, options::integer-8, column_ids::binary>>
+         <<"T", number_of_relations::integer-32, options::bitstring-8, column_ids::binary>>
        ) do
     truncated_relations =
       for relation_id_bin <- column_ids |> :binary.bin_to_list() |> Enum.chunk_every(4),
           do: relation_id_bin |> :binary.list_to_bin() |> :binary.decode_unsigned()
 
-    decoded_options =
-      case options do
-        0 -> []
-        1 -> [:cascade]
-        2 -> [:restart_identity]
-      end
+    decoded_options = decode_truncate_options(options)
 
     %Truncate{
       number_of_relations: number_of_relations,
@@ -274,4 +269,14 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
   end
 
   defp decode_lsn(bin), do: Lsn.decode_bin(bin)
+
+  defp decode_truncate_options(<<_::6, restart_identity::1, cascade::1>>) do
+    Enum.reject(
+      [
+        if(cascade == 1, do: :cascade),
+        if(restart_identity == 1, do: :restart_identity)
+      ],
+      &is_nil/1
+    )
+  end
 end

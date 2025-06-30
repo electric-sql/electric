@@ -194,6 +194,15 @@ defmodule Electric.Postgres.LogicalReplication.DecoderTest do
                }
     end
 
+    test "decodes messages with both cascade and restart identity options" do
+      assert decode(<<84, 0, 0, 0, 1, 3, 0, 0, 96, 0>>) ==
+               %Truncate{
+                 number_of_relations: 1,
+                 options: [:cascade, :restart_identity],
+                 truncated_relations: [24576]
+               }
+    end
+
     test "decodes unknown messages" do
       assert decode("!what's this message") ==
                %Unsupported{data: "!what's this message"}
