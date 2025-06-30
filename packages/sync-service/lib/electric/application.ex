@@ -149,7 +149,7 @@ defmodule Electric.Application do
       send_cache_headers?: get_env(opts, :send_cache_headers?),
       secret: Application.get_env(:electric, :secret)
     )
-    |> Keyword.merge(Keyword.take(opts, [:encoder]))
+    |> Keyword.merge(Keyword.take(opts, [:encoder, :inspector, :registry]))
   end
 
   defp core_configuration(opts) do
