@@ -161,17 +161,20 @@ defmodule Electric.Replication.PostgresInterop.Casting do
 
   ## Examples
 
-      iex> pg_and(true, false)
+      iex> pg_and(true, true)
       true
+
+      iex> pg_and(true, false)
+      false
 
       iex> pg_and(false, false)
       false
 
       iex> pg_and(nil, true)
-      true
+      nil
 
       iex> pg_and(nil, false)
-      nil
+      false
 
       iex> pg_and(nil, nil)
       nil
