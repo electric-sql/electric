@@ -792,13 +792,10 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
-      task =
-        Task.async(fn ->
-          send(test_pid, {:await_snapshot_start, self()})
-          ShapeCache.await_snapshot_start(shape_handle, opts)
-        end)
+      task = Task.async(ShapeCache, :await_snapshot_start, [shape_handle, opts])
 
-      assert_receive {:await_snapshot_start, _pid}
+      consumer_pid = GenServer.whereis(Electric.Shapes.Consumer.name(ctx.stack_id, shape_handle))
+      await_for_consumer_to_have_waiters(consumer_pid)
 
       assert_receive {:waiting_point, ref, pid}
       send(pid, {:continue, ref})
@@ -1235,5 +1232,26 @@ defmodule Electric.ShapeCacheTest do
     stream
     |> Enum.map(&Jason.decode!/1)
     |> Enum.sort_by(fn %{"value" => value} -> value[sort_col] end)
+  end
+
+  defp await_for_consumer_to_have_waiters(consumer, num_attempts \\ 3)
+
+  defp await_for_consumer_to_have_waiters(_consumer, 0) do
+    raise "No process started waiting on shape in time"
+  end
+
+  defp await_for_consumer_to_have_waiters(consumer, num_attempts) do
+    # We're looking up the process state directly here to be sure that the consumer has waiters
+    # on the snapshot before proceeding with the snapshot failure simulation. This adds
+    # coupling to the implementation of the consumer module but, on the other hand, it does
+    # prevent flake we used to see here.
+    case :sys.get_state(consumer).awaiting_snapshot_start do
+      [] ->
+        Process.sleep(50)
+        await_for_consumer_to_have_waiters(consumer, num_attempts - 1)
+
+      other ->
+        other
+    end
   end
 end
