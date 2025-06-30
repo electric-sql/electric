@@ -1,5 +1,5 @@
 defmodule Electric.ConfigTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   doctest Electric.Config, import: true
 
@@ -26,6 +26,41 @@ defmodule Electric.ConfigTest do
 
     test "accepts valid insecure configuration" do
       assert :ok = Electric.Config.validate_security_config!(nil, true)
+    end
+  end
+
+  describe "defaults" do
+    # want to know what happens without our runtime environment
+    setup do
+      initial_config = Application.get_all_env(:electric)
+
+      for {key, _} <- initial_config do
+        Application.delete_env(:electric, key)
+      end
+
+      on_exit(fn ->
+        Application.put_all_env([{:electric, initial_config}])
+      end)
+
+      [initial_config: initial_config]
+    end
+
+    test "api_server/0" do
+      Electric.Application.api_server()
+    end
+
+    test "configuration/1", ctx do
+      Electric.Application.configuration(
+        Keyword.take(ctx.initial_config, [:replication_connection_opts])
+      )
+    end
+
+    test "api/0" do
+      Electric.Application.api()
+    end
+
+    test "api_plug_opts/0" do
+      Electric.Application.api_plug_opts()
     end
   end
 end
