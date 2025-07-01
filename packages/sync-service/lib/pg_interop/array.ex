@@ -328,6 +328,9 @@ defmodule PgInterop.Array do
   def concat_arrays(arr1, []), do: arr1
   def concat_arrays([], arr2), do: arr2
 
+  def concat_arrays(arr1, nil), do: arr1
+  def concat_arrays(nil, arr2), do: arr2
+
   def concat_arrays(arr1, arr2) do
     case {get_array_dim(arr1), get_array_dim(arr2)} do
       {d1, d1} -> arr1 ++ arr2
@@ -360,6 +363,18 @@ defmodule PgInterop.Array do
   def array_prepend(elem, []), do: [elem]
   def array_prepend(elem, [hd | tl]) when not is_list(hd), do: [elem, hd | tl]
 
+  def array_prepend_concat(elem, _) when is_binary(elem),
+    do: raise("Cannot prepend a binary to an array with ||")
+
+  def array_prepend_concat(nil, arr), do: arr
+  def array_prepend_concat(elem, arr) when not is_binary(elem), do: array_prepend(elem, arr)
+
   def array_append([], elem), do: [elem]
   def array_append([hd | _] = list, elem) when not is_list(hd), do: list ++ [elem]
+
+  def array_append_concat(_, elem) when is_binary(elem),
+    do: raise("Cannot append a binary to an array with ||")
+
+  def array_append_concat(arr, nil), do: arr
+  def array_append_concat(arr, elem), do: array_append(arr, elem)
 end

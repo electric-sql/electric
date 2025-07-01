@@ -1,4 +1,6 @@
 defmodule Electric.Replication.Eval.Parser do
+  require Logger
+
   alias Electric.Replication.Eval.Walker
   alias Electric.Utils
   alias Electric.Replication.PostgresInterop.Casting
@@ -429,20 +431,26 @@ defmodule Electric.Replication.Eval.Parser do
               # OR can handle nulls sometimes
               # e.g. select null or true => t
               :OR_EXPR -> {&pg_or/2, "or", false}
-              :AND_EXPR -> {&Kernel.and/2, "and", true}
+              :AND_EXPR -> {&pg_and/2, "and", false}
               :NOT_EXPR -> {&Kernel.not/1, "not", true}
             end
 
-          {:ok,
-           %Func{
-             implementation: fun,
-             name: name,
-             type: :bool,
-             args: args,
-             location: expr.location,
-             strict?: strict?
-           }
-           |> to_binary_operators()}
+          func = %Func{
+            implementation: fun,
+            name: name,
+            type: :bool,
+            args: args,
+            location: expr.location,
+            strict?: strict?
+          }
+
+          func =
+            case args do
+              [_] -> func
+              [_ | _] -> to_binary_operators(func)
+            end
+
+          {:ok, func}
 
         %{location: loc} = node ->
           {:error, {loc, "#{internal_node_to_error(node)} is not castable to bool"}}
@@ -780,7 +788,7 @@ defmodule Electric.Replication.Eval.Parser do
          comparisons = [left_comparison, right_comparison],
          {:ok, reduced} <-
            build_bool_chain(
-             %{name: "and", impl: &Kernel.and/2, strict?: true},
+             %{name: "or", impl: &pg_and/2, strict?: false},
              comparisons,
              expr.location
            ) do
@@ -1146,7 +1154,7 @@ defmodule Electric.Replication.Eval.Parser do
      }}
   rescue
     e ->
-      IO.puts(Exception.format(:error, e, __STACKTRACE__))
+      Logger.warning(Exception.format(:error, e, __STACKTRACE__))
       {:error, {func.location, "Failed to apply function to constant arguments"}}
   end
 

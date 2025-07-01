@@ -63,15 +63,17 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres("- *numeric_type* -> *numeric_type*", delegate: &Kernel.-/1)
   defpostgres("*numeric_type* + *numeric_type* -> *numeric_type*", delegate: &Kernel.+/2)
   defpostgres("*numeric_type* - *numeric_type* -> *numeric_type*", delegate: &Kernel.-/2)
-  defpostgres("*integral_type* / *integral_type* -> bool", delegate: &Kernel.div/2)
-  defpostgres("float8 / float8 -> bool", delegate: &Kernel.//2)
-  defpostgres("numeric ^ numeric -> numeric", delegate: &Float.pow/2)
-  defpostgres("float8 ^ float8 -> float8", delegate: &Float.pow/2)
+  defpostgres("*numeric_type* * *numeric_type* -> *numeric_type*", delegate: &Kernel.*/2)
+  defpostgres("*integral_type* / *integral_type* -> *integral_type*", delegate: &Kernel.div/2)
+  defpostgres("float8 / float8 -> float8", delegate: &Kernel.//2)
+  defpostgres("numeric ^ numeric -> numeric", delegate: &Kernel.**/2)
+  defpostgres("float8 ^ float8 -> float8", delegate: &Kernel.**/2)
   defpostgres("|/ float8 -> float8", delegate: &:math.sqrt/1)
   defpostgres("@ *numeric_type* -> *numeric_type*", delegate: &:erlang.abs/1)
   defpostgres("*integral_type* & *integral_type* -> *integral_type*", delegate: &Bitwise.band/2)
   defpostgres("*integral_type* | *integral_type* -> *integral_type*", delegate: &Bitwise.bor/2)
   defpostgres("*integral_type* # *integral_type* -> *integral_type*", delegate: &Bitwise.bxor/2)
+  defpostgres("~ *integral_type* -> *integral_type*", delegate: &Bitwise.bnot/1)
 
   ## String functions
   defpostgres "text || text -> text" do
@@ -147,40 +149,52 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres("anyarray <> anyarray -> bool", delegate: &Kernel.!=/2)
 
   defpostgres("anycompatiblearray || anycompatiblearray -> anycompatiblearray",
-    delegate: &PgInterop.Array.concat_arrays/2
+    delegate: &PgInterop.Array.concat_arrays/2,
+    strict?: false
   )
 
   defpostgres("array_cat(anycompatiblearray, anycompatiblearray) -> anycompatiblearray",
-    delegate: &PgInterop.Array.concat_arrays/2
+    delegate: &PgInterop.Array.concat_arrays/2,
+    strict?: false
   )
 
   defpostgres("anycompatible || anycompatiblearray -> anycompatiblearray",
-    delegate: &PgInterop.Array.array_prepend/2
+    delegate: &PgInterop.Array.array_prepend_concat/2,
+    strict?: false
   )
 
   defpostgres("array_prepend(anycompatible, anycompatiblearray) -> anycompatiblearray",
-    delegate: &PgInterop.Array.array_prepend/2
+    delegate: &PgInterop.Array.array_prepend/2,
+    strict?: false
   )
 
   defpostgres("anycompatiblearray || anycompatible -> anycompatiblearray",
-    delegate: &PgInterop.Array.array_append/2
+    delegate: &PgInterop.Array.array_append_concat/2,
+    strict?: false
   )
 
   defpostgres("array_append(anycompatiblearray, anycompatible) -> anycompatiblearray",
-    delegate: &PgInterop.Array.array_append/2
+    delegate: &PgInterop.Array.array_append/2,
+    strict?: false
   )
 
   defpostgres("array_ndims(anyarray) -> int4", delegate: &PgInterop.Array.get_array_dim/1)
 
   defpostgres "anyarray @> anyarray -> bool" do
     def left_array_contains_right?(left, right) do
-      MapSet.subset?(MapSet.new(List.flatten(right)), MapSet.new(List.flatten(left)))
+      MapSet.subset?(
+        List.flatten(right) |> MapSet.new(),
+        List.flatten(left) |> Enum.reject(&is_nil/1) |> MapSet.new()
+      )
     end
   end
 
   defpostgres "anyarray <@ anyarray -> bool" do
     def right_array_contains_left?(left, right) do
-      MapSet.subset?(MapSet.new(List.flatten(left)), MapSet.new(List.flatten(right)))
+      MapSet.subset?(
+        List.flatten(left) |> MapSet.new(),
+        List.flatten(right) |> Enum.reject(&is_nil/1) |> MapSet.new()
+      )
     end
   end
 
@@ -193,6 +207,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
     def arrays_overlap?(%MapSet{} = left, right) do
       Enum.any?(right, fn
         elem when is_list(elem) -> arrays_overlap?(left, elem)
+        nil -> false
         elem -> MapSet.member?(left, elem)
       end)
     end

@@ -154,4 +154,36 @@ defmodule Electric.Replication.PostgresInterop.Casting do
   def pg_or(true, nil), do: true
   def pg_or(_, nil), do: nil
   def pg_or(a, b), do: Kernel.or(a, b)
+
+  @doc """
+  The Postgres AND operator, which has some specific behaviour when
+  comparing NULLs with booleans.
+
+  ## Examples
+
+      iex> pg_and(true, true)
+      true
+
+      iex> pg_and(true, false)
+      false
+
+      iex> pg_and(false, false)
+      false
+
+      iex> pg_and(nil, true)
+      nil
+
+      iex> pg_and(nil, false)
+      false
+
+      iex> pg_and(nil, nil)
+      nil
+  """
+  @spec pg_and(boolean() | nil, boolean() | nil) :: boolean() | nil
+  def pg_and(a, b)
+  def pg_and(nil, false), do: false
+  def pg_and(nil, _), do: nil
+  def pg_and(false, nil), do: false
+  def pg_and(_, nil), do: nil
+  def pg_and(a, b), do: Kernel.and(a, b)
 end

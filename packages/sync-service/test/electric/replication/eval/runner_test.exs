@@ -1,8 +1,12 @@
 defmodule Electric.Replication.Eval.RunnerTest do
   use ExUnit.Case, async: true
+  use ExUnitProperties
+
+  import Support.DbSetup
 
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Eval.Parser
+  alias Support.PgExpressionGenerator
 
   describe "record_to_ref_values/3" do
     test "should build ref values from record with known types and nils" do
@@ -179,5 +183,136 @@ defmodule Electric.Replication.Eval.RunnerTest do
                )
                |> Runner.execute(%{["x"] => [[[3, 4]]]})
     end
+  end
+
+  describe "execute/2 against PG results" do
+    setup [:with_shared_db]
+
+    @max_runs 10_000
+    @max_run_time 1_000
+
+    property "numeric expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.numeric_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    property "string expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.string_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    property "bool expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.bool_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    property "complex bool expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.complex_bool_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    property "array expressions", %{pool: pool} do
+      check all(
+              clause <- PgExpressionGenerator.array_expression(),
+              max_runs: @max_runs,
+              max_run_time: @max_run_time
+            ) do
+        assert_runner_and_oracle_match(clause, pool)
+      end
+    end
+
+    defp execute_oracle(clause, db_conn) do
+      case Postgrex.query(db_conn, "SELECT #{clause}", []) do
+        {:ok, %Postgrex.Result{rows: [[result]]}} -> {:ok, result}
+        {:error, %Postgrex.Error{postgres: %{message: reason}}} -> {:error, reason}
+      end
+    end
+
+    defp execute_runner(clause) do
+      try do
+        clause
+        |> Parser.parse_and_validate_expression!()
+        |> Runner.execute(%{})
+      rescue
+        err -> {:error, err}
+      end
+    end
+
+    defp assert_runner_and_oracle_match(clause, db_conn) do
+      oracle_result = execute_oracle(clause, db_conn)
+      runner_result = execute_runner(clause)
+
+      case {runner_result, oracle_result} do
+        {{:ok, runner_val}, {:ok, oracle_val}} ->
+          # Both results are ok, we can compare them
+          oracle_val = cast_decimals_to_floats(oracle_val)
+
+          if is_number(oracle_val) do
+            assert_in_delta(runner_val, oracle_val, abs(0.01 * oracle_val))
+          else
+            assert runner_val == oracle_val,
+                   """
+                   MISMATCH!
+
+                   SQL: #{clause}
+
+                   runner returned: #{inspect(runner_val)}
+                   oracle returned: #{inspect(oracle_val)}
+                   """
+          end
+
+          :ok
+
+        {{:error, _}, {:error, _}} ->
+          # Both results are errors - which is fine
+          :ok
+
+        {{:ok, nil}, {:error, _}} ->
+          # Runner coalescing to nil rather than erroring is not ideal,
+          # but we can live with it
+          :ok
+
+        {{:ok, _}, {:error, "value out of range:" <> _}} ->
+          # We are fine with being able to handle values the oracle cannot
+          :ok
+
+        {{:ok, _}, {:error, "integer out of range"}} ->
+          # We are fine with being able to handle values the oracle cannot
+          :ok
+
+        {{:error, err}, {:ok, _}} ->
+          raise "Runner error: #{inspect(err)} for clause: #{clause}"
+
+        {{:ok, _}, {:error, err}} ->
+          raise "Oracle error: #{inspect(err)} for clause: #{clause}"
+      end
+    end
+
+    defp cast_decimals_to_floats(value) when is_list(value) do
+      Enum.map(value, &cast_decimals_to_floats/1)
+    end
+
+    defp cast_decimals_to_floats(%Decimal{} = decimal), do: Decimal.to_float(decimal)
+    defp cast_decimals_to_floats(value), do: value
   end
 end
