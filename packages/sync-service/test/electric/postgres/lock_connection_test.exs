@@ -91,6 +91,66 @@ defmodule Electric.Postgres.LockConnectionTest do
       stop_supervised!(:lock1)
       assert_lock_acquired()
     end
+
+    test "should be able to restart immediately after getting killed", %{
+      db_config: config,
+      # db_conn: conn,
+      stack_id: stack_id
+    } do
+      parent = self()
+
+      task_pid =
+        start_supervised!(%{
+          id: :lock_starter,
+          start:
+            {Task, :start_link,
+             [
+               fn ->
+                 {:ok, pid} =
+                   LockConnection.start_link(
+                     connection_opts: config,
+                     connection_manager: self(),
+                     lock_name: @lock_name,
+                     stack_id: stack_id
+                   )
+
+                 assert_lock_acquired()
+
+                 send(parent, {:lock_pid, pid})
+
+                 receive do
+                   :block -> :ok
+                 end
+               end
+             ]},
+          restart: :temporary
+        })
+
+      assert_receive {:lock_pid, lock_pid}
+
+      assert Process.alive?(lock_pid)
+
+      Process.exit(task_pid, "unexpected error")
+
+      assert {:ok, new_lock_pid} =
+               start_supervised(%{
+                 id: :new_lock,
+                 start:
+                   {LockConnection, :start_link,
+                    [
+                      [
+                        connection_opts: config,
+                        connection_manager: self(),
+                        lock_name: @lock_name,
+                        stack_id: stack_id
+                      ]
+                    ]}
+               })
+
+      assert_lock_acquired()
+      assert new_lock_pid != lock_pid
+      refute Process.alive?(lock_pid)
+    end
   end
 
   defp assert_lock_acquired do
