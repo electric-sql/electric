@@ -977,7 +977,7 @@ defmodule Electric.Connection.Manager do
         Process.exit(pid, :kill)
 
         receive do
-          {:DOWN, _ref, :process, ^pid, _reason} ->
+          {:DOWN, ^ref, :process, ^pid, _reason} ->
             :ok
         end
     end
