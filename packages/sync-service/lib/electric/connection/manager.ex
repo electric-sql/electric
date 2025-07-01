@@ -952,17 +952,17 @@ defmodule Electric.Connection.Manager do
     # connection manager is able to start the processes in a clean state.
 
     %{
-      lock_connection_pid: lock_connection_pid,
-      replication_client_pid: replication_client_pid,
+      shape_supervisor_pid: shape_supervisor_pid,
       pool_pid: pool_pid,
-      shape_supervisor_pid: shape_supervisor_pid
+      replication_client_pid: replication_client_pid,
+      lock_connection_pid: lock_connection_pid
     } = state
 
     [
-      lock_connection_pid,
-      replication_client_pid,
+      shape_supervisor_pid,
       pool_pid,
-      shape_supervisor_pid
+      replication_client_pid,
+      lock_connection_pid
     ]
     |> Enum.filter(&is_pid/1)
     |> Enum.map(fn pid ->
