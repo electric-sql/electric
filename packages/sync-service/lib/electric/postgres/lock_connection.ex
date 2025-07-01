@@ -32,6 +32,10 @@ defmodule Electric.Postgres.LockConnection do
     ]
   end
 
+  def name(opts) do
+    Electric.ProcessRegistry.name(Access.fetch!(opts, :stack_id), __MODULE__)
+  end
+
   @spec start_link(options()) :: {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
   def start_link(opts) do
     {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
@@ -52,7 +56,7 @@ defmodule Electric.Postgres.LockConnection do
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      [timeout: :infinity, auto_reconnect: false, sync_connect: false] ++
+      [timeout: :infinity, auto_reconnect: false, sync_connect: false, name: name(opts)] ++
         connection_opts
     )
   end

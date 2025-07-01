@@ -107,6 +107,8 @@ defmodule Electric.Connection.Manager do
       :lock_connection_timer,
       # PID of the database connection pool
       :pool_pid,
+      # PID of the shape supervisor
+      :shape_supervisor_pid,
       # PID of the shape log collector
       :shape_log_collector_pid,
       # Backoff term used for reconnection with exponential back-off
@@ -129,6 +131,7 @@ defmodule Electric.Connection.Manager do
   end
 
   use GenServer
+  alias Mix.Dep.Lock
   alias Electric.Connection.Manager.ConnectionBackoff
   alias Electric.DbConnectionError
   alias Electric.StatusMonitor
@@ -456,6 +459,9 @@ defmodule Electric.Connection.Manager do
       )
     end
 
+    Logger.error("Failed to start shape supervisor")
+    exit("Failed on purpose")
+
     shapes_sup_pid =
       case Electric.Connection.Supervisor.start_shapes_supervisor(
              stack_id: state.stack_id,
@@ -480,7 +486,8 @@ defmodule Electric.Connection.Manager do
 
     state = %{
       state
-      | shape_log_collector_pid: log_collector_pid,
+      | shape_supervisor_pid: shapes_sup_pid,
+        shape_log_collector_pid: log_collector_pid,
         current_step: :waiting_for_consumers,
         purge_all_shapes?: false
     }
@@ -935,6 +942,37 @@ defmodule Electric.Connection.Manager do
   @impl true
   def handle_call(:ping, _from, state) do
     {:reply, :pong, state}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Ensure that all children of the connection manager are stopped
+    # before the manager itself terminates.
+    # This is important to ensure that upon restarting on an error the
+    # connection manager is able to start the processes in a clean state.
+
+    %{
+      lock_connection_pid: lock_connection_pid,
+      replication_client_pid: replication_client_pid,
+      pool_pid: pool_pid,
+      shape_supervisor_pid: shape_supervisor_pid
+    } = state
+
+    [
+      lock_connection_pid,
+      replication_client_pid,
+      pool_pid,
+      shape_supervisor_pid
+    ]
+    |> Enum.filter(&is_pid/1)
+    |> Enum.map(fn pid ->
+      Process.monitor(pid)
+      Process.exit(pid, :shutdown)
+
+      receive do
+        {:DOWN, _ref, :process, ^pid, _reason} -> :ok
+      end
+    end)
   end
 
   defp maybe_fallback_to_ipv4(error_message, conn_opts) do
