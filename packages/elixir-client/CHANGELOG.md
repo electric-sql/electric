@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.6.4
+
+### Patch Changes
+
+- 0baa791: Bump the minimum required version of Electric to v1.0.6.
+
 ## 0.6.3
 
 ### Patch Changes
