@@ -130,8 +130,7 @@ defmodule Electric.Connection.Manager do
     ]
   end
 
-  use GenServer
-  alias Mix.Dep.Lock
+  use GenServer, shutdown: :infinity
   alias Electric.Connection.Manager.ConnectionBackoff
   alias Electric.DbConnectionError
   alias Electric.StatusMonitor
@@ -458,9 +457,6 @@ defmodule Electric.Connection.Manager do
         state
       )
     end
-
-    Logger.error("Failed to start shape supervisor")
-    exit("Failed on purpose")
 
     shapes_sup_pid =
       case Electric.Connection.Supervisor.start_shapes_supervisor(
