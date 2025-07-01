@@ -970,15 +970,13 @@ defmodule Electric.Connection.Manager do
     Process.exit(pid, reason)
 
     receive do
-      {:DOWN, ^ref, :process, ^pid, _reason} ->
-        :ok
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
     after
       5000 ->
         Process.exit(pid, :kill)
 
         receive do
-          {:DOWN, ^ref, :process, ^pid, _reason} ->
-            :ok
+          {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
         end
     end
   end
