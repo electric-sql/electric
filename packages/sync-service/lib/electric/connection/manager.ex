@@ -719,20 +719,10 @@ defmodule Electric.Connection.Manager do
     {:noreply, state}
   end
 
-  # When a pooled connection terminates, we can report its exit reason the same way we do for
-  # replication and lock connections.
+  # When a pooled connection terminates, we log its exit reason, but more connections will
+  # be started by the connection pool supervisor, so we don't need to do anything else.
   def handle_info({:pool_conn_down, _ref, :process, _pid, {:shutdown, exit_reason}}, state) do
     error = DbConnectionError.from_error(exit_reason)
-
-    dispatch_stack_event(
-      {:pool_connection_error,
-       %{
-         error: DbConnectionError.format_original_error(error),
-         type: error.type,
-         message: error.message
-       }},
-      state
-    )
 
     # If the error is of an unknown type, it would have already been logged by DbConnectionError itself.
     if error.type != :unknown do
