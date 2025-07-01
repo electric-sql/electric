@@ -941,11 +941,12 @@ defmodule Electric.Connection.Manager do
   end
 
   @impl true
-  def terminate(_reason, state) do
+  def terminate(reason, state) do
     # Ensure that all children of the connection manager are stopped
     # before the manager itself terminates.
     # This is important to ensure that upon restarting on an error the
     # connection manager is able to start the processes in a clean state.
+    Logger.debug("Terminating connection manager with reason #{inspect(reason)}.")
 
     %{
       shape_supervisor_pid: shape_supervisor_pid,
@@ -961,14 +962,25 @@ defmodule Electric.Connection.Manager do
       lock_connection_pid
     ]
     |> Enum.filter(&is_pid/1)
-    |> Enum.map(fn pid ->
-      Process.monitor(pid)
-      Process.exit(pid, :shutdown)
+    |> Enum.map(&shutdown_child(&1, :shutdown))
+  end
 
-      receive do
-        {:DOWN, _ref, :process, ^pid, _reason} -> :ok
-      end
-    end)
+  defp shutdown_child(pid, reason) when is_pid(pid) do
+    ref = Process.monitor(pid)
+    Process.exit(pid, reason)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} ->
+        :ok
+    after
+      5000 ->
+        Process.exit(pid, :kill)
+
+        receive do
+          {:DOWN, _ref, :process, ^pid, _reason} ->
+            :ok
+        end
+    end
   end
 
   defp maybe_fallback_to_ipv4(error_message, conn_opts) do
