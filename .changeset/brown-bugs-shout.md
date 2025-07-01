@@ -2,4 +2,4 @@
 "@core/sync-service": patch
 ---
 
-Use `:pool_connection_error` stack event for pool errors that we do not retry anything on.
+Do not fire stack events for pool connection errors as they are not actionable.
