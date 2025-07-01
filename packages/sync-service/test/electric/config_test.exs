@@ -31,6 +31,8 @@ defmodule Electric.ConfigTest do
 
   describe "defaults" do
     # want to know what happens without our runtime environment
+    # if any of the configuration options are missing defaults
+    # then these configuration functions will raise
     setup do
       initial_config = Application.get_all_env(:electric)
 
