@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.0.22
+
+### Patch Changes
+
+- f15a10c: Do not fire stack events for pool connection errors as they are not actionable.
+- c9ad50d: Fix a bug in decoding TRUNCATE messages from the logical replication stream.
+- b528bb4: Fix parsing and execution for some edge cases of where clause operators.
+- a6c19df: Recognize additional common connection errors and handle appropriately.
+
 ## 1.0.21
 
 ### Patch Changes
