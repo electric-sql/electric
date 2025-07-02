@@ -398,21 +398,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       backOffOpts
     )
 
-    this.#fetchClient = createFetchWithConsumedMessages(
-      createFetchWithResponseHeadersCheck(
-        createFetchWithChunkBuffer(fetchWithBackoffClient)
-      )
-    )
-
-    const sseFetchWithBackoffClient = createFetchWithBackoff(
-      baseFetchClient,
-      backOffOpts,
-      true
-    )
-
     this.#sseFetchClient = createFetchWithResponseHeadersCheck(
-      createFetchWithChunkBuffer(sseFetchWithBackoffClient)
+      createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
+
+    this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
 
     this.#subscribeToVisibilityChanges()
   }
@@ -498,7 +488,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         fetchUrl,
         requestAbortController,
         headers: requestHeaders,
-        resumingFromPause: true,
+        resumingFromPause,
       })
     } catch (e) {
       // Handle abort error triggered by refresh

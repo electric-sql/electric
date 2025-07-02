@@ -38,8 +38,7 @@ export const BackoffDefaults = {
 
 export function createFetchWithBackoff(
   fetchClient: typeof fetch,
-  backoffOptions: BackoffOptions = BackoffDefaults,
-  sseMode: boolean = false
+  backoffOptions: BackoffOptions = BackoffDefaults
 ): typeof fetch {
   const {
     initialDelay,
@@ -67,12 +66,6 @@ export function createFetchWithBackoff(
         if (result.ok) return result
 
         const err = await FetchError.fromResponse(result, url.toString())
-        if (err.status === 409 && sseMode) {
-          // The json body is [ { headers: { control: 'must-refetch' } } ] in normal mode
-          // and is { headers: { control: 'must-refetch' } } in SSE mode
-          // So in SSE mode we need to wrap it in an array
-          err.json = [err.json]
-        }
 
         throw err
       } catch (e) {
