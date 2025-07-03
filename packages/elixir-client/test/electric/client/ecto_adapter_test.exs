@@ -304,6 +304,84 @@ defmodule Electric.Client.EctoAdapterTest do
              } = shape
     end
 
+    test "supports column subset using `select`" do
+      assert %Electric.Client.ShapeDefinition{
+               namespace: "custom",
+               table: "test_table",
+               where: "(\"name\" IN ('this','that'))",
+               columns: ["id", "name", "visible"],
+               parser: {EctoAdapter, TestTable}
+             } =
+               EctoAdapter.shape_from_query!(
+                 from(t in TestTable,
+                   prefix: "custom",
+                   select: [:id, :name],
+                   where: t.name in ["this", "that"],
+                   select_merge: [:visible]
+                 )
+               )
+
+      assert %Electric.Client.ShapeDefinition{
+               namespace: "custom",
+               table: "test_table",
+               where: "(\"name\" IN ('this','that'))",
+               columns: ["id", "name"],
+               parser: {EctoAdapter, TestTable}
+             } =
+               EctoAdapter.shape_from_query!(
+                 from(t in TestTable,
+                   prefix: "custom",
+                   select: map(t, [:id, :name]),
+                   where: t.name in ["this", "that"]
+                 )
+               )
+
+      assert %Electric.Client.ShapeDefinition{
+               namespace: "custom",
+               table: "test_table",
+               where: "(\"name\" IN ('this','that'))",
+               columns: ["id", "name"],
+               parser: {EctoAdapter, TestTable}
+             } =
+               EctoAdapter.shape_from_query!(
+                 from(t in TestTable,
+                   prefix: "custom",
+                   select: [t.id, t.name],
+                   where: t.name in ["this", "that"]
+                 )
+               )
+
+      assert %Electric.Client.ShapeDefinition{
+               namespace: "custom",
+               table: "test_table",
+               where: "(\"name\" IN ('this','that'))",
+               columns: ["id", "name"],
+               parser: {EctoAdapter, TestTable}
+             } =
+               EctoAdapter.shape_from_query!(
+                 from(t in TestTable,
+                   prefix: "custom",
+                   select: {t.id, t.name},
+                   where: t.name in ["this", "that"]
+                 )
+               )
+
+      assert %Electric.Client.ShapeDefinition{
+               namespace: nil,
+               table: "test_table",
+               where: "(\"name\" IN ('this','that'))",
+               columns: ["id", "name", "visible"],
+               parser: {EctoAdapter, TestTable}
+             } =
+               EctoAdapter.shape_from_query!(
+                 from(t in TestTable,
+                   select: struct(t, [:id, :name]),
+                   where: t.name in ["this", "that"],
+                   select_merge: [:visible]
+                 )
+               )
+    end
+
     test "allows passing a custom changeset/1 function", _ctx do
       changeset_fun =
         fn params ->
