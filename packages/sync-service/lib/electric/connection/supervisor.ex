@@ -111,4 +111,13 @@ defmodule Electric.Connection.Supervisor do
 
     Supervisor.start_child(name(opts), child_spec)
   end
+
+  def stop_shapes_supervisor(stack_id) do
+    shapes_sup_name = Electric.Replication.Supervisor.name(stack_id: stack_id)
+
+    case GenServer.whereis(shapes_sup_name) do
+      pid when is_pid(pid) -> Supervisor.stop(shapes_sup_name, :shutdown)
+      nil -> :ok
+    end
+  end
 end
