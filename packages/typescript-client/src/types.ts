@@ -17,7 +17,7 @@ export type Row<Extensions = never> = Record<string, Value<Extensions>>
 export type GetExtensions<T extends Row<unknown>> =
   T extends Row<infer Extensions> ? Extensions : never
 
-export type Offset = `-1` | `${number}_${number}`
+export type Offset = `-1` | `${number}_${number}` | `${bigint}_${number}`
 
 interface Header {
   [key: Exclude<string, `operation` | `control`>]: Value
