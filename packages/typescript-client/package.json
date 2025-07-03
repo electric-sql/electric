@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/client",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
