@@ -945,38 +945,40 @@ defmodule Electric.Connection.Manager do
     # connection manager is able to start the processes in a clean state.
     Logger.debug("Terminating connection manager with reason #{inspect(reason)}.")
 
-    Electric.Connection.Supervisor.stop_shapes_supervisor(state.stack_id)
-
     %{
       pool_pid: pool_pid,
       replication_client_pid: replication_client_pid,
       lock_connection_pid: lock_connection_pid
     } = state
 
-    [
-      pool_pid,
-      replication_client_pid,
-      lock_connection_pid
-    ]
-    |> Enum.filter(&is_pid/1)
-    |> Enum.map(&shutdown_child(&1, :shutdown))
+    Electric.Connection.Supervisor.stop_shapes_supervisor(state.stack_id)
+    if is_pid(pool_pid), do: shutdown_child(pool_pid, :shutdown)
+    if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
+
+    # We brutally kill the lock connection process as it might hang on waiting
+    # to establish a connection and can't be gracefully killed
+    if is_pid(lock_connection_pid), do: shutdown_child(lock_connection_pid, :kill)
 
     {:stop, reason, state}
   end
 
-  defp shutdown_child(pid, _reason) when is_pid(pid) do
+  defp shutdown_child(pid, :shutdown) when is_pid(pid) do
     ref = Process.monitor(pid)
     Process.exit(pid, :shutdown)
 
     receive do
       {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
     after
-      5000 ->
-        Process.exit(pid, :kill)
+      5000 -> shutdown_child(pid, :kill)
+    end
+  end
 
-        receive do
-          {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
-        end
+  defp shutdown_child(pid, :kill) when is_pid(pid) do
+    ref = Process.monitor(pid)
+    Process.exit(pid, :kill)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
     end
   end
 
