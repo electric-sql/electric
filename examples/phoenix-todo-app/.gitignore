@@ -1,0 +1,75 @@
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# If you run "mix test --cover", coverage assets end up here.
+/cover/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# Where 3rd-party dependencies like ExDoc output generated docs.
+/doc/
+
+# Ignore .fetch files in case you like to edit your project deps locally.
+/.fetch
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Also ignore archive artifacts (built via "mix archive.build").
+*.ez
+
+# Temporary files, for example, from tests.
+/tmp/
+
+# Ignore package tarball (built via "mix hex.build").
+electric_phoenix-*.tar
+
+# Ignore assets that are produced by build tools.
+/priv/static/assets/
+
+# Ignore digested assets cache.
+/priv/static/cache_manifest.json
+
+# In case you use Node.js/npm, you want to ignore these.
+npm-debug.log
+/assets/node_modules/
+
+# Phoenix .gitignore patterns
+phoenix/_build/
+phoenix/cover/
+phoenix/deps/
+phoenix/doc/
+phoenix/.fetch
+phoenix/erl_crash.dump
+phoenix/*.ez
+phoenix/tmp/
+phoenix/*-*.tar
+phoenix/priv/static/assets/
+phoenix/priv/static/cache_manifest.json
+phoenix/assets/node_modules/
+
+# Electric runtime data - NEVER commit this!
+phoenix/persistent/
+
+# React .gitignore patterns  
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# General patterns
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
