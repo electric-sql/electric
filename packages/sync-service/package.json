@@ -1,7 +1,7 @@
 {
   "name": "@core/sync-service",
   "private": true,
-  "version": "1.0.22",
+  "version": "1.0.23",
   "scripts": {
     "publish:hex": "mix do deps.get, hex.publish --yes || true"
   }
