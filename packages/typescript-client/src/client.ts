@@ -398,21 +398,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       backOffOpts
     )
 
-    this.#fetchClient = createFetchWithConsumedMessages(
-      createFetchWithResponseHeadersCheck(
-        createFetchWithChunkBuffer(fetchWithBackoffClient)
-      )
-    )
-
-    const sseFetchWithBackoffClient = createFetchWithBackoff(
-      baseFetchClient,
-      backOffOpts,
-      true
-    )
-
     this.#sseFetchClient = createFetchWithResponseHeadersCheck(
-      createFetchWithChunkBuffer(sseFetchWithBackoffClient)
+      createFetchWithChunkBuffer(fetchWithBackoffClient)
     )
+
+    this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
 
     this.#subscribeToVisibilityChanges()
   }
@@ -498,7 +488,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         fetchUrl,
         requestAbortController,
         headers: requestHeaders,
-        resumingFromPause: true,
+        resumingFromPause,
       })
     } catch (e) {
       // Handle abort error triggered by refresh
@@ -671,9 +661,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
-  async #onMessages(messages: string, schema: Schema, isSseMessage = false) {
-    const batch = this.#messageParser.parse(messages, schema)
-
+  async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
     // Update isUpToDate
     if (batch.length > 0) {
       const lastMessage = batch[batch.length - 1]
@@ -738,8 +726,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
     const messages = res || `[]`
+    const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
 
-    await this.#onMessages(messages, schema)
+    await this.#onMessages(batch)
   }
 
   async #requestShapeSSE(opts: {
@@ -750,6 +739,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const { fetchUrl, requestAbortController, headers } = opts
     const fetch = this.#sseFetchClient
     try {
+      let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
         headers,
         fetch,
@@ -759,11 +749,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
         },
         onmessage: (event: EventSourceMessage) => {
           if (event.data) {
-            // Process the SSE message
-            // The event.data is a single JSON object, so we wrap it in an array
-            const messages = `[${event.data}]`
+            // event.data is a single JSON object
             const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
-            this.#onMessages(messages, schema, true)
+            const message = this.#messageParser.parse<Message<T>>(
+              event.data,
+              schema
+            )
+            buffer.push(message)
+
+            if (isUpToDateMessage(message)) {
+              // Flush the buffer on up-to-date message.
+              // Ensures that we only process complete batches of operations.
+              this.#onMessages(buffer, true)
+              buffer = []
+            }
           }
         },
         onerror: (error: Error) => {

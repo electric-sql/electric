@@ -1,4 +1,4 @@
-import { ColumnInfo, GetExtensions, Message, Row, Schema, Value } from './types'
+import { ColumnInfo, GetExtensions, Row, Schema, Value } from './types'
 import { ParserNullValueError } from './error'
 
 type NullToken = null | `NULL`
@@ -98,7 +98,7 @@ export class MessageParser<T extends Row<unknown>> {
     this.parser = { ...defaultParser, ...parser }
   }
 
-  parse(messages: string, schema: Schema): Message<T>[] {
+  parse<Result>(messages: string, schema: Schema): Result {
     return JSON.parse(messages, (key, value) => {
       // typeof value === `object` && value !== null
       // is needed because there could be a column named `value`
@@ -117,7 +117,7 @@ export class MessageParser<T extends Row<unknown>> {
         })
       }
       return value
-    }) as Message<T>[]
+    }) as Result
   }
 
   // Parses the message values using the provided parser based on the schema information

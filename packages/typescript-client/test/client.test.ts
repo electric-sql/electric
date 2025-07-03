@@ -2,7 +2,13 @@ import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
-import { ShapeStream, Shape, FetchError } from '../src'
+import {
+  ShapeStream,
+  Shape,
+  FetchError,
+  isChangeMessage,
+  isControlMessage,
+} from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
@@ -1099,6 +1105,170 @@ describe.for(fetchAndSse)(
   }
 )
 
+describe(`Shape - SSE`, () => {
+  it(`should handle SSE messages in batches`, async ({
+    issuesTableUrl,
+    insertIssues,
+    aborter,
+  }) => {
+    // Create some initial data
+    const [id1] = await insertIssues({ title: `initial title` })
+
+    // Track if we've already thrown an error to ensure we only throw once
+    let hasThrownError = false
+
+    let resolveRefresh: () => void = () => {}
+    const refreshPromise = new Promise<void>((resolve) => {
+      resolveRefresh = resolve
+    })
+
+    // Custom fetch client that intercepts SSE messages
+    const customFetchClient = async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      const url = input.toString()
+
+      // Only intercept SSE requests (those with experimental_live_sse=true)
+      if (url.includes(`experimental_live_sse=true`)) {
+        // Create a custom response that intercepts the SSE stream
+        const response = await fetch(input, init)
+
+        // Create a custom readable stream that intercepts messages
+        const originalBody = response.body
+        if (!originalBody) {
+          throw new Error(`No response body`)
+        }
+
+        const filteredStream = response.body
+          .pipeThrough(new TextDecoderStream())
+          .pipeThrough(
+            createSSEFilterStream((event) => {
+              const data = event.slice(6) // remove 'data: ' prefix
+
+              let message
+              try {
+                message = JSON.parse(data)
+              } catch (parseError) {
+                // Ignore JSON parse errors for non-JSON lines
+              }
+
+              // Check if this is the first up-to-date message
+              if (
+                message.headers?.control === `up-to-date` &&
+                !hasThrownError
+              ) {
+                hasThrownError = true
+
+                // Force a refresh to interrupt the stream
+                shapeStream.forceDisconnectAndRefresh().then(resolveRefresh)
+
+                // Filter it out
+                return false
+              }
+
+              return true
+            })
+          )
+          .pipeThrough(new TextEncoderStream())
+
+        // Return a new response with our custom stream
+        return new Response(filteredStream, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        })
+      }
+
+      // For non-SSE requests, just forward to the real fetch
+      return fetch(input, init)
+    }
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: { table: issuesTableUrl },
+      signal: aborter.signal,
+      experimentalLiveSse: true,
+      fetchClient: customFetchClient,
+    })
+
+    // Track received messages to ensure no duplicates
+    const receivedRows: Array<Row> = []
+    const messageIds = new Set<string>()
+
+    let resolveInitialSync: () => void = () => {}
+    const initialSyncComplete = new Promise<void>((resolve) => {
+      resolveInitialSync = resolve
+    })
+
+    // Subscribe to the shape stream
+    const unsubscribe = shapeStream.subscribe((messages) => {
+      for (const message of messages) {
+        if (isChangeMessage(message)) {
+          // Check for duplicates
+          const rowId = message.key
+          if (messageIds.has(rowId)) {
+            throw new Error(`Duplicate message received for id: ${rowId}`)
+          }
+          messageIds.add(rowId)
+          receivedRows.push(message.value)
+        }
+
+        if (
+          isControlMessage(message) &&
+          message.headers.control === `up-to-date`
+        ) {
+          resolveInitialSync()
+        }
+      }
+    })
+
+    // Wait for initial sync
+    await initialSyncComplete
+
+    // Insert another issue to trigger an update
+    const [id2] = await insertIssues({ title: `second title` })
+
+    // Wait for the update to be processed
+    await vi.waitFor(
+      () => {
+        expect(receivedRows.length).toBe(2)
+      },
+      { timeout: 5000 }
+    )
+
+    // Verify we received both messages without duplicates
+    expect(receivedRows).toEqual([
+      {
+        id: id1,
+        title: `initial title`,
+        priority: 10,
+      },
+      {
+        id: id2,
+        title: `second title`,
+        priority: 10,
+      },
+    ])
+
+    // Check that we interrupted the stream
+    expect(hasThrownError).toBe(true)
+
+    // Await the refresh to complete
+    await refreshPromise
+
+    // Verify that there are no duplicates after the refresh
+    expect(receivedRows.length).toBe(2)
+    expect(messageIds.size).toBe(2)
+
+    // Verify the stream is connected and up to date
+    expect(shapeStream.isConnected()).toBe(true)
+    expect(shapeStream.isUpToDate).toBe(true)
+
+    unsubscribe()
+  })
+})
+
 function waitForFetch(stream: ShapeStream): Promise<void> {
   let unsub = () => {}
   return new Promise<void>((resolve) => {
@@ -1107,4 +1277,34 @@ function waitForFetch(stream: ShapeStream): Promise<void> {
       () => resolve()
     )
   }).finally(() => unsub())
+}
+
+// Simple SSE parser that buffers lines until an event is complete
+// And filters out events that don't pass the filter function
+function createSSEFilterStream(filterFn: (event: string) => boolean) {
+  let buffer = ``
+  return new TransformStream({
+    transform(chunk, controller) {
+      buffer += chunk
+      const lines = buffer.split(`\n`)
+      buffer = lines.pop() || `` // Keep the last incomplete line
+      let currentEvent = ``
+      for (const line of lines) {
+        currentEvent += line + `\n`
+        if (line.trim() === ``) {
+          // End of event
+          if (filterFn(currentEvent)) {
+            controller.enqueue(currentEvent)
+          }
+          currentEvent = ``
+        }
+      }
+    },
+    flush(controller) {
+      // Emit any remaining buffered event
+      if (buffer && filterFn(buffer)) {
+        controller.enqueue(buffer)
+      }
+    },
+  })
 }
