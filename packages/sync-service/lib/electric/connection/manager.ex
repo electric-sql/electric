@@ -108,7 +108,7 @@ defmodule Electric.Connection.Manager do
       # PID of the database connection pool
       :pool_pid,
       # PID of the shape supervisor
-      :shape_supervisor_pid,
+      :shapes_supervisor_pid,
       # PID of the shape log collector
       :shape_log_collector_pid,
       # Backoff term used for reconnection with exponential back-off
@@ -482,7 +482,7 @@ defmodule Electric.Connection.Manager do
 
     state = %{
       state
-      | shape_supervisor_pid: shapes_sup_pid,
+      | shapes_supervisor_pid: shapes_sup_pid,
         shape_log_collector_pid: log_collector_pid,
         current_step: :waiting_for_consumers,
         purge_all_shapes?: false
@@ -949,25 +949,32 @@ defmodule Electric.Connection.Manager do
     Logger.debug("Terminating connection manager with reason #{inspect(reason)}.")
 
     %{
-      shape_supervisor_pid: shape_supervisor_pid,
+      shapes_supervisor_pid: shapes_supervisor_pid,
       pool_pid: pool_pid,
       replication_client_pid: replication_client_pid,
       lock_connection_pid: lock_connection_pid
     } = state
 
     [
-      shape_supervisor_pid,
+      shapes_supervisor_pid,
       pool_pid,
       replication_client_pid,
       lock_connection_pid
     ]
     |> Enum.filter(&is_pid/1)
     |> Enum.map(&shutdown_child(&1, :shutdown))
+
+    {:stop, reason, state}
   end
 
-  defp shutdown_child(pid, reason) when is_pid(pid) do
+  defp shutdown_child(pid, _reason) when is_pid(pid) do
     ref = Process.monitor(pid)
-    Process.exit(pid, reason)
+
+    try do
+      GenServer.stop(pid, :shutdown, 5000)
+    catch
+      :exit, {:noproc, _} -> :ok
+    end
 
     receive do
       {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
