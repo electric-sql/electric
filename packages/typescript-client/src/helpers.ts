@@ -58,10 +58,9 @@ export function isUpToDateMessage<T extends Row<unknown> = Row>(
  * If we are not in SSE mode this function will return undefined.
  */
 export function getOffset(message: ControlMessage): Offset | undefined {
-  if (!message.headers.global_last_seen_lsn) {
+  const lsn = message.headers.global_last_seen_lsn
+  if (!lsn) {
     return
   }
-
-  const lsn = BigInt(message.headers.global_last_seen_lsn)
-  return `${lsn}_0`
+  return `${lsn}_0` as Offset
 }
