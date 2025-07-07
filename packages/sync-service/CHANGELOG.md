@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.23
+
+### Patch Changes
+
+- 8ff69b8: fix: account for PG14 when calculating if publication needs updating
+- a796d27: Ensure `LockConnection` can be restarted on connection manager restart
+
 ## 1.0.22
 
 ### Patch Changes
