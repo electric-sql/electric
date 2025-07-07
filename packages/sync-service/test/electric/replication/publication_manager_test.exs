@@ -13,6 +13,7 @@ defmodule Electric.Replication.PublicationManagerTest do
   @shape_handle_3 "shape_handle_3"
   @where_clause_1 %Expr{query: "id = '1'", used_refs: %{["id"] => :text}}
   @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
+  @where_clause_3 %Expr{query: "id = '3'", used_refs: %{["id"] => :text}}
   @where_clause_enum %Expr{
     query: "id = '1' AND foo_enum::text = 'bar'",
     used_refs: %{["foo_enum"] => {:enum, "foo_enum"}}
@@ -59,7 +60,7 @@ defmodule Electric.Replication.PublicationManagerTest do
         shape_cache: {__MODULE__, [self()]},
         publication_name: "pub_#{ctx.stack_id}",
         pool: :no_pool,
-        pg_version: 150_001,
+        pg_version: Access.get(ctx, :pg_version, 150_001),
         configure_tables_for_replication_fn: configure_tables_fn
       })
 
@@ -228,6 +229,33 @@ defmodule Electric.Replication.PublicationManagerTest do
                         %RelationFilter{
                           relation: {"public", "items"},
                           where_clauses: [@where_clause_2, @where_clause_1]
+                        }
+                      ]}
+
+      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
+
+      refute_receive {:filters, _}, 500
+    end
+
+    @tag update_debounce_timeout: 100
+    @tag pg_version: 14_0001
+    test "should not update publication if new shape adds nothing when where clauses aren't considered",
+         %{opts: opts} do
+      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+      # different clause, but PG 14 doesn't support those filters
+      shape3 = generate_shape({"public", "items"}, @where_clause_3)
+
+      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
+      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
+
+      Task.await_many([task1, task2])
+
+      assert_receive {:filters,
+                      [
+                        %RelationFilter{
+                          relation: {"public", "items"},
+                          where_clauses: nil
                         }
                       ]}
 

@@ -190,10 +190,11 @@ defmodule Electric.Replication.PublicationManager do
     {:ok, state, {:continue, :get_pg_version}}
   end
 
+  @pg_15 150_000
   @impl true
-  def handle_continue(:get_pg_version, state) do
+  def handle_continue(:get_pg_version, %__MODULE__{} = state) do
     state = get_pg_version(state)
-    {:noreply, state}
+    {:noreply, %__MODULE__{state | row_filtering_enabled: state.pg_version >= @pg_15}}
   end
 
   @impl true
