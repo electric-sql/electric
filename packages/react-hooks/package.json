@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/react",
   "description": "React hooks for ElectricSQL",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"

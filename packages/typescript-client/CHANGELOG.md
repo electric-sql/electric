@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.6
+
+### Patch Changes
+
+- 7be2fd3: Buffer SSE messages until up-to-date message to avoid duplicate operations from being published on the shape stream.
+
 ## 1.0.5
 
 ### Patch Changes
