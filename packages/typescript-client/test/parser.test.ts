@@ -216,6 +216,23 @@ describe(`Message parser`, () => {
     }
   })
 
+  it(`should parse text values like "NULL" correctly`, () => {
+    expect(
+      parser.parse(`[ { "value": { "a": "NULL" } } ]`, {
+        a: { type: `text`, not_null: true },
+      })
+    ).toEqual([{ value: { a: `NULL` } }])
+
+    expect(
+      parser.parse(
+        `[ { "value": { "a": "{\\"a\\",\\"NULL\\",NULL,\\"b\\"}" } } ]`,
+        {
+          a: { type: `text`, dims: 1 },
+        }
+      )
+    ).toEqual([{ value: { a: [`a`, `NULL`, null, `b`] } }])
+  })
+
   it(`should parse arrays including null values`, () => {
     const schema = {
       a: { type: `int2`, dims: 1 },

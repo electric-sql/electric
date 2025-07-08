@@ -1,8 +1,8 @@
 import { ColumnInfo, GetExtensions, Row, Schema, Value } from './types'
 import { ParserNullValueError } from './error'
 
-type NullToken = null | `NULL`
-type Token = Exclude<string, NullToken>
+type NullToken = null
+type Token = string
 type NullableToken = Token | NullToken
 export type ParseFunction<Extensions = never> = (
   value: Token,
@@ -49,6 +49,11 @@ export function pgArrayParser<Extensions>(
   let last = 0
   let p: string | undefined = undefined
 
+  function extractValue(x: Token, start: number, end: number) {
+    const val: Token = x.slice(start, end)
+    return val === `NULL` ? null : parser ? parser(val) : val
+  }
+
   function loop(x: string): Array<Value<Extensions>> {
     const xs = []
     for (; i < x.length; i++) {
@@ -71,18 +76,16 @@ export function pgArrayParser<Extensions>(
         xs.push(loop(x))
       } else if (char === `}`) {
         quoted = false
-        last < i &&
-          xs.push(parser ? parser(x.slice(last, i)) : x.slice(last, i))
+        last < i && xs.push(extractValue(x, last, i))
         last = i + 1
         break
       } else if (char === `,` && p !== `}` && p !== `"`) {
-        xs.push(parser ? parser(x.slice(last, i)) : x.slice(last, i))
+        xs.push(extractValue(x, last, i))
         last = i + 1
       }
       p = char
     }
-    last < i &&
-      xs.push(parser ? parser(x.slice(last, i + 1)) : x.slice(last, i + 1))
+    last < i && xs.push(xs.push(extractValue(x, last, i + 1)))
     return xs
   }
 
@@ -166,7 +169,7 @@ function makeNullableParser<Extensions>(
   // but if the column value is an array that contains a NULL value
   // then it will be included in the array string as `NULL`, e.g.: `"{1,NULL,3}"`
   return (value: NullableToken) => {
-    if (isPgNull(value)) {
+    if (value === null) {
       if (!isNullable) {
         throw new ParserNullValueError(columnName ?? `unknown`)
       }
@@ -174,8 +177,4 @@ function makeNullableParser<Extensions>(
     }
     return parser(value, columnInfo)
   }
-}
-
-function isPgNull(value: NullableToken): value is NullToken {
-  return value === null || value === `NULL`
 }
