@@ -282,12 +282,22 @@ defmodule Electric.Application do
   defp thousand_island_options(opts) do
     acceptor_opts = Keyword.take(opts, [:num_acceptors])
 
-    transport_opts =
-      if get_env(opts, :listen_on_ipv6?) do
-        [transport_options: [:inet6]]
+    send_opts =
+      case get_env(opts, :tcp_send_timeout) do
+        nil -> []
+        send_timeout -> [send_timeout: send_timeout]
       end
 
-    concat_opts([acceptor_opts, transport_opts])
+    ipv6_opts =
+      if get_env(opts, :listen_on_ipv6?) do
+        [:inet6]
+      else
+        []
+      end
+
+    transport_opts = [transport_options: ipv6_opts ++ send_opts]
+
+    acceptor_opts ++ transport_opts
   end
 
   defp cowboy_options(opts) do
@@ -316,11 +326,5 @@ defmodule Electric.Application do
       long_message_queue_disable_threshold:
         get_env(opts, :telemetry_long_message_queue_disable_threshold)
     ]
-  end
-
-  defp concat_opts(list_of_kw_lists) do
-    list_of_kw_lists
-    |> Enum.map(&List.wrap/1)
-    |> Enum.concat()
   end
 end

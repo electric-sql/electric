@@ -178,6 +178,23 @@ By default, Electric binds to IPv4. Enable this to listen on IPv6 addresses as w
 
 </EnvVarConfig>
 
+### ELECTRIC_TCP_SEND_TIMEOUT
+
+<EnvVarConfig
+    name="ELECTRIC_TCP_SEND_TIMEOUT"
+    defaultValue="30s"
+    example="60s">
+Timeout for sending a response chunk back to the client. Defaults to 30 seconds.
+
+Slow response processing on the client or bandwidth restristrictions can cause TCP backpressure leading to the error message:
+```
+Error while streaming response: :timeout
+```
+This environment variable increases this timeout.
+
+
+</EnvVarConfig>
+
 ### ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD
 
 <EnvVarConfig
