@@ -29,6 +29,50 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with database does not exist error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message: ~s|database "foo" does not exist|,
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: ~s|database "foo" does not exist|,
+               type: :database_does_not_exist,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with endpoint could not be found error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message:
+            ~s|The requested endpoint could not be found, or you don't have access to it. Please check the provided ID and try again.|,
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 ~s|The requested endpoint could not be found, or you don't have access to it. Please check the provided ID and try again.|,
+               type: :endpoint_not_found,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with insufficient privileges error" do
       error = %Postgrex.Error{
         message: nil,
