@@ -29,6 +29,77 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with database does not exist error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message: ~s|database "foo" does not exist|,
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: ~s|database "foo" does not exist|,
+               type: :database_does_not_exist,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with endpoint could not be found error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message:
+            ~s|The requested endpoint could not be found, or you don't have access to it. Please check the provided ID and try again.|,
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 ~s|The requested endpoint could not be found, or you don't have access to it. Please check the provided ID and try again.|,
+               type: :endpoint_not_found,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with too many connections error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :too_many_connections,
+          line: "353",
+          message:
+            "number of requested standby connections exceeds max_wal_senders (currently 5)",
+          file: "proc.c",
+          unknown: "FATAL",
+          severity: "FATAL",
+          pg_code: "53300",
+          routine: "InitProcess"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 ~s|number of requested standby connections exceeds max_wal_senders (currently 5)|,
+               type: :insufficient_resources,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with insufficient privileges error" do
       error = %Postgrex.Error{
         message: nil,
@@ -91,6 +162,42 @@ defmodule Electric.DbConnectionErrorTest do
       end
     end
 
+    test "with a tcp timeout with destination error" do
+      for message <- [
+            "tcp connect (localhost:54321): connection timed out - :etimedout",
+            "tcp connect (localhost:54321): timeout"
+          ] do
+        error = %DBConnection.ConnectionError{
+          message: message,
+          severity: :error,
+          reason: :error
+        }
+
+        assert %DbConnectionError{
+                 message: "connection timed out while trying to connect to localhost:54321",
+                 type: :connection_timeout,
+                 original_error: error,
+                 retry_may_fix?: true
+               } == DbConnectionError.from_error(error)
+      end
+    end
+
+    test "with a pool queue timeout error" do
+      error = %DBConnection.ConnectionError{
+        message:
+          "client #PID<0.4201.0> timed out because it queued and checked out the connection for longer than 3000ms\n\n whatever stack trace",
+        severity: :error,
+        reason: :error
+      }
+
+      assert %DbConnectionError{
+               message: "timed out trying to acquire connection from pool",
+               type: :connection_timeout,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with tcp closed error" do
       for message <- [
             "tcp recv (idle): closed",
@@ -148,6 +255,29 @@ defmodule Electric.DbConnectionErrorTest do
                message:
                  "Your account or project has exceeded the compute time quota. Upgrade your plan to increase limits.",
                type: :compute_quota_exceeded,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with data transfer quota exceeded error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message:
+            "Your project has exceeded the data transfer quota. Upgrade your plan to increase limits.",
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 "Your project has exceeded the data transfer quota. Upgrade your plan to increase limits.",
+               type: :data_transfer_quota_exceeded,
                original_error: error,
                retry_may_fix?: false
              } == DbConnectionError.from_error(error)

@@ -54,7 +54,11 @@ defmodule Electric.DbConnectionError do
   end
 
   def from_error(%DBConnection.ConnectionError{} = error) do
-    maybe_nxdomain_error(error) || maybe_connection_refused_error(error) || unknown_error(error)
+    maybe_nxdomain_error(error) ||
+      maybe_connection_refused_error(error) ||
+      maybe_connection_timeout_error(error) ||
+      maybe_pool_queue_timeout_error(error) ||
+      unknown_error(error)
   end
 
   def from_error(
@@ -163,6 +167,19 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{code: :too_many_connections, severity: "FATAL", pg_code: "53300"}
+        } = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :insufficient_resources,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error(%Postgrex.Error{message: "ssl not available"} = error) do
     %DbConnectionError{
       message: "Database server not configured to accept SSL connections",
@@ -173,7 +190,10 @@ defmodule Electric.DbConnectionError do
   end
 
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
-    maybe_database_does_not_exist(error) || maybe_compute_quota_exceeded(error) ||
+    maybe_database_does_not_exist(error) ||
+      maybe_endpoint_does_not_exist(error) ||
+      maybe_compute_quota_exceeded(error) ||
+      maybe_data_transfer_quota_exceeded(error) ||
       unknown_error(error)
   end
 
@@ -234,12 +254,42 @@ defmodule Electric.DbConnectionError do
     end
   end
 
+  defp maybe_endpoint_does_not_exist(error) do
+    case error.postgres.message do
+      "The requested endpoint could not be found, or you don't have access to it" <> _ ->
+        %DbConnectionError{
+          message: error.postgres.message,
+          type: :endpoint_not_found,
+          original_error: error,
+          retry_may_fix?: false
+        }
+
+      _ ->
+        nil
+    end
+  end
+
   defp maybe_compute_quota_exceeded(error) do
     case error.postgres.message do
       "Your account or project has exceeded the compute time quota" <> _ ->
         %DbConnectionError{
           message: error.postgres.message,
           type: :compute_quota_exceeded,
+          original_error: error,
+          retry_may_fix?: false
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp maybe_data_transfer_quota_exceeded(error) do
+    case error.postgres.message do
+      "Your project has exceeded the data transfer quota." <> _ ->
+        %DbConnectionError{
+          message: error.postgres.message,
+          type: :data_transfer_quota_exceeded,
           original_error: error,
           retry_may_fix?: false
         }
@@ -280,6 +330,37 @@ defmodule Electric.DbConnectionError do
 
       _ ->
         nil
+    end
+  end
+
+  defp maybe_connection_timeout_error(error) do
+    ~r/tcp connect \((?<destination>.*)\): (?:timeout|connection timed out - :etimedout)/
+    |> Regex.named_captures(error.message)
+    |> case do
+      %{"destination" => destination} ->
+        %DbConnectionError{
+          message: "connection timed out while trying to connect to #{destination}",
+          type: :connection_timeout,
+          original_error: error,
+          retry_may_fix?: true
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp maybe_pool_queue_timeout_error(error) do
+    if Regex.match?(
+         ~r/^client #PID<\d+.\d+.\d+> timed out because it queued and checked out the connection for longer than \d+ms/,
+         error.message
+       ) do
+      %DbConnectionError{
+        message: "timed out trying to acquire connection from pool",
+        type: :connection_timeout,
+        original_error: error,
+        retry_may_fix?: true
+      }
     end
   end
 end
