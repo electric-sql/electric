@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.7
+
+### Patch Changes
+
+- 6232b7e: Fix parsing of text `"NULL"` values as text rather than `NULL`
+
 ## 1.0.6
 
 ### Patch Changes

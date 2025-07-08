@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.0.24
+
+### Patch Changes
+
+- 23ccafd: Add ELECTRIC_TCP_SEND_TIMEOUT to allow configuration of TCP/SSL send timeout
+- bd43b35: Handle more pool connection disconnect exit reasons
+- 26528a0: Add more connection errors to recognized list (timeouts, pool timeouts, data tranfser quota issues, insufficient resources, unknown endpoint)
+
 ## 1.0.23
 
 ### Patch Changes
