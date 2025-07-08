@@ -80,40 +80,52 @@ describe(`Default parser`, () => {
 })
 
 describe(`Postgres array parser`, () => {
+  const nullableDefaultParser = Object.fromEntries(
+    Object.entries(defaultParser).map(([key, parser]) => [
+      key,
+      (val: string | null) => (val === null ? null : parser(val)),
+    ])
+  )
+
   it(`should parse arrays and their values`, () => {
-    expect(pgArrayParser(`{1,2,3,4,5}`, defaultParser.int2)).toEqual([
-      1, 2, 3, 4, 5,
+    expect(
+      pgArrayParser(`{1,2,3,4,5,NULL}`, nullableDefaultParser.int2)
+    ).toEqual([1, 2, 3, 4, 5, null])
+    expect(
+      pgArrayParser(`{1,2,3,4,5,NULL}`, nullableDefaultParser.int8)
+    ).toEqual([BigInt(1), BigInt(2), BigInt(3), BigInt(4), BigInt(5), null])
+    expect(pgArrayParser(`{"foo","bar","NULL",NULL}`, (v) => v)).toEqual([
+      `foo`,
+      `bar`,
+      `NULL`,
+      null,
     ])
-    expect(pgArrayParser(`{1,2,3,4,5}`, defaultParser.int8)).toEqual([
-      BigInt(1),
-      BigInt(2),
-      BigInt(3),
-      BigInt(4),
-      BigInt(5),
-    ])
-    expect(pgArrayParser(`{"foo","bar"}`, (v) => v)).toEqual([`foo`, `bar`])
     expect(pgArrayParser(`{foo,"}"}`, (v) => v)).toEqual([`foo`, `}`])
-    expect(pgArrayParser(`{t,f,f}`, defaultParser.bool)).toEqual([
+    expect(pgArrayParser(`{t,f,f,NULL}`, nullableDefaultParser.bool)).toEqual([
       true,
       false,
       false,
+      null,
     ])
 
-    expect(pgArrayParser(`{}`, defaultParser.json)).toEqual([])
-    expect(pgArrayParser(`{"{}"}`, defaultParser.json)).toEqual([{}])
-    expect(pgArrayParser(`{null}`, defaultParser.json)).toEqual([null])
+    expect(pgArrayParser(`{}`, nullableDefaultParser.json)).toEqual([])
+    expect(pgArrayParser(`{"{}"}`, nullableDefaultParser.json)).toEqual([{}])
+    expect(pgArrayParser(`{null}`, nullableDefaultParser.json)).toEqual([null])
     // eslint-disable-next-line no-useless-escape -- The backslashes are not useless, they are required in Postgres wire format
-    expect(pgArrayParser(`{"{\\\"a\\\":null}"}`, defaultParser.json)).toEqual([
-      { a: null },
-    ])
+    expect(
+      pgArrayParser(`{"{\\"a\\":null}"}`, nullableDefaultParser.json)
+    ).toEqual([{ a: null }])
 
     expect(
-      pgArrayParser(`{Infinity,-Infinity,NaN}`, defaultParser.float8)
-    ).toEqual([Infinity, -Infinity, NaN])
+      pgArrayParser(
+        `{Infinity,-Infinity,NaN,NULL}`,
+        nullableDefaultParser.float8
+      )
+    ).toEqual([Infinity, -Infinity, NaN, null])
   })
 
   it(`should parse nested arrays`, () => {
-    expect(pgArrayParser(`{{1,2},{3,4}}`, defaultParser.int2)).toEqual([
+    expect(pgArrayParser(`{{1,2},{3,4}}`, nullableDefaultParser.int2)).toEqual([
       [1, 2],
       [3, 4],
     ])
@@ -121,18 +133,26 @@ describe(`Postgres array parser`, () => {
       [`foo`],
       [`bar`],
     ])
-    expect(pgArrayParser(`{{t,f}, {f,t}}`, defaultParser.bool)).toEqual([
-      [true, false],
-      [false, true],
-    ])
-    expect(pgArrayParser(`{{1,2},{3,4}}`, defaultParser.int8)).toEqual([
+    expect(pgArrayParser(`{{t,f}, {f,t}}`, nullableDefaultParser.bool)).toEqual(
+      [
+        [true, false],
+        [false, true],
+      ]
+    )
+    expect(pgArrayParser(`{{1,2},{3,4}}`, nullableDefaultParser.int8)).toEqual([
       [BigInt(1), BigInt(2)],
       [BigInt(3), BigInt(4)],
     ])
 
-    expect(pgArrayParser(`{{},{}}`, defaultParser.json)).toEqual([[], []])
-    expect(pgArrayParser(`{"{}","{}"}`, defaultParser.json)).toEqual([{}, {}])
-    expect(pgArrayParser(`{null,null}`, defaultParser.json)).toEqual([
+    expect(pgArrayParser(`{{},{}}`, nullableDefaultParser.json)).toEqual([
+      [],
+      [],
+    ])
+    expect(pgArrayParser(`{"{}","{}"}`, nullableDefaultParser.json)).toEqual([
+      {},
+      {},
+    ])
+    expect(pgArrayParser(`{null,null}`, nullableDefaultParser.json)).toEqual([
       null,
       null,
     ])
@@ -140,14 +160,14 @@ describe(`Postgres array parser`, () => {
       pgArrayParser(
         // eslint-disable-next-line no-useless-escape -- The backslashes are not useless, they are required in Postgres wire format
         `{"{\\\"a\\\":null}", "{\\\"b\\\":null}"}`,
-        defaultParser.json
+        nullableDefaultParser.json
       )
     ).toEqual([{ a: null }, { b: null }])
 
     expect(
       pgArrayParser(
         `{{Infinity,-Infinity,NaN},{NaN,Infinity,-Infinity}}`,
-        defaultParser.float8
+        nullableDefaultParser.float8
       )
     ).toEqual([
       [Infinity, -Infinity, NaN],
@@ -214,6 +234,29 @@ describe(`Message parser`, () => {
         expectedParsedMessages
       )
     }
+  })
+
+  it(`should parse text values like "NULL" correctly`, () => {
+    expect(
+      parser.parse(`[ { "value": { "a": "NULL" } } ]`, {
+        a: { type: `text`, not_null: true },
+      })
+    ).toEqual([{ value: { a: `NULL` } }])
+
+    const messagesNullStringAndReal = `[ { "value": { "a": "{\\"a\\",\\"NULL\\",NULL,\\"b\\"}" } } ]`
+
+    expect(
+      parser.parse(messagesNullStringAndReal, {
+        a: { type: `text`, dims: 1 },
+      })
+    ).toEqual([{ value: { a: [`a`, `NULL`, null, `b`] } }])
+
+    // should fail if the array contains null in a non null type
+    expect(() =>
+      parser.parse(messagesNullStringAndReal, {
+        a: { type: `text`, dims: 1, not_null: true },
+      })
+    ).toThrowError(`Column "a" does not allow NULL values`)
   })
 
   it(`should parse arrays including null values`, () => {
