@@ -73,6 +73,33 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with too many connections error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :too_many_connections,
+          line: "353",
+          message:
+            "number of requested standby connections exceeds max_wal_senders (currently 5)",
+          file: "proc.c",
+          unknown: "FATAL",
+          severity: "FATAL",
+          pg_code: "53300",
+          routine: "InitProcess"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 ~s|number of requested standby connections exceeds max_wal_senders (currently 5)|,
+               type: :insufficient_resources,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with insufficient privileges error" do
       error = %Postgrex.Error{
         message: nil,

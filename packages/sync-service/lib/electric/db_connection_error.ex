@@ -167,6 +167,19 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{code: :too_many_connections, severity: "FATAL", pg_code: "53300"}
+        } = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :insufficient_resources,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error(%Postgrex.Error{message: "ssl not available"} = error) do
     %DbConnectionError{
       message: "Database server not configured to accept SSL connections",
