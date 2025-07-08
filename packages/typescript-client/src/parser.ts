@@ -1,9 +1,8 @@
 import { ColumnInfo, GetExtensions, Row, Schema, Value } from './types'
 import { ParserNullValueError } from './error'
 
-type NullToken = null
 type Token = string
-type NullableToken = Token | NullToken
+type NullableToken = Token | null
 export type ParseFunction<Extensions = never> = (
   value: Token,
   additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
@@ -40,7 +39,7 @@ export const defaultParser: Parser = {
 // Taken from: https://github.com/electric-sql/pglite/blob/main/packages/pglite/src/types.ts#L233-L279
 export function pgArrayParser<Extensions>(
   value: Token,
-  parser?: ParseFunction<Extensions>
+  parser?: NullableParseFunction<Extensions>
 ): Value<Extensions> {
   let i = 0
   let char = null
@@ -50,8 +49,9 @@ export function pgArrayParser<Extensions>(
   let p: string | undefined = undefined
 
   function extractValue(x: Token, start: number, end: number) {
-    const val: Token = x.slice(start, end)
-    return val === `NULL` ? null : parser ? parser(val) : val
+    let val: Token | null = x.slice(start, end)
+    val = val === `NULL` ? null : val
+    return parser ? parser(val) : val
   }
 
   function loop(x: string): Array<Value<Extensions>> {
