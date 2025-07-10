@@ -1,9 +1,10 @@
 defmodule Electric.ShapeCache.PureFileStorage.LogFile do
   @moduledoc false
-  alias Electric.ShapeCache.FileStorage.KeyIndex
+  alias Electric.ShapeCache.PureFileStorage.ActionFile
+  alias Electric.ShapeCache.PureFileStorage.KeyIndex
   alias Electric.LogItems
-  alias Electric.ShapeCache.FileStorage.ActionFile
-  alias Electric.ShapeCache.FileStorage.ChunkIndex
+  alias Electric.ShapeCache.PureFileStorage.ActionFile
+  alias Electric.ShapeCache.PureFileStorage.ChunkIndex
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.LogChunker
 
@@ -38,18 +39,19 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
           {log_file_path :: String.t(), chunk_index_path :: String.t(),
            key_index_path :: String.t()}
 
+  @spec make_entry(log_item_with_sizes()) :: {iodata(), iodata_size :: non_neg_integer()}
+  def make_entry({offset, key_size, key, op_type, flag, json_size, json}) do
+    {[
+       LogOffset.to_int128(offset),
+       <<key_size::32>>,
+       key,
+       <<op_type::8, flag::8, json_size::64>>,
+       json
+     ], key_size + json_size + @line_overhead}
+  end
+
   @doc """
   Write a log file based on the stream of log items.
-
-  Writes 2 files: the log file itself and the chunk index alongside it.
-
-  The log file structure is, in elixir binary:
-
-      <<tx_offset::64, op_offset::64,
-        key_size::32, key::binary-size(key_size),
-        op_type::binary-size(1),
-        processed_flag::8,
-        json_size::64, json::binary-size(json_size)>>
   """
   @spec write_log_file(
           log_stream :: Enumerable.t(log_item()),
@@ -64,7 +66,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     log_stream
     |> normalize_log_stream()
     |> ChunkIndex.write_from_stream(log_file_path <> ".chunk_index", chunk_size)
-    |> KeyIndex.write_from_stream(log_file_path <> ".key_index")
+    |> KeyIndex.write_from_stream(log_file_path <> ".key_index", 1)
     |> Stream.map(fn
       {log_offset, key_size, key, op_type, flag, json_size, json} ->
         # Add processed flag (0 for unprocessed) to header
@@ -74,52 +76,10 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
           json
         ]
     end)
-    |> Enum.into(File.stream!(log_file_path))
+    |> Stream.into(File.stream!(log_file_path))
+    |> Stream.run()
 
     {log_file_path, log_file_path <> ".chunk_index", log_file_path <> ".key_index"}
-  end
-
-  @doc """
-  Apply the compaction actions to the log file
-  """
-  def apply_actions(
-        log_file_path,
-        action_file_path,
-        chunk_size \\ LogChunker.default_chunk_size_threshold(),
-        merge_updates_fun \\ &LogItems.merge_updates/2
-      ) do
-    compacted_log_file_path = log_file_path <> ".compacted"
-
-    ActionFile.stream(action_file_path)
-    |> Stream.transform(
-      fn -> File.open!(log_file_path, [:read, :raw, :read_ahead]) end,
-      fn
-        {_, :skip}, file ->
-          _ = read_line(file)
-          {[], file}
-
-        {_, :keep}, file ->
-          case read_line(file) do
-            {offset, key_size, key, op_type, 0, _json_size, json} ->
-              # First compaction - process JSON and mark as processed
-              processed_json = process_json(json)
-
-              new_line =
-                {offset, key_size, key, op_type, 1, byte_size(processed_json), processed_json}
-
-              {[new_line], file}
-
-            line ->
-              # Already processed or not insert/delete - keep as-is
-              {[line], file}
-          end
-
-        {_, {:compact, offsets}}, file ->
-          {[compact_log_file_lines(file, offsets, merge_updates_fun)], file}
-      end,
-      &File.close(&1)
-    )
-    |> write_log_file(compacted_log_file_path, chunk_size)
   end
 
   defp read_line(file) do
@@ -127,43 +87,9 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
          <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
          <<op_type::8, processed_flag::8, json_size::64>> <- IO.binread(file, 10),
          <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
-      {{tx_offset, op_offset}, key_size, key, op_type, processed_flag, json_size, json}
+      {LogOffset.new(tx_offset, op_offset), key_size, key, op_type, processed_flag, json_size,
+       json}
     end
-  end
-
-  @spec compact_log_file_lines(
-          :file.io_device(),
-          [{position :: non_neg_integer(), size :: non_neg_integer()}],
-          (elem, elem -> elem)
-        ) :: log_item_with_sizes()
-        when elem: var
-  defp compact_log_file_lines(file, file_offsets, merge_updates_fun) do
-    # The line to be replaced with compaction will keep it's offset & key
-    {offset, key_size, key, op_type, _, _, _} = read_line(file)
-
-    # Save position
-    {:ok, current_position} = :file.position(file, :cur)
-
-    merged_json =
-      file_offsets
-      # Group reads to be efficient, but try to limit loading the JSONs to 10MB at a time.
-      # In the worst case when JSONs exceed 10MB, we'll just read one at a time.
-      |> chunk_expected_reads(bytes: 1024 * 1024 * 10)
-      |> Stream.flat_map(fn offsets ->
-        case :file.pread(file, offsets) do
-          {:ok, results} -> results
-          {:error, reason} -> raise inspect(reason)
-          :eof -> raise "unexpected end of file while reading back jsons from the log"
-        end
-      end)
-      |> Stream.map(&Jason.decode!/1)
-      |> Enum.reduce(fn new, acc -> merge_updates_fun.(acc, new) end)
-      |> Jason.encode!()
-
-    # Restore position to continue reading in the outer loop
-    {:ok, _} = :file.position(file, {:bof, current_position})
-
-    {offset, key_size, key, op_type, 1, byte_size(merged_json), merged_json}
   end
 
   @doc """
@@ -180,28 +106,6 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     end)
   end
 
-  @spec chunk_expected_reads(
-          Enumerable.t({position :: non_neg_integer(), size :: non_neg_integer()}),
-          bytes: non_neg_integer()
-        ) :: Enumerable.t(list({position :: non_neg_integer(), size :: non_neg_integer()}))
-  defp chunk_expected_reads(stream, bytes: chunk_size) do
-    Stream.chunk_while(
-      stream,
-      {0, []},
-      fn
-        {_, size} = item, {total_size, acc} when total_size > chunk_size ->
-          {:cont, Enum.reverse(acc), {size, [item]}}
-
-        {_, size} = item, {total_size, acc} ->
-          {:cont, {total_size + size, [item | acc]}}
-      end,
-      fn
-        {_, []} -> {:cont, []}
-        {_, acc} -> {:cont, Enum.reverse(acc), []}
-      end
-    )
-  end
-
   @doc """
   Get the expected byte position in the file after the given log item is written.
 
@@ -215,13 +119,22 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     current_position + key_size + json_size + @line_overhead
   end
 
+  def expected_position(current_position, key_size, json_size) do
+    current_position + key_size + json_size + @line_overhead
+  end
+
   @doc """
   Get the expected byte position of the JSON for the given log item after it's written.
 
   Used by other modules that know the log file structure.
   """
-  @spec expected_json_position(non_neg_integer(), log_item_with_sizes()) :: non_neg_integer()
+  @spec expected_json_position(non_neg_integer(), log_item_with_sizes() | non_neg_integer()) ::
+          non_neg_integer()
   def expected_json_position(current_position, {_, key_size, _, _, _, _, _}) do
+    current_position + key_size + @line_overhead
+  end
+
+  def expected_json_position(current_position, key_size) when is_integer(key_size) do
     current_position + key_size + @line_overhead
   end
 
@@ -241,6 +154,32 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     end
   end
 
+  @spec stream_entries(log_file_path :: String.t(), start_position :: non_neg_integer()) ::
+          Enumerable.t({log_item_with_sizes(), non_neg_integer()})
+  def stream_entries(log_file_path, start_position) do
+    Stream.resource(
+      fn ->
+        file = File.open!(log_file_path, [:read, :raw, :read_ahead])
+        :file.position(file, start_position)
+        {file, start_position}
+      end,
+      fn {file, position} ->
+        with <<tx_offset::64, op_offset::64, key_size::32>> <- IO.binread(file, 20),
+             <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
+             <<op_type::8, flag::8, json_size::64>> <- IO.binread(file, 10),
+             <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
+          entry =
+            {LogOffset.new(tx_offset, op_offset), key_size, key, op_type, flag, json_size, json}
+
+          {[{entry, position}], {file, expected_position(position, entry)}}
+        else
+          _ -> {:halt, {file, position}}
+        end
+      end,
+      &File.close(elem(&1, 0))
+    )
+  end
+
   def stream_jsons(log_file_path, start_position, end_position, exclusive_min_offset) do
     # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
     file = File.open!(log_file_path, [:read, :raw])
@@ -250,8 +189,14 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
         {jsons, _} = extract_jsons_from_binary(data, exclusive_min_offset, nil)
         jsons
       else
-        :eof -> raise "unexpected end of file"
-        {:error, reason} -> raise "error reading file: #{inspect(reason)}"
+        :eof ->
+          raise "unexpected end of file"
+
+        {:error, reason} ->
+          raise File.Error,
+            path: log_file_path,
+            reason: reason,
+            action: "pread(#{start_position}, #{end_position - start_position})"
       end
     after
       File.close(file)
@@ -391,5 +336,116 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
 
       :file.truncate(file)
     end)
+  end
+
+  alias Electric.LogItems
+
+  def merge_with_actions(
+        action_file_path,
+        paths_with_labels,
+        resulting_file,
+        chunk_size,
+        merge_fun \\ &LogItems.merge_updates/2
+      ) do
+    ActionFile.stream(action_file_path)
+    |> Stream.transform(
+      fn ->
+        Map.new(paths_with_labels, fn {label, path} ->
+          file = File.open!(path, [:read, :raw, :read_ahead])
+          {label, file}
+        end)
+      end,
+      # Actions are in log-offset order, so we can apply them as we go along
+      fn {_offset, label, _entry_start, action}, files ->
+        file = Map.fetch!(files, label)
+
+        case action do
+          :skip ->
+            skip_line(file)
+            {[], files}
+
+          :keep ->
+            {[file |> read_line() |> process_line()], files}
+
+          {:compact, offsets} ->
+            {[compact_lines(file, files, offsets, merge_fun)], files}
+        end
+      end,
+      &Enum.each(&1, fn {_, file} -> File.close(file) end)
+    )
+    |> write_log_file(resulting_file, chunk_size)
+  end
+
+  defp skip_line(file) do
+    _ = read_line(file)
+    :ok
+  end
+
+  defp process_line({_, _, _, _, 1, _, _} = line), do: line
+
+  defp process_line({offset, key_size, key, op_type, 0, _, json}) do
+    new_json = process_json(json)
+    {offset, key_size, key, op_type, 1, byte_size(new_json), new_json}
+  end
+
+  defp compact_lines(original_file, files, offsets, merge_fun) do
+    # The line to be replaced with compaction will keep it's offset & key
+    {offset, key_size, key, op_type, _, _, _} = read_line(original_file)
+
+    # Save position
+    saved_positions =
+      Map.new(files, fn {label, file} ->
+        {:ok, position} = :file.position(file, :cur)
+        {label, position}
+      end)
+
+    merged_json =
+      offsets
+      # Group reads to be efficient, but try to limit loading the JSONs to 10MB at a time.
+      # In the worst case when JSONs exceed 10MB, we'll just read one at a time.
+      |> chunk_expected_reads(bytes: 1024 * 1024 * 10)
+      |> Stream.flat_map(fn [{label, _, _} | _] = offsets ->
+        file = Map.fetch!(files, label)
+        read_offsets = Enum.map(offsets, fn {_, pos, length} -> {pos, length} end)
+
+        case :file.pread(file, read_offsets) do
+          {:ok, results} -> results
+          {:error, reason} -> raise File.Error, path: original_file, reason: reason
+          :eof -> raise "unexpected end of file while reading back jsons from the log"
+        end
+      end)
+      |> Stream.map(&Jason.decode!/1)
+      |> Enum.reduce(fn new, acc -> merge_fun.(acc, new) end)
+      |> Jason.encode!()
+
+    # Restore position to continue reading in the outer loop
+    Enum.each(saved_positions, fn {label, position} ->
+      :file.position(Map.fetch!(files, label), {:bof, position})
+    end)
+
+    {offset, key_size, key, op_type, 1, byte_size(merged_json), merged_json}
+  end
+
+  @spec chunk_expected_reads(
+          Enumerable.t({position :: non_neg_integer(), size :: non_neg_integer()}),
+          bytes: non_neg_integer()
+        ) :: Enumerable.t(list({position :: non_neg_integer(), size :: non_neg_integer()}))
+  defp chunk_expected_reads(stream, bytes: chunk_size) do
+    Stream.chunk_while(
+      stream,
+      {nil, 0, []},
+      fn
+        {label, _, size} = item, {old_label, total_size, [_ | _] = acc}
+        when total_size > chunk_size or old_label != label ->
+          {:cont, Enum.reverse(acc), {label, size, [item]}}
+
+        {label, _, size} = item, {_, total_size, acc} ->
+          {:cont, {label, total_size + size, [item | acc]}}
+      end,
+      fn
+        {_, _, []} -> {:cont, []}
+        {_, _, acc} -> {:cont, Enum.reverse(acc), []}
+      end
+    )
   end
 end

@@ -23,8 +23,7 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate get_chunk_end_log_offset(offset, opts), to: FileStorage
   defdelegate cleanup!(opts), to: FileStorage
   defdelegate terminate(opts), to: FileStorage
-  defdelegate compact(opts), to: FileStorage
-  defdelegate compact(opts, offset), to: FileStorage
+  defdelegate compact(opts, keep_complete_chunks), to: FileStorage
 
   def shared_opts(opts) do
     opts

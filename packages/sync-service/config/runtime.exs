@@ -107,7 +107,7 @@ storage_spec =
         "file" ->
           {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
 
-        "better_file" ->
+        "pure_file" ->
           {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
 
         "crashing_file" ->

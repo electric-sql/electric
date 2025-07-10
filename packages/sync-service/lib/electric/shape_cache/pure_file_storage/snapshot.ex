@@ -59,7 +59,7 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
             {[chunk_num], {chunk_num, file, {[], 0}}}
 
           true ->
-            {[chunk_num], {chunk_num, file, {[], 0}}}
+            {[chunk_num - 1], {chunk_num, file, {[], 0}}}
         end
       end,
       fn {_chunk_num, file, _} ->

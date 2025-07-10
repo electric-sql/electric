@@ -29,4 +29,23 @@ defmodule Electric.ShapeCache.LogChunker do
 
   @spec default_chunk_size_threshold() :: non_neg_integer()
   def default_chunk_size_threshold(), do: @default_threshold
+
+  def intersperse_boundaries(stream, current_size \\ 0, chunk_size, item_size_fn, boundary_fn)
+      when is_function(item_size_fn, 1) and is_function(boundary_fn, 1) do
+    Stream.transform(
+      stream,
+      fn -> current_size end,
+      fn elem, acc ->
+        item_size = item_size_fn.(elem)
+        new_size = acc + item_size
+
+        if new_size >= chunk_size do
+          {[elem, boundary_fn.(elem)], 0}
+        else
+          {[elem], new_size}
+        end
+      end,
+      fn acc -> send(self(), {:current_chunk_size, acc}) end
+    )
+  end
 end

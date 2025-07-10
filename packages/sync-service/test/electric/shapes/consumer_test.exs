@@ -658,8 +658,8 @@ defmodule Electric.Shapes.ConsumerTest do
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
             pg_snapshot = {10, 11, [10]}
             GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
-            Storage.make_new_snapshot!([], storage)
             GenServer.cast(parent, {:snapshot_started, shape_handle})
+            Storage.make_new_snapshot!([], storage)
           end
         )
 

@@ -75,7 +75,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   end
 
   def init(config) when is_map(config) do
-    %{shape_handle: shape_handle, storage: {_, _} = storage, shape: shape} = config
+    %{shape_handle: shape_handle, storage: {_, _} = storage} = config
 
     Process.set_label({:consumer_supervisor, shape_handle})
     metadata = [stack_id: config.stack_id, shape_handle: shape_handle]
@@ -92,19 +92,6 @@ defmodule Electric.Shapes.ConsumerSupervisor do
       {Electric.Shapes.Consumer.Snapshotter, shape_config}
     ]
 
-    children =
-      if should_enable_compaction?(shape, config) do
-        children ++
-          [{Electric.ShapeCache.CompactionRunner, [{:storage, shape_storage} | metadata]}]
-      else
-        children
-      end
-
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end
-
-  defp should_enable_compaction?(%{storage: %{compaction: :enabled}}, _config), do: true
-  defp should_enable_compaction?(%{storage: %{compaction: :disabled}}, _config), do: false
-  # Old shapes don't get compaction by default.
-  defp should_enable_compaction?(_, _), do: false
 end

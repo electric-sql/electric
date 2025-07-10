@@ -2,7 +2,9 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   use ExUnit.Case
 
   import Support.ComponentSetup
+  import Support.TestUtils
 
+  alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.PureFileStorage
@@ -78,6 +80,118 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     end
   end
 
+  describe "key index writes" do
+    test "are correct", %{opts: opts} do
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([], opts)
+
+      suffix = PureFileStorage.latest_name(opts)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|},
+            {LogOffset.new(11, 0), "test_key", :update, ~S|{"test":2}|},
+            {LogOffset.new(12, 0), "test_key", :delete, ~S|{"test":2}|}
+          ],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+
+      assert File.exists?(PureFileStorage.key_file(opts, suffix))
+
+      assert PureFileStorage.KeyIndex.read_key_file(PureFileStorage.key_file(opts, suffix)) == [
+               {"test_key", LogOffset.new(10, 0), ?i, 0, byte_size(~S|{"test":1}|)},
+               {"test_key", LogOffset.new(11, 0), ?u, 48, byte_size(~S|{"test":2}|)},
+               {"test_key", LogOffset.new(12, 0), ?d, 96, byte_size(~S|{"test":2}|)}
+             ]
+    end
+
+    @tag chunk_size: 5
+    test "are correct with small chunks too", %{opts: opts} do
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([], opts)
+
+      writer =
+        for i <- 1..10 do
+          %Changes.UpdatedRecord{
+            relation: {"public", "test_table"},
+            old_record: %{"id" => "sameid", "name" => "Test#{i - 1}"},
+            record: %{"id" => "sameid", "name" => "Test#{i}"},
+            log_offset: LogOffset.new(i, 0),
+            changed_columns: MapSet.new(["name"])
+          }
+        end
+        |> changes_to_log_items()
+        |> PureFileStorage.append_to_log!(writer)
+
+      PureFileStorage.terminate(writer)
+
+      key_file = PureFileStorage.key_file(opts, PureFileStorage.latest_name(opts))
+
+      assert File.exists?(key_file)
+
+      assert PureFileStorage.KeyIndex.read_key_file(key_file) == [
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(1, 0), 117, 0, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(2, 0), 117, 251, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(3, 0), 117, 502, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(4, 0), 117, 753, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(5, 0), 117, 1004, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(6, 0), 117, 1255, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(7, 0), 117, 1506, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(8, 0), 117, 1757, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(9, 0), 117, 2008, 191},
+               {"\"public\".\"test_table\"/\"sameid\"", LogOffset.new(10, 0), 117, 2259, 193}
+             ]
+    end
+  end
+
+  describe "chunk reads" do
+    @tag chunk_size: 100
+    test "correctly finds a chunk to read from", %{opts: opts} do
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([], opts)
+
+      long_word = String.duplicate("0", 100)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(10, 0), "test_key", :insert, ~s|{"test":"#{long_word}1"}|},
+            {LogOffset.new(11, 0), "test_key", :update, ~s|{"test":"#{long_word}2"}|},
+            {LogOffset.new(12, 0), "test_key", :delete, ~s|{"test":"#{long_word}3"}|}
+          ],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+
+      assert PureFileStorage.ChunkIndex.read_chunk_file(
+               PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
+             ) == [
+               {{LogOffset.new(10, 0), LogOffset.new(10, 0)}, {0, 150}, {0, 46}},
+               {{LogOffset.new(11, 0), LogOffset.new(11, 0)}, {150, 300}, {46, 92}},
+               {{LogOffset.new(12, 0), LogOffset.new(12, 0)}, {300, 450}, {92, 138}}
+             ]
+
+      assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(10, 0), opts)
+             |> Enum.to_list() == [~s|{"test":"#{long_word}1"}|]
+
+      assert PureFileStorage.get_log_stream(LogOffset.new(10, 0), LogOffset.new(11, 0), opts)
+             |> Enum.to_list() == [~s|{"test":"#{long_word}2"}|]
+
+      assert PureFileStorage.get_log_stream(LogOffset.new(11, 0), LogOffset.new(12, 0), opts)
+             |> Enum.to_list() == [~s|{"test":"#{long_word}3"}|]
+    end
+  end
+
   describe "crash recovery" do
     # These tests make use of known log file structures to test that the storage recovers correctly
     # If underlying file structure changes, these tests will need to be updated.
@@ -103,15 +217,19 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
     test "incomplete transaction write before crash is discarded", %{opts: opts} do
       # Transaction got partially flushed, but not "closed" i.e. persisted boundary wasn't updated
-      File.open!(PureFileStorage.json_file(opts), [:append, :raw], fn file ->
-        json = Jason.encode!(%{test: 2})
+      File.open!(
+        PureFileStorage.json_file(opts, PureFileStorage.latest_name(opts)),
+        [:append, :raw],
+        fn file ->
+          json = Jason.encode!(%{test: 2})
 
-        IO.binwrite(
-          file,
-          <<LogOffset.to_int128(LogOffset.new(11, 0))::binary, 4::32, "test"::binary, ?i::8, 0::8,
-            byte_size(json)::64, json::binary>>
-        )
-      end)
+          IO.binwrite(
+            file,
+            <<LogOffset.to_int128(LogOffset.new(11, 0))::binary, 4::32, "test"::binary, ?i::8,
+              0::8, byte_size(json)::64, json::binary>>
+          )
+        end
+      )
 
       writer = PureFileStorage.init_writer!(opts, @shape)
 
@@ -141,21 +259,34 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
     test "chunk boundary without an actual write is trimmed", %{opts: opts} do
       # Transaction got partially flushed, but not "closed" i.e. persisted boundary wasn't updated
-      File.open!(PureFileStorage.chunk_file(opts), [:append, :raw], fn file ->
-        IO.binwrite(file, <<LogOffset.to_int128(LogOffset.new(20, 0))::binary, 100::64>>)
-      end)
+      File.open!(
+        PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts)),
+        [:append, :raw],
+        fn file ->
+          IO.binwrite(
+            file,
+            <<LogOffset.to_int128(LogOffset.new(20, 0))::binary, 100::64, 100::64>>
+          )
+        end
+      )
 
       # And a partial write cut midline just for good measure
-      File.open!(PureFileStorage.json_file(opts), [:append, :raw], fn file ->
-        IO.binwrite(
-          file,
-          <<LogOffset.to_int128(LogOffset.new(20, 0))::binary, 4::32, "test"::binary, ?i::8, 0::8,
-            0::32>>
-        )
-      end)
+      File.open!(
+        PureFileStorage.json_file(opts, PureFileStorage.latest_name(opts)),
+        [:append, :raw],
+        fn file ->
+          IO.binwrite(
+            file,
+            <<LogOffset.to_int128(LogOffset.new(20, 0))::binary, 4::32, "test"::binary, ?i::8,
+              0::8, 0::32>>
+          )
+        end
+      )
 
-      assert PureFileStorage.ChunkIndex.read_chunk_file(PureFileStorage.chunk_file(opts)) == [
-               {{LogOffset.new(10, 0), LogOffset.new(20, 0)}, {0, 100}}
+      assert PureFileStorage.ChunkIndex.read_chunk_file(
+               PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
+             ) == [
+               {{LogOffset.new(10, 0), LogOffset.new(20, 0)}, {0, 100}, {0, 100}}
              ]
 
       writer = PureFileStorage.init_writer!(opts, @shape)
@@ -184,8 +315,10 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
                )
                |> Enum.to_list()
 
-      assert PureFileStorage.ChunkIndex.read_chunk_file(PureFileStorage.chunk_file(opts)) == [
-               {{LogOffset.new(10, 0), nil}, {0, nil}}
+      assert PureFileStorage.ChunkIndex.read_chunk_file(
+               PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
+             ) == [
+               {{LogOffset.new(10, 0), nil}, {0, nil}, {0, nil}}
              ]
     end
   end

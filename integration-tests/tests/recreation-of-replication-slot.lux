@@ -75,7 +75,6 @@
   ??"value":{"val":"3"}
 
 [shell electric]
-  ??[debug] Opening snapshot chunk 0 for writing
   ??[debug] Snapshot started shape_handle: $new_shape_handle
   ??[info] Chunked 200
 

@@ -314,7 +314,8 @@ defmodule Support.ComponentSetup do
       pid: start_supervised!(Electric.PersistentKV.Memory, restart: :temporary)
     }
 
-    storage = {PureFileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
+    storage =
+      {PureFileStorage, stack_id: stack_id, storage_dir: ctx.tmp_dir}
 
     stack_events_registry = Electric.stack_events_registry()
 
@@ -326,6 +327,12 @@ defmodule Support.ComponentSetup do
         {Electric.StackSupervisor,
          stack_id: stack_id,
          stack_events_registry: stack_events_registry,
+         chunk_bytes_threshold:
+           Map.get(
+             ctx,
+             :chunk_size,
+             Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
+           ),
          persistent_kv: kv,
          storage: storage,
          connection_opts: ctx.pooled_db_config,

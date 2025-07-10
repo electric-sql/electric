@@ -805,11 +805,32 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+
+      task =
+        Task.async(fn ->
+          try do
+            ShapeCache.await_snapshot_start(shape_handle, opts)
+          catch
+            :exit, {:some_reason, _} -> {:error, {:exited_with_reason, :some_reason}}
+          end
+        end)
+
       Process.exit(Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle), :some_reason)
 
       # should not be able to find the shape anymore
-      assert {:error, :unknown} = Task.await(task)
+      assert {:error, error} = Task.await(task)
+
+      # This handles 3 different race conditions:
+      # 1. The exit happens right as we're in the GenServer.call, and gets propagated to the caller
+      # 2. The exit happens earlier than the task starts, so we're at noproc and `await_snapshot_start`
+      #    returns `:unknown`
+      # 3. The exit happens after the consumer is fully started, which gives us "snapshot waiters"
+      #    path handling with "nice errors"
+      assert error in [
+               {:exited_with_reason, :some_reason},
+               :unknown,
+               "Shape terminated before snapshot was ready"
+             ]
     end
   end
 

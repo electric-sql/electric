@@ -23,6 +23,7 @@ defmodule Electric.ShapeCache.FileStorage do
   @snapshot_meta_key :snapshot_meta
   @snapshot_started_key :snapshot_started
   @compaction_info_key :compaction_info
+  @log_chunk_size_info :log_chunk_size
 
   @behaviour Electric.ShapeCache.Storage
 
@@ -375,30 +376,49 @@ defmodule Electric.ShapeCache.FileStorage do
   @impl Electric.ShapeCache.Storage
   def append_to_log!(log_items, %FS{} = opts) do
     compaction_boundary = get_compaction_boundary(opts)
-
     db = validate_db_process!(opts.db)
 
+    current_chunk_size = CubDB.get(db, @log_chunk_size_info, 0)
+
     retry with: linear_backoff(50, 2) |> expiry(5_000) do
-      log_items
-      |> Enum.flat_map(fn
-        {:chunk_boundary, offset} ->
-          [{chunk_checkpoint_key(offset), nil}]
+      entries =
+        log_items
+        |> LogChunker.intersperse_boundaries(
+          current_chunk_size,
+          opts.chunk_bytes_threshold,
+          &item_size/1,
+          &boundary/1
+        )
+        |> Enum.flat_map(fn
+          {:chunk_boundary, offset} ->
+            [{chunk_checkpoint_key(offset), nil}]
 
-        # We have definitely seen this, but it's not going to be in CubDB after compaction,
-        # so instead of idempotent insert we just ignore.
-        {offset, _, _, _} when is_log_offset_lt(offset, compaction_boundary) ->
-          []
+          # We have definitely seen this, but it's not going to be in CubDB after compaction,
+          # so instead of idempotent insert we just ignore.
+          {offset, _, _, _} when is_log_offset_lt(offset, compaction_boundary) ->
+            []
 
-        {offset, key, op_type, json_log_item} ->
-          [{log_key(offset), {key, op_type, json_log_item}}]
-      end)
-      |> then(&CubDB.put_multi(db, &1))
+          {offset, key, op_type, json_log_item} ->
+            [{log_key(offset), {key, op_type, json_log_item}}]
+        end)
+
+      new_chunk_size =
+        receive do
+          {:current_chunk_size, value} -> value
+        after
+          0 -> 0
+        end
+
+      CubDB.put_multi(db, [{@log_chunk_size_info, new_chunk_size} | entries])
     else
       error -> raise(error)
     end
 
     opts
   end
+
+  defp item_size({_, _, _, json}), do: byte_size(json)
+  defp boundary({offset, _, _, _}), do: {:chunk_boundary, offset}
 
   @impl Electric.ShapeCache.Storage
   def get_log_stream(
@@ -440,7 +460,7 @@ defmodule Electric.ShapeCache.FileStorage do
     do: stream_log_chunk(offset, max_offset, opts)
 
   @impl Electric.ShapeCache.Storage
-  def compact(%FS{} = opts) do
+  def compact(%FS{} = opts, keep_complete_chunks) do
     opts.db
     |> validate_db_process!()
     |> CubDB.select(
@@ -448,12 +468,11 @@ defmodule Electric.ShapeCache.FileStorage do
       max_key: chunk_checkpoint_end(),
       reverse: true
     )
-    # Keep the last 2 chunks as-is so that anything that relies on the live stream and
-    # transactional information/LSNs always has something to work with.
-    |> Enum.take(3)
+    |> Enum.take(keep_complete_chunks)
     |> case do
-      [_, _, {key, _}] ->
-        compact(opts, offset(key))
+      x when length(x) == keep_complete_chunks ->
+        {key, _} = List.last(x)
+        do_compact(opts, offset(key))
 
       _ ->
         # Not enough chunks to warrant compaction
@@ -461,13 +480,13 @@ defmodule Electric.ShapeCache.FileStorage do
     end
   end
 
-  @impl Electric.ShapeCache.Storage
-  def compact(%FS{} = opts, %LogOffset{} = upper_bound) do
+  defp do_compact(%FS{} = opts, %LogOffset{} = upper_bound) do
     # We consider log before the stored upper bound live & uncompacted. This means that concurrent readers
     # will be able to read out everything they want while the compaction is happening and we're only
     # atomically updating the pointer to the live portion.
 
     db = validate_db_process!(opts.db)
+    parent = self()
 
     case CubDB.fetch(db, @compaction_info_key) do
       {:ok, {_, ^upper_bound}} ->
@@ -481,50 +500,69 @@ defmodule Electric.ShapeCache.FileStorage do
             "compact_log_#{DateTime.utc_now() |> DateTime.to_unix(:millisecond)}.electric"
           )
 
-        new_log =
-          CubDB.select(db,
-            min_key: log_start(),
-            max_key: log_key(upper_bound),
-            max_key_inclusive: true
-          )
-          |> Stream.map(fn {key, {op_key, op_type, json}} ->
-            {offset(key), op_key, op_type, json}
-          end)
-          |> FS.LogFile.write_log_file(new_log_file_path <> ".new")
+        Task.start(fn ->
+          new_log =
+            CubDB.select(db,
+              min_key: log_start(),
+              max_key: log_key(upper_bound),
+              max_key_inclusive: true
+            )
+            |> Stream.map(fn {key, {op_key, op_type, json}} ->
+              {offset(key), op_key, op_type, json}
+            end)
+            |> FS.LogFile.write_log_file(new_log_file_path <> ".new")
 
-        merged_log =
-          FS.Compaction.merge_and_compact(
-            old_log,
-            new_log,
-            new_log_file_path,
-            opts.chunk_bytes_threshold
-          )
+          merged_log =
+            FS.Compaction.merge_and_compact(
+              old_log,
+              new_log,
+              new_log_file_path,
+              opts.chunk_bytes_threshold
+            )
 
-        CubDB.put(db, @compaction_info_key, {merged_log, upper_bound})
-        delete_compacted_keys(opts, upper_bound)
-        FS.Compaction.rm_log(new_log)
-        FS.Compaction.rm_log(old_log)
+          FS.Compaction.rm_log(new_log)
+
+          send(
+            parent,
+            {Storage, {__MODULE__, :mark_compaction_done, [merged_log, upper_bound, old_log]}}
+          )
+        end)
+
         :ok
 
       :error ->
-        log_file_path = Path.join(opts.log_dir, "compact_log.electric")
+        Task.start(fn ->
+          log_file_path = Path.join(opts.log_dir, "compact_log.electric")
 
-        log =
-          CubDB.select(db,
-            min_key: log_start(),
-            max_key: log_key(upper_bound),
-            max_key_inclusive: true
-          )
-          |> Stream.map(fn {key, {op_key, op_type, json}} ->
-            {offset(key), op_key, op_type, json}
-          end)
-          |> FS.LogFile.write_log_file(log_file_path)
-          |> FS.Compaction.compact_in_place(opts.chunk_bytes_threshold)
+          log =
+            CubDB.select(db,
+              min_key: log_start(),
+              max_key: log_key(upper_bound),
+              max_key_inclusive: true
+            )
+            |> Stream.map(fn {key, {op_key, op_type, json}} ->
+              {offset(key), op_key, op_type, json}
+            end)
+            |> FS.LogFile.write_log_file(log_file_path)
+            |> FS.Compaction.compact_in_place(opts.chunk_bytes_threshold)
 
-        CubDB.put(db, @compaction_info_key, {log, upper_bound})
-        delete_compacted_keys(opts, upper_bound)
+          send(parent, {Storage, {__MODULE__, :mark_compaction_done, [log, upper_bound, nil]}})
+        end)
+
         :ok
     end
+  end
+
+  def mark_compaction_done(opts, log, upper_bound, old_log) do
+    opts.db
+    |> validate_db_process!()
+    |> CubDB.put(@compaction_info_key, {log, upper_bound})
+
+    delete_compacted_keys(opts, upper_bound)
+
+    if old_log, do: FS.Compaction.rm_log(old_log)
+
+    opts
   end
 
   defp delete_compacted_keys(%FS{} = opts, upper_bound) do

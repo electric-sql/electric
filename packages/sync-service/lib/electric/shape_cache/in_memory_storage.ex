@@ -337,9 +337,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def compact(_opts), do: :ok
-
-  @impl Electric.ShapeCache.Storage
   def compact(_opts, _offset), do: :ok
 
   @impl Electric.ShapeCache.Storage

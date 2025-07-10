@@ -137,15 +137,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def compact({parent, shape_handle, _, storage}) do
-    send(parent, {__MODULE__, :compact, shape_handle})
-    Storage.compact(storage)
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def compact({parent, shape_handle, _, storage}, offset) do
-    send(parent, {__MODULE__, :compact, shape_handle, offset})
-    Storage.compact(storage, offset)
+  def compact({parent, shape_handle, _, storage}, keep_complete_chunks) do
+    send(parent, {__MODULE__, :compact, shape_handle, keep_complete_chunks})
+    Storage.compact(storage, keep_complete_chunks)
   end
 
   @impl Electric.ShapeCache.Storage

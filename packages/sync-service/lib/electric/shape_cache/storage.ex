@@ -43,7 +43,7 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Start any stack-wide processes required for storage to operate"
   @callback stack_start_link(compiled_opts()) :: GenServer.on_start()
 
-  @doc "Start any processes required to run the storage backend"
+  @doc "Start any shape-specific processes required to run the storage backend"
   @callback start_link(shape_opts()) :: GenServer.on_start()
 
   @doc "Prepare the in-process writer state, returning an accumulator."
@@ -119,14 +119,9 @@ defmodule Electric.ShapeCache.Storage do
   @callback cleanup!(shape_opts()) :: any()
 
   @doc """
-  Compact some prefix of the log collapsing together update operations
+  Compact operations in the log keeping the last N complete chunks intact
   """
-  @callback compact(shape_opts()) :: :ok
-
-  @doc """
-  Compact operations in the log up to the given offset
-  """
-  @callback compact(shape_opts(), LogOffset.t()) :: :ok
+  @callback compact(shape_opts(), keep_complete_chunks :: pos_integer()) :: :ok
 
   @behaviour __MODULE__
 
@@ -248,9 +243,13 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def compact({mod, shape_opts}), do: mod.compact(shape_opts)
+  def compact({mod, shape_opts}, keep_complete_chunks \\ 2)
+      when is_integer(keep_complete_chunks) and keep_complete_chunks >= 0 do
+    mod.compact(shape_opts, keep_complete_chunks)
+  end
 
-  @impl __MODULE__
-  def compact({mod, shape_opts}, offset) when is_struct(offset, LogOffset),
-    do: mod.compact(shape_opts, offset)
+  def trigger_compaction(server, {module, _opts}, keep_complete_chunks \\ 2)
+      when is_integer(keep_complete_chunks) and keep_complete_chunks >= 0 do
+    send(server, {__MODULE__, {module, :compact, [keep_complete_chunks]}})
+  end
 end

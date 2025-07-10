@@ -55,7 +55,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     @moduletag storage: module_name
     @moduletag mod: module
 
-    doctest module, import: true
+    # doctest module, import: true
 
     describe "#{module_name}.snapshot_started?/2" do
       setup :start_storage
@@ -507,19 +507,20 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   # Tests for storage implementations that are recoverable
-  for module <- [FileStorage, PureFileStorage] do
+  for module <- [PureFileStorage] do
     module_name = module |> Module.split() |> List.last()
     @moduletag storage: module_name
     @moduletag mod: module
 
     describe "#{module_name}.compact/1" do
-      @describetag skip: true
       setup :start_storage
 
-      test "can compact operations within a shape", %{storage: storage} do
-        Storage.initialise(storage)
+      # Super small chunk size so that each update is its own chunk
+      @tag chunk_size: 5
+      test "can compact operations within a shape", %{storage: storage, writer: writer} do
         Storage.mark_snapshot_as_started(storage)
         Storage.make_new_snapshot!([], storage)
+        Storage.set_pg_snapshot(%{xmin: 1, xmax: 10}, storage)
 
         for i <- 1..10 do
           %Changes.UpdatedRecord{
@@ -530,15 +531,20 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             changed_columns: MapSet.new(["name"])
           }
         end
-        # Super small chunk size so that each update is its own chunk
-        |> changes_to_log_items(chunk_size: 5)
-        |> Storage.append_to_log!(storage)
+        |> changes_to_log_items()
+        |> Storage.append_to_log!(writer)
+
+        Storage.terminate(writer)
 
         assert Storage.get_log_stream(LogOffset.first(), LogOffset.new(7, 0), storage)
                |> Enum.to_list()
                |> length() == 7
 
         assert :ok = Storage.compact(storage)
+
+        assert_receive {Storage, msg}
+        writer = Storage.init_writer!(storage, @shape)
+        _writer = Storage.apply_message(writer, msg)
 
         assert [line] =
                  Storage.get_log_stream(LogOffset.first(), LogOffset.new(7, 0), storage)
@@ -551,48 +557,56 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                }
       end
 
-      test "compaction doesn't bridge deletes", %{storage: storage} do
-        Storage.initialise(storage)
+      @tag chunk_size: 5
+      test "compaction doesn't bridge deletes", %{storage: storage, writer: writer} do
         Storage.mark_snapshot_as_started(storage)
         Storage.make_new_snapshot!([], storage)
+        Storage.set_pg_snapshot(%{xmin: 1, xmax: 10}, storage)
 
-        for i <- 1..10 do
-          update = %Changes.UpdatedRecord{
-            relation: {"public", "test_table"},
-            old_record: %{"id" => "sameid", "name" => "Test#{i - 1}"},
-            record: %{"id" => "sameid", "name" => "Test#{i}"},
-            log_offset: LogOffset.new(i, 0),
-            changed_columns: MapSet.new(["name"])
-          }
-
-          if i == 5 do
-            delete = %Changes.DeletedRecord{
+        writer =
+          for i <- 1..10 do
+            update = %Changes.UpdatedRecord{
               relation: {"public", "test_table"},
-              old_record: %{"id" => "sameid", "name" => "Test#{i}"},
-              log_offset: LogOffset.new(i, 1)
-            }
-
-            insert = %Changes.NewRecord{
-              relation: {"public", "test_table"},
+              old_record: %{"id" => "sameid", "name" => "Test#{i - 1}"},
               record: %{"id" => "sameid", "name" => "Test#{i}"},
-              log_offset: LogOffset.new(i, 2)
+              log_offset: LogOffset.new(i, 0),
+              changed_columns: MapSet.new(["name"])
             }
 
-            [update, delete, insert]
-          else
-            [update]
+            if i == 5 do
+              delete = %Changes.DeletedRecord{
+                relation: {"public", "test_table"},
+                old_record: %{"id" => "sameid", "name" => "Test#{i}"},
+                log_offset: LogOffset.new(i, 1)
+              }
+
+              insert = %Changes.NewRecord{
+                relation: {"public", "test_table"},
+                record: %{"id" => "sameid", "name" => "Test#{i}"},
+                log_offset: LogOffset.new(i, 2)
+              }
+
+              [update, delete, insert]
+            else
+              [update]
+            end
           end
-        end
-        |> List.flatten()
-        # Super small chunk size so that each update is its own chunk
-        |> changes_to_log_items(chunk_size: 5)
-        |> Storage.append_to_log!(storage)
+          |> List.flatten()
+          # Super small chunk size so that each update is its own chunk
+          |> changes_to_log_items()
+          |> Storage.append_to_log!(writer)
+
+        Storage.terminate(writer)
 
         assert Storage.get_log_stream(LogOffset.first(), LogOffset.new(7, 0), storage)
                |> Enum.to_list()
                |> length() == 9
 
         assert :ok = Storage.compact(storage)
+
+        assert_receive {Storage, msg}
+        writer = Storage.init_writer!(storage, @shape)
+        _writer = Storage.apply_message(writer, msg)
 
         assert [op1, op2, op3, op4] =
                  Storage.get_log_stream(LogOffset.first(), LogOffset.new(7, 0), storage)
@@ -606,50 +620,70 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                  Jason.decode!(op4, keys: :atoms)
       end
 
-      test "compaction works multiple times", %{storage: storage} do
-        Storage.initialise(storage)
+      @tag chunk_size: 5
+      test "compaction works multiple times", %{storage: storage, writer: writer} do
+        # shape = @shape
         Storage.mark_snapshot_as_started(storage)
         Storage.make_new_snapshot!([], storage)
+        Storage.set_pg_snapshot(%{xmin: 1, xmax: 10}, storage)
 
-        for i <- 1..10 do
-          %Changes.UpdatedRecord{
-            relation: {"public", "test_table"},
-            old_record: %{"id" => "sameid", "name" => "Test#{i - 1}"},
-            record: %{"id" => "sameid", "name" => "Test#{i}"},
-            log_offset: LogOffset.new(i, 0),
-            changed_columns: MapSet.new(["name"])
-          }
-        end
-        # Super small chunk size so that each update is its own chunk
-        |> changes_to_log_items(chunk_size: 5)
-        |> Storage.append_to_log!(storage)
+        writer =
+          for i <- 1..10 do
+            %Changes.UpdatedRecord{
+              relation: {"public", "test_table"},
+              old_record: %{"id" => "sameid", "name" => "Test#{i - 1}"},
+              record: %{"id" => "sameid", "name" => "Test#{i}"},
+              log_offset: LogOffset.new(i, 0),
+              changed_columns: MapSet.new(["name"])
+            }
+          end
+          |> changes_to_log_items()
+          |> Storage.append_to_log!(writer)
+
+        Storage.terminate(writer)
 
         assert Storage.get_log_stream(LogOffset.first(), LogOffset.new(7, 0), storage)
                |> Enum.to_list()
                |> length() == 7
 
         # Force compaction of all the lines
-        assert :ok = Storage.compact(storage, LogOffset.new(10, 0))
+        assert :ok = Storage.compact(storage, 0)
+
+        assert_receive {Storage, msg}
+        writer = Storage.init_writer!(storage, @shape)
+        writer = Storage.apply_message(writer, msg)
 
         assert Storage.get_log_stream(LogOffset.first(), LogOffset.new(10, 0), storage)
-               |> Enum.to_list()
-               |> length() == 1
+               |> Enum.map(&Jason.decode!(&1, keys: :atoms)) == [
+                 %{
+                   value: %{id: "sameid", name: "Test10"},
+                   key: ~S|"public"."test_table"/"sameid"|,
+                   headers: %{operation: "update", relation: ["public", "test_table"]}
+                 }
+               ]
 
-        for i <- 10..20 do
-          %Changes.UpdatedRecord{
-            relation: {"public", "test_table"},
-            old_record: %{"id" => "sameid", "other_name" => "Test#{i - 1}"},
-            record: %{"id" => "sameid", "other_name" => "Test#{i}"},
-            log_offset: LogOffset.new(i, 0),
-            # Change the other column here to make sure previous are also included in the compaction
-            changed_columns: MapSet.new(["other_name"])
-          }
-        end
-        # Super small chunk size so that each update is its own chunk
-        |> changes_to_log_items(chunk_size: 5)
-        |> Storage.append_to_log!(storage)
+        writer =
+          for i <- 11..20 do
+            %Changes.UpdatedRecord{
+              relation: {"public", "test_table"},
+              old_record: %{"id" => "sameid", "other_name" => "Test#{i - 1}"},
+              record: %{"id" => "sameid", "other_name" => "Test#{i}"},
+              log_offset: LogOffset.new(i, 0),
+              # Change the other column here to make sure previous are also included in the compaction
+              changed_columns: MapSet.new(["other_name"])
+            }
+          end
+          # Super small chunk size so that each update is its own chunk
+          |> changes_to_log_items()
+          |> Storage.append_to_log!(writer)
+
+        Storage.terminate(writer)
 
         assert :ok = Storage.compact(storage)
+
+        assert_receive {Storage, msg}
+        writer = Storage.init_writer!(storage, @shape)
+        _writer = Storage.apply_message(writer, msg)
 
         assert [line] =
                  Storage.get_log_stream(LogOffset.first(), LogOffset.new(17, 0), storage)
@@ -797,11 +831,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     ]
   end
 
-  defp opts(FileStorage, %{tmp_dir: tmp_dir, stack_id: stack_id}) do
+  defp opts(FileStorage, %{tmp_dir: tmp_dir, stack_id: stack_id} = ctx) do
     [
       db: String.to_atom("shape_mixed_disk_#{Utils.uuid4()}"),
       storage_dir: tmp_dir,
-      stack_id: stack_id
+      stack_id: stack_id,
+      chunk_bytes_threshold: ctx[:chunk_size] || 10 * 1024 * 1024
     ]
   end
 

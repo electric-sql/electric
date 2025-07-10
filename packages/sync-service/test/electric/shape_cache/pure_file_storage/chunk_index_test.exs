@@ -54,7 +54,6 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndexTest do
           {%LogOffset{tx_offset: 1, op_offset: 1}, "key1", :insert, "value1"},
           {%LogOffset{tx_offset: 2, op_offset: 2}, "key2", :insert, "value2"},
           {%LogOffset{tx_offset: 3, op_offset: 3}, "key3", :insert, "value3"}
-          # {%LogOffset{tx_offset: 4, op_offset: 4}, "key4", :insert, "value4"}
         ]
         |> LogFile.normalize_log_stream()
 
