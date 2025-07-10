@@ -113,7 +113,7 @@ defmodule Support.ComponentSetup do
             publication_name: ctx.publication_name,
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
             db_pool: ctx.pool,
-            pg_version: Access.get(ctx, :pg_version, nil),
+            pg_version: Access.get(ctx, :pg_version, 150_001),
             configure_tables_for_replication_fn:
               Access.get(
                 ctx,

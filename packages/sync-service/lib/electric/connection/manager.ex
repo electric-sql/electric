@@ -463,6 +463,7 @@ defmodule Electric.Connection.Manager do
              pool_opts: state.pool_opts,
              replication_opts: state.replication_opts,
              tweaks: state.tweaks,
+             pg_version: state.pg_version,
              persistent_kv: state.persistent_kv
            ) do
         {:ok, shapes_sup_pid} ->
