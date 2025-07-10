@@ -720,7 +720,8 @@ defmodule Electric.Connection.Manager do
 
   # When a pooled connection terminates, we log its exit reason, but more connections will
   # be started by the connection pool supervisor, so we don't need to do anything else.
-  def handle_info({:pool_conn_down, _ref, :process, _pid, :shutdown}, state) do
+  def handle_info({:pool_conn_down, _ref, :process, _pid, reason}, state)
+      when reason in [:shutdown, :noproc] do
     {:noreply, state}
   end
 
