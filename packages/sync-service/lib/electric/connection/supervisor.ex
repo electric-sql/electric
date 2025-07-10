@@ -83,6 +83,7 @@ defmodule Electric.Connection.Supervisor do
       {Electric.Replication.PublicationManager,
        stack_id: stack_id,
        publication_name: Keyword.fetch!(replication_opts, :publication_name),
+       pg_version: Keyword.fetch!(opts, :pg_version),
        db_pool: Keyword.fetch!(db_pool_opts, :name),
        update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0)}
 

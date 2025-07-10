@@ -68,6 +68,7 @@ defmodule Electric.Replication.PublicationManager do
 
   @retry_timeout 300
   @max_retries 3
+  @pg_15 150_000
 
   # The default debounce timeout is 0, which means that the publication update
   # will be scheduled immediately to run at the end of the current process
@@ -87,7 +88,7 @@ defmodule Electric.Replication.PublicationManager do
             publication_name: [type: :string, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
             shape_cache: [type: :mod_arg, required: false],
-            pg_version: [type: {:or, [:integer, :atom]}, required: false, default: nil],
+            pg_version: [type: :integer, required: true],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             configure_tables_for_replication_fn: [
               type: {:fun, 5},
@@ -174,7 +175,7 @@ defmodule Electric.Replication.PublicationManager do
       relation_filter_counters: %{},
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
-      row_filtering_enabled: true,
+      row_filtering_enabled: opts.pg_version >= @pg_15,
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
@@ -187,14 +188,7 @@ defmodule Electric.Replication.PublicationManager do
       configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn
     }
 
-    {:ok, state, {:continue, :get_pg_version}}
-  end
-
-  @pg_15 150_000
-  @impl true
-  def handle_continue(:get_pg_version, %__MODULE__{} = state) do
-    state = get_pg_version(state)
-    {:noreply, %__MODULE__{state | row_filtering_enabled: state.pg_version >= @pg_15}}
+    {:ok, state}
   end
 
   @impl true
@@ -431,25 +425,6 @@ defmodule Electric.Replication.PublicationManager do
         _ ->
           {:error, err}
       end
-  end
-
-  defp get_pg_version(%{pg_version: pg_version} = state) when not is_nil(pg_version), do: state
-
-  defp get_pg_version(%{pg_version: nil, db_pool: db_pool} = state) do
-    case Configuration.get_pg_version(db_pool) do
-      {:ok, pg_version} ->
-        %{state | pg_version: pg_version}
-
-      {:error, err} ->
-        err_msg = "Failed to get PG version, retrying after timeout: #{inspect(err)}"
-
-        if %DBConnection.ConnectionError{reason: :queue_timeout} == err,
-          do: Logger.warning(err_msg),
-          else: Logger.error(err_msg)
-
-        Process.sleep(@retry_timeout)
-        get_pg_version(state)
-    end
   end
 
   @spec update_relation_filters_for_shape(Shape.t(), filter_operation(), state()) :: state()
