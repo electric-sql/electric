@@ -72,10 +72,12 @@ with_telemetry Telemetry.Metrics do
       }
 
       # Attach a listener per event
-      for {event, metrics} <- groups do
-        id = {__MODULE__, event, self()}
-        :telemetry.attach(id, event, &__MODULE__.handle_event/4, {metrics, context})
-      end
+      handler_ids =
+        for {event, metrics} <- groups do
+          id = {__MODULE__, event, self()}
+          :telemetry.attach(id, event, &__MODULE__.handle_event/4, {metrics, context})
+          id
+        end
 
       # Save some information about the metrics to use when building an output object
       summary_types =
@@ -97,7 +99,7 @@ with_telemetry Telemetry.Metrics do
 
       {:ok,
        Map.merge(context, %{
-         event_ids: Map.keys(groups),
+         handler_ids: handler_ids,
          summary_types: summary_types,
          all_paths: all_paths,
          reporting_period: reporting_period,
@@ -110,7 +112,7 @@ with_telemetry Telemetry.Metrics do
 
     @impl GenServer
     def terminate(_, state) do
-      for id <- state.event_ids do
+      for id <- state.handler_ids do
         :telemetry.detach(id)
       end
 
