@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   use ExUnit.Case, async: true
   use Repatch.ExUnit
 
+  alias Electric.ShapeCache.PureFileStorage
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.FileStorage
@@ -48,26 +49,71 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   setup :with_stack_id_from_test
 
-  for module <- [InMemoryStorage, FileStorage] do
+  for module <- [InMemoryStorage, FileStorage, PureFileStorage] do
     module_name = module |> Module.split() |> List.last()
+
+    @moduletag storage: module_name
+    @moduletag mod: module
 
     doctest module, import: true
 
     describe "#{module_name}.snapshot_started?/2" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
       setup :start_storage
 
-      test "returns false when shape does not exist", %{module: storage, opts: opts} do
-        assert storage.snapshot_started?(opts) == false
+      test "returns false when shape does not exist", %{storage: opts} do
+        assert Storage.snapshot_started?(opts) == false
       end
 
-      test "returns true when snapshot has started", %{module: storage, opts: opts} do
-        storage.mark_snapshot_as_started(opts)
+      test "returns true when snapshot has started", %{storage: opts} do
+        Storage.mark_snapshot_as_started(opts)
 
-        assert storage.snapshot_started?(opts) == true
+        assert Storage.snapshot_started?(opts) == true
+      end
+    end
+
+    describe "#{module_name}.get_current_position/1" do
+      setup :start_storage
+
+      test "returns the earliest possible position on startup", %{storage: opts} do
+        assert Storage.get_current_position(opts) ==
+                 {:ok, LogOffset.last_before_real_offsets(), nil}
+      end
+
+      test "returns the saved position for snapshot", %{storage: opts} do
+        Storage.set_pg_snapshot(%{xmin: 100}, opts)
+
+        assert Storage.get_current_position(opts) ==
+                 {:ok, LogOffset.last_before_real_offsets(), %{xmin: 100}}
+      end
+
+      @tag chunk_size: 100
+      test "returns the last known position for snapshot if snapshot is multiple chunks", %{
+        storage: opts
+      } do
+        Storage.mark_snapshot_as_started(opts)
+        Storage.make_new_snapshot!(@data_stream |> Enum.intersperse(:chunk_boundary), opts)
+
+        assert Storage.get_current_position(opts) == {:ok, LogOffset.new(0, 1), nil}
+      end
+
+      @tag chunk_size: 100
+      test "returns the last written position after writing to the log", %{
+        storage: opts,
+        writer: writer
+      } do
+        Storage.mark_snapshot_as_started(opts)
+        Storage.make_new_snapshot!(@data_stream |> Enum.intersperse(:chunk_boundary), opts)
+
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "123", "name" => "Test"},
+          log_offset: LogOffset.new(1000, 0)
+        }
+        |> List.wrap()
+        |> changes_to_log_items()
+        |> Storage.append_to_log!(writer)
+
+        assert Storage.get_current_position(opts) == {:ok, LogOffset.new(1000, 0), nil}
       end
     end
 
@@ -79,7 +125,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
       setup :start_empty_snapshot
 
-      test "adds items to the log", %{module: storage, opts: opts} do
+      test "adds items to the log", %{storage: opts, writer: writer} do
         lsn = Lsn.from_integer(1000)
         offset = LogOffset.new(lsn, 0)
 
@@ -93,9 +139,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        storage.append_to_log!(log_items, opts)
+        Storage.append_to_log!(log_items, writer)
 
-        stream = storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
 
         assert [
                  %{
@@ -112,7 +158,84 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ] == Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
       end
 
-      test "adds items to the log in idempotent way", %{module: storage, opts: opts} do
+      # For CubDb-backed storage this test takes about 10s
+      @tag slow: module == FileStorage
+      test "adds a lot of items to the log correctly", %{storage: opts, writer: writer} do
+        lsn = Lsn.from_integer(1000)
+
+        # Roughly 24MB
+        log_items =
+          for x <- 0..100_000 do
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "123", "name" => "Test"},
+              log_offset: LogOffset.new(lsn, x)
+            }
+          end
+          |> changes_to_log_items()
+
+        Storage.append_to_log!(log_items, writer)
+
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+
+        expected =
+          for x <- 0..100_000 do
+            %{
+              key: ~S|"public"."test_table"/"123"|,
+              value: %{id: "123", name: "Test"},
+              headers: %{
+                operation: "insert",
+                txids: [1],
+                relation: ["public", "test_table"],
+                lsn: "1000",
+                op_position: x
+              }
+            }
+          end
+
+        assert expected == Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+      end
+
+      # For CubDb-backed storage this test takes about 10s
+      @tag slow: module == FileStorage
+      test "adds a lot of items to the log correctly in separate steps", %{
+        storage: opts,
+        writer: writer
+      } do
+        log_items =
+          for x <- 1..10_000 do
+            changes_to_log_items([
+              %Changes.NewRecord{
+                relation: {"public", "test_table"},
+                record: %{"id" => "123", "name" => "Test"},
+                log_offset: LogOffset.new(x, 0)
+              }
+            ])
+          end
+
+        Enum.reduce(log_items, writer, &Storage.append_to_log!/2)
+
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+
+        expected =
+          for x <- 1..10000 do
+            %{
+              key: ~S|"public"."test_table"/"123"|,
+              value: %{id: "123", name: "Test"},
+              headers: %{
+                operation: "insert",
+                txids: [1],
+                relation: ["public", "test_table"],
+                lsn: "#{x}",
+                op_position: 0
+              }
+            }
+          end
+
+        assert expected == Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+      end
+
+      test "adds items to the log in idempotent way", %{storage: opts, writer: writer} do
         lsn = Lsn.from_integer(1000)
         offset = LogOffset.new(lsn, 0)
 
@@ -126,16 +249,16 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(log_items, opts)
+        writer = Storage.append_to_log!(log_items, writer)
 
         log1 =
-          storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+          Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
           |> Enum.map(&:json.decode/1)
 
-        :ok = storage.append_to_log!(log_items, opts)
+        _writer = Storage.append_to_log!(log_items, writer)
 
         log2 =
-          storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+          Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
           |> Enum.map(&:json.decode/1)
 
         assert log1 == log2
@@ -150,7 +273,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
       setup :start_empty_snapshot
 
-      test "returns correct stream of log items", %{storage: opts} do
+      test "returns correct stream of log items", %{storage: opts, writer: writer} do
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
@@ -180,8 +303,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = Storage.append_to_log!(log_items1, opts)
-        :ok = Storage.append_to_log!(log_items2, opts)
+        writer = Storage.append_to_log!(log_items1, writer)
+        _writer = Storage.append_to_log!(log_items2, writer)
 
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
@@ -193,7 +316,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ] = entries
       end
 
-      test "returns stream of log items after offset", %{module: storage, opts: opts} do
+      test "returns stream of log items after offset", %{storage: opts, writer: writer} do
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
 
@@ -223,11 +346,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(log_items1, opts)
-        :ok = storage.append_to_log!(log_items2, opts)
+        writer = Storage.append_to_log!(log_items1, writer)
+        _writer = Storage.append_to_log!(log_items2, writer)
 
         stream =
-          storage.get_log_stream(LogOffset.new(lsn1, 0), LogOffset.last(), opts)
+          Storage.get_log_stream(LogOffset.new(lsn1, 0), LogOffset.last(), opts)
 
         entries = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
@@ -238,8 +361,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "returns stream of log items after offset and before max_offset (inclusive)", %{
-        module: storage,
-        opts: opts
+        storage: opts,
+        writer: writer
       } do
         lsn1 = Lsn.from_integer(1000)
         lsn2 = Lsn.from_integer(2000)
@@ -270,11 +393,11 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        :ok = storage.append_to_log!(log_items1, opts)
-        :ok = storage.append_to_log!(log_items2, opts)
+        writer = Storage.append_to_log!(log_items1, writer)
+        _writer = Storage.append_to_log!(log_items2, writer)
 
         stream =
-          storage.get_log_stream(
+          Storage.get_log_stream(
             LogOffset.new(lsn1, 0),
             LogOffset.new(lsn2, 0),
             opts
@@ -316,7 +439,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ] = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
       end
 
-      test "does not return items not in the snapshot", %{storage: opts} do
+      test "does not return items not in the snapshot", %{storage: opts, writer: writer} do
         log_items =
           [
             %Changes.NewRecord{
@@ -329,7 +452,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.mark_snapshot_as_started(opts)
         Storage.make_new_snapshot!(@data_stream, opts)
-        Storage.append_to_log!(log_items, opts)
+        Storage.append_to_log!(log_items, writer)
 
         stream =
           Storage.get_log_stream(
@@ -381,55 +504,16 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         Task.await(read_task)
       end
     end
-
-    describe "#{module_name}.cleanup!/2" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
-      setup :start_storage
-
-      test "causes snapshot_started?/2 to return false", %{module: storage, opts: opts} do
-        storage.make_new_snapshot!(@data_stream, opts)
-
-        storage.cleanup!(opts)
-
-        assert storage.snapshot_started?(opts) == false
-      end
-
-      test "causes get_log_stream/4 to raise", %{module: storage, opts: opts} do
-        lsn = Lsn.from_integer(1000)
-
-        log_items =
-          [
-            %Changes.NewRecord{
-              relation: {"public", "test_table"},
-              record: %{"id" => "123", "name" => "Test"},
-              log_offset: LogOffset.new(lsn, 0)
-            }
-          ]
-          |> changes_to_log_items()
-
-        storage.append_to_log!(log_items, opts)
-
-        storage.cleanup!(opts)
-
-        assert_raise Storage.Error, fn ->
-          storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts) |> Enum.to_list()
-        end
-      end
-    end
   end
 
   # Tests for storage implementations that are recoverable
-  for module <- [FileStorage] do
+  for module <- [FileStorage, PureFileStorage] do
     module_name = module |> Module.split() |> List.last()
+    @moduletag storage: module_name
+    @moduletag mod: module
 
     describe "#{module_name}.compact/1" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
+      @describetag skip: true
       setup :start_storage
 
       test "can compact operations within a shape", %{storage: storage} do
@@ -579,117 +663,72 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.initialise/1" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
+    describe "#{module_name}.init_writer!/1" do
+      @describetag skip_initialise: true
       setup :start_storage
 
-      test "removes the shape if the shape definition has not been set", %{
-        module: storage,
-        opts: opts
-      } do
-        storage.initialise(opts)
+      test "removes the shape if pg_snapshot has not been set", %{storage: opts} do
+        writer = Storage.init_writer!(opts, @shape)
+        Storage.mark_snapshot_as_started(opts)
+        Storage.make_new_snapshot!(@data_stream, opts)
+        assert Storage.snapshot_started?(opts)
 
-        # storage.set_shape_definition(@shape, opts)
-        storage.mark_snapshot_as_started(opts)
-        storage.make_new_snapshot!(@data_stream, opts)
-        storage.set_pg_snapshot(%{xmin: 11, xmax: 12, xip_list: []}, opts)
-        assert storage.snapshot_started?(opts)
+        Storage.terminate(writer)
+        _writer = Storage.init_writer!(opts, @shape)
 
-        storage.initialise(opts)
-
-        refute storage.snapshot_started?(opts)
+        refute Storage.snapshot_started?(opts)
       end
 
-      test "removes the shape if pg_snapshot has not been set", %{
-        module: storage,
-        opts: opts
-      } do
-        storage.initialise(opts)
+      test "removes the shape if the snapshot has not finished", %{storage: opts} do
+        writer = Storage.init_writer!(opts, @shape)
+        Storage.mark_snapshot_as_started(opts)
+        Storage.set_pg_snapshot(%{xmin: 22, xmax: 23, xip_list: []}, opts)
 
-        storage.set_shape_definition(@shape, opts)
-        storage.mark_snapshot_as_started(opts)
-        storage.make_new_snapshot!(@data_stream, opts)
-        assert storage.snapshot_started?(opts)
+        Storage.terminate(writer)
+        _writer = Storage.init_writer!(opts, @shape)
 
-        storage.initialise(opts)
-
-        refute storage.snapshot_started?(opts)
+        refute Storage.snapshot_started?(opts)
       end
 
-      test "removes the shape if the snapshot has not finished", %{
-        module: storage,
-        opts: opts
-      } do
-        storage.initialise(opts)
+      test "removes all shapes if the storage version has changed", %{storage: opts} do
+        writer = Storage.init_writer!(opts, @shape)
+        Storage.mark_snapshot_as_started(opts)
+        Storage.make_new_snapshot!(@data_stream, opts)
+        Storage.set_pg_snapshot(%{xmin: 22, xmax: 23, xip_list: []}, opts)
 
-        storage.set_shape_definition(@shape, opts)
-        storage.mark_snapshot_as_started(opts)
-        storage.set_pg_snapshot(%{xmin: 22, xmax: 23, xip_list: []}, opts)
+        Storage.terminate(writer)
+        {mod, arg} = opts
+        opts = {mod, %{arg | version: "different version"}}
+        _writer = Storage.init_writer!(opts, @shape)
 
-        storage.initialise(opts)
-
-        refute storage.snapshot_started?(opts)
-      end
-
-      test "removes all shapes if the storage version has changed", %{
-        module: storage,
-        opts: opts
-      } do
-        storage.initialise(opts)
-
-        storage.set_shape_definition(@shape, opts)
-        storage.mark_snapshot_as_started(opts)
-        storage.make_new_snapshot!(@data_stream, opts)
-        storage.set_pg_snapshot(%{xmin: 11, xmax: 12, xip_list: []}, opts)
-
-        storage.initialise(%{opts | version: "new-version"})
-
-        refute storage.snapshot_started?(opts)
+        refute Storage.snapshot_started?(opts)
       end
     end
 
     describe "#{module_name}.get_all_stored_shapes/1" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
+      @describetag skip_initialise: true
       setup :start_storage
 
-      test "retrieves no shapes if no shapes persisted", %{
-        module: storage,
-        opts: opts
-      } do
-        assert {:ok, %{}} = Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
+      test "retrieves no shapes if no shapes persisted", %{storage: opts} do
+        assert {:ok, %{}} = Storage.get_all_stored_shapes(opts)
       end
 
-      test "retrieves stored shapes", %{
-        module: storage,
-        opts: opts
-      } do
-        storage.initialise(opts)
-        storage.set_shape_definition(@shape, opts)
+      test "retrieves stored shapes", %{storage: opts} do
+        _writer = Storage.init_writer!(opts, @shape)
 
-        assert {:ok, %{@shape_handle => parsed}} =
-                 Electric.ShapeCache.Storage.get_all_stored_shapes({storage, opts})
+        assert {:ok, %{@shape_handle => parsed}} = Storage.get_all_stored_shapes(opts)
 
         assert @shape == parsed
       end
     end
 
-    describe "#{module_name}.unsafe_cleanup/1" do
-      setup do
-        {:ok, %{module: unquote(module)}}
-      end
-
+    describe "#{module_name}.cleanup!/1" do
       setup :start_storage
 
       test "should remove entire data directory without requiring process to run", %{
-        module: storage,
-        opts: opts,
-        pid: pid
+        storage: storage,
+        storage_base: storage_base,
+        writer: writer
       } do
         lsn = Lsn.from_integer(1000)
 
@@ -703,58 +742,43 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
           ]
           |> changes_to_log_items()
 
-        storage.append_to_log!(log_items, opts)
+        Storage.append_to_log!(log_items, writer)
+        Storage.terminate(writer)
 
-        Process.exit(pid, :normal)
-
-        assert File.exists?(opts.data_dir)
-
-        storage.unsafe_cleanup!(opts)
-
-        refute File.exists?(opts.data_dir)
+        Storage.cleanup!(storage)
+        assert Storage.get_total_disk_usage(storage_base) == 0
       end
     end
 
     describe "#{module_name}.get_total_disk_usage/1" do
-      setup do
-        {:ok, %{module: unquote(module)}}
+      test "returns 0 if no shapes exist", %{mod: module} = context do
+        storage_base = Storage.shared_opts({module, opts(module, context)})
+
+        assert 0 = Storage.get_total_disk_usage(storage_base)
       end
 
-      test "returns 0 if no shapes exist", %{module: module} = context do
-        opts = module |> opts(context) |> module.shared_opts()
+      test "returns the total disk usage for all shapes", context do
+        {:ok, %{storage_base: storage_base}} = start_storage(context)
 
-        assert 0 = Electric.ShapeCache.Storage.get_total_disk_usage({module, opts})
-      end
-
-      test "returns the total disk usage for all shapes", %{module: storage} = context do
-        {:ok, %{opts: shape_opts, shared_opts: opts}} = start_storage(context)
-
-        storage.initialise(shape_opts)
-        storage.set_shape_definition(@shape, shape_opts)
-
-        assert Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts}) > 2300
-      end
-
-      test "returns the total disk usage with FS failures", %{module: storage} = context do
-        {:ok, %{opts: shape_opts, shared_opts: opts}} = start_storage(context)
-        storage.initialise(shape_opts)
-        storage.set_shape_definition(@shape, shape_opts)
-
-        Repatch.patch(File, :ls, fn _ -> {:error, :enoent} end)
-        assert 0 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
-
-        Repatch.cleanup()
-        Repatch.patch(File, :stat, fn _ -> {:error, :enoent} end)
-        assert 0 = Electric.ShapeCache.Storage.get_total_disk_usage({storage, opts})
+        assert Storage.get_total_disk_usage(storage_base) > 0
       end
     end
   end
 
-  defp start_storage(%{module: module} = context) do
-    opts = module |> opts(context) |> module.shared_opts()
-    shape_opts = module.for_shape(@shape_handle, opts)
-    pid = start_link_supervised!({module, shape_opts})
-    {:ok, %{opts: shape_opts, shared_opts: opts, pid: pid, storage: {module, shape_opts}}}
+  defp start_storage(%{mod: module} = context) do
+    storage_base = Storage.shared_opts({module, opts(module, context)})
+    _shared_pid = start_supervised!(Storage.stack_child_spec(storage_base))
+
+    storage = Storage.for_shape(@shape_handle, storage_base)
+    pid = start_supervised!(Storage.child_spec(storage))
+    if is_pid(pid), do: Process.link(pid)
+
+    writer =
+      if not Map.get(context, :skip_initialise, false) do
+        Storage.init_writer!(storage, @shape)
+      end
+
+    {:ok, %{storage: storage, storage_base: storage_base, writer: writer}}
   end
 
   defp start_empty_snapshot(%{storage: storage}) do
@@ -778,6 +802,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       db: String.to_atom("shape_mixed_disk_#{Utils.uuid4()}"),
       storage_dir: tmp_dir,
       stack_id: stack_id
+    ]
+  end
+
+  defp opts(PureFileStorage, %{tmp_dir: tmp_dir, stack_id: stack_id} = ctx) do
+    [
+      storage_dir: tmp_dir,
+      stack_id: stack_id,
+      chunk_bytes_threshold: ctx[:chunk_size] || 10 * 1024 * 1024
     ]
   end
 end

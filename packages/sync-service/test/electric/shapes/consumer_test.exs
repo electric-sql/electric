@@ -148,7 +148,7 @@ defmodule Electric.Shapes.ConsumerTest do
               id: {Shapes.ConsumerSupervisor, shape_handle}
             )
 
-          assert_receive {Support.TestStorage, :set_shape_definition, ^shape_handle, ^shape}
+          assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, ^shape}
           # Wait for the virtual snapshot to have started to avoid overriding any of the
           # defined Mox expectations
           :started =
@@ -634,7 +634,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
     setup [
       :with_registry,
-      :with_cub_db_storage,
+      :with_pure_file_storage,
       :with_log_chunking,
       :with_persistent_kv,
       :with_shape_log_collector,

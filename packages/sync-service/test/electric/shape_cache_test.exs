@@ -71,7 +71,7 @@ defmodule Electric.ShapeCacheTest do
   setup [
     :with_persistent_kv,
     :with_stack_id_from_test,
-    :with_cub_db_storage,
+    :with_pure_file_storage,
     :with_status_monitor,
     :with_shape_monitor
   ]
@@ -265,38 +265,32 @@ defmodule Electric.ShapeCacheTest do
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
+      writer = Storage.init_writer!(storage, @shape)
 
-      Storage.append_to_log!(
-        changes_to_log_items([
-          %Electric.Replication.Changes.NewRecord{
-            relation: {"public", "items"},
-            record: %{"id" => "1", "value" => "Alice"},
-            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-          }
-        ]),
-        storage
-      )
+      writer =
+        Storage.append_to_log!(
+          changes_to_log_items([
+            %Electric.Replication.Changes.NewRecord{
+              relation: {"public", "items"},
+              record: %{"id" => "1", "value" => "Alice"},
+              log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+            }
+          ]),
+          writer
+        )
+
+      Storage.terminate(writer)
 
       assert Storage.snapshot_started?(storage)
 
       assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
                1
 
-      {module, _} = storage
-
-      ref =
-        Process.monitor(
-          module.name(ctx.stack_id, shape_handle)
-          |> GenServer.whereis()
-        )
-
       {new_shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(%{@shape | where: "1 == 1"}, opts)
 
       Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(new_shape_handle, opts)
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
       assert_raise Storage.Error,
                    fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
@@ -843,35 +837,31 @@ defmodule Electric.ShapeCacheTest do
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
+      writer = Storage.init_writer!(storage, @shape)
 
-      Storage.append_to_log!(
-        changes_to_log_items([
-          %Electric.Replication.Changes.NewRecord{
-            relation: {"public", "items"},
-            record: %{"id" => "1", "value" => "Alice"},
-            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-          }
-        ]),
-        storage
-      )
+      writer =
+        Storage.append_to_log!(
+          changes_to_log_items([
+            %Electric.Replication.Changes.NewRecord{
+              relation: {"public", "items"},
+              record: %{"id" => "1", "value" => "Alice"},
+              log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+            }
+          ]),
+          writer
+        )
+
+      Storage.terminate(writer)
 
       assert Storage.snapshot_started?(storage)
 
       assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
                1
 
-      {module, _} = storage
-
-      ref =
-        Process.monitor(
-          module.name(ctx.stack_id, shape_handle)
-          |> GenServer.whereis()
-        )
-
       log = capture_log(fn -> :ok = ShapeCache.clean_shape(shape_handle, opts) end)
       assert log =~ "Cleaning up shape"
 
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+      Process.sleep(100)
 
       assert_raise Storage.Error,
                    fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
@@ -925,30 +915,26 @@ defmodule Electric.ShapeCacheTest do
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
+      writer = Storage.init_writer!(storage, @shape)
 
-      Storage.append_to_log!(
-        changes_to_log_items([
-          %Electric.Replication.Changes.NewRecord{
-            relation: {"public", "items"},
-            record: %{"id" => "1", "value" => "Alice"},
-            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-          }
-        ]),
-        storage
-      )
+      writer =
+        Storage.append_to_log!(
+          changes_to_log_items([
+            %Electric.Replication.Changes.NewRecord{
+              relation: {"public", "items"},
+              record: %{"id" => "1", "value" => "Alice"},
+              log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+            }
+          ]),
+          writer
+        )
+
+      Storage.terminate(writer)
 
       assert Storage.snapshot_started?(storage)
 
       assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
                1
-
-      {module, _} = storage
-
-      ref =
-        Process.monitor(
-          module.name(ctx.stack_id, shape_handle)
-          |> GenServer.whereis()
-        )
 
       # Cleaning unrelated relations should not affect the shape
       :ok =
@@ -957,7 +943,10 @@ defmodule Electric.ShapeCacheTest do
           opts
         )
 
-      refute_receive {:DOWN, ^ref, :process, _pid, _reason}
+      Process.sleep(100)
+
+      # Shouldn't raise
+      assert :ok = Stream.run(Storage.get_log_stream(@zero_offset, storage))
 
       :ok =
         ShapeCache.clean_all_shapes_for_relations(
@@ -965,7 +954,7 @@ defmodule Electric.ShapeCacheTest do
           opts
         )
 
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+      Process.sleep(100)
 
       assert_raise Storage.Error, fn ->
         Stream.run(Storage.get_log_stream(@zero_offset, storage))

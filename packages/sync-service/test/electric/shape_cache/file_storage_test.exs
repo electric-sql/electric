@@ -4,6 +4,7 @@ defmodule Electric.ShapeCache.FileStorageTest do
 
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.FileStorage
+  alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
 
   alias Support.StubInspector
@@ -27,7 +28,7 @@ defmodule Electric.ShapeCache.FileStorageTest do
       )
 
     shape_opts = FileStorage.for_shape(@shape_handle, opts)
-    pid = start_link_supervised!({FileStorage, shape_opts})
+    pid = start_link_supervised!(Storage.child_spec({FileStorage, shape_opts}))
     {:ok, %{opts: shape_opts, shared_opts: opts, pid: pid, storage: {FileStorage, shape_opts}}}
   end
 
@@ -105,7 +106,7 @@ defmodule Electric.ShapeCache.FileStorageTest do
 
     test "excludes shapes marked for deletion", ctx do
       shape = Shape.new!("public.test_table", inspector: {Mock.Inspector, []})
-      :ok = FileStorage.set_shape_definition(shape, ctx.opts)
+      _ = FileStorage.init_writer!(ctx.opts, shape)
 
       assert {:ok, %{@shape_handle => _shape}} =
                FileStorage.get_all_stored_shapes(ctx.shared_opts)

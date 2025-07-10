@@ -1,6 +1,5 @@
 defmodule Support.TestUtils do
   alias Electric.Replication.LogOffset
-  alias Electric.ShapeCache.LogChunker
   alias Electric.LogItems
   alias Electric.Replication.Changes
 
@@ -12,7 +11,6 @@ defmodule Support.TestUtils do
     pk = Keyword.get(opts, :pk, ["id"])
     xid = Keyword.get(opts, :xid, 1)
     replica = Keyword.get(opts, :replica, :default)
-    chunk_size = Keyword.get(opts, :chunk_size, LogChunker.default_chunk_size_threshold())
 
     changes
     |> Enum.map(&Changes.fill_key(&1, pk))
@@ -20,16 +18,6 @@ defmodule Support.TestUtils do
     |> Enum.map(fn {offset, item} ->
       {offset, item.key, item.headers.operation, Jason.encode!(item)}
     end)
-    |> Enum.flat_map_reduce(0, fn {offset, _, _, json_log_item} = line, acc ->
-      case LogChunker.fit_into_chunk(byte_size(json_log_item), acc, chunk_size) do
-        {:ok, new_chunk_size} ->
-          {[line], new_chunk_size}
-
-        {:threshold_exceeded, new_chunk_size} ->
-          {[line, {:chunk_boundary, offset}], new_chunk_size}
-      end
-    end)
-    |> elem(0)
   end
 
   def with_electric_instance_id(ctx) do

@@ -76,16 +76,28 @@ defmodule Electric.Replication.Changes do
           affected_relations: MapSet.put(rels, rel)
       }
     end
+
+    def finalize(%__MODULE__{changes: [], lsn: lsn} = txn),
+      do: %{txn | last_log_offset: LogOffset.new(lsn, 0)}
+
+    def finalize(%__MODULE__{changes: [%{log_offset: last_offset} | _] = changes} = txn) do
+      %{
+        txn
+        | last_log_offset: last_offset,
+          changes: Enum.reverse(changes)
+      }
+    end
   end
 
   defmodule NewRecord do
-    defstruct [:relation, :record, :log_offset, :key]
+    defstruct [:relation, :record, :log_offset, :key, last?: false]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
             record: Changes.record(),
             log_offset: LogOffset.t(),
-            key: String.t() | nil
+            key: String.t() | nil,
+            last?: boolean()
           }
   end
 
@@ -98,7 +110,8 @@ defmodule Electric.Replication.Changes do
       :key,
       :old_key,
       tags: [],
-      changed_columns: MapSet.new()
+      changed_columns: MapSet.new(),
+      last?: false
     ]
 
     @type t() :: %__MODULE__{
@@ -109,7 +122,8 @@ defmodule Electric.Replication.Changes do
             key: String.t() | nil,
             old_key: String.t() | nil,
             tags: [Changes.tag()],
-            changed_columns: MapSet.t()
+            changed_columns: MapSet.t(),
+            last?: boolean()
           }
 
     def new(attrs) do
@@ -145,23 +159,25 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule DeletedRecord do
-    defstruct [:relation, :old_record, :log_offset, :key, tags: []]
+    defstruct [:relation, :old_record, :log_offset, :key, tags: [], last?: false]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
             old_record: Changes.record(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
-            tags: [Changes.tag()]
+            tags: [Changes.tag()],
+            last?: boolean()
           }
   end
 
   defmodule TruncatedRelation do
-    defstruct [:relation, :log_offset]
+    defstruct [:relation, :log_offset, last?: false]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
-            log_offset: LogOffset.t()
+            log_offset: LogOffset.t(),
+            last?: boolean()
           }
   end
 
