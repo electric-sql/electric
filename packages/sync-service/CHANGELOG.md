@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.0.25
+
+### Patch Changes
+
+- 64526b7: Ignore pool connection `:DOWN` messages with reason `:noproc`
+- a805e19: Ensure telemetry handlers are detached when the relevant telemetry processes die.
+
 ## 1.0.24
 
 ### Patch Changes
