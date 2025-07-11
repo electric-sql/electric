@@ -431,7 +431,7 @@ Implemented in the [shared API server](https://github.com/electric-sql/electric/
 
 Just as [with reads](#auth), because you're sending writes to an API endpoint, you can use your API, middleware, or a proxy to authorize them. Just as you would any other API request.
 
-Agaim, to emphasise, this allows you to develop local-first apps, without having to codify write-path authorization logic into database rules. In fact, in many cases, you can just keep your existing API endpoints and you may not need to change any code at all.
+Again, to emphasise, this allows you to develop local-first apps, without having to codify write-path authorization logic into database rules. In fact, in many cases, you can just keep your existing API endpoints and you may not need to change any code at all.
 
 ### Encryption
 
