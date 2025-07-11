@@ -53,65 +53,9 @@ curl -i 'http://localhost:3000/v1/shape?table=scores&offset=-1'
 - `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
 :::
 
-You should get a response like this:
+The `docker-compose.yaml` file includes an initialization script that automatically creates a `scores` table and populates it with sample data when the database starts up. This means you can immediately start querying the data without manual setup.
 
-```http
-HTTP/1.1 400 Bad Request
-date: Wed, 09 Apr 2025 20:03:40 GMT
-content-length: 170
-vary: accept-encoding
-cache-control: no-cache
-x-request-id: GDS_DYUuk2dR6FEAAAAh
-electric-server: ElectricSQL/1.0.4
-access-control-allow-origin: *
-access-control-expose-headers: *
-access-control-allow-methods: GET, HEAD, DELETE, OPTIONS
-content-type: application/json; charset=utf-8
-electric-schema: null
-
-{"message":"Invalid request","errors":{"table":["Table \"public\".\"scores\" does not exist. If the table name contains capitals or special characters you must quote it."]}}
-```
-
-So it didn't work! Which makes sense... as it's an empty database without any tables or data. Let's fix that.
-
-### Create a table and insert some data
-
-Use a Postgres client to connect to Postgres. For example, with [psql](https://www.postgresql.org/docs/current/app-psql.html) you can run:
-
-```sh
-psql "postgresql://postgres:password@localhost:54321/electric"
-```
-
-Then create a `scores` table
-
-```sql
-CREATE TABLE scores (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255),
-  value FLOAT
-);
-```
-
-And insert some rows:
-
-```sql
-INSERT INTO scores (name, value) VALUES
-  ('Alice', 3.14),
-  ('Bob', 2.71),
-  ('Charlie', -1.618),
-  ('David', 1.414),
-  ('Eve', 0);
-```
-
-#### Now try the curl command again
-
-Exit your Postgres client (e.g.: with `psql` enter `\q`) and try the `curl` request again:
-
-```sh
-curl -i 'http://localhost:3000/v1/shape?table=scores&offset=-1'
-```
-
-Success! You should see the data you just put into Postgres in the shape response:
+You should see the sample data in the shape response:
 
 ```bash
 HTTP/1.1 200 OK
@@ -221,7 +165,13 @@ Navigate to http://localhost:5173 in your web browser. You should see output lik
 
 #### Postgres as a real-time database
 
-Note that the row with id `2` has the name `"Bob"`. Go back to your Postgres client and update the name of that row. It'll instantly be synced to your component!
+Note that the row with id `2` has the name `"Bob"`. To see real-time updates in action, connect to your Postgres database using a client like [psql](https://www.postgresql.org/docs/current/app-psql.html):
+
+```sh
+psql "postgresql://postgres:password@localhost:54321/electric"
+```
+
+Then update the name of that row. It'll instantly be synced to your component!
 
 ```sql
 UPDATE scores SET name = 'James' WHERE id = 2;
