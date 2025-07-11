@@ -160,7 +160,7 @@ export async function GET(req: Request) {
 
 ### Pricing
 
-Electric Cloud is currently free in public BETA. We'll be launching low-cost, usage-based pricing soon (likely by the end of June 2025).
+Electric Cloud is currently free in public BETA. We'll be launching low-cost, usage-based pricing soon (by the end of Q3 2025).
 
 Electric Cloud will always provide a generous free tier, so many apps will roll over with zero cost. If your plan is to use Electric in a larger app (more than 1,000 monthly active users) please reach out to make sure we can fully support you and to get a sense of what the future pricing will be like.
 
