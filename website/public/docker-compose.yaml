@@ -1,15 +1,14 @@
-version: "3.3"
 name: "electric_quickstart"
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: docker.io/postgres:16-alpine
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - 54321:5432
+      - "54321:5432"
     tmpfs:
       - /var/lib/postgresql/data
       - /tmp
@@ -18,9 +17,17 @@ services:
       - listen_addresses=*
       - -c
       - wal_level=logical
+    configs:
+      - source: init.sql
+        target: /docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   electric:
-    image: electricsql/electric
+    image: docker.io/electricsql/electric:latest
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
       # Not suitable for production. Only use insecure mode in development or if you've otherwise secured the Electric API.
@@ -29,4 +36,21 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
+configs:
+  init.sql:
+    content: |
+      CREATE TABLE scores (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255),
+        value FLOAT
+      );
+      
+      INSERT INTO scores (name, value) VALUES
+        ('Alice', 3.14),
+        ('Bob', 2.71),
+        ('Charlie', -1.618),
+        ('David', 1.414),
+        ('Eve', 0);
