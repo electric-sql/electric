@@ -149,8 +149,10 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.start_interval("shape_log_collector.logging")
 
-    Logger.info(
-      "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}",
+    Logger.debug(
+      fn ->
+        "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}"
+      end,
       received_transaction_xid: xid,
       received_transaction_num_changes: txn.num_changes,
       received_transaction_lsn: lsn
