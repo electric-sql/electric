@@ -67,7 +67,7 @@
     ??$PS1
 
   [shell electric]
-    ??[info] Received transaction
+    ??[debug] Received transaction
     [sleep 1]
 
   # Client should be able to continue same shape
