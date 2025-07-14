@@ -104,7 +104,7 @@ defmodule Electric.MixProject do
         {:nimble_options, "~> 1.1"},
         {:opentelemetry_telemetry, "~> 1.1"},
         {:opentelemetry_semantic_conventions, "~> 1.27"},
-        {:pg_query_ex, "0.7.0"},
+        {:pg_query_ex, "0.8.0"},
         {:plug, "~> 1.17"},
         {:postgrex, "~> 0.20"},
         {:retry, "~> 0.19"},
@@ -148,7 +148,7 @@ defmodule Electric.MixProject do
 
   defp telemetry_deps() do
     [
-      {:sentry, "~> 10.9"},
+      {:sentry, "~> 11.0"},
       {:opentelemetry, "~> 1.5"},
       {:opentelemetry_exporter, "~> 1.8"},
       {:otel_metric_exporter, "~> 0.3.11"},
