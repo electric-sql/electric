@@ -158,8 +158,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
-  def handle_call({:handle_event, event, trace_context}, _from, state) do
-    OpenTelemetry.set_current_context(trace_context)
+  def handle_call({:handle_event, event}, _from, state) do
     {:reply, :ok, handle_event(event, state)}
   end
 
