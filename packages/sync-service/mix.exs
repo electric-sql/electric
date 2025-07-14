@@ -148,7 +148,7 @@ defmodule Electric.MixProject do
 
   defp telemetry_deps() do
     [
-      {:sentry, "~> 10.9"},
+      {:sentry, "~> 11.0"},
       {:opentelemetry, "~> 1.5"},
       {:opentelemetry_exporter, "~> 1.8"},
       {:otel_metric_exporter, "~> 0.3.11"},
