@@ -111,25 +111,6 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  @doc """
-  Get Postgres server version
-  """
-  @spec get_pg_version(Postgrex.conn()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def get_pg_version(conn) do
-    case Postgrex.query(
-           conn,
-           "SELECT current_setting('server_version_num') server_version_num",
-           []
-         ) do
-      {:ok, result} when result.num_rows == 1 ->
-        [[version_str]] = result.rows
-        {:ok, String.to_integer(version_str)}
-
-      {:error, err} ->
-        {:error, err}
-    end
-  end
-
   defp alter_pub_set_whole_tables!(conn, publication_name, relation_filters) do
     publication = Utils.quote_name(publication_name)
 
