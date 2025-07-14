@@ -149,7 +149,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   defp indexed_shapes_affected(condition, record) do
-    OpenTelemetry.with_span(
+    OpenTelemetry.with_child_span(
       "filter.filter_using_indexes",
       [index_count: map_size(condition.indexes)],
       fn ->
@@ -163,7 +163,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   defp other_shapes_affected(condition, record) do
-    OpenTelemetry.with_span(
+    OpenTelemetry.with_child_span(
       "filter.filter_other_shapes",
       [shape_count: map_size(condition.other_shapes)],
       fn ->

@@ -1,50 +1,21 @@
-use Electric.Telemetry
+defmodule Electric.Telemetry.Sampler do
+  @moduledoc """
+  Decides which spans should be included and how often.
 
-with_telemetry :otel_sampler do
-  defmodule Electric.Telemetry.Sampler do
-    @moduledoc """
-    Custom sampler that samples all spans except for specifically configured
-    spans for which a given ratio is sampled.
-    """
+  This deviates from the standard way to OpenTelemetry sampling by sampling as the spans are created.
+  This is done to avoid the overhead of creating spans that will not be recorded.
 
-    require OpenTelemetry.Tracer, as: Tracer
+  Child spans of a sampled span should use `OpenTelemetry.with_child_span/4` to ensure that
+  they are only sampled if the parent span is sampled.
+  """
 
-    @behaviour :otel_sampler
+  def include_span?("filter." <> _), do: Application.get_env(:electric, :profile_where_clauses?)
+  def include_span?("pg_txn.replication_client.process_x_log_data"), do: false
+  def include_span?("pg_txn.replication_client.relation_received"), do: false
+  def include_span?("pg_txn.replication_client.transaction_received"), do: sample()
+  def include_span?(_), do: true
 
-    # Span names that are sampled probabilistically
-    @probabilistic_span_names [
-      "pg_txn.replication_client.process_x_log_data"
-    ]
-
-    @impl :otel_sampler
-    def setup(%{ratio: ratio}) do
-      %{sampling_probability: ratio}
-    end
-
-    @impl :otel_sampler
-    def description(%{sampling_probability: sampling_probability}) do
-      "Custom sampler that samples all spans except for specifically configured spans for which #{sampling_probability * 100}% are sampled."
-    end
-
-    @impl true
-    def should_sample(ctx, _, _, span_name, _, _, state)
-        when span_name in @probabilistic_span_names do
-      if :rand.uniform() <= state.sampling_probability do
-        {:record_and_sample, [], tracestate(ctx)}
-      else
-        {:drop, [], tracestate(ctx)}
-      end
-    end
-
-    @impl true
-    def should_sample(ctx, _trace_id, _links, _span_name, _span_kind, _attributes, _) do
-      {:record_and_sample, [], tracestate(ctx)}
-    end
-
-    defp tracestate(ctx) do
-      ctx
-      |> Tracer.current_span_ctx()
-      |> OpenTelemetry.Span.tracestate()
-    end
+  defp sample do
+    :rand.uniform() <= Application.get_env(:electric, :otel_sampling_ratio, 0)
   end
 end

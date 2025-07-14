@@ -32,7 +32,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   require Logger
   require OpenTelemetry.SemanticConventions.Trace
 
-  alias Electric.Telemetry.OptionalSpans
+  alias Electric.Telemetry.Sampler
   alias Electric.Telemetry.IntervalTimer
 
   @typep span_name :: String.t()
@@ -55,10 +55,24 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
   def with_span(name, attributes, stack_id \\ nil, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    if OptionalSpans.include?(name) do
+    if Sampler.include_span?(name) do
       do_with_span(name, attributes, stack_id, fun)
     else
       fun.()
+    end
+  end
+
+  @doc """
+  Creates a span providing there is a parent span in the current context.
+  If there is no parent span, the function `fun` is called without creating a span.
+
+  This is necessary for the custom way we do sampling, if the parent span is not sampled, the child span
+  will not be created either.
+  """
+  def with_child_span(name, attributes, stack_id \\ nil, fun) do
+    case get_current_context() do
+      {:undefined, _} -> fun.()
+      _ -> with_span(name, attributes, stack_id, fun)
     end
   end
 
