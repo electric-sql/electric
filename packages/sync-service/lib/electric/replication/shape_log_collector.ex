@@ -56,14 +56,20 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
-    timer = IntervalTimer.start_interval("shape_log_collector.transaction_message")
+    timer = IntervalTimer.start_interval(:transaction_message)
     trace_context = OpenTelemetry.get_current_context()
 
     timer = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
-    OpenTelemetry.stop_and_save_intervals(
-      timer: timer,
-      total_attribute: :"shape_log_collector.transaction.total_duration_µs"
+    durations = IntervalTimer.durations(timer)
+
+    :telemetry.execute(
+      [:electric, :shape_log_collector],
+      for {interval_name, duration} <- durations, into: %{} do
+        {interval_name, duration}
+      end,
+      # TODO: Replace with actual stack_id
+      %{stack_id: "single_stack"}
     )
 
     :ok
@@ -144,10 +150,10 @@ defmodule Electric.Replication.ShapeLogCollector do
       ) do
     OpenTelemetry.set_interval_timer(timer)
 
-    OpenTelemetry.start_interval("shape_log_collector.set_current_context")
+    OpenTelemetry.start_interval(:set_current_context)
     OpenTelemetry.set_current_context(trace_context)
 
-    OpenTelemetry.start_interval("shape_log_collector.logging")
+    OpenTelemetry.start_interval(:logging)
 
     Logger.debug(
       fn ->
@@ -162,7 +168,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     state = handle_transaction(state, txn)
 
-    OpenTelemetry.start_interval("shape_log_collector.transaction_message_response")
+    OpenTelemetry.start_interval(:transaction_message_response)
 
     {:reply, OpenTelemetry.extract_interval_timer(), state}
   end
@@ -197,7 +203,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp handle_transaction(state, txn) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
-    OpenTelemetry.start_interval("shape_log_collector.handle_transaction")
+    OpenTelemetry.start_interval(:handle_transaction)
 
     pk_cols_of_relations =
       for relation <- txn.affected_relations, into: %{} do
@@ -218,10 +224,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp publish(state, event) do
-    OpenTelemetry.start_interval("partitions.handle_event")
+    OpenTelemetry.start_interval(:partitions)
     {partitions, event} = Partitions.handle_event(state.partitions, event)
 
-    OpenTelemetry.start_interval("shape_log_collector.affected_shapes")
+    OpenTelemetry.start_interval(:affected_shapes)
     affected_shapes = Filter.affected_shapes(state.filter, event)
     affected_shape_count = MapSet.size(affected_shapes)
 
@@ -229,11 +235,11 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.affected_shape_count": affected_shape_count
     )
 
-    OpenTelemetry.start_interval("shape_log_collector.publish")
+    OpenTelemetry.start_interval(:publish)
     context = OpenTelemetry.get_current_context()
     Publisher.publish(affected_shapes, {:handle_event, event, context})
 
-    OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
+    OpenTelemetry.start_interval(:set_last_processed_lsn)
 
     LsnTracker.set_last_processed_lsn(
       state.last_processed_lsn,

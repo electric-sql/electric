@@ -254,6 +254,36 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         distribution("electric.storage.transaction_stored.replication_lag",
           unit: :millisecond,
           keep: for_stack
+        ),
+        distribution("electric.shape_log_collector.transaction_message",
+          unit: :microsecond,
+          keep: for_stack
+        ),
+        distribution("electric.shape_log_collector.set_current_context",
+          unit: :microsecond,
+          keep: for_stack
+        ),
+        distribution("electric.shape_log_collector.logging", unit: :microsecond, keep: for_stack),
+        distribution("electric.shape_log_collector.transaction_message_response",
+          unit: :microsecond,
+          keep: for_stack
+        ),
+        distribution("electric.shape_log_collector.handle_transaction",
+          unit: :microsecond,
+          keep: for_stack
+        ),
+        distribution("electric.shape_log_collector.partitions",
+          unit: :microsecond,
+          keep: for_stack
+        ),
+        distribution("electric.shape_log_collector.affected_shapes",
+          unit: :microsecond,
+          keep: for_stack
+        ),
+        distribution("electric.shape_log_collector.publish", unit: :microsecond, keep: for_stack),
+        distribution("electric.shape_log_collector.set_last_processed_lsn",
+          unit: :microsecond,
+          keep: for_stack
         )
       ] ++ prometheus_metrics(opts)
     end
