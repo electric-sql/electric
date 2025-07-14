@@ -94,6 +94,8 @@ defmodule Support.DbSetup do
     %{rows: [[pg_version]]} =
       Postgrex.query!(ctx.db_conn, "SELECT current_setting('server_version_num')::integer", [])
 
+    true = is_integer(pg_version)
+
     {:ok, %{pg_version: pg_version}}
   end
 
