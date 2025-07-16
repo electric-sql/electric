@@ -1,4 +1,4 @@
-name: Elixir CI
+name: Electric CI
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build_and_test:
-    name: "Build and test, Postgres ${{ matrix.postgres_version }}"
+    name: "Build and test sync-service, Postgres ${{ matrix.postgres_version }}"
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -122,7 +122,7 @@ jobs:
           files: ./junit/regular-test-junit-report.xml,./junit/telemetry-test-junit-report.xml
 
   formatting:
-    name: Check formatting
+    name: Check formatting for sync-service
     runs-on: ubuntu-latest
     defaults:
       run:
