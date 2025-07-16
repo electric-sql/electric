@@ -1,4 +1,4 @@
-name: Benchmark a PR
+name: Benchmark Electric image from DockerHub
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ env:
 
 jobs:
   build:
-    name: Build and test on PR comment
+    name: Run predefined benchmarks for DockerHub image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.2.2

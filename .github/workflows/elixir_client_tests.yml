@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build and test
+    name: Build and test elixir-client
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -93,7 +93,7 @@ jobs:
           files: ./junit/test-junit-report.xml
 
   formatting:
-    name: Check formatting
+    name: Check formatting for elixir-client
     runs-on: ubuntu-latest
     defaults:
       run:

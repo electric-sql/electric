@@ -1,4 +1,4 @@
-name: Integration Tests
+name: Lux Integration Tests
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    name: Build and test
+    name: Run Lux integration tests
     runs-on: ubuntu-latest
     defaults:
       run:

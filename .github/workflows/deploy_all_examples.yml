@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy ${{ matrix.example.name }}
+    name: Deploy ${{ matrix.example.name }} example
     environment: "Production"
     runs-on: ubuntu-latest
     continue-on-error: true

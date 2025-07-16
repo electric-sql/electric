@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   list_ts_packages:
-    name: List packages
+    name: List TS packages
     runs-on: ubuntu-latest
     outputs:
       directories: ${{ steps.list_ts_packages.outputs.directories }}
@@ -35,7 +35,7 @@ jobs:
         id: list_examples
 
   check_packages:
-    name: Check ${{ matrix.package_dir }}
+    name: Check TS package at ${{ matrix.package_dir }}
     needs: [list_ts_packages]
     runs-on: ubuntu-latest
     strategy:
@@ -58,7 +58,7 @@ jobs:
       - run: pnpm run typecheck
 
   build_and_test_packages:
-    name: Build and test
+    name: Test TS packages against sync-service
     needs: [list_ts_packages]
     runs-on: ubuntu-latest
     strategy:
@@ -151,7 +151,7 @@ jobs:
           files: ./junit/test-report.junit.xml
 
   check_and_build_examples:
-    name: Check and build ${{ matrix.example_folder }}
+    name: Check and build ${{ matrix.example_folder }} example
     needs: [list_examples, build_and_test_packages]
     runs-on: ubuntu-latest
     strategy:
