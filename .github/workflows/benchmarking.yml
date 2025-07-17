@@ -1,8 +1,7 @@
 name: Benchmark a PR
 
 on:
-  issue_comment:
-    types: [created]
+  pull_request:
 
 defaults:
   run:
@@ -102,7 +101,7 @@ jobs:
                   "tx_row_count": [100],
                   "tx_affects_shape": [false],
                   "row_size": [100],
-                  "where_clause": ["name = '"'#{name}'"'", "name ILIKE '"'#{name}%'"'"]
+                  "where_clause": ["name = '"'#{name}'"'", "name > '"'az'"'"]
                 },
                 "machine_request": {
                   "vcpu": 4,
