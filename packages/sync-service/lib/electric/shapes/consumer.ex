@@ -261,7 +261,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%Transaction{} = txn, %{pg_snapshot: %{xmin: xmin, xmax: xmax}} = state) do
-    OpenTelemetry.with_span(
+    OpenTelemetry.with_child_span(
       "shape_write.consumer.handle_txns",
       [snapshot_xmin: xmin, snapshot_xmax: xmax],
       state.stack_id,
@@ -323,9 +323,14 @@ defmodule Electric.Shapes.Consumer do
       [xid: txn.xid, total_num_changes: txn.num_changes] ++
         shape_attrs(state.shape_handle, state.shape)
 
-    OpenTelemetry.with_span("shape_write.consumer.handle_txn", ot_attrs, state.stack_id, fn ->
-      do_handle_txn(txn, state)
-    end)
+    OpenTelemetry.with_child_span(
+      "shape_write.consumer.handle_txn",
+      ot_attrs,
+      state.stack_id,
+      fn ->
+        do_handle_txn(txn, state)
+      end
+    )
   end
 
   defp do_handle_txn(%Transaction{} = txn, state) do
