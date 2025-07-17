@@ -160,6 +160,8 @@ otel_export_period =
     nil
   )
 
+otel_sampling_ratio = env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, 0.01)
+
 # The provided database id is relevant if you had used v0.8 and want to keep the storage
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
 provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, nil)
@@ -187,6 +189,7 @@ config :electric,
   system_metrics_poll_interval: system_metrics_poll_interval,
   otel_export_period: otel_export_period,
   otel_per_process_metrics?: env!("ELECTRIC_OTEL_PER_PROCESS_METRICS", :boolean, nil),
+  otel_sampling_ratio: otel_sampling_ratio,
   telemetry_top_process_count: env!("ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT", :integer, nil),
   telemetry_long_gc_threshold: env!("ELECTRIC_TELEMETRY_LONG_GC_THRESHOLD", :integer, nil),
   telemetry_long_schedule_threshold:
@@ -235,7 +238,6 @@ if Electric.telemetry_enabled?() do
 
   otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
   otel_debug = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
-  otel_sampling_ratio = env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, 0.01)
 
   otel_batch_processor =
     if otlp_endpoint do
@@ -258,19 +260,7 @@ if Electric.telemetry_enabled?() do
       service: %{name: service_name, version: Electric.version()},
       instance: %{id: instance_id}
     },
-    processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1),
-    # sampler: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}}
-    # Sample root spans based on our custom sampler
-    # and inherit sampling decision from remote parents
-    sampler:
-      {:parent_based,
-       %{
-         root: {Electric.Telemetry.Sampler, %{ratio: otel_sampling_ratio}},
-         remote_parent_sampled: :always_on,
-         remote_parent_not_sampled: :always_off,
-         local_parent_sampled: :always_on,
-         local_parent_not_sampled: :always_off
-       }}
+    processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
 
   if otlp_endpoint do
     # Shortcut config for Honeycomb.io:
