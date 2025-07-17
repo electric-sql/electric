@@ -10,6 +10,7 @@ defaults:
 env:
   PROJECT_ID: vaxine
   REGISTRY: europe-docker.pkg.dev/vaxine/electric
+  ISSUE_NUMBER: ${{ github.event.pull_request.number }}
 
 jobs:
   build:
@@ -51,8 +52,8 @@ jobs:
         run: |
           docker pull ${{ env.REGISTRY }}/electric:canary-builder || true
           docker pull ${{ env.REGISTRY }}/electric:canary-runner-base || true
-          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder || true
-          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-builder || true
+          docker pull ${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-runner-base || true
       - name: Build base images
         env:
           DOCKER_BUILDKIT: "1"
@@ -60,18 +61,18 @@ jobs:
           docker build \
             --push \
             --cache-from ${{ env.REGISTRY }}/electric:canary-builder \
-            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
+            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-builder \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            --tag ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
+            --tag ${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-builder \
             --target builder \
             .
 
           docker build \
             --push \
             --cache-from ${{ env.REGISTRY }}/electric:canary-runner-base \
-            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
+            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-runner-base \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
-            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-runner-base \
             --target runner_setup \
             .
       - name: Build actual image
@@ -80,9 +81,9 @@ jobs:
         run: >
           docker build \
             --push \
-            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
-            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
-            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }} \
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-builder \
+            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-runner-base \
+            --tag  ${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-${{ env.SHORT_SHA }} \
             .
       - name: Replication throughput benchmark
         run: |
@@ -93,7 +94,7 @@ jobs:
             -d '{
               "benchmark_run": {
                 "spec_values": {
-                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}"],
+                  "electric_image": ["${{ env.REGISTRY }}/electric:pr-${{ env.ISSUE_NUMBER }}-${{ env.SHORT_SHA }}"],
                   "postgres_image": ["postgres:17-alpine"],
                   "row_count": [1],
                   "shape_count": [5,2000,4000,8000,16000],
@@ -109,7 +110,7 @@ jobs:
                 },
                 "metadata": {
                   "pr": ${{ github.event.issue.number }},
-                  "short_version": "pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}",
+                  "short_version": "pr-${{ env.ISSUE_NUMBER }}-${{ env.SHORT_SHA }}",
                   "callback": {
                     "method": "POST",
                     "headers": [
@@ -118,7 +119,7 @@ jobs:
                       ["X-GitHub-Api-Version","2022-11-28"]
                     ],
                     "url":"https://api.github.com/repos/electric-sql/electric/actions/workflows/leave_benchmark_comment.yml/dispatches",
-                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ github.event.issue.number }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
+                    "body": "{\"ref\":\"main\",\"inputs\":{\"pr\":\"${{ env.ISSUE_NUMBER }}\",\"benchmark_info\":#{benchmark_info},\"original_commit\":\"${{ env.SHORT_SHA }}\"}}"
                   }
                 }
               }
