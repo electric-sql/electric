@@ -10,8 +10,8 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   @num_calls_until_crash_key :num_calls_until_crash
 
   defdelegate for_shape(shape_handle, opts), to: FileStorage
+  defdelegate stack_start_link(opts), to: FileStorage
   defdelegate start_link(opts), to: FileStorage
-  defdelegate set_shape_definition(shape, opts), to: FileStorage
   defdelegate get_all_stored_shapes(opts), to: FileStorage
   defdelegate get_total_disk_usage(opts), to: FileStorage
   defdelegate get_current_position(opts), to: FileStorage
@@ -22,7 +22,8 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate get_log_stream(offset, max_offset, opts), to: FileStorage
   defdelegate get_chunk_end_log_offset(offset, opts), to: FileStorage
   defdelegate cleanup!(opts), to: FileStorage
-  defdelegate unsafe_cleanup!(opts), to: FileStorage
+  defdelegate terminate(opts), to: FileStorage
+  defdelegate compact(opts, keep_complete_chunks), to: FileStorage
 
   def shared_opts(opts) do
     opts
@@ -30,9 +31,9 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
     |> Map.put(:extra_opts, %{num_calls_until_crash: Keyword.fetch!(opts, :num_calls_until_crash)})
   end
 
-  def initialise(opts) do
+  def init_writer!(opts, shape_definition) do
     CubDB.put(opts.db, @num_calls_until_crash_key, opts.extra_opts.num_calls_until_crash)
-    FileStorage.initialise(opts)
+    FileStorage.init_writer!(opts, shape_definition)
   end
 
   def append_to_log!(log_items, opts) do

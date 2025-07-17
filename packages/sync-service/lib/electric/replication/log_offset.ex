@@ -109,23 +109,51 @@ defmodule Electric.Replication.LogOffset do
   def compare(%LogOffset{} = offset, offset), do: :eq
   def compare(%LogOffset{tx_offset: a}, %LogOffset{tx_offset: b}) when a < b, do: :lt
   def compare(%LogOffset{tx_offset: a}, %LogOffset{tx_offset: b}) when a > b, do: :gt
+  def compare(%LogOffset{}, %LogOffset{op_offset: :infinity}), do: :lt
+  def compare(%LogOffset{op_offset: :infinity}, %LogOffset{}), do: :gt
+  def compare(%LogOffset{op_offset: a}, %LogOffset{op_offset: b}) when a < b, do: :lt
+  def compare(%LogOffset{op_offset: a}, %LogOffset{op_offset: b}) when a > b, do: :gt
 
-  def compare(%LogOffset{tx_offset: tx, op_offset: a}, %LogOffset{tx_offset: tx, op_offset: b})
-      when a < b,
-      do: :lt
+  @doc """
+  Get a minimum of 2 log offsets
 
-  def compare(%LogOffset{tx_offset: tx, op_offset: a}, %LogOffset{tx_offset: tx, op_offset: b})
-      when a > b,
-      do: :gt
+  ## Examples
+
+      iex> LogOffset.min(new(10, 0), new(10, 1))
+      new(10, 0)
+  """
+  def min(%LogOffset{} = a, %LogOffset{} = b) do
+    if compare(a, b) == :lt, do: a, else: b
+  end
+
+  @doc """
+  Get a maximum of 2 log offsets
+
+  ## Examples
+
+      iex> LogOffset.max(new(10, 0), new(10, 1))
+      new(10, 1)
+  """
+  def max(%LogOffset{} = a, %LogOffset{} = b) do
+    if compare(a, b) == :gt, do: a, else: b
+  end
 
   defguard is_log_offset_lt(offset1, offset2)
            when offset1.tx_offset < offset2.tx_offset or
                   (offset1.tx_offset == offset2.tx_offset and
                      offset1.op_offset < offset2.op_offset)
 
+  defguard is_log_offset_lte(offset1, offset2)
+           when offset1 == offset2 or is_log_offset_lt(offset1, offset2)
+
   defguard is_min_offset(offset) when offset.tx_offset == -1
 
   defguard is_virtual_offset(offset) when offset.tx_offset == 0
+
+  defguard is_real_offset(offset) when offset.tx_offset > 0
+
+  defguard is_last_virtual_offset(offset)
+           when offset.tx_offset == 0 and offset.op_offset == :infinity
 
   @doc """
   An offset that is smaller than all offsets in the log.
@@ -198,6 +226,13 @@ defmodule Electric.Replication.LogOffset do
   @spec to_tuple(t) :: {int64(), non_neg_integer()}
   def to_tuple(%LogOffset{tx_offset: tx_offset, op_offset: op_offset}) do
     {tx_offset, op_offset}
+  end
+
+  @doc """
+  Convert the log offset to a binary representation used on disk, sized to int128
+  """
+  def to_int128(%LogOffset{tx_offset: tx_offset, op_offset: op_offset}) do
+    <<tx_offset::64, op_offset::64>>
   end
 
   @doc """

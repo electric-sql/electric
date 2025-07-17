@@ -107,6 +107,9 @@ storage_spec =
         "file" ->
           {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
 
+        "pure_file" ->
+          {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
+
         "crashing_file" ->
           num_calls_until_crash =
             env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)

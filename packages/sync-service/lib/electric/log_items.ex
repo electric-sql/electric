@@ -11,6 +11,10 @@ defmodule Electric.LogItems do
   client accepts.
   """
 
+  defp put_if_true(map, key, value) do
+    if value, do: Map.put(map, key, value), else: map
+  end
+
   @type log_item ::
           {LogOffset.t(),
            %{
@@ -31,13 +35,15 @@ defmodule Electric.LogItems do
        %{
          key: change.key,
          value: change.record,
-         headers: %{
-           operation: :insert,
-           txids: List.wrap(txids),
-           relation: Tuple.to_list(change.relation),
-           lsn: to_string(change.log_offset.tx_offset),
-           op_position: change.log_offset.op_offset
-         }
+         headers:
+           %{
+             operation: :insert,
+             txids: List.wrap(txids),
+             relation: Tuple.to_list(change.relation),
+             lsn: to_string(change.log_offset.tx_offset),
+             op_position: change.log_offset.op_offset
+           }
+           |> put_if_true(:last, change.last?)
        }}
     ]
   end
@@ -48,13 +54,15 @@ defmodule Electric.LogItems do
        %{
          key: change.key,
          value: take_pks_or_all(change.old_record, pk_cols, replica),
-         headers: %{
-           operation: :delete,
-           txids: List.wrap(txids),
-           relation: Tuple.to_list(change.relation),
-           lsn: to_string(change.log_offset.tx_offset),
-           op_position: change.log_offset.op_offset
-         }
+         headers:
+           %{
+             operation: :delete,
+             txids: List.wrap(txids),
+             relation: Tuple.to_list(change.relation),
+             lsn: to_string(change.log_offset.tx_offset),
+             op_position: change.log_offset.op_offset
+           }
+           |> put_if_true(:last, change.last?)
        }}
     ]
   end
@@ -65,13 +73,15 @@ defmodule Electric.LogItems do
       {change.log_offset,
        %{
          key: change.key,
-         headers: %{
-           operation: :update,
-           txids: List.wrap(txids),
-           relation: Tuple.to_list(change.relation),
-           lsn: to_string(change.log_offset.tx_offset),
-           op_position: change.log_offset.op_offset
-         }
+         headers:
+           %{
+             operation: :update,
+             txids: List.wrap(txids),
+             relation: Tuple.to_list(change.relation),
+             lsn: to_string(change.log_offset.tx_offset),
+             op_position: change.log_offset.op_offset
+           }
+           |> put_if_true(:last, change.last?)
        }
        |> Map.merge(put_update_values(change, pk_cols, replica))}
     ]
@@ -98,17 +108,25 @@ defmodule Electric.LogItems do
        %{
          key: change.key,
          value: change.record,
-         headers: %{
-           operation: :insert,
-           txids: List.wrap(txids),
-           relation: Tuple.to_list(change.relation),
-           key_change_from: change.old_key,
-           lsn: to_string(new_offset.tx_offset),
-           op_position: new_offset.op_offset
-         }
+         headers:
+           %{
+             operation: :insert,
+             txids: List.wrap(txids),
+             relation: Tuple.to_list(change.relation),
+             key_change_from: change.old_key,
+             lsn: to_string(new_offset.tx_offset),
+             op_position: new_offset.op_offset
+           }
+           |> put_if_true(:last, change.last?)
        }}
     ]
   end
+
+  def expected_offset_after_split(%Changes.UpdatedRecord{old_key: x, log_offset: offset})
+      when not is_nil(x),
+      do: LogOffset.increment(offset)
+
+  def expected_offset_after_split(%{log_offset: offset}), do: offset
 
   defp take_pks_or_all(record, _pks, :full), do: record
   defp take_pks_or_all(record, [], :default), do: record

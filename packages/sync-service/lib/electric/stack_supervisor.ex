@@ -239,14 +239,15 @@ defmodule Electric.StackSupervisor do
 
   @doc false
   def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}} = opts) do
-    {mod,
-     arg
-     |> put_in([:stack_id], stack_id)
-     |> put_in(
-       [:chunk_bytes_threshold],
-       opts[:chunk_bytes_threshold] || LogChunker.default_chunk_size_threshold()
-     )
-     |> mod.shared_opts()}
+    arg =
+      arg
+      |> put_in([:stack_id], stack_id)
+      |> put_in(
+        [:chunk_bytes_threshold],
+        opts[:chunk_bytes_threshold] || LogChunker.default_chunk_size_threshold()
+      )
+
+    Electric.ShapeCache.Storage.shared_opts({mod, arg})
   end
 
   def registry_name(stack_id) do
@@ -351,6 +352,7 @@ defmodule Electric.StackSupervisor do
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
           {Registry,
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
+          Electric.ShapeCache.Storage.stack_child_spec(storage),
           {Electric.Postgres.Inspector.EtsInspector,
            stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
           {Electric.Shapes.Monitor,

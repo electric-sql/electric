@@ -128,8 +128,9 @@ defmodule Electric.Plug.RouterTest do
       assert [%{"value" => %{"num" => "2"}}, _] = Jason.decode!(conn.resp_body)
     end
 
+    @tag chunk_size: 10
     @tag with_sql: [
-           "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000001', 'test value 1')"
+           "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000001', 'test value 0')"
          ]
     test "GET after a compaction proceeds correctly",
          %{opts: opts, db_conn: db_conn} do
@@ -148,23 +149,44 @@ defmodule Electric.Plug.RouterTest do
 
       Process.sleep(500)
 
-      conn =
-        conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_0&live")
-        |> Router.call(opts)
+      # Here, we should have exactly 10 chunks
 
-      assert length(Jason.decode!(conn.resp_body)) == 10
-      {:ok, offset} = LogOffset.from_string(get_resp_header(conn, "electric-offset"))
+      final_offset =
+        for x <- 1..10, reduce: "0_0" do
+          offset ->
+            conn =
+              conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=#{offset}&live")
+              |> Router.call(opts)
 
-      # Force compaction
-      Electric.ShapeCache.Storage.for_shape(shape_handle, opts[:api].storage)
-      |> Electric.ShapeCache.Storage.compact(offset)
+            expected_value = "test value #{x}"
+
+            if x == 10 do
+              assert length(Jason.decode!(conn.resp_body)) == 2
+            else
+              assert [%{value: %{value: ^expected_value}}] =
+                       Jason.decode!(conn.resp_body, keys: :atoms)
+            end
+
+            {:ok, offset} = LogOffset.from_string(get_resp_header(conn, "electric-offset"))
+
+            offset
+        end
+
+      # Force compaction, but it's done in chunks, so we're using small chunks
+      Electric.Shapes.Consumer.whereis(opts[:stack_id], shape_handle)
+      |> Electric.ShapeCache.Storage.trigger_compaction(opts[:api].storage, 0)
+
+      # If this test is flaking, then the compaction didn't have time to complete - we don't have a good way to wait for it to complete though.
+      Process.sleep(200)
 
       conn =
         conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_0")
         |> Router.call(opts)
 
       assert [%{"value" => %{"value" => "test value 10"}}, _] = Jason.decode!(conn.resp_body)
-      assert LogOffset.from_string(get_resp_header(conn, "electric-offset")) == {:ok, offset}
+
+      assert LogOffset.from_string(get_resp_header(conn, "electric-offset")) ==
+               {:ok, final_offset}
     end
 
     @tag with_sql: [

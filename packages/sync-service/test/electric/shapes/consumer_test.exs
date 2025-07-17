@@ -148,7 +148,7 @@ defmodule Electric.Shapes.ConsumerTest do
               id: {Shapes.ConsumerSupervisor, shape_handle}
             )
 
-          assert_receive {Support.TestStorage, :set_shape_definition, ^shape_handle, ^shape}
+          assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, ^shape}
           # Wait for the virtual snapshot to have started to avoid overriding any of the
           # defined Mox expectations
           :started =
@@ -634,7 +634,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
     setup [
       :with_registry,
-      :with_cub_db_storage,
+      :with_pure_file_storage,
       :with_log_chunking,
       :with_persistent_kv,
       :with_shape_log_collector,
@@ -658,8 +658,8 @@ defmodule Electric.Shapes.ConsumerTest do
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
             pg_snapshot = {10, 11, [10]}
             GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
-            Storage.make_new_snapshot!([], storage)
             GenServer.cast(parent, {:snapshot_started, shape_handle})
+            Storage.make_new_snapshot!([], storage)
           end
         )
 

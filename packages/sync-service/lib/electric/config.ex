@@ -9,7 +9,7 @@ defmodule Electric.Config.Defaults do
   @doc false
   def storage(opts \\ []) do
     storage_dir = Keyword.get_lazy(opts, :storage_dir, fn -> storage_dir("shapes") end)
-    {Electric.ShapeCache.FileStorage, storage_dir: storage_dir}
+    {Electric.ShapeCache.PureFileStorage, storage_dir: storage_dir}
   end
 
   @doc false

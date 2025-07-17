@@ -15,6 +15,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   @snapshot_start_index 0
   @snapshot_end_index :end
   @pg_snapshot_key :pg_snapshot
+  @latest_offset_key :latest_offset
 
   defstruct [
     :table_base_name,
@@ -66,6 +67,9 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def stack_start_link(_), do: :ignore
+
+  @impl Electric.ShapeCache.Storage
   def start_link(%MS{} = opts) do
     if is_nil(opts.shape_handle),
       do: raise(Storage.Error, "cannot start an un-attached storage instance")
@@ -89,6 +93,9 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def init_writer!(%MS{} = opts, _shape_definition), do: opts
+
+  @impl Electric.ShapeCache.Storage
   def get_current_position(%MS{} = opts) do
     {:ok, current_offset(opts), pg_snapshot(opts)}
   end
@@ -100,8 +107,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     end
   end
 
-  defp current_offset(_opts) do
-    LogOffset.last_before_real_offsets()
+  defp current_offset(opts) do
+    with [] <- :ets.lookup(opts.snapshot_table, @latest_offset_key),
+         [] <- :ets.lookup(opts.snapshot_table, snapshot_end()) do
+      LogOffset.last_before_real_offsets()
+    else
+      [{_, offset}] -> offset
+    end
   end
 
   @impl Electric.ShapeCache.Storage
@@ -111,24 +123,10 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def initialise(%MS{} = _opts), do: :ok
+  def get_all_stored_shapes(_opts), do: {:ok, %{}}
 
   @impl Electric.ShapeCache.Storage
-  def set_shape_definition(_shape, %MS{} = _opts) do
-    # no-op - only used to restore shapes between sessions
-    :ok
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def get_all_stored_shapes(_opts) do
-    # shapes not stored, empty map returned
-    {:ok, %{}}
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def get_total_disk_usage(_opts) do
-    0
-  end
+  def get_total_disk_usage(_opts), do: 0
 
   @impl Electric.ShapeCache.Storage
   def snapshot_started?(%MS{} = opts) do
@@ -287,39 +285,30 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     log_table = opts.log_table
     chunk_checkpoint_table = opts.chunk_checkpoint_table
 
-    log_items
-    |> Enum.map(fn
-      {:chunk_boundary, offset} ->
-        {storage_offset(offset), :checkpoint}
+    {log_items, last_offset} =
+      Enum.map_reduce(log_items, nil, fn
+        {:chunk_boundary, offset}, curr ->
+          {{storage_offset(offset), :checkpoint}, curr}
 
-      {offset, _key, _op_type, json_log_item} ->
-        {{:offset, storage_offset(offset)}, json_log_item}
-    end)
+        {offset, _key, _op_type, json_log_item}, _ ->
+          {{{:offset, storage_offset(offset)}, json_log_item}, offset}
+      end)
+
+    log_items
     |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)
     |> then(fn {checkpoints, log_items} ->
       :ets.insert(chunk_checkpoint_table, checkpoints)
       :ets.insert(log_table, log_items)
-      log_items
+      :ets.insert(opts.snapshot_table, {@latest_offset_key, last_offset})
     end)
 
-    :ok
+    opts
   end
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%MS{} = opts) do
-    for table <- tables(opts), do: :ets.delete_all_objects(table)
-    :ok
-  rescue
-    _ ->
-      :ok
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def unsafe_cleanup!(%MS{} = opts) do
     for table <- tables(opts),
         do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
-
-    :ok
   end
 
   defp ignoring_exceptions(fun, exception) do
@@ -346,4 +335,10 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   defp storage_offset(offset) do
     LogOffset.to_tuple(offset)
   end
+
+  @impl Electric.ShapeCache.Storage
+  def compact(_opts, _offset), do: :ok
+
+  @impl Electric.ShapeCache.Storage
+  def terminate(_opts), do: :ok
 end

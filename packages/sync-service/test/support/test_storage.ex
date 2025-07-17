@@ -47,29 +47,26 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def stack_start_link({_parent, _init, storage}), do: Storage.stack_start_link(storage)
+
+  @impl Electric.ShapeCache.Storage
   def start_link({_parent, _shape_handle, _shape_init, storage}) do
     Storage.start_link(storage)
   end
 
   @impl Electric.ShapeCache.Storage
-  def initialise({parent, shape_handle, init, storage}) do
-    send(parent, {__MODULE__, :initialise, shape_handle})
+  def init_writer!({parent, shape_handle, init, storage}, shape_definition) do
+    send(parent, {__MODULE__, :init_writer!, shape_handle, shape_definition})
 
     {module, opts} = storage
 
-    with :ok <- Storage.initialise(storage) do
+    with state <- Storage.init_writer!(storage, shape_definition) do
       for {name, args} <- init do
         apply(module, name, args ++ [opts])
       end
 
-      :ok
+      {parent, shape_handle, init, state}
     end
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def set_shape_definition(shape, {parent, shape_handle, _, storage}) do
-    send(parent, {__MODULE__, :set_shape_definition, shape_handle, shape})
-    Storage.set_shape_definition(shape, storage)
   end
 
   @impl Electric.ShapeCache.Storage
@@ -127,9 +124,10 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def append_to_log!(log_items, {parent, shape_handle, _, storage}) do
+  def append_to_log!(log_items, {parent, shape_handle, data, storage}) do
     send(parent, {__MODULE__, :append_to_log!, shape_handle, log_items})
-    Storage.append_to_log!(log_items, storage)
+    storage = Storage.append_to_log!(log_items, storage)
+    {parent, shape_handle, data, storage}
   end
 
   @impl Electric.ShapeCache.Storage
@@ -139,8 +137,14 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def unsafe_cleanup!({parent, shape_handle, _, storage}) do
-    send(parent, {__MODULE__, :unsafe_cleanup!, shape_handle})
-    Storage.unsafe_cleanup!(storage)
+  def compact({parent, shape_handle, _, storage}, keep_complete_chunks) do
+    send(parent, {__MODULE__, :compact, shape_handle, keep_complete_chunks})
+    Storage.compact(storage, keep_complete_chunks)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def terminate({parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :terminate, shape_handle})
+    Storage.terminate(storage)
   end
 end
