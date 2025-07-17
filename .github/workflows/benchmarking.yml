@@ -109,7 +109,7 @@ jobs:
                   "mem_gb": 8
                 },
                 "metadata": {
-                  "pr": ${{ github.event.issue.number }},
+                  "pr": ${{ env.ISSUE_NUMBER }},
                   "short_version": "pr-${{ env.ISSUE_NUMBER }}-${{ env.SHORT_SHA }}",
                   "callback": {
                     "method": "POST",
