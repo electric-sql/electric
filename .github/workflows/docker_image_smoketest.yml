@@ -6,10 +6,10 @@ on:
     paths-ignore:
       - "website/**"
       - "**/README.md"
-  pull_request:
-    paths-ignore:
-      - "website/**"
-      - "**/README.md"
+#  pull_request:
+#    paths-ignore:
+#      - "website/**"
+#      - "**/README.md"
 
 jobs:
   docker_image_smoketest:
