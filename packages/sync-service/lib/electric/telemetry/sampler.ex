@@ -13,7 +13,7 @@ with_telemetry :otel_sampler do
 
     # Span names that are sampled probabilistically
     @probabilistic_span_names [
-      "pg_txn.replication_client.process_x_log_data"
+      # "pg_txn.replication_client.process_x_log_data"
     ]
 
     @impl :otel_sampler
