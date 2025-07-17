@@ -32,7 +32,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   require Logger
   require OpenTelemetry.SemanticConventions.Trace
 
-  alias Electric.Telemetry.OptionalSpans
+  alias Electric.Telemetry.Sampler
   alias Electric.Telemetry.IntervalTimer
 
   @typep span_name :: String.t()
@@ -55,7 +55,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
   def with_span(name, attributes, stack_id \\ nil, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    if OptionalSpans.include?(name) do
+    if Sampler.include_span?(name) do
       do_with_span(name, attributes, stack_id, fun)
     else
       fun.()
