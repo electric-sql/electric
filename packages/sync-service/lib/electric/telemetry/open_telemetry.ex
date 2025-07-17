@@ -65,6 +65,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @doc """
   Creates a span providing there is a parent span in the current context.
   If there is no parent span, the function `fun` is called without creating a span.
+
+  This is necessary for the custom way we do sampling, if the parent span is not sampled, the child span
+  will not be created either.
   """
   def with_child_span(name, attributes, stack_id \\ nil, fun) do
     case get_current_context() do

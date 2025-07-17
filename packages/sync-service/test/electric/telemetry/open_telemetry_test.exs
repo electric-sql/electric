@@ -21,7 +21,7 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
     end)
   end
 
-  describe "with_child_span" do
+  describe "with_child_span/4" do
     test "creates a span if there is a parent span" do
       OpenTelemetry.with_span("parent_span", %{}, @stack_id, fn ->
         Repatch.spy(OpenTelemetry)
