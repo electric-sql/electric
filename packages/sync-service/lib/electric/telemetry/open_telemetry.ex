@@ -62,6 +62,17 @@ defmodule Electric.Telemetry.OpenTelemetry do
     end
   end
 
+  @doc """
+  Creates a span providing there is a parent span in the current context.
+  If there is no parent span, the function `fun` is called without creating a span.
+  """
+  def with_child_span(name, attributes, stack_id \\ nil, fun) do
+    case get_current_context() do
+      {:undefined, _} -> fun.()
+      _ -> with_span(name, attributes, stack_id, fun)
+    end
+  end
+
   defp do_with_span(name, attributes, stack_id, fun) do
     stack_id = stack_id || get_from_baggage("stack_id")
     stack_attributes = get_stack_span_attrs(stack_id)
