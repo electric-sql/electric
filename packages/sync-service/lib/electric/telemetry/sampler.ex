@@ -7,8 +7,6 @@ defmodule Electric.Telemetry.Sampler do
   """
 
   def include_span?("filter." <> _), do: Application.get_env(:electric, :profile_where_clauses?)
-  def include_span?("pg_txn.replication_client.process_x_log_data"), do: false
-  def include_span?("pg_txn.replication_client.relation_received"), do: false
   def include_span?("pg_txn.replication_client.transaction_received"), do: sample()
   def include_span?(_), do: true
 

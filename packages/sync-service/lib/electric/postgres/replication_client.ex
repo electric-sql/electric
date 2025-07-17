@@ -246,18 +246,6 @@ defmodule Electric.Postgres.ReplicationClient do
     handle_data(data, state)
   end
 
-  def handle_data(
-        <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
-        %State{stack_id: stack_id} = state
-      ) do
-    OpenTelemetry.with_span(
-      "pg_txn.replication_client.process_x_log_data",
-      [msg_size: byte_size(rest)],
-      stack_id,
-      fn -> process_x_log_data(rest, wal_end, state) end
-    )
-  end
-
   def handle_data(<<@repl_msg_primary_keepalive, wal_end::64, _clock::64, reply>>, state) do
     Logger.debug(fn ->
       "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
@@ -279,8 +267,11 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  defp process_x_log_data(data, _wal_end, %State{stack_id: stack_id} = state) do
-    OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
+  def handle_data(
+        <<@repl_msg_x_log_data, _wal_start::64, _wal_end::64, _clock::64, data::binary>>,
+        %State{stack_id: stack_id} = state
+      ) do
+    decode_message(data)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
     #   message_type = struct |> to_string() |> String.split(".") |> List.last()
