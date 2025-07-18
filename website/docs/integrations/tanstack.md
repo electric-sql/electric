@@ -18,11 +18,18 @@ import DataFlowJPG from '/static/img/docs/integrations/tanstack/data-flow.jpg?ur
 
 [TanStack](https://tanstack.com/) is a set of utilities for building web applications.
 
-[TanStack Query](https://tanstack.com/query/latest) is a data-fetching and state management library.
+> [!Warning] Electric and TanStack DB
+> Electric now has native support for TanStack through the TanStack DB library. [Tanstack DB](https://tanstack.com/db) is a reactive client
+> store for building super fast apps on sync. Electric integrates natively with it.
+>
+> See the [TanStack DB documentation](https://tanstack.com/db/latest/docs/overview) for usage details and James'
+> [Introducing TanStack DB](https://youtu.be/ia9FpY_Sw_4) Local-first Conf talk for more context.
+>
+> TanStack DB superceeds the integration docs below.
 
 ## Electric and TanStack
 
-Electric works very well together with TanStack Query, where Electric provides the read-path sync and TanStack provides a [local write-path with optimistic state](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates#via-the-cache).
+[TanStack Query](https://tanstack.com/query/latest) is a data-fetching and state management library. Electric works very well together with TanStack Query, where Electric provides the read-path sync and TanStack provides a [local write-path with optimistic state](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates#via-the-cache).
 
 <figure>
   <a :href="DataFlowJPG">
@@ -54,9 +61,3 @@ Electric is used to sync a shape. TanStack is used to apply mutations and mainta
 <<< @../../examples/tanstack/src/Example.tsx
 
 See the [Tanstack example](/demos/tanstack) for the full source code.
-
-<HelpWanted issue="1882">
-  a library based on the
-  <code>tanstack</code> example
-  that integrates Electric and TanStack into a higher level interface.
-</HelpWanted>
