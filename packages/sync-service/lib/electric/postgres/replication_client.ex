@@ -248,14 +248,9 @@ defmodule Electric.Postgres.ReplicationClient do
 
   def handle_data(
         <<@repl_msg_x_log_data, _wal_start::64, wal_end::64, _clock::64, rest::binary>>,
-        %State{stack_id: stack_id} = state
+        %State{stack_id: _stack_id} = state
       ) do
-    OpenTelemetry.with_span(
-      "pg_txn.replication_client.process_x_log_data",
-      [msg_size: byte_size(rest)],
-      stack_id,
-      fn -> process_x_log_data(rest, wal_end, state) end
-    )
+    process_x_log_data(rest, wal_end, state)
   end
 
   def handle_data(<<@repl_msg_primary_keepalive, wal_end::64, _clock::64, reply>>, state) do
@@ -280,7 +275,7 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   defp process_x_log_data(data, _wal_end, %State{stack_id: stack_id} = state) do
-    OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
+    decode_message(data)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
     #   message_type = struct |> to_string() |> String.split(".") |> List.last()
@@ -337,16 +332,7 @@ defmodule Electric.Postgres.ReplicationClient do
         # write to storage, but crash individual consumers if the write takes
         # too long. So it doesn't matter how many consumers we have but an
         # individual storage write can timeout the entire batch.
-        OpenTelemetry.with_span(
-          "pg_txn.replication_client.transaction_received",
-          [
-            num_changes: txn.num_changes,
-            num_relations: MapSet.size(txn.affected_relations),
-            xid: txn.xid
-          ],
-          stack_id,
-          fn -> apply(m, f, [txn | args]) end
-        )
+        apply(m, f, [txn | args])
         |> case do
           :ok ->
             # We currently process incoming replication messages sequentially, persisting each
