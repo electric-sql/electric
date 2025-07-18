@@ -1,5 +1,19 @@
 # @core/sync-service
 
+## 1.1.0
+
+### Minor Changes
+
+- 19e267b: feat: added a new storage engine, replacing the old one by default
+
+  New engine brings about a very nice speedup for reads, writes, and scalability. If you want the old one, you can use `ELECTRIC_STORAGE=file` environment variable.
+
+### Patch Changes
+
+- 64526b7: Ignore pool connection `:DOWN` messages with reason `:noproc`
+- a805e19: Ensure telemetry handlers are detached when the relevant telemetry processes die.
+- 569b69f: Ensure publication manager is given pg_version to remove redundant queries
+
 ## 1.0.24
 
 ### Patch Changes
