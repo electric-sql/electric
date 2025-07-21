@@ -55,21 +55,14 @@ defmodule Electric.Replication.ShapeLogCollector do
   # the new tx to disk, instead the storage backend is responsible for
   # determining how long a write should reasonably take and if that fails
   # it should raise.
-  def store_transaction(%Transaction{} = txn, server) do
-    timer =
-      IntervalTimer.init()
-      |> IntervalTimer.start_interval("shape_log_collector.transaction_message")
+  def store_transaction(%Transaction{} = txn, timer, server) do
+    timer = IntervalTimer.start_interval(timer, "shape_log_collector.transaction_message")
 
     trace_context = OpenTelemetry.get_current_context()
 
     timer = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
-    OpenTelemetry.stop_and_save_intervals(
-      timer: timer,
-      total_attribute: :"shape_log_collector.transaction.total_duration_µs"
-    )
-
-    :ok
+    {:ok, timer}
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do

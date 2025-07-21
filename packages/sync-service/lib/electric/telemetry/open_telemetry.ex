@@ -170,9 +170,11 @@ defmodule Electric.Telemetry.OpenTelemetry do
     total_sleep_µs: 3000
   """
   @spec start_interval(binary()) :: :ok
-  def start_interval(interval_name) do
+  def start_interval(context \\ nil, interval_name) do
     IntervalTimer.start_interval(get_interval_timer(), interval_name)
     |> set_interval_timer()
+
+    context
   end
 
   @doc """

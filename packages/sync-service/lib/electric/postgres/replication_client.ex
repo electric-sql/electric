@@ -12,6 +12,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.IntervalTimer
 
   require Logger
 
@@ -271,7 +272,9 @@ defmodule Electric.Postgres.ReplicationClient do
         <<@repl_msg_x_log_data, _wal_start::64, _wal_end::64, _clock::64, data::binary>>,
         %State{stack_id: stack_id} = state
       ) do
-    decode_message(data)
+    data
+    |> OpenTelemetry.start_interval("replication_client.decode_message")
+    |> decode_message()
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
     #   message_type = struct |> to_string() |> String.split(".") |> List.last()
@@ -282,12 +285,14 @@ defmodule Electric.Postgres.ReplicationClient do
     #       message_type <> " :: " <> inspect(Map.from_struct(msg))
     #   )
     # end)
+    |> OpenTelemetry.start_interval("replication_client.collector.handle_message")
     |> Collector.handle_message(state.txn_collector)
     |> case do
       %Collector{} = txn_collector ->
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {%Relation{} = rel, %Collector{} = txn_collector} ->
+        OpenTelemetry.wipe_interval_timer()
         {m, f, args} = state.relation_received
 
         OpenTelemetry.with_span(
@@ -297,12 +302,15 @@ defmodule Electric.Postgres.ReplicationClient do
           fn -> apply(m, f, [rel | args]) end
         )
 
+        OpenTelemetry.start_interval("replication_client.await_more_data")
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {%Transaction{} = txn, %Collector{} = txn_collector} ->
         state = %{state | txn_collector: txn_collector}
 
         {m, f, args} = state.transaction_received
+
+        OpenTelemetry.start_interval("replication_client.telemetry_execute")
 
         :telemetry.execute(
           [:electric, :postgres, :replication, :transaction_received],
@@ -316,6 +324,7 @@ defmodule Electric.Postgres.ReplicationClient do
           %{stack_id: state.stack_id}
         )
 
+        OpenTelemetry.start_interval("replication_client.telemetry_span")
         # this will block until all the consumers have processed the transaction because
         # the log collector uses manual demand, and only replies to the `call` once it
         # receives more demand.
@@ -336,25 +345,28 @@ defmodule Electric.Postgres.ReplicationClient do
             xid: txn.xid
           ],
           stack_id,
-          fn -> apply(m, f, [txn | args]) end
-        )
-        |> case do
-          :ok ->
+          fn ->
+            OpenTelemetry.start_interval("replication_client.telemetry_span")
+            timer = OpenTelemetry.extract_interval_timer()
+            {:ok, timer} = apply(m, f, [txn, timer | args])
+            timer = IntervalTimer.start_interval(timer, "replication_client.update_applied_wal")
             # We currently process incoming replication messages sequentially, persisting each
             # new transaction into the shape log store. So, when the applied function
             # returns, we can safely advance the replication slot past the transaction's commit
             # LSN.
             state = update_applied_wal(state, Electric.Postgres.Lsn.to_integer(txn.lsn))
-            {:noreply, [encode_standby_status_update(state)], state}
+            response = [encode_standby_status_update(state)]
 
-          other ->
-            # TODO(alco): crash the connection process here?
-            # If we keep going and a subsequent transaction is processed successfully, Electric
-            # will acknowledge the later LSN to Postgres and so the next time it opens a
-            # replication connection, it will no longer receive the failed transaction.
-            Logger.error("Unexpected result from calling #{inspect(m)}.#{f}(): #{inspect(other)}")
-            {:noreply, state}
-        end
+            OpenTelemetry.stop_and_save_intervals(
+              timer: timer,
+              total_attribute: :"shape_log_collector.transaction.total_duration_µs"
+            )
+
+            OpenTelemetry.start_interval("replication_client.await_more_data")
+
+            {:noreply, response, state}
+          end
+        )
     end
   end
 

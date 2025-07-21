@@ -53,6 +53,8 @@ defmodule Electric.Telemetry.IntervalTimer do
   defp calculate_durations([], _), do: []
 
   defp time(opts) do
-    opts[:time] || System.monotonic_time(:microsecond)
+    opts[:time] || time()
   end
+
+  def time, do: System.monotonic_time(:microsecond)
 end
