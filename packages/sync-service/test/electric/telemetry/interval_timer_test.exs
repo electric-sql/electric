@@ -3,30 +3,28 @@ defmodule Electric.Telemetry.IntervalTimerTest do
 
   alias Electric.Telemetry.IntervalTimer
 
-  @a_time 2
-  @b_time 5
-  @c_time 9
-  @μs_per_ms 1000
-  @rounding_error 1
-
   test "times how long each interval takes" do
-    {total, intervals} =
-      :timer.tc(fn ->
-        timer = IntervalTimer.start_interval("A")
-        Process.sleep(@a_time)
-        timer = IntervalTimer.start_interval(timer, "B")
-        Process.sleep(@b_time)
-        timer = IntervalTimer.start_interval(timer, "C")
-        Process.sleep(@c_time)
+    timer = IntervalTimer.init()
+    timer = IntervalTimer.start_interval(timer, "A", time: 10)
+    timer = IntervalTimer.start_interval(timer, "B", time: 20)
+    timer = IntervalTimer.start_interval(timer, "C", time: 25)
 
-        IntervalTimer.durations(timer)
-      end)
+    assert %{"A" => 10, "B" => 5, "C" => 2} = IntervalTimer.durations(timer, time: 27)
+  end
 
-    assert [{"A", a_time}, {"B", b_time}, {"C", c_time}] = intervals
+  test "durations for intervals with the same name are summed" do
+    timer = IntervalTimer.init()
+    timer = IntervalTimer.start_interval(timer, "A", time: 10)
+    timer = IntervalTimer.start_interval(timer, "B", time: 20)
+    timer = IntervalTimer.start_interval(timer, "C", time: 25)
+    timer = IntervalTimer.start_interval(timer, "A", time: 27)
 
-    assert a_time >= @a_time * @μs_per_ms
-    assert b_time >= @b_time * @μs_per_ms
-    assert c_time >= @c_time * @μs_per_ms
-    assert a_time + b_time + c_time <= total + @rounding_error
+    assert %{"A" => 17, "B" => 5, "C" => 2} = IntervalTimer.durations(timer, time: 34)
+  end
+
+  test "records nothing if timer is not initialized" do
+    assert nil == IntervalTimer.start_interval(nil, "A")
+
+    assert %{} == IntervalTimer.durations(nil)
   end
 end

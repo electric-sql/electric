@@ -10,20 +10,32 @@ defmodule Electric.Telemetry.IntervalTimer do
   only be used directly if you do not want to use the process memory.
   """
 
-  @default_state []
-
   @type t() :: [{binary(), non_neg_integer()}]
 
-  def start_interval(state \\ nil, interval_name) do
-    [{interval_name, time()} | state || @default_state]
+  def init, do: []
+
+  def start_interval(state, interval_name, opts \\ [])
+  def start_interval(nil, _, _), do: nil
+
+  def start_interval(state, interval_name, opts) do
+    [{interval_name, time(opts)} | state]
   end
 
-  def durations(state) do
-    calculate_durations(state, time())
-    |> Enum.reverse()
+  def durations(state, opts \\ [])
+  def durations(nil, _), do: %{}
+
+  def durations(state, opts) do
+    calculate_durations(state, time(opts))
+    |> Enum.group_by(
+      fn {interval_name, _} -> interval_name end,
+      fn {_, duration} -> duration end
+    )
+    |> Map.new(fn {interval_name, durations} ->
+      {interval_name, Enum.sum(durations)}
+    end)
   end
 
-  def total_time([]), do: 0
+  def total_time(durations) when durations == %{}, do: 0
 
   def total_time(durations) do
     durations
@@ -40,7 +52,9 @@ defmodule Electric.Telemetry.IntervalTimer do
 
   defp calculate_durations([], _), do: []
 
-  defp time do
-    System.monotonic_time(:microsecond)
+  defp time(opts) do
+    opts[:time] || time()
   end
+
+  def time, do: System.monotonic_time(:microsecond)
 end

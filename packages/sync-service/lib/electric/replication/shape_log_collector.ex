@@ -56,15 +56,15 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
-    timer = IntervalTimer.start_interval("shape_log_collector.transaction_message")
+    timer =
+      OpenTelemetry.extract_interval_timer()
+      |> IntervalTimer.start_interval("shape_log_collector.transaction_message")
+
     trace_context = OpenTelemetry.get_current_context()
 
     timer = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
-    OpenTelemetry.stop_and_save_intervals(
-      timer: timer,
-      total_attribute: :"shape_log_collector.transaction.total_duration_µs"
-    )
+    OpenTelemetry.set_interval_timer(timer)
 
     :ok
   end
@@ -272,9 +272,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         %{state | tracked_relations: tracker_state}
 
       _ ->
-        state = publish(%{state | tracked_relations: tracker_state}, updated_rel)
-        OpenTelemetry.wipe_interval_timer()
-        state
+        publish(%{state | tracked_relations: tracker_state}, updated_rel)
     end
   end
 
