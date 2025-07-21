@@ -275,9 +275,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         %{state | tracked_relations: tracker_state}
 
       _ ->
-        state = publish(%{state | tracked_relations: tracker_state}, updated_rel)
-        OpenTelemetry.wipe_interval_timer()
-        state
+        publish(%{state | tracked_relations: tracker_state}, updated_rel)
     end
   end
 

@@ -14,11 +14,17 @@ defmodule Electric.Telemetry.IntervalTimer do
 
   def init, do: []
 
-  def start_interval(state, interval_name, opts \\ []) do
+  def start_interval(state, interval_name, opts \\ [])
+  def start_interval(nil, _, _), do: nil
+
+  def start_interval(state, interval_name, opts) do
     [{interval_name, time(opts)} | state]
   end
 
-  def durations(state, opts \\ []) do
+  def durations(state, opts \\ [])
+  def durations(nil, _), do: []
+
+  def durations(state, opts) do
     calculate_durations(state, time(opts))
     |> Enum.reverse()
   end
