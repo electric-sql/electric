@@ -22,14 +22,20 @@ defmodule Electric.Telemetry.IntervalTimer do
   end
 
   def durations(state, opts \\ [])
-  def durations(nil, _), do: []
+  def durations(nil, _), do: %{}
 
   def durations(state, opts) do
     calculate_durations(state, time(opts))
-    |> Enum.reverse()
+    |> Enum.group_by(
+      fn {interval_name, _} -> interval_name end,
+      fn {_, duration} -> duration end
+    )
+    |> Map.new(fn {interval_name, durations} ->
+      {interval_name, Enum.sum(durations)}
+    end)
   end
 
-  def total_time([]), do: 0
+  def total_time(durations) when durations == %{}, do: 0
 
   def total_time(durations) do
     durations
