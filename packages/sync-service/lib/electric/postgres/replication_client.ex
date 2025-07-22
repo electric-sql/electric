@@ -21,6 +21,7 @@ defmodule Electric.Postgres.ReplicationClient do
           | :connected
           | :query_pg_info
           | :create_publication
+          | :check_if_publication_exists
           | :drop_slot
           | :create_slot
           | :set_display_setting
@@ -42,6 +43,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_temporary?,
       :display_settings,
       :txn_collector,
+      :publication_owner?,
       origin: "postgres",
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
