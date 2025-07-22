@@ -20,6 +20,7 @@ defmodule Electric.Postgres.ReplicationClient do
           | :connected
           | :query_pg_info
           | :create_publication
+          | :check_if_publication_exists
           | :drop_slot
           | :create_slot
           | :set_display_setting
@@ -40,6 +41,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_name,
       :slot_temporary?,
       :display_settings,
+      :publication_owner?,
       origin: "postgres",
       txn_collector: %Collector{},
       step: :disconnected,
