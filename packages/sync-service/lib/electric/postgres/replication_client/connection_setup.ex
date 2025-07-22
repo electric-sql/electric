@@ -64,6 +64,8 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     {%{server_version_num: String.to_integer(version_str)}, state}
   end
 
+  ###
+
   defp create_publication_query(state) do
     Logger.debug("ReplicationClient step: create_publication_query")
     # We're creating an "empty" publication here because synced tables are added to it
@@ -77,7 +79,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     # At this point, even if there is a replication slot already, we have to drop it and create
     # a new one, while also invalidating existing shapes. See
     # https://github.com/electric-sql/electric/issues/2692 for details.
-    %{state | recreate_slot?: true}
+    %{state | publication_owner?: true, recreate_slot?: true}
   end
 
   defp create_publication_result(%Postgrex.Error{} = error, state) do
@@ -86,12 +88,50 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     case error.postgres do
       %{code: :duplicate_object, pg_code: "42710", message: ^error_message} ->
         # Publication already exists, proceed to the next step.
-        state
+        %{state | publication_owner?: true}
+
+      %{code: :insufficient_privilege, pg_code: "42501"} ->
+        {:insufficient_privilege, %{state | publication_owner?: false}}
 
       _ ->
         # Unexpected error, fail loudly.
         raise error
     end
+  end
+
+  ###
+
+  defp check_if_publication_exists_query(state) do
+    query =
+      "SELECT * FROM pg_publication WHERE pubname = #{Utils.quote_string(state.publication_name)}"
+
+    {:query, query, state}
+  end
+
+  defp check_if_publication_exists_result([%Postgrex.Result{} = result], state) do
+    publication =
+      case result do
+        %{num_rows: 1, columns: cols, rows: [row]} ->
+          Enum.zip(cols, row) |> Map.new()
+
+        _ ->
+          raise Electric.DbConfigurationError,
+                "Publication #{Utils.quote_name(state.publication_name)} not found in the database"
+      end
+
+    case publication do
+      %{"pubinsert" => "t", "pubupdate" => "t", "pubdelete" => "t", "pubtruncate" => "t"} ->
+        state
+
+      _ ->
+        raise Electric.DbConfigurationError,
+              "Publication #{Utils.quote_name(state.publication_name)} does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE"
+    end
+  end
+
+  defp check_if_publication_exists_result(%Postgrex.Error{} = error, _state) do
+    # Unrecoverable error.
+    raise error
   end
 
   ###
@@ -222,10 +262,16 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp next_step(%{step: :query_pg_info}),
     do: :create_slot
 
-  defp next_step(%{step: :create_publication, recreate_slot?: true}),
+  defp next_step(%{step: :create_publication, publication_owner?: false}),
+    do: :check_if_publication_exists
+
+  defp next_step(%{step: :create_publication, publication_owner?: true, recreate_slot?: true}),
     do: :drop_slot
 
-  defp next_step(%{step: :create_publication}),
+  defp next_step(%{step: :create_publication, publication_owner?: true}),
+    do: :create_slot
+
+  defp next_step(%{step: :check_if_publication_exists}),
     do: :create_slot
 
   defp next_step(%{step: :drop_slot}),
@@ -252,6 +298,10 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp query_for_step(:query_pg_info, state), do: pg_info_query(state)
   defp query_for_step(:create_publication, state), do: create_publication_query(state)
+
+  defp query_for_step(:check_if_publication_exists, state),
+    do: check_if_publication_exists_query(state)
+
   defp query_for_step(:drop_slot, state), do: drop_slot_query(state)
   defp query_for_step(:create_slot, state), do: create_slot_query(state)
   defp query_for_step(:set_display_setting, state), do: set_display_setting_query(state)
@@ -270,6 +320,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp dispatch_query_result(:create_publication, result, state),
     do: create_publication_result(result, state)
+
+  defp dispatch_query_result(:check_if_publication_exists, result, state),
+    do: check_if_publication_exists_result(result, state)
 
   defp dispatch_query_result(:drop_slot, result, state),
     do: drop_slot_result(result, state)
