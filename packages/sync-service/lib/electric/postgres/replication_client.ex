@@ -308,18 +308,6 @@ defmodule Electric.Postgres.ReplicationClient do
 
         {m, f, args} = state.transaction_received
 
-        :telemetry.execute(
-          [:electric, :postgres, :replication, :transaction_received],
-          %{
-            monotonic_time: System.monotonic_time(),
-            receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
-            bytes: byte_size(data),
-            count: 1,
-            operations: txn.num_changes
-          },
-          %{stack_id: state.stack_id}
-        )
-
         # this will block until all the consumers have processed the transaction because
         # the log collector uses manual demand, and only replies to the `call` once it
         # receives more demand.
