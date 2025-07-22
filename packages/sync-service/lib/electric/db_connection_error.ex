@@ -1,4 +1,7 @@
 defmodule Electric.DbConnectionError do
+  alias Electric.DbConfigurationError
+  alias Electric.DbConnectionError
+
   require Logger
 
   defexception [
@@ -16,8 +19,6 @@ defmodule Electric.DbConnectionError do
           retry_may_fix?: boolean(),
           drop_slot_and_restart?: boolean()
         }
-
-  alias Electric.DbConnectionError
 
   def from_error(%DbConnectionError{} = error), do: error
 
@@ -262,6 +263,15 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(%DbConfigurationError{} = error) do
+    %DbConnectionError{
+      message: error.message,
+      type: :config_error,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
   if Mix.env() == :test do
     def from_error(:shutdown) do
       %DbConnectionError{
@@ -277,6 +287,10 @@ defmodule Electric.DbConnectionError do
   end
 
   def from_error(error), do: unknown_error(error)
+
+  def format_original_error(%DbConnectionError{original_error: %DbConfigurationError{} = error}) do
+    Exception.format(:error, error)
+  end
 
   def format_original_error(%DbConnectionError{original_error: error}) do
     inspect(error, pretty: true)
