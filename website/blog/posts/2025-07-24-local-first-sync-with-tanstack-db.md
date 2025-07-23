@@ -1,5 +1,5 @@
 ---
-title: Local-first sync with TanStack DB
+title: Local-first sync with TanStack DB
 description: >-
   Tanstack DB is a reactive client store for building super fast apps on sync. Paired with Electric, it provides an optimal end-to-end sync stack for local-first app development.
 excerpt: >-
@@ -11,11 +11,12 @@ outline: [2, 3]
 post: true
 ---
 
-... some kind of electric version of the TanStack logo ...
-
 [Tanstack DB](https://tanstack.com/db) is a reactive client store for building super fast apps on sync. Paired with [Electric](/) it provides an end-to-end sync stack for local-first app development.
 
 The combination is insanely fast and scalable. With a declarative, reactive and type-safe programming model that's incrementally adoptable into existing apps. For real-time without the re-write and sync that just works.
+
+> [!Warning] ✨&nbsp; TanStack DB starter
+> ... info here about the starter with a link to the repo / docs ...
 
 ## Connecting the desire paths to the motorway
 
