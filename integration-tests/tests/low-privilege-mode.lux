@@ -1,0 +1,72 @@
+[doc Verify that Electric can work with reduced DB privileges if its required conditions are met externally]
+
+[include _macros.luxinc]
+
+[global pg_container_name=low-privilege-mode__pg]
+[global database_url=postgresql://low_privilege:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+## Start a Postgres cluster with no publication and a low-privilege user
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e LOW_PRIVILEGE_TEST_CREATE_PUBLICATION_SQL=null" \
+  "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+# Start the sync service.
+[invoke setup_electric]
+
+# Verify that the sync service fails to initialize because of missing publication in the database.
+[shell electric]
+  # Reset the failure pattern to make it possible to pattern-match on errors below
+  -
+
+  ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" not found in the database
+	??[emergency] Publication "electric_publication_integration" not found in the database
+	??[notice] Application electric exited: shutdown
+
+[invoke stop_electric]
+[invoke stop_and_remove_pg]
+
+###
+
+## Start a Postgres cluster with incorrectly configured publication and a low-privilege user
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e LOW_PRIVILEGE_TEST_CREATE_PUBLICATION_SQL='CREATE PUBLICATION electric_publication_integration WITH (publish = 'insert')'" \
+  "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+## Start the sync service.
+[invoke setup_electric]
+
+# Verify that the sync service fails to initialize because the publication has incorrect parameters
+[shell electric]
+  # Reset the failure pattern to make it possible to pattern-match on errors below
+  -
+
+  ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE
+	??[emergency] Publication "electric_publication_integration" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE
+	??[notice] Application electric exited: shutdown
+
+[invoke stop_electric]
+[invoke stop_and_remove_pg]
+
+###
+
+## Start a Postgres cluster with precreated publication and a low-privilege user
+[invoke setup_pg_with_shell_name \
+  "pg" "" "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+## Start the sync service.
+[invoke setup_electric]
+
+## Confirm that the replication pipeline has initialized successfully
+[shell electric]
+  -$fail_pattern
+
+  ??Starting shape replication pipeline
+  ??Starting replication from postgres
+
+[cleanup]
+  [invoke teardown]
