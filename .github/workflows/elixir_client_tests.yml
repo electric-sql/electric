@@ -91,7 +91,7 @@ jobs:
           fail_ci_if_error: true
           flags: elixir,unit-tests,elixir-client
           files: ./junit/test-junit-report.xml
-          override_branch: ${{ github.event_name == 'pull_request' && 'pr-test-aggregation' || '' }}
+          override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
 
   formatting:
     name: Check formatting for elixir-client
