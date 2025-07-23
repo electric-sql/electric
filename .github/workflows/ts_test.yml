@@ -151,6 +151,7 @@ jobs:
           files: ./junit/test-report.junit.xml
           override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
           override_pr: 1
+          override_commit: 'dummy'
 
   check_and_build_examples:
     name: Check and build ${{ matrix.example_folder }} example

@@ -93,6 +93,7 @@ jobs:
           files: ./junit/test-junit-report.xml
           override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
           override_pr: 1
+          override_commit: 'dummy'
 
   formatting:
     name: Check formatting for elixir-client

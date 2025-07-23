@@ -122,6 +122,7 @@ jobs:
           files: ./junit/regular-test-junit-report.xml,./junit/telemetry-test-junit-report.xml
           override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
           override_pr: 1
+          override_commit: 'dummy'
 
   formatting:
     name: Check formatting for sync-service
