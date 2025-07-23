@@ -149,6 +149,7 @@ jobs:
           fail_ci_if_error: true
           flags: typescript,unit-tests,${{ matrix.package_dir }}
           files: ./junit/test-report.junit.xml
+          override_branch: ${{ github.event_name == 'pull_request' && 'pr-test-aggregation' || '' }}
 
   check_and_build_examples:
     name: Check and build ${{ matrix.example_folder }} example

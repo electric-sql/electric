@@ -120,6 +120,7 @@ jobs:
           fail_ci_if_error: true
           flags: elixir,unit-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
           files: ./junit/regular-test-junit-report.xml,./junit/telemetry-test-junit-report.xml
+          override_branch: ${{ github.event_name == 'pull_request' && 'pr-test-aggregation' || '' }}
 
   formatting:
     name: Check formatting for sync-service
