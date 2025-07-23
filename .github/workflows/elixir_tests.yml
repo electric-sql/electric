@@ -121,6 +121,7 @@ jobs:
           flags: elixir,unit-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
           files: ./junit/regular-test-junit-report.xml,./junit/telemetry-test-junit-report.xml
           override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
+          override_pr: 1
 
   formatting:
     name: Check formatting for sync-service
