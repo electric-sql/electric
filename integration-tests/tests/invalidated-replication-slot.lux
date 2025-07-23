@@ -15,7 +15,8 @@
 [invoke setup_pg_with_shell_name \
   "pg" \
   "-e POSTGRES_INITDB_ARGS=--wal-segsize=1" \
-  "-c max_slot_wal_keep_size=1MB -c max_wal_size=2MB"]
+  "-c max_slot_wal_keep_size=1MB -c max_wal_size=2MB" \
+  ""]
 
 ## Start the sync service.
 [invoke setup_electric]

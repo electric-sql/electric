@@ -5,7 +5,7 @@
 [global pg_container_name=invalid-wal-level__pg]
 
 ## Start a new Postgres cluster with logical replication disabled
-[invoke setup_pg_with_shell_name "pg" "" "-c wal_level=replica"]
+[invoke setup_pg_with_shell_name "pg" "" "-c wal_level=replica" ""]
 
 ## Start the sync service.
 [invoke setup_electric]

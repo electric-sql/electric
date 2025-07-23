@@ -1,0 +1,28 @@
+[doc Verify that Electric can work with reduced DB privileges if its required conditions are met externally]
+
+[include _macros.luxinc]
+
+[global pg_container_name=low-privilege-mode__pg]
+[global database_url=postgresql://low_privilege:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+## Start a Postgres cluster with precreated publication and a low-privilege user
+[invoke setup_pg_with_shell_name \
+  "pg" "-e POSTGRES_INITDB_ARGS=--wal-segsize=1" "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+[invoke start_psql]
+
+[shell psql]
+  !SELECT * FROM pg_publication;
+  ??(1 row)
+
+## Start the sync service.
+[invoke setup_electric]
+
+## Confirm that the replication pipeline has initialized successfully
+[shell electric]
+  ??Starting shape replication pipeline
+  ??Starting replication from postgres
+
+[cleanup]
+  [invoke teardown]
