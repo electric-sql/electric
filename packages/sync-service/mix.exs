@@ -129,7 +129,9 @@ defmodule Electric.MixProject do
       {:mox, "~> 1.1", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:stream_data, "~> 1.2", only: [:dev, :test]},
-      {:repatch, "~> 1.0", only: [:test]}
+      {:repatch, "~> 1.0", only: [:test]},
+      {:benchee, "~> 1.0", only: :dev},
+      {:eflambe, "~> 0.3.0", only: :dev}
     ]
   end
 
