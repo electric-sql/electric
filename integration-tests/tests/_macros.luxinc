@@ -7,7 +7,7 @@
 [global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric?sslmode=disable]
 [global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/electric?sslmode=disable]
 
-[macro setup_pg_with_shell_name shell_name container_env_vars config_opts]
+[macro setup_pg_with_shell_name shell_name container_env_vars config_opts extra_volumes]
   [shell $shell_name]
     -$fail_pattern
 
@@ -23,6 +23,7 @@
       ${container_env_vars} \
       -p $pg_host_port:5432 \
       -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
+      ${extra_volumes} \
       postgres:14-alpine \
         -c wal_level=logical ${config_opts}
 
@@ -36,7 +37,7 @@
 [endmacro]
 
 [macro setup_pg]
-  [invoke setup_pg_with_shell_name "pg" "" ""]
+  [invoke setup_pg_with_shell_name "pg" "" "" ""]
 [endmacro]
 
 [macro setup_pg_with_pooler]
