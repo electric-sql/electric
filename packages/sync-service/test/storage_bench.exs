@@ -126,6 +126,14 @@ setup_storage = fn folder, storage, init_fn ->
     Storage.mark_snapshot_as_started(shape_opts)
     Storage.make_new_snapshot!([], shape_opts)
 
+    IO.puts("""
+    Storage setup called from #{inspect(self())}:
+      #{inspect(root_supervisor)} - root supervisor
+      #{inspect(stack_pid)} - stack pid
+      #{inspect(pid)} - storage pid
+      #{inspect(consumer_pid)} - consumer pid
+    """)
+
     init_fn.(
       {input,
        %{
@@ -160,7 +168,8 @@ end
 
 # Test 1 - writes to single shape
 Benchee.init(
-  time: 10,
+  profile_after: {:fprof, [details: true, sort: :own]},
+  time: 5,
   inputs: inputs,
   before_each: fn {input, context} ->
     timestamp = System.monotonic_time() + System.os_time()
@@ -170,10 +179,13 @@ Benchee.init(
         {LogOffset.new(timestamp, op_offset), key, type, json}
       end)
 
+    # {_, _} = :erlang.statistics(:exact_reductions)
+
     {input, context}
   end,
   after_each: fn {input, %{storage: storage}} ->
-    nil
+    # {_, reductions_since_last_call} = :erlang.statistics(:exact_reductions)
+
     {%LogOffset{tx_offset: tx_offset}, _, _, _} = List.first(input)
     {last_offset, _, _, _} = List.last(input)
 
@@ -204,12 +216,13 @@ Benchee.init(
 |> Benchee.load()
 |> Benchee.relative_statistics()
 |> Benchee.Formatter.output(Benchee.Formatters.Console)
+|> Benchee.profile()
 
 # # Test 2 - chunk-aligned reads from random points
 
 inputs = %{
-  "5 chunks" => 5,
-  "10 chunks" => 10
+  "3 chunks" => 3
+  # "10 chunks" => 10
 }
 
 write_n_chunks = fn n, %{consumer_pid: consumer_pid} ->
@@ -255,6 +268,7 @@ read_chunk = fn {input, %{storage: storage}} ->
 end
 
 Benchee.init(
+  profile_after: {:fprof, [details: true, sort: :own]},
   time: 5,
   inputs: inputs,
   before_each: fn {range, context} ->
@@ -278,6 +292,7 @@ Benchee.init(
 |> Benchee.load()
 |> Benchee.relative_statistics()
 |> Benchee.Formatter.output(Benchee.Formatters.Console)
+|> Benchee.profile()
 
 # # Test 3 - High concurrency reads from same shape
 
@@ -317,8 +332,9 @@ Benchee.init(
     setup_storage.("#{base_dir}/pure_file_storage", pure_file_storage, setup_write_n_chunks),
   after_scenario: teardown_storage
 })
-|> Benchee.collect()
-|> Benchee.statistics()
-|> Benchee.load()
-|> Benchee.relative_statistics()
-|> Benchee.Formatter.output(Benchee.Formatters.Console)
+
+# |> Benchee.collect()
+# |> Benchee.statistics()
+# |> Benchee.load()
+# |> Benchee.relative_statistics()
+# |> Benchee.Formatter.output(Benchee.Formatters.Console)
