@@ -201,6 +201,126 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     end
   end
 
+  @spec fetch_chunk_2(path :: String.t(), LogOffset.t()) ::
+          {:ok, max_offset :: LogOffset.t(),
+           {start_position :: non_neg_integer, end_position :: non_neg_integer}}
+          | {:ok, nil, {start_position :: non_neg_integer, nil}}
+          | :error
+  def fetch_chunk_2(path, exclusive_min_offset) do
+    case FileInfo.file_size(path) do
+      {:ok, size} when size < 512 * 1024 ->
+        data = File.open!(path, [:read, :raw], &IO.binread(&1, :eof))
+
+        case in_mem_binary_search(
+               data,
+               0,
+               div(size, @full_record_width) - 1,
+               exclusive_min_offset
+             ) do
+          {:ok, {_, nil}, {start_pos, nil}, _} ->
+            {:ok, nil, {start_pos, nil}}
+
+          {:ok, {_, max_offset}, {start_pos, end_pos}, _} ->
+            {:ok, max_offset, {start_pos, end_pos}}
+
+          nil ->
+            if rem(size, @full_record_width) == 0 do
+              :error
+            else
+              <<min_tx::64, min_op::64, start_pos::64, key_start_pos::64>> =
+                binary_part(data, size - @half_record_width, @half_record_width)
+
+              {:ok, nil, {start_pos, nil}}
+            end
+        end
+
+      {:ok, _} ->
+        fetch_chunk(path, exclusive_min_offset)
+
+      :error ->
+        :error
+    end
+  end
+
+  defp in_mem_binary_search(data, left, right, %LogOffset{} = target)
+       when left <= right do
+    mid = div(left + right, 2)
+
+    <<min_tx::64, min_op::64, start_pos::64, key_start_pos::64, max_tx::64, max_op::64,
+      end_pos::64,
+      key_end_pos::64>> = binary_part(data, mid * @full_record_width, @full_record_width)
+
+    max_offset = LogOffset.new(max_tx, max_op)
+    min_offset = LogOffset.new(min_tx, min_op)
+
+    case {LogOffset.compare(target, max_offset), mid} do
+      {:lt, mid} when mid > 0 ->
+        # Target is less than max_offset, this chunk might be the answer
+        # but let's check if there's a better one in the left half
+        in_mem_binary_search(data, left, mid - 1, target) ||
+          {:ok, {min_offset, max_offset}, {start_pos, end_pos}, {key_start_pos, key_end_pos}}
+
+      {:lt, _} ->
+        {:ok, {min_offset, max_offset}, {start_pos, end_pos}, {key_start_pos, key_end_pos}}
+
+      {_, mid} when mid < right ->
+        # Target is equal to / greater than max_offset, need to look in right half
+        in_mem_binary_search(data, mid + 1, right, target)
+
+      _ ->
+        # Target is greater than max_offset but we're at the end
+        nil
+    end
+  end
+
+  defp in_mem_binary_search(_data, _left, _right, _target), do: nil
+
+  @spec fetch_chunk_1(path :: String.t(), LogOffset.t()) ::
+          {:ok, max_offset :: LogOffset.t(),
+           {start_position :: non_neg_integer, end_position :: non_neg_integer}}
+          | {:ok, nil, {start_position :: non_neg_integer, nil}}
+          | :error
+  def fetch_chunk_1(path, exclusive_min_offset) do
+    case FileInfo.file_size(path) do
+      {:ok, size} when size < 512 * 1024 ->
+        data = File.open!(path, [:read, :raw], &IO.binread(&1, :eof))
+        find_chunk(data, exclusive_min_offset)
+
+      {:ok, _} ->
+        fetch_chunk(path, exclusive_min_offset)
+
+      :error ->
+        :error
+    end
+  end
+
+  defp find_chunk(
+         <<tx1::64, op1::64, pos1::64, _::64>> <> rest,
+         %LogOffset{tx_offset: min_tx, op_offset: min_op}
+       )
+       when min_tx < tx1 or (min_tx == tx1 and min_op < op1) do
+    case rest do
+      <<tx2::64, op2::64, pos2::64, _>> <> _ ->
+        {:ok, LogOffset.new(tx2, op2), {pos1, pos2}}
+
+      _ ->
+        {:ok, nil, {pos1, nil}}
+    end
+  end
+
+  defp find_chunk(
+         <<_::64*2, pos1::64, _::64, tx2::64, op2::64, pos2::64, _::64>> <> _,
+         %LogOffset{tx_offset: min_tx, op_offset: min_op}
+       )
+       when min_tx < tx2 or (min_tx == tx2 and min_op < op2),
+       do: {:ok, LogOffset.new(tx2, op2), {pos1, pos2}}
+
+  defp find_chunk(<<_::64*2, start_pos::64, _::64>>, _), do: {:ok, nil, {start_pos, nil}}
+
+  defp find_chunk(<<_::64*8>> <> rest, offset) do
+    if rest == "", do: :error, else: find_chunk(rest, offset)
+  end
+
   def fetch_chunk_with_positions(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
     file = File.open!(chunk_file_path, [:read, :raw])
 

@@ -42,7 +42,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndexTest do
       # consume the stream to write the file
       Enum.to_list(result_stream)
 
-      result = ChunkIndex.fetch_chunk(chunk_index_path, %LogOffset{tx_offset: 0, op_offset: 0})
+      result = ChunkIndex.fetch_chunk_2(chunk_index_path, %LogOffset{tx_offset: 0, op_offset: 0})
       assert match?({:ok, %LogOffset{}, {_, _}}, result)
     end
 
@@ -63,7 +63,9 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndexTest do
       # consume the stream to write the file
       Stream.run(result_stream)
 
-      result = ChunkIndex.fetch_chunk(chunk_index_path, %LogOffset{tx_offset: 100, op_offset: 0})
+      result =
+        ChunkIndex.fetch_chunk_2(chunk_index_path, %LogOffset{tx_offset: 100, op_offset: 0})
+
       assert {:ok, nil, {_, nil}} = result
     end
   end
