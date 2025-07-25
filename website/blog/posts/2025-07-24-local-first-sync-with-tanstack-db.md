@@ -5,70 +5,129 @@ description: >-
 excerpt: >-
   Tanstack DB is a reactive client store for building super fast apps on sync. Paired with Electric, it provides an optimal end-to-end sync stack for local-first app development.
 authors: [thruflo]
-image: /img/blog/local-first-sync-with-tanstack-db/header.jpg
+image: /img/blog/local-first-sync-with-tanstack-db/header2.jpg
 tags: [db]
 outline: [2, 3]
 post: true
 ---
 
-[Tanstack DB](https://tanstack.com/db) is a reactive client store for building super fast apps on sync. Paired with [Electric](/) it provides an end-to-end sync stack for local-first app development.
+<style scoped>
+  figure {
+    background: #161618;
+    border-radius: 14px;
+    margin: 28px 0;
+  }
+  figure#tanstack-db-image {
+    margin: -40px 0;
+  }
+  h2#introducing-tanstack-db {
+    border: none;
+  }
+</style>
 
-The combination is insanely fast and scalable. With a declarative, reactive and type-safe programming model that's incrementally adoptable into existing apps. For real-time without the re-write and sync that just works.
+[Tanstack DB](https://tanstack.com/db) is a reactive client store for building super fast apps on sync.
+
+It's type-safe, declarative and incrementally adoptable. For real-time without the re-write and sync that just works.
 
 > [!Warning] ✨&nbsp; TanStack DB starter
 > ... info here about the starter with a link to the repo / docs ...
 
-## Connecting the desire paths to the motorway
+## The case for local-first sync
 
-Last year, at Electric, we did a [clean re-write](#) of our core sync engine. Slimming down to focus on read-path sync with partial replication. This pushed concerns like client-side reactivity and local writes out-of-scope, so we could focus on making core Electric.
+Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains across UX, DX and AX lies in [local-first, sync engine architecture](#).
 
-Having pushed these concerns back onto our users, it was fascinating to see how they creatively solved them. Over time, we started to see desire paths forming, with users:
+Sync-based apps like [Linear](#) and [Figma](#) feel instant to use and are naturally collaborative. Eliminating stale data, loading spinners and manual data wiring by design.
 
-- needing a reactive client side store to sync into and code against
-- home-rolling solutions to manage local optimistic state and write-path sync
-
-In some cases, we wrote solutions up as patterns, like in the [writes guide](#). In other cases, we pointed to integrations like [LiveStore](#) and [Phoenix.Sync](#).
-
-What became increasingly clear was that **these were the desire paths that we needed to pave over**. But, of course, at Electric, we're focused on mainstreaming sync and local-first. We want to build an on-ramp for mainstream adoption into both greenfield and brownfield applications.
-
-So, we didn't want to just pave over these desire paths. We wanted to plug them into the mainstream. So, where is that? What is the stack or framework that teams with good taste are choosing to build their startups on?
-
-The answer, of course, is [TanStack](https://tanstack.com).
+It's an ideal architecture for [building AI apps and agentic systems](#) and [makes LLM-generated code more maintainable](#) and production ready.
 
 ## Adding local-first sync to TanStack
 
-TanStack is a collection of TypeScript libraries for building modern apps.
+[TanStack](https://tanstack.com) is a popular and fast growing collection of libraries for building modern apps.
 
-It grew out of React Query, now [TanStack Query](https://tanstack.com/query). A library that gives you managed queries, caching, mutation primitives, etc. It now has other popular libraries like [TanStack Router](https://tanstack.com/router), [TanStack Start](https://tanstack.com/start), etc.
+It grew out of React Query, now [TanStack Query](https://tanstack.com/query), a library that gives you managed queries, caching, mutation primitives, etc.
 
-This is TanStack Query code:
+### How TanStack Query works
 
-```tsx
-```
-
-It loads data into a React state variable. Using a managed `queryFn`. So the query function defines how you fetch the data and TanStack Query then manages calling it, retries, caching, etc.
-
-Then when it comes to writes, you create a mutator with a `mutationFn` that defines how you actually handle the write. In this case by posting it to your API:
+This is TanStack Query code to read data into a React component:
 
 ```tsx
+import { useQuery } from '@tanstack/react-query'
+
+function Todos() {
+  const { data } = useQuery({
+    queryFn: async () => await api.get('/todos'),
+    queryKey: ['todos']
+  })
+
+  // ...
+}
 ```
 
-You can then use this mutator in your components to make local optimistic writes:
+You provide a `queryFn` that defines how you fetch your data. TanStack Query then [manages calling it, retries, caching](https://tanstack.com/query/latest/docs/framework/react/overview#motivation) etc.
+
+For writes, you create a mutation with a `mutationFn` that defines how you actually send your data to the server (in this case by posting it to your API):
 
 ```tsx
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+function Todos() {
+  const queryClient = useQueryClient()
+
+  const { mutate } = useMutation({
+    mutationFn: (todo) => api.post('/todos', todo),
+    onSettled: () => queryClient.invalidateQueries({
+      queryKey: ['todos']
+    })
+  })
+
+  // continues below ...
+}
 ```
 
-So, what exactly do we need to do or add to this to pave over our desire paths and integrate local-first sync into TanStack?
+You can then use this mutation in your components to make instant local writes, with TanStack Query managing the [optimistic state lifecycle](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates) for you:
 
-Well, the first thing is that we need to change from *fetching* data (using the managed query primitive) to *syncing* data into a local store. That means we need a primitive to sync into. Which we'll call a `Collection`.
+```tsx
+function Todos() {
+  // ... as above
 
-... collection diagramme ...
+  const addTodo = () => mutate({title: 'Some Title' })
 
-We then need the local mutations to apply optimistic state to collections and to tie the optimistic state lifecycle in with the sync machinery.
+  return <Button onClick={ addTodo } />
+}
+```
 
-... diagramme ...
+So, we see that TanStack already handles data loading and local optimistic writes. What exactly do we need to add to TanStack for it to support local-first sync?
 
-Lastly, we need to provide a declarative, reactive programming model for working with the data in collections. Which means adding cross-collection live queries.
+### Adding support for local-first sync
+
+Local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/use-cases/data-sync#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) into the sync engine domain (where it can be automated, normalized and system optimized).
+
+The first thing we need is a local store primitive to sync data in-and-out-of and for the app code to interact with. Let's call it a **Collection**.
+
+<figure>
+  <a class="no-visual" target="_blank"
+      href="/img/blog/local-first-sync-with-tanstack-db/collection.lg.jpg">
+    <img src="/img/blog/local-first-sync-with-tanstack-db/collection.png?v=2" />
+  </a>
+</figure>
+
+Then for local reads, we need **Live&nbsp;Queries** that allow you to query and join data across collections. These need to be declarative, reactive and extremely efficient.
+
+<figure>
+  <a class="no-visual" target="_blank"
+      href="/img/blog/local-first-sync-with-tanstack-db/live-queries.lg.jpg">
+    <img src="/img/blog/local-first-sync-with-tanstack-db/live-queries.png" />
+  </a>
+</figure>
+
+And for local writes, we need transactional **Optimistic Mutations** that can apply optimistic state across collections and tie its lifecycle in with the sync machinery.
+
+<figure>
+  <a class="no-visual" target="_blank"
+      href="/img/blog/local-first-sync-with-tanstack-db/sync-on-sync-off.lg.jpg">
+    <img src="/img/blog/local-first-sync-with-tanstack-db/sync-on-sync-off.png" />
+  </a>
+</figure>
 
 If we have these three things:
 
@@ -78,11 +137,24 @@ If we have these three things:
 
 Then we have a local-first sync stack built natively into TanStack.
 
+<h2>&nbsp;</h2>
+
+<figure id="tanstack-db-image">
+  <a class="no-visual" target="_blank"
+      href="https://tanstack.com/db">
+    <img src="/img/blog/local-first-sync-with-tanstack-db/tanstack-db.jpg" />
+  </a>
+</figure>
+
 ## Introducing TanStack DB
 
-TanStack DB is a reactive client side store, built into TanStack, that extends TanStack Query with collections, live queries and sync-aware optimistic mutations.
+[TanStack DB](https://tanstack.com/db) is a reactive client store that extends TanStack Query with:
 
-It allows you to *incrementally* migrate existing API-based apps to local-first sync. Resulting in apps that are resilient, reactive and, as we’ll see, insanely fast 🔥
+- collections
+- live queries
+- sync-aware optimistic mutations
+
+It allows you to *incrementally* migrate existing API-based apps to local-first sync and build real-time apps that are resilient, reactive and, as we’ll see, insanely fast 🔥
 
 <!--
 
