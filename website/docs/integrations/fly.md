@@ -33,7 +33,7 @@ Fly's [Supabase Postgres](https://fly.io/docs/supabase) is a managed Postgres se
 
 ### Deploy Electric
 
-Copy the following config into a file called `fly.toml`, replacing the app name and `DATABASE_URL`:
+Copy the following config into a file called `fly.toml`, replacing the app name:
 
 ```toml
 app = "YOUR_UNIQUE_APP_NAME"
@@ -42,7 +42,6 @@ app = "YOUR_UNIQUE_APP_NAME"
   image = "electricsql/electric:latest"
 
 [env]
-  DATABASE_URL = "postgresql://..."
   ELECTRIC_DATABASE_USE_IPV6 = true
 
 [http_service]
@@ -61,6 +60,12 @@ Using the [`flyctl` client](https://fly.io/docs/flyctl/install/), in the same di
 
 ```shell
 flyctl launch --copy-config --ha=false
+```
+
+Once the app is deployed, you'll need to set your `DATABASE_URL` as a secret:
+
+```shell
+flyctl secrets set DATABASE_URL="postgresql://..."
 ```
 
 Hit the health check endpoint to verify that everything is running OK:
