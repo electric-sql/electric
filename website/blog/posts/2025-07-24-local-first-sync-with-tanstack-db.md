@@ -1,9 +1,13 @@
 ---
 title: Local-first sync with TanStack DB
 description: >-
-  Tanstack DB is a reactive client store for building super fast apps on sync. Paired with Electric, it provides an optimal end-to-end sync stack for local-first app development.
+  Tanstack DB is a reactive client store for building super fast apps on sync.
+  Paired with Electric, it provides an optimal end-to-end sync stack for
+  local-first app development.
 excerpt: >-
-  Tanstack DB is a reactive client store for building super fast apps on sync. Paired with Electric, it provides an optimal end-to-end sync stack for local-first app development.
+  Tanstack DB is a reactive client store for building super fast apps on sync.
+  Paired with Electric, it provides an optimal end-to-end sync stack for
+  local-first app development.
 authors: [thruflo]
 image: /img/blog/local-first-sync-with-tanstack-db/header2.jpg
 tags: [db]
@@ -23,30 +27,49 @@ post: true
   h2#introducing-tanstack-db {
     border: none;
   }
+  .embed-container {
+    margin: 28px 0;
+  }
 </style>
 
 [Tanstack DB](https://tanstack.com/db) is a reactive client store for building super fast apps on sync.
 
-It's type-safe, declarative and incrementally adoptable. For real-time without the re-write and sync that just works.
+It's type-safe, declarative, incrementally adoptable and insanely fast. Combined with Electric, it gives you real-time without the re-write and sync that just works. A new unified standard for sync and an optimal, end-to-end local-first sync stack.
 
-> [!Warning] ✨&nbsp; TanStack DB starter
-> ... info here about the starter with a link to the repo / docs ...
+It's the future of app development with Electric and hands down the best way of building the next generation of AI apps and agentic systems.
 
-## The case for local-first sync
+> [!Warning] ✨&nbsp; TanStack DB <> Electric starters
+> You can fire up TanStack DB with Electric using the [TanStack Start starter](https://github.com/KyleAMathews/tanstack-start-db-electric-starter) and [Expo starter](https://github.com/KyleAMathews/expo-db-electric-starter) templates. Docs are at [tanstack.com/db](https://tanstack.com/db) and there's an [example app](https://github.com/TanStack/db/tree/main/examples/react/todo) in the repo.
 
-Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains across UX, DX and AX lies in [local-first, sync engine architecture](#).
+## The next frontier for front-end
 
-Sync-based apps like [Linear](#) and [Figma](#) feel instant to use and are naturally collaborative. Eliminating stale data, loading spinners and manual data wiring by design.
+Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains across UX, DX and AX lies in [local-first, sync engine architecture](/use-cases/local-first-software).
 
-It's an ideal architecture for [building AI apps and agentic systems](#) and [makes LLM-generated code more maintainable](#) and production ready.
+Sync-based apps like [Linear](https://linear.app/blog/scaling-the-linear-sync-engine) and [Figma](https://www.figma.com/blog/how-figmas-multiplayer-technology-works) feel instant to use and are naturally collaborative. Eliminating stale data, loading spinners and manual data wiring by design.
+
+It's an ideal architecture for [building AI apps and agentic systems](/blog/2025/04/09/building-ai-apps-on-sync) and makes LLM-generated code [more maintainable and production ready](/blog/2025/04/22/untangling-llm-spaghetti).
 
 ## Adding local-first sync to TanStack
 
-[TanStack](https://tanstack.com) is a popular and fast growing collection of libraries for building modern apps.
+[TanStack](https://tanstack.com) is a collection of TypeScript libraries for building web and mobile apps. Developed by an open collective, stewarded with great taste by [Tanner Linsley](https://github.com/tannerlinsley), it's one of the best and most popular ways to build modern apps.
 
-It grew out of React Query, now [TanStack Query](https://tanstack.com/query), a library that gives you managed queries, caching, mutation primitives, etc.
+Tanner has long wanted to add local-first sync to TanStack:
 
-### How TanStack Query works
+<blockquote><em>&ldquo;I think ideally every developer would love to be able to interact with their APIs as if they were local-first. I have no doubt that that is what everybody wants.&rdquo;</em></blockquote>
+
+<div class="embed-container">
+  <YoutubeEmbed video-id="hy9pNJMFfyM" />
+</div>
+
+When Electric co-founder [Kyle Mathews](/about/team#kyle) approached Tanner with the idea to work on this, they immediately aligned on a vision for an ideal developer experience for incrementally adoptable local-first app development. There was still once piece missing though: a reactive query engine fast enough to make the vision a reality.
+
+Enter [Sam Willis'](/about/team#sam) work on [d2ts](https://github.com/electric-sql/d2ts), a Typescript implementation of differential dataflow that could handle even the most complex reactive queries in microseconds.
+
+Suddenly we had all the primitives: the stack, the DX, the sync engine and a query engine fast enough to make it possible. To understand how this then came together in TanStack DB, let's briefly refresh on how TanStack works.
+
+### How TanStack works
+
+TanStack grew out of React Query, now [TanStack Query](https://tanstack.com/query), a library that gives you managed queries, caching, mutation primitives, etc.
 
 This is TanStack Query code to read data into a React component:
 
@@ -100,9 +123,9 @@ So, we see that TanStack already handles data loading and local optimistic write
 
 ### Adding support for local-first sync
 
-Local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/use-cases/data-sync#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) into the sync engine domain (where it can be automated, normalized and system optimized).
+Local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/use-cases/data-sync#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) into the sync engine (where it can be normalized and system optimized).
 
-The first thing we need is a local store primitive to sync data in-and-out-of and for the app code to interact with. Let's call it a **Collection**.
+The first thing we need is a local store primitive to sync data in-and-out-of that the app code can interact with. Let's call it a **Collection**.
 
 <figure>
   <a class="no-visual" target="_blank"
@@ -120,7 +143,7 @@ Then for local reads, we need **Live&nbsp;Queries** that allow you to query and 
   </a>
 </figure>
 
-And for local writes, we need transactional **Optimistic Mutations** that can apply optimistic state across collections and tie its lifecycle in with the sync machinery.
+And for local writes, we need **Optimistic Mutations** that can apply optimistic state to collections and tie its lifecycle in with the sync machinery.
 
 <figure>
   <a class="no-visual" target="_blank"
@@ -156,61 +179,119 @@ Then we have a local-first sync stack built natively into TanStack.
 
 It allows you to *incrementally* migrate existing API-based apps to local-first sync and build real-time apps that are resilient, reactive and, as we’ll see, insanely fast 🔥
 
-<!--
-
-For example, if you have an existing API-based app using TanStack Query the steps are:
-
-1. take your routes / loaders using TanStack Query and adjust them to load data into TanStack DB collections (using the same TanStack Query `queryFn`)
-2. adjust your app code / components to read data from TanStack DB collections
-3. add and swap out your query collections for sync-based collections using Electric
-
-This gives you a practical migration pathway from existing API-based architecture to local-first sync architecture.
-
--->
-
 Let’s dive it and see how it works!
 
 ### Collections
 
-Collections are typed sets of objects that can be populated with data. You can define many types of collections, including:
+Collections are typed sets of objects that can be populated with data. You can populate data in many ways, for example by:
 
 - fetching data, for example from API endpoints using TanStack Query
-- syncing data, for example using Electric
-- storing local data, for example using localStorage
-- from live queries, creating derived collections as materialised views
+- syncing data, for example using sync engines like Electric
 
-For example, to define a TanStack Query collection:
+You can also storing local client and derive collections from live queries (creating new collections as materialised views).
 
-```ts
-```
+#### Query collections
 
-We’ve seen this code before right? It fetches data using a managed `queryFn`. The API is deliberately the same, so the migration path from an existing TanStack Query app is minimal.
-
-To define a sync collection using Electric, you provide `shapeOptions` to `electricCollectionOptions`:
+Create a collection that fetches data using TanStack Query like this:
 
 ```ts
+import { createCollection } from '@tanstack/react-db'
+import { queryCollectionOptions } from '@tanstack/query-db-collection'
+import { QueryClient } from '@tanstack/query-core'
+
+const queryClient = new QueryClient()
+
+const queryTodoCollection = createCollection(
+  queryCollectionOptions({
+    id: 'fetch-todos',
+    queryKey: ['todos'],
+    queryFn: async () => await api.get('/todos'),
+    getKey: (item) => item.id,
+    schema: todoSchema, // any standard schema
+    queryClient
+  })
+)
 ```
 
-If you’ve used it, these are exactly the same options you’d pass to the [Electric client](#) when defining a [Shape](#). (A shape is a filtered view on a database table. You can create as many views as you like with different subsets of the source data).
+We’ve seen the heart of this before, right? It fetches data using a managed `queryFn`.
+
+This allows you to take existing API-based applications and incrementally layer on TanStack DB where you need it, with minimal changes to your code.
+
+#### Sync collections
+
+To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/api/clients/typescript) when defining a [Shape](/docs/guides/shapes):
+
+```ts
+import { createCollection } from '@tanstack/react-db'
+import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+
+const electricTodoCollection = createCollection(
+  electricCollectionOptions({
+    id: 'sync-todos',
+    shapeOptions: {
+      url: 'http://localhost:3003/v1/shape',
+      params: {
+        table: 'todos',
+      }
+    },
+    getKey: (item) => item.id,
+    schema: todoSchema
+  })
+)
+```
+
+A shape is a [filtered view on a database table](/docs/guides/shapes) that Electric syncs into the client for you. You can create as many filtered views as you like on the same table.
+
+The key difference between a query-based and a sync-based collection is that a sync-based collection keeps the data in the collection in-sync with the data in your Postgres database. You don't need to tell it to re-fetch data. It just always keeps the local data live and up-to-date in real-time.
+
+There are a range of other collections also built into TanStack DB. Such as an in-memory [local-only collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-only.ts) and a [localStorage backed collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-storage.ts), both for storing arbitrary client state. There are also collections from other sync engines, like [Materialize](https://materialize.com) and [Trailbase](https://trailbase.io) and a guide to [easily create your own collections](https://tanstack.com/db/latest/docs/collection-options-creator).
 
 Once you have data in collections, you can bind it to your components using live queries.
 
 ### Live queries
 
-... live queries are ...
+Live queries run reactively against and across collections. They're super fast, powered by differential dataflow, with support for joins, filters and aggregates.
 
-You can query across as many collections as you like
-They can be collections of different types.
+Use them in your components [using the framework hooks](https://tanstack.com/db/latest/docs/live-queries#using-with-frameworks). For example:
 
-Load some data from the database, some from an API; there’s a LocalCollection for UI state.
-Query across them all as part of the same logical data model.
+```tsx
+import { useLiveQuery, eq } from '@tanstack/react-db'
+
+const Todos = () => {
+  const { data } = useLiveQuery((query) =>
+    query
+      .from({ todo: todoCollection })
+      .where(({ todo }) => eq(todo.completed, true))
+  )
+
+  return <List items={ data } />
+}
+```
+
+This keeps the value of the `data` state variable in sync with the contents of your collection. Which, if you're using a sync collection, is in sync with the contents of your database. So any write to Postgres will sync into your app in real-time and then instantly trigger the component to re-render (using your reactivity framework of choice).
+
+There's no manual data wiring and your component code has no knowledge, or care, about where the data in the collection came from. Data fetching is entirely abstracted out of the component code.
+
+
+
+You can query across as many collections as you like. They can be collections of different types. So you can use the collection primitive to load/sync/save data from different sources. And then use live queries to query across them as part of the same logical data model.
+
 You can have as many complex queries as you like, with joins, aggregates, etc.
+
+
+You can also derive collections from live queries. In fact, live queries *are* collections. You can create a live query based collection using createCollection and you can access live query results in your components as a collection:
+
+... examples ...
+
+
+creating new collections as materialised views.
+
 
 So, we’ve seen that the component code stays the same
 but that queries are actually are super powerful under the hood.
 => The same is true of mutations
 
-### OPTIMISTIC MUTATIONS
+### Optimistic Mutations
 
 And to write data locally.
 Rather than the `useMutation` hook we saw before with TanStack Query.
@@ -290,6 +371,14 @@ abstracts state transfer out of application code
 
 ### incrementally adoptable
 
+For example, if you have an existing API-based app using TanStack Query the steps are:
+
+1. take your routes / loaders using TanStack Query and adjust them to load data into TanStack DB collections (using the same TanStack Query `queryFn`)
+2. adjust your app code / components to read data from TanStack DB collections
+3. add and swap out your query collections for sync-based collections using Electric
+
+This gives you a practical migration pathway from existing API-based architecture to local-first sync.
+
 ### works with your existing API
 
  that's composable and incrementally adoptable.
@@ -331,4 +420,3 @@ what's missing ...
 ## ...
 
 This is the future of application development with Electric. It unlocks realtime sync without the rewrite and it's the best way to build the next-generation of AI apps.
-
