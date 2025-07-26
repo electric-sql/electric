@@ -15,6 +15,10 @@ outline: [2, 3]
 post: true
 ---
 
+<script setup>
+import Tweet from 'vue-tweet'
+</script>
+
 <style scoped>
   figure {
     background: #161618;
@@ -63,7 +67,7 @@ Tanner has long wanted to add local-first sync to TanStack:
 
 When Electric co-founder [Kyle Mathews](/about/team#kyle) approached Tanner with the idea to work on this, they immediately aligned on a vision for an ideal developer experience for incrementally adoptable local-first app development. There was still once piece missing though: a reactive query engine fast enough to make the vision a reality.
 
-Enter [Sam Willis'](/about/team#sam) work on [d2ts](https://github.com/electric-sql/d2ts), a Typescript implementation of differential dataflow that could handle even the most complex reactive queries in microseconds.
+Enter [Sam Willis'](/about/team#sam) work on [d2ts](https://github.com/electric-sql/d2ts), a Typescript implementation of differential dataflow that can handle even the most complex reactive queries in microseconds.
 
 Suddenly we had all the primitives: the stack, the DX, the sync engine and a query engine fast enough to make it possible. To understand how this then came together in TanStack DB, let's briefly refresh on how TanStack works.
 
@@ -291,9 +295,9 @@ However it gets there, once you have data in collections, you can bind it to you
 
 ### Live queries
 
-Live queries run reactively against and across collections. They're super fast, powered by differential dataflow, with support for joins, filters and aggregates.
+[Live queries](https://tanstack.com/db/latest/docs/live-queries) run reactively against and across collections. They're fast and expressive, with support for joins, filters and aggregates.
 
-Use them in your components [using the framework hooks](https://tanstack.com/db/latest/docs/live-queries#using-with-frameworks). For example:
+There's a number of ways to build and use them. The most common is in your components [using a `useLiveQuery` hook or equivalent:
 
 ```tsx
 import { useLiveQuery, eq } from '@tanstack/react-db'
@@ -309,30 +313,37 @@ const Todos = () => {
 }
 ```
 
-This keeps the value of the `data` state variable in sync with the contents of your collection. Which, if you're using a sync collection, is in sync with the contents of your database. So any write to Postgres will sync into your app in real-time and then instantly trigger the component to re-render (using your reactivity framework of choice).
+This keeps the value of the `data` state variable in sync with the contents of your collection. Which, if you're using an Electric collection, is in sync with the contents of your database. So any write to Postgres will sync into your app in real-time and then instantly trigger the component to re-render (if the value has changed, using your reactivity framework of choice).
 
-There's no manual data wiring and your component code has no knowledge, or care, about where the data in the collection came from. Data fetching is entirely abstracted out of the component code.
+As you can see, there's no manual data wiring and your component code has no knowledge, or care, about where the data in the collection came from. Data fetching is entirely abstracted out of the component code.
 
-
+#### Cross-collection queries
 
 You can query across as many collections as you like. They can be collections of different types. So you can use the collection primitive to load/sync/save data from different sources. And then use live queries to query across them as part of the same logical data model.
 
 You can have as many complex queries as you like, with joins, aggregates, etc.
 
-
-You can also derive collections from live queries. In fact, live queries *are* collections. You can create a live query based collection using createCollection and you can access live query results in your components as a collection:
-
 ... examples ...
 
+#### Collections all the way down
 
-creating new collections as materialised views.
+You can also derive collections from live queries. In fact, live queries *are* collections.
 
+You can create a live query based collection using `createCollection`, creating new collections as materialised views derived from your synced or loaded data:
 
-So, we’ve seen that the component code stays the same
-but that queries are actually are super powerful under the hood.
-=> The same is true of mutations
+```ts
+// ...
+```
 
-### Optimistic Mutations
+You can also access live query results as collection in your components:
+
+```ts
+// ...
+```
+
+This allows you to compose a pipeline of layered queries, materializing as a collection when you want to cache a layer of the pipeline. So collections and live queries are composable and it's collections all the way down.
+
+### Mutations
 
 And to write data locally.
 Rather than the `useMutation` hook we saw before with TanStack Query.
@@ -362,53 +373,47 @@ You can see reference implementations in our examples using Hono and in the Phoe
 
 ... code ...
 
-## Optimal end-to-end sync stack
+## Optimal sync stack
 
-When TanStack DB is paired with Electric, it gives you an end-to-end sync stack that's fast, scalable, declarative, type-safe, reactive, composable, extensible and incrementally adoptable.
+When TanStack DB is paired with Electric, it gives you an optimal, end-to-end local-first sync stack. The combination is insanely fast, scalable, declarative, type-safe, reactive, composable, extensible and incrementally adoptable.
 
-### Insanely fast and scalable
+### Fast and scalable
 
-There are two main aspects to performance of a sync stack:
+You can pump as much data as Postgres can handle through Electric and sync it out to as many users as you can imagine. Electric scales and keeps sync latency flat and low.
 
-1. client-side reactivity with live queries and re-rendering
-2. server-side throughput and scalability of the sync engine
+#### High write throughput
 
-TanStack DB with Electric nails both: combining sub-millisecond reactivity with high data throughput and CDN-based data delivery.
+Electric aims to be faster than Postgres. So you'll max out Postgres before you max out Electric. For example, Trigger.dev [sync 20,000 writes-per-second through Electric](https://trigger.dev/blog/how-we-built-realtime), with 500GB+ of Postgres inserts processed daily.
 
-#### Sub-millisecond client-side reactivity
+#### Massive read fan-out
 
-Because the query engine is based on a Typescript implementation of
-Differential dataflow
-When the data changes, it incrementally updates just the relevant part of the result set.
+We deliver data through existing CDN infrastructure. Our cloud benchmarks show Electric syncing an 80Gbps workload to a million concurrent clients with flat, low latency and memory use:
 
-=> three complex queries; they’re all running multiple joins across multiple tables with lots of rows using with grouping and aggregates, etc.
+... chart ...
 
-Basic JS is hacking it in JS
-SQLite is re-running the query
-TanStack DB
-=> is sub-millisecond no matter what
+#### Sub-millisecond reactivity
 
-Instead of your application grinding to a halt when you have lots of components; all running multiple complex live queries
-Everything stays well within a single animation frame
+In the client, because the TanStack DB query engine is based on differential dataflow, when the data changes, it incrementally updates just the relevant part of the result set. This keeps the live query latency sub-millisecond.
 
-#### High data throughput and CDN-based data delivery
+For example, here we see a benchmark across three extremely complex queries. They’re all running multiple joins across multiple tables with lots of rows using with grouping and aggregates, etc. As you can see, TanStack DB is sub-millisecond no matter what:
 
-Our goal for write-throughput (the volume of realtime data changes we can process) is to be faster than Postgres. So that if you have Electric processing data (filtering and fanning out changes) from Postgres, you'll max out Postgres before you max out Electric.
+... video ...
 
-You can read about our work on this in our [scaling a sync engine](#) post and Trigger.dev's post about how they [sync 20,000 writes-per-second through Electric](#).
+Instead of your application grinding to a halt when you have lots of components running complex live queries, everything stays well within a single animation frame and your application goes brrr 🔥
 
-Then for read-path scalability, we deliver data through existing CDN infrastructure. This gives us effectively unlimited horizontal scalability (up-to the limits of the Cloudflare CDN). Our cloud benchmarks demonstrate scaling an 80gbps workload to a million concurrent clients with flat latency.
-
-So pump as much data through as your database can handle and sync it to as many users as you can get, on a single Electric instance, without breaking a sweat.
-
-### type-safe, reactive DX
-
-
-### declarative
+### Declarative
 
 abstracts state transfer out of application code
 
+### Type-safe, reactive DX
+
+...
+
 ### composable, extensible
+
+...
+
+works with your existing API
 
 ### incrementally adoptable
 
@@ -420,44 +425,19 @@ For example, if you have an existing API-based app using TanStack Query the step
 
 This gives you a practical migration pathway from existing API-based architecture to local-first sync.
 
-### works with your existing API
+## Next steps
 
- that's composable and incrementally adoptable.
+[TanStack DB](https://tanstack.com/db) with [Electric](/) gives you real-time without the re-write and sync that just works. A new unified standard for sync and an optimal, end-to-end local-first sync stack.
 
+It's the future of app development with Electric and hands down the best way of building the next generation of AI apps and agentic systems.
 
+To get started, check out the two starters:
 
-Building apps on sync is one of the
+- [TanStack Start <> DB <> Electric starter](https://github.com/KyleAMathews/tanstack-start-db-electric-starter) for web aps
+- [Expo <> DB <> Electric starter](https://github.com/KyleAMathews/expo-db-electric-starter) for mobile
 
-TanStack is one of the most popular  for building modern web applications.
+Check out the project website at [tanstack.com/db](https://tanstack.com/db), the [official docs](https://tanstack.com/db/latest/docs/overview) and the [example app](https://github.com/TanStack/db/tree/main/examples/react/todo) in the [tanstack/db](https://github.com/tanstack/db) GitHub repo.
 
-also "what electric sql is now"
-
-S:
-
-- simplified; pushed out of scope
-- talking to users, see how they were creatively solving / working around limitations
-- some cases we wrote up those patterns; like in the writes guide
-- over time, we could see the desire paths we needed to pave over
-- didn't want to just pave over, wanted to connect to the motorway
-
-C:
-
-- ...
-
-Q:
-
-- so where is the motorway, what is the mainstream of particularly SPA dev?
-
-A:
-
-- it's TanStack
-
-tanstack is ...
-what's missing ...
-
-
-***
-
-## ...
-
-This is the future of application development with Electric. It unlocks realtime sync without the rewrite and it's the best way to build the next-generation of AI apps.
+<figure style="background: none">
+  <Tweet tweet-id="1947383819314823318" align="center" conversation="none" theme="dark" />
+</figure>
