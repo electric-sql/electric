@@ -28,6 +28,12 @@ import Tweet from 'vue-tweet'
   figure#tanstack-db-image {
     margin: -40px 0;
   }
+  video {
+    width: 100%;
+    aspect-ratio: 16/9;
+    margin: 28px 0;
+    overflow: hidden;
+  }
   h2#introducing-tanstack-db {
     border: none;
   }
@@ -36,11 +42,9 @@ import Tweet from 'vue-tweet'
   }
 </style>
 
-[Tanstack DB](https://tanstack.com/db) is a reactive client store for building super fast apps on sync.
+[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on sync](#tanstack-com-blog-post).
 
-It's type-safe, declarative, incrementally adoptable and insanely fast. Combined with Electric, it gives you real-time without the re-write and sync that just works. A new unified standard for sync and an optimal, end-to-end local-first sync stack.
-
-It's the future of app development with Electric and hands down the best way of building the next generation of AI apps and agentic systems.
+It's type-safe, declarative, incrementally adoptable and insanely fast. Combined with Electric, it gives you real-time without the re-write and an optimal, end-to-end local-first sync stack. It's the future of app development with Electric and the best way of [building AI apps and agentic systems](/blog/2025/04/09/building-ai-apps-on-sync).
 
 > [!Warning] ✨&nbsp; TanStack DB <> Electric starters
 > You can fire up TanStack DB with Electric using the [TanStack Start starter](https://github.com/KyleAMathews/tanstack-start-db-electric-starter) and [Expo starter](https://github.com/KyleAMathews/expo-db-electric-starter) templates. Docs are at [tanstack.com/db](https://tanstack.com/db) and there's an [example app](https://github.com/TanStack/db/tree/main/examples/react/todo) in the repo.
@@ -51,11 +55,11 @@ Front-end has long been about reactivity frameworks and client-side state manage
 
 Sync-based apps like [Linear](https://linear.app/blog/scaling-the-linear-sync-engine) and [Figma](https://www.figma.com/blog/how-figmas-multiplayer-technology-works) feel instant to use and are naturally collaborative. Eliminating stale data, loading spinners and manual data wiring by design.
 
-It's an ideal architecture for [building AI apps and agentic systems](/blog/2025/04/09/building-ai-apps-on-sync) and makes LLM-generated code [more maintainable and production ready](/blog/2025/04/22/untangling-llm-spaghetti).
+It's an ideal architecture for [building AI apps and agentic systems](/blog/2025/04/09/building-ai-apps-on-sync) that need to keep data in sync between users and agents. And it makes LLM-generated code [more maintainable and production ready](/blog/2025/04/22/untangling-llm-spaghetti).
 
 ## Adding local-first sync to TanStack
 
-[TanStack](https://tanstack.com) is a collection of TypeScript libraries for building web and mobile apps. Developed by an open collective, stewarded with great taste by [Tanner Linsley](https://github.com/tannerlinsley), it's one of the best and most popular ways to build modern apps.
+[TanStack](https://tanstack.com) is a collection of TypeScript libraries for building web and mobile apps. Developed by an open collective, stewarded by [Tanner Linsley](https://github.com/tannerlinsley), it's one of the best and most popular ways to build modern apps.
 
 Tanner has long wanted to add local-first sync to TanStack:
 
@@ -129,7 +133,7 @@ So, we see that TanStack already handles data loading and local optimistic write
 
 Well, local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/use-cases/data-sync#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) out of the app code (into the sync engine where it can be system optimized).
 
-So, the first thing we need is a local store primitive to sync data in-and-out-of that the app code can interact with. Let's call it a **Collection**.
+So, the first thing we need is a local store primitive to sync data into that the app code can talk to. Let's call it a **Collection**.
 
 <figure>
   <a class="no-visual" target="_blank"
@@ -138,9 +142,7 @@ So, the first thing we need is a local store primitive to sync data in-and-out-o
   </a>
 </figure>
 
-Then for local reads, we need **Live&nbsp;Queries** to query and join data across collections.
-
-These need to be reactive and extremely efficient. Reactive keeps your components from having stale data. Extremely efficient stops your app grinding to a halt [when your component tree and data size grows](https://riffle.systems/essays/prelude) in a real world application.
+Once we have data in collections, we need **Live Queries** to read it and react when it changes.
 
 <figure>
   <a class="no-visual" target="_blank"
@@ -149,7 +151,7 @@ These need to be reactive and extremely efficient. Reactive keeps your component
   </a>
 </figure>
 
-And for local writes, we need **Optimistic Mutations** that can apply optimistic state to collections. These need to be transactional, so local writes can be applied atomically across collections. And they need to tie the optimistic state lifecycle in with the sync machinery &mdash; so we keep the app code clean and don't leak data transfer concerns back into the application domain.
+Then for local writes, we need **Optimistic Mutations** that apply optimistic state to collections and tie the optimistic state lifecycle in with the sync machinery.
 
 <figure>
   <a class="no-visual" target="_blank"
@@ -171,7 +173,12 @@ Then we have a local-first sync stack built natively into TanStack.
 <figure id="tanstack-db-image">
   <a class="no-visual" target="_blank"
       href="https://tanstack.com/db">
-    <img src="/img/blog/local-first-sync-with-tanstack-db/tanstack-db.jpg" />
+    <img src="/img/blog/local-first-sync-with-tanstack-db/tanstack-db.sm.jpg"
+        class="block-sm"
+    />
+    <img src="/img/blog/local-first-sync-with-tanstack-db/tanstack-db.jpg"
+        class="hidden-sm"
+    />
   </a>
 </figure>
 
@@ -189,16 +196,13 @@ Let’s dive it and see how it works!
 
 ### Collections
 
-Collections are typed sets of objects that can be populated with data. You can populate data in many ways, for example by:
+Collections are typed sets of objects that can be populated with data.
 
-- fetching data, for example from API endpoints using TanStack Query
-- syncing data, for example using sync engines like Electric and Materialize
-
-You can also store local client data and derive collections from live queries (creating new collections as materialised views).
+You can populate data in many ways, such as fetching data from API endpoints using TanStack Query and syncing data using sync engines like Electric and Materialize. You can also store local client data and derive collections from live queries.
 
 #### Query collections
 
-Query collections fetch data using TanStack Query.
+Query collections fetch data using [TanStack Query](https://tanstack.com/query/latest).
 
 ```ts
 import { QueryClient } from '@tanstack/query-core'
@@ -219,13 +223,7 @@ const queryTodoCollection = createCollection(
 )
 ```
 
-We’ve seen the heart of this before, right? It fetches data using a managed `queryFn`.
-
-This allows you to take existing API-based applications and incrementally layer on TanStack DB where you need it, with minimal changes to your code.
-
-It also allows you to load data into your app from a variety of sources: anything that provides or can be wrapped by an API. That can be your backend API but can also be an external service, like an auth service or a weather API.
-
-You can then configure polling or call `invalidate()` on the TanStack `queryClient` to fetch fresh data into the collection:
+We’ve seen the heart of this before, right? It fetches data using a managed `queryFn`. You can then configure polling or call `invalidate()` on the TanStack `queryClient` to fetch fresh data into the collection:
 
 ```ts
 queryClient.invalidateQueries({
@@ -233,7 +231,9 @@ queryClient.invalidateQueries({
 })
 ```
 
-This is a practical way of updating the data in an API-backed collection. However, it's based on re-fetching, which is neither as fast nor as efficient as real-time sync.
+This allows you to take existing API-based applications and incrementally layer on TanStack DB where you need it, with minimal changes to your code.
+
+It also allows you to load data into your app from a variety of sources: anything that provides or can be wrapped by an API. That can be your backend API but can also be an external service, like an auth service or a weather API.
 
 #### Sync collections
 
@@ -264,7 +264,7 @@ const electricTodoCollection = createCollection(
 
 This keeps the collection in sync with the `todos` table in your Postgres database.
 
-You can create as many filtered views as you like on the same table. For example, syncing just your todos created since the 1st January 2025:
+You can create as many filtered views as you like on the same table. For example, syncing just your todos created this year:
 
 ```ts
 const myRecentTodoCollection = createCollection(
@@ -275,7 +275,7 @@ const myRecentTodoCollection = createCollection(
       params: {
         table: 'todos',
         where: `
-          user_id='${currentUser.id}
+          user_id = '${currentUser.id}'
           AND
           inserted_at >= '2025-01-01'
         `
@@ -291,13 +291,13 @@ const myRecentTodoCollection = createCollection(
 
 There are a range of other collections also built into TanStack DB. Such as an ephemoral [local collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-only.ts) and a persistent [localStorage collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-storage.ts). You can also easily create your own collections by following the [collection options creator guide](https://tanstack.com/db/latest/docs/collection-options-creator).
 
-However it gets there, once you have data in collections, you can bind it to your components using live queries.
+Once you have your data in collections, you can access it using live queries.
 
 ### Live queries
 
 [Live queries](https://tanstack.com/db/latest/docs/live-queries) run reactively against and across collections. They're fast and expressive, with support for joins, filters and aggregates.
 
-There's a number of ways to build and use them. The most common is in your components [using a `useLiveQuery` hook or equivalent:
+There's a number of ways to build and use them. The most common is using a framework hook in your components like `useLiveQuery` for React:
 
 ```tsx
 import { useLiveQuery, eq } from '@tanstack/react-db'
@@ -315,63 +315,257 @@ const Todos = () => {
 
 This keeps the value of the `data` state variable in sync with the contents of your collection. Which, if you're using an Electric collection, is in sync with the contents of your database. So any write to Postgres will sync into your app in real-time and then instantly trigger the component to re-render (if the value has changed, using your reactivity framework of choice).
 
-As you can see, there's no manual data wiring and your component code has no knowledge, or care, about where the data in the collection came from. Data fetching is entirely abstracted out of the component code.
+There's no manual data wiring and your component code doesn't know, or care, where the data in the collection came from. Data fetching is entirely abstracted out of the component code.
 
-#### Cross-collection queries
+#### Querying across collections
 
 You can query across as many collections as you like. They can be collections of different types. So you can use the collection primitive to load/sync/save data from different sources. And then use live queries to query across them as part of the same logical data model.
 
-You can have as many complex queries as you like, with joins, aggregates, etc.
+```tsx
+// Fetch authenticated users from an external auth service.
+const authCollection = createCollection(queryCollectionOptions(...))
 
-... examples ...
+// Store ephemoral notes as local client state
+const notesCollection = createCollection(localOnlyCollectionOptions(...))
+
+// Sync todos data from the database.
+const todoCollection = createCollection(electricCollectionOptions(...))
+
+function Todos() {
+  const { data } = useLiveQuery((query) =>
+    query
+      .from({ todo: todoCollection })
+      .join({ user: authCollection }, ({ todo, user }) => eq(todo.userId, user.id))
+      .join({ note: noteCollection }, ({ note, todo }) => eq(note.todoId, todo.id))
+      .select(({ note, todo, user  }) => ({
+        id: todo.id,
+        numNotes: count(note.id),
+        owner: user.name
+      }))
+  )
+
+  return <List items={ data } />
+}
+```
+
+Because the engine is so fast, you can have as many queries as you like, across lots of components and collections, with complex [joins, aggregates, etc](https://tanstack.com/db/latest/docs/live-queries#table-of-contents).
+
+#### Sub-millisecond performance
+
+The live query engine is based on [differential dataflow](https://github.com/electric-sql/d2ts). This means that, when the data changes, it incrementally updates just the relevant part of the result set. This keeps the live query latency blazing fast 🔥
+
+For example, here we see a benchmark across three extremely complex queries. They’re all running multiple joins across multiple tables with lots of rows using with grouping and aggregates, etc. As you can see, TanStack DB queries are all sub-millisecond no matter what:
+
+<video class="w-full" controls poster="/videos/blog/local-first-sync-with-tanstack-db/tanstack-db-speed-3.jpg">
+  <source src="/videos/blog/local-first-sync-with-tanstack-db/tanstack-db-speed-3.mp4" />
+</video>
+
+Instead of your application grinding to a halt when you have lots of components running complex live queries, everything stays well within a single animation frame and your application feels super fast and responsive to use.
 
 #### Collections all the way down
 
-You can also derive collections from live queries. In fact, live queries *are* collections.
-
-You can create a live query based collection using `createCollection`, creating new collections as materialised views derived from your synced or loaded data:
+Just as you can create live queries from collections, you can also create collections from live queries. This allows you to create new collections as materialised views derived from your synced or loaded data:
 
 ```ts
-// ...
+import { createCollection, liveQueryCollectionOptions, eq } from '@tanstack/react-db'
+
+const pendingTodos = createCollection(liveQueryCollectionOptions({
+  query: (query) =>
+    query
+      .from({ todo: todoCollection })
+      .where(({ todo }) => eq(todo.completed, false))
+}))
 ```
 
 You can also access live query results as collection in your components:
 
 ```ts
-// ...
+function Todos() {
+  const { collection: pendingTodos } = useLiveQuery((query) =>
+    .from({ todo: todoCollection })
+    .where(({ todo }) => eq(todo.completed, false))
+  )
 ```
 
-This allows you to compose a pipeline of layered queries, materializing as a collection when you want to cache a layer of the pipeline. So collections and live queries are composable and it's collections all the way down.
+And then join across and query these derived collections. This allows you to compose a pipeline of layered queries, materializing as a collection when you want to cache a layer of the pipeline.
 
-### Mutations
+For example, this code first creates an `todoResults` collection, which is a filtered view of just the todos in a given list. It then creates a live query that additionally filters the results against a typeahead text value (provided as a query dependency). Materialising the `eventResults` collection avoids re-computing the whole pipeline when the typeahead string changes.
 
-And to write data locally.
-Rather than the `useMutation` hook we saw before with TanStack Query.
+```tsx
+const { collection: eventResults } = useLiveQuery(
+  (query) => (
+    query // First filter the events by threadId.
+      .from({ event: eventCollection })
+      .where(({ event }) => eq(event.thread_id, threadId))
+  ),
+  [threadId]
+)
 
-You define ... mutators / transactions ...
+const { data: events } = useLiveQuery(
+  (query) => {
+    query // Then filter by the typeahead filter text.
+      .from({ result: eventResults })
+      .where(({ result }) => ilike(result.title, `%${filterText}%`)
+  },
+  [filterText]
+)
+```
 
-And *if you want*, the mutationFn can be exactly the same as it would be with React Query
-You can handle mutations by posting to specific API endpoints.
+Collections and live queries are [composable](https://tanstack.com/db/latest/docs/live-queries#composable-queries) and it's collections (and efficient, incremental computation) all the way down.
 
-But if you choose to, you can incrementally move to write-path sync with a …
-… generic mutationFn.
+### Optimistic mutations
 
-So, what we’re doing here is whenever there’s a local transaction — applying changes to any collection post all the mutations to the backend, to a generic ingest endpoint. If it errors for any reason, the local transaction is rolled back If it succeeds, the server returns the txid that the changes were written into Postgres under
-Then we monitor the replication stream for that transaction.
+[Optimistic mutations](https://tanstack.com/db/latest/docs/overview#making-optimistic-mutations) allow you to make local writes, instantly and transactionally, to and across collections.
 
-This is both simple and pragmatic
-server authoritative, you have rollbacks
-but also quite sophisticated
-=> allows the local optimistic state to be rebased over concurrent transactions from other users
+Like with TanStack Query, mutations apply and manage optimistic state for you. So the write is displayed immediately and then sent/synced to the server in the background.
 
-Then on the server side you can just … ingest the changes.
+TanStack DB extends Query by making mutations *transactional* and allowing you to *tie the optimistic state lifecycle in with the sync machinery*.
 
-Obviously in any language or framework you like.
-This works with *your API*, your stack.
+#### Collection operations
 
-You can see reference implementations in our examples using Hono and in the Phoenix.Sync.Writer module for the Phoenix.Sync library in Elixir, e.g.:
+The simplest way to make local writes is to call `insert`, `update` and `delete` directly on a collection. They default to triggering the corresponding `onInsert`, `onUpdate` and `onDelete` handler defined in your collection config:
 
-... code ...
+```tsx
+const todoCollection = createCollection({
+  // ... other config options as above ...
+
+  // Define an update handler to actually POST changes to your API.
+  onUpdate: async ({ transaction }) => {
+    const { original, changes } = transaction.mutations[0]
+
+    await api.post(`/todos/${original.id}`, changes)
+  }
+})
+
+// Then in your components call collection.update().
+function Todo({ todo }) {
+  const completeTodo = todoCollection.update(todo.id, (draft) => {
+    draft.completed = true
+  })
+
+  return <Button onClick={ completeTodo } />
+}
+```
+
+In this, the update handler is equivalent to the TanStack Query `mutationFn`. With a key difference being that its passed a `transaction` rather than a mutated object.
+
+#### Optimistic state
+
+Internally, each collection stores synced data and optimistic state seperately and rebases the optimistic state on top of the synced data. The `todoCollection.update` call in the component adds the write to the optimistic state. This causes the collection data and live queries to show the write instantly. It then invokes the `onUpdate` handler, which is responsible for actually sending the mutation to the backend.
+
+If the write is rejected, the local optimistic state is rolled back. If the write succeeds then the optimistic state is discarded when your handler resolves. This allows you to control when to discard it. For example, with a query collection you can make the write, refetch to update the collection data and then return once the collection has been updated:
+
+```tsx
+const todoCollection = createCollection(queryCollectionOptions({
+  // ... other config options
+
+  onUpdate: async ({ transaction }) => {
+    const { original, changes, collection } = transaction.mutations[0]
+
+    await api.post(`/todos/${original.id}`, changes)
+    await collection.refetch()
+  }
+})
+```
+
+#### Transactional mutations
+
+For simple state changes, directly mutating the collection and persisting with the operator handlers is enough. For more complex use cases, you can directly create custom actions with `createOptimisticAction` or custom transactions with `createTransaction`.
+
+```tsx
+import { createOptimisticAction } from '@tanstack/react-db'
+
+const createUserWithDefaultWorkspace = createOptimisticAction({
+  (loginName) => {
+    const userId = crypto.randomUUID()
+    const workspaceId = crypto.randomUUID()
+
+    userCollection.insert({
+      id: userId,
+      name: loginName
+    })
+    workspaceCollection.insert({
+      id: workspaceId,
+      name: 'Default'
+    })
+    membershipCollection.insert({
+      role: 'owner',
+      userId,
+      workspaceId
+    })
+  },
+  mutationFn: async (_loginName, { transaction }) => {
+    // In this case, the `transaction` contains all three mutations.
+
+    // ... handle sending to the server ...
+  }
+})
+```
+
+This lets you transactionally apply writes across multiple collections (as well as building other advanced write semantics, like chaining transactions with intermediate rollbacks).
+
+#### Write-path sync
+
+In the example above, the `mutationFn` handler receives a transaction with three mutations, each made to a different collection. For existing API-based apps, the simplest way to handle these may be to POST each write to an individual API endpoint. For example:
+
+- `POST {id, name} /api/users`
+- `POST {id, name} /api/workspaces`
+- `POST {role, userId, workspaceId} /api/memberships`
+
+Or you may choose to POST all of the data to a custom endpoint, designed to perform the correct operations transactionally on the server:
+
+- `POST {user, workspace, membership} /api/create-user-with-default-workspace`
+
+How you handle writes is entirely up-to-you and can be optimised for backwards compatibility with an existing API-based app. However, if you choose you can implement write-path sync by POSTing all of the mutations to the backend, to a generic ingest endpoint. This allows you to use the same `mutationFn` across all your mutation handlers.
+
+When using TanStack DB with Electric this allows you to configure your mutations to display local optimistic state, sync the changes to the server, monitor the replication stream and discard the optimistic state when the write syncs back into the app.
+
+For example:
+
+```ts
+export const mutationFn = async (_variables, { transaction }) => {
+  const mutations = transaction.mutations
+
+  const collections = new Set(mutations.map(mutation => mutation.collection))
+  const payloadData = mutations.map(mutation => {
+    const { collection, ...result } = mutation
+
+    return result
+  })
+
+  // Post the mutations data to the ingest endpoint.
+  const txid = await api.post('/ingest', { mutations: payloadData })
+
+  // Monitor the collections for the transaction to sync back in.
+  const promises = [...collections].map(({ utils }) => utils.awaitTxId(txid))
+  await Promise.all(promises)
+}
+```
+
+This is both simple and pragmatic. It's server authoritative, based on rollbacks. But it's also quite sophisticated, allowing the local optimistic state to be rebased over concurrent transactions from other users.
+
+Then on the server side you can just … ingest the changes. Obviously in any language or framework you like (this works with *your API*, your stack). One reference implementations is the [`Phoenix.Sync.Writer`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html) module for the Phoenix.Sync library in Elixir, e.g.:
+
+```elixir
+defmodule IngestController do
+  use Phoenix.Controller, formats: [:json]
+  alias Phoenix.Sync.Writer
+
+  def mutate(conn, %{"mutations" => mutations} = _params) do
+    {:ok, txid, _changes} =
+      Writer.new()
+      |> Writer.allow(Accounts.User)
+      |> Writer.allow(Workspaces.Workspace)
+      |> Writer.allow(Workspaces.Membership)
+      |> Writer.ingest(mutations, format: Writer.Formats.TanstackDB)
+      |> Writer.transaction(Repo)
+
+    json(conn, %{txid: txid})
+  end
+end
+```
+
+The key trick for an Electric collection is for your write / ingest endpoint on the server to return the Postgres transaction ID that the changes are written under. This allows TanStack DB to tie the optimistic state lifecycle in with both sync machinery. For fully end-to-end local-first sync using TanStack, Electric and your API.
 
 ## Optimal sync stack
 
@@ -379,64 +573,89 @@ When TanStack DB is paired with Electric, it gives you an optimal, end-to-end lo
 
 ### Fast and scalable
 
-You can pump as much data as Postgres can handle through Electric and sync it out to as many users as you can imagine. Electric scales and keeps sync latency flat and low.
+You can pump as much data as Postgres can handle through Electric and sync it out to as many users as you can imagine. Electric scales and keeps sync latency flat and low. Then, on the client, because the TanStack DB query engine is based on differential dataflow, when the data changes, it incrementally updates just the relevant part of the result set.
 
-#### High write throughput
+For write-throughout, Electric aims to be faster than Postgres. So you'll max out Postgres before you max out Electric. For example, Trigger.dev [sync 20,000 writes-per-second through Electric](https://trigger.dev/blog/how-we-built-realtime), with 500GB+ of Postgres inserts processed daily.
 
-Electric aims to be faster than Postgres. So you'll max out Postgres before you max out Electric. For example, Trigger.dev [sync 20,000 writes-per-second through Electric](https://trigger.dev/blog/how-we-built-realtime), with 500GB+ of Postgres inserts processed daily.
+For data delivery and fan-out, Electric serves data through existing CDN infrastructure. This handles millions of concurrent users out of the box. For example, our cloud benchmarks show Electric syncing an 80Gbps workload to a million concurrent clients with flat, low latency and memory use:
 
-#### Massive read fan-out
+<figure>
+  <ScalabilityChart />
+</figure>
 
-We deliver data through existing CDN infrastructure. Our cloud benchmarks show Electric syncing an 80Gbps workload to a million concurrent clients with flat, low latency and memory use:
+The entire stack is live and reactive. Updates arrive faster than your eyes can move. The client-side reactivity is sub-millisecond.
 
-... chart ...
+### Declarative and type-safe
 
-#### Sub-millisecond reactivity
+TanStack DB abstracts data transfer and placement out of your application code. This allows it to be normalized and system optimised. Your application code just doesn't need to know or care about it. This has been the direction in the [evolution of state transfer](#) for a long time. It simplifies your codebase and is crucial to [maintainability and performance as more code is LLM-generated](#).
 
-In the client, because the TanStack DB query engine is based on differential dataflow, when the data changes, it incrementally updates just the relevant part of the result set. This keeps the live query latency sub-millisecond.
+TanStack DB collections support passing in any [Standard Schema](https://standardschema.dev/) instance. Collection methods, live queries and mutations are all fully typed. In many cases, you can re-use or generate this schema from your database definition on the server.
 
-For example, here we see a benchmark across three extremely complex queries. They’re all running multiple joins across multiple tables with lots of rows using with grouping and aggregates, etc. As you can see, TanStack DB is sub-millisecond no matter what:
+### Composable, extensible and incrementally adoptable
 
-... video ...
+TanStack DB allows you to load data from different sources, including existing API and external services and handle writes with your existing API. It has framework adapters for most common reactivity frameworks. It allows you to incrementally adopt reactive programming and sync one fetch, one route, one component at a time.
 
-Instead of your application grinding to a halt when you have lots of components running complex live queries, everything stays well within a single animation frame and your application goes brrr 🔥
+Electric syncs data through standard HTTP and JSON. You can proxy and authorize requests using your existing API. You can instrument, monitor and debug sync using your existing tooling.
 
-### Declarative
-
-abstracts state transfer out of application code
-
-### Type-safe, reactive DX
-
-...
-
-### composable, extensible
-
-...
-
-works with your existing API
-
-### incrementally adoptable
-
-For example, if you have an existing API-based app using TanStack Query the steps are:
+Everything works with your existing API and is designed to provide a practical pathway to realtime sync without the re-write. For example, if you have an existing API-based app using TanStack Query the steps are:
 
 1. take your routes / loaders using TanStack Query and adjust them to load data into TanStack DB collections (using the same TanStack Query `queryFn`)
 2. adjust your app code / components to read data from TanStack DB collections
 3. add and swap out your query collections for sync-based collections using Electric
 
-This gives you a practical migration pathway from existing API-based architecture to local-first sync.
+It's a practical migration pathway from existing API-based architecture to local-first sync.
 
 ## Next steps
 
-[TanStack DB](https://tanstack.com/db) with [Electric](/) gives you real-time without the re-write and sync that just works. A new unified standard for sync and an optimal, end-to-end local-first sync stack.
-
-It's the future of app development with Electric and hands down the best way of building the next generation of AI apps and agentic systems.
+[TanStack DB](https://tanstack.com/db) with [Electric](/) gives you real-time without the re-write and sync that just works. An optimal, end-to-end local-first sync stack. It's the future of app development with Electric and the best way of [building AI apps and agentic systems](/blog/2025/04/09/building-ai-apps-on-sync).
 
 To get started, check out the two starters:
 
 - [TanStack Start <> DB <> Electric starter](https://github.com/KyleAMathews/tanstack-start-db-electric-starter) for web aps
 - [Expo <> DB <> Electric starter](https://github.com/KyleAMathews/expo-db-electric-starter) for mobile
 
-Check out the project website at [tanstack.com/db](https://tanstack.com/db), the [official docs](https://tanstack.com/db/latest/docs/overview) and the [example app](https://github.com/TanStack/db/tree/main/examples/react/todo) in the [tanstack/db](https://github.com/tanstack/db) GitHub repo.
+Check out the project website at [tanstack.com/db](https://tanstack.com/db), the [official docs](https://tanstack.com/db/latest/docs/overview) and the [example&nbsp;app](https://github.com/TanStack/db/tree/main/examples/react/todo) in the [tanstack/db](https://github.com/tanstack/db) GitHub repo.
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action cloud-cta hidden-xs">
+    <VPButton
+      href="https://github.com/KyleAMathews/tanstack-start-db-electric-starter"
+      text="Starter template"
+      theme="brand"
+    />
+    &nbsp;
+    <VPButton
+        href="https://tanstack.com/db/latest/docs/overview"
+        text="Docs"
+        theme="alt"
+    />
+    &nbsp;
+    <VPButton
+        href="https://github.com/TanStack/db"
+        text="Repo"
+        theme="alt"
+    />
+  </div>
+  <div class="action cloud-cta block-xs">
+    <VPButton
+      href="https://github.com/KyleAMathews/tanstack-start-db-electric-starter"
+      text="Starter"
+      theme="brand"
+    />
+    &nbsp;
+    <VPButton
+        href="https://tanstack.com/db/latest/docs/overview"
+        text="Docs"
+        theme="alt"
+    />
+    &nbsp;
+    <VPButton
+        href="https://github.com/TanStack/db"
+        text="Repo"
+        theme="alt"
+    />
+  </div>
+</div>
 
 <figure style="background: none">
   <Tweet tweet-id="1947383819314823318" align="center" conversation="none" theme="dark" />
