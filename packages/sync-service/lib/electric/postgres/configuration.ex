@@ -11,6 +11,44 @@ defmodule Electric.Postgres.Configuration do
 
   @pg_15 150_000
 
+  def check_publication_for_missing_relations(conn, publication_name, relations) do
+    {_oids, schemas, tables} = known_relations(relations, %{})
+
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        WITH input_relations AS (
+          SELECT
+            UNNEST($2::text[]) AS input_nspname,
+            UNNEST($3::text[]) AS input_relname
+        )
+        SELECT
+          (ir.input_nspname, ir.input_relname) as input_relation, pt.pubname IS NOT NULL
+        FROM
+          input_relations ir
+        LEFT JOIN
+          pg_publication_tables pt ON pt.schemaname = ir.input_nspname AND pt.tablename = ir.input_relname
+        WHERE
+          pt.pubname = $1
+        """,
+        [publication_name, schemas, tables]
+      )
+
+    result_rows_set =
+      for [relation, in_publication?] <- rows, in_publication?, into: MapSet.new() do
+        relation
+      end
+
+    diff_set = MapSet.difference(MapSet.new(relations), result_rows_set)
+
+    if MapSet.size(diff_set) == 0 do
+      :ok
+    else
+      {:error, {:missing_relations, Enum.to_list(diff_set)}}
+    end
+  end
+
   @doc """
   Configure the publication to include all relevant tables, also setting table identity to `FULL`
   if necessary. Return a list of tables that could not be configured.
@@ -44,9 +82,7 @@ defmodule Electric.Postgres.Configuration do
       # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)
       # so we need to check if any of the relations were dropped/renamed since then
       changed_relations =
-        (previous_relations ++ Map.keys(new_filters))
-        |> Enum.uniq()
-        |> list_changed_relations(conn)
+        list_changed_relations(conn, known_relations(previous_relations, new_filters))
 
       used_filters = Map.drop(new_filters, changed_relations)
 
@@ -78,13 +114,19 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  defp list_changed_relations(known_relations, conn) do
+  defp known_relations(previous_relations, new_filters) do
+    known_relations = Enum.uniq(previous_relations ++ Map.keys(new_filters))
+    {oids, relations} = Enum.unzip(known_relations)
+    {schemas, tables} = Enum.unzip(relations)
+    {oids, schemas, tables}
+  end
+
+  defp list_changed_relations(conn, known_relations) do
     # We're checking whether the table has been renamed (same oid, different name) or
     # dropped (maybe same name exists, but different oid). If either is true, we need to update
     # the new filters and maybe notify existing shapes.
 
-    {oids, relations} = Enum.unzip(known_relations)
-    {schemas, tables} = Enum.unzip(relations)
+    {oids, schemas, tables} = known_relations
 
     result =
       Postgrex.query!(

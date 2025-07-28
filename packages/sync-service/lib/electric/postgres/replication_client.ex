@@ -210,6 +210,9 @@ defmodule Electric.Postgres.ReplicationClient do
     if current_step == :create_slot and extra_info == :created_new_slot,
       do: notify_created_new_slot(state)
 
+    if current_step == :create_publication and extra_info == :insufficient_privilege,
+      do: notify_insufficient_privilege(state)
+
     if next_step == :ready_to_stream,
       do: notify_ready_to_stream(state)
 
@@ -478,6 +481,11 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp notify_created_new_slot(%State{connection_manager: manager} = state) do
     :ok = Electric.Connection.Manager.replication_client_created_new_slot(manager)
+    state
+  end
+
+  defp notify_insufficient_privilege(%State{connection_manager: manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_has_insufficient_privilege(manager)
     state
   end
 

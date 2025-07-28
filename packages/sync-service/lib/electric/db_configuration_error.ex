@@ -1,3 +1,3 @@
 defmodule Electric.DbConfigurationError do
-  defexception [:message]
+  defexception [:type, :message]
 end

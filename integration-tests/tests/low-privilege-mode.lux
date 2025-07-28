@@ -80,15 +80,41 @@
   -
 
   [invoke shape_get_snapshot items]
-  ??HTTP/1.1 403
-  ??{"message":"Unable to create initial snapshot: must be owner of publication electric_publication_integration"}
+  ??HTTP/1.1 503
+  ??{"message":"Database table is missing from the publication and Electric lacks privileges to add it"}
 
 [shell electric]
   -
 
-  ??[error] Failed to configure publication: %Postgrex.Error{message: nil, postgres: %{code: :insufficient_privilege, line: "3583", message: "must be owner of publication electric_publication_integration", file: "aclchk.c", unknown: "ERROR", severity: "ERROR", pg_code: "42501"
-  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: must be owner of publication electric_publication_integration
-  ?\[info\] Sent 403 in [\d]+ms
+  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table is missing from the publication and Electric lacks privileges to add it
+  ?\[info\] Sent 503 in [\d]+ms
+
+## Add the table to the publication and try again
+[shell psql]
+  !ALTER PUBLICATION electric_publication_integration ADD TABLE items;
+  ??ALTER PUBLICATION
+  ??ALTER PUBLICATION
+
+  !GRANT SELECT ON items TO low_privilege;
+  ??GRANT
+  ??GRANT
+
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 200
+  ??transfer-encoding: chunked
+  ??electric-schema: {"val":{"type":"text"}}
+  ??electric-offset: 0_0
+
+  ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"operation":"insert","relation":["public","items"]}}]
+
+[shell electric]
+  -$fail_pattern
+
+  ??GET /v1/shape
+  ??Starting a wait on the snapshot
+  ??Snapshot started
+  ?\[info\] Chunked 200 in [\d]+ms
 
 [cleanup]
   [invoke teardown]

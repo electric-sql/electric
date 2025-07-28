@@ -45,6 +45,15 @@ defmodule Electric.SnapshotError do
     }
   end
 
+  def from_error(%Electric.DbConfigurationError{type: :tables_missing_from_publication} = error) do
+    %SnapshotError{
+      type: :misconfigured_database,
+      message:
+        "Database table is missing from the publication and Electric lacks privileges to add it",
+      original_error: error
+    }
+  end
+
   def from_error(error) do
     %SnapshotError{
       type: :unknown,
