@@ -22,6 +22,8 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
   to do batched writes for performance, because reads are always going to be faster than we're writing.
   """
   def write_snapshot_stream!(stream, %ST{} = opts, write_buffer \\ @write_buffer_size) do
+    IO.puts(">>>>>>>>>>> WRITING SNAPSHOT STREAM")
+
     stream
     |> Stream.transform(
       fn -> {0, nil, {[], 0}} end,
@@ -73,6 +75,7 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
     do: Path.join(log_dir, "#{chunk_num}.jsonsnapshot")
 
   defp open_snapshot_chunk_to_write(opts, chunk_num) do
+    IO.puts("open snapshot chunk to write #{chunk_num}")
     File.open!(chunk_file_path(opts, chunk_num), [:write, :exclusive, :raw])
   end
 

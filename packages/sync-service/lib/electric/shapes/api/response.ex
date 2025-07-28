@@ -390,6 +390,8 @@ defmodule Electric.Shapes.Api.Response do
       |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
         chunk_size = IO.iodata_length(chunk)
 
+        IO.puts("sending chunk #{chunk_size}: #{chunk}")
+
         OpenTelemetry.with_span(
           "shape_get.plug.stream_chunk",
           [chunk_size: chunk_size],

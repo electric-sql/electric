@@ -21,6 +21,8 @@ defmodule Electric.Shapes.Querying do
         %Shape{root_table: root_table} = shape,
         chunk_bytes_threshold \\ LogChunker.default_chunk_size_threshold()
       ) do
+    IO.puts("SSSSSSSSSTREAM initial data for #{stack_id}")
+
     OpenTelemetry.with_span("shape_read.stream_initial_data", [], stack_id, fn ->
       table = Utils.relation_to_sql(root_table)
 
@@ -31,10 +33,13 @@ defmodule Electric.Shapes.Querying do
 
       query =
         Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
+        |> IO.inspect(label: :prepared_query)
 
       Postgrex.stream(conn, query, params)
       |> Stream.flat_map(& &1.rows)
       |> Stream.transform(0, fn [line], chunk_size ->
+        IO.puts("Trying to fit #{inspect(line)} into chunk of size #{chunk_size}")
+
         # Reason to add 1 byte to expected length is to account for  `\n` breaks when the data is written.
         case LogChunker.fit_into_chunk(
                IO.iodata_length(line) + 1,

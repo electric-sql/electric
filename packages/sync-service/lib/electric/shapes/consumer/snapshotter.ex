@@ -71,6 +71,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                     end
                   )
 
+                  IO.puts("added shape to publication manager")
+
+                  IO.puts("applying create_snapshot_fn")
+
                   apply(create_snapshot_fn, [
                     consumer,
                     shape_handle,
@@ -136,6 +140,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         chunk_bytes_threshold
       ) do
     shape_attrs = shape_attrs(shape_handle, shape)
+
+    IO.puts("query_in_readonly_tx")
 
     Postgrex.transaction(
       db_pool,
