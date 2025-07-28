@@ -295,8 +295,6 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   defp process_x_log_data(data, _wal_end, %State{stack_id: stack_id} = state) do
-    msg_size = byte_size(data)
-
     OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
@@ -308,7 +306,7 @@ defmodule Electric.Postgres.ReplicationClient do
     #       message_type <> " :: " <> inspect(Map.from_struct(msg))
     #   )
     # end)
-    |> Collector.handle_message_with_size(msg_size, state.txn_collector)
+    |> Collector.handle_message(state.txn_collector)
     |> case do
       {:error, reason, _} ->
         exit({:irrecoverable_slot, reason})
@@ -338,7 +336,7 @@ defmodule Electric.Postgres.ReplicationClient do
           %{
             monotonic_time: System.monotonic_time(),
             receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
-            bytes: msg_size,
+            bytes: byte_size(data),
             count: 1,
             operations: txn.num_changes
           },

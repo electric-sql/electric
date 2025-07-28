@@ -88,7 +88,8 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
     insert_msg = %LR.Insert{
       relation_id: 1,
-      tuple_data: ["123"]
+      tuple_data: ["123"],
+      bytes: 3
     }
 
     updated_collector = Collector.handle_message(insert_msg, collector)
@@ -110,7 +111,8 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     update_msg = %LR.Update{
       relation_id: 1,
       old_tuple_data: ["123"],
-      tuple_data: ["124"]
+      tuple_data: ["124"],
+      bytes: 6
     }
 
     updated_collector = Collector.handle_message(update_msg, collector)
@@ -138,7 +140,8 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
     update_msg = %LR.Update{
       relation_id: 1,
       old_tuple_data: nil,
-      tuple_data: ["124"]
+      tuple_data: ["124"],
+      bytes: 3
     }
 
     updated_collector = Collector.handle_message(update_msg, collector)
@@ -162,7 +165,8 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
     delete_msg = %LR.Delete{
       relation_id: 1,
-      old_tuple_data: ["123"]
+      old_tuple_data: ["123"],
+      bytes: 3
     }
 
     updated_collector = Collector.handle_message(delete_msg, collector)
@@ -221,28 +225,28 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
   end
 
   test "collector errors if max transaction size is exceeded", %{collector: collector} do
-    max_tx_size = 100
+    max_tx_size = 5
     collector = %{collector | max_tx_size: max_tx_size}
 
     collector =
-      Collector.handle_message_with_size(
+      Collector.handle_message(
         %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-        0,
         collector
       )
 
     insert_msg = %LR.Insert{
       relation_id: 1,
-      tuple_data: ["123"]
+      tuple_data: ["123"],
+      bytes: 3
     }
 
     assert collector =
-             %Collector{} = Collector.handle_message_with_size(insert_msg, 50, collector)
+             %Collector{} = Collector.handle_message(insert_msg, collector)
 
     err_msg = "Collected transaction exceeds limit of #{max_tx_size} bytes."
 
     assert {:error, {:exceeded_max_tx_size, ^err_msg}} =
-             Collector.handle_message_with_size(insert_msg, 51, collector)
+             Collector.handle_message(insert_msg, collector)
   end
 
   test "Multiple collected operations are stored in the correct order within the transaction when it's emitted",
@@ -253,9 +257,16 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
         collector
       )
 
-    insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"]}
-    update_msg = %LR.Update{relation_id: 1, old_tuple_data: ["123"], tuple_data: ["124"]}
-    delete_msg = %LR.Delete{relation_id: 1, old_tuple_data: ["124"]}
+    insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3}
+
+    update_msg = %LR.Update{
+      relation_id: 1,
+      old_tuple_data: ["123"],
+      tuple_data: ["124"],
+      bytes: 6
+    }
+
+    delete_msg = %LR.Delete{relation_id: 1, old_tuple_data: ["124"], bytes: 3}
 
     collector = Collector.handle_message(insert_msg, collector)
     collector = Collector.handle_message(update_msg, collector)

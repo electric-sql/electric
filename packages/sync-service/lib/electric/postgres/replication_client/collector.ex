@@ -30,27 +30,6 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
         }
 
   @doc """
-  Same as `handle_message/2` but with message size checking
-  """
-  @spec handle_message_with_size(LR.message(), non_neg_integer(), t()) ::
-          t()
-          | {Transaction.t() | Relation.t(), t()}
-          | {:error, {:replica_not_full | :exceeded_max_tx_size, String.t()}, t()}
-  def handle_message_with_size(_msg, size, state)
-      when is_number(state.max_tx_size) and state.tx_size + size > state.max_tx_size do
-    {
-      :error,
-      {:exceeded_max_tx_size,
-       "Collected transaction exceeds limit of #{state.max_tx_size} bytes."}
-    }
-  end
-
-  def handle_message_with_size(msg, size, state) do
-    state = %{state | tx_size: state.tx_size + size}
-    handle_message(msg, state)
-  end
-
-  @doc """
   Handle incoming logical replication message by either building up a transaction or
   returning a complete built up transaction.
   """
@@ -102,7 +81,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
 
     %NewRecord{relation: {relation.namespace, relation.name}, record: data, log_offset: offset}
-    |> prepend_change(state)
+    |> prepend_change(msg.bytes, state)
   end
 
   def handle_message(%LR.Update{old_tuple_data: nil} = msg, %__MODULE__{} = state) do
@@ -146,7 +125,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
       record: data,
       log_offset: offset
     )
-    |> prepend_change(state)
+    |> prepend_change(msg.bytes, state)
   end
 
   def handle_message(%LR.Delete{} = msg, %__MODULE__{} = state) do
@@ -161,7 +140,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
       old_record: data,
       log_offset: offset
     }
-    |> prepend_change(state)
+    |> prepend_change(msg.bytes, state)
   end
 
   def handle_message(%LR.Truncate{} = msg, state) do
@@ -170,7 +149,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     msg.truncated_relations
     |> Enum.map(&Map.get(state.relations, &1))
     |> Enum.map(&%TruncatedRelation{relation: {&1.namespace, &1.name}, log_offset: offset})
-    |> Enum.reduce(state, &prepend_change/2)
+    |> Enum.reduce(state, &prepend_change(&1, 0, &2))
   end
 
   def handle_message(%LR.Commit{lsn: commit_lsn}, %__MODULE__{transaction: txn} = state)
@@ -196,14 +175,27 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   defp column_value(_column_name, value), do: value
 
-  @spec prepend_change(Changes.change(), t()) :: t()
-  defp prepend_change(change, %__MODULE__{transaction: txn, tx_op_index: tx_op_index} = state) do
+  @spec prepend_change(Changes.change(), non_neg_integer(), t()) :: t()
+  defp prepend_change(_, bytes, %__MODULE__{max_tx_size: max_tx_size, tx_size: tx_size})
+       when is_number(max_tx_size) and tx_size + bytes > max_tx_size do
+    {
+      :error,
+      {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max_tx_size} bytes."}
+    }
+  end
+
+  defp prepend_change(
+         change,
+         bytes,
+         %__MODULE__{transaction: txn, tx_op_index: tx_op_index, tx_size: tx_size} = state
+       ) do
     %{
       state
       | transaction: Transaction.prepend_change(txn, change),
         # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
         # This gives us headroom for splitting any operation into 2.
-        tx_op_index: tx_op_index + 2
+        tx_op_index: tx_op_index + 2,
+        tx_size: tx_size + bytes
     }
   end
 

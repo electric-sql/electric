@@ -26,7 +26,7 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
       %#{Begin}{commit_timestamp: ~U[2019-07-18 17:02:35.726322Z], final_lsn: %#{Lsn}{segment: 2, offset: 2817828992}, xid: 619}
 
       iex> decode(<<73, 0, 0, 64, 12, 78, 0, 2, 116, 0, 0, 0, 36, 48, 54, 97, 99, 57, 101, 57, 97, 45, 102, 51, 49, 99, 45, 52, 101, 102, 52, 45, 97, 53, 55, 102, 45, 99, 52, 55, 55, 54, 98, 49, 51, 57, 50, 48, 49, 116, 0, 0, 0, 2, 111, 107>>)
-      %#{Insert}{relation_id: 16396, tuple_data: ["06ac9e9a-f31c-4ef4-a57f-c4776b139201", "ok"]}
+      %#{Insert}{relation_id: 16396, tuple_data: ["06ac9e9a-f31c-4ef4-a57f-c4776b139201", "ok"], bytes: 38}
 
       iex> decode(<<67, 0, 0, 0, 0, 0, 1, 115, 90, 104, 0, 0, 0, 0, 1, 115, 90, 152, 0, 2, 131, 255, 114, 87, 68, 106>>)
       %#{Commit}{commit_timestamp: ~U[2022-06-09 09:45:11.642218Z], end_lsn: %#{Lsn}{segment: 0, offset: 24337048}, flags: [], lsn: %#{Lsn}{segment: 0, offset: 24337000}}
@@ -48,14 +48,16 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
         changed_key_tuple_data: nil,
         old_tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "ok"],
         relation_id: 16396,
-        tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "yes"]
+        tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "yes"],
+        bytes: 77
       }
 
       iex> decode(<<68, 0, 0, 64, 12, 79, 0, 2, 116, 0, 0, 0, 36, 99, 48, 100, 55, 51, 49, 99, 97, 45, 48, 101, 55, 50, 45, 52, 57, 53, 48, 45, 57, 52, 57, 57, 45, 56, 100, 98, 56, 51, 98, 97, 100, 98, 48, 53, 49, 116, 0, 0, 0, 3, 121, 101, 115>>)
       %#{Delete}{
         relation_id: 16396,
         changed_key_tuple_data: nil,
-        old_tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "yes"]
+        old_tuple_data: ["c0d731ca-0e72-4950-9499-8db83badb051", "yes"],
+        bytes: 39
       }
   """
   def decode(message) when is_binary(message) do
@@ -126,22 +128,24 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
   defp decode_message_impl(
          <<"I", relation_id::integer-32, "N", number_of_columns::integer-16, tuple_data::binary>>
        ) do
-    {<<>>, decoded_tuple_data} = decode_tuple_data(tuple_data, number_of_columns)
+    {<<>>, decoded_tuple_data, bytes} = decode_tuple_data(tuple_data, number_of_columns)
 
     %Insert{
       relation_id: relation_id,
-      tuple_data: decoded_tuple_data
+      tuple_data: decoded_tuple_data,
+      bytes: bytes
     }
   end
 
   defp decode_message_impl(
          <<"U", relation_id::integer-32, "N", number_of_columns::integer-16, tuple_data::binary>>
        ) do
-    {<<>>, decoded_tuple_data} = decode_tuple_data(tuple_data, number_of_columns)
+    {<<>>, decoded_tuple_data, bytes} = decode_tuple_data(tuple_data, number_of_columns)
 
     %Update{
       relation_id: relation_id,
-      tuple_data: decoded_tuple_data
+      tuple_data: decoded_tuple_data,
+      bytes: bytes
     }
   end
 
@@ -150,14 +154,17 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
            tuple_data::binary>>
        )
        when key_or_old == "O" or key_or_old == "K" do
-    {<<"N", new_number_of_columns::integer-16, new_tuple_binary::binary>>, old_decoded_tuple_data} =
+    {<<"N", new_number_of_columns::integer-16, new_tuple_binary::binary>>, old_decoded_tuple_data,
+     old_bytes} =
       decode_tuple_data(tuple_data, number_of_columns)
 
-    {<<>>, decoded_tuple_data} = decode_tuple_data(new_tuple_binary, new_number_of_columns)
+    {<<>>, decoded_tuple_data, new_bytes} =
+      decode_tuple_data(new_tuple_binary, new_number_of_columns)
 
     base_update_msg = %Update{
       relation_id: relation_id,
-      tuple_data: decoded_tuple_data
+      tuple_data: decoded_tuple_data,
+      bytes: new_bytes + old_bytes
     }
 
     case key_or_old do
@@ -171,10 +178,11 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
            tuple_data::binary>>
        )
        when key_or_old == "K" or key_or_old == "O" do
-    {<<>>, decoded_tuple_data} = decode_tuple_data(tuple_data, number_of_columns)
+    {<<>>, decoded_tuple_data, bytes} = decode_tuple_data(tuple_data, number_of_columns)
 
     base_delete_msg = %Delete{
-      relation_id: relation_id
+      relation_id: relation_id,
+      bytes: bytes
     }
 
     case key_or_old do
@@ -213,21 +221,22 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
 
   defp decode_message_impl(binary), do: %Unsupported{data: binary}
 
-  defp decode_tuple_data(binary, columns_remaining, accumulator \\ [])
+  defp decode_tuple_data(binary, columns_remaining, accumulator \\ [], size \\ 0)
 
-  defp decode_tuple_data(remaining_binary, 0, accumulator) when is_binary(remaining_binary),
-    do: {remaining_binary, accumulator |> Enum.reverse()}
+  defp decode_tuple_data(remaining_binary, 0, accumulator, size) when is_binary(remaining_binary),
+    do: {remaining_binary, accumulator |> Enum.reverse(), size}
 
-  defp decode_tuple_data(<<"n", rest::binary>>, columns_remaining, accumulator),
-    do: decode_tuple_data(rest, columns_remaining - 1, [nil | accumulator])
+  defp decode_tuple_data(<<"n", rest::binary>>, columns_remaining, accumulator, size),
+    do: decode_tuple_data(rest, columns_remaining - 1, [nil | accumulator], size)
 
-  defp decode_tuple_data(<<"u", rest::binary>>, columns_remaining, accumulator),
-    do: decode_tuple_data(rest, columns_remaining - 1, [:unchanged_toast | accumulator])
+  defp decode_tuple_data(<<"u", rest::binary>>, columns_remaining, accumulator, size),
+    do: decode_tuple_data(rest, columns_remaining - 1, [:unchanged_toast | accumulator], size)
 
   defp decode_tuple_data(
          <<"t", column_length::integer-32, rest::binary>>,
          columns_remaining,
-         accumulator
+         accumulator,
+         size
        ),
        do:
          decode_tuple_data(
@@ -235,7 +244,8 @@ defmodule Electric.Postgres.LogicalReplication.Decoder do
            columns_remaining - 1,
            [
              :erlang.binary_part(rest, {0, column_length}) | accumulator
-           ]
+           ],
+           size + column_length
          )
 
   @spec decode_columns(binary, [Column.t()]) :: [Column.t()]
