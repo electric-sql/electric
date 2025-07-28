@@ -28,6 +28,7 @@ defmodule Electric.Replication.PublicationManager do
     :publication_name,
     :db_pool,
     :pg_version,
+    :can_alter_publication?,
     :configure_tables_for_replication_fn,
     :shape_cache,
     next_update_forced?: false
@@ -89,6 +90,7 @@ defmodule Electric.Replication.PublicationManager do
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
             shape_cache: [type: :mod_arg, required: false],
             pg_version: [type: :integer, required: true],
+            can_alter_publication?: [type: :boolean, required: true],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             configure_tables_for_replication_fn: [
               type: {:fun, 5},
@@ -184,6 +186,7 @@ defmodule Electric.Replication.PublicationManager do
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
       pg_version: opts.pg_version,
+      can_alter_publication?: opts.can_alter_publication?,
       shape_cache: Map.get(opts, :shape_cache, {Electric.ShapeCache, [stack_id: opts.stack_id]}),
       configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn
     }
@@ -256,7 +259,10 @@ defmodule Electric.Replication.PublicationManager do
   @impl true
   def handle_info(
         :update_publication,
-        %__MODULE__{prepared_relation_filters: relation_filters, retries: retries} = state
+        %__MODULE__{
+          prepared_relation_filters: relation_filters,
+          retries: retries
+        } = state
       ) do
     state = %{state | scheduled_updated_ref: nil, retries: 0}
 
@@ -284,6 +290,15 @@ defmodule Electric.Replication.PublicationManager do
              # which eventually will do the same thing - this lowers the number of attempted alterations to the DB where we do nothing
              prepared_relation_filters: committed_filters
          }}
+
+      {:error, {:missing_relations, _relations}} ->
+        err = %Electric.DbConfigurationError{
+          type: :tables_missing_from_publication,
+          message: "....error message..."
+        }
+
+        state = reply_to_waiters({:error, err}, state)
+        {:noreply, %{state | next_update_forced?: false}}
 
       {:error, err} when retries < @max_retries and not is_fatal(err) ->
         Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
@@ -334,6 +349,7 @@ defmodule Electric.Replication.PublicationManager do
   # to the DB.
   @spec update_publication(state()) ::
           {:ok, state(), [Electric.oid_relation()]} | {:error, term()}
+
   defp update_publication(
          %__MODULE__{
            committed_relation_filters: committed_filters,
@@ -344,6 +360,33 @@ defmodule Electric.Replication.PublicationManager do
        when current_filters == committed_filters and not forced? do
     Logger.debug("No changes to publication, skipping update")
     {:ok, state, []}
+  end
+
+  defp update_publication(
+         %__MODULE__{
+           can_alter_publication?: false,
+           committed_relation_filters: committed_filters,
+           prepared_relation_filters: current_filters,
+           next_update_forced?: forced?,
+           publication_name: publication_name,
+           db_pool: db_pool
+         } = state
+       ) do
+    # We cannot modify the publication, so all that remains is to check whether the
+    # publication is in the right state for the set of currently active relation filters.
+    if not forced? and Map.keys(current_filters) == Map.keys(committed_filters) do
+      Logger.debug("No changes to publication, skipping checkup")
+      {:ok, state, []}
+    else
+      with :ok <-
+             Configuration.check_publication_for_missing_relations(
+               db_pool,
+               publication_name,
+               Map.keys(current_filters)
+             ) do
+        {:ok, state, []}
+      end
+    end
   end
 
   defp update_publication(
