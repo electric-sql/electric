@@ -110,6 +110,7 @@ defmodule Support.ComponentSetup do
           [
             name: server,
             stack_id: ctx.stack_id,
+            can_alter_publication?: true,
             publication_name: ctx.publication_name,
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
             db_pool: ctx.pool,
