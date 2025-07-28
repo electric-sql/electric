@@ -40,8 +40,8 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_name,
       :slot_temporary?,
       :display_settings,
+      :txn_collector,
       origin: "postgres",
-      txn_collector: %Collector{},
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
@@ -81,7 +81,16 @@ defmodule Electric.Postgres.ReplicationClient do
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
-                   slot_temporary?: [type: :boolean, default: false]
+                   slot_temporary?: [type: :boolean, default: false],
+                   # Set a reasonable limit for the maximum size of a transaction that
+                   # we can handle, above which we would exit as we run the risk of running
+                   # out of memmory.
+                   # TODO: stream out transactions and collect on disk to avoid this
+                   max_txn_size: [
+                     required: false,
+                     type: :non_neg_integer,
+                     default: 250 * 1024 * 1024
+                   ]
                  )
 
     @spec new(Access.t()) :: t()
@@ -89,7 +98,13 @@ defmodule Electric.Postgres.ReplicationClient do
       opts = NimbleOptions.validate!(opts, @opts_schema)
       settings = [display_settings: Electric.Postgres.display_settings()]
       opts = settings ++ opts
-      struct!(__MODULE__, opts)
+
+      {max_txn_size, opts} = Keyword.pop!(opts, :max_txn_size)
+
+      struct!(
+        __MODULE__,
+        opts ++ [txn_collector: %Collector{max_tx_size: max_txn_size}]
+      )
     end
   end
 
@@ -280,6 +295,8 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   defp process_x_log_data(data, _wal_end, %State{stack_id: stack_id} = state) do
+    msg_size = byte_size(data)
+
     OpenTelemetry.timed_fun("decode_message_duration", fn -> decode_message(data) end)
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
@@ -291,8 +308,11 @@ defmodule Electric.Postgres.ReplicationClient do
     #       message_type <> " :: " <> inspect(Map.from_struct(msg))
     #   )
     # end)
-    |> Collector.handle_message(state.txn_collector)
+    |> Collector.handle_message_with_size(msg_size, state.txn_collector)
     |> case do
+      {:error, reason, _} ->
+        exit({:irrecoverable_slot, reason})
+
       %Collector{} = txn_collector ->
         {:noreply, %{state | txn_collector: txn_collector}}
 
@@ -318,7 +338,7 @@ defmodule Electric.Postgres.ReplicationClient do
           %{
             monotonic_time: System.monotonic_time(),
             receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
-            bytes: byte_size(data),
+            bytes: msg_size,
             count: 1,
             operations: txn.num_changes
           },

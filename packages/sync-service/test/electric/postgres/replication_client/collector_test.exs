@@ -128,7 +128,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
            } = updated_collector
   end
 
-  test "collector logs an error for empty old data on updates", %{collector: collector} do
+  test "collector errors for empty old data on updates", %{collector: collector} do
     collector =
       Collector.handle_message(
         %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
@@ -141,29 +141,16 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
       tuple_data: ["124"]
     }
 
-    log =
-      capture_log(fn ->
-        updated_collector = Collector.handle_message(update_msg, collector)
-        send(self(), updated_collector)
-      end)
+    updated_collector = Collector.handle_message(update_msg, collector)
+    send(self(), updated_collector)
 
-    assert_received %Collector{
-      transaction: %Transaction{
-        changes: [
-          %UpdatedRecord{
-            relation: {"public", "users"},
-            old_record: %{},
-            record: %{"id" => "124"}
-          }
-        ]
-      }
-    }
+    assert_received {:error, {:replica_not_full, message}, _}
 
-    assert log =~
-             "[error] Received an update from PG for public.users that did not have " <>
+    assert message =~
+             "Received an update from PG for public.users that did not have " <>
                "old data included in the message."
 
-    assert log =~ "Try executing `ALTER TABLE public.users REPLICA IDENTITY FULL`"
+    assert message =~ "Try executing `ALTER TABLE public.users REPLICA IDENTITY FULL`"
   end
 
   test "collector stores received delete when the relation is known", %{collector: collector} do
@@ -231,6 +218,31 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
              completed_txn
 
     assert %Collector{transaction: nil, tx_op_index: nil} = updated_collector
+  end
+
+  test "collector errors if max transaction size is exceeded", %{collector: collector} do
+    max_tx_size = 100
+    collector = %{collector | max_tx_size: max_tx_size}
+
+    collector =
+      Collector.handle_message_with_size(
+        %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+        0,
+        collector
+      )
+
+    insert_msg = %LR.Insert{
+      relation_id: 1,
+      tuple_data: ["123"]
+    }
+
+    assert collector =
+             %Collector{} = Collector.handle_message_with_size(insert_msg, 50, collector)
+
+    err_msg = "Collected transaction exceeds limit of #{max_tx_size} bytes."
+
+    assert {:error, {:exceeded_max_tx_size, ^err_msg}} =
+             Collector.handle_message_with_size(insert_msg, 51, collector)
   end
 
   test "Multiple collected operations are stored in the correct order within the transaction when it's emitted",

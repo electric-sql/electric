@@ -19,19 +19,45 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     Column
   }
 
-  defstruct transaction: nil, tx_op_index: nil, relations: %{}
+  defstruct transaction: nil, tx_op_index: nil, tx_size: 0, max_tx_size: nil, relations: %{}
 
   @type t() :: %__MODULE__{
           transaction: nil | Transaction.t(),
           tx_op_index: nil | non_neg_integer(),
-          relations: %{optional(LR.relation_id()) => LR.Relation.t()}
+          tx_size: non_neg_integer(),
+          relations: %{optional(LR.relation_id()) => LR.Relation.t()},
+          max_tx_size: nil | non_neg_integer()
         }
+
+  @doc """
+  Same as `handle_message/2` but with message size checking
+  """
+  @spec handle_message_with_size(LR.message(), non_neg_integer(), t()) ::
+          t()
+          | {Transaction.t() | Relation.t(), t()}
+          | {:error, {:replica_not_full | :exceeded_max_tx_size, String.t()}, t()}
+  def handle_message_with_size(_msg, size, state)
+      when is_number(state.max_tx_size) and state.tx_size + size > state.max_tx_size do
+    {
+      :error,
+      {:exceeded_max_tx_size,
+       "Collected transaction exceeds limit of #{state.max_tx_size} bytes."}
+    }
+  end
+
+  def handle_message_with_size(msg, size, state) do
+    state = %{state | tx_size: state.tx_size + size}
+    handle_message(msg, state)
+  end
 
   @doc """
   Handle incoming logical replication message by either building up a transaction or
   returning a complete built up transaction.
   """
-  @spec handle_message(LR.message(), t()) :: t() | {Transaction.t() | Relation.t(), t()}
+  @spec handle_message(LR.message(), t()) ::
+          t()
+          | {Transaction.t() | Relation.t(), t()}
+          | {:error, {:replica_not_full | :exceeded_max_tx_size, String.t()}, t()}
   def handle_message(%LR.Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
 
@@ -79,18 +105,25 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     |> prepend_change(state)
   end
 
-  def handle_message(%LR.Update{} = msg, %__MODULE__{} = state) do
+  def handle_message(%LR.Update{old_tuple_data: nil} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
-    if is_nil(msg.old_tuple_data),
-      do:
-        Logger.error("""
-        Received an update from PG for #{relation.namespace}.#{relation.name} that did not have old data included in the message.
-        This means the table #{relation.namespace}.#{relation.name} doesn't have the correct replica identity mode. Electric cannot
-        function with replica identity mode set to something other than FULL.
+    {
+      :error,
+      {:replica_not_full,
+       """
+       Received an update from PG for #{relation.namespace}.#{relation.name} that did not have old data included in the message.
+       This means the table #{relation.namespace}.#{relation.name} doesn't have the correct replica identity mode. Electric cannot
+       function with replica identity mode set to something other than FULL.
 
-        Try executing `ALTER TABLE #{relation.namespace}.#{relation.name} REPLICA IDENTITY FULL` on Postgres.
-        """)
+       Try executing `ALTER TABLE #{relation.namespace}.#{relation.name} REPLICA IDENTITY FULL` on Postgres.
+       """},
+      state
+    }
+  end
+
+  def handle_message(%LR.Update{} = msg, %__MODULE__{} = state) do
+    relation = Map.get(state.relations, msg.relation_id)
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
 
@@ -119,11 +152,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
   def handle_message(%LR.Delete{} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
-    data =
-      data_tuple_to_map(
-        relation.columns,
-        msg.old_tuple_data || msg.changed_key_tuple_data
-      )
+    data = data_tuple_to_map(relation.columns, msg.old_tuple_data || msg.changed_key_tuple_data)
 
     offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
 
@@ -146,7 +175,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   def handle_message(%LR.Commit{lsn: commit_lsn}, %__MODULE__{transaction: txn} = state)
       when not is_nil(txn) and commit_lsn == txn.lsn do
-    {Transaction.finalize(txn), %{state | transaction: nil, tx_op_index: nil}}
+    {Transaction.finalize(txn), %{state | transaction: nil, tx_op_index: nil, tx_size: 0}}
   end
 
   @spec data_tuple_to_map([LR.Relation.Column.t()], list(String.t())) :: %{
@@ -169,9 +198,13 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   @spec prepend_change(Changes.change(), t()) :: t()
   defp prepend_change(change, %__MODULE__{transaction: txn, tx_op_index: tx_op_index} = state) do
-    # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
-    # This gives us headroom for splitting any operation into 2.
-    %{state | transaction: Transaction.prepend_change(txn, change), tx_op_index: tx_op_index + 2}
+    %{
+      state
+      | transaction: Transaction.prepend_change(txn, change),
+        # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
+        # This gives us headroom for splitting any operation into 2.
+        tx_op_index: tx_op_index + 2
+    }
   end
 
   defguard is_collecting(collector) when not is_nil(collector.transaction)
