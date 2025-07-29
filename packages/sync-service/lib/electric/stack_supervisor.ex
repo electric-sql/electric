@@ -75,6 +75,7 @@ defmodule Electric.StackSupervisor do
                      slot_name: [type: :string, required: true],
                      slot_temporary?: [type: :boolean, default: false],
                      try_creating_publication?: [type: :boolean, default: true],
+                     max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil],
                      stream_id: [type: :string, required: false]
                    ]
                  ],

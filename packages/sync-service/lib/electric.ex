@@ -40,6 +40,7 @@ defmodule Electric do
         db_pool_size: #{default.(:db_pool_size)},
         replication_stream_id: #{default.(:replication_stream_id)},
         replication_slot_temporary?: #{default.(:replication_slot_temporary?)},
+        max_txn_size: #{default.(:max_txn_size)},
         # HTTP API
         service_port: #{default.(:service_port)},
         allow_shape_deletion?: #{default.(:allow_shape_deletion?)},

@@ -86,11 +86,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    # we can handle, above which we would exit as we run the risk of running
                    # out of memmory.
                    # TODO: stream out transactions and collect on disk to avoid this
-                   max_txn_size: [
-                     required: false,
-                     type: :non_neg_integer,
-                     default: 250 * 1024 * 1024
-                   ]
+                   max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
                  )
 
     @spec new(Access.t()) :: t()
