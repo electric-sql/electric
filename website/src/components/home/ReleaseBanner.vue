@@ -1,14 +1,18 @@
 <template>
   <div class="banner">
     <div class="container">
-      🚀 Electric is
-      <a href="/blog/2025/03/17/electricsql-1.0-released">
-        <span class="no-wrap">
-          now 1.0</span></a>
-      and Cloud is
-      <a href="/blog/2025/04/07/electric-cloud-public-beta-release">
-        <span class="no-wrap">
-          in public BETA</span></a>!
+      <div>
+        🔥
+        <a href="/blog/2025/07/29/local-first-sync-with-tanstack-db">
+          Introducing Tanstack DB</a>
+        &ndash;
+        <span class="inline-md">
+          now in BETA!
+        </span>
+        <span class="hidden-md">
+          Reactive client store for building super fast apps on sync!
+        </span>
+      </div>
     </div>
   </div>
 </template>

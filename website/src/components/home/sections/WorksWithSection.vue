@@ -6,28 +6,28 @@
 
   const integrations = [
     {
-      slug: 'supabase',
-      name: 'Supabase'
-    },
-    {
-      slug: 'neon',
-      name: 'Neon'
+      slug: 'tanstack',
+      name: 'TanStack'
     },
     {
       slug: 'phoenix',
       name: 'Phoenix'
     },
     {
+      slug: 'react',
+      name: 'React'
+    },
+    {
       slug: 'next',
       name: 'Next.js'
     },
     {
-      slug: 'tanstack',
-      name: 'TanStack'
+      slug: 'neon',
+      name: 'Neon'
     },
     {
-      slug: 'react',
-      name: 'React'
+      slug: 'supabase',
+      name: 'Supabase'
     }
   ]
 
@@ -253,7 +253,7 @@
     gap: 24px;
   }
   .integration-icon {
-    width: 52px;
+    width: 64px;
     margin: 0 auto;
   }
   .integration-label {
