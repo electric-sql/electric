@@ -113,13 +113,12 @@ defmodule Support.ComponentSetup do
             publication_name: ctx.publication_name,
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
             db_pool: ctx.pool,
-            pg_version: Access.get(ctx, :pg_version, 150_001),
             manual_table_publishing?: Access.get(ctx, :manual_table_publishing?, false),
             configure_tables_for_replication_fn:
               Access.get(
                 ctx,
                 :configure_tables_for_replication_fn,
-                &Electric.Postgres.Configuration.configure_publication!/5
+                &Electric.Postgres.Configuration.configure_publication!/4
               ),
             shape_cache:
               Access.get(ctx, :shape_cache, {Electric.ShapeCache, [stack_id: ctx.stack_id]})

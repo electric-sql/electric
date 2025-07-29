@@ -9,8 +9,6 @@ defmodule Electric.Postgres.Configuration do
 
   @type filters() :: %{Electric.oid_relation() => RelationFilter.t()}
 
-  @pg_15 150_000
-
   @doc """
   Check whether the state of the publication relations in the database matches the sets of
   filters passed into the function.
@@ -127,21 +125,10 @@ defmodule Electric.Postgres.Configuration do
 
   Raises if it fails to configure all the tables in the expected way.
   """
-  @spec configure_publication!(
-          Postgrex.conn(),
-          [Electric.oid_relation()],
-          filters(),
-          non_neg_integer(),
-          String.t()
-        ) :: relations_failed_to_configure
+  @spec configure_publication!(Postgrex.conn(), [Electric.oid_relation()], filters(), String.t()) ::
+          relations_failed_to_configure
         when relations_failed_to_configure: [Electric.oid_relation()]
-  def configure_publication!(
-        conn,
-        previous_relations,
-        new_filters,
-        pg_version,
-        publication_name
-      ) do
+  def configure_publication!(conn, previous_relations, new_filters, publication_name) do
     Postgrex.transaction(conn, fn conn ->
       # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)
       # so we need to check if any of the relations were dropped/renamed since then
@@ -158,11 +145,7 @@ defmodule Electric.Postgres.Configuration do
             "Configuring publication #{publication_name} to include #{map_size(used_filters)} tables - skipping altered tables #{inspect(changed_relations)}"
           )
 
-      if pg_version < @pg_15 do
-        alter_pub_set_whole_tables!(conn, publication_name, used_filters)
-      else
-        alter_pub_set_filtered_tables!(conn, publication_name, used_filters)
-      end
+      alter_publication!(conn, publication_name, used_filters)
 
       # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
       # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
@@ -217,7 +200,7 @@ defmodule Electric.Postgres.Configuration do
     Enum.map(rows, &List.to_tuple/1)
   end
 
-  defp alter_pub_set_whole_tables!(conn, publication_name, relation_filters) do
+  defp alter_publication!(conn, publication_name, relation_filters) do
     publication = Utils.quote_name(publication_name)
 
     prev_published_tables =
@@ -263,11 +246,6 @@ defmodule Electric.Postgres.Configuration do
           raise reason
       end
     end
-  end
-
-  defp alter_pub_set_filtered_tables!(conn, publication_name, filters) do
-    # Update the entire publication with the new filters
-    Postgrex.query!(conn, make_alter_publication_query(publication_name, filters), [])
   end
 
   defp set_replica_identity!(conn, relation_filters) do
@@ -340,76 +318,6 @@ defmodule Electric.Postgres.Configuration do
       )
 
     Enum.map(rows, &List.to_tuple/1)
-  end
-
-  # Makes an SQL query that alters the given publication whith the given tables and filters.
-  @spec make_alter_publication_query(String.t(), filters()) :: String.t()
-  defp make_alter_publication_query(publication_name, filters) do
-    case Map.values(filters) do
-      [] ->
-        Logger.info(
-          "Configuring publication #{publication_name} to DROP ALL TABLES",
-          publication_alter_set_tables: []
-        )
-
-        """
-        DO $$
-        DECLARE
-            tables TEXT;
-        BEGIN
-            SELECT string_agg(format('%I.%I', pn.nspname, pc.relname), ', ') INTO tables
-              FROM pg_publication_rel ppr
-              JOIN pg_publication pp
-                ON ppr.prpubid = pp.oid
-              JOIN pg_class pc
-                ON pc.oid = ppr.prrelid
-              JOIN pg_namespace pn
-                ON pc.relnamespace = pn.oid
-              WHERE pp.pubname = '#{publication_name}';
-
-            IF tables IS NOT NULL THEN
-                EXECUTE format('ALTER PUBLICATION #{Utils.quote_name(publication_name)} DROP TABLE %s', tables);
-            END IF;
-        END $$;
-        """
-
-      filters ->
-        base_sql = "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET TABLE "
-
-        Logger.info(
-          "Configuring publication #{publication_name} to SET tables #{inspect(Enum.map(filters, & &1.relation))}",
-          publication_alter_set_tables: Enum.map(filters, &Utils.relation_to_sql(&1.relation))
-        )
-
-        tables =
-          filters
-          |> Enum.map(&make_table_clause/1)
-          |> Enum.join(", ")
-
-        base_sql <> tables
-    end
-  end
-
-  @spec make_table_clause(RelationFilter.t()) :: String.t()
-  defp make_table_clause(%RelationFilter{
-         relation: relation,
-         where_clauses: where_clauses
-         #  selected_columns: cols
-       }) do
-    table = Utils.relation_to_sql(relation)
-
-    # NOTE: cannot filter on columns with REPLICA IDENTITY FULL
-    # cols = if cols == nil, do: "", else: " (#{Enum.join(cols, ", ")})"
-    cols = ""
-
-    where =
-      if where_clauses == nil,
-        do: "",
-        else:
-          " WHERE " <>
-            "(#{where_clauses |> Enum.map(& &1.query) |> Enum.join(" OR ")})"
-
-    table <> cols <> where
   end
 
   defp trim_changed_relation({oid, relation, _new_oid, _renamed_relation}), do: {oid, relation}

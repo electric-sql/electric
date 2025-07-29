@@ -34,7 +34,6 @@ config :logger,
   handle_sasl_reports: sasl?
 
 if config_env() == :test do
-  config :electric, pg_version_for_tests: env!("POSTGRES_VERSION", :integer, 150_001)
   config :logger, :default_handler, level: test_log_level
 end
 

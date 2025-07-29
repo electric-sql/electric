@@ -104,15 +104,6 @@ defmodule Support.DbSetup do
     %{publication_name: publication_name}
   end
 
-  def with_pg_version(ctx) do
-    %{rows: [[pg_version]]} =
-      Postgrex.query!(ctx.db_conn, "SELECT current_setting('server_version_num')::integer", [])
-
-    true = is_integer(pg_version)
-
-    {:ok, %{pg_version: pg_version}}
-  end
-
   @doc """
   Creates a database that is shared between all tests in the module
   """
