@@ -13,7 +13,6 @@ defmodule Electric.Replication.PublicationManagerTest do
   @shape_handle_3 "shape_handle_3"
   @where_clause_1 %Expr{query: "id = '1'", used_refs: %{["id"] => :text}}
   @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
-  @where_clause_3 %Expr{query: "id = '3'", used_refs: %{["id"] => :text}}
   @where_clause_enum %Expr{
     query: "id = '1' AND foo_enum::text = 'bar'",
     used_refs: %{["foo_enum"] => {:enum, "foo_enum"}}
@@ -94,7 +93,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                       ]}
     end
 
-    test "should merge where clauses for same relation", %{opts: opts} do
+    test "should not update publication when only the where clause changes", %{opts: opts} do
       shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "items"}, @where_clause_2)
       shape3 = generate_shape({"public", "items"}, @where_clause_1)
@@ -182,37 +181,11 @@ defmodule Electric.Replication.PublicationManagerTest do
                       ]}
     end
 
-    @tag update_debounce_timeout: 50
+    @tag update_debounce_timeout: 100
     test "should not update publication if new shape adds nothing", %{opts: opts} do
       shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "items"}, @where_clause_2)
       shape3 = generate_shape({"public", "items"}, @where_clause_1)
-
-      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
-      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
-
-      Task.await_many([task1, task2])
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_2, @where_clause_1]
-                        }
-                      ]}
-
-      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
-
-      refute_receive {:filters, _}, 500
-    end
-
-    @tag update_debounce_timeout: 100
-    test "should not update publication if new shape adds nothing new since where clauses aren't considered",
-         %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
-      # different clause but we're no using those filters in publication
-      shape3 = generate_shape({"public", "items"}, @where_clause_3)
 
       task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
       task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)

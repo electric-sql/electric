@@ -144,58 +144,6 @@ defmodule Electric.Postgres.ConfigurationTest do
                expected_filters([{"public", "items"}, {"public", "other_table"}])
     end
 
-    test "can update existing where clauses by updating all tables", %{
-      pool: conn,
-      publication_name: publication
-    } do
-      assert get_table_identity(conn, {"public", "items"}) == "d"
-      assert get_table_identity(conn, {"public", "other_table"}) == "d"
-      assert list_tables_in_publication(conn, publication) == []
-      oid1 = get_table_oid(conn, {"public", "items"})
-      oid2 = get_table_oid(conn, {"public", "other_table"})
-
-      assert Configuration.configure_publication!(
-               conn,
-               [],
-               %{
-                 {oid1, {"public", "items"}} => %RelationFilter{
-                   relation: {"public", "items"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-                 },
-                 {oid2, {"public", "other_table"}} => %RelationFilter{
-                   relation: {"public", "other_table"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
-                 }
-               },
-               publication
-             ) == []
-
-      assert get_table_identity(conn, {"public", "items"}) == "f"
-      assert get_table_identity(conn, {"public", "other_table"}) == "f"
-
-      assert list_tables_in_publication(conn, publication) ==
-               expected_filters([{"public", "items"}, {"public", "other_table"}])
-
-      assert Configuration.configure_publication!(
-               conn,
-               [{oid1, {"public", "items"}}, {oid2, {"public", "other_table"}}],
-               %{
-                 {oid1, {"public", "items"}} => %RelationFilter{
-                   relation: {"public", "items"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-                 },
-                 {oid2, {"public", "other_table"}} => %RelationFilter{
-                   relation: {"public", "other_table"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-                 }
-               },
-               publication
-             ) == []
-
-      assert list_tables_in_publication(conn, publication) ==
-               expected_filters([{"public", "items"}, {"public", "other_table"}])
-    end
-
     test "doesn't fail when one of the tables is already configured",
          %{pool: conn, publication_name: publication} do
       oid = get_table_oid(conn, {"public", "items"})
@@ -207,7 +155,8 @@ defmodule Electric.Postgres.ConfigurationTest do
                %{
                  {oid, {"public", "items"}} => %RelationFilter{
                    relation: {"public", "items"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
+                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
+                   selected_columns: ["id"]
                  }
                },
                publication
@@ -218,14 +167,14 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert list_tables_in_publication(conn, publication) ==
                expected_filters([{"public", "items"}])
 
-      # Configure `items` table again but with a different where clause
+      # Configure `items` table again but with a different list of selected columns
       assert Configuration.configure_publication!(
                conn,
                [{oid, {"public", "items"}}],
                %{
                  {oid, {"public", "items"}} => %RelationFilter{
                    relation: {"public", "items"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
+                   selected_columns: ["id", "value"]
                  },
                  {oid2, {"public", "other_table"}} => %RelationFilter{
                    relation: {"public", "other_table"}
@@ -236,23 +185,6 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
-
-      assert list_tables_in_publication(conn, publication) ==
-               expected_filters([{"public", "items"}, {"public", "other_table"}])
-
-      # Now configure it again but for a shape that has no where clause
-      # the resulting publication should no longer have a filter for that table
-      assert Configuration.configure_publication!(
-               conn,
-               [{oid, {"public", "items"}}, {oid2, {"public", "other_table"}}],
-               %{
-                 {oid, {"public", "items"}} => %RelationFilter{relation: {"public", "items"}},
-                 {oid2, {"public", "other_table"}} => %RelationFilter{
-                   relation: {"public", "other_table"}
-                 }
-               },
-               publication
-             ) == []
 
       assert list_tables_in_publication(conn, publication) ==
                expected_filters([{"public", "items"}, {"public", "other_table"}])
