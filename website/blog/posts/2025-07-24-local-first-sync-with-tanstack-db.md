@@ -245,7 +245,7 @@ It also allows you to load data into your app from a variety of sources: anythin
 
 Sync collections automatically and efficiently keep the data in the collection up-to-date. You don't need to tell a sync-based collection to re-fetch data. It always keeps the local data live and up-to-date in real-time for you.
 
-There are already a number of built-in TanStack DB collections for different sync engines, including [Electric](/), [Firebase](https://firebase.google.com/), [Materialize](https://materialize.com) and [Trailbase](https://trailbase.io).
+There are already a number of TanStack DB collections for different sync engines built-in or under development, including [Electric](/), [Firebase](https://firebase.google.com/), [Materialize](https://materialize.com) and [Trailbase](https://trailbase.io).
 
 To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/api/clients/typescript) when defining a [Shape](/docs/guides/shapes). A shape is a [filtered view on a database table](/docs/guides/shapes#where-clause) that Electric syncs out-of Postgres, into the client for you:
 
