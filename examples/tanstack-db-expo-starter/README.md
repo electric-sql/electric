@@ -18,6 +18,15 @@ ElectricSQL is a Postgres sync engine that solves the hard problems of data sync
 *   [`api/index.ts`](./api/index.ts) - The entry point for your serverless functions (if you choose to use them).
 *   [`src/db/schema.ts`](./src/db/schema.ts) - The database schema definition for ElectricSQL.
 
+## Create a new project
+
+To create a new project based on this starter, run the following commands:
+
+```
+npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-expo-starter my-tanstack-db-expo-project
+cd my-tanstack-db-expo-project
+```
+
 ## Setup
 
 1.  Install dependencies:
