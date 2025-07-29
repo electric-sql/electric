@@ -205,7 +205,8 @@ config :electric,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
   replication_slot_temporary_random_name?:
     env!("ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME", :boolean, nil),
-  max_txn_size: env!("ELECTRIC_MAX_TXN_SIZE", :integer, nil),
+  # The ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE is undocumented and will be removed in future versions.
+  max_txn_size: env!("ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE", :non_neg_integer, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
   storage_dir: storage_dir,
