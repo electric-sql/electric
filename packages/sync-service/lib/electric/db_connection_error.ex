@@ -6,7 +6,7 @@ defmodule Electric.DbConnectionError do
     :type,
     :original_error,
     :retry_may_fix?,
-    drop_replication_slot?: false
+    drop_slot_and_restart?: false
   ]
 
   alias Electric.DbConnectionError
@@ -104,8 +104,8 @@ defmodule Electric.DbConnectionError do
       """,
       type: :database_slot_exceeded_max_size,
       original_error: error,
-      retry_may_fix?: true,
-      drop_replication_slot?: true
+      retry_may_fix?: false,
+      drop_slot_and_restart?: true
     }
   end
 
@@ -226,8 +226,8 @@ defmodule Electric.DbConnectionError do
       message: message,
       type: type,
       original_error: error,
-      retry_may_fix?: true,
-      drop_replication_slot?: true
+      retry_may_fix?: false,
+      drop_slot_and_restart?: true
     }
   end
 

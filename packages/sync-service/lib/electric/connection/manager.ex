@@ -1112,7 +1112,7 @@ defmodule Electric.Connection.Manager do
 
   defp pg_error_extra_info(_), do: ""
 
-  defp drop_slot_and_restart(%DbConnectionError{drop_replication_slot?: true} = error, state) do
+  defp drop_slot_and_restart(%DbConnectionError{drop_slot_and_restart?: true} = error, state) do
     Logger.warning(error.message)
 
     dispatch_stack_event(

@@ -114,27 +114,19 @@
 [endmacro]
 
 [macro setup_electric]
-  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_INSECURE=true"]
+  [invoke setup_electric_with_env ""]
 [endmacro]
 
 [macro setup_secure_electric secret]
-  [invoke setup_electric_with_env "DATABASE_URL=$database_url ELECTRIC_INSECURE=false ELECTRIC_SECRET=$secret"]
+  [invoke setup_electric_with_env "ELECTRIC_INSECURE=false ELECTRIC_SECRET=$secret"]
 [endmacro]
 
 [macro setup_electric_with_pooler]
-  [invoke setup_electric_with_env "ELECTRIC_INSECURE=true DATABASE_URL=$database_url ELECTRIC_QUERY_DATABASE_URL=$pooled_database_url"]
-[endmacro]
-
-[macro setup_multi_tenant_electric]
-  [invoke setup_electric_with_env "ELECTRIC_INSECURE=true"]
+  [invoke setup_electric_with_env "ELECTRIC_QUERY_DATABASE_URL=$pooled_database_url"]
 [endmacro]
 
 [macro setup_electric_with_env env]
-  [invoke setup_electric_shell "electric" "3000" $env]
-[endmacro]
-
-[macro setup_electric_with_env_and_tenant env]
-  [invoke setup_electric_with_env "DATABASE_URL=$database_url $env"]
+  [invoke setup_electric_shell "electric" "3000" "DATABASE_URL=$database_url ELECTRIC_INSECURE=true $env"]
 [endmacro]
 
 [macro setup_electric_shell shell_name port env]
@@ -160,25 +152,9 @@
     ??"$tenant_id"
 [endmacro]
 
-[macro check_tenant_status tenant_id expected_status electric_port]
-  [shell $tenant_id]
-    [invoke wait-for "curl -X GET http://localhost:$electric_port/v1/health?database_id=$tenant_id" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
-[endmacro]
-
-[macro capture_stack_supervisor_pid]
-  ?pid=(<\d+\.\d+\.\d+>) \[debug\] StackSupervisor for stack "single_stack" is initializing
-  # All interactive commands and matches are performed within a single IEx session,
-  # so we can assign local variables here which is less of a hassle than using lux variables.
-  !stack_supervisor_pid = :erlang.list_to_pid(~c"$1")
-  !stack_supervisor_mon = Process.monitor(stack_supervisor_pid)
-[endmacro]
-
-[macro wait_on_stack_supervisor_registration]
-  # Verify that the stack supervisor is registered using regular process registration. If we
-  # change this at any point, the line below will catch it and we'll be able to correct the
-  # check further down that verifies that the stack supervisor is no longer running.
-  !IO.puts("Stack supervisor pid: #{inspect Process.whereis(Electric.StackSupervisor)}")
-  ??Stack supervisor pid: #PID<
+[macro check_health_status expected_status]
+  [shell electric-health]
+    [invoke wait-for "curl -X GET http://localhost:3000/v1/health" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
 [endmacro]
 
 [macro teardown_container container_name]

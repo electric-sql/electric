@@ -20,9 +20,8 @@
 ## Start the sync service.
 [invoke setup_electric]
 
-[shell electric]
-  [invoke capture_stack_supervisor_pid]
-  [invoke wait_on_stack_supervisor_registration]
+[invoke check_health_status "active"]
+  
 
 ## Seed the database with enough data to exceed max_wal_size and force a checkpoint that
 ## will invalidate the replication slot.
