@@ -1,5 +1,5 @@
 ---
-title: Local-first sync with TanStack DB
+title: Local-first sync with TanStack DB and Electric
 description: >-
   Tanstack DB is a reactive client store for building super fast apps on sync.
   Paired with Electric, it provides an optimal end-to-end sync stack for
@@ -247,7 +247,7 @@ Sync collections automatically and efficiently keep the data in the collection u
 
 There are already a number of TanStack DB collections for different sync engines built-in or under development, including [Electric](/), [Firebase](https://firebase.google.com/), [Materialize](https://materialize.com) and [Trailbase](https://trailbase.io).
 
-To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/api/clients/typescript) when defining a [Shape](/docs/guides/shapes). A shape is a [filtered view on a database table](/docs/guides/shapes#where-clause) that Electric syncs out-of Postgres, into the client for you:
+Electric is our open-source, Postgres-native, super fast sync engine. To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/api/clients/typescript) when defining a [Shape](/docs/guides/shapes). A shape is a [filtered view on a database table](/docs/guides/shapes#where-clause) that Electric syncs out-of Postgres, into the client for you:
 
 ```ts
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
