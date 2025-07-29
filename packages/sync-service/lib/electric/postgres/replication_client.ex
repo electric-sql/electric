@@ -40,8 +40,8 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_name,
       :slot_temporary?,
       :display_settings,
+      :txn_collector,
       origin: "postgres",
-      txn_collector: %Collector{},
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
@@ -81,7 +81,12 @@ defmodule Electric.Postgres.ReplicationClient do
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
-                   slot_temporary?: [type: :boolean, default: false]
+                   slot_temporary?: [type: :boolean, default: false],
+                   # Set a reasonable limit for the maximum size of a transaction that
+                   # we can handle, above which we would exit as we run the risk of running
+                   # out of memmory.
+                   # TODO: stream out transactions and collect on disk to avoid this
+                   max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
                  )
 
     @spec new(Access.t()) :: t()
@@ -89,7 +94,13 @@ defmodule Electric.Postgres.ReplicationClient do
       opts = NimbleOptions.validate!(opts, @opts_schema)
       settings = [display_settings: Electric.Postgres.display_settings()]
       opts = settings ++ opts
-      struct!(__MODULE__, opts)
+
+      {max_txn_size, opts} = Keyword.pop!(opts, :max_txn_size)
+
+      struct!(
+        __MODULE__,
+        opts ++ [txn_collector: %Collector{max_tx_size: max_txn_size}]
+      )
     end
   end
 
@@ -293,6 +304,9 @@ defmodule Electric.Postgres.ReplicationClient do
     # end)
     |> Collector.handle_message(state.txn_collector)
     |> case do
+      {:error, reason, _} ->
+        {:disconnect, {:irrecoverable_slot, reason}}
+
       %Collector{} = txn_collector ->
         {:noreply, %{state | txn_collector: txn_collector}}
 

@@ -1,9 +1,17 @@
 defmodule Electric.DbConnectionError do
   require Logger
 
-  defexception [:message, :type, :original_error, :retry_may_fix?]
+  defexception [
+    :message,
+    :type,
+    :original_error,
+    :retry_may_fix?,
+    drop_slot_and_restart?: false
+  ]
 
   alias Electric.DbConnectionError
+
+  def from_error(%DbConnectionError{} = err), do: err
 
   def from_error(%DBConnection.ConnectionError{message: message} = error)
       when message in [
@@ -94,9 +102,10 @@ defmodule Electric.DbConnectionError do
         it's possible either Electric is lagging behind and you might need to scale up,
         or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
       """,
-      type: :replication_slot_invalidated,
+      type: :database_slot_exceeded_max_size,
       original_error: error,
-      retry_may_fix?: false
+      retry_may_fix?: false,
+      drop_slot_and_restart?: true
     }
   end
 
@@ -209,6 +218,16 @@ defmodule Electric.DbConnectionError do
       type: :syntax_error,
       original_error: error,
       retry_may_fix?: false
+    }
+  end
+
+  def from_error({:irrecoverable_slot, {type, message}} = error) do
+    %DbConnectionError{
+      message: message,
+      type: type,
+      original_error: error,
+      retry_may_fix?: false,
+      drop_slot_and_restart?: true
     }
   end
 

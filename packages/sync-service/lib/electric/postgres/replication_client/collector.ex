@@ -19,19 +19,24 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     Column
   }
 
-  defstruct transaction: nil, tx_op_index: nil, relations: %{}
+  defstruct transaction: nil, tx_op_index: nil, tx_size: 0, max_tx_size: nil, relations: %{}
 
   @type t() :: %__MODULE__{
           transaction: nil | Transaction.t(),
           tx_op_index: nil | non_neg_integer(),
-          relations: %{optional(LR.relation_id()) => LR.Relation.t()}
+          tx_size: non_neg_integer(),
+          relations: %{optional(LR.relation_id()) => LR.Relation.t()},
+          max_tx_size: nil | non_neg_integer()
         }
 
   @doc """
   Handle incoming logical replication message by either building up a transaction or
   returning a complete built up transaction.
   """
-  @spec handle_message(LR.message(), t()) :: t() | {Transaction.t() | Relation.t(), t()}
+  @spec handle_message(LR.message(), t()) ::
+          t()
+          | {Transaction.t() | Relation.t(), t()}
+          | {:error, {:replica_not_full | :exceeded_max_tx_size, String.t()}, t()}
   def handle_message(%LR.Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
 
@@ -76,21 +81,28 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
 
     %NewRecord{relation: {relation.namespace, relation.name}, record: data, log_offset: offset}
-    |> prepend_change(state)
+    |> prepend_change(msg.bytes, state)
+  end
+
+  def handle_message(%LR.Update{old_tuple_data: nil} = msg, %__MODULE__{} = state) do
+    relation = Map.get(state.relations, msg.relation_id)
+
+    {
+      :error,
+      {:replica_not_full,
+       """
+       Received an update from PG for #{relation.namespace}.#{relation.name} that did not have old data included in the message.
+       This means the table #{relation.namespace}.#{relation.name} doesn't have the correct replica identity mode. Electric cannot
+       function with replica identity mode set to something other than FULL.
+
+       Try executing `ALTER TABLE #{relation.namespace}.#{relation.name} REPLICA IDENTITY FULL` on Postgres.
+       """},
+      state
+    }
   end
 
   def handle_message(%LR.Update{} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
-
-    if is_nil(msg.old_tuple_data),
-      do:
-        Logger.error("""
-        Received an update from PG for #{relation.namespace}.#{relation.name} that did not have old data included in the message.
-        This means the table #{relation.namespace}.#{relation.name} doesn't have the correct replica identity mode. Electric cannot
-        function with replica identity mode set to something other than FULL.
-
-        Try executing `ALTER TABLE #{relation.namespace}.#{relation.name} REPLICA IDENTITY FULL` on Postgres.
-        """)
 
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
 
@@ -113,17 +125,13 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
       record: data,
       log_offset: offset
     )
-    |> prepend_change(state)
+    |> prepend_change(msg.bytes, state)
   end
 
   def handle_message(%LR.Delete{} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
-    data =
-      data_tuple_to_map(
-        relation.columns,
-        msg.old_tuple_data || msg.changed_key_tuple_data
-      )
+    data = data_tuple_to_map(relation.columns, msg.old_tuple_data || msg.changed_key_tuple_data)
 
     offset = LogOffset.new(state.transaction.lsn, state.tx_op_index)
 
@@ -132,7 +140,7 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
       old_record: data,
       log_offset: offset
     }
-    |> prepend_change(state)
+    |> prepend_change(msg.bytes, state)
   end
 
   def handle_message(%LR.Truncate{} = msg, state) do
@@ -141,12 +149,12 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
     msg.truncated_relations
     |> Enum.map(&Map.get(state.relations, &1))
     |> Enum.map(&%TruncatedRelation{relation: {&1.namespace, &1.name}, log_offset: offset})
-    |> Enum.reduce(state, &prepend_change/2)
+    |> Enum.reduce(state, &prepend_change(&1, 0, &2))
   end
 
   def handle_message(%LR.Commit{lsn: commit_lsn}, %__MODULE__{transaction: txn} = state)
       when not is_nil(txn) and commit_lsn == txn.lsn do
-    {Transaction.finalize(txn), %{state | transaction: nil, tx_op_index: nil}}
+    {Transaction.finalize(txn), %{state | transaction: nil, tx_op_index: nil, tx_size: 0}}
   end
 
   @spec data_tuple_to_map([LR.Relation.Column.t()], list(String.t())) :: %{
@@ -167,11 +175,30 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   defp column_value(_column_name, value), do: value
 
-  @spec prepend_change(Changes.change(), t()) :: t()
-  defp prepend_change(change, %__MODULE__{transaction: txn, tx_op_index: tx_op_index} = state) do
-    # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
-    # This gives us headroom for splitting any operation into 2.
-    %{state | transaction: Transaction.prepend_change(txn, change), tx_op_index: tx_op_index + 2}
+  @spec prepend_change(Changes.change(), non_neg_integer(), t()) ::
+          t() | {:error, {:exceeded_max_tx_size, String.t()}, t()}
+  defp prepend_change(_, bytes, %__MODULE__{max_tx_size: max_tx_size, tx_size: tx_size} = state)
+       when is_number(max_tx_size) and tx_size + bytes > max_tx_size do
+    {
+      :error,
+      {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max_tx_size} bytes."},
+      state
+    }
+  end
+
+  defp prepend_change(
+         change,
+         bytes,
+         %__MODULE__{transaction: txn, tx_op_index: tx_op_index, tx_size: tx_size} = state
+       ) do
+    %{
+      state
+      | transaction: Transaction.prepend_change(txn, change),
+        # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
+        # This gives us headroom for splitting any operation into 2.
+        tx_op_index: tx_op_index + 2,
+        tx_size: tx_size + bytes
+    }
   end
 
   defguard is_collecting(collector) when not is_nil(collector.transaction)

@@ -58,32 +58,35 @@ defmodule Electric.Postgres.LogicalReplication.Messages do
   end
 
   defmodule Insert do
-    defstruct([:relation_id, :tuple_data])
+    defstruct([:relation_id, :tuple_data, :bytes])
 
     @type t() :: %__MODULE__{
             relation_id: Messages.relation_id(),
-            tuple_data: tuple()
+            tuple_data: tuple(),
+            bytes: non_neg_integer()
           }
   end
 
   defmodule Update do
-    defstruct([:relation_id, :changed_key_tuple_data, :old_tuple_data, :tuple_data])
+    defstruct([:relation_id, :changed_key_tuple_data, :old_tuple_data, :tuple_data, :bytes])
 
     @type t() :: %__MODULE__{
             relation_id: Messages.relation_id(),
             changed_key_tuple_data: nil | {String.t(), nil | String.t()},
             old_tuple_data: tuple(),
-            tuple_data: tuple()
+            tuple_data: tuple(),
+            bytes: non_neg_integer()
           }
   end
 
   defmodule Delete do
-    defstruct([:relation_id, :changed_key_tuple_data, :old_tuple_data])
+    defstruct([:relation_id, :changed_key_tuple_data, :old_tuple_data, :bytes])
 
     @type t() :: %__MODULE__{
             relation_id: Messages.relation_id(),
             changed_key_tuple_data: nil | {String.t(), nil | String.t()},
-            old_tuple_data: nil | tuple()
+            old_tuple_data: nil | tuple(),
+            bytes: non_neg_integer()
           }
   end
 

@@ -1112,16 +1112,13 @@ defmodule Electric.Connection.Manager do
 
   defp pg_error_extra_info(_), do: ""
 
-  defp drop_slot_and_restart(
-         %DbConnectionError{type: :replication_slot_invalidated} = error,
-         state
-       ) do
+  defp drop_slot_and_restart(%DbConnectionError{drop_slot_and_restart?: true} = error, state) do
     Logger.warning(error.message)
 
     dispatch_stack_event(
       {:warning,
        %{
-         type: :database_slot_exceeded_max_size,
+         type: error.type,
          message: error.message,
          error: DbConnectionError.format_original_error(error)
        }},
@@ -1135,7 +1132,7 @@ defmodule Electric.Connection.Manager do
       state.timeline_opts
     )
 
-    {:stop, {:shutdown, :database_slot_exceeded_max_size}, state}
+    {:stop, {:shutdown, error.type}, state}
   end
 
   defp drop_slot_and_restart(_, _), do: false

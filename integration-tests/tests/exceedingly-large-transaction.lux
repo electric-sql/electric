@@ -1,0 +1,80 @@
+[doc Verify handling of exceedingly large transactions]
+
+[include _macros.luxinc]
+
+[global pg_container_name=exceedingly-large-transaction__pg]
+
+[my max_txn_bytes=5000]
+[my exceeded_transaction_limit_error=
+  """
+  Collected transaction exceeds limit of $max_txn_bytes bytes.
+  """]
+
+## Start a new Postgres cluster configured for easy replication slot invalidation.
+[invoke setup_pg_with_shell_name "pg" "" ""]
+
+## Start the sync service.
+[invoke setup_electric_with_env "ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE=$max_txn_bytes"]
+
+[invoke check_health_status "active"]
+
+## Create a table and shape, and send through a large transaction that should
+## surpass the limit specified
+[invoke start_psql]
+[shell psql]
+[shell psql]
+  """!
+  CREATE TABLE items (
+    id UUID PRIMARY KEY,
+    val TEXT
+  );
+  """
+  ??CREATE TABLE
+
+  """!
+  INSERT INTO items (id, val) VALUES (gen_random_uuid(), 'initial');
+  """
+  ??INSERT 0 1
+
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 200 OK
+  ?electric-handle: ([\d-]+)
+  [local handle=$1]
+  ?electric-offset: ([\w\d_]+)
+  [local offset=$1]
+  ??"val":"initial"
+
+[shell psql]
+  """!
+  INSERT INTO items (id, val) VALUES (
+    gen_random_uuid(),
+    'large val ' || repeat('012345679abcdef', 4096)
+  );
+  """
+  ??INSERT 0 1
+
+## Observe the error and clean restart of the stack
+[shell electric]
+  # Reset the failure pattern because we'll be matching on an error.
+  -
+
+  ??$exceeded_transaction_limit_error
+  ??Purging all shapes.
+  ??Starting replication from postgres
+
+[invoke check_health_status "active"]
+
+## Should now be able to observe data from large transaction
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 200 OK
+  ?electric-handle: ([\d-]+)
+  [local handle=$1]
+  ?electric-offset: ([\w\d_]+)
+  [local offset=$1]
+  ??"val":"initial"
+  ?"val":"large val [\w\d]+"
+
+[cleanup]
+  [invoke teardown]
