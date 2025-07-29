@@ -2,6 +2,21 @@ Welcome to your new TanStack [Start](https://tanstack.com/start/latest)/[DB](htt
 
 # Getting Started
 
+## Create a new project
+
+To create a new project based on this starter, run the following commands:
+
+```
+npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-starter my-tanstack-db-project
+cd my-tanstack-db-project
+```
+
+Copy the .env.example file to .env and fill in the values.
+
+```
+cp .env.example .env
+```
+
 ## Prerequisites
 
 This project uses [Caddy](https://caddyserver.com/) for local HTTPS development:
@@ -11,11 +26,16 @@ This project uses [Caddy](https://caddyserver.com/) for local HTTPS development:
 
 ## Running the Application
 
-To run this application:
+Install dependencies and run the application.
 
-```bash
+```
 pnpm install
 pnpm run dev
+```
+
+In another terminal, run the migrations.
+
+```
 pnpm run migrate
 ```
 
@@ -252,16 +272,16 @@ This starter uses [tRPC v10](https://trpc.io/) for type-safe mutations while Ele
 
 ```tsx
 // src/lib/trpc-client.ts
-import { createTRPCProxyClient, httpBatchLink } from '@trpc/client'
-import type { AppRouter } from '@/routes/api/trpc/$'
+import { createTRPCProxyClient, httpBatchLink } from "@trpc/client"
+import type { AppRouter } from "@/routes/api/trpc/$"
 
 export const trpc = createTRPCProxyClient<AppRouter>({
   links: [
     httpBatchLink({
-      url: '/api/trpc',
+      url: "/api/trpc",
       async headers() {
         return {
-          cookie: typeof document !== 'undefined' ? document.cookie : '',
+          cookie: typeof document !== "undefined" ? document.cookie : "",
         }
       },
     }),
@@ -287,6 +307,7 @@ onUpdate: async ({ transaction }) => {
 ```
 
 **API Routes:**
+
 - `/api/trpc/*` - tRPC mutations with full type safety
 - `/api/auth/*` - Authentication via better-auth
 - `/api/projects`, `/api/todos`, `/api/users` - Electric sync shapes for reads
