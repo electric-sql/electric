@@ -43,7 +43,7 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app development](/use-cases/local-first-software).
+[Tanstack DB](https://tanstack.com/db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app development](/use-cases/local-first-software).
 
 </div>
 <div class="block-xs">
@@ -680,5 +680,8 @@ See the [TanStack blog post](https://tanstack.com/blog/tanstack-db-0.1-the-embed
 </div>
 
 <figure style="background: none">
-  <Tweet tweet-id="1947383819314823318" align="center" conversation="none" theme="dark" />
+  <Tweet tweet-id="1947383819314823318" conversation="none" theme="dark" />
+</figure>
+<figure style="background: none">
+  <Tweet tweet-id="1950262878852043103" conversation="none" theme="dark" />
 </figure>
