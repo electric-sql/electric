@@ -12,6 +12,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.Sampler
 
   require Logger
 
@@ -318,17 +319,19 @@ defmodule Electric.Postgres.ReplicationClient do
 
         {m, f, args} = state.transaction_received
 
-        :telemetry.execute(
-          [:electric, :postgres, :replication, :transaction_received],
-          %{
-            monotonic_time: System.monotonic_time(),
-            receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
-            bytes: byte_size(data),
-            count: 1,
-            operations: txn.num_changes
-          },
-          %{stack_id: state.stack_id}
-        )
+        if Sampler.sample?() do
+          :telemetry.execute(
+            [:electric, :postgres, :replication, :transaction_received],
+            %{
+              monotonic_time: System.monotonic_time(),
+              receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
+              bytes: byte_size(data),
+              count: 1,
+              operations: txn.num_changes
+            },
+            %{stack_id: state.stack_id}
+          )
+        end
 
         # this will block until all the consumers have processed the transaction because
         # the log collector uses manual demand, and only replies to the `call` once it
