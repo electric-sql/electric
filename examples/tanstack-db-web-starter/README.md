@@ -55,14 +55,6 @@ To build this application for production:
 pnpm run build
 ```
 
-## Testing
-
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
-
-```bash
-pnpm run test
-```
-
 ## AI
 
 The starter includes an `AGENT.md`. Depending on which AI coding tool you use, you may need to copy/move it to the right file name e.g. `.cursor/rules`.
