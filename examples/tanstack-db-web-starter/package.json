@@ -8,7 +8,7 @@
     "build": "vite build",
     "migrate": "drizzle-kit migrate",
     "serve": "vite preview",
-    "test": "vitest run",
+    "test": "echo 'No tests yet'",
     "lint:check": "eslint .",
     "lint": "eslint . --fix",
     "format": "prettier --write .",
@@ -61,7 +61,6 @@
     "tsx": "^4.20.3",
     "typescript": "^5.7.2",
     "vite": "^6.1.0",
-    "vitest": "^3.0.5",
     "web-vitals": "^5.0.3"
   }
 }
