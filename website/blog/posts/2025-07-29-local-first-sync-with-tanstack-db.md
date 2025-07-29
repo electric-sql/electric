@@ -43,14 +43,14 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app development](/use-cases/local-first).
+[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app development](/use-cases/local-first-software).
 
 </div>
 <div class="block-xs">
 
 [Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
-Paired with [Electric](/), it provides an optimal end-to-end sync stack for local-first app&nbsp;development.
+Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app&nbsp;development](/use-cases/local-first-software).
 
 </div>
 
