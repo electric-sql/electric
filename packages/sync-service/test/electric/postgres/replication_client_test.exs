@@ -270,6 +270,32 @@ defmodule Electric.Postgres.ReplicationClientTest do
                }
              } = receive_tx_change()
     end
+
+    test "exits with irrecoverable slot error with large transactions", %{db_conn: conn} = ctx do
+      pid =
+        start_client(ctx,
+          replication_opts: Keyword.put(ctx.replication_opts, :max_txn_size, 5000)
+        )
+
+      monitor = Process.monitor(pid)
+      Process.unlink(pid)
+      on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
+
+      insert_item(conn, gen_random_string(5001))
+
+      # Verify that passing the txn size limit crashes the process
+
+      assert_receive {
+                       :DOWN,
+                       ^monitor,
+                       :process,
+                       ^pid,
+                       {:irrecoverable_slot,
+                        {:exceeded_max_tx_size,
+                         "Collected transaction exceeds limit of 5000 bytes."}}
+                     },
+                     @assert_receive_db_timeout
+    end
   end
 
   describe "ReplicationClient against real db (toast)" do

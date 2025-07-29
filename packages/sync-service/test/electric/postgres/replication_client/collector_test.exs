@@ -245,7 +245,7 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
     err_msg = "Collected transaction exceeds limit of #{max_tx_size} bytes."
 
-    assert {:error, {:exceeded_max_tx_size, ^err_msg}} =
+    assert {:error, {:exceeded_max_tx_size, ^err_msg}, %Collector{} = _} =
              Collector.handle_message(insert_msg, collector)
   end
 

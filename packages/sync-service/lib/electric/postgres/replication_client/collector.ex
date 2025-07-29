@@ -175,12 +175,14 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   defp column_value(_column_name, value), do: value
 
-  @spec prepend_change(Changes.change(), non_neg_integer(), t()) :: t()
-  defp prepend_change(_, bytes, %__MODULE__{max_tx_size: max_tx_size, tx_size: tx_size})
+  @spec prepend_change(Changes.change(), non_neg_integer(), t()) ::
+          t() | {:error, {:exceeded_max_tx_size, String.t()}, t()}
+  defp prepend_change(_, bytes, %__MODULE__{max_tx_size: max_tx_size, tx_size: tx_size} = state)
        when is_number(max_tx_size) and tx_size + bytes > max_tx_size do
     {
       :error,
-      {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max_tx_size} bytes."}
+      {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max_tx_size} bytes."},
+      state
     }
   end
 
