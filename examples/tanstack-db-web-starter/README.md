@@ -13,6 +13,8 @@ cd my-tanstack-db-project
 
 Copy the .env.example file to .env and fill in the values.
 
+_The database url will be set by default to development postgres docker container, and during development the better-auth secret is not required._
+
 ```
 cp .env.example .env
 ```
@@ -24,6 +26,8 @@ This project uses [Caddy](https://caddyserver.com/) for local HTTPS development:
 1. **Install Caddy** for your OS — https://caddyserver.com/docs/install
 2. **Run `caddy trust`** so Caddy can install its certificate into your OS. This is necessary for http/2 to Just Work™ without SSL warnings/errors in the browser — https://caddyserver.com/docs/command-line#caddy-trust
 
+Docker is also required to run Postgres and the ElectricSQL sync engine.
+
 ## Running the Application
 
 Install dependencies and run the application.
@@ -33,11 +37,15 @@ pnpm install
 pnpm run dev
 ```
 
+The `dev` command will start both the dev server and a docker compose with Postgres and the ElectricSQL sync engine.
+
 In another terminal, run the migrations.
 
 ```
 pnpm run migrate
 ```
+
+Visit `https://tanstack-start-db-electric-starter.localhost/` to see the application.
 
 # Building For Production
 
