@@ -11,6 +11,8 @@ defmodule Electric.DbConnectionError do
 
   alias Electric.DbConnectionError
 
+  def from_error(%DbConnectionError{} = err), do: err
+
   def from_error(%DBConnection.ConnectionError{message: message} = error)
       when message in [
              "tcp recv (idle): closed",

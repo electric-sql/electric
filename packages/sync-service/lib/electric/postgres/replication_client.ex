@@ -305,7 +305,7 @@ defmodule Electric.Postgres.ReplicationClient do
     |> Collector.handle_message(state.txn_collector)
     |> case do
       {:error, reason, _} ->
-        exit({:irrecoverable_slot, reason})
+        raise Electric.DbConnectionError.from_error({:irrecoverable_slot, reason})
 
       %Collector{} = txn_collector ->
         {:noreply, %{state | txn_collector: txn_collector}}
