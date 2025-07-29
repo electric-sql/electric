@@ -2,6 +2,23 @@ Welcome to your new TanStack [Start](https://tanstack.com/start/latest)/[DB](htt
 
 # Getting Started
 
+## Create a new project
+
+To create a new project based on this starter, run the following commands:
+
+```
+npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-starter my-tanstack-db-project
+cd my-tanstack-db-project
+```
+
+Copy the .env.example file to .env and fill in the values.
+
+_The database url will be set by default to development postgres docker container, and during development the better-auth secret is not required._
+
+```
+cp .env.example .env
+```
+
 ## Prerequisites
 
 This project uses [Caddy](https://caddyserver.com/) for local HTTPS development:
@@ -9,15 +26,26 @@ This project uses [Caddy](https://caddyserver.com/) for local HTTPS development:
 1. **Install Caddy** for your OS — https://caddyserver.com/docs/install
 2. **Run `caddy trust`** so Caddy can install its certificate into your OS. This is necessary for http/2 to Just Work™ without SSL warnings/errors in the browser — https://caddyserver.com/docs/command-line#caddy-trust
 
+Docker is also required to run Postgres and the ElectricSQL sync engine.
+
 ## Running the Application
 
-To run this application:
+Install dependencies and run the application.
 
-```bash
+```
 pnpm install
 pnpm run dev
+```
+
+The `dev` command will start both the dev server and a docker compose with Postgres and the ElectricSQL sync engine.
+
+In another terminal, run the migrations.
+
+```
 pnpm run migrate
 ```
+
+Visit `https://tanstack-start-db-electric-starter.localhost/` to see the application.
 
 # Building For Production
 
@@ -25,14 +53,6 @@ To build this application for production:
 
 ```bash
 pnpm run build
-```
-
-## Testing
-
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
-
-```bash
-pnpm run test
 ```
 
 ## AI
@@ -252,16 +272,16 @@ This starter uses [tRPC v10](https://trpc.io/) for type-safe mutations while Ele
 
 ```tsx
 // src/lib/trpc-client.ts
-import { createTRPCProxyClient, httpBatchLink } from '@trpc/client'
-import type { AppRouter } from '@/routes/api/trpc/$'
+import { createTRPCProxyClient, httpBatchLink } from "@trpc/client"
+import type { AppRouter } from "@/routes/api/trpc/$"
 
 export const trpc = createTRPCProxyClient<AppRouter>({
   links: [
     httpBatchLink({
-      url: '/api/trpc',
+      url: "/api/trpc",
       async headers() {
         return {
-          cookie: typeof document !== 'undefined' ? document.cookie : '',
+          cookie: typeof document !== "undefined" ? document.cookie : "",
         }
       },
     }),
@@ -287,6 +307,7 @@ onUpdate: async ({ transaction }) => {
 ```
 
 **API Routes:**
+
 - `/api/trpc/*` - tRPC mutations with full type safety
 - `/api/auth/*` - Authentication via better-auth
 - `/api/projects`, `/api/todos`, `/api/users` - Electric sync shapes for reads
