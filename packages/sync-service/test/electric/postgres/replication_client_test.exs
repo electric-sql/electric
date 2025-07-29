@@ -290,10 +290,9 @@ defmodule Electric.Postgres.ReplicationClientTest do
                        ^monitor,
                        :process,
                        ^pid,
-                       {%Electric.DbConnectionError{
-                          type: :exceeded_max_tx_size,
-                          message: "Collected transaction exceeds limit of 5000 bytes."
-                        }, _stacktrace}
+                       {:irrecoverable_slot,
+                        {:exceeded_max_tx_size,
+                         "Collected transaction exceeds limit of 5000 bytes."}}
                      },
                      @assert_receive_db_timeout
     end
@@ -318,8 +317,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
                        ^monitor,
                        :process,
                        ^pid,
-                       {%Electric.DbConnectionError{type: :replica_not_full, message: msg},
-                        _stacktrace}
+                       {:irrecoverable_slot, {:replica_not_full, msg}}
                      },
                      @assert_receive_db_timeout
 
