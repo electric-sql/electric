@@ -7,57 +7,102 @@ image: /img/integrations/electric-tanstack.jpg
 ---
 
 <script setup>
-import DataFlowPNG from '/static/img/docs/integrations/tanstack/data-flow.png?url'
-import DataFlowSmPNG from '/static/img/docs/integrations/tanstack/data-flow.sm.png?url'
-import DataFlowJPG from '/static/img/docs/integrations/tanstack/data-flow.jpg?url'
+import { data } from '../../data/posts.data.ts'
+const posts = data.filter(post => {
+  console.log(post.path)
+
+  return post.path === '/blog/2025/07/24/local-first-sync-with-tanstack-db'
+})
+
+import BlogPostListing from '../../src/components/BlogPostListing.vue'
 </script>
+
+<style scoped>
+  .listing {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+    margin: 24px 0;
+    overflow: hidden;
+  }
+  @media (max-width: 1049px) {
+    .listing {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 949px) {
+    .listing {
+      gap: 32px;
+      margin: 24px 0;
+    }
+  }
+  @media (max-width: 749px) {
+    .listing {
+      grid-template-columns: 1fr;
+      gap: 32px;
+      margin: 20px 0;
+    }
+  }
+  @media (max-width: 549px) {
+    .listing {
+      margin: 20px 0;
+    }
+  }
+</style>
 
 <img src="/img/integrations/tanstack.svg" class="product-icon" />
 
 # TanStack
 
-[TanStack](https://tanstack.com/) is a set of utilities for building web applications.
+[TanStack](https://tanstack.com) is a collection of TypeScript libraries for building web and mobile apps.
 
-> [!Warning] Electric and TanStack DB
-> Electric now has native support for TanStack through the TanStack DB library. [Tanstack DB](https://tanstack.com/db) is a reactive client
-> store for building super fast apps on sync. Electric integrates natively with it.
->
-> See the [TanStack DB documentation](https://tanstack.com/db/latest/docs/overview) for usage details and James'
-> [Introducing TanStack DB](https://youtu.be/ia9FpY_Sw_4) Local-first Conf talk for more context.
->
-> TanStack DB superceeds the integration docs below.
+Developed by an open collective, stewarded by [Tanner Linsley](https://github.com/tannerlinsley), it's one of the best and most popular ways to build modern apps.
 
-## Electric and TanStack
+## TanStack DB
 
-[TanStack Query](https://tanstack.com/query/latest) is a data-fetching and state management library. Electric works very well together with TanStack Query, where Electric provides the read-path sync and TanStack provides a [local write-path with optimistic state](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates#via-the-cache).
+Electric have [partnered with TanStack](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query) to build [TanStack DB](https://tanstack.com/db), a reactive client store for building super fast apps on sync.
 
-<figure>
-  <a :href="DataFlowJPG">
-    <img :src="DataFlowPNG" class="hidden-xs"
-        alt="Illustration of an Electric - TanStack integration"
+Type-safe, declarative, incrementally adoptable and insanely fast, it's the [future of app development with Electric](/blog/2025/07/24/local-first-sync-with-tanstack-db) and the best way of [building AI apps<span class="hidden-xs"> and agentic systems</span>](/blog/2025/04/09/building-ai-apps-on-sync).
+
+See the blog post for more details:
+
+<div class="listing">
+  <BlogPostListing v-for="post in posts"
+      :key="post.slug"
+      :post="post"
+  />
+</div>
+
+### Project links
+
+There's a [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for web and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for&nbsp;mobile.
+
+See the project website at [tanstack.com/db](https://tanstack.com/db), the [official docs](https://tanstack.com/db/latest/docs/overview) and the [example&nbsp;app](https://github.com/TanStack/db/tree/main/examples/react/todo) in the [tanstack/db](https://github.com/tanstack/db) GitHub&nbsp;repo.
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action cloud-cta">
+    <VPButton
+      href="https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter"
+      text="Starter"
+      theme="brand"
     />
-    <img :src="DataFlowSmPNG" class="block-xs"
-        alt="Illustration of an Electric - TanStack integration"
+    &nbsp;
+    <VPButton
+        href="https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query"
+        text="Blog"
+        theme="alt"
     />
-  </a>
-  <figcaption style="line-height: 1.4">
-    <small>
-      <em>
-        Green shows read-path sync via Electric.
-        <span class="no-wrap">Red shows write-path via TanStack.</span>
-      </em>
-    </small>
-  </figcaption>
-</figure>
-
-In this configuration, Electric and TanStack can provide a fully offline-capable system with active-active replication of both reads and writes.
-
-### Example
-
-The example below shows a simple todo application that uses Electric for read-path sync and TanStack for local optimistic writes.
-
-Electric is used to sync a shape. TanStack is used to apply mutations and maintain optimistic state. When a mutation is confirmed, it cleares the optimistic state. When the component renders, it merges the optimistic state into the shape data.
-
-<<< @../../examples/tanstack/src/Example.tsx
-
-See the [Tanstack example](/demos/tanstack) for the full source code.
+    &nbsp;
+    <VPButton
+        href="https://tanstack.com/db/latest/docs/overview"
+        text="Docs"
+        theme="alt"
+    />
+    &nbsp;
+    <VPButton
+        href="https://github.com/TanStack/db"
+        text="Repo"
+        theme="alt"
+    />
+  </div>
+</div>

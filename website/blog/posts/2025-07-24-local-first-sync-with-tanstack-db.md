@@ -43,7 +43,7 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for local-first app development.
+[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app development](/use-cases/local-first).
 
 </div>
 <div class="block-xs">
@@ -57,7 +57,7 @@ Paired with [Electric](/), it provides an optimal end-to-end sync stack for loca
 Type-safe, declarative, incrementally adoptable and insanely fast, it's the future of app development with Electric and the best way of [building AI apps<span class="hidden-xs"> and agentic systems</span>](/blog/2025/04/09/building-ai-apps-on-sync).
 
 > [!Warning] ✨&nbsp; TanStack&nbsp;DB <> Electric&nbsp;starters
-> Fire up TanStack DB with Electric using the [TanStack&nbsp;Start&nbsp;starter](https://github.com/KyleAMathews/tanstack-start-db-electric-starter) and [Expo&nbsp;starter](https://github.com/KyleAMathews/expo-db-electric-starter) templates.
+> Fire up TanStack DB with Electric using the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) templates.
 >
 > Docs are at [tanstack.com/db](https://tanstack.com/db) and there's an [example&nbsp;app](https://github.com/TanStack/db/tree/main/examples/react/todo) in&nbsp;the&nbsp;repo.
 
@@ -647,14 +647,14 @@ Each step will make your app faster and more resilient, as well as providing a p
 
 [TanStack DB](https://tanstack.com/db) with [Electric](/) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
 
-To get started, check out the [TanStack&nbsp;Start&nbsp;starter](https://github.com/KyleAMathews/tanstack-start-db-electric-starter) for web and [Expo&nbsp;starter](https://github.com/KyleAMathews/expo-db-electric-starter) for&nbsp;mobile.
+To get started, check out the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for web and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for&nbsp;mobile.
 
 See the [TanStack blog post](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query), the project website at [tanstack.com/db](https://tanstack.com/db), the [official docs](https://tanstack.com/db/latest/docs/overview) and the [example&nbsp;app](https://github.com/TanStack/db/tree/main/examples/react/todo) in the [tanstack/db](https://github.com/tanstack/db) GitHub&nbsp;repo.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
     <VPButton
-      href="https://github.com/KyleAMathews/tanstack-start-db-electric-starter"
+      href="https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter"
       text="Starter"
       theme="brand"
     />
