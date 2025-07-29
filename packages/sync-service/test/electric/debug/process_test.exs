@@ -48,4 +48,39 @@ defmodule Electric.Debug.ProcessTest do
              ] = Electric.Debug.Process.top_memory_by_type(2)
     end
   end
+
+  describe "top_reduction_rate_per_type/1" do
+    test "works" do
+      start_busy_process({:p1, 1}, 10)
+      start_busy_process({:p2, 1}, 50)
+      start_busy_process({:p3, 1}, 90)
+
+      assert [
+               %{type: :p3, reduction_rate: _},
+               %{type: :p2, reduction_rate: _},
+               %{type: :p1, reduction_rate: _}
+             ] = Electric.Debug.Process.top_reduction_rate_per_type(3)
+    end
+
+    defp start_busy_process(lable, load_percent) do
+      Task.async(fn ->
+        Process.set_label(lable)
+        busy_loop(load_percent, System.monotonic_time(:microsecond))
+      end)
+    end
+
+    defp busy_loop(reduction_rate, start_time) do
+      1..1000 |> Enum.each(fn _ -> :ok end)
+      {:reductions, reductions} = Process.info(self(), :reductions)
+      time = System.monotonic_time(:microsecond) - start_time
+      actual_reduction_rate = reductions / time
+
+      if actual_reduction_rate > reduction_rate do
+        Process.sleep(1)
+        busy_loop(reduction_rate, start_time)
+      else
+        busy_loop(reduction_rate, start_time)
+      end
+    end
+  end
 end

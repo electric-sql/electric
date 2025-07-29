@@ -3,6 +3,83 @@ defmodule Electric.Debug.Process do
 
   def type(pid), do: process_type(pid, info(pid))
 
+  def top_reduction_rate_per_type(duration \\ 50) do
+    pids = Process.list()
+    types = Enum.map(pids, &type/1)
+
+    start =
+      Enum.map(pids, fn pid ->
+        time = System.monotonic_time(:microsecond)
+
+        case Process.info(pid, :reductions) do
+          {:reductions, reductions} ->
+            {time, reductions}
+
+          _ ->
+            {time, nil}
+        end
+      end)
+
+    Process.sleep(duration)
+
+    finish =
+      Enum.map(pids, fn pid ->
+        time = System.monotonic_time(:microsecond)
+
+        case Process.info(pid, :reductions) do
+          {:reductions, reductions} ->
+            {time, reductions}
+
+          _ ->
+            {time, nil}
+        end
+      end)
+
+    Enum.zip([pids, types, start, finish])
+    |> Enum.reject(fn
+      {_, nil, {_, _}, {_, _}} ->
+        true
+
+      {_, _, {_, nil}, {_, _}} ->
+        true
+
+      {_, _, {_, _}, {_, nil}} ->
+        true
+
+      _ ->
+        false
+    end)
+    |> Enum.map(fn {pid, type, {start_time, start_reductions}, {finish_time, finish_reductions}} ->
+      reductions = finish_reductions - start_reductions
+      time = finish_time - start_time
+
+      %{
+        type: type,
+        pid: pid,
+        time: time,
+        reductions: reductions,
+        reduction_rate: 1000 * 1000 * reductions / time
+      }
+    end)
+    |> Enum.sort_by(&(-&1.reduction_rate))
+
+    # |> Enum.take(count)
+  end
+
+  def group(list, count \\ 5) do
+    list
+    |> Enum.group_by(& &1.type, & &1.reduction_rate)
+    |> Enum.map(fn {t, rs} -> {t, Enum.sum(rs)} end)
+    |> Enum.sort_by(fn {_, r} -> -r end)
+    |> Enum.take(count)
+  end
+
+  def sum(list) do
+    list
+    |> Enum.map(& &1.reduction_rate)
+    |> Enum.sum()
+  end
+
   def top_memory_by_type do
     top_memory_by_type(Process.list(), @default_count)
   end
@@ -32,13 +109,20 @@ defmodule Electric.Debug.Process do
   end
 
   defp info(pid) do
-    Process.info(pid, [:dictionary, :initial_call, :label, :memory])
+    Process.info(pid, [:dictionary, :initial_call, :label, :memory, :reductions])
   end
 
   defp process_type(pid, info) do
-    label_from_info(info) ||
-      initial_module_from_info(info) ||
-      if(Process.alive?(pid), do: :unknown, else: :dead)
+    type =
+      label_from_info(info) ||
+        initial_module_from_info(info) ||
+        if(Process.alive?(pid), do: :unknown, else: :dead)
+
+    if is_binary(type) && String.starts_with?(type, "Request ") do
+      :request
+    else
+      type
+    end
   end
 
   defp label_from_info(info) do
@@ -72,3 +156,5 @@ defmodule Electric.Debug.Process do
     end
   end
 end
+
+alias Electric.Debug.Process, as: P
