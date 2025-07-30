@@ -7,7 +7,6 @@ excerpt: >-
   When AWS launched S3 in 2006 they didn’t lead with features — they led with eleven nines.
   Our last quarter was our own “eleven‑nine sprint.” We set one goal: make ElectricSQL so boring‑reliable that you stop thinking about it and just build.
 authors: [kyle]
-image: /img/blog/intel-ignite/header.jpg
 tags: [product, engineering]
 outline: deep
 post: true
@@ -21,15 +20,15 @@ Our last quarter was our own “eleven‑nine sprint.” We set one goal: make E
 
 Electric is a Postgres-native, CDN-powered sync engine. We power the sync layer for companies all around the world.
 
-Your sync layer just has to just work. It's a load-bearing black box that drives critical data flows and people rightfully have db-level expectations for.
+Your sync layer just has to work. It's a load-bearing black box that drives critical data flows and people rightfully have db-level expectations for.
 
 We look to tools like S3 and Redis for inspiration.
 
 S3 is a pretty simple idea. Read and write files in the cloud. Yet they made it extrodinary by delivering on the 11 9s promise and scaling it to essentially infinite capacity.
 
-Redis is a pretty simple idea. A networked data structures server. Yet they made it extrodinary by scaling it huge numbers of reads and writes.
+Redis is also pretty simple - a networked data structures server. Yet they made it extraordinary by scaling it huge numbers of reads and writes.
 
-Postgres-native sync is a pretty simple idea. Any write to Postgres gets synced instantly to any number of subscribers. We're working to make it extrodinary by scaling it to huge numbers of subscribers, tx/sec, and S3/PG levels of reliability.
+Postgres-native sync is a pretty simple idea. Any write to Postgres gets synced instantly to any number of subscribers. We're working to make it extraordinary by scaling it to huge numbers of subscribers, tx/sec, and S3/PG levels of reliability.
 
 So we hit pause post v1 on feature work to fully focus on reliability for a quarter. Our bet: sacrifice a quarter of roadmap velocity to buy years of trust.
 
