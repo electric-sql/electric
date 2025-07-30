@@ -1,4 +1,3 @@
-
 ---
 title: 120 days of hardening – the post‑1.0 reliability sprint
 description: >-
@@ -38,9 +37,9 @@ We want sync to be a magical black box so for the next four months we went heads
 
 **TL;DR**
 
-* **60‑plus pull requests** merged between **17 March → 14 July**
-* Connection failures cut by an order of magnitude on our largest production tenant
-* Replication engine now passes **100 % of Postgres expression tests** (including PG 14 edge‑cases)
+- **60‑plus pull requests** merged between **17 March → 14 July**
+- Connection failures cut by an order of magnitude on our largest production tenant
+- Replication engine now passes **100 % of Postgres expression tests** (including PG 14 edge‑cases)
 
 ---
 
@@ -52,7 +51,7 @@ We want sync to be a magical black box so for the next four months we went heads
 | **2. Graceful degradation & self‑healing**     | `#2840`, `#2881`          | High replication traffic no longer stalls shape restoration; TCP send timeouts are now tunable per deployment.                      |
 | **3. Observability that predicts, not reacts** | `#2854`, `#2839`, `#2856` | Millisecond‑level timing on replication loop + experimental live‑mode SSE streaming make “black‑box” debugging a thing of the past. |
 | **4. Chaos & property‑based testing**          | `#2859`, `#2852`          | Eliminated intermittent CI reds; shaped traffic replay now part of every PR run.                                                    |
-| **5. Developer experience & guard‑rails**      | `#2833`                   | Observer comes pre‑wired, so you can watch processes crash *before* they reach production.                                          |
+| **5. Developer experience & guard‑rails**      | `#2833`                   | Observer comes pre‑wired, so you can watch processes crash _before_ they reach production.                                          |
 | **6. Security = reliability**                  | `#2857`, `#2832`          | Latest Erlang/OTP & TLS cert checks plugged; keeps the supply chain tight.                                                          |
 | **7. Operational excellence**                  | `#2863`, `#2828`          | Sensible defaults for acceptor pools; Ecto field‑type parity stops surprising migrations.                                           |
 
@@ -76,6 +75,5 @@ Sync loop could load a shape while still wiring change‑listeners (`#2848`). Ra
 
 ## Reliability debt paid
 
-* **Connection resilience** is no longer our top support ticket.
-* **Postgres fidelity** (clause parsing, TRUNCATE decoding, publication diffs) means fewer “but it works in psql” surprises.
-
+- **Connection resilience** is no longer our top support ticket.
+- **Postgres fidelity** (clause parsing, TRUNCATE decoding, publication diffs) means fewer “but it works in psql” surprises.
