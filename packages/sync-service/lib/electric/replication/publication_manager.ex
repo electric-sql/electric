@@ -175,7 +175,7 @@ defmodule Electric.Replication.PublicationManager do
       relation_filter_counters: %{},
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
-      row_filtering_enabled: true,
+      row_filtering_enabled: false,
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
