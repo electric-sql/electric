@@ -815,9 +815,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "returns proper SSE format response when experimental_live_sse=true and live=true",
          ctx do
       Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
       |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
 
