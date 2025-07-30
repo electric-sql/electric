@@ -63,7 +63,7 @@ defmodule Electric.Client.MixProject do
 
   defp deps do
     [
-      {:electric, "~> 1.0.6", optional: true},
+      {:electric, "~> 1.1.0", optional: true},
       {:ecto_sql, "~> 3.12", optional: true},
       {:gen_stage, "~> 1.2", optional: true},
       {:jason, "~> 1.4"},
