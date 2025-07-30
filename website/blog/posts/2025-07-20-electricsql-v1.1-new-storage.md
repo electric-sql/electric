@@ -24,6 +24,69 @@ import diverseShapeFanoutImg from '/static/img/blog/electric-v1.1-new-storage/di
 
 </script>
 
+
+
+# Why We Built a Custom Storage Engine for Electric
+
+The most engaging applications today feel magical: data updates flow instantly across all users, changes appear in real-time without page refreshes, and everything stays perfectly in sync. This is the power of sync engines—they replace traditional request-response patterns with continuous data synchronization, letting your application work with local data that automatically stays in sync with your database changes. It's not evolution, it's revolution.
+
+Electric is a Postgres sync engine that allows developers to sync subsets of data into their applications, handling the core concerns of partial replication, fan-out, and data delivery. Developers declare what we call a *shape*—put simply a SQL query with a WHERE clause filter on a table—and Electric continuously streams changes matching that shape definition from the database to the application.
+
+## How Electric works
+
+Electric's job is deceptively simple: it connects to Postgres's logical replication stream, filters incoming changes that affect registered shapes, writes those changes to disk and serves shape requests. The challenge is keeping up with Postgres. Lagging behind means higher latency for live updates and growing WAL size on the source database.
+
+Architecture Diagram
+
+**1. Filtering the logical replication stream**
+ With hundreds of thousands of shapes to evaluate for each modified row in the replication stream, Electric has an extremely limited time budget to filter incoming changes. In another article, we'll talk about how we made Electric faster than the beefiest Postgres you can rent today.
+
+**2. Persisting changes to disk**
+Once Electric determines which shapes are affected by a change, it writes those changes to persistent storage—the "shape log". A single database transaction might affect dozens of shapes, each requiring appending a log entry and triggering expensive IO operations. This is done in the critical path of Electric.
+
+**3. Serving clients**
+To serve a shape request, Electric reads from the shape logs starting at an *offset* requested by the client and streams all data after that point. If this is the first request for the shape, we build a "snapshot" of the query by reading Postgres. The read path must handle massive concurrency, as thousands of clients might simultaneously request shapes while new changes continue to be written.
+
+These three components create a pipeline from Postgres's replication stream to client applications, enabling Electric to fan out database changes to potentially millions of concurrent users at lightning speed.
+
+## Picking an off-the-shelf store for Electric
+
+Writing a storage solution from scratch is an engineer's dream come true, but we didn't want to go that route. When we decided to rewrite Electric https://electric-sql.com/blog/2024/07/17/electric-next (yes! we scrapped a two-year project and started fresh with very ambitious scalability requirements), we wanted to make a pragmatic solution that would allow us to get a running system fast and tune performance in a second step. As Kyle likes saying: "make it work, make it right, make it fast". We looked at many off-the-shelf solutions we could use, but it wasn't easy to pick one.
+
+Electric requires fast append-only writes to shape logs and offset-based access for clients to catch up with the replication stream where they left off. In the background, we compact shape logs to reduce the number of entries in the log while preserving the offset of creation and deletion of each row.
+
+LSM-tree based stores like RocksDB combine the strengths of append-only writes and key-value access, but compaction wouldn't work with the offset-addressing requirements of Electric. We tried the more general-purpose SQLite. It was fast but ultimately not fast enough and would be very hard to customize. Kafka was the closest thing to what we needed but wasn't easy to integrate.
+
+None of the off-the-shelf solutions were a perfect fit for Electric's requirements. So we decided to go with CubDB as a pragmatic starting point—a solid Elixir key-value store that could get us to production quickly. We built a custom algorithm that would keep the largest chunk of data in a separate file and use CubDb to retrieve non-compacted chunks.
+
+## Realizing you need something better
+
+CubDB worked well for a while. But as we scaled to production traffic with customers like Trigger.dev pushing [20,000 changes per second](https://x.com/triggerdotdev/status/1945876425225171173), the limitations started to surface.
+
+Writing to storage is a big part of the time budget we have per transaction and they were taking up plenty of time with high CPU usage. The reason for this was that for every read or write operation, we were traversing a B-tree to find the right key, which can become quiete expensive. To handle writes, we rewriting entire chunks every time. This design wasn't going to get us very far. 
+
+The problem wasn't that CubDB was poorly designed—it just wasn't designed for Electric's specific requirements. We needed exactly two operations performed at extreme scale: append changes to shape logs, and read sections of those logs for client sync. Every other step was overhead we couldn't afford.
+
+## The new storage engine
+
+We built our own storage engine from scratch, designed specifically for the unique demands of our sync engine. The results transformed Electric's performance: 8-30x faster writes, 40-90x faster reads, and the ability to handle workloads that previously brought our system to its knees.
+
+The insight was simple: build a system that is optimized for Electric's write and read patterns leveraging the properties of logical replication and sequential reads to make it simple and performant.
+
+**Postgres logical replication**: every change comes with a Log Sequence Number (LSN) that gives us a total ordering. We can write changes in the order they arrive and use LSNs to track progress. If Electric restarts or crashes, we simply continue from the last processed LSN. This safety guarantee lets us prioritize speed over complex crash-recovery mechanisms.
+
+**Predictable access patterns**: Unlike databases that handle arbitrary queries, Electric clients always request data starting from a specific offset and read forward. This lets us optimize file serialization format for sequential reads without any data transformations, with massive speed-ups by not copying data around.
+
+**Cloud-Friendly **: Electric read-path scalability hangs on the ability to push from the server into an CDN/HTTP cache. We breaks data into fixed sized that match the limits of CDNs. We made this a core part of our storage design instead of treating it as an afterthought. On top of that, chances can be handed-off to an object store like S3. After all any ~~database~~ in 2025 is bottomless.
+
+
+
+TODO....
+
+
+
+
+
 ## The Problem: When Your Key-Value Store Becomes Your Bottleneck
 
 We’re making ElectricSQL - a sync engine that helps deliver data from PostgreSQL database to clients along with the updates. Querying the PostgreSQL for data is easy, but we also want to subscribe to future changes that affect the data we’ve just queried. Luckily, PostgreSQL provides a replication stream that we can follow and reason about.
