@@ -1279,7 +1279,7 @@ defmodule Electric.ShapeCacheTest do
 
   defp await_for_storage_to_raise(storage, num_attempts) do
     try do
-      Stream.run(Storage.get_log_stream(@zero_offset, storage))
+      Stream.run(Storage.get_log_stream(LogOffset.before_all(), storage))
       Process.sleep(50)
       await_for_storage_to_raise(storage, num_attempts - 1)
     rescue

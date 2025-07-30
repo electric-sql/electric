@@ -861,12 +861,16 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :ok
   end
 
+  def get_log_stream(%LogOffset{} = min_offset, %LogOffset{} = max_offset, opts)
+      when is_last_virtual_offset(min_offset) or is_real_offset(min_offset) do
+    stream_main_log(min_offset, max_offset, opts)
+  end
+
   def get_log_stream(
         %LogOffset{op_offset: op_offset} = min_offset,
         %LogOffset{} = max_offset,
         %__MODULE__{} = opts
-      )
-      when not is_real_offset(min_offset) do
+      ) do
     # Single ETS lookup to get both snapshot_started? and last_snapshot_chunk
     metadata =
       read_multiple_cached_metadata(opts, [:snapshot_started?, :last_snapshot_chunk])
@@ -892,10 +896,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       {%LogOffset{}, offset} ->
         stream_main_log(offset, max_offset, opts)
     end
-  end
-
-  def get_log_stream(%LogOffset{} = min_offset, %LogOffset{} = max_offset, opts) do
-    stream_main_log(min_offset, max_offset, opts)
   end
 
   defp stream_main_log(

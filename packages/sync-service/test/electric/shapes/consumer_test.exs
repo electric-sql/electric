@@ -828,7 +828,9 @@ defmodule Electric.Shapes.ConsumerTest do
         run_with_conn_fn: &run_with_conn_noop/2
       )
 
+      :started = ShapeCache.await_snapshot_start(shape_handle, shape_cache_opts)
       assert {_, offset2} = ShapeCache.get_shape(shape_handle, shape_cache_opts)
+
       assert LogOffset.compare(offset2, offset1) != :lt
     end
   end
