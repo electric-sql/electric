@@ -122,6 +122,59 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     end)
   end
 
+  def read_last_n_chunks(chunk_file_path, n) do
+    size = file_size(chunk_file_path)
+    full_chunks = div(size, @full_record_width)
+
+    incomplete_chunk =
+      if(rem(size, @full_record_width) >= @half_record_width, do: 1, else: 0)
+
+    full_chunks_to_read = min(n - incomplete_chunk, full_chunks)
+    full_chunks_to_skip = full_chunks - full_chunks_to_read
+
+    File.open(chunk_file_path, [:read, :raw], fn file ->
+      {:ok, [full_chunks_data, incomplete_chunk_data]} =
+        :file.pread(
+          file,
+          [
+            {full_chunks_to_skip * @full_record_width, full_chunks_to_read * @full_record_width},
+            {full_chunks * @full_record_width, @half_record_width}
+          ]
+        )
+
+      incomplete =
+        case incomplete_chunk_data do
+          :eof ->
+            []
+
+          <<tx::64, op::64, start_pos::64, key_start_pos::64>> ->
+            [{{LogOffset.new(tx, op), nil}, {start_pos, nil}, {key_start_pos, nil}}]
+        end
+
+      full_chunks_data = if full_chunks_data == :eof, do: <<>>, else: full_chunks_data
+
+      complete =
+        for <<tx::64, op::64, start_pos::64, key_start_pos::64, tx2::64, op2::64, end_pos::64,
+              key_end_pos::64 <- full_chunks_data>> do
+          {{LogOffset.new(tx, op), LogOffset.new(tx2, op2)}, {start_pos, end_pos},
+           {key_start_pos, key_end_pos}}
+        end
+
+      complete ++ incomplete
+    end)
+    |> case do
+      {:ok, chunks} -> chunks
+      {:error, :enoent} -> []
+    end
+  end
+
+  defp file_size(chunk_file_path) do
+    case FileInfo.file_size(chunk_file_path) do
+      {:ok, size} -> size
+      {:error, :enoent} -> 0
+    end
+  end
+
   @doc """
   Make sure that the chunk file doesn't end on a partial write and
   that the last chunk doesn't overshoot the new end of log.

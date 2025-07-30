@@ -52,7 +52,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :last_persisted_offset,
     :last_seen_txn_offset,
     :compaction_boundary,
-    :latest_name
+    :latest_name,
+    snapshot_started?: false,
+    compaction_started?: false,
+    last_snapshot_chunk: nil,
+    cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []}
   ]
 
   # Record that controls the writer's progress & flush logic
@@ -70,7 +74,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
     write_position: 0,
     bytes_in_chunk: 0,
     times_flushed: 0,
-    chunk_started?: false
+    chunk_started?: false,
+    cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []}
 
   # Record that controls the writer's state including parts that shouldn't change in reduction
   defrecord :writer_state, [
@@ -240,8 +245,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp prepare_compaction(%__MODULE__{} = opts, end_offset, file_pos, key_pos) do
     # Just-in-case file-existence-based lock
-    if !read_metadata!(opts, :compaction_started?) do
-      write_metadata!(opts, :compaction_started?, true)
+    if !read_cached_metadata(opts, :compaction_started?) do
+      write_cached_metadata!(opts, :compaction_started?, true)
 
       Task.Supervisor.start_child(
         opts.stack_task_supervisor,
@@ -370,7 +375,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
 
     set_latest_name(opts, new_latest_suffix)
-    write_metadata!(opts, :compaction_started?, false)
+    write_cached_metadata!(opts, :compaction_started?, false)
 
     Task.Supervisor.start_child(opts.stack_task_supervisor, fn ->
       rm_rf!(json_file(opts, current_latest_suffix))
@@ -429,10 +434,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
     do: write_metadata!(opts, :pg_snapshot, pg_snapshot)
 
   def mark_snapshot_as_started(%__MODULE__{} = opts),
-    do: write_metadata!(opts, :snapshot_started?, true)
+    do: write_cached_metadata!(opts, :snapshot_started?, true)
 
   def snapshot_started?(%__MODULE__{} = opts),
-    do: read_metadata!(opts, :snapshot_started?) || false
+    do: read_cached_metadata(opts, :snapshot_started?) || false
 
   def compaction_boundary(%__MODULE__{} = opts),
     do: read_metadata!(opts, :compaction_boundary) || {LogOffset.before_all(), nil}
@@ -465,22 +470,23 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp get_latest_offset(%__MODULE__{} = opts) do
-    try do
-      # This element is there only after storage writer has started. Both stack ETS missing & entry missing will raise badarg
-      found =
-        :ets.lookup_element(
-          opts.stack_ets,
-          opts.shape_handle,
-          storage_meta(:last_seen_txn_offset) + 1
-        )
+    metadata =
+      read_multiple_cached_metadata(opts, [
+        :last_seen_txn_offset,
+        :last_snapshot_chunk
+      ])
 
-      if LogOffset.is_virtual_offset(found),
-        do: last_snapshot_chunk(opts) || LogOffset.last_before_real_offsets(),
-        else: found
-    rescue
-      ArgumentError ->
-        read_metadata!(opts, :last_persisted_txn_offset) || last_snapshot_chunk(opts) ||
+    case Keyword.get(metadata, :last_seen_txn_offset) do
+      nil ->
+        # ETS entry doesn't exist, fall back to disk reads
+        read_metadata!(opts, :last_persisted_txn_offset) ||
+          Keyword.get(metadata, :last_snapshot_chunk) ||
           LogOffset.last_before_real_offsets()
+
+      found ->
+        if LogOffset.is_virtual_offset(found),
+          do: Keyword.get(metadata, :last_snapshot_chunk) || LogOffset.last_before_real_offsets(),
+          else: found
     end
   end
 
@@ -489,14 +495,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def init_writer!(opts, shape_definition) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix} = initialise_filesystem!(opts, shape_definition)
+    {initial_acc, suffix, chunks} = initialise_filesystem!(opts, shape_definition)
 
     register_with_stack(
       opts,
       table,
       writer_acc(initial_acc, :last_persisted_txn_offset),
       compaction_boundary(opts),
-      suffix
+      suffix,
+      chunks
     )
 
     if shape_definition.storage.compaction == :enabled do
@@ -553,11 +560,16 @@ defmodule Electric.ShapeCache.PureFileStorage do
     trim_log!(opts, last_persisted_txn_offset, suffix)
 
     json_file_size = FileInfo.get_file_size!(json_file(opts, suffix)) || 0
-    chunk_file_size = FileInfo.get_file_size!(chunk_file(opts, suffix)) || 0
+
     key_file_size = FileInfo.get_file_size!(key_file(opts, suffix)) || 0
 
-    {chunk_status, _, position, _} =
-      ChunkIndex.get_last_boundary(chunk_file(opts, suffix), chunk_file_size)
+    chunks = ChunkIndex.read_last_n_chunks(chunk_file(opts, suffix), 4)
+
+    {{_, chunk_end_offset}, {start_pos, end_pos}, _} =
+      List.last(chunks, {{nil, :empty}, {0, nil}, nil})
+
+    # If the last chunk is complete, we take the end as position to calculate chunk size
+    position = end_pos || start_pos
 
     {writer_acc(
        last_persisted_offset: last_persisted_txn_offset,
@@ -567,8 +579,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
        write_position: json_file_size,
        key_file_write_pos: key_file_size,
        bytes_in_chunk: json_file_size - position,
-       chunk_started?: chunk_status != :complete
-     ), suffix}
+       chunk_started?: is_nil(chunk_end_offset)
+     ), suffix, chunks}
   end
 
   defp trim_log!(%__MODULE__{} = opts, last_persisted_offset, suffix) do
@@ -595,6 +607,61 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
+  # Read metadata with ETS-first, disk-fallback pattern
+  defp read_cached_metadata(%__MODULE__{stack_ets: stack_ets, shape_handle: handle} = opts, key) do
+    try do
+      case :ets.lookup(stack_ets, handle) do
+        [] ->
+          read_metadata!(opts, key)
+
+        [storage_meta() = meta] ->
+          get_cached_by_key(meta, key)
+      end
+    rescue
+      ArgumentError ->
+        read_metadata!(opts, key)
+    end
+  end
+
+  # Read multiple metadata values with a single ETS lookup
+  defp read_multiple_cached_metadata(
+         %__MODULE__{stack_ets: stack_ets, shape_handle: handle} = opts,
+         keys
+       ) do
+    try do
+      case :ets.lookup(stack_ets, handle) do
+        [] ->
+          # Fall back to reading from disk for each key
+          Enum.map(keys, fn key -> {key, read_metadata!(opts, key)} end)
+
+        [storage_meta() = meta] ->
+          # Extract all requested values from the single ETS record
+          Enum.map(keys, fn key -> {key, get_cached_by_key(meta, key)} end)
+      end
+    rescue
+      ArgumentError ->
+        # Fall back to reading from disk for each key
+        Enum.map(keys, fn key -> {key, read_metadata!(opts, key)} end)
+    end
+  end
+
+  @cached_keys [
+    :snapshot_started?,
+    :compaction_started?,
+    :last_snapshot_chunk,
+    :last_seen_txn_offset,
+    :persisted_full_txn_offset,
+    :last_persisted_offset,
+    :compaction_boundary,
+    :latest_name,
+    :cached_chunk_boundaries
+  ]
+
+  # we need this because macro expects a compile-time atom
+  for key <- @cached_keys do
+    defp get_cached_by_key(meta, unquote(key)), do: storage_meta(meta, unquote(key))
+  end
+
   defp write_metadata!(%__MODULE__{metadata_dir: metadata_dir}, key, value) do
     File.write!(Path.join(metadata_dir, "#{key}.bin.tmp"), :erlang.term_to_binary(value), [
       :write,
@@ -605,6 +672,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
       Path.join(metadata_dir, "#{key}.bin.tmp"),
       Path.join(metadata_dir, "#{key}.bin")
     )
+  end
+
+  # Write metadata to both disk and ETS
+  defp write_cached_metadata!(
+         %__MODULE__{stack_ets: stack_ets, shape_handle: handle} = opts,
+         key,
+         value
+       ) do
+    # Write to disk first
+    write_metadata!(opts, key, value)
+
+    # Update ETS if entry exists
+    try do
+      case key do
+        :snapshot_started? ->
+          :ets.update_element(stack_ets, handle, {storage_meta(:snapshot_started?) + 1, value})
+
+        :compaction_started? ->
+          :ets.update_element(stack_ets, handle, {storage_meta(:compaction_started?) + 1, value})
+
+        :last_snapshot_chunk ->
+          :ets.update_element(stack_ets, handle, {storage_meta(:last_snapshot_chunk) + 1, value})
+      end
+    rescue
+      ArgumentError ->
+        # ETS entry doesn't exist yet, that's okay
+        :ok
+    end
   end
 
   defp write_shape_definition!(%__MODULE__{metadata_dir: metadata_dir}, shape_definition) do
@@ -625,10 +720,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp last_snapshot_chunk(%__MODULE__{} = opts), do: read_metadata!(opts, :last_snapshot_chunk)
+  defp last_snapshot_chunk(%__MODULE__{} = opts),
+    do: read_cached_metadata(opts, :last_snapshot_chunk)
 
   defp snapshot_complete?(%__MODULE__{} = opts) do
-    not is_nil(read_metadata!(opts, :last_snapshot_chunk))
+    not is_nil(read_cached_metadata(opts, :last_snapshot_chunk))
   end
 
   defp create_directories!(%__MODULE__{} = opts) do
@@ -637,7 +733,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
     mkdir_p!(opts.metadata_dir)
   end
 
-  defp register_with_stack(opts, table, stable_offset, compaction_boundary, suffix) do
+  defp register_with_stack(opts, table, stable_offset, compaction_boundary, suffix, chunks) do
+    snapshot_started = read_metadata!(opts, :snapshot_started?) || false
+    compaction_started = read_metadata!(opts, :compaction_started?) || false
+    last_snapshot_chunk = read_metadata!(opts, :last_snapshot_chunk)
+
     :ets.insert(
       opts.stack_ets,
       storage_meta(
@@ -647,32 +747,60 @@ defmodule Electric.ShapeCache.PureFileStorage do
         last_persisted_offset: stable_offset,
         last_seen_txn_offset: stable_offset,
         compaction_boundary: compaction_boundary,
-        latest_name: suffix
+        latest_name: suffix,
+        snapshot_started?: snapshot_started,
+        compaction_started?: compaction_started,
+        last_snapshot_chunk: last_snapshot_chunk,
+        cached_chunk_boundaries: reformat_chunks_for_cache(chunks)
       )
     )
   end
 
-  defp get_boundary_info(%__MODULE__{} = opts) do
+  defp reformat_chunks_for_cache([]), do: {LogOffset.last_before_real_offsets(), []}
+
+  defp reformat_chunks_for_cache([{{_, max}, _, _} | [_, _, _] = rest]),
+    do: {max, Enum.map(rest, fn {offsets, pos, _key_pos} -> {offsets, pos} end)}
+
+  defp reformat_chunks_for_cache(chunks),
+    do:
+      {LogOffset.last_before_real_offsets(),
+       Enum.map(chunks, fn {offsets, pos, _key_pos} -> {offsets, pos} end)}
+
+  @type chunk ::
+          {{min :: LogOffset.t(), max :: LogOffset.t()},
+           {log_start :: pos_integer(), log_end :: pos_integer()}}
+  @spec get_read_source_info(%__MODULE__{}) :: {
+          latest_path :: String.t(),
+          compacted :: {boundary :: LogOffset.t(), path :: String.t()},
+          cached_chunks :: {prev_max :: LogOffset.t() | nil, [chunk]}
+        }
+  defp get_read_source_info(%__MODULE__{} = opts) do
     try do
       case :ets.lookup(opts.stack_ets, opts.shape_handle) do
         [] ->
-          {offset, filename} = compaction_boundary(opts)
-          {offset, filename, latest_name(opts)}
+          {latest_name(opts), compaction_boundary(opts), {nil, []}}
 
-        [storage_meta(compaction_boundary: {offset, filename}, latest_name: latest_name)] ->
-          {offset, filename, latest_name}
+        [
+          storage_meta(
+            compaction_boundary: boundary,
+            latest_name: latest_name,
+            cached_chunk_boundaries: cached_boundaries
+          )
+        ] ->
+          {latest_name, boundary, cached_boundaries}
       end
     rescue
       ArgumentError ->
-        {offset, filename} = compaction_boundary(opts)
-        {offset, filename, latest_name(opts)}
+        {latest_name(opts), compaction_boundary(opts), {nil, []}}
     end
   end
 
+  # We're opening the chunk file in sync mode because writes there are rare but we prefer for them
+  # to be atomic
   defp open_files(%__MODULE__{} = opts, suffix) do
     {
       File.open!(json_file(opts, suffix), [:append, :raw]),
-      File.open!(chunk_file(opts, suffix), [:append, :raw]),
+      File.open!(chunk_file(opts, suffix), [:append, :raw, :sync]),
       File.open!(key_file(opts, suffix), [:append, :raw])
     }
   end
@@ -694,20 +822,42 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   def get_chunk_end_log_offset(offset, %__MODULE__{} = opts) do
-    {boundary, compacted_name, latest_name} = get_boundary_info(opts)
-
-    suffix =
-      if LogOffset.is_log_offset_lt(offset, boundary), do: compacted_name, else: latest_name
-
-    case ChunkIndex.fetch_chunk(chunk_file(opts, suffix), offset) do
+    case fetch_chunk(offset, opts) do
       {:ok, max_offset, _} -> max_offset
       :error -> nil
     end
   end
 
+  defp fetch_chunk(offset, %__MODULE__{} = opts, boundary_info \\ nil) do
+    {latest_name, {compaction_boundary, compacted_name}, {cached_min, chunks}} =
+      boundary_info || get_read_source_info(opts)
+
+    cond do
+      LogOffset.is_log_offset_lt(offset, compaction_boundary) ->
+        ChunkIndex.fetch_chunk(chunk_file(opts, compacted_name), offset)
+
+      not is_nil(cached_min) and LogOffset.is_log_offset_lte(cached_min, offset) ->
+        find_chunk_positions_in_cache(chunks, offset)
+
+      true ->
+        ChunkIndex.fetch_chunk(chunk_file(opts, latest_name), offset)
+    end
+  end
+
+  defp find_chunk_positions_in_cache([], _), do: :error
+  defp find_chunk_positions_in_cache([{{_, nil}, positions}], _), do: {:ok, nil, positions}
+
+  defp find_chunk_positions_in_cache([{{_, max}, positions} | _], offset)
+       when is_log_offset_lt(offset, max),
+       do: {:ok, max, positions}
+
+  defp find_chunk_positions_in_cache([{{_, max}, _} | rest], offset)
+       when is_log_offset_lte(max, offset),
+       do: find_chunk_positions_in_cache(rest, offset)
+
   def make_new_snapshot!(stream, %__MODULE__{} = opts) do
     last_chunk_num = Snapshot.write_snapshot_stream!(stream, opts)
-    write_metadata!(opts, :last_snapshot_chunk, LogOffset.new(0, last_chunk_num))
+    write_cached_metadata!(opts, :last_snapshot_chunk, LogOffset.new(0, last_chunk_num))
     :ok
   end
 
@@ -717,9 +867,16 @@ defmodule Electric.ShapeCache.PureFileStorage do
         %__MODULE__{} = opts
       )
       when not is_real_offset(min_offset) do
-    if not snapshot_started?(opts), do: raise(Storage.Error, message: "Snapshot not started")
+    # Single ETS lookup to get both snapshot_started? and last_snapshot_chunk
+    metadata =
+      read_multiple_cached_metadata(opts, [:snapshot_started?, :last_snapshot_chunk])
 
-    case {last_snapshot_chunk(opts), min_offset} do
+    snapshot_started = Keyword.get(metadata, :snapshot_started?) || false
+    last_snapshot_chunk = Keyword.get(metadata, :last_snapshot_chunk)
+
+    if not snapshot_started, do: raise(Storage.Error, message: "Snapshot not started")
+
+    case {last_snapshot_chunk, min_offset} do
       {_, x} when is_min_offset(x) ->
         Snapshot.stream_chunk_lines(opts, 0)
 
@@ -751,7 +908,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         [] ->
           # Writer's not active, only disk reads are possible
           offset = get_latest_offset(opts)
-          {nil, offset, offset, get_boundary_info(opts)}
+          {nil, offset, offset, get_read_source_info(opts)}
 
         [
           storage_meta(
@@ -759,10 +916,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
             last_persisted_offset: last_persisted,
             last_seen_txn_offset: last_seen,
             latest_name: latest_name,
-            compaction_boundary: {boundary, compacted_name}
+            compaction_boundary: compaction,
+            cached_chunk_boundaries: cached_boundaries
           )
         ] ->
-          {ets, last_persisted, last_seen, {boundary, compacted_name, latest_name}}
+          {ets, last_persisted, last_seen, {latest_name, compaction, cached_boundaries}}
       end
 
     upper_read_bound = LogOffset.min(max_offset, last_seen)
@@ -847,12 +1005,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
          %__MODULE__{} = opts,
          min_offset,
          max_offset,
-         {boundary, compacted_name, latest_name} = boundary_info
+         boundary_info
        ) do
-    suffix =
-      if LogOffset.is_log_offset_lt(min_offset, boundary), do: compacted_name, else: latest_name
+    suffix = get_suffix(min_offset, boundary_info)
 
-    case ChunkIndex.fetch_chunk(chunk_file(opts, suffix), min_offset) do
+    case fetch_chunk(min_offset, opts, boundary_info) do
       {:ok, chunk_end_offset, {start_pos, end_pos}} when not is_nil(end_pos) ->
         LogFile.stream_jsons(json_file(opts, suffix), start_pos, end_pos, min_offset)
         |> Stream.concat(stream_from_disk(opts, chunk_end_offset, max_offset, boundary_info))
@@ -869,6 +1026,12 @@ defmodule Electric.ShapeCache.PureFileStorage do
         []
     end
   end
+
+  defp get_suffix(min_offset, {_, {compaction_boundary, compacted_name}, _})
+       when is_log_offset_lt(min_offset, compaction_boundary),
+       do: compacted_name
+
+  defp get_suffix(_, {latest_name, _, _}), do: latest_name
 
   def append_to_log!(txn_lines, writer_state(writer_acc: acc) = state) do
     times_flushed = writer_acc(acc, :times_flushed)
@@ -910,10 +1073,57 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp maybe_write_opening_chunk_boundary(
          writer_acc(write_position: pos, key_file_write_pos: key_pos) = acc,
-         writer_state(open_files: {_, chunk_file, _}),
+         writer_state(open_files: {_, chunk_file, _}, opts: opts),
          offset
        ) do
     IO.binwrite(chunk_file, [LogOffset.to_int128(offset), <<pos::64, key_pos::64>>])
+
+    acc
+    |> add_opening_chunk_boundary_to_cache(offset, pos)
+    |> update_chunk_boundaries_cache(opts)
+  end
+
+  defp add_opening_chunk_boundary_to_cache(
+         writer_acc(cached_chunk_boundaries: {boundary, cached_chunks}) = acc,
+         offset,
+         pos
+       )
+       when length(cached_chunks) < 3 do
+    writer_acc(acc,
+      cached_chunk_boundaries: {boundary, cached_chunks ++ [{{offset, nil}, {pos, nil}}]}
+    )
+  end
+
+  defp add_opening_chunk_boundary_to_cache(
+         writer_acc(cached_chunk_boundaries: {_, [{{_, max}, _} | cached_chunks]}) = acc,
+         offset,
+         pos
+       ) do
+    writer_acc(acc,
+      cached_chunk_boundaries: {max, cached_chunks ++ [{{offset, nil}, {pos, nil}}]}
+    )
+  end
+
+  defp add_closing_chunk_boundary_to_cache(
+         writer_acc(cached_chunk_boundaries: {boundary, cached_chunks}) = acc,
+         max,
+         end_pos
+       ) do
+    [{{min, nil}, {start_pos, nil}} | rest] = Enum.reverse(cached_chunks)
+
+    writer_acc(acc,
+      cached_chunk_boundaries:
+        {boundary, Enum.reverse([{{min, max}, {start_pos, end_pos}} | rest])}
+    )
+  end
+
+  defp update_chunk_boundaries_cache(writer_acc(cached_chunk_boundaries: cached) = acc, opts) do
+    :ets.update_element(
+      opts.stack_ets,
+      opts.shape_handle,
+      {storage_meta(:cached_chunk_boundaries) + 1, cached}
+    )
+
     acc
   end
 
@@ -1003,14 +1213,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
            write_position: position,
            key_file_write_pos: key_file_write_pos
          ) = acc,
-         writer_state(open_files: {_, chunk_file, _}) = state
+         writer_state(open_files: {_, chunk_file, _}, opts: opts) = state
        ) do
     IO.binwrite(chunk_file, [
       LogOffset.to_int128(offset),
       <<position::64, key_file_write_pos::64>>
     ])
 
-    acc |> writer_acc(chunk_started?: false, bytes_in_chunk: 0) |> flush_buffer(state, true)
+    acc
+    |> writer_acc(chunk_started?: false, bytes_in_chunk: 0)
+    |> add_closing_chunk_boundary_to_cache(offset, position)
+    |> update_chunk_boundaries_cache(opts)
+    |> flush_buffer(state, true)
   end
 
   defp add_to_buffer(
