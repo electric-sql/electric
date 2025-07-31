@@ -11,8 +11,19 @@ defmodule Electric.Postgres.Configuration do
 
   @pg_15 150_000
 
-  def check_publication_for_missing_relations(conn, publication_name, relations) do
-    {_oids, schemas, tables} = known_relations(relations, %{})
+  @spec check_publication_for_missing_relations(
+          Postgrex.conn(),
+          String.t(),
+          [Electric.oid_relation()],
+          filters()
+        ) :: :ok | {:error, :misconfigured_replica_identity | :table_missing_from_publication}
+  def check_publication_for_missing_relations(
+        conn,
+        publication_name,
+        previous_relations,
+        new_filters
+      ) do
+    {oids, schemas, tables} = known_relations(previous_relations, new_filters)
 
     %Postgrex.Result{rows: rows} =
       Postgrex.query!(
@@ -20,32 +31,72 @@ defmodule Electric.Postgres.Configuration do
         """
         WITH input_relations AS (
           SELECT
+            UNNEST($1::oid[]) AS oid,
             UNNEST($2::text[]) AS input_nspname,
             UNNEST($3::text[]) AS input_relname
         )
         SELECT
-          (ir.input_nspname, ir.input_relname) as input_relation, pt.pubname IS NOT NULL
+          (ir.input_nspname, ir.input_relname) as input_relation, pt.pubname IS NOT NULL, pc.relreplident
         FROM
           input_relations ir
+        JOIN
+          pg_class pc ON pc.oid = ir.oid
         LEFT JOIN
           pg_publication_tables pt ON pt.schemaname = ir.input_nspname AND pt.tablename = ir.input_relname
         WHERE
-          pt.pubname = $1
+          pt.pubname = $4
         """,
-        [publication_name, schemas, tables]
+        [oids, schemas, tables, publication_name]
       )
 
-    result_rows_set =
-      for [relation, in_publication?] <- rows, in_publication?, into: MapSet.new() do
+    with :ok <- check_replica_identity(rows),
+         :ok <- check_relations_in_publication(Enum.zip(schemas, tables), rows) do
+      :ok
+    end
+  end
+
+  defp check_replica_identity(rows) do
+    relations_with_incorrect_replica_identity =
+      for [relation, _in_publication?, replica_identity] <- rows,
+          replica_identity != "f" do
         relation
       end
 
-    diff_set = MapSet.difference(MapSet.new(relations), result_rows_set)
+    if relations_with_incorrect_replica_identity == [] do
+      :ok
+    else
+      error = %Electric.DbConfigurationError{
+        type: :misconfigured_replica_identity,
+        message: "Database table does not have its replica identity set to FULL"
+      }
+
+      {:error, error}
+    end
+  end
+
+  defp check_relations_in_publication(relations, rows) do
+    relations_set =
+      relations |> Enum.map(fn {_oid, {schema, table}} -> {schema, table} end) |> MapSet.new()
+
+    result_rows_set =
+      for [relation, in_publication?, _replica_identity] <- rows,
+          in_publication?,
+          into: MapSet.new() do
+        relation
+      end
+
+    diff_set = MapSet.difference(relations_set, result_rows_set)
 
     if MapSet.size(diff_set) == 0 do
       :ok
     else
-      {:error, {:missing_relations, Enum.to_list(diff_set)}}
+      error = %Electric.DbConfigurationError{
+        type: :tables_missing_from_publication,
+        message:
+          "Database table is missing from the publication and Electric lacks privileges to add it"
+      }
+
+      {:error, error}
     end
   end
 
