@@ -29,10 +29,26 @@ defmodule Electric.SnapshotError do
     }
   end
 
+  def from_error(%Postgrex.Error{postgres: %{code: :insufficient_privilege}} = error) do
+    %SnapshotError{
+      type: :missing_privilege,
+      message: error.postgres.message,
+      original_error: error
+    }
+  end
+
+  def from_error(%Postgrex.Error{} = error) do
+    %SnapshotError{
+      type: :unknown,
+      message: error.postgres.message,
+      original_error: error
+    }
+  end
+
   def from_error(error) do
     %SnapshotError{
       type: :unknown,
-      message: "Unknown error while creating snapshot: #{inspect(error)}",
+      message: error.message,
       original_error: error
     }
   end

@@ -350,6 +350,12 @@ defmodule Support.ComponentSetup do
     ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
     publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 
+    connection_opts =
+      Keyword.merge(ctx.pooled_db_config, List.wrap(ctx[:connection_opt_overrides]))
+
+    replication_connection_opts =
+      Keyword.merge(ctx.db_config, List.wrap(ctx[:connection_opt_overrides]))
+
     stack_supervisor =
       start_supervised!(
         {Electric.StackSupervisor,
@@ -363,9 +369,9 @@ defmodule Support.ComponentSetup do
            ),
          persistent_kv: kv,
          storage: storage,
-         connection_opts: ctx.pooled_db_config,
+         connection_opts: connection_opts,
          replication_opts: [
-           connection_opts: ctx.db_config,
+           connection_opts: replication_connection_opts,
            slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
            publication_name: publication_name,
            try_creating_publication?: true,
