@@ -176,7 +176,7 @@ defmodule Electric.Replication.PublicationManager do
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
       # take 2
-      row_filtering_enabled: false,
+      row_filtering_enabled: true,
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
