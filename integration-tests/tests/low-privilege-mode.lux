@@ -95,6 +95,24 @@
   ??ALTER PUBLICATION
   ??ALTER PUBLICATION
 
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Database table does not have its replica identity set to FULL"}
+
+[shell electric]
+  -
+
+  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table does not have its replica identity set to FULL
+  ?\[info\] Sent 503 in [\d]+ms
+
+## Set table's replica identity to FULL
+
+[shell psql]
+  !ALTER TABLE items REPLICA IDENTITY FULL;
+  ??ALTER TABLE
+  ??ALTER TABLE
+
   !GRANT SELECT ON items TO low_privilege;
   ??GRANT
   ??GRANT

@@ -291,13 +291,8 @@ defmodule Electric.Replication.PublicationManager do
              prepared_relation_filters: committed_filters
          }}
 
-      {:error, {:missing_relations, _relations}} ->
-        err = %Electric.DbConfigurationError{
-          type: :tables_missing_from_publication,
-          message: "....error message..."
-        }
-
-        state = reply_to_waiters({:error, err}, state)
+      {:error, %Electric.DbConfigurationError{} = error} ->
+        state = reply_to_waiters({:error, error}, state)
         {:noreply, %{state | next_update_forced?: false}}
 
       {:error, err} when retries < @max_retries and not is_fatal(err) ->
@@ -382,7 +377,8 @@ defmodule Electric.Replication.PublicationManager do
              Configuration.check_publication_for_missing_relations(
                db_pool,
                publication_name,
-               Map.keys(current_filters)
+               Map.keys(committed_filters),
+               current_filters
              ) do
         {:ok, state, []}
       end
