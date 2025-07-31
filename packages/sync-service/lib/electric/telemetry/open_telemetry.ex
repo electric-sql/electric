@@ -52,7 +52,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
   The `stack_id` parameter must be set in root spans. For child spans the stack_id is optional
   and will be inherited from the parent span.
   """
-  @spec with_span(span_name(), span_attrs(), String.t(), (-> t)) :: t when t: term
+  @spec with_span(span_name(), span_attrs(), String.t() | nil, (-> t)) :: t when t: term
   def with_span(name, attributes, stack_id \\ nil, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
     if Sampler.include_span?(name) do
