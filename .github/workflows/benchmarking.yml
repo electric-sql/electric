@@ -98,8 +98,8 @@ jobs:
                   "postgres_image": ["postgres:17-alpine"],
                   "row_count": [1],
                   "shape_count": [10000,20000,30000,60000],
-                  "tx_count": [100],
-                  "tx_row_count": [200],
+                  "tx_count": [50],
+                  "tx_row_count": [20],
                   "tx_affects_shape": [false],
                   "row_size": [50],
                   "where_clause": ["name ILIKE '"'#{name}%'"'", "name = '"'#{name}'"'"]
