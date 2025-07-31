@@ -23,13 +23,13 @@ Everyone says "use boring software". How do you become said boring software? As 
 
 Electric is a Postgres-native, CDN-powered sync engine. We power the sync layer for companies all around the world.
 
-Your sync layer just has to work. It's load-bearing infrastructure that drives critical data flows and people rightfully have db-level expectations for.
+Your sync layer just has to work. It's load-bearing infrastructure that drives critical data flows and people rightfully have db-level expectations for it.
 
 We look to tools like S3 and Redis for inspiration.
 
 S3 is a pretty simple idea. Read and write files in the cloud. Yet they made it extrodinary by delivering on the 11 9s promise and scaling it to essentially infinite capacity.
 
-Redis is also pretty simple - a networked data structures server. But by scaling it huge numbers of reads and writes, it's essential glue in almost every backend.
+Redis is just a networked data structures server. But by scaling it huge numbers of reads and writes, it's essential glue in almost every backend.
 
 Postgres-native sync is a pretty simple idea. Any write to Postgres gets synced instantly to any number of subscribers. We're working to make it extraordinary by scaling it to huge numbers of subscribers, tx/sec, and S3/PG levels of reliability.
 
@@ -47,7 +47,7 @@ Electric captures changes from Postgres via logical replication and streams them
 
 ### The reliability stack
 1. **Replication resilience**: Connection pooling, automatic reconnection, and WAL position tracking ensure we never lose data
-2. **Backpressure handling**: High-traffic shapes don't block other operations; the system degrades gracefully under load  
+2. **Backpressure handling**: High-traffic [shapes](https://electric-sql.com/docs/guides/shapes) don't block other operations; the system degrades gracefully under load  
 3. **Rate limiting**: Protects against resource exhaustion
 4. **Caching layers**: Multi-tier caching (CDN, Nginx, disk) reduces database load
 5. **Observability**: Deep instrumentation exposes exactly what's happening when things go wrong
@@ -57,6 +57,8 @@ The result is a system that handles 500GB+ of daily Postgres traffic while maint
 ---
 
 ## What we shipped (and why it matters)
+
+Here's how we made Electric almost boring.
 
 ### 1. Hardening the replication engine
 **PRs:** [`#2880`](https://github.com/electric-sql/electric/pull/2880), [`#2878`](https://github.com/electric-sql/electric/pull/2878), [`#2866`](https://github.com/electric-sql/electric/pull/2866)  
@@ -78,13 +80,9 @@ The result is a system that handles 500GB+ of daily Postgres traffic while maint
 **PRs:** [`#2833`](https://github.com/electric-sql/electric/pull/2833)  
 **Impact:** Observer comes pre‑wired, so you can watch processes crash _before_ they reach production.
 
-### 6. Security = reliability
-**PRs:** [`#2857`](https://github.com/electric-sql/electric/pull/2857), [`#2832`](https://github.com/electric-sql/electric/pull/2832)  
-**Impact:** Latest Erlang/OTP & TLS cert checks plugged; keeps the supply chain tight.
-
-### 7. Operational excellence
-**PRs:** [`#2863`](https://github.com/electric-sql/electric/pull/2863), [`#2828`](https://github.com/electric-sql/electric/pull/2828)  
-**Impact:** Sensible defaults for acceptor pools; Ecto field‑type parity stops surprising migrations.
+### 6. Security & operational excellence
+**PRs:** [`#2857`](https://github.com/electric-sql/electric/pull/2857), [`#2832`](https://github.com/electric-sql/electric/pull/2832), [`#2863`](https://github.com/electric-sql/electric/pull/2863), [`#2828`](https://github.com/electric-sql/electric/pull/2828)  
+**Impact:** Latest Erlang/OTP & TLS cert checks plugged; sensible defaults for acceptor pools; Ecto field‑type parity stops surprising migrations.
 
 ---
 
@@ -106,6 +104,6 @@ Sync loop could load a shape while still wiring change‑listeners ([`#2848`](ht
 
 ## Reliability is never done
 
-Electric has a zero-bug policy. Our first priority is reliability, then features.
+We've killed a huge number of bugs. But we're not done if something doesn't work right for you.
 
 So see something odd or unexpected? Please [file an issue](https://github.com/electric-sql/electric/) or [chat with us over on Discord](https://discord.electric-sql.com/).
