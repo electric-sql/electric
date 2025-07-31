@@ -70,9 +70,10 @@ defmodule Electric.Telemetry.OpenTelemetry do
   will not be created either.
   """
   def with_child_span(name, attributes, stack_id \\ nil, fun) do
-    case get_current_context() do
-      {:undefined, _} -> fun.()
-      _ -> with_span(name, attributes, stack_id, fun)
+    if in_span_context?() do
+      with_span(name, attributes, stack_id, fun)
+    else
+      fun.()
     end
   end
 
@@ -299,5 +300,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
 
   defp current_span_context do
     :otel_tracer.current_span_ctx()
+  end
+
+  defp in_span_context? do
+    current_span_context() != :undefined
   end
 end
