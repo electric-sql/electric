@@ -251,7 +251,7 @@ defmodule Electric.Replication.PublicationManager do
 
   defguardp is_fatal(err)
             when is_exception(err, Postgrex.Error) and
-                   err.postgres.code in ~w|undefined_function undefined_table|a
+                   err.postgres.code in ~w|undefined_function undefined_table insufficient_privilege|a
 
   @impl true
   def handle_info(

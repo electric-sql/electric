@@ -68,5 +68,27 @@
   ??Starting shape replication pipeline
   ??Starting replication from postgres
 
+## Create a table and verify that Electric reports an error because it cannot update the publication.
+[invoke start_psql]
+
+[shell psql]
+  !CREATE TABLE items(val text);
+  !INSERT INTO items VALUES ('hello');
+  ??INSERT 0 1
+
+[shell client]
+  -
+
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 403
+  ??{"message":"Unable to create initial snapshot: must be owner of publication electric_publication_integration"}
+
+[shell electric]
+  -
+
+  ??[error] Failed to configure publication: %Postgrex.Error{message: nil, postgres: %{code: :insufficient_privilege, line: "3583", message: "must be owner of publication electric_publication_integration", file: "aclchk.c", unknown: "ERROR", severity: "ERROR", pg_code: "42501"
+  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: must be owner of publication electric_publication_integration
+  ?\[info\] Sent 403 in [\d]+ms
+
 [cleanup]
   [invoke teardown]
