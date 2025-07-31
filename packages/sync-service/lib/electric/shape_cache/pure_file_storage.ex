@@ -495,7 +495,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def init_writer!(opts, shape_definition) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix, chunks} = initialise_filesystem!(opts, shape_definition)
+    {initial_acc, suffix} = initialise_filesystem!(opts, shape_definition)
 
     register_with_stack(
       opts,
@@ -503,7 +503,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       writer_acc(initial_acc, :last_persisted_txn_offset),
       compaction_boundary(opts),
       suffix,
-      chunks
+      writer_acc(initial_acc, :cached_chunk_boundaries)
     )
 
     if shape_definition.storage.compaction == :enabled do
@@ -579,8 +579,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
        write_position: json_file_size,
        key_file_write_pos: key_file_size,
        bytes_in_chunk: json_file_size - position,
-       chunk_started?: is_nil(chunk_end_offset)
-     ), suffix, chunks}
+       chunk_started?: is_nil(chunk_end_offset),
+       cached_chunk_boundaries: reformat_chunks_for_cache(chunks)
+     ), suffix}
   end
 
   defp trim_log!(%__MODULE__{} = opts, last_persisted_offset, suffix) do
@@ -751,7 +752,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         snapshot_started?: snapshot_started,
         compaction_started?: compaction_started,
         last_snapshot_chunk: last_snapshot_chunk,
-        cached_chunk_boundaries: reformat_chunks_for_cache(chunks)
+        cached_chunk_boundaries: chunks
       )
     )
   end
@@ -1078,7 +1079,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
        ) do
     IO.binwrite(chunk_file, [LogOffset.to_int128(offset), <<pos::64, key_pos::64>>])
 
-    acc
+    writer_acc(acc, chunk_started?: true)
     |> add_opening_chunk_boundary_to_cache(offset, pos)
     |> update_chunk_boundaries_cache(opts)
   end
@@ -1205,7 +1206,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
          writer_state(opts: %{chunk_bytes_threshold: maximum})
        )
        when total < maximum,
-       do: writer_acc(acc, chunk_started?: true)
+       do: acc
 
   defp write_chunk_boundary(
          writer_acc(
@@ -1239,7 +1240,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
            bytes_in_chunk: bytes_in_chunk
          ) =
            acc,
-         {offset, _, _, _, _, _, json} = line
+         {offset, _, _, _, _, json_size, json} = line
        ) do
     {iodata, iodata_size} = LogFile.make_entry(line)
     {key_iodata, key_iodata_size} = KeyIndex.make_entry(line, write_position)
@@ -1252,7 +1253,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       key_file_write_pos: key_file_write_pos + key_iodata_size,
       buffer_size: buffer_size + iodata_size,
       write_position: write_position + iodata_size,
-      bytes_in_chunk: bytes_in_chunk + iodata_size,
+      bytes_in_chunk: bytes_in_chunk + json_size,
       last_seen_offset: offset
     )
   end
