@@ -26,7 +26,7 @@ defmodule Support.DbSetup do
     Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
 
     Enum.each(database_settings(ctx), fn setting ->
-      Postgrex.query!(utility_pool, "ALTER DATABASE \"#{db_name}\" SET #{setting}", [])
+      Postgrex.query!(utility_pool, "ALTER DATABASE \"#{escaped_db_name}\" SET #{setting}", [])
     end)
 
     # schedule cleanup of the database after all tests have run
@@ -59,7 +59,8 @@ defmodule Support.DbSetup do
        db_config: updated_replication_config,
        pooled_db_config: updated_query_config,
        pool: pool,
-       db_conn: pool
+       db_conn: pool,
+       escaped_db_name: escaped_db_name
      }}
   end
 
