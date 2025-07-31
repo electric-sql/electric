@@ -291,15 +291,8 @@ defmodule Electric.Replication.PublicationManager do
              prepared_relation_filters: committed_filters
          }}
 
-      {:error, {:missing_relations, relations}} ->
-        IO.puts("missing relations :: #{inspect(relations)}")
-
-        err = %Electric.DbConfigurationError{
-          type: :tables_missing_from_publication,
-          message: "....error message..."
-        }
-
-        state = reply_to_waiters({:error, err}, state)
+      {:error, %Electric.DbConfigurationError{} = error} ->
+        state = reply_to_waiters({:error, error}, state)
         {:noreply, %{state | next_update_forced?: false}}
 
       #  %Postgrex.Error{
