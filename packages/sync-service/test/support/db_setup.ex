@@ -29,9 +29,15 @@ defmodule Support.DbSetup do
       Postgrex.query!(utility_pool, "ALTER DATABASE \"#{db_name}\" SET #{setting}", [])
     end)
 
+    # schedule cleanup of the database after all tests have run
+    ExUnit.after_suite(fn _ ->
+      {:ok, utility_pool} = start_utility_pool(replication_config)
+      drop_database(utility_pool, escaped_db_name)
+      GenServer.stop(utility_pool)
+    end)
+
     on_exit(fn ->
       Process.link(utility_pool)
-      drop_database(utility_pool, escaped_db_name)
       GenServer.stop(utility_pool)
     end)
 

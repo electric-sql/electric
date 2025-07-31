@@ -512,6 +512,7 @@ defmodule Electric.Shapes.Api do
         if live? && Enum.take(log, 1) == [] do
           request
           |> update_attrs(%{ot_is_immediate_response: false})
+          |> notify_changes_since_request_start()
           |> handle_live_request()
         else
           up_to_date_lsn =
@@ -585,20 +586,22 @@ defmodule Electric.Shapes.Api do
     hold_until_change(request)
   end
 
-  defp hold_until_change(%Request{} = request) do
+  # Between loading the shape info and registering as a listener for new changes,
+  # there is a short time period where information might be lost, so we  do an
+  # explicit check if anything has changed.
+  defp notify_changes_since_request_start(%Request{} = request) do
     %{
       new_changes_ref: ref,
       last_offset: last_offset,
       handle: shape_handle,
-      params: %{shape_definition: shape_def, experimental_live_sse: in_sse?},
-      api: %{long_poll_timeout: long_poll_timeout} = api
+      params: %{shape_definition: shape_def},
+      api: api
     } = request
 
-    Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
+    Logger.debug(
+      "Client #{inspect(self())} is checking for any changes to #{shape_handle} since start of request"
+    )
 
-    # Between loading the shape info and registering as a listener for new changes,
-    # there is a short time period where information might be lost, so we check our
-    # mailbox and then do an explicit check if nothing is present
     case Shapes.get_shape(api, shape_def) do
       {^shape_handle, ^last_offset} ->
         # no-op, shape is still present and unchanged
@@ -614,6 +617,19 @@ defmodule Electric.Shapes.Api do
       nil ->
         send(self(), {ref, :shape_rotation})
     end
+
+    request
+  end
+
+  defp hold_until_change(%Request{} = request) do
+    %{
+      new_changes_ref: ref,
+      handle: shape_handle,
+      params: %{experimental_live_sse: in_sse?},
+      api: %{long_poll_timeout: long_poll_timeout}
+    } = request
+
+    Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->

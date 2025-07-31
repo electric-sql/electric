@@ -261,25 +261,25 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      consumer_ref =
+        Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+        |> Process.monitor()
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
       writer = Storage.init_writer!(storage, @shape)
 
-      writer =
-        Storage.append_to_log!(
-          changes_to_log_items([
-            %Electric.Replication.Changes.NewRecord{
-              relation: {"public", "items"},
-              record: %{"id" => "1", "value" => "Alice"},
-              log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-            }
-          ]),
-          writer
-        )
-
-      Storage.terminate(writer)
+      Storage.append_to_log!(
+        changes_to_log_items([
+          %Electric.Replication.Changes.NewRecord{
+            relation: {"public", "items"},
+            record: %{"id" => "1", "value" => "Alice"},
+            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+          }
+        ]),
+        writer
+      )
 
       assert Storage.snapshot_started?(storage)
 
@@ -289,14 +289,15 @@ defmodule Electric.ShapeCacheTest do
       {new_shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(%{@shape | where: "1 == 1"}, opts)
 
-      Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(new_shape_handle, opts)
 
-      assert_raise Storage.Error,
-                   fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
+      assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
+
+      assert :ok = await_for_storage_to_raise(storage)
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert shape_handle != shape_handle2
+      assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
     end
 
     test "shape gets cleaned up if terminated unexpectedly", %{storage: storage} = ctx do
@@ -584,6 +585,7 @@ defmodule Electric.ShapeCacheTest do
 
       refute ShapeCache.has_shape?("some-random-id", opts)
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
       assert ShapeCache.has_shape?(shape_handle, opts)
     end
 
@@ -854,25 +856,25 @@ defmodule Electric.ShapeCacheTest do
         )
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      consumer_ref =
+        Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+        |> Process.monitor()
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
       writer = Storage.init_writer!(storage, @shape)
 
-      writer =
-        Storage.append_to_log!(
-          changes_to_log_items([
-            %Electric.Replication.Changes.NewRecord{
-              relation: {"public", "items"},
-              record: %{"id" => "1", "value" => "Alice"},
-              log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-            }
-          ]),
-          writer
-        )
-
-      Storage.terminate(writer)
+      Storage.append_to_log!(
+        changes_to_log_items([
+          %Electric.Replication.Changes.NewRecord{
+            relation: {"public", "items"},
+            record: %{"id" => "1", "value" => "Alice"},
+            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+          }
+        ]),
+        writer
+      )
 
       assert Storage.snapshot_started?(storage)
 
@@ -882,12 +884,11 @@ defmodule Electric.ShapeCacheTest do
       log = capture_log(fn -> :ok = ShapeCache.clean_shape(shape_handle, opts) end)
       assert log =~ "Cleaning up shape"
 
-      Process.sleep(100)
-
-      assert_raise Storage.Error,
-                   fn -> Stream.run(Storage.get_log_stream(@zero_offset, storage)) end
+      assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
+      assert :ok = await_for_storage_to_raise(storage)
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
       assert shape_handle != shape_handle2
     end
 
@@ -932,25 +933,25 @@ defmodule Electric.ShapeCacheTest do
 
     test "cleans up shape data for relevant shapes", %{shape_cache_opts: opts} = ctx do
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      Process.sleep(50)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      consumer_ref =
+        Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+        |> Process.monitor()
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
       writer = Storage.init_writer!(storage, @shape)
 
-      writer =
-        Storage.append_to_log!(
-          changes_to_log_items([
-            %Electric.Replication.Changes.NewRecord{
-              relation: {"public", "items"},
-              record: %{"id" => "1", "value" => "Alice"},
-              log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-            }
-          ]),
-          writer
-        )
-
-      Storage.terminate(writer)
+      Storage.append_to_log!(
+        changes_to_log_items([
+          %Electric.Replication.Changes.NewRecord{
+            relation: {"public", "items"},
+            record: %{"id" => "1", "value" => "Alice"},
+            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+          }
+        ]),
+        writer
+      )
 
       assert Storage.snapshot_started?(storage)
 
@@ -964,7 +965,7 @@ defmodule Electric.ShapeCacheTest do
           opts
         )
 
-      Process.sleep(100)
+      refute_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}, 100
 
       # Shouldn't raise
       assert :ok = Stream.run(Storage.get_log_stream(@zero_offset, storage))
@@ -975,13 +976,12 @@ defmodule Electric.ShapeCacheTest do
           opts
         )
 
-      Process.sleep(100)
+      assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
 
-      assert_raise Storage.Error, fn ->
-        Stream.run(Storage.get_log_stream(@zero_offset, storage))
-      end
+      assert :ok = await_for_storage_to_raise(storage)
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
       assert shape_handle != shape_handle2
     end
   end
@@ -1046,6 +1046,7 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
       restart_shape_cache(context)
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
       assert shape_handle1 == shape_handle2
     end
 
@@ -1083,6 +1084,7 @@ defmodule Electric.ShapeCacheTest do
       })
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
       assert shape_handle1 == shape_handle2
     end
 
@@ -1155,7 +1157,7 @@ defmodule Electric.ShapeCacheTest do
     defmodule SlowPublicationManager do
       def refresh_publication(_), do: :ok
       def remove_shape(_, _), do: :ok
-      def recover_shape(_, _), do: Process.sleep(100)
+      def recover_shape(_, _), do: Process.sleep(10)
       def add_shape(_, _), do: :ok
     end
 
@@ -1189,6 +1191,8 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(shape1, opts)
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(shape2, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
 
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(ctx.storage)
       assert map_size(found) == 2
@@ -1204,6 +1208,8 @@ defmodule Electric.ShapeCacheTest do
       # and asking for a shape handle should now get us a new one
       {shape_handle3, _} = ShapeCache.get_or_create_shape_handle(shape1, opts)
       {shape_handle4, _} = ShapeCache.get_or_create_shape_handle(shape2, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle3, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle4, opts)
       assert shape_handle1 != shape_handle3
       assert shape_handle2 != shape_handle4
     end
@@ -1262,6 +1268,22 @@ defmodule Electric.ShapeCacheTest do
 
       other ->
         other
+    end
+  end
+
+  defp await_for_storage_to_raise(storage, num_attempts \\ 3)
+
+  defp await_for_storage_to_raise(_storage, 0) do
+    raise "Storage did not raise Storage.Error in time"
+  end
+
+  defp await_for_storage_to_raise(storage, num_attempts) do
+    try do
+      Stream.run(Storage.get_log_stream(LogOffset.before_all(), storage))
+      Process.sleep(50)
+      await_for_storage_to_raise(storage, num_attempts - 1)
+    rescue
+      Storage.Error -> :ok
     end
   end
 end
