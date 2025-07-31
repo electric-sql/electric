@@ -152,13 +152,10 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   end
 
   describe "chunk reads" do
-    @tag chunk_size: 100
-    test "correctly finds a chunk to read from", %{opts: opts} do
-      writer = PureFileStorage.init_writer!(opts, @shape)
-      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
-      PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
+    setup :with_started_writer
 
+    @tag chunk_size: 100
+    test "correctly finds a chunk to read from", %{writer: writer, opts: opts} do
       long_word = String.duplicate("0", 100)
 
       writer =
@@ -195,12 +192,9 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   describe "crash recovery" do
     # These tests make use of known log file structures to test that the storage recovers correctly
     # If underlying file structure changes, these tests will need to be updated.
-    setup %{opts: opts} do
-      writer = PureFileStorage.init_writer!(opts, @shape)
-      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
-      PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
+    setup :with_started_writer
 
+    setup %{writer: writer, opts: opts} do
       writer =
         PureFileStorage.append_to_log!(
           [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
@@ -321,5 +315,71 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
                {{LogOffset.new(10, 0), nil}, {0, nil}, {0, nil}}
              ]
     end
+  end
+
+  describe "chunk writes - " do
+    setup :with_started_writer
+
+    @tag chunk_size: 11
+    test "chunk size is counted by JSON size and not full entry size", %{
+      writer: writer,
+      opts: opts
+    } do
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+
+      # Chunk shoudn't be closed, because byte_size(~S|{"test":1}|) == 10 < 11
+      refute PureFileStorage.get_chunk_end_log_offset(LogOffset.new(9, 0), opts) ==
+               LogOffset.new(10, 0)
+    end
+  end
+
+  @tag chunk_size: 30
+  test "correctly continues a chunk after a reboot", %{opts: opts} do
+    %{writer: writer} = with_started_writer(%{opts: opts})
+
+    writer =
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+        writer
+      )
+
+    PureFileStorage.terminate(writer)
+
+    assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) == nil
+
+    writer = PureFileStorage.init_writer!(opts, @shape)
+
+    writer =
+      PureFileStorage.append_to_log!(
+        [
+          {LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":2}|},
+          {LogOffset.new(12, 0), "test_key", :insert, ~S|{"test":3}|},
+          {LogOffset.new(13, 0), "test_key", :insert, ~S|{"test":4}|}
+        ],
+        writer
+      )
+
+    PureFileStorage.terminate(writer)
+
+    assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) ==
+             LogOffset.new(11, 0)
+
+    assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(13, 0), opts)
+           |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|, ~S|{"test":3}|, ~S|{"test":4}|]
+  end
+
+  defp with_started_writer(%{opts: opts}) do
+    writer = PureFileStorage.init_writer!(opts, @shape)
+    PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+    PureFileStorage.mark_snapshot_as_started(opts)
+    PureFileStorage.make_new_snapshot!([], opts)
+
+    %{writer: writer}
   end
 end
