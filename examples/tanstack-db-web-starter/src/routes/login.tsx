@@ -27,14 +27,12 @@ function Layout() {
         },
         {
           onSuccess: () => {
-            console.log(`signed up, navigating`)
             window.location.href = "/"
           },
         }
       )
 
       if (error?.code === `USER_ALREADY_EXISTS`) {
-        console.log(`user exists, logging in`)
         const result = await authClient.signIn.email(
           {
             email,
@@ -42,9 +40,7 @@ function Layout() {
           },
           {
             onSuccess: async () => {
-              console.log(`signed in, navigating`)
               const { data: session, error } = await authClient.getSession()
-              console.log({ session, error })
               window.location.href = "/"
             },
           }
@@ -54,10 +50,9 @@ function Layout() {
         error = result.error
       }
 
-      console.log({ data, error })
 
       if (error) {
-        console.log(`set error`)
+        console.log(`error logging in`, error)
         setError(JSON.stringify(error, null, 4))
       }
     } catch (_) {

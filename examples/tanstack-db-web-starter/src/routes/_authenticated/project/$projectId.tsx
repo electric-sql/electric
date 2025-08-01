@@ -50,7 +50,6 @@ function ProjectPage() {
     [projectId]
   )
   const usersInProject = usersInProjects?.[0]
-  console.log({ usersInProject, users })
 
   const { data: projects } = useLiveQuery(
     (q) =>
@@ -156,11 +155,10 @@ function ProjectPage() {
                 className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
               <span
-                className={`flex-1 ${
-                  todo.completed
+                className={`flex-1 ${todo.completed
                     ? "line-through text-gray-500"
                     : "text-gray-800"
-                }`}
+                  }`}
               >
                 {todo.text}
               </span>
@@ -204,7 +202,6 @@ function ProjectPage() {
                       type="checkbox"
                       checked={isInProject}
                       onChange={() => {
-                        console.log(`onChange`, { isInProject, isOwner })
                         if (isInProject && !isOwner) {
                           projectCollection.update(project.id, (draft) => {
                             draft.shared_user_ids =
