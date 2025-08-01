@@ -6,12 +6,17 @@ outline: [2, 3]
 ---
 
 <script setup>
+import { ref } from 'vue'
+import ImageModal from '/src/components/ImageModal.vue'
 import AuthorizingProxy from '/static/img/docs/guides/auth/authorizing-proxy.png?url'
 import AuthorizingProxySmall from '/static/img/docs/guides/auth/authorizing-proxy.sm.png?url'
 import AuthorizingProxyJPG from '/static/img/docs/guides/auth/authorizing-proxy.jpg?url'
 
 import GatekeeperFlow from '/static/img/docs/guides/auth/gatekeeper-flow.dark.png?url'
 import GatekeeperFlowJPG from '/static/img/docs/guides/auth/gatekeeper-flow.jpg?url'
+
+const isAuthorizingProxyModalOpen = ref(false)
+const isGatekeeperFlowModalOpen = ref(false)
 </script>
 
 <img src="/img/icons/auth.svg" class="product-icon"
@@ -22,7 +27,7 @@ import GatekeeperFlowJPG from '/static/img/docs/guides/auth/gatekeeper-flow.jpg?
 
 <div class="hidden-xs">
 
-  How to do auth<span class="hidden-sm inline-md">entication and authorization</span> with Electric. Including examples for <span class="no-wrap-md">[proxy](#proxy-auth) and</span> [gatekeeper](#gatekeeper-auth)&nbsp;auth.
+How to do auth<span class="hidden-sm inline-md">entication and authorization</span> with Electric. Including examples for <span class="no-wrap-md">[proxy](#proxy-auth) and</span> [gatekeeper](#gatekeeper-auth)&nbsp;auth.
 
 </div>
 <div class="block-xs">
@@ -39,7 +44,6 @@ The golden rule with Electric is that it's [all just HTTP](/docs/api/http).
 
 So when it comes to auth, you can use existing primitives, such as your API, middleware and external authorization services<!-- (like [Auth0](/docs/integrations/auth0) and [Authzed](/docs/integrations/auth0)) -->.
 
-
 ### Shapes are resources
 
 With Electric, you sync data using [Shapes](/docs/guides/shapes) and shapes are just resources.
@@ -50,14 +54,29 @@ You access them by making a request to `GET /v1/shape`, with the [shape definiti
 
 When you make a request to Electric, you can route it through an HTTP proxy or middleware stack. This allows you to authorise the request before it reaches Electric.
 
-<a :href="AuthorizingProxyJPG">
+<div class="clickable-image" @click="isAuthorizingProxyModalOpen = true">
   <img :src="AuthorizingProxy" class="hidden-sm"
       alt="Illustration of an authorzing proxy"
   />
   <img :src="AuthorizingProxySmall" class="block-sm"
       alt="Illustration of an authorzing proxy"
   />
-</a>
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isAuthorizingProxyModalOpen"
+:image-src="AuthorizingProxyJPG"
+image-alt="Illustration of an authorizing proxy"
+@close="isAuthorizingProxyModalOpen = false"
+/>
 
 You can proxy the request in your cloud, or at the edge, [in-front of a CDN](#cdn-proxy). Your auth logic can query your database, or call an external service. It's all completely up-to-you.
 
@@ -196,12 +215,27 @@ The API is an [Elixir/Phoenix](/docs/integrations/phoenix) web application that 
 2. a proxy endpoint at `GET /proxy/v1/shape`
 
 <figure>
-  <a :href="GatekeeperFlowJPG" target="_blank">
+  <div class="clickable-image" @click="isGatekeeperFlowModalOpen = true">
     <img :src="GatekeeperFlow"
         alt="Illustration of the gatekeeper request flow"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isGatekeeperFlowModalOpen"
+:image-src="GatekeeperFlowJPG"
+image-alt="Illustration of the gatekeeper request flow"
+@close="isGatekeeperFlowModalOpen = false"
+/>
 
 ##### Gatekeeper endpoint
 

@@ -6,9 +6,13 @@ outline: [2, 3]
 ---
 
 <script setup>
+import { ref } from 'vue'
 import ComponentsJPG from '/static/img/docs/guides/deployment/components.jpg?url'
 import ComponentsPNG from '/static/img/docs/guides/deployment/components.png?url'
 import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.png?url'
+
+// Modal state
+const isComponentsModalOpen = ref(false)
 </script>
 
 <img src="/img/icons/security.svg" class="product-icon"
@@ -24,7 +28,7 @@ How to secure data access and [encrypt data](#encryption) with Electric.
 Electric is a [sync service](/product/electric) that runs in front of Postgres. It connects to a Postgres database using a [`DATABASE_URL`](/docs/api/config#database-url) and exposes the data in that database via an [HTTP API](/docs/api/http).
 
 <figure>
-  <a :href="ComponentsJPG">
+  <div class="clickable-image" @click="isComponentsModalOpen = true">
     <img :src="ComponentsPNG" class="hidden-sm"
         alt="Illustration of the main components of a successfull deployment"
     />
@@ -32,8 +36,23 @@ Electric is a [sync service](/product/electric) that runs in front of Postgres. 
         style="max-width: 360px"
         alt="Illustration of the main components of a successfull deployment"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal 
+  :is-open="isComponentsModalOpen"
+  :image-src="ComponentsJPG"
+  image-alt="Illustration of the main components of a successful deployment"
+  @close="isComponentsModalOpen = false"
+/>
 
 This API is [public by default](#public-by-default). It should be secured in production using an [API token](#api-token), [network security](#network-security) and/or an [authorization proxy](#authorization).
 

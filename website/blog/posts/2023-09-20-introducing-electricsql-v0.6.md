@@ -9,6 +9,13 @@ outline: deep
 post: true
 ---
 
+<script setup>
+  import { ref } from 'vue'
+
+  // Modal states
+  const isSpectrumSyncModelsModalOpen = ref(false)
+</script>
+
 Introducing the v0.6 release of ElectricSQL. A local-first sync layer that you can use to build reactive, realtime, offline-capable apps directly on Postgres.
 
 <!--truncate-->
@@ -113,16 +120,15 @@ npx electric-sql generate [--watch]
 And import a [type-safe, schema-aware client library](https://legacy.electric-sql.com/docs/usage/data-access/client) into your app:
 
 ```tsx
-import { schema, Project } from './generated/client'
+import { schema, Project } from "./generated/client"
 
 const { db } = await electrify(conn, schema, config)
 const projects: Project[] = db.projects.findMany({
   where: {
-    owner_id: auth.user_id
-  }
+    owner_id: auth.user_id,
+  },
 })
 ```
-
 
 ## Dynamic partial replication
 
@@ -134,18 +140,31 @@ When you're building local-first or offline-capable apps, there are a range of s
 
 <div class="my-6 mt-8">
   <figure class="figure mx-0 my-3">
-    <a href="/img/blog/introducing-electric-sql/spectrum-sync-models.jpg"
-        class="relative block text-center w-full no-visual"
-        target="_blank">
+    <div class="clickable-image" @click="isSpectrumSyncModelsModalOpen = true">
       <img src="/img/blog/introducing-electric-sql/spectrum-sync-models.sm.jpg"
           class="figure-img img-fluid mx-auto"
       />
-    </a>
+      <div class="image-overlay">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+          <line x1="11" y1="8" x2="11" y2="14"></line>
+          <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+      </div>
+    </div>
   </figure>
   <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
     Table summarising a range of sync strategies with increasing offline capabilities.
   </figcaption>
 </div>
+
+<ImageModal
+:is-open="isSpectrumSyncModelsModalOpen"
+image-src="/img/blog/introducing-electric-sql/spectrum-sync-models.jpg"
+image-alt="Spectrum sync models table"
+@close="isSpectrumSyncModelsModalOpen = false"
+/>
 
 With Electric, we've worked hard to design a system where you can express all of these different models. We do this using a core primitive called [Shapes](https://legacy.electric-sql.com/docs/usage/data-access/shapes).
 
@@ -221,7 +240,6 @@ await db.projects.update({
 ```
 
 Components automatically re-render when necessary. Data is automatically replicated using the shape subscriptions you've established. In many cases, there's no need for an additional state-management library. Just use the database as a unified store for data and UI state.
-
 
 ## Modern, local-first apps
 

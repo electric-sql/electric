@@ -6,10 +6,14 @@ outline: deep
 ---
 
 <script setup>
+import { ref } from 'vue'
 import InitialRequest from '/static/img/docs/api/http/initial-request.png?url'
 import InitialRequestSm from '/static/img/docs/api/http/initial-request.sm.png?url'
 import SubsequentRequest from '/static/img/docs/api/http/subsequent-request.png?url'
 import SubsequentRequestSm from '/static/img/docs/api/http/subsequent-request.sm.png?url'
+
+// Modal state
+const isShapeLogModalOpen = ref(false)
 </script>
 
 # HTTP API
@@ -34,7 +38,7 @@ The rest of this page will describe the features of the API.
 The API allows you to sync [Shapes](/docs/guides/shapes) of data out of Postgres using the
 <a href="/openapi.html#/paths/~1v1~1shape/get"
     target="_blank">
-  <code>GET /v1/shape</code></a> endpoint. The pattern is as follows.
+<code>GET /v1/shape</code></a> endpoint. The pattern is as follows.
 
 First you make an initial sync request to get the current data for the Shape, such as:
 
@@ -53,17 +57,32 @@ The `offset` that you see in the messages and provide as the `?offset=...` query
 The Shape Log is similar conceptually to the logical replication stream from Postgres. Except that instead of getting all the database operations, you're getting the ones that affect the data in your Shape. It's then the responsibility of the client to consume the log and materialize out the current value of the shape.
 
 <figure>
-  <a href="/img/api/shape-log.jpg">
+  <div class="clickable-image" @click="isShapeLogModalOpen = true">
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
         alt="Shape log flow diagramme"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
   <figcaption class="figure-caption text-end">
     Shape log flow diagramme.
   </figcaption>
 </figure>
+
+<ImageModal
+:is-open="isShapeLogModalOpen"
+image-src="/img/api/shape-log.jpg"
+image-alt="Shape log flow diagramme"
+@close="isShapeLogModalOpen = false"
+/>
 
 The values included in the shape log are strings formatted according to Postgres' display settings. The <a href="/openapi.html" target="_blank">OpenAPI specification</a> defines the display settings the HTTP API adheres to.
 
@@ -80,7 +99,7 @@ Sometimes a log can fit in a single response. Sometimes it's too big and require
 The client will then receive an `up-to-date` control message at the end of the response data:
 
 ```json
-{"headers": {"control": "up-to-date"}}
+{ "headers": { "control": "up-to-date" } }
 ```
 
 This indicates that the client has all the data that the server was aware of when fulfilling the request. The client can then switch into live mode to receive real-time updates.
@@ -89,8 +108,9 @@ This indicates that the client has all the data that the server was aware of whe
 Note that the other control message is `must-refetch` which indicates that the client must throw away their local shape data and re-sync from scratch:
 
 ```json
-{"headers": {"control": "must-refetch"}}
+{ "headers": { "control": "must-refetch" } }
 ```
+
 :::
 
 ### Live mode

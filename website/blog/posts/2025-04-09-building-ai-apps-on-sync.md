@@ -16,6 +16,16 @@ post: true
 <script setup>
   import Card from '../../src/components/home/Card.vue'
   import PartialReplicationDiagramme from '../../src/components/home/PartialReplicationDiagramme.vue'
+  import { ref } from 'vue'
+
+  // Modal states
+  const isTokenStreamingModalOpen = ref(false)
+  const isStreamingViaStoreModalOpen = ref(false)
+  const isMultiTabBrokenModalOpen = ref(false)
+  const isNippingOutForCoffeeModalOpen = ref(false)
+  const isStreamingTwoClientsModalOpen = ref(false)
+  const isFigmaModalOpen = ref(false)
+  const isSwarmModalOpen = ref(false)
 </script>
 
 <style scoped>
@@ -58,13 +68,30 @@ As AI apps become more collaborative, with [multiple users interacting with the 
 Most AI apps stream tokens into the front-end. That's how Claude and ChatGPT write out their response to you, one word at a time.
 
 <figure>
-  <img class="hidden-sm"
-      src="/img/blog/building-ai-apps-on-sync/token-streaming.png"
-  />
-  <img class="block-sm" style="width: 100%; max-width: 275px"
-      src="/img/blog/building-ai-apps-on-sync/token-streaming.sm.png"
-  />
+  <div class="clickable-image" @click="isTokenStreamingModalOpen = true">
+    <img class="hidden-sm"
+        src="/img/blog/building-ai-apps-on-sync/token-streaming.png"
+    />
+    <img class="block-sm" style="width: 100%; max-width: 275px"
+        src="/img/blog/building-ai-apps-on-sync/token-streaming.sm.png"
+    />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isTokenStreamingModalOpen"
+image-src="/img/blog/building-ai-apps-on-sync/token-streaming.png"
+image-alt="Token streaming diagram"
+@close="isTokenStreamingModalOpen = false"
+/>
 
 If you stream directly from the agent to the UI, you have a fragile system. Your app breaks when the connection drops and when the user refreshes the page.
 
@@ -80,13 +107,30 @@ For example, here's a video showing how ChatGPT behaves:
 If, instead, you stream tokens into a store and then subscribe to that store, you can build non-fragile, resilient apps where the data isn't lost when a connection drops.
 
 <figure>
-  <img class="hidden-sm"
-      src="/img/blog/building-ai-apps-on-sync/streaming-via-store.png"
-  />
-  <img class="block-sm" style="width: 100%; max-width: 396px"
-      src="/img/blog/building-ai-apps-on-sync/streaming-via-store.sm.png"
-  />
+  <div class="clickable-image" @click="isStreamingViaStoreModalOpen = true">
+    <img class="hidden-sm"
+        src="/img/blog/building-ai-apps-on-sync/streaming-via-store.png"
+    />
+    <img class="block-sm" style="width: 100%; max-width: 396px"
+        src="/img/blog/building-ai-apps-on-sync/streaming-via-store.sm.png"
+    />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isStreamingViaStoreModalOpen"
+image-src="/img/blog/building-ai-apps-on-sync/streaming-via-store.png"
+image-alt="Streaming via store diagram"
+@close="isStreamingViaStoreModalOpen = false"
+/>
 
 For example, here's our [Electric AI chat app](https://github.com/electric-sql/electric-ai-chat), streaming tokens via a store (in this case [a Postgres database](https://electric-sql.com/docs/guides/deployment#_1-running-postgres)). It handles offline, patchy connectivity and page refreshes without a problem:
 
@@ -125,7 +169,24 @@ You know another thing users do? They open multiple browser tabs and they flit i
 
 So what do you do when they open your app in two tabs at the same time? They can't remember which tab they used last. They're just confused when their session isn't there. Where did my vibes go?!
 
-<img src="/img/blog/building-ai-apps-on-sync/multi-tab-broken.png" />
+<div class="clickable-image" @click="isMultiTabBrokenModalOpen = true">
+  <img src="/img/blog/building-ai-apps-on-sync/multi-tab-broken.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isMultiTabBrokenModalOpen"
+image-src="/img/blog/building-ai-apps-on-sync/multi-tab-broken.png"
+image-alt="Multi tab broken diagram"
+@close="isMultiTabBrokenModalOpen = false"
+/>
 
 Or worse, they kick off the same prompt twice because they think it's not running. Now they have two threads competing to do the same thing.
 
@@ -134,19 +195,53 @@ Who are they going to blame? Your software. So even just the possibility of mult
 But, of course, the world is not just about browser tabs. Agents do stuff in the background. What are the chances your user is going to grab their mobile, nip across to [Linea Coffee](https://lineacaffe.com) on Mariposa and check progress while waiting in the queue?
 
 <figure style="border-radius: 16px; overflow: hidden">
-  <img src="/img/blog/building-ai-apps-on-sync/nipping-out-for-coffee.jpg" />
+  <div class="clickable-image" @click="isNippingOutForCoffeeModalOpen = true">
+    <img src="/img/blog/building-ai-apps-on-sync/nipping-out-for-coffee.jpg" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isNippingOutForCoffeeModalOpen"
+image-src="/img/blog/building-ai-apps-on-sync/nipping-out-for-coffee.jpg"
+image-alt="Nipping out for coffee"
+@close="isNippingOutForCoffeeModalOpen = false"
+/>
 
 When they do so, how do you keep the mobile app up-to-date with the session that was started in the browser? This is exactly what sync does. It handles _fan out_, so you can (resiliently) stream changes to multiple places at the same time.
 
 <figure>
-  <img class="hidden-sm"
-      src="/img/blog/building-ai-apps-on-sync/streaming-two-clients.png"
-  />
-  <img class="block-sm" style="width: 100%; max-width: 396px"
-      src="/img/blog/building-ai-apps-on-sync/streaming-two-clients.sm.png"
-  />
+  <div class="clickable-image" @click="isStreamingTwoClientsModalOpen = true">
+    <img class="hidden-sm"
+        src="/img/blog/building-ai-apps-on-sync/streaming-two-clients.png"
+    />
+    <img class="block-sm" style="width: 100%; max-width: 396px"
+        src="/img/blog/building-ai-apps-on-sync/streaming-two-clients.sm.png"
+    />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isStreamingTwoClientsModalOpen"
+image-src="/img/blog/building-ai-apps-on-sync/streaming-two-clients.png"
+image-alt="Streaming two clients diagram"
+@close="isStreamingTwoClientsModalOpen = false"
+/>
 
 For example, with Electric, you can just write changes to Postgres and then Electric takes care of fanning-out data delivery to as many clients as you like (you can literally scale to [millions of clients](/docs/reference/benchmarks#cloud) straight out of the box).
 
@@ -166,11 +261,25 @@ In an [Onion-style newsflash](https://theonion.com/area-man-accepts-burden-of-be
 SaaS was designed around this. Work colleagues can collaborate on Figma designs. Friends and family members can plan holidays using Airbnb wishlists.
 
 <figure style="border-radius: 16px; opacity: 0.82; overflow: hidden">
-  <a href="https://www.figma.com/blog/introducing-figma-community/" class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isFigmaModalOpen = true">
     <img src="/img/blog/building-ai-apps-on-sync/figma.png" style="margin: -30px 0" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isFigmaModalOpen"
+image-src="/img/blog/building-ai-apps-on-sync/figma.png"
+image-alt="Figma community"
+@close="isFigmaModalOpen = false"
+/>
 
 Now we have AI, collaboration-by-clicking-buttons is going to be replaced by by interacting with agents. That direct stream from the agent to the UI, it's single-user. It doesn't work for collaboration. For multi-user, you need the same pattern as with resumability and multi-device. Stream through a store with fan-out. As long as you stream the right sessions to the right users.
 
@@ -253,9 +362,25 @@ So, as soon as you have a user interacting with an agent, you have a multi-user 
 You're also not going to just have one agent. Soon, we're all going to have [swarms of agents](https://github.com/openai/openai-agents-python) running around in the background for us. These are going to need to share context and have situational awareness.
 
 <figure style="border-radius: 16px; overflow: hidden">
-  <a href="https://github.com/openai/openai-agents-python" class="no-visual" target="_blank">
-    <img src="/img/blog/building-ai-apps-on-sync/swarm.png" /></a>
+  <div class="clickable-image" @click="isSwarmModalOpen = true">
+    <img src="/img/blog/building-ai-apps-on-sync/swarm.png" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isSwarmModalOpen"
+image-src="/img/blog/building-ai-apps-on-sync/swarm.png"
+image-alt="Swarm"
+@close="isSwarmModalOpen = false"
+/>
 
 Tools like [LangGraph](https://www.langchain.com/langgraph) and [Mastra](https://mastra.ai/blog/mastra-storage) provide a shared data layer for agents. However, they don't solve the last mile problem of syncing into user-facing apps to also keep the human in the loop. State can't just be in the cloud. Users have agency too!
 

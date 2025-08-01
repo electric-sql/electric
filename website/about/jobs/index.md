@@ -9,15 +9,34 @@ outline: deep
 
 <script setup>
 import { data as activeJobs } from '../../data/activeJobs.data.ts'
+import { ref } from 'vue'
 
 const currentlyHiring = activeJobs.length > 0
+
+// Modal state
+const isImageModalOpen = ref(false)
 </script>
 
 <figure class="page-image">
-  <a href="/img/about/villa-discussion.jpg" class="no-visual">
+  <div class="clickable-image" @click="isImageModalOpen = true">
     <img src="/img/about/villa-discussion.jpg" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isImageModalOpen"
+image-src="/img/about/villa-discussion.jpg"
+image-alt="Villa discussion"
+@close="isImageModalOpen = false"
+/>
 
 <h1 id="#join">Join the ElectricSQL team</h1>
 
@@ -28,6 +47,7 @@ We're a [small, technical team](/about/team) that's passionate about our work, o
 ## Active roles
 
 > [!Tip] We're hiring!
+>
 > <ul><li v-for="job in activeJobs"><a :href="job.link">{{ job.title }}</a></li></ul>
 
 </div>

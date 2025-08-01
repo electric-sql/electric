@@ -9,6 +9,13 @@ outline: deep
 post: true
 ---
 
+<script setup>
+  import { ref } from 'vue'
+
+  // Modal states
+  const isComponentsAndConnectionsModalOpen = ref(false)
+</script>
+
 To set the tone for 2024, we're kicking January off with a fresh release of Electric that introduces a whole slew of improvements to the experience of configuring, deploying, and developing with Electric.
 
 <!--truncate-->
@@ -84,7 +91,26 @@ Don't we all just love it that we can drop Electric onto a classical cloud-first
 
 Fear not, though, as we recently published a new guide that provides an in-depth look into the various components of an electrified app stack and how they all fit together. Here's a teaser:
 
-![Components and connections](/img/blog/electricsql-v0.9-released/components-and-connections.png)
+<figure>
+  <div class="clickable-image" @click="isComponentsAndConnectionsModalOpen = true">
+    <img src="/img/blog/electricsql-v0.9-released/components-and-connections.png" alt="Components and connections" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
+</figure>
+
+<ImageModal
+:is-open="isComponentsAndConnectionsModalOpen"
+image-src="/img/blog/electricsql-v0.9-released/components-and-connections.png"
+image-alt="Components and connections"
+@close="isComponentsAndConnectionsModalOpen = false"
+/>
 
 Go read our new [Deployment Concepts](https://legacy.electric-sql.com/docs/deployment/concepts) guide to learn all about it.
 

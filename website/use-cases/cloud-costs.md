@@ -2,7 +2,7 @@
 title: "Cloud cost reduction"
 description: >-
   Take the query workload off your database and the
-  compute workload off your cloud.
+  compute workload off your cloud.
 image: /img/use-cases/scalability.png
 outline: deep
 case: true
@@ -14,16 +14,41 @@ benefits:
   - Reduces your cloud bill
 ---
 
+<script setup>
+import { ref } from 'vue'
+
+// Modal states
+const isThreeTierModalOpen = ref(false)
+const isSyncEngineModalOpen = ref(false)
+</script>
+
 ## Radically reduce your cloud bill
 
 Most software today is built on a 3-tier web-service architecture. Front-end apps talk to backend services to fetch data and run business logic.
 
 <figure>
-  <img src="/img/use-cases/three-tier-architecture.png"
-      alt="Diagramme illustrating 3-tier software architecture"
-      style="margin: 0; width: 100%; max-width: 450px"
-  />
+  <div class="clickable-image" @click="isThreeTierModalOpen = true">
+    <img src="/img/use-cases/three-tier-architecture.png"
+        alt="Diagramme illustrating 3-tier software architecture"
+        style="margin: 0; width: 100%; max-width: 450px"
+    />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isThreeTierModalOpen"
+image-src="/img/use-cases/three-tier-architecture.png"
+image-alt="Diagramme illustrating 3-tier software architecture"
+@close="isThreeTierModalOpen = false"
+/>
 
 This means business logic executes on the cloud, which leads to high volumes of requests and database queries. This costs money to serve, in the form of compute and database query costs. Plus querying data in the cloud leads to large egress costs.
 
@@ -32,11 +57,28 @@ This means business logic executes on the cloud, which leads to high volumes of 
 Sync-engine architecture replaces data fetching, querying and egress from the cloud with sync into a local data store, local queries and minimal egress.
 
 <figure>
-  <img src="/img/use-cases/sync-engine-architecture.png"
-      alt="Diagramme illustrating sync engine architecture"
-      style="margin: 0; width: 100%; max-width: 450px"
-  />
+  <div class="clickable-image" @click="isSyncEngineModalOpen = true">
+    <img src="/img/use-cases/sync-engine-architecture.png"
+        alt="Diagramme illustrating sync engine architecture"
+        style="margin: 0; width: 100%; max-width: 450px"
+    />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isSyncEngineModalOpen"
+image-src="/img/use-cases/sync-engine-architecture.png"
+image-alt="Diagramme illustrating sync engine architecture"
+@close="isSyncEngineModalOpen = false"
+/>
 
 This architecture changes the operational cost characteristics of your software:
 

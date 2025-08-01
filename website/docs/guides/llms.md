@@ -5,6 +5,19 @@ description: >-
 outline: [2, 4]
 ---
 
+<script setup>
+import { ref } from 'vue'
+
+// Modal states
+const isChatGPTUploadModalOpen = ref(false)
+const isChatGPTDocumentAttachedModalOpen = ref(false)
+const isClaudeUploadModalOpen = ref(false)
+const isClaudeProjectContextModalOpen = ref(false)
+const isClaudeElectricProjectModalOpen = ref(false)
+const isWindsurfLocalFolderModalOpen = ref(false)
+const isCursorLocalEditingModalOpen = ref(false)
+</script>
+
 <img src="/img/icons/llms.svg" class="product-icon"
     style="width: 72px"
 />
@@ -13,9 +26,9 @@ outline: [2, 4]
 
 How to use Electric with LLMs like [ChatGPT](https://chatgpt.com) and [Claude](https://claude.ai) and AI code editors like
 <span class="no-wrap-lg">
-  [Cursor](https://www.cursor.com)
-  and
-  [Windsurf](https://windsurf.com)</span>.
+[Cursor](https://www.cursor.com)
+and
+[Windsurf](https://windsurf.com)</span>.
 
 ## Using Electric with LLMs
 
@@ -37,28 +50,96 @@ You can use this file in two ways:
 Manually download the Electric [llms.txt](https://electric-sql.com) file to your computer. Then in ChatGPT use the `Attach` or `+` button to upload the file from your computer:
 
 <figure>
-  <img src="/img/guides/llms/chatgpt-upload.jpg" style="border-radius: 16px" />
+  <div class="clickable-image" @click="isChatGPTUploadModalOpen = true">
+    <img src="/img/guides/llms/chatgpt-upload.jpg" style="border-radius: 16px" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isChatGPTUploadModalOpen"
+image-src="/img/guides/llms/chatgpt-upload.jpg"
+image-alt="ChatGPT upload interface"
+@close="isChatGPTUploadModalOpen = false"
+/>
 
 This will upload the file and provide the information in it as context to the LLM. You can then [prompt the LLM](#prompting) to use Electric.
 
 <figure>
-  <img src="/img/guides/llms/chatgpt-document-attached.jpg" style="border-radius: 16px" />
+  <div class="clickable-image" @click="isChatGPTDocumentAttachedModalOpen = true">
+    <img src="/img/guides/llms/chatgpt-document-attached.jpg" style="border-radius: 16px" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isChatGPTDocumentAttachedModalOpen"
+image-src="/img/guides/llms/chatgpt-document-attached.jpg"
+image-alt="ChatGPT document attached interface"
+@close="isChatGPTDocumentAttachedModalOpen = false"
+/>
 
 #### Example - Claude
 
 Similarly if you're using [Claude](https://claude.ai) you can either just upload the file:
 
 <figure>
-  <img src="/img/guides/llms/claude-upload.png" style="border-radius: 16px" />
+  <div class="clickable-image" @click="isClaudeUploadModalOpen = true">
+    <img src="/img/guides/llms/claude-upload.png" style="border-radius: 16px" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isClaudeUploadModalOpen"
+image-src="/img/guides/llms/claude-upload.png"
+image-alt="Claude upload interface"
+@close="isClaudeUploadModalOpen = false"
+/>
 
 Or, more powerfully, you can [create a project](https://www.anthropic.com/news/projects) and add the llms.txt file to the project context. This means that the instructions within it will be applied to all of the chat sessions you create within the project.
 
 <figure>
-  <img src="/img/guides/llms/claude-project-context.png" style="border-radius: 16px" />
+  <div class="clickable-image" @click="isClaudeProjectContextModalOpen = true">
+    <img src="/img/guides/llms/claude-project-context.png" style="border-radius: 16px" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isClaudeProjectContextModalOpen"
+image-src="/img/guides/llms/claude-project-context.png"
+image-alt="Claude project context interface"
+@close="isClaudeProjectContextModalOpen = false"
+/>
 
 ### Prompting
 
@@ -69,8 +150,25 @@ Prompts are how you tell the LLM what you would like to do. You don't need any s
 With the [llms.txt as context](#llms-txt), this will be enough to generate a fully working Electric application. For example, this is Claude's response:
 
 <figure>
-  <img src="/img/guides/llms/claude-electric-project.jpg" />
+  <div class="clickable-image" @click="isClaudeElectricProjectModalOpen = true">
+    <img src="/img/guides/llms/claude-electric-project.jpg" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isClaudeElectricProjectModalOpen"
+image-src="/img/guides/llms/claude-electric-project.jpg"
+image-alt="Claude Electric project response"
+@close="isClaudeElectricProjectModalOpen = false"
+/>
 
 The rule-of-thumb with prompting is that you need to provide all of the information to the LLM that it doesn't have in its training set (or project context). So, for example, if you want to use a specific database host like Supabase or Neon, you should say that. Or if you want to use a [specific pattern for writes](/docs/guides/writes) you should say that, e.g.:
 
@@ -93,8 +191,25 @@ For these, you can provide the existing code as context, for example by adding a
 Here we've added the local clone of the [electric-ai-chat demo app](/demos/ai-chat) to [Windsurf](https://windsurf.com), by selecting the folder from our local filesystem.
 
 <figure>
-  <img src="/img/guides/llms/windsurf-local-folder.jpg" />
+  <div class="clickable-image" @click="isWindsurfLocalFolderModalOpen = true">
+    <img src="/img/guides/llms/windsurf-local-folder.jpg" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isWindsurfLocalFolderModalOpen"
+image-src="/img/guides/llms/windsurf-local-folder.jpg"
+image-alt="Windsurf local folder interface"
+@close="isWindsurfLocalFolderModalOpen = false"
+/>
 
 You can then identify existing components or routes that are fetching data and tell the LLM to replace the data wiring with Electric sync. This can typically be achieved by selecting the relevant code and then prompting to revise it.
 
@@ -103,8 +218,25 @@ You can then identify existing components or routes that are fetching data and t
 For example in [Cursor](https://cursor.com), you can navigate to the file, select any relevant code and then prompt to tell the LLM how you'd like to change it:
 
 <figure>
-  <img src="/img/guides/llms/cursor-local-editing.jpg" />
+  <div class="clickable-image" @click="isCursorLocalEditingModalOpen = true">
+    <img src="/img/guides/llms/cursor-local-editing.jpg" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isCursorLocalEditingModalOpen"
+image-src="/img/guides/llms/cursor-local-editing.jpg"
+image-alt="Cursor local editing interface"
+@close="isCursorLocalEditingModalOpen = false"
+/>
 
 ## More information
 

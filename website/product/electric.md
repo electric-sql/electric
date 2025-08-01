@@ -7,10 +7,14 @@ outline: deep
 ---
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 
 import { data as initialStarCounts } from '../data/count.data.ts'
 import { getStarCount } from '../src/lib/star-count.ts'
+
+// Modal states
+const isUseCasesModalOpen = ref(false)
+const isShapeLogModalOpen = ref(false)
 
 const formatStarCount = (count) => (
   `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
@@ -72,10 +76,27 @@ local apps and services.
 
 The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out of Postgres into local apps and services &mdash; wherever you need the data.
 
-<img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
-    sizes="(max-width: 767px) 600px, 1484px"
-    src="/img/about/use-cases.png"
-    alt="Use cases diagramme"
+<div class="clickable-image" @click="isUseCasesModalOpen = true">
+  <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
+      sizes="(max-width: 767px) 600px, 1484px"
+      src="/img/about/use-cases.png"
+      alt="Use cases diagramme"
+  />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isUseCasesModalOpen"
+image-src="/img/about/use-cases.png"
+image-alt="Use cases diagramme"
+@close="isUseCasesModalOpen = false"
 />
 
 You can sync data into:
@@ -92,17 +113,32 @@ The Electric sync engine is an [Elixir](https://elixir-lang.org) application, de
 It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-url), consumes the logical replication stream and fans out data into [Shapes](/docs/guides/shapes), which [Clients](/docs/api/clients/typescript) then consume and sync.
 
 <figure>
-  <a href="/img/api/shape-log.jpg">
+  <div class="clickable-image" @click="isShapeLogModalOpen = true">
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
         alt="Shape log flow diagramme"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
   <figcaption class="figure-caption text-end">
     Shape log flow diagramme.
   </figcaption>
 </figure>
+
+<ImageModal
+:is-open="isShapeLogModalOpen"
+image-src="/img/api/shape-log.jpg"
+image-alt="Shape log flow diagramme"
+@close="isShapeLogModalOpen = false"
+/>
 
 This enables a massive number of clients to query and get real-time updates to subsets of the database. In this way, Electric turns Postgres into a real-time database.
 

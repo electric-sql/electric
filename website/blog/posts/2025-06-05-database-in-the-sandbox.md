@@ -62,7 +62,7 @@ Now ... there is a solution built into the platforms for this. That is to connec
 
 Once connected, you can create a database and then wire in the credentials. Sometimes the AI does this for you. In other cases, it writes unhelpful keys into your `.env` file and you have to debug getting the right connection string into your database driver.
 
-So you can make this work. (And it's a [well-trodden path](https://x.com/kiwicopple/status/1862433123192955016)). However, what you *now* have is a sandboxed development environment that's tied to an external database resource. This creates *even more* fricition and limits the flexibility of the app builder experience.
+So you can make this work. (And it's a [well-trodden path](https://x.com/kiwicopple/status/1862433123192955016)). However, what you _now_ have is a sandboxed development environment that's tied to an external database resource. This creates _even more_ fricition and limits the flexibility of the app builder experience.
 
 For example, using Bolt, you can click a button to fork, aka duplicate, your application:
 
@@ -81,7 +81,7 @@ This stuff is meant to be simple and automated. But with an external database, i
 
 What if ... instead of connecting the app to an external database, you could just have the database inside the sandbox?
 
-If you dig into a platform like Bolt, you'll see it runs the full development environment, with both front-end *and* back-end services, inside a [WebContainer](https://webcontainers.io). What if the database was *also* able to run inside the WebContainer? Well, with PGlite, it can.
+If you dig into a platform like Bolt, you'll see it runs the full development environment, with both front-end _and_ back-end services, inside a [WebContainer](https://webcontainers.io). What if the database was _also_ able to run inside the WebContainer? Well, with PGlite, it can.
 
 <figure>
   <a href="https://pglite.dev" class="no-visual">
@@ -118,20 +118,19 @@ There's nothing in this approach that prevents running against a hosted database
 
 ```ts
 const sql =
-  process.env.NODE_ENV === 'production'
+  process.env.NODE_ENV === "production"
     ? postgres(process.env.DATABASE_URL)
     : postgres({
-        host: '/tmp/',
-        username: 'postgres',
-        password: 'postgres',
-        database: 'postgres',
+        host: "/tmp/",
+        username: "postgres",
+        password: "postgres",
+        database: "postgres",
         max: 1,
-        connect_timeout: 0
-      }
-    )
+        connect_timeout: 0,
+      })
 ```
 
-So if you hit "deploy" and run in production, the app automatically connects to a production database on a platform like Supabase or Neon. Which is when you *want* a proper, external database, because you *need* that database to be available and durable.
+So if you hit "deploy" and run in production, the app automatically connects to a production database on a platform like Supabase or Neon. Which is when you _want_ a proper, external database, because you _need_ that database to be available and durable.
 
 What you don't need is the friction from configuring and managing that kind of infra, before you've even run the code your AI app builder has generated for you.
 
