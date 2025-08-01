@@ -14,6 +14,10 @@ post: true
 
 <script setup>
 import Tweet from 'vue-tweet'
+import { ref } from 'vue'
+
+// Modal states
+const isEvolutionTableModalOpen = ref(false)
 </script>
 
 Web development has been progressing through an evolution of state transfer. Local-first is the natural endgame and the vision we're working towards with Electric.
@@ -24,18 +28,31 @@ State transfer is fundamental to online applications. Web apps are architected a
 
 <div class="my-6 mt-8">
   <figure class="figure mx-0 my-3">
-    <a href="/img/blog/evolution-state-transfer/electricsql-evolution-state-transfer.jpg"
-        class="relative block text-center w-full no-visual"
-        target="_blank">
+    <div class="clickable-image" @click="isEvolutionTableModalOpen = true">
       <img src="/img/blog/evolution-state-transfer/electricsql-evolution-state-transfer.jpg"
           class="figure-img img-fluid mx-auto"
       />
-    </a>
+      <div class="image-overlay">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+          <line x1="11" y1="8" x2="11" y2="14"></line>
+          <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+      </div>
+    </div>
   </figure>
   <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">
     Table summarising the evolution of state transfer from form-POST through AJAX, REST and GraphQL to local-first.
   </figcaption>
 </div>
+
+<ImageModal
+:is-open="isEvolutionTableModalOpen"
+image-src="/img/blog/evolution-state-transfer/electricsql-evolution-state-transfer.jpg"
+image-alt="Evolution of state transfer table"
+@close="isEvolutionTableModalOpen = false"
+/>
 
 ## Forms to GraphQL
 

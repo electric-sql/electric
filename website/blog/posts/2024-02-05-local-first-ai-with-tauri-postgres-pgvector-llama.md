@@ -11,6 +11,17 @@ outline: deep
 post: true
 ---
 
+<script setup>
+import { ref } from 'vue'
+
+// Modal states
+const isRagModalOpen = ref(false)
+const isCloudRagModalOpen = ref(false)
+const isLocalRagModalOpen = ref(false)
+const isHybridRagModalOpen = ref(false)
+const isArchitectureModalOpen = ref(false)
+</script>
+
 The first wave of LLM-enabled apps used large models running in the cloud. It's a running joke that most AI startups are just a wrapper around the OpenAI API. This naturally involves sending your prompt and context data to a third party API.
 
 This typically doesn't matter too much when you're just generating [funny elephant pictures](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/electric-elephant.jpg). But if you're building consumer or professional apps, you don't want to leak sensitive and private data. Retrieval-augmented generation (RAG) compounds the problem, by feeding even more data into the model &mdash; silently, in the background.
@@ -62,7 +73,24 @@ To perform RAG using a vector database you:
 1. feed both the prompt and the text from the retrieved documents as context into a LLM
 1. the LLM then generates a response
 
-[![](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/rag.png)](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/rag.jpg)
+<div class="clickable-image" @click="isRagModalOpen = true">
+  <img src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/rag.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isRagModalOpen"
+image-src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/rag.jpg"
+image-alt="RAG diagram"
+@close="isRagModalOpen = false"
+/>
 
 ### Cloud-based RAG
 
@@ -72,7 +100,24 @@ Cloud-based retrieval-augmented generation has many parts of the pipeline provid
 - the vector database is provided by a cloud service like [Pinecone&nbsp;serverless](https://www.pinecone.io/product/)
 - the generation is performed by a LLM hosted by a company like <span class="no-wrap">[OpenAI](https://platform.openai.com/docs/introduction) or [Google](https://ai.google.dev/docs)</span>
 
-[![](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/cloud-rag.png)](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/cloud-rag.jpg)
+<div class="clickable-image" @click="isCloudRagModalOpen = true">
+  <img src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/cloud-rag.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isCloudRagModalOpen"
+image-src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/cloud-rag.jpg"
+image-alt="Cloud RAG diagram"
+@close="isCloudRagModalOpen = false"
+/>
 
 As you can see, this sends both your prompt/query data and information retrieved from your knowledge base to multiple APIs in the cloud.
 
@@ -82,9 +127,26 @@ As an alternative, the ideal local-first AI architecture for RAG would be:
 
 - a local, on-device, vector embedding model
 - a local vector database, ideally integrated into your main on-device datastore
-- a local language model for generation text (or other multi-modal) 
+- a local language model for generation text (or other multi-modal)
 
-[![](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/local-rag.png)](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/local-rag.jpg)
+<div class="clickable-image" @click="isLocalRagModalOpen = true">
+  <img src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/local-rag.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isLocalRagModalOpen"
+image-src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/local-rag.jpg"
+image-alt="Local RAG diagram"
+@close="isLocalRagModalOpen = false"
+/>
 
 This is the architecture we were able to get to with this project. However, it's worth noting that, on lower-powered devices, such as less powerful mobile phones, it may not be possible to run the LLM locally due to the resources required, so it's also worth considering a hybrid approach.
 
@@ -92,7 +154,24 @@ This is the architecture we were able to get to with this project. However, it's
 
 As the embedding models are significantly smaller, it is possible to have a hybrid model where the embedding model and vector database are on the user’s device, whereas the LLM is provided by a cloud API.
 
-[![](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/hybrid-rag.png)](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/hybrid-rag.jpg)
+<div class="clickable-image" @click="isHybridRagModalOpen = true">
+  <img src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/hybrid-rag.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isHybridRagModalOpen"
+image-src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/hybrid-rag.jpg"
+image-alt="Hybrid RAG diagram"
+@close="isHybridRagModalOpen = false"
+/>
 
 Although this is the route that would be required to perform text generation on some mobile devices at this time, models are getting smaller and more efficient all the time. We expect that the ideal local-first AI architecture will be viable very soon on the majority of mobile devices.
 
@@ -172,7 +251,24 @@ The Chat UI's construction was straightforward and completed the RAG workflow:
 
 The final full architecture diagram of the project is shown here:
 
-[![](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/architecture.png)](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/architecture.jpg)
+<div class="clickable-image" @click="isArchitectureModalOpen = true">
+  <img src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/architecture.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isArchitectureModalOpen"
+image-src="/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/architecture.jpg"
+image-alt="Architecture diagram"
+@close="isArchitectureModalOpen = false"
+/>
 
 ## Try it out yourself
 
@@ -184,4 +280,3 @@ The final full architecture diagram of the project is shown here:
 There's more to do to productionise this demo and integrate into the primary ElectricSQL stack. We also want to dive into the parallel route with the sqlite-vss in the browser. If you're interested in getting involved, building a local AI app or collaborating on local AI development, [let us know on Discord](https://discord.electric-sql.com).
 
 Tauri is also expanding to cover more deployment targets, including mobile apps, so we'll look at compiling for those too. Keep an eye on the developments with the Tauri project via [their Discord here](https://discord.com/invite/tauri).
-

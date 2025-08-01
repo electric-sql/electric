@@ -7,7 +7,9 @@ outline: deep
 ---
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+
+const isCloudDashboardModalOpen = ref(false)
 
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
@@ -67,7 +69,24 @@ This allows you to scale out real-time data to [millions of concurrent users](/d
 
 Once connected you should see your source details akin to the screenshot below.
 
-<img alt="Source details in cloud dashboard" src="/static/img/docs/cloud/source-details.png" />
+<div class="clickable-image" @click="isCloudDashboardModalOpen = true">
+  <img alt="Source details in cloud dashboard" src="/static/img/docs/cloud/source-details.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isCloudDashboardModalOpen"
+image-src="/static/img/docs/cloud/source-details.png"
+image-alt="Source details in cloud dashboard"
+@close="isCloudDashboardModalOpen = false"
+/>
 
 It shouldn't take long before the source `state` becomes `active` and you're ready to make your first API request.
 
@@ -110,70 +129,12 @@ The recommended pattern for secure use of the Electric Cloud is to add the sourc
 In your client, request the shape as normal, without the `source_id` and `secret` parameters. For example here using the [Typescript client](/docs/api/clients/typescript):
 
 ```ts
-import { ShapeStream } from '@electric-sql/client'
+import { ShapeStream } from "@electric-sql/client"
 
 const stream = new ShapeStream({
   url: `https://your-api-or-proxy.example.com/v1/shape`,
   params: {
-    table: `items`
-  }
+    table: `items`,
+  },
 })
 ```
-
-Then add the source ID and secret to the origin request in your [auth proxy](/docs/guides/auth). For example here using a Next.js [Route Handler](https://nextjs.org/docs/app/building-your-application/routing/route-handlers)):
-
-```ts
-export async function GET(req: Request) {
-  const proxyUrl = new URL(req.url)
-
-  // ... validate and authorize the request ...
-
-  // Construct the origin URL.
-  const originUrl = new URL(`/v1/shape`, `https://api.electric-sql.cloud`)
-  proxyUrl.searchParams.forEach((value, key) => {
-    originUrl.searchParams.set(key, value)
-  })
-
-  // Add the source params.
-  originUrl.searchParams.set(`source_id`, process.env.SOURCE_ID)
-  originUrl.searchParams.set(`secret`, process.env.SOURCE_SECRET)
-
-  // Proxy the authorised request on to the Electric Cloud.
-  const response = await fetch(originUrl)
-
-  // Fetch decompresses the body but doesn't remove the
-  // content-encoding & content-length headers which would
-  // break decoding in the browser.
-  //
-  // See https://github.com/whatwg/fetch/issues/1729
-  const headers = new Headers(response.headers)
-  headers.delete(`content-encoding`)
-  headers.delete(`content-length`)
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  })
-}
-```
-
-### Pricing
-
-Electric Cloud is currently free in public BETA. We'll be launching low-cost, usage-based pricing soon (likely by the end of June 2025).
-
-Electric Cloud will always provide a generous free tier, so many apps will roll over with zero cost. If your plan is to use Electric in a larger app (more than 1,000 monthly active users) please reach out to make sure we can fully support you and to get a sense of what the future pricing will be like.
-
-### Support
-
-Let us know if you have any questions. We'll be very happy to help. You can ask questions on [Discord](https://discord.electric-sql.com) or email us directly at [support@electric-sql.com](mailto:support@electric-sql.com).
-
-<div class="actions cta-actions page-footer-actions left">
-  <div class="action cloud-cta">
-    <VPButton
-        href="/product/cloud/sign-up"
-        text="Sign-up for Cloud"
-        theme="brand"
-    />
-  </div>
-</div>

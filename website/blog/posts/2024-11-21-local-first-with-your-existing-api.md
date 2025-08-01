@@ -18,7 +18,13 @@ import AuthorizingProxyJPG from '/static/img/docs/guides/auth/authorizing-proxy.
 import BrowserConsolePNG from '/static/img/blog/browser-console.png?url'
 import NoStaleDataJGP from '/static/img/blog/no-stale-data.jpg?url'
 
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+
+// Modal states
+const isNoStaleDataModalOpen = ref(false)
+const isAuthorizingProxyModalOpen = ref(false)
+const isShapeLogModalOpen = ref(false)
+const isBrowserConsoleModalOpen = ref(false)
 
 import { data as initialStarCounts } from '../../data/count.data.ts'
 import { getStarCount } from '../../src/lib/star-count.ts'
@@ -110,17 +116,32 @@ Because Electric syncs data [over HTTP](#http-and-json), you can use existing mi
 To build local-first you have to have the data locally. If you're doing that with data fetching then you have a stale data problem. Because if you're working with local data without keeping it in sync, then how do you know that it's not stale?
 
 <figure style="max-width: 512px">
-  <a :href="NoStaleDataJGP">
+  <div class="clickable-image" @click="isNoStaleDataModalOpen = true">
     <img :src="NoStaleDataJGP" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isNoStaleDataModalOpen"
+:image-src="NoStaleDataJGP"
+image-alt="No stale data diagram"
+@close="isNoStaleDataModalOpen = false"
+/>
 
 This is why you need [data sync](/use-cases/data-sync). To keep the local data fresh when it changes.
 
 Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
 ```jsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from "react"
 
 const MyComponent = () => {
   const [items, setItems] = useState([])
@@ -382,14 +403,29 @@ The [Typescript client](/docs/api/clients/typescript) supports auth headers and 
 Electric does [read-path](#read-path) sync. That's the bit between Postgres and the client in the diagramme below. Electric **does not** handle writes. That's the dashed blue arrows around the outside, back from the client into Postgres:
 
 <figure>
-  <a href="/img/api/shape-log.jpg">
+  <div class="clickable-image" @click="isShapeLogModalOpen = true">
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
         alt="Shape log flow diagramme"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isShapeLogModalOpen"
+image-src="/img/api/shape-log.png"
+image-alt="Shape log flow diagramme"
+@close="isShapeLogModalOpen = false"
+/>
 
 Instead, Electric is designed for you to implement writes yourself. There's a comprehensive [Writes guide](/docs/guides/writes) and [Write patterns example](/demos/write-patterns) that walks through a range of approaches for this that integrate with your existing API.
 
@@ -486,10 +522,25 @@ You can debug on the command line [using `curl`](/docs/quickstart#http-api).
 One of the most aspects of this is being able to see and easily introspect sync requests in the browser console. This allows you to see what data is being sent through when and also allows you to observe caching and and offline behaviour.
 
 <p style="max-width: 512px">
-  <a :href="BrowserConsolePNG">
+  <div class="clickable-image" @click="isBrowserConsoleModalOpen = true">
     <img :src="BrowserConsolePNG" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </p>
+
+<ImageModal
+:is-open="isBrowserConsoleModalOpen"
+:image-src="BrowserConsolePNG"
+image-alt="Browser console screenshot"
+@close="isBrowserConsoleModalOpen = false"
+/>
 
 You don't need to implement custom tooling to get visibility in what's happening with Electric. It's not a black box when it comes to debugging in development and in production.
 

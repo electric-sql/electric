@@ -8,6 +8,7 @@ outline: [2, 4]
 ---
 
 <script setup>
+import { ref } from 'vue'
 import ConcurrentShapeCreation from '/static/img/benchmarks/concurrent-shape-creation.png?url'
 import DiverseShapeFanout from '/static/img/benchmarks/diverse-shape-fanout.png?url'
 import ManyShapesOneClient from '/static/img/benchmarks/many-shapes-one-client.png?url'
@@ -18,6 +19,17 @@ import UnrelatedShapesOneClientLatency from '/static/img/benchmarks/unrelated-sh
 import ReplicationThroughputOptimised from '/static/img/benchmarks/replication-throughput-optimised.png?url'
 import ReplicationThroughputNonOptimised from '/static/img/benchmarks/replication-throughput-non-optimised.png?url'
 import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
+
+// Modal states
+const isConcurrentShapeCreationModalOpen = ref(false)
+const isSingleShapeSingleClientModalOpen = ref(false)
+const isUnrelatedShapesOneClientLatencyModalOpen = ref(false)
+const isWriteFanoutModalOpen = ref(false)
+const isWriteFanoutMemoryModalOpen = ref(false)
+const isDiverseShapeFanoutModalOpen = ref(false)
+const isManyShapesOneClientModalOpen = ref(false)
+const isReplicationThroughputOptimisedModalOpen = ref(false)
+const isReplicationThroughputNonOptimisedModalOpen = ref(false)
 </script>
 
 # Benchmarks
@@ -84,12 +96,27 @@ The last two benchmarks measure how long it takes Electric to process a write:
 #### 1. Many concurrent clients syncing a small shape
 
 <figure>
-  <a :href="ConcurrentShapeCreation">
+  <div class="clickable-image" @click="isConcurrentShapeCreationModalOpen = true">
     <img :src="ConcurrentShapeCreation"
         alt="Benchmark measuring many concurrent clients syncing a small shape"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isConcurrentShapeCreationModalOpen"
+:image-src="ConcurrentShapeCreation"
+image-alt="Benchmark measuring many concurrent clients syncing a small shape"
+@close="isConcurrentShapeCreationModalOpen = false"
+/>
 
 This measures the memory use and the time to sync all the data into all the clients for an increasing number of concurrent clients performing
 an initial sync of a 500 row single shape. The results show stable memory use with time to sync all data rising roughly linearly up to 2,000 concurrent clients.
@@ -97,12 +124,27 @@ an initial sync of a 500 row single shape. The results show stable memory use wi
 #### 2. A single client syncing a large shape
 
 <figure>
-  <a :href="SingleShapeSingleClient">
+  <div class="clickable-image" @click="isSingleShapeSingleClientModalOpen = true">
     <img :src="SingleShapeSingleClient"
         alt="Benchmark measuring a single client syncing an increasingly large shape"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isSingleShapeSingleClientModalOpen"
+:image-src="SingleShapeSingleClient"
+image-alt="Benchmark measuring a single client syncing an increasingly large shape"
+@close="isSingleShapeSingleClientModalOpen = false"
+/>
 
 This measures a single client syncing a single large shape of up-to 1M rows. The sync time is linear, the memory is stable.
 
@@ -111,17 +153,33 @@ This measures a single client syncing a single large shape of up-to 1M rows. The
 #### 3. Many independent shapes
 
 <figure>
-  <a :href="UnrelatedShapesOneClientLatency">
+  <div class="clickable-image" @click="isUnrelatedShapesOneClientLatencyModalOpen = true">
     <img :src="UnrelatedShapesOneClientLatency"
         alt="Benchmark measuring how long a write that affects a single shape takes to reach a client"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isUnrelatedShapesOneClientLatencyModalOpen"
+:image-src="UnrelatedShapesOneClientLatency"
+image-alt="Benchmark measuring how long a write that affects a single shape takes to reach a client"
+@close="isUnrelatedShapesOneClientLatencyModalOpen = false"
+/>
 
 This benchmark evaluates the time it takes for a write operation to reach a client subscribed to the relevant shape. On the x-axis, the number of active shapes is shown.
 Each shape in this benchmark is independent, ensuring that a write operation affects only one shape at a time.
 
 The two graphs differ based on the type of where clause used for the shapes:
+
 - **Top Graph:** The where clause is in the form `field = constant`, where each shape is assigned a unique constant. These types of where clause, along with
   [other patterns](/docs/guides/shapes#optimised-where-clauses),
   are optimised for high performance regardless of the number of shapes — analogous to having an index on the field. As shown in the graph, the latency remains consistently
@@ -134,34 +192,79 @@ The two graphs differ based on the type of where clause used for the shapes:
 #### 4. One shape with many clients
 
 <figure>
-  <a :href="WriteFanout">
+  <div class="clickable-image" @click="isWriteFanoutModalOpen = true">
     <img :src="WriteFanout"
         alt="Benchmark measuring write fanout into to one shape with many clients"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isWriteFanoutModalOpen"
+:image-src="WriteFanout"
+image-alt="Benchmark measuring write fanout into to one shape with many clients"
+@close="isWriteFanoutModalOpen = false"
+/>
 
 Measures write latency (i.e.: time for the client to see the write) for a transaction of increasing size written to one shape log, streamed to an increasing number of clients.
 
 Below is the memory use for the same benchmark.
 
 <figure>
-  <a :href="WriteFanoutMemory">
+  <div class="clickable-image" @click="isWriteFanoutMemoryModalOpen = true">
     <img :src="WriteFanoutMemory"
         alt="Benchmark measuring memory use for write fanout into one shape with many clients"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isWriteFanoutMemoryModalOpen"
+:image-src="WriteFanoutMemory"
+image-alt="Benchmark measuring memory use for write fanout into one shape with many clients"
+@close="isWriteFanoutMemoryModalOpen = false"
+/>
 
 #### 5. Many overlapping shapes, each with a single client
 
 <figure>
-  <a :href="DiverseShapeFanout">
+  <div class="clickable-image" @click="isDiverseShapeFanoutModalOpen = true">
     <img :src="DiverseShapeFanout"
         alt="Benchmark measuring write fanout into many shapes, each with a single client"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isDiverseShapeFanoutModalOpen"
+:image-src="DiverseShapeFanout"
+image-alt="Benchmark measuring write fanout into many shapes, each with a single client"
+@close="isDiverseShapeFanoutModalOpen = false"
+/>
 
 In this benchmark there are a varying number of shapes with each shape having a single client subscribed to it. It shows the average length of time it takes for a single write that affects all the shapes to reach each client.
 
@@ -170,12 +273,27 @@ Latency and memory use rises linearly.
 #### 6. Many overlapping shapes, one client
 
 <figure>
-  <a :href="ManyShapesOneClient">
+  <div class="clickable-image" @click="isManyShapesOneClientModalOpen = true">
     <img :src="ManyShapesOneClient"
         alt="Benchmark measuring write fanout into many shapes, all streamed to the same client"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isManyShapesOneClientModalOpen"
+:image-src="ManyShapesOneClient"
+image-alt="Benchmark measuring write fanout into many shapes, all streamed to the same client"
+@close="isManyShapesOneClientModalOpen = false"
+/>
 
 In this benchmark there are a varying number of shapes with just one client subscribed to one of the shapes. It shows the length of time it takes for a single write that affects all the shapes to reach the client.
 
@@ -184,12 +302,27 @@ Latency and peak memory use rises linearly. Average memory use is flat.
 #### 7. Write throughput with optimised where clauses
 
 <figure>
-  <a :href="ReplicationThroughputOptimised">
+  <div class="clickable-image" @click="isReplicationThroughputOptimisedModalOpen = true">
     <img :src="ReplicationThroughputOptimised"
         alt="Benchmark measuring how many writes per second Electric can process"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isReplicationThroughputOptimisedModalOpen"
+:image-src="ReplicationThroughputOptimised"
+image-alt="Benchmark measuring how many writes per second Electric can process"
+@close="isReplicationThroughputOptimisedModalOpen = false"
+/>
 
 This benchmark measures how long each write takes to process with a varying number of shapes. Each shape in this benchmark
 is using an optimised where clause, specifically `field = constant`.
@@ -218,12 +351,27 @@ We're working on improving this, but at the moment it's kept as it's beneficial 
 #### 8. Write throughput with non-optimised where clauses
 
 <figure>
-  <a :href="ReplicationThroughputNonOptimised">
+  <div class="clickable-image" @click="isReplicationThroughputNonOptimisedModalOpen = true">
     <img :src="ReplicationThroughputNonOptimised"
         alt="Benchmark measuring how many writes per second Electric can process"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isReplicationThroughputNonOptimisedModalOpen"
+:image-src="ReplicationThroughputNonOptimised"
+image-alt="Benchmark measuring how many writes per second Electric can process"
+@close="isReplicationThroughputNonOptimisedModalOpen = false"
+/>
 
 This benchmark also measures how long each write takes to process with a varying number of shapes, but in this benchmark each shape
 is using an non-optimised where clause, specifically `field ILIKE constant`. You can see in both graphs that throughput scales linearly with the number of shapes.
@@ -233,7 +381,7 @@ The top graph shows throughput for Postgres 14. You can see throughput is the ro
 140k row changes per second per shape.
 
 The bottom graph shows throughput for Postgres 15. Postgres 15 has the ability to filter the replication stream based on a where clause,
-so we use this to filter out writes that don't affect any shapes. So for writes that affect shapes, we get the same  140k row changes per second per shape as Postgres 14,
+so we use this to filter out writes that don't affect any shapes. So for writes that affect shapes, we get the same 140k row changes per second per shape as Postgres 14,
 but for writes that don't affect shapes, we get 1400k row changes per second per shape.
 
 ## PGlite
