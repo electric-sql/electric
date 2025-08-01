@@ -1,5 +1,18 @@
 # @core/sync-service
 
+## 1.1.1
+
+### Patch Changes
+
+- 1da5ef0: fix: ensure dependent applications have a sane otel sampling default
+- 213d247: Ensure service can recover from unhandleable replication slots, in cases such as too large transactions or incorrectly configured replica identity.
+- 028c45c: Check for changes since request start in SSE requests.
+- 6ee031e: fix: fix a crash because of wrong in-memory state initialization for storage
+- 028c45c: Fix streaming of last virtual offset.
+- 3ca82d7: fix: improve CPU usage of PureFileStorage by lowering syscall count
+- 5dfb8fa: Extend replication processing telemetry to cover the entire processing loop
+- 5dfb8fa: Sample telemetry at source for faster replication stream processing
+
 ## 1.1.0
 
 ### Minor Changes
