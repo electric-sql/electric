@@ -20,41 +20,15 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AuthenticatedLayout() {
   const { data: session, isPending } = authClient.useSession()
-  console.log({ session, isPending })
   const navigate = useNavigate()
   const [showNewProjectForm, setShowNewProjectForm] = useState(false)
   const [newProjectName, setNewProjectName] = useState("")
 
-  const countQuery = createLiveQueryCollection({
-    query: (q) =>
-      q.from({ projects: projectCollection }).select(({ projects }) => ({
-        count: count(projects.id),
-      })),
-  })
-  const newQuery = createCollection(
-    liveQueryCollectionOptions({
-      query: (q) =>
-        q
-          .from({ projects: projectCollection })
-          .where(({ projects }) => not(like(projects.name, `Default`))),
-    })
-  )
-
-  const { data: notDefault } = useLiveQuery(newQuery)
-  const { data: countData } = useLiveQuery(countQuery)
-  console.log({ notDefault, countData })
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ projectCollection })
   )
 
-  useEffect(() => {
-    if (!isPending && !session) {
-      navigate({
-        href: "/login",
-      })
-    }
-  }, [session, isPending, navigate])
-
+  // Create an initial default project if the user doesn't yet have any.
   useEffect(() => {
     if (session && projects && !isLoading) {
       const hasProject = projects.length > 0
