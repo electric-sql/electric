@@ -141,7 +141,7 @@ defmodule Electric.Shapes.Consumer do
   def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
     Logger.debug("Starting a wait on the snapshot #{state.shape_handle} for #{inspect(from)}}")
 
-    {:noreply, %{state | awaiting_snapshot_start: [from | waiters]}}
+    {:noreply, %{state | awaiting_snapshot_start: [from | waiters] |> IO.inspect()}}
   end
 
   @impl GenServer
@@ -181,6 +181,8 @@ defmodule Electric.Shapes.Consumer do
         {:snapshot_failed, shape_handle, %SnapshotError{} = error},
         %{shape_handle: shape_handle} = state
       ) do
+    IO.puts("oh the snapshot has failed, let me just terminate silently")
+
     if error.type == :schema_changed do
       # Schema changed while we were creating stuff, which means shape is functionally invalid.
       # Return a 409 to trigger a fresh start with validation against the new schema.
@@ -478,10 +480,12 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
+    IO.puts("no snapshot waiters")
     state
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: waiters} = state, reply) do
+    IO.puts("notifying snapshot waiters #{inspect(waiters)}")
     for client <- List.wrap(waiters), not is_nil(client), do: GenServer.reply(client, reply)
     %{state | awaiting_snapshot_start: []}
   end

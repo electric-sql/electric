@@ -5,6 +5,8 @@
 [global pg_container_name=low-privilege-mode__pg]
 [global database_url=postgresql://low_privilege:password@localhost:$pg_host_port/electric?sslmode=disable]
 
+###
+
 ## Start a Postgres cluster with no publication and a low-privilege user
 [invoke setup_pg_with_shell_name \
   "pg" \
@@ -12,12 +14,11 @@
   "" \
   "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
 
-# Start the sync service.
+## Start the sync service.
 [invoke setup_electric]
 
-# Verify that the sync service fails to initialize because of missing publication in the database.
+## Verify that the sync service fails to initialize because of missing publication in the database.
 [shell electric]
-  # Reset the failure pattern to make it possible to pattern-match on errors below
   -
 
   ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" not found in the database
@@ -39,9 +40,8 @@
 ## Start the sync service.
 [invoke setup_electric]
 
-# Verify that the sync service fails to initialize because the publication has incorrect parameters
+## Verify that the sync service fails to initialize because the publication has incorrect parameters
 [shell electric]
-  # Reset the failure pattern to make it possible to pattern-match on errors below
   -
 
   ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE
@@ -61,7 +61,7 @@
 ## Start the sync service.
 [invoke setup_electric]
 
-## Confirm that the replication pipeline has initialized successfully
+## Verify that the replication pipeline has initialized successfully
 [shell electric]
   -$fail_pattern
 
@@ -83,12 +83,6 @@
   ??HTTP/1.1 503
   ??{"message":"Database table is missing from the publication and the service has no permissions to alter it"}
 
-[shell electric]
-  -
-
-  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table is missing from the publication and the service has no permissions to alter it
-  ?\[info\] Sent 503 in [\d]+ms
-
 ## Add the table to the publication and try again
 [shell psql]
   !ALTER PUBLICATION electric_publication_integration ADD TABLE items;
@@ -100,19 +94,19 @@
   ??HTTP/1.1 503
   ??{"message":"Database table does not have its replica identity set to FULL"}
 
-[shell electric]
-  -
-
-  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table does not have its replica identity set to FULL
-  ?\[info\] Sent 503 in [\d]+ms
-
-## Set table's replica identity to FULL
-
+## Set table's replica identity to FULL and try again
 [shell psql]
   !ALTER TABLE items REPLICA IDENTITY FULL;
   ??ALTER TABLE
   ??ALTER TABLE
 
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Lacking permission to read from the database table"}
+
+### Grant Electric read access to the table and try again
+[shell psql]
   !GRANT SELECT ON items TO low_privilege;
   ??GRANT
   ??GRANT
@@ -125,14 +119,6 @@
   ??electric-offset: 0_0
 
   ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"operation":"insert","relation":["public","items"]}}]
-
-[shell electric]
-  -$fail_pattern
-
-  ??GET /v1/shape
-  ??Starting a wait on the snapshot
-  ??Snapshot started
-  ?\[info\] Chunked 200 in [\d]+ms
 
 [cleanup]
   [invoke teardown]

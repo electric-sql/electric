@@ -222,7 +222,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def make_new_snapshot!(data_stream, %MS{stack_id: stack_id} = opts) do
+  def make_new_snapshot!(data_stream, _notifier_fn, %MS{stack_id: stack_id} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
       [storage_impl: "in_memory", "shape.handle": opts.shape_handle],

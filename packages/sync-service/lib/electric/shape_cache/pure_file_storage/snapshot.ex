@@ -21,54 +21,105 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
   The clients of the storage expect the snapshot chunks to be read in their entirety, which gives us freedom
   to do batched writes for performance, because reads are always going to be faster than we're writing.
   """
-  def write_snapshot_stream!(stream, %ST{} = opts, write_buffer \\ @write_buffer_size) do
+  def write_snapshot_stream!(
+        stream,
+        notifier_fn,
+        %ST{} = opts,
+        write_buffer \\ @write_buffer_size
+      ) do
     IO.puts(">>>>>>>>>>> WRITING SNAPSHOT STREAM")
 
-    stream
-    |> Stream.transform(
-      fn -> {0, nil, {[], 0}} end,
-      fn line, {chunk_num, file, {buffer, buffer_size}} ->
-        file = file || open_snapshot_chunk_to_write(opts, chunk_num)
+    result =
+      stream
+      |> Stream.transform(
+        fn ->
+          IO.puts("Init stream transform")
+          {0, nil, {[], 0}}
+        end,
+        fn line, {chunk_num, file, {buffer, buffer_size}} ->
+          IO.puts("Streaming line")
+          file = file || open_snapshot_chunk_to_write(opts, chunk_num)
 
-        case line do
-          :chunk_boundary ->
-            IO.binwrite(file, [buffer, <<4::utf8>>])
-            File.close(file)
-            {[], {chunk_num + 1, nil, {[], 0}}}
+          case line do
+            :chunk_boundary ->
+              IO.binwrite(file, [buffer, <<4::utf8>>])
+              File.close(file)
+              {[], {chunk_num + 1, nil, {[], 0}}}
 
-          line ->
-            line_size = IO.iodata_length(line)
+            line ->
+              line_size = IO.iodata_length(line)
 
-            if buffer_size + line_size > write_buffer do
-              IO.binwrite(file, [buffer, line, ",\n"])
+              if buffer_size + line_size > write_buffer do
+                IO.binwrite(file, [buffer, line, ",\n"])
+                {[chunk_num], {chunk_num, file, {[], 0}}}
+              else
+                {[chunk_num],
+                 {chunk_num, file, {[buffer, line, ",\n"], buffer_size + line_size + 2}}}
+              end
+          end
+        end,
+        fn {chunk_num, file, {buffer, _}} ->
+          cond do
+            not is_nil(file) ->
+              IO.binwrite(file, [buffer, <<4::utf8>>])
               {[chunk_num], {chunk_num, file, {[], 0}}}
-            else
-              {[chunk_num],
-               {chunk_num, file, {[buffer, line, ",\n"], buffer_size + line_size + 2}}}
-            end
-        end
-      end,
-      fn {chunk_num, file, {buffer, _}} ->
-        cond do
-          not is_nil(file) ->
-            IO.binwrite(file, [buffer, <<4::utf8>>])
-            {[chunk_num], {chunk_num, file, {[], 0}}}
 
-          is_nil(file) and chunk_num == 0 ->
-            # Special case if the source stream has ended before we started writing any chunks - we need to create the empty file for the first chunk.
-            file = open_snapshot_chunk_to_write(opts, chunk_num)
-            IO.binwrite(file, [buffer, <<4::utf8>>])
-            {[chunk_num], {chunk_num, file, {[], 0}}}
+            is_nil(file) and chunk_num == 0 ->
+              # Special case if the source stream has ended before we started writing any
+              # chunks - we need to create the empty file for the first chunk.
+              file = open_snapshot_chunk_to_write(opts, chunk_num)
+              IO.binwrite(file, [buffer, <<4::utf8>>])
+              {[chunk_num], {chunk_num, file, {[], 0}}}
 
-          true ->
-            {[chunk_num - 1], {chunk_num, file, {[], 0}}}
+            true ->
+              {[chunk_num - 1], {chunk_num, file, {[], 0}}}
+          end
+        end,
+        fn
+          {0, nil, {[], 0}} ->
+            # Not a single chunk file has been written. We probably don't have the read
+            # permission on the table, so signal an error.
+            # Doing nothing here is not an option because it would result in the response
+            # streaming process to crash when it doesn't find any snapshot chunk files.
+            IO.puts("about to raise")
+
+            raise %Electric.DbConfigurationError{
+              type: :cannot_read_from_table,
+              message: "Lacking permission to read from the database table"
+            }
+
+          {_chunk_num, file, _} = acc ->
+            IO.inspect(acc, label: :acc)
+            IO.puts("File.close()")
+            if file, do: File.close(file)
         end
-      end,
-      fn {_chunk_num, file, _} ->
-        if file, do: File.close(file)
-      end
-    )
-    |> Enum.reduce(0, fn chunk_num, _ -> chunk_num end)
+      )
+      # |> Stream.transform(
+      #   fn -> false end,
+      #   fn item, acc ->
+      #     IO.puts("inside Snapshotter :: fn item, acc")
+      #     if not acc, do: notifier_fn.()
+      #     {[item], true}
+      #   end,
+      #   fn acc ->
+      #     IO.puts("inside Snapshotter :: fn acc")
+      #     if not acc, do: notifier_fn.()
+      #     []
+      #   end,
+      #   fn _acc -> nil end
+      # )
+      |> Enum.reduce(0, fn
+        0, 0 ->
+          notifier_fn.()
+          0
+
+        chunk_num, _ ->
+          chunk_num
+      end)
+      |> IO.inspect()
+
+    IO.puts(">>>>>>>>>>> FINISHED WRITING SNAPSHOT STREAM")
+    result
   end
 
   def chunk_file_path(%ST{log_dir: log_dir}, chunk_num),

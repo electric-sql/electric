@@ -86,6 +86,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   ])
                 rescue
                   error ->
+                    # IO.puts("rescued snapshot creation e$$or: #{inspect(error)}")
+
                     GenServer.cast(
                       consumer,
                       {:snapshot_failed, shape_handle, SnapshotError.from_error(error)}
@@ -186,23 +188,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               end
             )
 
-            stream =
-              Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
-              |> Stream.transform(
-                fn -> false end,
-                fn item, acc ->
-                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
-                  {[item], true}
-                end,
-                fn acc ->
-                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
-                  acc
-                end
-              )
+            stream = Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
+            notifier_fn = fn -> GenServer.cast(parent, {:snapshot_started, shape_handle}) end
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
             # that way it has the relation, but it is still missing the pk_cols
-            Storage.make_new_snapshot!(stream, storage)
+            Storage.make_new_snapshot!(stream, notifier_fn, storage)
           end
         )
       end,

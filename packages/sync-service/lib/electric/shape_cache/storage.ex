@@ -76,6 +76,7 @@ defmodule Electric.ShapeCache.Storage do
   """
   @callback make_new_snapshot!(
               Querying.json_result_stream(),
+              (-> term),
               shape_opts()
             ) :: :ok
 
@@ -207,8 +208,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def make_new_snapshot!(stream, {mod, shape_opts}) do
-    mod.make_new_snapshot!(stream, shape_opts)
+  def make_new_snapshot!(stream, notifier_fn, {mod, shape_opts}) do
+    mod.make_new_snapshot!(stream, notifier_fn, shape_opts)
   end
 
   @impl __MODULE__

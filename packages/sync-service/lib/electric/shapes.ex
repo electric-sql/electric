@@ -16,13 +16,9 @@ defmodule Electric.Shapes do
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
 
-    if shape_cache.has_shape?(shape_handle, shape_cache_opts)
-       |> IO.inspect(label: :shape_cache_has_shape) do
-      with :started <-
-             shape_cache.await_snapshot_start(shape_handle, shape_cache_opts)
-             |> IO.inspect(label: :await_snapshot_start) do
-        {:ok,
-         Storage.get_log_stream(offset, max_offset, storage) |> IO.inspect(label: :get_log_stream)}
+    if shape_cache.has_shape?(shape_handle, shape_cache_opts) do
+      with :started <- shape_cache.await_snapshot_start(shape_handle, shape_cache_opts) do
+        {:ok, Storage.get_log_stream(offset, max_offset, storage)}
       end
     else
       # If we have a shape handle, but no shape, it means the shape was deleted. Send a 409
