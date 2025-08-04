@@ -103,7 +103,7 @@ defmodule Electric.StatusMonitorTest do
       stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
 
       Task.async(fn ->
-        assert StatusMonitor.wait_until_active(stack_id, 200) == :ok
+        assert StatusMonitor.wait_until_active(stack_id, 100) == :ok
         send(test_process, :active)
       end)
 
@@ -115,7 +115,7 @@ defmodule Electric.StatusMonitorTest do
 
       refute_receive :active, 20
       assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
-      assert_receive :active, 200
+      assert_receive :active, 100
     end
 
     test "returns error on timeout when process registry is not present", %{stack_id: stack_id} do
