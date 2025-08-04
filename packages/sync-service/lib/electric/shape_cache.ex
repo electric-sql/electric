@@ -243,10 +243,10 @@ defmodule Electric.ShapeCache do
       max_shapes: opts.max_shapes
     }
 
-    last_processed_lsn =
+    {last_processed_lsn, total_recovered, total_failed_to_recover} =
       if opts[:purge_all_shapes?] do
         purge_all_shapes(state)
-        Lsn.from_integer(0)
+        {Lsn.from_integer(0), 0, 0}
       else
         recover_shapes(state, opts.recover_shape_timeout)
       end
@@ -269,13 +269,22 @@ defmodule Electric.ShapeCache do
 
     # Let ShapeLogCollector that it can start processing after finishing this function so that
     # we're subscribed to the producer before it starts forwarding its demand.
-    {:ok, state, {:continue, {:consumers_ready, last_processed_lsn}}}
+    {:ok, state,
+     {:continue, {:consumers_ready, last_processed_lsn, total_recovered, total_failed_to_recover}}}
   end
 
   @impl GenServer
-  def handle_continue({:consumers_ready, last_processed_lsn}, state) do
+  def handle_continue(
+        {:consumers_ready, last_processed_lsn, total_recovered, total_failed_to_recover},
+        state
+      ) do
     ShapeLogCollector.set_last_processed_lsn(state.log_producer, last_processed_lsn)
-    Electric.Connection.Manager.consumers_ready(state.stack_id)
+
+    Electric.Connection.Manager.consumers_ready(
+      state.stack_id,
+      total_recovered,
+      total_failed_to_recover
+    )
 
     {:noreply, state}
   end
@@ -439,40 +448,40 @@ defmodule Electric.ShapeCache do
     state.shape_status_state |> state.shape_status.list_shapes()
   end
 
+  # Timeout is per-shape, not for the entire function
   defp recover_shapes(state, timeout) do
-    state.shape_status_state
-    |> state.shape_status.list_shapes()
-    |> Enum.flat_map(fn {shape_handle, shape} ->
-      start_shape_with_timeout(shape_handle, shape, state, timeout)
-    end)
-    |> Lsn.max()
-  end
+    all_handles = shape_handles(state)
 
-  # the shape cache loads existing shapes within its init/1 callback
-  # which is useful because we know that when the start_link call on the
-  # stack completes the system is fully booted and all shape consumers are
-  # running.
-  #
-  # rather than set a global timeout for the `init/1` function we leave the
-  # `start_link/1` timeout as `:infinity` and instead have a timeout for every
-  # shape
-  defp start_shape_with_timeout(shape_handle, shape, state, timeout) do
-    task = Task.async(fn -> start_and_recover_shape(shape_handle, shape, state) end)
+    recovered =
+      Task.Supervisor.async_stream_nolink(
+        Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor),
+        all_handles,
+        fn {shape_handle, shape} -> start_and_recover_shape(shape_handle, shape, state) end,
+        ordered: false,
+        timeout: timeout,
+        on_timeout: :kill_task,
+        zip_input_on_exit: true
+      )
+      |> Stream.flat_map(fn
+        {:ok, result} ->
+          result
 
-    # since we catch errors in the task we don't need to handle the error state here
-    case Task.yield(task, timeout) || Task.shutdown(task) do
-      {:ok, lsn} ->
-        lsn
+        # All other exit reasons are caught in the `start_and_recover_shape/3` function
+        {:exit, {{shape_handle, shape}, :timeout}} ->
+          Logger.error(
+            "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
+          )
 
-      nil ->
-        Logger.error(
-          "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
-        )
+          purge_shape(state, shape_handle, shape)
 
-        purge_shape(state, shape_handle, shape)
+          []
+      end)
+      |> Enum.to_list()
 
-        []
-    end
+    total_recovered = length(recovered)
+    total_failed_to_recover = length(all_handles) - total_recovered
+
+    {Lsn.max(recovered), total_recovered, total_failed_to_recover}
   end
 
   defp start_and_recover_shape(shape_handle, shape, state) do
@@ -520,6 +529,7 @@ defmodule Electric.ShapeCache do
          ) do
       {:ok, _supervisor_pid} ->
         consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
+        # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
         {:ok, _latest_offset} = Shapes.Consumer.initial_state(consumer)
 
       {:error, _reason} = error ->

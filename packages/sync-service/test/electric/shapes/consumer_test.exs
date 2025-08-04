@@ -818,6 +818,8 @@ defmodule Electric.Shapes.ConsumerTest do
       stop_supervised!(shape_cache_opts[:server])
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
 
+      stop_supervised!("shape_task_supervisor")
+
       # Restart the shape cache and the consumers
       Support.ComponentSetup.with_shape_cache(
         Map.merge(ctx, %{

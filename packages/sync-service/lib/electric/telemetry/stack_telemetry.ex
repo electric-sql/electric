@@ -206,7 +206,13 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         summary("electric.querying.stream_initial_data.stop.duration",
           unit: {:native, :millisecond},
           keep: for_stack(opts)
-        )
+        ),
+        last_value("electric.connection.consumers_ready.duration",
+          unit: {:native, :millisecond},
+          keep: for_stack(opts)
+        ),
+        last_value("electric.connection.consumers_ready.total", keep: for_stack(opts)),
+        last_value("electric.connection.consumers_ready.before_recovery", keep: for_stack(opts))
       ]
       |> Enum.map(&%{&1 | tags: [:instance_id | &1.tags]})
     end
@@ -225,7 +231,13 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
           keep: for_stack(opts)
         ),
         sum("electric.storage.transaction_stored.bytes", unit: :byte, keep: for_stack(opts)),
-        last_value("electric.shape_monitor.active_reader_count", keep: for_stack(opts))
+        last_value("electric.shape_monitor.active_reader_count", keep: for_stack(opts)),
+        last_value("electric.connection.consumers_ready.duration",
+          unit: {:native, :millisecond},
+          keep: for_stack(opts)
+        ),
+        last_value("electric.connection.consumers_ready.total", keep: for_stack(opts)),
+        last_value("electric.connection.consumers_ready.failed_to_recover", keep: for_stack(opts))
       ]
     end
 
@@ -234,6 +246,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
 
       [
         distribution("electric.plug.serve_shape.duration",
+          unit: {:native, :millisecond},
           keep: &(&1[:live] != true && for_stack.(&1))
         ),
         distribution("electric.shape_cache.create_snapshot_task.stop.duration",

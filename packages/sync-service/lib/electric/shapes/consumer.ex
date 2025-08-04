@@ -13,6 +13,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.Shapes.Api
+  alias Electric.Shapes.Consumer.Snapshotter
   alias Electric.Shapes.Shape
   alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
@@ -60,17 +61,35 @@ defmodule Electric.Shapes.Consumer do
     Process.set_label({:consumer, config.shape_handle})
     Process.flag(:trap_exit, true)
 
-    %{
-      log_producer: producer,
-      storage: storage,
-      shape_status: {shape_status, shape_status_state}
-    } = config
-
     metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    writer = ShapeCache.Storage.init_writer!(storage, config.shape)
+    state =
+      Map.merge(config, %{
+        inspector: config.inspector,
+        snapshot_started: false,
+        awaiting_snapshot_start: [],
+        buffer: [],
+        monitors: [],
+        cleaned?: false
+      })
+
+    :ok =
+      Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
+
+    {:ok, state, {:continue, :init_storage}}
+  end
+
+  @impl GenServer
+  def handle_continue(:init_storage, state) do
+    %{
+      log_producer: producer,
+      storage: storage,
+      shape_status: {shape_status, shape_status_state}
+    } = state
+
+    writer = ShapeCache.Storage.init_writer!(storage, state.shape)
 
     {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
@@ -85,34 +104,29 @@ defmodule Electric.Shapes.Consumer do
     :ok =
       shape_status.initialise_shape(
         shape_status_state,
-        config.shape_handle,
+        state.shape_handle,
         pg_snapshot[:xmin],
         normalized_latest_offset
       )
 
-    state =
-      Map.merge(config, %{
-        latest_offset: normalized_latest_offset,
-        pg_snapshot: pg_snapshot,
-        inspector: config.inspector,
-        snapshot_started: false,
-        awaiting_snapshot_start: [],
-        buffer: [],
-        monitors: [],
-        cleaned?: false,
-        writer: writer
-      })
+    ShapeLogCollector.subscribe(producer, state.shape)
 
-    :ok =
-      Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
+    Logger.debug("Writer for #{state.shape_handle} initialized")
 
-    ShapeLogCollector.subscribe(producer, config.shape)
+    Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
 
-    {:ok, state}
+    {:noreply,
+     Map.merge(state, %{
+       latest_offset: normalized_latest_offset,
+       writer: writer,
+       pg_snapshot: pg_snapshot
+     })}
   end
 
   @impl GenServer
   def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
+    Logger.debug("Returning latest offset for #{state.shape_handle}: #{inspect(offset)}")
+
     {:reply, {:ok, offset}, state}
   end
 

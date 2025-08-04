@@ -1235,7 +1235,8 @@ defmodule Electric.ShapeCacheTest do
       for name <- [
             ctx.shape_cache_opts[:server],
             ctx.consumer_supervisor,
-            ctx.shape_log_collector
+            ctx.shape_log_collector,
+            "shape_task_supervisor"
           ] do
         stop_supervised(name)
       end

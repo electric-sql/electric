@@ -64,7 +64,7 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, :configuring_connection}
             | :start_connection_pool
             | :start_shapes_supervisor
-            | :waiting_for_consumers
+            | {:waiting_for_consumers, integer()}
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
             | :waiting_for_streaming_confirmation
@@ -194,8 +194,8 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :lock_connection_started)
   end
 
-  def consumers_ready(stack_id) do
-    GenServer.cast(name(stack_id), :consumers_ready)
+  def consumers_ready(stack_id, total_recovered, total_failed_to_recover) do
+    GenServer.cast(name(stack_id), {:consumers_ready, total_recovered, total_failed_to_recover})
   end
 
   def exclusive_connection_lock_acquisition_failed(manager, error) do
@@ -456,6 +456,8 @@ defmodule Electric.Connection.Manager do
       )
     end
 
+    start_time = System.monotonic_time()
+
     shapes_sup_pid =
       case Electric.Connection.Supervisor.start_shapes_supervisor(
              stack_id: state.stack_id,
@@ -482,7 +484,7 @@ defmodule Electric.Connection.Manager do
     state = %{
       state
       | shape_log_collector_pid: log_collector_pid,
-        current_step: :waiting_for_consumers,
+        current_step: {:waiting_for_consumers, start_time},
         purge_all_shapes?: false
     }
 
@@ -883,12 +885,24 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast(
-        :consumers_ready,
+        {:consumers_ready, total_recovered, total_failed_to_recover},
         %State{
           current_phase: :connection_setup,
-          current_step: :waiting_for_consumers
+          current_step: {:waiting_for_consumers, start_time}
         } = state
       ) do
+    duration = System.monotonic_time() - start_time
+
+    Logger.notice(
+      "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
+    )
+
+    :telemetry.execute(
+      [:electric, :connection, :consumers_ready],
+      %{duration: duration, total: total_recovered, failed_to_recover: total_failed_to_recover},
+      %{stack_id: state.stack_id}
+    )
+
     state = %State{state | current_step: {:start_replication_client, :start_streaming}}
     {:noreply, state, {:continue, :start_streaming}}
   end
