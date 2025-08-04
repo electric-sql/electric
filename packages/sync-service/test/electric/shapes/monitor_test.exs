@@ -190,7 +190,9 @@ defmodule Electric.Shapes.MonitorTest do
       use GenServer
 
       def start_link({stack_id, handle, parent}) do
-        GenServer.start_link(__MODULE__, {stack_id, handle, parent})
+        GenServer.start_link(__MODULE__, {stack_id, handle, parent},
+          name: :"controlled_consumer-#{stack_id}-#{handle}"
+        )
       end
 
       @impl GenServer
@@ -241,7 +243,12 @@ defmodule Electric.Shapes.MonitorTest do
 
       assert_receive {:ready, :supervisor}
 
-      {:ok, consumer} = start_supervised({ControlledConsumer, {stack_id, handle, parent}})
+      {:ok, consumer} =
+        start_supervised(%{
+          id: ControlledConsumer,
+          start: {ControlledConsumer, :start_link, [{stack_id, handle, parent}]},
+          restart: :temporary
+        })
 
       {:ok, _subscriber1} =
         start_supervised(
