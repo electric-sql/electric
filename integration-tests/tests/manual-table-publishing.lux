@@ -1,0 +1,98 @@
+[doc Verify that Electric can work without ownership of the user table when configured with manual table publishing]
+
+[include _macros.luxinc]
+
+[global pg_container_name=manual-table-publishing__pg]
+[global database_url=postgresql://low_privilege:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+###
+
+## Start a Postgres cluster with a role that does not own the user table
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e LOW_PRIVILEGE_TEST_INIT_SQL='GRANT CREATE ON DATABASE electric TO low_privilege'" \
+  "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+## Start the sync service
+[invoke setup_electric_with_env "ELECTRIC_MANUAL_TABLE_PUBLISHING=true"]
+
+## Verify that the replication pipeline has initialized successfully
+[shell electric]
+  ??Starting shape replication pipeline
+  ??Starting replication from postgres
+
+## Create a table and verify that Electric reports an error because it cannot add it to the publication
+[invoke start_psql]
+
+[shell psql]
+  !CREATE TABLE items(val text);
+  !INSERT INTO items VALUES ('hello');
+  ??INSERT 0 1
+
+[shell client]
+  -
+
+  # Electric fails to add the table to the publication
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Database table is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"}
+
+[shell electric]
+  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
+
+## Add the table to the publication and try again
+[shell psql]
+  !ALTER PUBLICATION electric_publication_integration ADD TABLE items;
+  ??ALTER PUBLICATION
+  ??ALTER PUBLICATION
+
+  !SELECT * FROM pg_publication_tables;
+  ??electric_publication_integration | public     | items
+  ??(1 row)
+
+[shell client]
+  # Electric still fails because the table's replica identity requirement isn't met
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Database table does not have its replica identity set to FULL"}
+
+[shell electric]
+  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table does not have its replica identity set to FULL
+
+## Set table's replica identity to FULL and grant Electric read access to it
+[shell psql]
+  !ALTER TABLE items REPLICA IDENTITY FULL;
+  ??ALTER TABLE
+  ??ALTER TABLE
+
+  !GRANT SELECT ON items TO low_privilege;
+  ??GRANT
+  ??GRANT
+
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 200
+  ??transfer-encoding: chunked
+  ??electric-schema: {"val":{"type":"text"}}
+  ??electric-offset: 0_0
+
+  ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"operation":"insert","relation":["public","items"]}}]
+
+## Wait for the schema reconciler to run and verify that the table is NOT removed from the publication
+[shell psql]
+  !ALTER TABLE items REPLICA IDENTITY FULL;
+  ??ALTER TABLE
+  ??ALTER TABLE
+
+[shell electric]
+  [timeout 60]
+  ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, and add [] tables
+
+[shell psql]
+  !SELECT * FROM pg_publication_tables;
+  ??electric_publication_integration | public     | items
+  ??(1 row)
+
+[cleanup]
+  [invoke teardown]

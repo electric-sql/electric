@@ -1,0 +1,83 @@
+[doc Verify that Electric doesn't work correctly without ownership of the user table]
+
+[include _macros.luxinc]
+
+[global pg_container_name=not-owner-of-the-table__pg]
+[global database_url=postgresql://low_privilege:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+###
+
+## Start a Postgres cluster with a role that does not own the user table
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e LOW_PRIVILEGE_TEST_INIT_SQL='GRANT CREATE ON DATABASE electric TO low_privilege'" \
+  "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+## Start the sync service
+[invoke setup_electric]
+
+## Verify that the replication pipeline has initialized successfully
+[shell electric]
+  ??Starting shape replication pipeline
+  ??Starting replication from postgres
+
+## Create a table and verify that Electric reports an error because it cannot add it to the publication
+[invoke start_psql]
+
+[shell psql]
+  !CREATE TABLE items(val text);
+  !INSERT INTO items VALUES ('hello');
+  ??INSERT 0 1
+
+[shell client]
+  -
+
+  # Electric fails to add the table to the publication
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 403
+  ??{"message":"Unable to create initial snapshot: must be owner of table items"}
+
+[shell electric]
+  -
+
+  ??[info] Configuring publication electric_publication_integration to drop [] tables, and add ["public.items"] tables
+  ??[error] Failed to configure publication: %Postgrex.Error{message: nil, postgres: %{code: :insufficient_privilege, line: "3583", message: "must be owner of table items"
+
+## Add the table to the publication and try again
+[shell psql]
+  !ALTER PUBLICATION electric_publication_integration ADD TABLE items;
+  ??ALTER PUBLICATION
+  ??ALTER PUBLICATION
+
+  !SELECT * FROM pg_publication_tables;
+  ??electric_publication_integration | public     | items
+  ??(1 row)
+
+[shell client]
+  # Electric still fails because it's trying to alter items' replica identity
+  # (it doesn't check whether it's already there)
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 403
+  ??{"message":"Unable to create initial snapshot: must be owner of table items"}
+
+[shell electric]
+  ??[info] Configuring publication electric_publication_integration to drop [] tables, and add [] tables
+	??[info] Altering identity of public.items to FULL
+  ??[error] Failed to configure publication: %Postgrex.Error{message: nil, postgres: %{code: :insufficient_privilege, line: "3583", message: "must be owner of table items"
+
+## Wait for the schema reconciler to run and verify that the table is removed from the publication
+[shell electric]
+  [timeout 60]
+
+  ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, and add [] tables
+
+  ## Wait for one more run of the schema reconciler to make sure the previous publication update has completed
+  ??[info] Configuring publication electric_publication_integration to drop [] tables, and add [] tables
+
+[shell psql]
+  !SELECT * FROM pg_publication_tables;
+  ??(0 rows)
+
+[cleanup]
+  [invoke teardown]
