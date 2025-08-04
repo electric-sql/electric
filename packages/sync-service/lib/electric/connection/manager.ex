@@ -603,7 +603,12 @@ defmodule Electric.Connection.Manager do
     # further down below.
     state = nillify_pid(state, pid)
 
-    {step, _} = state.current_step
+    step =
+      case state.current_step do
+        {step, _} -> step
+        step when is_atom(step) -> step
+      end
+
     conn_opts = connection_opts_for_step(step, state)
 
     repaired_conn_opts =
