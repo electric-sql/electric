@@ -15,7 +15,7 @@ When AWS launched S3 in 2006 they didn’t lead with features — they led w
 
 Our last quarter was our own “eleven‑nine sprint.” We set one goal: make ElectricSQL so boring‑reliable that you stop thinking about it and just build.
 
-Everyone says "use boring software". How do you become _the_ "boring software"? As it turns out, lots of unglamorous work.
+Everyone says "use boring software". How do you become _the_ "boring software"? As it turns out, through lots of unglamorous work.
 
 ## Infrastructure software can't have bugs
 
@@ -49,7 +49,7 @@ Electric captures changes from Postgres via logical replication and streams them
 3. **Caching layers**: Multi-tier caching (CDN, Nginx, disk) reduces database load
 4. **Observability**: Deep instrumentation exposes exactly what's happening when things go wrong
 
-The result is a system that handles 500GB+ of daily Postgres traffic while maintaining sub-100ms update latency. Our [Electric Cloud](https://electric-sql.com/product/cloud) syncs data to devices in over 100 countries every month—the kind of boring reliability that lets you focus on building features, not debugging sync issues.
+The result is a system that handles 500GB+ of daily Postgres traffic while maintaining sub-100ms update latency. Our [Electric Cloud](https://electric-sql.com/product/cloud) syncs data to devices in over 100 countries every month.
 
 ---
 
