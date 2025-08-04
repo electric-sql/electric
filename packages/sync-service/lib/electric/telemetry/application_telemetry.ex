@@ -251,60 +251,70 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     end
 
     def cpu_utilization do
-      {per_core_utilization, bare_values} =
-        for {cpu_index, busy, _free, _misc} <- :cpu_sup.util([:per_cpu]) do
-          {{:"core_#{cpu_index}", busy}, busy}
-        end
-        |> Enum.unzip()
+      case :cpu_sup.util([:per_cpu]) do
+        {:error, reason} ->
+          Logger.debug("Failed to collect CPU utilization: #{inspect(reason)}")
 
-      utilization =
-        per_core_utilization
-        |> Map.new()
-        |> Map.put(:total, mean(bare_values))
+        data ->
+          {per_core_utilization, bare_values} =
+            for {cpu_index, busy, _free, _misc} <- data do
+              {{:"core_#{cpu_index}", busy}, busy}
+            end
+            |> Enum.unzip()
 
-      :telemetry.execute([:system, :cpu, :utilization], utilization)
+          utilization =
+            per_core_utilization
+            |> Map.new()
+            |> Map.put(:total, mean(bare_values))
 
-      :telemetry.execute([:system, :cpu], %{core_count: length(bare_values)})
+          :telemetry.execute([:system, :cpu, :utilization], utilization)
+
+          :telemetry.execute([:system, :cpu], %{core_count: length(bare_values)})
+      end
     end
 
     def get_system_load_average do
-      cores = :erlang.system_info(:logical_processors)
+      case :erlang.system_info(:logical_processors) do
+        cores when cores > 0 ->
+          # > The load values are proportional to how long time a runnable Unix
+          # > process has to spend in the run queue before it is scheduled.
+          # > Accordingly, higher values mean more system load. The returned value
+          # > divided by 256 produces the figure displayed by rup and top.
+          #
+          # I'm going one step further and dividing by the number of CPUs so in a 4
+          # core system, a load of 4.0 (in top) will show as 100%.
+          # Since load can go above num cores, we can to 200%, 300% but
+          # I think this makes sense.
+          #
+          # Certainly the formula in the erlang docs:
+          #
+          # > the following simple mathematical transformation can produce the load
+          # > value as a percentage:
+          # >
+          # >   PercentLoad = 100 * (1 - D/(D + Load))
+          # >
+          # > D determines which load value should be associated with which
+          # > percentage. Choosing D = 50 means that 128 is 60% load, 256 is 80%, 512
+          # > is 90%, and so on.
+          #
+          # Makes little sense. Setting `D` as they say and plugging in a avg1 value
+          # of 128 does not give 60% so I'm not sure how to square what they say with
+          # the numbers...
+          #
+          # e.g. my machine currently has a cpu util (:cpu_sup.util()) of 4% and an
+          # avg1() of 550 ish across 24 cores (so doing very little) but that formula
+          # would give a `PercentLoad` of ~92%.
+          #
+          # My version would give value of 550 / 256 / 24 = 9%
+          [:avg1, :avg5, :avg15]
+          |> Map.new(fn probe ->
+            {probe, 100 * (apply(:cpu_sup, probe, []) / 256 / cores)}
+          end)
+          |> then(&:telemetry.execute([:system, :load_percent], &1))
 
-      # > The load values are proportional to how long time a runnable Unix
-      # > process has to spend in the run queue before it is scheduled.
-      # > Accordingly, higher values mean more system load. The returned value
-      # > divided by 256 produces the figure displayed by rup and top.
-      #
-      # I'm going one step further and dividing by the number of CPUs so in a 4
-      # core system, a load of 4.0 (in top) will show as 100%.
-      # Since load can go above num cores, we can to 200%, 300% but
-      # I think this makes sense.
-      #
-      # Certainly the formula in the erlang docs:
-      #
-      # > the following simple mathematical transformation can produce the load
-      # > value as a percentage:
-      # >
-      # >   PercentLoad = 100 * (1 - D/(D + Load))
-      # >
-      # > D determines which load value should be associated with which
-      # > percentage. Choosing D = 50 means that 128 is 60% load, 256 is 80%, 512
-      # > is 90%, and so on.
-      #
-      # Makes little sense. Setting `D` as they say and plugging in a avg1 value
-      # of 128 does not give 60% so I'm not sure how to square what they say with
-      # the numbers...
-      #
-      # e.g. my machine currently has a cpu util (:cpu_sup.util()) of 4% and an
-      # avg1() of 550 ish across 24 cores (so doing very little) but that formula
-      # would give a `PercentLoad` of ~92%.
-      #
-      # My version would give value of 550 / 256 / 24 = 9%
-      [:avg1, :avg5, :avg15]
-      |> Map.new(fn probe ->
-        {probe, 100 * (apply(:cpu_sup, probe, []) / 256 / cores)}
-      end)
-      |> then(&:telemetry.execute([:system, :load_percent], &1))
+        _ ->
+          Logger.debug("Failed to collect system load average: no cores reported")
+      end
     end
 
     @required_system_memory_keys ~w[system_total_memory free_memory]a
