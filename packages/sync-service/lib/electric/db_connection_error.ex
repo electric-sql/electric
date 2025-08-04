@@ -66,6 +66,7 @@ defmodule Electric.DbConnectionError do
       maybe_connection_refused_error(error) ||
       maybe_connection_timeout_error(error) ||
       maybe_pool_queue_timeout_error(error) ||
+      maybe_client_exit_error(error) ||
       unknown_error(error)
   end
 
@@ -377,6 +378,26 @@ defmodule Electric.DbConnectionError do
       %DbConnectionError{
         message: "timed out trying to acquire connection from pool",
         type: :connection_timeout,
+        original_error: error,
+        retry_may_fix?: true
+      }
+    end
+  end
+
+  defp maybe_client_exit_error(
+         %DBConnection.ConnectionError{
+           message: message,
+           severity: :info,
+           reason: :error
+         } = error
+       ) do
+    if Regex.match?(
+         ~r/^client #PID<\d+.\d+.\d+> exited$/,
+         message
+       ) do
+      %DbConnectionError{
+        message: "connection exited",
+        type: :client_exit,
         original_error: error,
         retry_may_fix?: true
       }

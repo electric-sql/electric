@@ -198,6 +198,21 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with a client exit error" do
+      error = %DBConnection.ConnectionError{
+        message: "client #PID<0.4201.0> exited",
+        severity: :info,
+        reason: :error
+      }
+
+      assert %DbConnectionError{
+               message: "connection exited",
+               type: :client_exit,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with tcp closed error" do
       for message <- [
             "tcp recv (idle): closed",
