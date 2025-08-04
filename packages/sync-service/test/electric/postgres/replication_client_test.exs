@@ -20,7 +20,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   # Larger than average timeout for assertions that require
   # seeing changes back from the database, as it can be especially
   # slow on CI/Docker etc
-  @assert_receive_db_timeout 1000
+  @assert_receive_db_timeout 2000
 
   defmodule MockConnectionManager do
     def receive_casts(test_pid) do
