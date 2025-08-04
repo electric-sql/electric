@@ -119,6 +119,9 @@ defmodule Electric.Connection.Manager do
       # Capability flag that is set during replication client initialization and shows whether
       # the PG role has the necessary privilege to alter the PG publication.
       :can_alter_publication?,
+      # User setting that determines whether the table publishing is to be automatically
+      # managed by the stack or whether it's the user's responsibility.
+      :manual_table_publishing?,
       # ID used for process labeling and sibling discovery
       :stack_id,
       # Registry used for stack events
@@ -272,7 +275,8 @@ defmodule Electric.Connection.Manager do
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
-        can_alter_publication?: true
+        can_alter_publication?: true,
+        manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false)
       }
       |> initialize_connection_opts(opts)
 
@@ -456,6 +460,7 @@ defmodule Electric.Connection.Manager do
              tweaks: state.tweaks,
              pg_version: state.pg_version,
              can_alter_publication?: state.can_alter_publication?,
+             manual_table_publishing?: state.manual_table_publishing?,
              persistent_kv: state.persistent_kv
            ) do
         {:ok, shapes_sup_pid} ->

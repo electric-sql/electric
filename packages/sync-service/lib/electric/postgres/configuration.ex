@@ -65,12 +65,7 @@ defmodule Electric.Postgres.Configuration do
     if relations_with_incorrect_replica_identity == [] do
       :ok
     else
-      error = %Electric.DbConfigurationError{
-        type: :misconfigured_replica_identity,
-        message: "Database table does not have its replica identity set to FULL"
-      }
-
-      {:error, error}
+      {:error, :misconfigured_replica_identity}
     end
   end
 
@@ -90,13 +85,7 @@ defmodule Electric.Postgres.Configuration do
     if MapSet.size(diff_set) == 0 do
       :ok
     else
-      error = %Electric.DbConfigurationError{
-        type: :tables_missing_from_publication,
-        message:
-          "Database table is missing from the publication and Electric lacks privileges to add it"
-      }
-
-      {:error, error}
+      {:error, :tables_missing_from_publication}
     end
   end
 

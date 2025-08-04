@@ -109,6 +109,13 @@ defmodule Electric.StackSupervisor do
                      ]
                    ]
                  ],
+                 manual_table_publishing?: [
+                   type: :boolean,
+                   required: false,
+                   doc:
+                     "Specify whether tables are to be added to the Postgres publication automatically or by hand",
+                   default: false
+                 ],
                  telemetry_opts: [type: :keyword_list, default: []],
                  telemetry_span_attrs: [
                    # Validates the OpenTelemetry.attributes_map() type
@@ -328,7 +335,8 @@ defmodule Electric.StackSupervisor do
       ],
       persistent_kv: config.persistent_kv,
       shape_cache_opts: shape_cache_opts,
-      tweaks: tweaks
+      tweaks: tweaks,
+      manual_table_publishing?: config.manual_table_publishing?
     ]
 
     registry_partitions =

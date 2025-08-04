@@ -91,6 +91,7 @@ defmodule Electric.Connection.Supervisor do
        publication_name: Keyword.fetch!(replication_opts, :publication_name),
        pg_version: Keyword.fetch!(opts, :pg_version),
        can_alter_publication?: Keyword.fetch!(opts, :can_alter_publication?),
+       manual_table_publishing?: Keyword.fetch!(opts, :manual_table_publishing?),
        db_pool: Keyword.fetch!(db_pool_opts, :name),
        update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0)}
 
