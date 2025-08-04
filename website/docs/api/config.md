@@ -103,6 +103,30 @@ Suffix for the logical replication publication and slot name.
 
 </EnvVarConfig>
 
+### ELECTRIC_MANUAL_TABLE_PUBLISHING
+
+<EnvVarConfig
+    name="ELECTRIC_MANUAL_TABLE_PUBLISHING"
+    defaultValue="false"
+    example="true">
+
+Set to `true` to disable automatic addition/removal of database tables from the publication in Postgres.
+
+In order to receive realtime updates as soon as they are committed in Postgres, Electric maintains a [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) inside the database and automatically adds tables to it for which shape subscriptions are established. However, this only works if the database role used by Electric is the table owner or is granted the [group role](https://www.postgresql.org/docs/current/role-membership.html#ROLE-MEMBERSHIP) that owns the table.
+
+If you permissions policies prevent you from running Electric with a role that can alter tables used in shape subscription, set this setting to `true` and manually add each table to publication by executing
+
+```sql
+BEGIN;
+ALTER PUBLICATION electric_publication_default ADD TABLE <my table>;
+ALTER TABLE <my table> REPLICA IDENTITY FULL;
+COMMIT;
+```
+
+before requesting a new shape for that table.
+
+</EnvVarConfig>
+
 ## Electric
 
 ### ELECTRIC_SECRET
