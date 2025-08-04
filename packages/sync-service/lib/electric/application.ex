@@ -133,7 +133,8 @@ defmodule Electric.Application do
       tweaks: [
         publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms),
         registry_partitions: get_env(opts, :process_registry_partitions)
-      ]
+      ],
+      manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )
   end
 
