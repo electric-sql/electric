@@ -1027,7 +1027,7 @@ defmodule Electric.Connection.Manager do
   defp maybe_fallback_to_no_ssl(conn_opts) do
     sslmode = conn_opts[:sslmode]
 
-    if sslmode != :require do
+    if sslmode != :require and is_nil(conn_opts[:certfile]) do
       if not is_nil(sslmode) do
         # Only log a warning when there's an explicit sslmode parameter in the database
         # config, meaning the user has requested a certain sslmode.
@@ -1212,22 +1212,19 @@ defmodule Electric.Connection.Manager do
           false
 
         _ ->
-          hostname = String.to_charlist(connection_opts[:hostname])
-
-          ssl_verify_opts()
-          |> Keyword.put(:server_name_indication, hostname)
+          ssl_verify_opts(connection_opts[:hostname], connection_opts[:certfile])
       end
 
     Keyword.put(connection_opts, :ssl, ssl_opts)
   end
 
-  # We explicitly set `verify` to `verify_none` because it's currently the only way to ensure
-  # encrypted connections work even when a faulty certificate chain is presented by the PG host.
-  # This behaviour matches that of `psql <DATABASE_URL>?sslmode=require`.
+  # Unless explicitly requested by the user, Electric doesn't perform server certificate
+  # verification even when the database connection is encrypted. This mimics the behaviour of
+  # psql with sslmode=prefer or sslmode=require.
   #
   # Here's an example of connecting to DigitalOcean's Managed PostgreSQL to illustrate the point.
-  # Specifying `sslmode=require` does not result in any certificate validation, it only instructs
-  # `psql` to use SSL for the connection:
+  # Specifying sslmode=require does not result in certificate verification, it only instructs
+  # psql to use SSL for encryption of the database connection:
   #
   #     $ psql 'postgresql://...?sslmode=require'
   #     psql (16.1, server 16.3)
@@ -1236,7 +1233,7 @@ defmodule Electric.Connection.Manager do
   #
   #     [db-postgresql-do-user-13160360-0] doadmin:defaultdb=> \q
   #
-  # Now if we request certificate validation, we get a different result:
+  # Now if we request certificate verification, we get a different result:
   #
   #     $ psql 'postgresql://...?sslmode=verify-full'
   #     psql: error: connection to server at "***.db.ondigitalocean.com" (167.99.250.38), o
@@ -1248,18 +1245,23 @@ defmodule Electric.Connection.Manager do
   #     psql: error: connection to server at "***.db.ondigitalocean.com" (167.99.250.38), port 25060
   #     failed: SSL error: certificate verify failed
   #
-  # We can a better idea of what's wrong with the certificate with `openssl`'s help:
-  #
-  #     $ openssl s_client -starttls postgres -showcerts -connect ***.db.ondigitalocean.com:25060 -CApath /etc/ssl/certs/
-  #     [...]
-  #     SSL handshake has read 3990 bytes and written 885 bytes
-  #     Verification error: self-signed certificate in certificate chain
-  #
-  # So, until we find a way to deal with such PG hosts, we'll use `verify_none` to explicitly
-  # silence any warnings originating in Postgrex, since we're already forbidding the use of
-  # `sslmode=verify-ca` and `sslmode=verify-full` in the database URL parsing code.
-  defp ssl_verify_opts do
-    [verify: :verify_none]
+  # In Electric, specifying the path to a root certificate file forces the full verification
+  # to take place, equivalent to psql's sslmode=verify-full.
+  defp ssl_verify_opts(hostname, nil) do
+    # Even with `verify: :verify_none` we still need to include `server_name_indication`
+    # since, for example, Neon relies on it being present in the client's TLS handshake.
+    [
+      verify: :verify_none,
+      server_name_indication: String.to_charlist(hostname)
+    ]
+  end
+
+  defp ssl_verify_opts(hostname, certfile_path) when is_binary(certfile_path) do
+    [
+      verify: :verify_peer,
+      cacertfile: certfile_path,
+      server_name_indication: String.to_charlist(hostname)
+    ]
   end
 
   defp populate_tcp_opts(connection_opts) do

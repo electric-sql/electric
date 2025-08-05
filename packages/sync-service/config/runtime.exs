@@ -55,10 +55,24 @@ query_database_url_config =
   )
 
 database_ipv6_config = env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
+database_certfile = env!("ELECTRIC_DATABASE_CERTIFICATE_FILE", :string, nil)
+
+if replication_database_url_config[:sslmode] == :disable and not is_nil(database_certfile) do
+  raise Dotenvy.Error,
+    message:
+      "When the database server's certificate file is used, " <>
+        "sslmode must be omitted or set to a value other than 'disable'"
+end
+
+extra_conn_opts =
+  Enum.reject(
+    [ipv6: database_ipv6_config, certfile: database_certfile],
+    fn {_, val} -> is_nil(val) end
+  )
 
 config :electric,
-  replication_connection_opts: replication_database_url_config ++ [ipv6: database_ipv6_config],
-  query_connection_opts: query_database_url_config ++ [ipv6: database_ipv6_config]
+  replication_connection_opts: replication_database_url_config ++ extra_conn_opts,
+  query_connection_opts: query_database_url_config ++ extra_conn_opts
 
 enable_integration_testing? = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, nil)
 cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)
