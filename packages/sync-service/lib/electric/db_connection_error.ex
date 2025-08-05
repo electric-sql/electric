@@ -199,6 +199,24 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :protocol_violation,
+            message: "server conn crashed?",
+            severity: "FATAL",
+            pg_code: "08P01"
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message: "Server connection crashed",
+      type: :server_connection_crashed,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
     maybe_database_does_not_exist(error) ||
       maybe_endpoint_does_not_exist(error) ||
