@@ -393,14 +393,14 @@ defmodule Electric.Replication.PublicationManager do
       Logger.debug("No changes to publication, skipping checkup")
       {:ok, state, []}
     else
-      with :ok <-
+      with {:ok, modified_relations} <-
              Configuration.check_publication_for_missing_relations(
                db_pool,
-               publication_name,
                Map.keys(committed_filters),
-               current_filters
+               Map.keys(current_filters),
+               publication_name
              ) do
-        {:ok, state, []}
+        {:ok, state, modified_relations}
       end
     end
   end
