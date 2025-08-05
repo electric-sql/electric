@@ -18,13 +18,6 @@ export const usersCollection = createCollection(
           ? window.location.origin
           : `http://localhost:5173`
       ).toString(),
-      params: {
-        table: "users",
-        user_id: async () =>
-          authClient
-            .getSession()
-            .then((session) => session.data?.user.id ?? ``),
-      },
       parser: {
         timestamptz: (date: string) => {
           return new Date(date)
@@ -45,13 +38,6 @@ export const projectCollection = createCollection(
           ? window.location.origin
           : `http://localhost:5173`
       ).toString(),
-      params: {
-        table: "projects",
-        user_id: async () =>
-          authClient
-            .getSession()
-            .then((session) => session.data?.user.id ?? ``),
-      },
       parser: {
         timestamptz: (date: string) => {
           return new Date(date)
@@ -105,13 +91,6 @@ export const todoCollection = createCollection(
           ? window.location.origin
           : `http://localhost:5173`
       ).toString(),
-      params: {
-        table: "todos",
-        // Set the user_id as a param as a cache buster for when
-        // you log in and out to test different accounts.
-        user_id: async (): Promise<string> =>
-          authClient.getSession().then((session) => session.data!.user.id)!,
-      },
       parser: {
         // Parse timestamp columns into JavaScript Date objects
         timestamptz: (date: string) => {

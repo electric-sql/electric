@@ -14,7 +14,8 @@ const serve = async ({ request }: { request: Request }) => {
   const originUrl = new URL("http://localhost:3000/v1/shape")
 
   url.searchParams.forEach((value, key) => {
-    if (["live", "table", "handle", "offset", "cursor"].includes(key)) {
+    // Pass through the Electric protocol query parameters.
+    if (["live", "handle", "offset", "cursor"].includes(key)) {
       originUrl.searchParams.set(key, value)
     }
   })
