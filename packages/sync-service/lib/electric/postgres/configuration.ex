@@ -19,73 +19,54 @@ defmodule Electric.Postgres.Configuration do
         ) :: :ok | {:error, :misconfigured_replica_identity | :table_missing_from_publication}
   def check_publication_for_missing_relations(
         conn,
-        publication_name,
         previous_relations,
-        new_filters
+        new_relations,
+        publication_name
       ) do
-    {oids, schemas, tables} = known_relations(previous_relations, new_filters)
+    known_relations = known_relations(previous_relations, new_relations)
+    changed_relations = list_changed_relations(conn, known_relations)
 
-    %Postgrex.Result{rows: rows} =
-      Postgrex.query!(
-        conn,
-        """
-        WITH input_relations AS (
-          SELECT
-            UNNEST($1::oid[]) AS oid,
-            UNNEST($2::text[]) AS input_nspname,
-            UNNEST($3::text[]) AS input_relname
-        )
-        SELECT
-          (ir.input_nspname, ir.input_relname) as input_relation, pt.pubname IS NOT NULL, pc.relreplident
-        FROM
-          input_relations ir
-        JOIN
-          pg_class pc ON pc.oid = ir.oid
-        LEFT JOIN
-          pg_publication_tables pt ON pt.schemaname = ir.input_nspname AND pt.tablename = ir.input_relname
-        WHERE
-          pt.pubname = $4
-        """,
-        [oids, schemas, tables, publication_name]
+    published_relations = lookup_published_relations(conn, known_relations, publication_name)
+    {_oids, schemas, tables} = known_relations
+
+    with :ok <- check_relations_in_publication(Enum.zip(schemas, tables), published_relations),
+         :ok <- check_replica_identity(published_relations) do
+      tables = for {relation, _, _} <- published_relations, do: Utils.relation_to_sql(relation)
+
+      Logger.info(
+        "Verified publication #{publication_name} to include #{inspect(tables)} tables with REPLICA IDENTITY FULL"
       )
 
-    with :ok <- check_replica_identity(rows),
-         :ok <- check_relations_in_publication(Enum.zip(schemas, tables), rows) do
-      :ok
+      {:ok, changed_relations}
     end
   end
 
-  defp check_replica_identity(rows) do
-    relations_with_incorrect_replica_identity =
-      for [relation, _in_publication?, replica_identity] <- rows,
-          replica_identity != "f" do
-        relation
-      end
+  defp check_relations_in_publication(known_relations, published_relations) do
+    known_relations_set = MapSet.new(known_relations)
 
-    if relations_with_incorrect_replica_identity == [] do
-      :ok
-    else
-      {:error, :misconfigured_replica_identity}
-    end
-  end
-
-  defp check_relations_in_publication(relations, rows) do
-    relations_set =
-      relations |> Enum.map(fn {_oid, {schema, table}} -> {schema, table} end) |> MapSet.new()
-
-    result_rows_set =
-      for [relation, in_publication?, _replica_identity] <- rows,
+    published_relations_set =
+      for {relation, in_publication?, _replica_identity} <- published_relations,
           in_publication?,
           into: MapSet.new() do
         relation
       end
 
-    diff_set = MapSet.difference(relations_set, result_rows_set)
+    diff_set = MapSet.difference(known_relations_set, published_relations_set)
 
     if MapSet.size(diff_set) == 0 do
       :ok
     else
       {:error, :tables_missing_from_publication}
+    end
+  end
+
+  defp check_replica_identity(relations) do
+    if Enum.all?(relations, fn {_relation, _in_publication?, replica_identity} ->
+         replica_identity == "f"
+       end) do
+      :ok
+    else
+      {:error, :misconfigured_replica_identity}
     end
   end
 
@@ -122,7 +103,7 @@ defmodule Electric.Postgres.Configuration do
       # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)
       # so we need to check if any of the relations were dropped/renamed since then
       changed_relations =
-        list_changed_relations(conn, known_relations(previous_relations, new_filters))
+        list_changed_relations(conn, known_relations(previous_relations, Map.keys(new_filters)))
 
       used_filters = Map.drop(new_filters, changed_relations)
 
@@ -154,8 +135,8 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  defp known_relations(previous_relations, new_filters) do
-    known_relations = Enum.uniq(previous_relations ++ Map.keys(new_filters))
+  defp known_relations(previous_relations, new_relations) do
+    known_relations = Enum.uniq(previous_relations ++ new_relations)
     {oids, relations} = Enum.unzip(known_relations)
     {schemas, tables} = Enum.unzip(relations)
     {oids, schemas, tables}
@@ -168,7 +149,7 @@ defmodule Electric.Postgres.Configuration do
 
     {oids, schemas, tables} = known_relations
 
-    result =
+    %Postgrex.Result{rows: rows} =
       Postgrex.query!(
         conn,
         """
@@ -188,9 +169,40 @@ defmodule Electric.Postgres.Configuration do
         [oids, schemas, tables]
       )
 
-    for [input_oid, input_relation] <- result.rows do
-      {input_oid, input_relation}
-    end
+    Enum.map(rows, &List.to_tuple/1)
+  end
+
+  defp lookup_published_relations(conn, known_relations, publication_name) do
+    # For each relation in known_relations, check if it's included in the publication and look
+    # up its replica identity.
+
+    {oids, schemas, tables} = known_relations
+
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        WITH input_relations AS (
+          SELECT
+            UNNEST($1::oid[]) AS oid,
+            UNNEST($2::text[]) AS input_nspname,
+            UNNEST($3::text[]) AS input_relname
+        )
+        SELECT
+          (ir.input_nspname, ir.input_relname) as input_relation, pt.pubname IS NOT NULL, pc.relreplident
+        FROM
+          input_relations ir
+        JOIN
+          pg_class pc ON pc.oid = ir.oid
+        LEFT JOIN
+          pg_publication_tables pt ON pt.schemaname = ir.input_nspname AND pt.tablename = ir.input_relname
+        WHERE
+          pt.pubname = $4
+        """,
+        [oids, schemas, tables, publication_name]
+      )
+
+    Enum.map(rows, &List.to_tuple/1)
   end
 
   defp alter_pub_set_whole_tables!(conn, publication_name, relation_filters) do

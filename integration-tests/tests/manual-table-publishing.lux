@@ -86,8 +86,7 @@
   ??ALTER TABLE
 
 [shell electric]
-  [timeout 60]
-  ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, and add [] tables
+  ??[info] Verified publication electric_publication_integration to include ["public.items"] tables with REPLICA IDENTITY FULL
 
 [shell psql]
   !SELECT * FROM pg_publication_tables;
