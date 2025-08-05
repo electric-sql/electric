@@ -132,7 +132,8 @@ defmodule Electric.Application do
       max_shapes: get_env(opts, :max_shapes),
       tweaks: [
         publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms),
-        registry_partitions: get_env(opts, :process_registry_partitions)
+        registry_partitions: get_env(opts, :process_registry_partitions),
+        schema_reconciler_period: get_env(opts, :schema_reconciler_period)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )
