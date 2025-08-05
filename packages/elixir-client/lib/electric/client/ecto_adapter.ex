@@ -175,7 +175,7 @@ if Code.ensure_loaded?(Ecto) do
       end
     end
 
-    def cast_to({:parameterized, {_, _}} = type) do
+    def cast_to({:parameterized, {module, params}} = type) do
       fn
         nil ->
           nil
@@ -187,7 +187,7 @@ if Code.ensure_loaded?(Ecto) do
               {:error, _} -> value
             end
 
-          case Ecto.Type.load(type, decoded_value) do
+          case module.load(decoded_value, &Ecto.Type.embedded_load(&1, &2, :json), params) do
             {:ok, loaded} -> loaded
             :error -> raise Ecto.CastError, type: type, value: value
           end

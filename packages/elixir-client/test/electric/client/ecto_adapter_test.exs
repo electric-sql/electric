@@ -29,10 +29,12 @@ defmodule Electric.Client.EctoAdapterTest do
       field(:time, :time)
       field(:bits, :bitstring)
       field(:blob, :binary)
+      field(:rejected_at, :utc_datetime)
 
       embeds_one :mushroom, Mushroom do
         field(:name, :string)
         field(:color, :string)
+        field(:picked_at, :utc_datetime)
       end
 
       embeds_many :reasons, Reason do
@@ -156,6 +158,7 @@ defmodule Electric.Client.EctoAdapterTest do
       {"time", "time"},
       {"bits", "varbit"},
       {"blob", "bytea"},
+      {"rejected_at", "timestamp with time zone"},
       {"inserted_at", "timestamp without time zone"},
       {"updated_at", "timestamp without time zone"}
     ]
@@ -427,12 +430,13 @@ defmodule Electric.Client.EctoAdapterTest do
                "visible" => "true",
                "metadata" => ~s|{"a":[1,2]}|,
                "mushroom" =>
-                 ~s|{"id":"3dda6337-8bf5-4dbc-91e4-92baba4a8f3d", "name":"earthstar","color":"white"}|,
+                 ~s|{"id":"3dda6337-8bf5-4dbc-91e4-92baba4a8f3d", "name":"earthstar","color":"white","picked_at":"2025-01-01T12:25:17Z"}|,
                "reasons" =>
                  ~s|[{"id":"cac2ecc0-ba53-4e6c-8d29-eba2280453e7","justifications":["worth it","don't care"]}]|,
                "string_list" => "{a,b,{c,d}}",
                "int_list" => "{1}",
                "map_list" => ~s[{"{\\"a\\":1}"}],
+               "rejected_at" => "2016-03-24 17:53:17+00",
                "inserted_at" => "2016-03-24 17:53:17+00",
                "updated_at" => "2017-04-28 18:54:18+00"
              }) == %TestTable{
@@ -447,7 +451,8 @@ defmodule Electric.Client.EctoAdapterTest do
                mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
                  id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
                  name: "earthstar",
-                 color: "white"
+                 color: "white",
+                 picked_at: ~U[2025-01-01T12:25:17Z]
                },
                reasons: [
                  %Electric.Client.EctoAdapterTest.TestTable.Reason{
@@ -458,6 +463,7 @@ defmodule Electric.Client.EctoAdapterTest do
                string_list: ["a", "b", ["c", "d"]],
                int_list: [1],
                map_list: [%{"a" => 1}],
+               rejected_at: ~U[2016-03-24 17:53:17Z],
                updated_at: ~N[2017-04-28 18:54:18]
              }
     end
@@ -482,6 +488,7 @@ defmodule Electric.Client.EctoAdapterTest do
 
       price1 = Decimal.new("7.99")
       net_price1 = Decimal.new("8.99")
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
 
       value1 =
         %TestTable{
@@ -495,7 +502,8 @@ defmodule Electric.Client.EctoAdapterTest do
           mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
             id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
             name: "earthstar",
-            color: "white"
+            color: "white",
+            picked_at: now
           },
           reasons: [
             %Electric.Client.EctoAdapterTest.TestTable.Reason{
@@ -551,7 +559,8 @@ defmodule Electric.Client.EctoAdapterTest do
                mushroom: %Electric.Client.EctoAdapterTest.TestTable.Mushroom{
                  id: "3dda6337-8bf5-4dbc-91e4-92baba4a8f3d",
                  name: "earthstar",
-                 color: "white"
+                 color: "white",
+                 picked_at: ^now
                },
                reasons: [
                  %Electric.Client.EctoAdapterTest.TestTable.Reason{
