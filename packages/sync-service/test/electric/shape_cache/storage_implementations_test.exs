@@ -512,6 +512,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     @moduletag storage: module_name
     @moduletag mod: module
 
+    # FS is occasionally slow so we set a high timeout for compaction
+    @default_compaction_timeout 2000
+
     describe "#{module_name}.compact/1" do
       setup :start_storage
 
@@ -542,7 +545,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         assert :ok = Storage.compact(storage)
 
-        assert_receive {Storage, msg}
+        assert_receive {Storage, msg}, @default_compaction_timeout
         writer = Storage.init_writer!(storage, @shape)
         _writer = Storage.apply_message(writer, msg)
 
@@ -604,7 +607,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         assert :ok = Storage.compact(storage)
 
-        assert_receive {Storage, msg}
+        assert_receive {Storage, msg}, @default_compaction_timeout
         writer = Storage.init_writer!(storage, @shape)
         _writer = Storage.apply_message(writer, msg)
 
@@ -649,7 +652,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         # Force compaction of all the lines
         assert :ok = Storage.compact(storage, 0)
 
-        assert_receive {Storage, msg}
+        assert_receive {Storage, msg}, @default_compaction_timeout
         writer = Storage.init_writer!(storage, @shape)
         writer = Storage.apply_message(writer, msg)
 
@@ -681,7 +684,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         assert :ok = Storage.compact(storage)
 
-        assert_receive {Storage, msg}
+        assert_receive {Storage, msg}, @default_compaction_timeout
         writer = Storage.init_writer!(storage, @shape)
         _writer = Storage.apply_message(writer, msg)
 
