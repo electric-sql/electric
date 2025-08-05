@@ -387,13 +387,40 @@ defmodule Electric.Client do
         iex> Elixir.Client.shape!(&MyApp.Todo.changeset/1)
         %Electric.Client.ShapeDefinition{table: "todos", columns: ["title", "completed"]}
 
-    Passing a changeset will filter the table columns according to the applied
+    Values from the Electric change stream will be mapped to instances of the
+    passed `Ecto.Schema` module.
+
+    ## Column subsets
+
+    Specifying a subset of columns to stream can be done in two ways:
+
+    1. Passing a changeset will filter the table columns according to the applied
     validations so if you want a shape to include a column, you must ensure
     that it has some kind of validation, using e.g.
     `Ecto.Changeset.validate_required/2`
 
-    Values from the Electric change stream will be mapped to instances of the
-    passed `Ecto.Schema` module.
+    2. Using `Ecto.Query.select/3` to select a subset of columns within the query:
+
+        Electric.Client.shape!(
+          from(t in MyApp.Todo, where: t.completed == false, select: [:id, :title])
+        )
+
+    [`select/3`](`Ecto.Query.select/3`) allows for various ways to specify the columns,
+    we only support the following forms:
+
+    - `select(Todo, [t], [:id, :name])`
+    - `select(Todo, [t], [t.id, t.name])`
+    - `select(Todo, [t], {t.id, t.name})`
+    - `select(Todo, [t], struct(t, [:id, :name]))`
+    - `select(Todo, [t], map(t, [:id, :name]))`
+
+    You definitely **can't** add virtual columns like this:
+
+    - `select(Todo, [t], map(t, %{t | reason: "here"}))`
+
+    We also support `Ecto.Query.select_merge/3` to add additional columns:
+
+    - `select(Todo, [t], map(t, [:id, :name])) |> select_merge([:completed])`
     """
     @spec shape!(ecto_shape()) :: ShapeDefinition.t() | no_return()
     def shape!(queryable) when is_ecto_shape(queryable) do

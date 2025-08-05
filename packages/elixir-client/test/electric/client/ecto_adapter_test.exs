@@ -325,6 +325,22 @@ defmodule Electric.Client.EctoAdapterTest do
                namespace: "custom",
                table: "test_table",
                where: "(\"name\" IN ('this','that'))",
+               columns: ["id", "name", "visible"],
+               parser: {EctoAdapter, TestTable}
+             } =
+               EctoAdapter.shape_from_query!(
+                 from(t in TestTable,
+                   prefix: "custom",
+                   where: t.name in ["this", "that"]
+                 )
+                 |> select([t], [:id, :name])
+                 |> select_merge([t], [:visible])
+               )
+
+      assert %Electric.Client.ShapeDefinition{
+               namespace: "custom",
+               table: "test_table",
+               where: "(\"name\" IN ('this','that'))",
                columns: ["id", "name"],
                parser: {EctoAdapter, TestTable}
              } =
