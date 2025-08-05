@@ -34,6 +34,8 @@ defmodule Electric.Replication.Supervisor do
       )
 
     children = [
+      {Task.Supervisor,
+       name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
       consumer_supervisor,
       publication_manager,
       log_collector,

@@ -20,6 +20,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
+  def start_snapshot(stack_id, shape_handle) do
+    # Low timeout because we expect the process to be present & the block to be short
+    GenServer.call(name(stack_id, shape_handle), :start_snapshot, 1_000)
+  end
+
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: name(config))
   end
@@ -30,7 +35,11 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {:ok, config, {:continue, :start_snapshot}}
+    {:ok, config}
+  end
+
+  def handle_call(:start_snapshot, _from, state) do
+    {:reply, :ok, state, {:continue, :start_snapshot}}
   end
 
   def handle_continue(:start_snapshot, state) do

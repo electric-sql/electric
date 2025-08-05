@@ -146,6 +146,12 @@ defmodule Support.ComponentSetup do
     server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
 
+    start_link_supervised!(
+      {Task.Supervisor,
+       name: Electric.ProcessRegistry.name(ctx.stack_id, Electric.StackTaskSupervisor)}
+      |> Supervisor.child_spec(id: "shape_task_supervisor")
+    )
+
     start_opts =
       [
         name: server,

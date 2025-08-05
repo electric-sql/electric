@@ -715,7 +715,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     path = Path.join(metadata_dir, "shape_definition.json")
 
     with {:ok, contents} <- File.open(path, [:read, :raw, :read_ahead], &IO.binread(&1, :eof)),
-         {:ok, decoded} <- Jason.decode(contents),
+         {:ok, decoded} <- Jason.decode(if(is_binary(contents), do: contents, else: "")),
          {:ok, rebuilt} <- Shape.from_json_safe(decoded) do
       {:ok, rebuilt}
     end
