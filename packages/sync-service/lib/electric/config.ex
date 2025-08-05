@@ -88,7 +88,8 @@ defmodule Electric.Config do
     publication_alter_debounce_ms: 0,
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
-    feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: [])
+    feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),
+    schema_reconciler_period: 60_000
   ]
 
   @installation_id_key "electric_installation_id"

@@ -103,7 +103,8 @@ defmodule Electric.Connection.Supervisor do
       {Electric.Replication.SchemaReconciler,
        stack_id: stack_id,
        inspector: inspector,
-       shape_cache: {Electric.ShapeCache, stack_id: stack_id}}
+       shape_cache: {Electric.ShapeCache, stack_id: stack_id},
+       period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)}
 
     child_spec =
       Supervisor.child_spec(

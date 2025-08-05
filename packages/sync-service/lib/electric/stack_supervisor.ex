@@ -106,7 +106,8 @@ defmodule Electric.StackSupervisor do
                          on_remove: [type: {:fun, 2}],
                          on_cleanup: [type: {:fun, 1}]
                        ]
-                     ]
+                     ],
+                     schema_reconciler_period: [type: :non_neg_integer, default: 60_000]
                    ]
                  ],
                  manual_table_publishing?: [
