@@ -15,7 +15,7 @@
   "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
 
 ## Start the sync service
-[invoke setup_electric]
+[invoke setup_electric_with_env "ELECTRIC_TWEAKS_SCHEMA_RECONCILER_PERIOD=2s"]
 
 ## Verify that the replication pipeline has initialized successfully
 [shell electric]
@@ -68,10 +68,7 @@
 
 ## Wait for the schema reconciler to run and verify that the table is removed from the publication
 [shell electric]
-  [timeout 60]
-
   ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, and add [] tables
-
   ## Wait for one more run of the schema reconciler to make sure the previous publication update has completed
   ??[info] Configuring publication electric_publication_integration to drop [] tables, and add [] tables
 
