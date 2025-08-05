@@ -42,7 +42,7 @@
   -
 
   ??[info] Configuring publication electric_publication_integration to drop [] tables, and add ["public.items"] tables
-  ??[error] Failed to configure publication: %Postgrex.Error{message: nil, postgres: %{code: :insufficient_privilege, line: "3583", message: "must be owner of table items"
+  ?\[error\] Failed to configure publication: %Postgrex.Error\{message: nil, postgres: %\{code: :insufficient_privilege,.*message: "must be owner of table items"
 
 ## Add the table to the publication and try again
 [shell psql]
@@ -64,7 +64,7 @@
 [shell electric]
   ??[info] Configuring publication electric_publication_integration to drop [] tables, and add [] tables
 	??[info] Altering identity of public.items to FULL
-  ??[error] Failed to configure publication: %Postgrex.Error{message: nil, postgres: %{code: :insufficient_privilege, line: "3583", message: "must be owner of table items"
+  ?\[error\] Failed to configure publication: %Postgrex.Error\{message: nil, postgres: %\{code: :insufficient_privilege,.*message: "must be owner of table items"
 
 ## Wait for the schema reconciler to run and verify that the table is removed from the publication
 [shell electric]
