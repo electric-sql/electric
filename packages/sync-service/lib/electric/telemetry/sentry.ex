@@ -3,7 +3,8 @@ defmodule Electric.Telemetry.Sentry do
 
   @default_handler_id :electric_sentry_handler
 
-  @spec add_logger_handler(atom()) :: :ok | {:error, term()}
+  @spec add_logger_handler(handler_id :: atom()) :: :ok | {:error, term()}
+  @spec add_logger_handler() :: :ok | {:error, term()}
   def add_logger_handler(id \\ @default_handler_id)
 
   with_telemetry Sentry.LoggerHandler do
