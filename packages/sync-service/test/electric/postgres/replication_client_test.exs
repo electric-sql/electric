@@ -7,6 +7,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
 
+  alias Electric.Replication.LogOffset
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
 
@@ -140,7 +141,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
       pid = start_client(ctx)
 
       insert_item(conn, "test value")
-      assert %NewRecord{record: %{"value" => "test value"}} = receive_tx_change()
+
+      assert %NewRecord{
+               record: %{"value" => "test value"},
+               log_offset: %LogOffset{tx_offset: tx_lsn}
+             } = receive_tx_change()
 
       insert_item(conn, "return: not ok")
       assert %NewRecord{record: %{"value" => "return: not ok"}} = receive_tx_change()
@@ -150,6 +155,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
       Process.unlink(pid)
 
       on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
+
+      send(pid, {:flush_boundary_updated, tx_lsn})
 
       interrupt_val = "interrupt #{inspect(pid)}"
       insert_item(conn, interrupt_val)
@@ -419,14 +426,17 @@ defmodule Electric.Postgres.ReplicationClientTest do
         connection_manager: ctx.connection_manager
       )
 
-    state = %{state | applied_wal: lsn_to_wal("0/0")}
+    state = %{state | received_wal: lsn_to_wal("0/0"), flushed_wal: lsn_to_wal("0/0")}
     pg_wal = lsn_to_wal("0/10")
 
-    assert {:noreply, [<<?r, app_wal::64, app_wal::64, app_wal::64, _time::64, 0::8>>], state} =
+    assert {:noreply,
+            [<<?r, received_wal::64, flushed_wal::64, flushed_wal::64, _time::64, 0::8>>],
+            state} =
              ReplicationClient.handle_data(<<?k, pg_wal::64, 0::64, 1::8>>, state)
 
-    assert state.applied_wal == pg_wal
-    assert app_wal == state.applied_wal + 1
+    assert state.received_wal == pg_wal
+    assert received_wal == state.received_wal + 1
+    assert flushed_wal == state.flushed_wal + 1
   end
 
   defp with_publication(%{db_conn: conn, slot_name: slot_name}) do

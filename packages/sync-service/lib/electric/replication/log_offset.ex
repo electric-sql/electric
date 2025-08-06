@@ -18,6 +18,8 @@ defmodule Electric.Replication.LogOffset do
           op_offset: non_neg_integer() | :infinity
         }
 
+  @type t_tuple() :: {int64(), non_neg_integer() | :infinity}
+
   # Comparison operators on tuples work out of the box
   # If we change internal representation to something else than a tuple
   # we may need to overload the comparison operators
@@ -47,6 +49,7 @@ defmodule Electric.Replication.LogOffset do
       ** (FunctionClauseError) no function clause matching in Electric.Replication.LogOffset.new/2
   """
   def new(tx_offset, op_offset)
+      when tx_offset == -1 and op_offset == 0
       when is_integer(tx_offset) and tx_offset >= 0 and is_integer(op_offset) and op_offset >= 0
       when is_integer(tx_offset) and tx_offset >= 0 and op_offset == :infinity do
     %LogOffset{tx_offset: tx_offset, op_offset: op_offset}

@@ -6,6 +6,7 @@ defmodule Electric.Shapes.Consumer do
   import Electric.Postgres.Xid, only: [compare: 2]
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
+  alias Electric.Replication.LogOffset
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
@@ -72,7 +73,8 @@ defmodule Electric.Shapes.Consumer do
         awaiting_snapshot_start: [],
         buffer: [],
         monitors: [],
-        cleaned?: false
+        cleaned?: false,
+        txn_offset_mapping: []
       })
 
     :ok =
@@ -224,6 +226,13 @@ defmodule Electric.Shapes.Consumer do
     # Triggered as a result of `Electric.Shapes.Monitor.notify_reader_termination/3`
     # when all readers have terminated.
     {:stop, reason, state}
+  end
+
+  def handle_info({ShapeCache.Storage, :flushed, offset}, state) do
+    {state, offset} = normalize_offset(state, offset)
+
+    ShapeLogCollector.notify_flushed(state.log_producer, state.shape_handle, offset)
+    {:noreply, state}
   end
 
   def handle_info({ShapeCache.Storage, message}, state) do
@@ -407,7 +416,13 @@ defmodule Electric.Shapes.Consumer do
           Map.new(shape_attrs(state.shape_handle, state.shape))
         )
 
-        {:cont, notify(txn, %{state | writer: writer})}
+        {:cont,
+         notify(txn, %{
+           state
+           | writer: writer,
+             txn_offset_mapping:
+               state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
+         })}
     end
   end
 
@@ -560,5 +575,15 @@ defmodule Electric.Shapes.Consumer do
     # Since the lag is only useful when it becomes significant, a slight skew doesn't matter.
     now = DateTime.utc_now()
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
+  end
+
+  defp normalize_offset(%{txn_offset_mapping: txn_offset_mapping} = state, offset) do
+    case Enum.drop_while(txn_offset_mapping, &(LogOffset.compare(elem(&1, 0), offset) == :lt)) do
+      [{^offset, normalized} | rest] ->
+        {%{state | txn_offset_mapping: rest}, normalized}
+
+      rest ->
+        {%{state | txn_offset_mapping: rest}, offset}
+    end
   end
 end

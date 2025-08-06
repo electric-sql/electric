@@ -410,6 +410,10 @@ defmodule Electric.ShapeCache.FileStorage do
         end
 
       CubDB.put_multi(db, [{@log_chunk_size_info, new_chunk_size} | entries])
+
+      send(self(), {Storage, :flushed, elem(List.last(log_items), 0)})
+
+      :ok
     else
       error -> raise(error)
     end
