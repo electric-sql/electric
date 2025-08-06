@@ -92,6 +92,27 @@ How many connections Electric opens as a pool for handling shape queries.
 
 </EnvVarConfig>
 
+### ELECTRIC_DATABASE_CERTIFICATE_FILE
+
+<EnvVarConfig
+    name="ELECTRIC_DATABASE_CERTIFICATE_FILE"
+    optional="true"
+    example="/root/.postgresql/root.crt">
+
+The path on local disk to the root certificate file that Electric will use to verify the database server identity.
+
+You could use the default bundle provided by your OS by specifying an absolute path to it. [This page](https://neon.com/docs/connect/connect-securely#location-of-system-root-certificates) from Neon lists the typical locations for different operating systems.
+
+Some managed Postgres providers such as Supabase and DigitalOcean use a self-signed root certificate that won't be found in OS-specific bundles. If you're using one of those, download the file from the provider's website and put it somewhere on your local disk where Electric can access it.
+
+##### Certificate verification and `sslmode`
+
+Electric doesn't support `sslmode=verify-ca` or `sslmode=verify-full` query params in `DATABASE_URL`. Those values are specific to `psql`. When you configure Electric with a certificate file, it will always try to verify the server identity.
+
+Note, however, that setting `sslmode=disable` in `DATABASE_URL` and configuring Electric to perform certificate verification at the same time will result in a startup error.
+
+</EnvVarConfig>
+
 ### ELECTRIC_REPLICATION_STREAM_ID
 
 <EnvVarConfig
