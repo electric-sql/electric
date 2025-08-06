@@ -36,6 +36,11 @@ export default $config({
     const service = cluster.addService(`yjs-${$app.stage}-service`, {
       loadBalancer: {
         ports: [{ listen: `443/https`, forward: `3002/http` }],
+        health: {
+          "3002/http": {
+            path: "/health",
+          },
+        },
         domain: {
           name: `yjs-server${isProduction() ? `` : `-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),

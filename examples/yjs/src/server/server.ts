@@ -171,6 +171,10 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
   }
 })
 
+app.get(`/health`, (c: Context) => {
+  return c.body(null, 200)
+})
+
 // Start the server
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3002
 console.log(`Server is running on port ${port}`)

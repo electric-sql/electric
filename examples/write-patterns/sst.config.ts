@@ -39,6 +39,11 @@ export default $config({
     const service = cluster.addService(`write-patterns-${$app.stage}-service`, {
       loadBalancer: {
         ports: [{ listen: '443/https', forward: '3001/http' }],
+        health: {
+          '3001/http': {
+            path: '/health',
+          },
+        },
         domain: {
           name: `write-patterns-backend${
             isProduction() ? '' : `-stage-${$app.stage}`
