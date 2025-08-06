@@ -30,6 +30,8 @@ defmodule Electric.Shapes.Shape do
     :root_pk,
     :root_column_count,
     :where,
+    :order_by,
+    :limit,
     :selected_columns,
     flags: %{},
     storage: %{compaction: :disabled},
@@ -52,6 +54,8 @@ defmodule Electric.Shapes.Shape do
           root_column_count: non_neg_integer(),
           flags: %{optional(flag()) => boolean()},
           where: Electric.Replication.Eval.Expr.t() | nil,
+          order_by: String.t() | nil,
+          limit: non_neg_integer() | nil,
           selected_columns: [String.t(), ...],
           replica: replica(),
           storage: storage_config() | nil
@@ -67,6 +71,8 @@ defmodule Electric.Shapes.Shape do
           root_pks: [String.t(), ...],
           root_column_count: non_neg_integer(),
           where: String.t(),
+          order_by: String.t(),
+          limit: non_neg_integer(),
           selected_columns: [String.t(), ...],
           flags: %{optional(flag()) => boolean()},
           replica: String.t(),
@@ -121,6 +127,8 @@ defmodule Electric.Shapes.Shape do
   @schema_options [
     relation: [type: {:tuple, [:string, :string]}, required: true],
     where: [type: {:or, [:string, nil]}],
+    order_by: [type: {:or, [:string, nil]}],
+    limit: [type: {:or, [:integer, nil]}],
     columns: [type: {:or, [{:list, :string}, nil]}],
     params: [type: {:map, :string, :string}, default: %{}],
     replica: [
@@ -171,7 +179,10 @@ defmodule Electric.Shapes.Shape do
          {:ok, selected_columns} <-
            validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
-         {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), opts[:params], refs) do
+         {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), opts[:params], refs),
+         {:ok, order_by} <-
+           maybe_parse_order_by_clause(Access.get(opts, :order_by), opts[:params], refs),
+         {:ok, limit} <- maybe_parse_limit(Access.get(opts, :limit), opts[:params], refs) do
       flags =
         [
           if(is_nil(Access.get(opts, :columns)), do: :selects_all_columns),
@@ -190,6 +201,8 @@ defmodule Electric.Shapes.Shape do
          root_pk: pk_cols,
          flags: flags,
          where: where,
+         order_by: order_by,
+         limit: limit,
          selected_columns: selected_columns,
          replica: Access.get(opts, :replica, :default),
          storage: Access.get(opts, :storage) || %{compaction: :disabled}
@@ -204,6 +217,22 @@ defmodule Electric.Shapes.Shape do
       {:ok, expr} -> {:ok, expr}
       {:error, reason} -> {:error, {:where, reason}}
     end
+  end
+
+  defp maybe_parse_order_by_clause(nil, _, _), do: {:ok, nil}
+
+  defp maybe_parse_order_by_clause(order_by, _params, _refs) do
+    # XXX actually validate
+    # Parser.parse_and_validate_...
+    {:ok, order_by}
+  end
+
+  defp maybe_parse_limit(nil, _, _), do: {:ok, nil}
+
+  defp maybe_parse_limit(limit, _params, _refs) when is_integer(limit) do
+    # XXX actually validate
+    # Parser.parse_and_validate_...
+    {:ok, limit}
   end
 
   @spec validate_selected_columns(
@@ -437,6 +466,8 @@ defmodule Electric.Shapes.Shape do
       root_column_count: shape.root_column_count,
       flags: shape.flags,
       where: shape.where,
+      order_by: shape.order_by,
+      limit: shape.limit,
       selected_columns: shape.selected_columns,
       storage: shape.storage,
       replica: shape.replica
@@ -452,11 +483,15 @@ defmodule Electric.Shapes.Shape do
         "root_column_count" => root_column_count,
         "flags" => flags,
         "where" => where,
+        "order_by" => order_by,
+        "limit" => limit,
         "selected_columns" => selected_columns,
         "storage" => storage,
         "replica" => replica
       }) do
-    with {:ok, where} <- if(where != nil, do: Expr.from_json_safe(where), else: {:ok, nil}) do
+    with {:ok, where} <- if(where != nil, do: Expr.from_json_safe(where), else: {:ok, nil}),
+         {:ok, order_by} <-
+           if(order_by != nil, do: Expr.from_json_safe(order_by), else: {:ok, nil}) do
       {:ok,
        %__MODULE__{
          root_table: {schema, name},
@@ -465,6 +500,8 @@ defmodule Electric.Shapes.Shape do
          root_column_count: root_column_count,
          flags: Map.new(flags, fn {k, v} -> {String.to_existing_atom(k), v} end),
          where: where,
+         order_by: order_by,
+         limit: limit,
          selected_columns: selected_columns,
          storage: storage_config_from_json(storage),
          replica: String.to_existing_atom(replica)
@@ -479,6 +516,8 @@ defmodule Electric.Shapes.Shape do
           "root_table" => [schema, name],
           "root_table_id" => root_table_id,
           "where" => where,
+          "order_by" => order_by,
+          "limit" => limit,
           "selected_columns" => selected_columns,
           "table_info" => info
         } = data
@@ -497,6 +536,8 @@ defmodule Electric.Shapes.Shape do
     %{columns: column_info, pk: pk} = Map.fetch!(table_info, {schema, name})
     refs = Inspector.columns_to_expr(column_info)
     {:ok, where} = maybe_parse_where_clause(where, Map.get(data, "params", %{}), refs)
+    {:ok, order_by} = maybe_parse_order_by_clause(order_by, Map.get(data, "params", %{}), refs)
+    {:ok, limit} = maybe_parse_limit(limit, Map.get(data, "params", %{}), refs)
 
     flags =
       Enum.reject(
@@ -518,6 +559,8 @@ defmodule Electric.Shapes.Shape do
        root_column_count: length(column_info),
        flags: flags,
        where: where,
+       order_by: order_by,
+       limit: limit,
        selected_columns: selected_columns || Enum.map(column_info, & &1.name),
        replica: String.to_atom(Map.get(data, "replica", "default")),
        storage: storage_config_from_json(Map.get(data, "storage"))
