@@ -195,8 +195,12 @@ defmodule Electric.ShapeCache.PureFileStorage do
     marker_file_path = deletion_marker_path(opts)
 
     try do
-      File.touch!(marker_file_path)
-      unsafe_cleanup_with_retries!(opts)
+      case File.touch(marker_file_path) do
+        :ok -> unsafe_cleanup_with_retries!(opts)
+        # nothing to delete, no-op
+        {:error, :enoent} -> :ok
+        {:error, reason} -> raise File.Error, reason: reason, path: marker_file_path
+      end
     after
       File.rm(marker_file_path)
     end
