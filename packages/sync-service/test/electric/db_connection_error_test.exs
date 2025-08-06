@@ -100,6 +100,27 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with server connection crashed error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :protocol_violation,
+          message: "server conn crashed?",
+          severity: "FATAL",
+          pg_code: "08P01"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "Server connection crashed",
+               type: :server_connection_crashed,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with insufficient privileges error" do
       error = %Postgrex.Error{
         message: nil,
