@@ -16,7 +16,7 @@ This page documents the config options for [self-hosting](/docs/guides/deploymen
 > [!Warning] Advanced only
 > You don't need to worry about this if you're using [Electric Cloud](/product/cloud).
 >
-> Also, the only required configuration is `DATABASE_URL`.
+> Also, the only required configuration options are `DATABASE_URL` and `ELECTRIC_SECRET`.
 
 ## Configuration
 
