@@ -38,7 +38,7 @@ export default $config({
         ports: [{ listen: `443/https`, forward: `3002/http` }],
         health: {
           "3002/http": {
-            path: "/health",
+            path: `/health`,
           },
         },
         domain: {
