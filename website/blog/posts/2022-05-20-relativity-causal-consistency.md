@@ -9,6 +9,13 @@ outline: deep
 post: true
 ---
 
+<script setup>
+  import { ref } from 'vue'
+
+  // Modal states
+  const isGraphModalOpen = ref(false)
+</script>
+
 In this post we explore the assumptions that distributed databases are based on and investigate how causal consistency fits the reality of a relativistic universe.
 
 <!--truncate-->
@@ -32,14 +39,27 @@ To see this, first, let’s consider the total ordering assumption. Imagine that
 The point is that there’s no right answer, because they’re all working in completely different frames of reference. According to the relativity of simultaneity, there’s no total ordering of events that are separated by space.
 
 <figure>
-  <a href="/img/blog/relativity-causal-consistency/graph.png"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isGraphModalOpen = true">
     <img src="/img/blog/relativity-causal-consistency/graph.png"
         style="width: 100%; max-width: 450px;"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isGraphModalOpen"
+image-src="/img/blog/relativity-causal-consistency/graph.png"
+image-alt="Graph diagram"
+@close="isGraphModalOpen = false"
+/>
 
 > [!NOTE] No total ordering of events
 > In physics, the [relativity of simultaneity](https://en.wikipedia.org/wiki/Relativity_of_simultaneity) is the concept that distant simultaneity – whether two spatially separated events occur at the same time – is not absolute, but depends on the observer's reference frame.
@@ -56,7 +76,7 @@ So what to do?
 
 Enter causal consistency. A distributed system that implements causal consistency discards total ordering by timestamps in favor of causal ordering. With causal ordering, if event A causes event B, then event A precedes event B in every frame of reference.
 
-For example, if Alice posts a comment on a collaborative document and Bob then responds to that comment, it doesn’t matter if Alice and Bob are standing light-years apart – Claire will never see Bob’s reply without Alice’s message. Causally consistent databases keep track of causal relationships (using vector clocks), but allow other events that aren’t causally related to be *indeterminately* ordered, so that there’s no need for a total order to be imposed.
+For example, if Alice posts a comment on a collaborative document and Bob then responds to that comment, it doesn’t matter if Alice and Bob are standing light-years apart – Claire will never see Bob’s reply without Alice’s message. Causally consistent databases keep track of causal relationships (using vector clocks), but allow other events that aren’t causally related to be _indeterminately_ ordered, so that there’s no need for a total order to be imposed.
 
 <div class="side-by-side-videos">
   <div class="embed-container">

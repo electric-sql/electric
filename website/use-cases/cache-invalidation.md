@@ -2,8 +2,8 @@
 title: "Cache invalidation"
 description: >-
   Replace ttls and expiry policies with
-  realtime sync and
-  automated invalidation.
+  realtime sync and
+  automated invalidation.
 image: /img/use-cases/cache-invalidation.png
 outline: deep
 case: true
@@ -14,6 +14,14 @@ benefits:
   - Simplifies your stack
   - No more stale data
 ---
+
+<script setup>
+import { ref } from 'vue'
+
+// Modal states
+const isCacheInvalidationMechanismModalOpen = ref(false)
+const isCacheInvalidationElectricModalOpen = ref(false)
+</script>
 
 <style scoped>
   .cache-invalidation-diagramme {
@@ -53,13 +61,28 @@ Say you're maintaining a cache of recently updated projects. What happens when o
 
 <figure>
   <div class="cache-invalidation-diagramme">
-    <a href="/img/use-cases/cache-invalidation-mechanism.jpg" target="_blank">
+    <div class="clickable-image" @click="isCacheInvalidationMechanismModalOpen = true">
       <img src="/img/use-cases/cache-invalidation-mechanism.png"
           alt="Diagramme illustrating the need for a cache invalidation mechanism"
       />
-    </a>
+      <div class="image-overlay">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+          <line x1="11" y1="8" x2="11" y2="14"></line>
+          <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+      </div>
+    </div>
   </div>
 </figure>
+
+<ImageModal
+:is-open="isCacheInvalidationMechanismModalOpen"
+image-src="/img/use-cases/cache-invalidation-mechanism.png"
+image-alt="Diagramme illustrating the need for a cache invalidation mechanism"
+@close="isCacheInvalidationMechanismModalOpen = false"
+/>
 
 This means you need durability, at-least-once delivery and to be able to recover from downtime. It's easy to get sucked into engineering complexity and it's easy to make mistakes, so a cache either gets stuck with stale data or wiped too often.
 
@@ -79,13 +102,28 @@ Electric syncs data into caches in realtime. It's fast and reliable, handles dur
 
 <figure>
   <div class="cache-invalidation-diagramme">
-    <a href="/img/use-cases/cache-invalidation-electric.jpg" target="_blank">
+    <div class="clickable-image" @click="isCacheInvalidationElectricModalOpen = true">
       <img src="/img/use-cases/cache-invalidation-electric.png"
           alt="Diagramme illustrating Electric cache invalidation"
       />
-    </a>
+      <div class="image-overlay">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+          <line x1="11" y1="8" x2="11" y2="14"></line>
+          <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+      </div>
+    </div>
   </div>
 </figure>
+
+<ImageModal
+:is-open="isCacheInvalidationElectricModalOpen"
+image-src="/img/use-cases/cache-invalidation-electric.png"
+image-alt="Diagramme illustrating Electric cache invalidation"
+@close="isCacheInvalidationElectricModalOpen = false"
+/>
 
 ### Automated cache invalidation
 

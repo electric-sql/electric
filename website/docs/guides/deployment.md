@@ -6,9 +6,13 @@ outline: [2, 3]
 ---
 
 <script setup>
+import { ref } from 'vue'
 import ComponentsJPG from '/static/img/docs/guides/deployment/components.jpg?url'
 import ComponentsPNG from '/static/img/docs/guides/deployment/components.png?url'
 import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.png?url'
+
+// Modal state
+const isComponentsModalOpen = ref(false)
 </script>
 
 <img src="/img/icons/deploy.png" class="product-icon"
@@ -34,7 +38,7 @@ An Electric deployment has three main components. Your Postgres database, the El
 Electric connects to your Postgres using a `DATABASE_URL`. Your app connects to Electric [over HTTP](/docs/api/http), usually using a [Client library](/docs/api/clients/typescript).
 
 <figure>
-  <a :href="ComponentsJPG">
+  <div class="clickable-image" @click="isComponentsModalOpen = true">
     <img :src="ComponentsPNG" class="hidden-sm"
         alt="Illustration of the main components of a successfull deployment"
     />
@@ -42,8 +46,23 @@ Electric connects to your Postgres using a `DATABASE_URL`. Your app connects to 
         style="max-width: 360px"
         alt="Illustration of the main components of a successfull deployment"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isComponentsModalOpen"
+:image-src="ComponentsJPG"
+image-alt="Illustration of the main components of a successful deployment"
+@close="isComponentsModalOpen = false"
+/>
 
 As a result, there are three ingredients to a successful Electric deployment:
 
@@ -62,7 +81,6 @@ Note also that, when running Electric behind a CDN, you may want your proxy in f
 By default, Electric exposes public access to the contents of your database. You generally don't want to expose the contents of your database, so you need to [lock down access](/docs/guides/security#secure-data-access) to the Electric HTTP API.
 
 See the [Security guide](/docs/guides/security) for information.
-
 
 ## 1. Running Postgres
 
@@ -159,7 +177,7 @@ Electric provides an HTTP API exposed on a configurable [`ELECTRIC_PORT`](/docs/
 
 ### Caching proxy
 
-Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't *have* to run a proxy in front of Electric but you will benefit from radically better performance if you do.
+Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
 
 See the [Caching section](/docs/api/http#caching) of the HTTP API docs for more information.
 
@@ -171,8 +189,8 @@ You can then connect your app to Electric [over HTTP](/docs/api/http). Typically
 const stream = new ShapeStream({
   url: `https://your-electric-service.example.com/v1/shape`,
   params: {
-    table: `foo`
-  }
+    table: `foo`,
+  },
 })
 const shape = new Shape(stream)
 ```
