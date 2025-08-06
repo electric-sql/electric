@@ -92,24 +92,24 @@ How many connections Electric opens as a pool for handling shape queries.
 
 </EnvVarConfig>
 
-### ELECTRIC_DATABASE_CERTIFICATE_FILE
+### ELECTRIC_DATABASE_CA_CERTIFICATE_FILE
 
 <EnvVarConfig
-    name="ELECTRIC_DATABASE_CERTIFICATE_FILE"
+    name="ELECTRIC_DATABASE_CA_CERTIFICATE_FILE"
     optional="true"
     example="/root/.postgresql/root.crt">
 
-The path on local disk to the root certificate file that Electric will use to verify the database server identity.
+The path on local disk to a file containing trusted certificate(s) that Electric will use to verify the database server identity.
 
-You could use the default bundle provided by your OS by specifying an absolute path to it. [This page](https://neon.com/docs/connect/connect-securely#location-of-system-root-certificates) from Neon lists the typical locations for different operating systems.
+Trusted certificates are those that have been signed by trusted certificate authorities (CA); they are also known as root certificates. Every operating system and most web browsers include a bundle of well-known root certificates (aka CA store). You can instruct Electric to use the default bundle provided by your OS by specifying an absolute path to it. [This page](https://neon.com/docs/connect/connect-securely#location-of-system-root-certificates) from Neon lists the typical locations for different operating systems.
 
-Some managed Postgres providers such as Supabase and DigitalOcean use a self-signed root certificate that won't be found in OS-specific bundles. If you're using one of those, download the file from the provider's website and put it somewhere on your local disk where Electric can access it.
+Some managed Postgres providers such as Supabase and DigitalOcean use a self-signed root certificate that won't be found in OS-specific CA stores. If you're using one of those, download the trusted certificate from the provider's website and put it somewhere on your local disk where Electric can access it.
 
 ##### Certificate verification and `sslmode`
 
-Electric doesn't support `sslmode=verify-ca` or `sslmode=verify-full` query params in `DATABASE_URL`. Those values are specific to `psql`. When you configure Electric with a certificate file, it will always try to verify the server identity.
+Electric doesn't support `sslmode=verify-ca` or `sslmode=verify-full` query params in `DATABASE_URL`. Those values are specific to `psql`. When you configure Electric with a trusted certificate file, it will always try to verify the server identity and will refuse to open a database connection if the verification does not succeed.
 
-Note, however, that setting `sslmode=disable` in `DATABASE_URL` and configuring Electric to perform certificate verification at the same time will result in a startup error.
+Note, however, that setting `sslmode=disable` in `DATABASE_URL` and enabling certificate verification at the same time will result in a startup error.
 
 </EnvVarConfig>
 
