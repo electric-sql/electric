@@ -15,6 +15,8 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     ~s|CREATE TABLE "partitioned_items_200" PARTITION OF "partitioned_items" FOR VALUES FROM (100) TO (199)|
   ]
 
+  @shape_cleanup_timeout 5_000
+
   @moduletag :tmp_dir
   @moduletag with_sql: @partition_schema
 
@@ -194,8 +196,8 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     )
 
     assert_receive {^ref, :shape_rotation}, 5000
-    assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}, 5000
-    assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, 5000
+    assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}, @shape_cleanup_timeout
+    assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
 
     assert [_] = active_shapes = ShapeCache.list_shapes(stack_id: ctx.stack_id)
 
@@ -250,8 +252,10 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     assert_receive {^ref, :shape_rotation}, 5000
     assert_receive {^partition_ref, :shape_rotation}, 5000
-    assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, 5000
-    assert_receive {Electric.Shapes.Monitor, :cleanup, ^partition_shape_handle}, 5000
+    assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
+
+    assert_receive {Electric.Shapes.Monitor, :cleanup, ^partition_shape_handle},
+                   @shape_cleanup_timeout
 
     assert [] = ShapeCache.list_shapes(stack_id: ctx.stack_id)
 

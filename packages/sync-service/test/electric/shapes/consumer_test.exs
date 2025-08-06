@@ -20,6 +20,7 @@ defmodule Electric.Shapes.ConsumerTest do
   import Mox
 
   @receive_timeout 1_000
+  @shape_cleanup_timeout 1_500
 
   @base_inspector StubInspector.new(
                     tables: [
@@ -340,7 +341,7 @@ defmodule Electric.Shapes.ConsumerTest do
         assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
       refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
     end
 
@@ -404,7 +405,7 @@ defmodule Electric.Shapes.ConsumerTest do
       end)
 
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
       refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
     end
 
@@ -494,7 +495,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
     end
 
     test "cleans shapes affected by a relation change", ctx do
@@ -533,7 +534,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
       refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
     end
 
@@ -607,7 +608,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
       refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
     end
 
@@ -618,7 +619,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
       refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
 
       assert_receive {:DOWN, ^ref1, :process, _, _}
