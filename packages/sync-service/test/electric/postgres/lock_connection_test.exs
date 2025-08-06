@@ -91,6 +91,31 @@ defmodule Electric.Postgres.LockConnectionTest do
       stop_supervised!(:lock1)
       assert_lock_acquired()
     end
+
+    test "should exit if timed out on connection ", %{db_config: config, stack_id: stack_id} do
+      lock_pid =
+        start_supervised!(%{
+          id: :lock,
+          start:
+            {LockConnection, :start_link,
+             [
+               [
+                 connection_opts: config,
+                 timeout: 1,
+                 connection_manager: self(),
+                 lock_name: @lock_name,
+                 stack_id: stack_id
+               ]
+             ]}
+        })
+
+      ref = Process.monitor(lock_pid)
+
+      assert_receive {:DOWN, ^ref, _, _, %DBConnection.ConnectionError{message: message}},
+                     1000
+
+      assert message =~ "tcp"
+    end
   end
 
   defp assert_lock_acquired do

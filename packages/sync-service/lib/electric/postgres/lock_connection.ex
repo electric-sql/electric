@@ -22,6 +22,8 @@ defmodule Electric.Postgres.LockConnection do
 
   @type options :: [option]
 
+  @default_timeout 30_000
+
   defmodule State do
     defstruct [
       :connection_manager,
@@ -58,7 +60,12 @@ defmodule Electric.Postgres.LockConnection do
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts,
-      [timeout: :infinity, auto_reconnect: false, sync_connect: false, name: name(stack_id)] ++
+      [
+        timeout: Access.get(opts, :timeout, @default_timeout),
+        auto_reconnect: false,
+        sync_connect: false,
+        name: name(stack_id)
+      ] ++
         connection_opts
     )
   end
