@@ -76,6 +76,10 @@ app.delete(`/todos/:id`, async (req, res) => {
   res.send(`ok`)
 })
 
+app.get(`/health`, (_req, res) => {
+  return res.sendStatus(200)
+})
+
 // --- Start the Server ---
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`)

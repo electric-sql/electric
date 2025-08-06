@@ -35,6 +35,11 @@ export default $config({
     const service = cluster.addService(`todo-app-${$app.stage}-service`, {
       loadBalancer: {
         ports: [{ listen: "443/https", forward: "3010/http" }],
+        health: {
+          "3010/http": {
+            path: `/health`,
+          },
+        },
         domain: {
           name: `todo-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
