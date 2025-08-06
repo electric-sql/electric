@@ -10,6 +10,7 @@ COPY pnpm-*.yaml ./
 COPY package.json ./
 COPY tsconfig.base.json ./
 COPY tsconfig.build.json ./
+COPY patches/ ./patches/
 COPY examples/yjs examples/yjs/
 
 # Install dependencies
