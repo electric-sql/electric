@@ -104,7 +104,7 @@ defmodule Electric.MixProject do
         {:nimble_options, "~> 1.1"},
         {:opentelemetry_telemetry, "~> 1.1"},
         {:opentelemetry_semantic_conventions, "~> 1.27"},
-        {:pg_query_ex, "0.8.0"},
+        {:pg_query_ex, "0.9.0"},
         {:plug, "~> 1.17"},
         {:postgrex, "~> 0.20"},
         {:retry, "~> 0.19"},
