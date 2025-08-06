@@ -977,7 +977,8 @@ defmodule Electric.Connection.Manager do
     } = state
 
     Electric.Connection.Supervisor.stop_shapes_supervisor(state.stack_id)
-    if is_pid(pool_pid), do: shutdown_child(pool_pid, :shutdown)
+
+    if is_pid(pool_pid), do: GenServer.stop(pool_pid)
     if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
 
     # We brutally kill the lock connection process as it might hang on waiting
