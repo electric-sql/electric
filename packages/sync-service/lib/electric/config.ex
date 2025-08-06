@@ -338,7 +338,7 @@ defmodule Electric.Config do
 
       %{"sslmode" => sslmode} when sslmode in ~w[verify-ca verify-full] ->
         {:error,
-         "unsupported \"sslmode\" value #{inspect(sslmode)}. Use sslmode=require and set the ELECTRIC_DATABASE_CERTIFICATE_FILE config to ensure Electric verifies database server identity"}
+         "unsupported \"sslmode\" value #{inspect(sslmode)}. Use sslmode=require and set the ELECTRIC_DATABASE_CA_CERTIFICATE_FILE config to ensure Electric verifies database server identity"}
 
       %{"sslmode" => sslmode} ->
         {:error, "invalid \"sslmode\" value: #{inspect(sslmode)}"}

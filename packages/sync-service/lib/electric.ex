@@ -19,12 +19,12 @@ defmodule Electric do
       default: false,
       doc: "Whether to use IPv6 for database connections"
     ],
-    certfile: [
+    cacertfile: [
       type: :string,
       required: false,
       doc:
-        "The path to the database certfile that is used as the root certificate " <>
-          "to validate the certificate obtained from the database server during the TLS handshake"
+        "The path to a file containing trusted certificate(s) that will be used " <>
+          "to verify the certificate obtained from the database server during the TLS handshake"
     ]
   ]
   opts_schema = NimbleOptions.new!(@connection_opts)

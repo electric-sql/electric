@@ -55,18 +55,18 @@ query_database_url_config =
   )
 
 database_ipv6_config = env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
-database_certfile = env!("ELECTRIC_DATABASE_CERTIFICATE_FILE", :string, nil)
+database_cacertfile = env!("ELECTRIC_DATABASE_CA_CERTIFICATE_FILE", :string, nil)
 
-if replication_database_url_config[:sslmode] == :disable and not is_nil(database_certfile) do
+if replication_database_url_config[:sslmode] == :disable and not is_nil(database_cacertfile) do
   raise Dotenvy.Error,
     message:
-      "When the database server's certificate file is used, " <>
+      "When ELECTRIC_DATABASE_CA_CERTIFICATE_FILE is set, " <>
         "sslmode must be omitted or set to a value other than 'disable'"
 end
 
 extra_conn_opts =
   Enum.reject(
-    [ipv6: database_ipv6_config, certfile: database_certfile],
+    [ipv6: database_ipv6_config, cacertfile: database_cacertfile],
     fn {_, val} -> is_nil(val) end
   )
 

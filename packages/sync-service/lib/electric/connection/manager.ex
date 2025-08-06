@@ -1027,7 +1027,7 @@ defmodule Electric.Connection.Manager do
   defp maybe_fallback_to_no_ssl(conn_opts) do
     sslmode = conn_opts[:sslmode]
 
-    if sslmode != :require and is_nil(conn_opts[:certfile]) do
+    if sslmode != :require and is_nil(conn_opts[:cacertfile]) do
       if not is_nil(sslmode) do
         # Only log a warning when there's an explicit sslmode parameter in the database
         # config, meaning the user has requested a certain sslmode.
@@ -1212,7 +1212,7 @@ defmodule Electric.Connection.Manager do
           false
 
         _ ->
-          ssl_verify_opts(connection_opts[:hostname], connection_opts[:certfile])
+          ssl_verify_opts(connection_opts[:hostname], connection_opts[:cacertfile])
       end
 
     Keyword.put(connection_opts, :ssl, ssl_opts)
@@ -1245,8 +1245,8 @@ defmodule Electric.Connection.Manager do
   #     psql: error: connection to server at "***.db.ondigitalocean.com" (167.99.250.38), port 25060
   #     failed: SSL error: certificate verify failed
   #
-  # In Electric, specifying the path to a root certificate file forces the full verification
-  # to take place, equivalent to psql's sslmode=verify-full.
+  # In Electric, specifying the path to a file containing trusted certificate(s) forces the
+  # full verification to take place, equivalent to psql's sslmode=verify-full.
   defp ssl_verify_opts(hostname, nil) do
     # Even with `verify: :verify_none` we still need to include `server_name_indication`
     # since, for example, Neon relies on it being present in the client's TLS handshake.
@@ -1256,10 +1256,10 @@ defmodule Electric.Connection.Manager do
     ]
   end
 
-  defp ssl_verify_opts(hostname, certfile_path) when is_binary(certfile_path) do
+  defp ssl_verify_opts(hostname, cacertfile_path) when is_binary(cacertfile_path) do
     [
       verify: :verify_peer,
-      cacertfile: certfile_path,
+      cacertfile: cacertfile_path,
       server_name_indication: String.to_charlist(hostname)
     ]
   end
