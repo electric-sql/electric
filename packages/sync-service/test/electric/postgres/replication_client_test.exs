@@ -302,15 +302,15 @@ defmodule Electric.Postgres.ReplicationClientTest do
          %{db_conn: conn} = ctx do
       pid = start_client(ctx)
 
+      monitor = Process.monitor(pid)
+      Process.unlink(pid)
+      on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
+
       {_id, bin_uuid} = gen_uuid()
 
       Postgrex.query!(conn, "INSERT INTO items (id, value) VALUES ($1, $2)", [bin_uuid, "test"])
       assert %NewRecord{record: %{"value" => "test"}} = receive_tx_change()
       Postgrex.query!(conn, "UPDATE items SET value = $2 WHERE id = $1", [bin_uuid, "new"])
-
-      monitor = Process.monitor(pid)
-      Process.unlink(pid)
-      on_exit(fn -> Process.alive?(pid) && Process.exit(pid, :kill) end)
 
       # Verify that receiving updates without old values causes an exit
       assert_receive {

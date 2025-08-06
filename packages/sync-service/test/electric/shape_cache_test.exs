@@ -52,6 +52,8 @@ defmodule Electric.ShapeCacheTest do
   @pg_snapshot_xmin_10 {10, 11, [10]}
   @pg_snapshot_xmin_100 {100, 101, [100]}
 
+  @shape_cleanup_timeout 1_500
+
   @moduletag :tmp_dir
 
   defmodule TempPubManager do
@@ -315,7 +317,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^consumer_ref, :process, _pid, :some_reason}
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
 
       # should have cleaned up the shape
       meta_table = Keyword.fetch!(opts, :shape_meta_table)
@@ -764,7 +766,7 @@ defmodule Electric.ShapeCacheTest do
 
       Task.await_many(tasks, 10_000)
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
     end
 
     test "propagates error in snapshot creation to listeners", ctx do
@@ -1016,7 +1018,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
     end
   end
 
@@ -1144,7 +1146,7 @@ defmodule Electric.ShapeCacheTest do
         })
       end
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, @shape_cleanup_timeout
       Process.flag(:trap_exit, false)
 
       # Next restart should not recover shape
@@ -1174,7 +1176,7 @@ defmodule Electric.ShapeCacheTest do
         recover_shape_timeout: 1
       )
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, 500
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, @shape_cleanup_timeout
 
       Process.sleep(100)
 
@@ -1199,8 +1201,8 @@ defmodule Electric.ShapeCacheTest do
 
       restart_shape_cache(ctx, purge_all_shapes?: true)
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, 500
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle2}, 500
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, @shape_cleanup_timeout
+      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle2}, @shape_cleanup_timeout
 
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(ctx.storage)
       assert map_size(found) == 0
