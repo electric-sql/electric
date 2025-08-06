@@ -3,7 +3,13 @@ name: Elixir Client CI
 on:
   push:
     branches: ["main"]
+    paths-ignore:
+      - "website/**"
+      - "**/README.md"
   pull_request:
+    paths-ignore:
+      - "website/**"
+      - "**/README.md"
 
 permissions:
   contents: read
