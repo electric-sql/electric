@@ -318,5 +318,21 @@ defmodule Electric.DbConnectionErrorTest do
                retry_may_fix?: false
              } == DbConnectionError.from_error(error)
     end
+
+    test "with an unknown error" do
+      error = %DBConnection.ConnectionError{
+        message: "made-up error",
+        severity: :error,
+        reason: :error
+      }
+
+      assert %DbConnectionError{
+               type: :unknown,
+               message:
+                 "%DBConnection.ConnectionError{message: \"made-up error\", severity: :error, reason: :error}",
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
   end
 end

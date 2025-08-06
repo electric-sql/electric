@@ -403,11 +403,7 @@ defmodule Electric.DbConnectionError do
   end
 
   defp maybe_client_exit_error(
-         %DBConnection.ConnectionError{
-           message: message,
-           severity: :info,
-           reason: :error
-         } = error
+         %DBConnection.ConnectionError{message: message, severity: :info, reason: :error} = error
        ) do
     if Regex.match?(
          ~r/^client #PID<\d+.\d+.\d+> exited$/,
@@ -421,4 +417,6 @@ defmodule Electric.DbConnectionError do
       }
     end
   end
+
+  defp maybe_client_exit_error(_), do: nil
 end
