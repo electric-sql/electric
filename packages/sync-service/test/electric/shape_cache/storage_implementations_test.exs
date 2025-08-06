@@ -781,9 +781,16 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.append_to_log!(log_items, writer)
         Storage.terminate(writer)
+        assert Storage.get_total_disk_usage(storage_base) > 0
 
         Storage.cleanup!(storage)
         assert Storage.get_total_disk_usage(storage_base) == 0
+      end
+
+      test "should handle entire base directory already missing", %{storage: storage} do
+        {_, storage_opts} = storage
+        File.rm_rf!(storage_opts.base_path)
+        Storage.cleanup!(storage)
       end
     end
 
