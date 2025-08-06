@@ -275,7 +275,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     def get_system_load_average do
       case :erlang.system_info(:logical_processors) do
-        cores when cores > 0 ->
+        cores when is_number(cores) and cores > 0 ->
           # > The load values are proportional to how long time a runnable Unix
           # > process has to spend in the run queue before it is scheduled.
           # > Accordingly, higher values mean more system load. The returned value
