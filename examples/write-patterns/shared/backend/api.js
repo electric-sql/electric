@@ -178,6 +178,10 @@ app.post('/changes', async (req, res) => {
   return res.status(200).json({ status: 'OK' })
 })
 
+app.get('/health', (_req, res) => {
+  return res.sendStatus(200)
+})
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server listening at port ${PORT}`)

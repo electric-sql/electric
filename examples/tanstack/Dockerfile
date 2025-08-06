@@ -10,6 +10,7 @@ COPY pnpm-*.yaml ./
 COPY package.json ./
 COPY tsconfig.base.json ./
 COPY tsconfig.build.json ./
+COPY patches/ ./patches/
 COPY packages/typescript-client packages/typescript-client/
 COPY packages/react-hooks packages/react-hooks/
 COPY examples/tanstack examples/tanstack/
