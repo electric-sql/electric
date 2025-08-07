@@ -1,8 +1,8 @@
-import type { Config } from "drizzle-kit";
-import * as dotenv from "dotenv";
+import type { Config } from "drizzle-kit"
+import * as dotenv from "dotenv"
 
 // Load environment variables from .env file
-dotenv.config();
+dotenv.config()
 
 export default {
   schema: "./src/db/schema.ts",
@@ -15,4 +15,4 @@ export default {
     password: process.env.DB_PASSWORD || "password",
     database: process.env.DB_NAME || "electric",
   },
-} satisfies Config;
+} satisfies Config

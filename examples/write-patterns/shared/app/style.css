@@ -4,13 +4,13 @@ body {
 
   background: #1c1e20;
   color: rgba(227, 227, 239, 0.92);
-  font-family: "Helvetica Neue", Helvetica, sans-serif;
+  font-family: 'Helvetica Neue', Helvetica, sans-serif;
   font-size: 15px;
   margin: 0;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, "Courier New", monospace;
+  font-family: source-code-pro, Menlo, Monaco, 'Courier New', monospace;
 }
 
 .app {
@@ -18,7 +18,7 @@ code {
   padding: 10px;
   width: 100%;
 
-  display:grid;
+  display: grid;
   grid-template-columns: calc(50% - 30px) calc(50% - 30px);
   grid-row: auto auto;
   grid-column-gap: 20px;
@@ -29,7 +29,7 @@ code {
   padding: 65px 20px 20px 20px;
 
   background-color: #262628;
-  border-radius:10px;
+  border-radius: 10px;
 
   min-height: calc(50vh - 115px);
 
@@ -61,7 +61,7 @@ code {
   cursor: pointer;
 }
 
-.example label input[type=checkbox] {
+.example label input[type='checkbox'] {
   margin-right: 7px;
 
   accent-color: rgb(208, 188, 255);
@@ -84,7 +84,7 @@ code {
   margin-top: 18px;
 }
 
-.example form input[type=text] {
+.example form input[type='text'] {
   padding: 9px;
   margin-bottom: 12px;
   background: #363638;
@@ -97,7 +97,7 @@ code {
   width: calc(100% - 20px);
 }
 
-.example form button[type=submit] {
+.example form button[type='submit'] {
   background: #404049;
   border: none;
   padding: 6px 9px;

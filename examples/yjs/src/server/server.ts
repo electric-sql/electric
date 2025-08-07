@@ -4,7 +4,7 @@ import type { Context } from "hono"
 import { cors } from "hono/cors"
 import pg, { Pool } from "pg"
 import { logger } from "hono/logger"
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 
 type InvalidRequest = { isValid: false; error?: string }
 type ValidRequest = (Update | AwarenessUpdate) & { isValid: true }
@@ -103,8 +103,8 @@ const proxyToElectric = async (c: Context, table: string, room: string) => {
   })
 
   // Set table and where clause server-side
-  originUrl.searchParams.set('table', table)
-  originUrl.searchParams.set('where', `room = '${room}'`)
+  originUrl.searchParams.set("table", table)
+  originUrl.searchParams.set("where", `room = '${room}'`)
 
   // Add Electric source credentials
   if (process.env.ELECTRIC_SOURCE_ID) {
@@ -176,15 +176,15 @@ const proxyToElectric = async (c: Context, table: string, room: string) => {
 }
 
 // Specific endpoints for YJS document updates
-app.get('/api/ydoc_update', async (c: Context) => {
-  const room = c.req.query('room') || 'electric-demo'
-  return proxyToElectric(c, 'ydoc_update', room)
+app.get("/api/ydoc_update", async (c: Context) => {
+  const room = c.req.query("room") || "electric-demo"
+  return proxyToElectric(c, "ydoc_update", room)
 })
 
-// Specific endpoints for YJS awareness updates  
-app.get('/api/ydoc_awareness', async (c: Context) => {
-  const room = c.req.query('room') || 'electric-demo'
-  return proxyToElectric(c, 'ydoc_awareness', room)
+// Specific endpoints for YJS awareness updates
+app.get("/api/ydoc_awareness", async (c: Context) => {
+  const room = c.req.query("room") || "electric-demo"
+  return proxyToElectric(c, "ydoc_awareness", room)
 })
 
 app.get(`/health`, (c: Context) => {

@@ -17,4 +17,3 @@
     "test:browser": "playwright install && playwright test ./e2e/"
   }
 }
-

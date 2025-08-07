@@ -7,11 +7,11 @@ import globals from 'globals'
 import eslintTsParser from '@typescript-eslint/parser'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 
-import pluginReact from "@eslint-react/eslint-plugin";
+import pluginReact from '@eslint-react/eslint-plugin'
 // @ts-expect-error no types
-import pluginReactCompiler from "eslint-plugin-react-compiler";
+import pluginReactCompiler from 'eslint-plugin-react-compiler'
 // @ts-expect-error no types
-import pluginReactHooks from "eslint-plugin-react-hooks";
+import pluginReactHooks from 'eslint-plugin-react-hooks'
 
 const compat = new FlatCompat()
 
@@ -63,25 +63,25 @@ export default [
     },
   },
   {
-    files: ["**/*.{ts,tsx}"],
+    files: ['**/*.{ts,tsx}'],
     ...pluginReact.configs.recommended,
   },
   {
     plugins: {
-      "react-hooks": pluginReactHooks,
-      "react-compiler": pluginReactCompiler,
+      'react-hooks': pluginReactHooks,
+      'react-compiler': pluginReactCompiler,
     },
     rules: {
-      "react-compiler/react-compiler": "error",
-      "react-hooks/exhaustive-deps": "error",
-      "react-hooks/rules-of-hooks": "error",
+      'react-compiler/react-compiler': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+      'react-hooks/rules-of-hooks': 'error',
     },
   },
   {
-    files: ["**/test/**"],
+    files: ['**/test/**'],
     rules: {
-      "@typescript-eslint/no-unnecessary-condition": "off",
-      "react-compiler/react-compiler": "off",
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      'react-compiler/react-compiler': 'off',
     },
   },
 ]

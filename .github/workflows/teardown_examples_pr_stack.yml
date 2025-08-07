@@ -78,6 +78,6 @@ jobs:
             echo "Error removing stage: $output" >&2
             exit 1
           fi
-          
+
           echo "Successfully removed stage"
           exit 0

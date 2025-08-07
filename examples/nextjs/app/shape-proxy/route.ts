@@ -1,4 +1,4 @@
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   })
 
   // Set the table server-side - not from client params
-  originUrl.searchParams.set('table', 'items')
+  originUrl.searchParams.set("table", "items")
 
   if (process.env.ELECTRIC_SOURCE_ID) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)

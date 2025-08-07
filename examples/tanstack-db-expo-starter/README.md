@@ -14,9 +14,9 @@ ElectricSQL is a Postgres sync engine that solves the hard problems of data sync
 
 ## Key Files
 
-*   [`app/index.tsx`](./app/index.tsx) - The main entry point for the Expo application.
-*   [`api/index.ts`](./api/index.ts) - The entry point for your serverless functions (if you choose to use them).
-*   [`src/db/schema.ts`](./src/db/schema.ts) - The database schema definition for ElectricSQL.
+- [`app/index.tsx`](./app/index.tsx) - The main entry point for the Expo application.
+- [`api/index.ts`](./api/index.ts) - The entry point for your serverless functions (if you choose to use them).
+- [`src/db/schema.ts`](./src/db/schema.ts) - The database schema definition for ElectricSQL.
 
 ## Create a new project
 
@@ -53,5 +53,4 @@ cd my-tanstack-db-expo-project
 
 ## Notes
 
-*   [`react-native-random-uuid`](https://github.com/LinusU/react-native-random-uuid) is needed as a polyfill for TanStack DB on React Native/Expo.
-
+- [`react-native-random-uuid`](https://github.com/LinusU/react-native-random-uuid) is needed as a polyfill for TanStack DB on React Native/Expo.

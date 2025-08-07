@@ -50,7 +50,6 @@ function Layout() {
         error = result.error
       }
 
-
       if (error) {
         console.log(`error logging in`, error)
         setError(JSON.stringify(error, null, 4))

@@ -5,6 +5,5 @@
 import "sst"
 export {}
 declare module "sst" {
-  export interface Resource {
-  }
+  export interface Resource {}
 }

@@ -1,7 +1,7 @@
 import http from "http"
 import pg from "pg"
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
+import { Readable } from "stream"
+import { pipeline } from "stream/promises"
 
 const db = new pg.Pool({
   connectionString:
@@ -49,39 +49,47 @@ const server = http.createServer(async (req, res) => {
     if (req.method === `GET` && req.url?.startsWith(`/items`)) {
       const url = new URL(req.url, `http://localhost:${PORT}`)
       const originUrl = new URL(`http://localhost:3000/v1/shape`)
-      
+
       // Copy relevant query params
       url.searchParams.forEach((value, key) => {
         if ([`live`, `handle`, `offset`, `cursor`].includes(key)) {
           originUrl.searchParams.set(key, value)
         }
       })
-      
+
       // Set the table server-side
       originUrl.searchParams.set(`table`, `items`)
-      
+
       // Add source credentials if available
       if (process.env.VITE_ELECTRIC_SOURCE_ID) {
-        originUrl.searchParams.set(`source_id`, process.env.VITE_ELECTRIC_SOURCE_ID)
+        originUrl.searchParams.set(
+          `source_id`,
+          process.env.VITE_ELECTRIC_SOURCE_ID
+        )
       }
       if (process.env.VITE_ELECTRIC_SOURCE_SECRET) {
-        originUrl.searchParams.set(`secret`, process.env.VITE_ELECTRIC_SOURCE_SECRET)
+        originUrl.searchParams.set(
+          `secret`,
+          process.env.VITE_ELECTRIC_SOURCE_SECRET
+        )
       }
-      
+
       const response = await fetch(originUrl)
-      
+
       // Copy headers, excluding problematic ones
       const headers = { ...CORS_HEADERS }
       response.headers.forEach((value, key) => {
-        if (key.toLowerCase() !== 'content-encoding' && 
-            key.toLowerCase() !== 'content-length') {
+        if (
+          key.toLowerCase() !== "content-encoding" &&
+          key.toLowerCase() !== "content-length"
+        ) {
           headers[key] = value
         }
       })
-      
+
       // Set status and headers
       res.writeHead(response.status, response.statusText, headers)
-      
+
       // Convert Web Streams to Node.js stream and pipe
       const nodeStream = Readable.fromWeb(response.body)
       await pipeline(nodeStream, res)

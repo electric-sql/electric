@@ -36,6 +36,6 @@ module.exports = {
     '**/dist/**',
     'tsup.config.ts',
     'vitest.config.ts',
-    '.eslintrc.js'
+    '.eslintrc.js',
   ],
 }

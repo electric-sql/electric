@@ -1,4 +1,3 @@
-
 # Gatekeeper client
 
 This is a little client app that syncs a shape from Electric using the gatekeeper pattern.
