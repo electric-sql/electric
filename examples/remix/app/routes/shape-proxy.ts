@@ -17,7 +17,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   })
 
   // Set the table server-side
-  originUrl.searchParams.set("table", "items")
+  originUrl.searchParams.set(`table`, `items`)
 
   originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID!)
   originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET!)

@@ -32,7 +32,7 @@ const createSchema = z.object({
 })
 
 // Expose `POST {data} /items`.
-app.post(`/items`, async (req, res) => {
+app.post('/items', async (req, res) => {
   let data
   try {
     data = createSchema.parse(req.body)
