@@ -23,12 +23,7 @@ type ToDo = {
 
 export default function Index() {
   const { data: todos } = useShape<ToDo>({
-    url: new URL(`${import.meta.env.VITE_ELECTRIC_URL}/v1/shape/`).href,
-    params: {
-      table: `todos`,
-      source_id: import.meta.env.VITE_ELECTRIC_SOURCE_ID,
-      secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
-    },
+    url: new URL(`${import.meta.env.VITE_SERVER_URL}/todos`).href,
   })
   todos.sort((a, b) => a.created_at - b.created_at)
 

@@ -1,3 +1,5 @@
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const originUrl = new URL(
@@ -6,9 +8,15 @@ export async function GET(request: Request) {
       : `http://localhost:3000/v1/shape`
   )
 
+  // Only pass through Electric protocol parameters, not table name
   url.searchParams.forEach((value, key) => {
-    originUrl.searchParams.set(key, value)
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key as any)) {
+      originUrl.searchParams.set(key, value)
+    }
   })
+
+  // Set the table server-side - not from client params
+  originUrl.searchParams.set('table', 'items')
 
   if (process.env.ELECTRIC_SOURCE_ID) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)

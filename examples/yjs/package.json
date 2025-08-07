@@ -26,6 +26,7 @@
     "@codemirror/state": "^6.4.1",
     "@codemirror/view": "^6.32.0",
     "@electric-sql/y-electric": "workspace:*",
+    "@electric-sql/client": "workspace:*",
     "@hono/node-server": "^1.8.2",
     "codemirror": "^6.0.1",
     "hono": "^4.6.13",
@@ -53,3 +54,4 @@
     "vite": "^5.3.4"
   }
 }
+

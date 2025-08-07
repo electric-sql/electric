@@ -15,3 +15,11 @@ export const WHERE_PARAMS_PARAM = `params`
 export const EXPERIMENTAL_LIVE_SSE_QUERY_PARAM = `experimental_live_sse`
 export const FORCE_DISCONNECT_AND_REFRESH = `force-disconnect-and-refresh`
 export const PAUSE_STREAM = `pause-stream`
+
+// Query parameters that should be passed through when proxying Electric requests
+export const ELECTRIC_PROTOCOL_QUERY_PARAMS = [
+  LIVE_QUERY_PARAM,
+  SHAPE_HANDLE_QUERY_PARAM,
+  OFFSET_QUERY_PARAM,
+  LIVE_CACHE_BUSTER_QUERY_PARAM,
+] as const

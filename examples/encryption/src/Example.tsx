@@ -15,7 +15,6 @@ type EncryptedItem = {
 }
 
 const API_URL = import.meta.env.API_URL || 'http://localhost:3001'
-const ELECTRIC_URL = import.meta.env.ELECTRIC_URL ?? 'http://localhost:3000'
 
 // For this example, we hardcode a deterministic key that works across page loads.
 // In a real app, you would implement a key management strategy. Electric is great
@@ -86,10 +85,7 @@ export const Example = () => {
   const [items, setItems] = useState<Item[]>()
 
   const { data } = useShape<EncryptedItem>({
-    url: `${ELECTRIC_URL}/v1/shape`,
-    params: {
-      table: 'items',
-    },
+    url: `${API_URL}/items`,
   })
 
   const rows = data !== undefined ? data : []

@@ -36,7 +36,7 @@ pnpm backend:up
 Now start the dev server:
 
 ```shell
-pnpm dev
+DATABASE_URL=postgresql://postgres:password@localhost:54321/electric pnpm dev
 ```
 
 When you're done, stop the backend services using:

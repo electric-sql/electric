@@ -13,7 +13,7 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { StatusBar } from "expo-status-bar";
 import { apiClient, hostname } from "../src/utils/api-client";
 import { selectTodoSchema } from "../src/db/schema";
-import { electricCollectionOptions } from "@tanstack/db-collections";
+import { electricCollectionOptions } from "@tanstack/electric-db-collection";
 import { createCollection } from "@tanstack/react-db";
 import { parseISO } from "date-fns";
 
@@ -24,10 +24,7 @@ const todoCollection = createCollection(
     // Electric syncs data using "shapes". These are filtered views
     // on database tables that Electric keeps in sync for you.
     shapeOptions: {
-      url: `http://${hostname}:3000/v1/shape`,
-      params: {
-        table: "todos",
-      },
+      url: `http://${hostname}:3001/api/todos`,
       parser: {
         // Parse timestamp columns into JavaScript Date objects
         timestamptz: (date: string) => {
