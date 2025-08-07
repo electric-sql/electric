@@ -127,9 +127,6 @@ defmodule Electric.Connection.Manager do
     ]
   end
 
-  defguardp is_connection_process_pid(pid, state)
-            when pid in [state.lock_connection_pid, state.replication_client_pid, state.pool_pid]
-
   use GenServer, shutdown: :infinity
   alias Electric.Connection.Manager.ConnectionBackoff
   alias Electric.DbConnectionError
@@ -582,8 +579,7 @@ defmodule Electric.Connection.Manager do
   def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
 
   # A process exited as it was trying to open a database connection.
-  def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state)
-      when is_connection_process_pid(pid, state) do
+  def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
     # Try repairing the connection opts and try connecting again. If we're already using noSSL
     # and IPv4, the error will be propagated to a `shutdown_or_reconnect()` function call
     # further down below.
@@ -643,7 +639,7 @@ defmodule Electric.Connection.Manager do
   # The most likely reason for any database connection to get closed after we've already opened a
   # bunch of them is the database server going offline or shutting down. Stop
   # Connection.Manager to allow its supervisor to restart it in the initial state.
-  def handle_info({:EXIT, pid, reason}, state) when is_connection_process_pid(pid, state) do
+  def handle_info({:EXIT, pid, reason}, state) do
     error =
       reason
       |> strip_exit_signal_stacktrace()
@@ -666,35 +662,6 @@ defmodule Electric.Connection.Manager do
     )
 
     {:stop, {:shutdown, reason}, state}
-  end
-
-  # When a pooled connection terminates, we log its exit reason, but more connections will
-  # be started by the connection pool supervisor, so we don't need to do anything else.
-  def handle_info({:EXIT, pid, reason}, state) do
-    if not Map.has_key?(state.pool_connection_pids, pid) do
-      raise RuntimeError,
-            "Unexpected exit of a process #{inspect(pid)} with reason #{inspect(reason)}."
-    end
-
-    Logger.debug("Pooled connection #{inspect(pid)} exited with reason: #{inspect(reason)}")
-
-    reason =
-      case reason do
-        {:shutdown, reason} -> reason
-        reason -> reason
-      end
-
-    error = DbConnectionError.from_error(reason)
-
-    # If the error is of an unknown type, it would have already been logged by DbConnectionError itself.
-    if error.type != :unknown do
-      Logger.warning(
-        "Pooled database connection encountered an error: " <>
-          DbConnectionError.format_original_error(error)
-      )
-    end
-
-    {:noreply, %{state | pool_connection_pids: Map.delete(state.pool_connection_pids, pid)}}
   end
 
   def handle_info(
