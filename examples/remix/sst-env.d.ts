@@ -6,13 +6,13 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
-    RemixExample: {
-      name: string
-      type: "sst.aws.Bucket"
+    "RemixExample": {
+      "name": string
+      "type": "sst.aws.Bucket"
     }
-    remix: {
-      type: "sst.aws.Remix"
-      url: string
+    "remix": {
+      "type": "sst.aws.Remix"
+      "url": string
     }
   }
 }

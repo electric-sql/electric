@@ -4,7 +4,8 @@
 /* deno-fmt-ignore-file */
 
 declare module "sst" {
-  export interface Resource {}
+  export interface Resource {
+  }
 }
 /// <reference path="sst-env.d.ts" />
 
