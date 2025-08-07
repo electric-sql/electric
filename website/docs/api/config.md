@@ -105,7 +105,7 @@ Trusted certificates are those that have been signed by trusted certificate auth
 
 Some managed Postgres providers such as Supabase and DigitalOcean use a self-signed root certificate that won't be found in OS-specific CA stores. If you're using one of those, download the trusted certificate from the provider's website and put it somewhere on your local disk where Electric can access it.
 
-##### Certificate verification and `sslmode`
+**Certificate verification and `sslmode`**
 
 Electric doesn't support `sslmode=verify-ca` or `sslmode=verify-full` query params in `DATABASE_URL`. Those values are specific to `psql`. When you configure Electric with a trusted certificate file, it will always try to verify the server identity and will refuse to open a database connection if the verification does not succeed.
 
