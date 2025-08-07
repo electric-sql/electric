@@ -49,7 +49,7 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
         request_timestamp: timestamp,
         # Ensure we enumerate the response body in the same process that made the
         # original api request so the cleanup shape process cleanup works
-        body: Enum.into(response.body, [])
+        body: response.body |> Enum.to_list() |> List.flatten()
       }
     end
 
