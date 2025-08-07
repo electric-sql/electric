@@ -222,4 +222,25 @@ defmodule Electric.Client.EmbeddedTest do
     assert_receive {:msg, %ChangeMessage{}}, 1000
     assert_receive {:msg, up_to_date()}, 1000
   end
+
+  test "sends a must-refetch message if the table is truncated", ctx do
+    parent = self()
+    stream = stream(ctx)
+
+    {:ok, _} =
+      start_supervised(
+        {Task,
+         fn ->
+           Enum.each(stream, &send(parent, {:msg, &1}))
+         end}
+      )
+
+    {:ok, _id1} = insert_item(ctx)
+    assert_receive {:msg, %ChangeMessage{}}, 1000
+    assert_receive {:msg, up_to_date()}, 1000
+
+    Postgrex.query!(ctx.db_conn, ~s|TRUNCATE TABLE "#{ctx.tablename}"|, [])
+
+    assert_receive {:msg, %ControlMessage{control: :must_refetch}}, 5000
+  end
 end
