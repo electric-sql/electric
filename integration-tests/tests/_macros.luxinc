@@ -158,14 +158,29 @@
 [endmacro]
 
 [macro setup_electric_shell shell_name port env]
+  [invoke start_electric_script $shell_name $port $env]
+
   [shell $shell_name]
     -$fail_pattern
-
-    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
 
     ??[info] Starting ElectricSQL
 
     !{:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack"))
+[endmacro]
+
+[macro start_electric_script shell_name port env]
+  [shell $shell_name]
+    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+[endmacro]
+
+[macro stop_electric]
+  [invoke stop_electric_shell "electric"]
+[endmacro]
+
+[macro stop_electric_shell shell_name]
+  [shell $shell_name]
+    !:init.stop()
+    ??$PS1
 [endmacro]
 
 [macro setup_electric_shell_with_tenant shell_name port]

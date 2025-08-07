@@ -1,0 +1,56 @@
+[doc Verify the ability to connect to Postgres using a trusted certificate file]
+
+[include _macros.luxinc]
+
+[global pg_container_name=secure-db-connection__pg]
+
+###
+
+## Start a new Postgres cluster
+[invoke setup_pg_with_ssl]
+
+###
+
+## Start the sync service with sslmode=disable and confirm that Postgres rejects its connection attempts
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+[invoke setup_electric]
+[shell electric]
+  -
+  ?\*\* \(Postgrex.Error\) FATAL 28000 \(invalid_authorization_specification\) pg_hba.conf rejects connection for host "[0-9.]+", user "postgres", database "electric", no encryption
+
+[invoke stop_electric]
+
+###
+
+## Connecting with sslmode > disable works fine
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric]
+
+[invoke setup_electric]
+[shell electric]
+  ??[info] Starting replication from postgres
+  -
+
+[invoke stop_electric]
+
+###
+
+## Configure Electric with a trusted certificate and set sslmode=disable to verify it fails to start up
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+[invoke start_electric_script electric 3000 "DATABASE_URL=$database_url ELECTRIC_INSECURE=true ELECTRIC_DATABASE_CA_CERTIFICATE_FILE=foo"]
+[shell electric]
+  -
+  ??** (Dotenvy.Error) When ELECTRIC_DATABASE_CA_CERTIFICATE_FILE is set, sslmode must be omitted or set to a value other than 'disable'
+
+###
+
+[global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric]
+
+## Configure Electric with the correct certificate and verify that it successfully connects to the database
+[invoke setup_electric_with_env "ELECTRIC_DATABASE_CA_CERTIFICATE_FILE=../../integration-tests/support_files/root.crt"]
+[shell electric]
+  ??[info] Starting replication from postgres
+
+[cleanup]
+  [invoke teardown]
