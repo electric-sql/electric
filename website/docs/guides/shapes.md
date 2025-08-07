@@ -136,7 +136,6 @@ For example:
 
 The specified columns must always include the primary key column(s), and should be formed as a comma separated list of column names &mdash; exactly as they are in the database schema. If the identifier was defined as case sensitive and/or with special characters, then you must quote it.
 
-
 ## Subscribing to shapes
 
 Local clients establish shape subscriptions, typically using [client libraries](/docs/api/clients/typescript). These sync data from the [Electric sync engine](/product/electric) into the client using the [HTTP API](/docs/api/http).
@@ -148,7 +147,7 @@ The sync service maintains shape subscriptions and streams any new data and data
 You can sync shapes manually using the
 <a href="/openapi.html#/paths/~1v1~1shape~1%7Btable%7D/get"
     target="_blank">
-  <code>GET /v1/shape</code></a> endpoint. First make an initial sync request to get the current data for the Shape, such as:
+<code>GET /v1/shape</code></a> endpoint. First make an initial sync request to get the current data for the Shape, such as:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
@@ -175,13 +174,13 @@ npm i @electric-sql/client
 Instantiate a `ShapeStream` and materialise into a `Shape`:
 
 ```ts
-import { ShapeStream, Shape } from '@electric-sql/client'
+import { ShapeStream, Shape } from "@electric-sql/client"
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
   params: {
-    table: `foo`
-  }
+    table: `foo`,
+  },
 })
 const shape = new Shape(stream)
 
@@ -230,7 +229,6 @@ We currently optimize the evaluation of the following clauses:
 > [!Warning] Need additional where clause optimization?
 > We plan to optimize a much larger subset of Postgres where clauses. If you need a particular clause optimized, please [raise an issue on GitHub](https://github.com/electric-sql/electric) or [let us know on Discord](https://discord.electric-sql.com).
 
-
 ### Row filtering
 
 We use [row filtering](https://www.postgresql.org/docs/17/logical-replication-row-filter.html) where possible to reduce the amount of data sent over the replication stream. Based on the active shapes and their where clauses, we can determine which rows should be included in the replication stream to be filtered directly in Postgres.
@@ -270,7 +268,7 @@ You can upvote and discuss adding support for mutable shapes here:
 
 ### Dropping tables
 
-When dropping a table from Postgres you need to *manually* delete all shapes that are defined on that table.
+When dropping a table from Postgres you need to _manually_ delete all shapes that are defined on that table.
 This is especially important if you intend to recreate the table afterwards (possibly with a different schema) as the shape will contain stale data from the old table.
 Therefore, recreating the table only works if you first delete the shape.
 

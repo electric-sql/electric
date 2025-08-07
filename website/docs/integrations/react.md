@@ -34,11 +34,11 @@ Always proxy Electric requests through your backend API for production applicati
 
 ```tsx
 // ✅ Recommended: Clean API pattern
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 const MyComponent = () => {
-  const { isLoading, data } = useShape<{title: string}>({
-    url: `http://localhost:3001/api/items`  // Your API endpoint
+  const { isLoading, data } = useShape<{ title: string }>({
+    url: `http://localhost:3001/api/items`, // Your API endpoint
   })
 
   if (isLoading) {
@@ -47,7 +47,9 @@ const MyComponent = () => {
 
   return (
     <div>
-      {data.map(item => <div>{item.title}</div>)}
+      {data.map((item) => (
+        <div>{item.title}</div>
+      ))}
     </div>
   )
 }
@@ -57,7 +59,7 @@ Your backend handles the Electric details:
 
 ```ts
 // Server code (Express example)
-app.get('/api/items', async (req, res) => {
+app.get("/api/items", async (req, res) => {
   // Proxy to Electric with authorization
   // See auth guide for complete implementation
 })
@@ -75,14 +77,14 @@ For development, you can connect directly to Electric:
 
 ```tsx
 // ⚠️ Development only - exposes database structure
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 const MyComponent = () => {
-  const { isLoading, data } = useShape<{title: string}>({
+  const { isLoading, data } = useShape<{ title: string }>({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: 'items'
-    }
+      table: "items",
+    },
   })
 
   if (isLoading) {
@@ -91,7 +93,9 @@ const MyComponent = () => {
 
   return (
     <div>
-      {data.map(item => <div>{item.title}</div>)}
+      {data.map((item) => (
+        <div>{item.title}</div>
+      ))}
     </div>
   )
 }
@@ -101,13 +105,13 @@ You can also include additional PostgreSQL-specific parameters:
 
 ```tsx
 const MyFilteredComponent = () => {
-  const { isLoading, data } = useShape<{id: number, title: string}>({
+  const { isLoading, data } = useShape<{ id: number; title: string }>({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: 'items',
-      where: 'status = \'active\'',
-      columns: ['id', 'title']
-    }
+      table: "items",
+      where: "status = 'active'",
+      columns: ["id", "title"],
+    },
   })
   // ...
 }
@@ -138,7 +142,6 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
   isError: boolean
   error: Shape<T>[`error`]
-
 }
 ```
 
@@ -151,8 +154,8 @@ export const clientLoader = async () => {
   return await preloadShape({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: 'items'
-    }
+      table: "items",
+    },
   })
 }
 ```
@@ -164,10 +167,10 @@ export const filteredLoader = async () => {
   return await preloadShape({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: 'items',
-      where: 'category = \'electronics\'',
-      columns: ['id', 'name', 'price']
-    }
+      table: "items",
+      where: "category = 'electronics'",
+      columns: ["id", "name", "price"],
+    },
   })
 }
 ```
@@ -182,8 +185,8 @@ It takes the same options as [ShapeStream](/docs/api/clients/typescript#options)
 const itemsStream = getShapeStream<Item>({
   url: `http://localhost:3000/v1/shape`,
   params: {
-    table: 'items'
-  }
+    table: "items",
+  },
 })
 ```
 
@@ -197,8 +200,8 @@ This allows you to avoid consuming multiple streams for the same shape log.
 const itemsShape = getShape<Item>({
   url: `http://localhost:3000/v1/shape`,
   params: {
-    table: 'items'
-  }
+    table: "items",
+  },
 })
 ```
 
@@ -213,7 +216,7 @@ The following is a simple example which aborts the subscription when the compone
 ```tsx
 function MyComponent() {
   const [controller, _] = useState(new AbortController())
-  
+
   const { data } = useShape({
     ...
     signal: controller.signal

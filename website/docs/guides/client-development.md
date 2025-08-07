@@ -68,7 +68,7 @@ The body of the response will contain a JSON array of messages. The headers of t
 If the last message in the response body contains an `up-to-date` control message:
 
 ```json
-{"headers":{"control":"up-to-date"}}
+{ "headers": { "control": "up-to-date" } }
 ```
 
 Then the response will also contain an:
@@ -156,7 +156,6 @@ As well as just a single data structure, it's possible to materialise one or mor
 
 Only apply logical operations to your materialised structure when you get an `up-to-date` message. Then either apply that batch of operations to your data structure or store atomically, for example using some kind of transactional application primitive, or only [trigger reactivity](#reactivity-bindings) once all the changes are applied.
 
-
 ## Reactivity bindings
 
 If you maintain a materialised data structure, it's often useful to know when it changes. This is what the Typescript client's [`Shape.subscribe`](/docs/api/clients/typescript#shape) function enables, for example.
@@ -164,10 +163,10 @@ If you maintain a materialised data structure, it's often useful to know when it
 This can then be used by a framework to trigger re-rendering. See the [`useShape` React hook source code](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx) for a real example but in short, e.g.: for a React component:
 
 ```tsx
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react"
 
 const MyComponent = ({ shapeDefinition }) => {
-  const [ data, setData ] = useState([])
+  const [data, setData] = useState([])
 
   useEffect(() => {
     const stream = new ShapeStream(shapeDefinition)
