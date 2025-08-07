@@ -1,5 +1,12 @@
 # @core/elixir-client
 
+## 0.6.5
+
+### Patch Changes
+
+- 421315f: Fix handling of Ecto embeds when deserializing
+- 8e95270: Fix decoding of must-refetch messages
+
 ## 0.6.4
 
 ### Patch Changes
