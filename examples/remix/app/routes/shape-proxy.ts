@@ -11,7 +11,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const originUrl = new URL(`/v1/shape`, baseUrl)
   // Only pass through Electric protocol parameters
   url.searchParams.forEach((value, key) => {
-    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key as any)) {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
       originUrl.searchParams.set(key, value)
     }
   })

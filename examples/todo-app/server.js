@@ -30,7 +30,7 @@ const putSchema = z.object({
 
 // GET /todos - proxy to Electric for syncing todos
 app.get(`/todos`, async (req, res) => {
-  const ELECTRIC_URL = process.env.ELECTRIC_URL || "http://localhost:3000"
+  const ELECTRIC_URL = process.env.ELECTRIC_URL || `http://localhost:3000`
   const electricUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
 
   // Only pass through Electric protocol parameters
@@ -41,18 +41,18 @@ app.get(`/todos`, async (req, res) => {
   })
 
   // Set the table server-side
-  electricUrl.searchParams.set("table", "todos")
+  electricUrl.searchParams.set(`table`, `todos`)
 
   // Add source credentials if available
   if (process.env.VITE_ELECTRIC_SOURCE_ID) {
     electricUrl.searchParams.set(
-      "source_id",
+      `source_id`,
       process.env.VITE_ELECTRIC_SOURCE_ID
     )
   }
   if (process.env.VITE_ELECTRIC_SOURCE_SECRET) {
     electricUrl.searchParams.set(
-      "secret",
+      `secret`,
       process.env.VITE_ELECTRIC_SOURCE_SECRET
     )
   }
@@ -64,8 +64,8 @@ app.get(`/todos`, async (req, res) => {
     const headers = {}
     response.headers.forEach((value, key) => {
       if (
-        key.toLowerCase() !== "content-encoding" &&
-        key.toLowerCase() !== "content-length"
+        key.toLowerCase() !== `content-encoding` &&
+        key.toLowerCase() !== `content-length`
       ) {
         headers[key] = value
       }
@@ -78,8 +78,8 @@ app.get(`/todos`, async (req, res) => {
     const nodeStream = Readable.fromWeb(response.body)
     await pipeline(nodeStream, res)
   } catch (error) {
-    console.error("Error proxying to Electric:", error)
-    res.status(500).json({ error: "Internal server error" })
+    console.error(`Error proxying to Electric:`, error)
+    res.status(500).json({ error: `Internal server error` })
   }
 })
 

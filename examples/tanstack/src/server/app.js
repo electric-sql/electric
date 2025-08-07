@@ -80,8 +80,8 @@ const server = http.createServer(async (req, res) => {
       const headers = { ...CORS_HEADERS }
       response.headers.forEach((value, key) => {
         if (
-          key.toLowerCase() !== "content-encoding" &&
-          key.toLowerCase() !== "content-length"
+          key.toLowerCase() !== `content-encoding` &&
+          key.toLowerCase() !== `content-length`
         ) {
           headers[key] = value
         }
