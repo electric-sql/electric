@@ -47,6 +47,26 @@
 
 [global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric]
 
+## Configure Electric with a bad certificate and verify its error handling behaviour
+[invoke setup_electric_with_env "ELECTRIC_DATABASE_CA_CERTIFICATE_FILE=foo"]
+[shell electric]
+  -
+  ??[emergency] SSL connection failed to verify server certificate: Invalid CA certificate file
+
+[invoke stop_electric]
+
+###
+
+[invoke setup_electric_with_env "ELECTRIC_DATABASE_CA_CERTIFICATE_FILE=../../integration-tests/support_files/root_otherhost.crt"]
+[shell electric]
+  -
+  # Wrong root certificate
+  ?\[emergency\] SSL connection failed to verify server certificate: .* CLIENT ALERT: Fatal - Unknown CA
+
+[invoke stop_electric]
+
+###
+
 ## Configure Electric with the correct certificate and verify that it successfully connects to the database
 [invoke setup_electric_with_env "ELECTRIC_DATABASE_CA_CERTIFICATE_FILE=../../integration-tests/support_files/root.crt"]
 [shell electric]

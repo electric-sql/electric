@@ -375,7 +375,12 @@ defmodule Electric.DbConnectionError do
   defp maybe_ssl_connection_error(error) do
     case error.message do
       "ssl connect: " <> message ->
-        if String.contains?(message, ["Unknown CA", "unknown_ca"]) do
+        if String.contains?(message, [
+             "Unknown CA",
+             "unknown_ca",
+             "Bad Certificate",
+             "Invalid CA certificate file"
+           ]) do
           %DbConnectionError{
             message: "SSL connection failed to verify server certificate: " <> message,
             type: :ssl_connection_failed,
