@@ -2,15 +2,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { Outlet } from "@tanstack/react-router"
 import { authClient } from "@/lib/auth-client"
-import {
-  useLiveQuery,
-  createCollection,
-  liveQueryCollectionOptions,
-  createLiveQueryCollection,
-  not,
-  like,
-  count,
-} from "@tanstack/react-db"
+import { useLiveQuery } from "@tanstack/react-db"
 import { projectCollection } from "@/lib/collections"
 
 export const Route = createFileRoute("/_authenticated")({

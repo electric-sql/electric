@@ -97,14 +97,14 @@ const proxyToElectric = async (c: Context, table: string, room: string) => {
 
   // Only pass through Electric protocol parameters
   url.searchParams.forEach((value, key) => {
-    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key as any)) {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
       originUrl.searchParams.set(key, value)
     }
   })
 
   // Set table and where clause server-side
-  originUrl.searchParams.set("table", table)
-  originUrl.searchParams.set("where", `room = '${room}'`)
+  originUrl.searchParams.set(`table`, table)
+  originUrl.searchParams.set(`where`, `room = '${room}'`)
 
   // Add Electric source credentials
   if (process.env.ELECTRIC_SOURCE_ID) {
@@ -176,15 +176,15 @@ const proxyToElectric = async (c: Context, table: string, room: string) => {
 }
 
 // Specific endpoints for YJS document updates
-app.get("/api/ydoc_update", async (c: Context) => {
-  const room = c.req.query("room") || "electric-demo"
-  return proxyToElectric(c, "ydoc_update", room)
+app.get(`/api/ydoc_update`, async (c: Context) => {
+  const room = c.req.query(`room`) || `electric-demo`
+  return proxyToElectric(c, `ydoc_update`, room)
 })
 
 // Specific endpoints for YJS awareness updates
-app.get("/api/ydoc_awareness", async (c: Context) => {
-  const room = c.req.query("room") || "electric-demo"
-  return proxyToElectric(c, "ydoc_awareness", room)
+app.get(`/api/ydoc_awareness`, async (c: Context) => {
+  const room = c.req.query(`room`) || `electric-demo`
+  return proxyToElectric(c, `ydoc_awareness`, room)
 })
 
 app.get(`/health`, (c: Context) => {

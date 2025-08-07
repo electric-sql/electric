@@ -8,13 +8,13 @@ export async function GET(request: Request) {
   const originUrl = new URL(`/v1/shape`, baseUrl)
   // Only pass through Electric protocol parameters
   url.searchParams.forEach((value, key) => {
-    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key as any)) {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
       originUrl.searchParams.set(key, value)
     }
   })
 
   // Set the table server-side
-  originUrl.searchParams.set("table", "users")
+  originUrl.searchParams.set(`table`, `users`)
 
   if (process.env.ELECTRIC_SOURCE_ID) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)

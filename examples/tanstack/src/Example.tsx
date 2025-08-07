@@ -10,7 +10,6 @@ import "./Example.css"
 
 type Item = { id: string }
 
-const baseUrl = import.meta.env.VITE_ELECTRIC_URL ?? `http://localhost:3000`
 const baseApiUrl = import.meta.env.VITE_SERVER_URL ?? `http://localhost:3001`
 const itemsUrl = new URL(`/items`, baseApiUrl)
 

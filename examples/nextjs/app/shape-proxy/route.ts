@@ -10,13 +10,13 @@ export async function GET(request: Request) {
 
   // Only pass through Electric protocol parameters, not table name
   url.searchParams.forEach((value, key) => {
-    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key as any)) {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
       originUrl.searchParams.set(key, value)
     }
   })
 
   // Set the table server-side - not from client params
-  originUrl.searchParams.set("table", "items")
+  originUrl.searchParams.set(`table`, `items`)
 
   if (process.env.ELECTRIC_SOURCE_ID) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
