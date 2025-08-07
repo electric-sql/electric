@@ -171,12 +171,15 @@ export async function GET(request: Request) {
 > [!Warning] GitHub example
 > See the [gatekeeper-auth example](https://github.com/electric-sql/electric/tree/main/examples/gatekeeper-auth) on GitHub for an example that implements this pattern.
 
+> [!Note] Exception to the proxy pattern
+> Unlike the proxy pattern above where shape parameters are set server-side, the gatekeeper pattern is designed to authorize specific shape configurations requested by the client. The client provides the full shape definition, and the gatekeeper explicitly authorizes that exact shape configuration.
+
 The Gatekeeper pattern works as follows:
 
 1. post to a gatekeeper endpoint in your API to generate a shape-scoped auth token
 2. make shape requests to Electric via an authorising proxy that validates the auth token against the request parameters
 
-The auth token should include a claim containing the shape definition. This allows the proxy to authorize the shape request by comparing the shape claim signed into the token with the [shape defined in the request parameters](/docs/quickstart#http-api).
+The auth token should include a claim containing the shape definition. This allows the proxy to authorize the shape request by comparing the shape claim signed into the token with the [shape defined in the request parameters](/docs/quickstart#http-api). The proxy validates that the client is requesting exactly the same shape that was authorized by the gatekeeper.
 
 This keeps your main auth logic:
 
