@@ -29,6 +29,10 @@ The rest of this page will describe the features of the API.
   <p class="custom-block-no-title">💡 If you haven't already, you may like to walkthrough the <a href="/docs/quickstart">Quickstart</a> to get a feel for using the HTTP API.</p>
 </div>
 
+:::warning Production Best Practice
+While this page documents the HTTP API directly, **production applications should proxy Electric requests through your backend API** rather than exposing Electric directly to clients. This provides security, authorization, and a clean API interface. See the [authentication guide](/docs/guides/auth) for implementation details.
+:::
+
 ## Syncing shapes
 
 The API allows you to sync [Shapes](/docs/guides/shapes) of data out of Postgres using the

@@ -31,6 +31,10 @@ You can create a client for Electric by:
 
 The [Electric sync service](/product/electric) syncs data over an [HTTP API](/docs/api/http). The primary job of a client is to consume this API using HTTP requests.
 
+:::tip Production Best Practice
+While this guide shows direct HTTP API consumption, **production applications should proxy Electric requests through your backend API** rather than connecting clients directly to Electric. This provides security, authorization, and a clean API interface. See the [authentication guide](/docs/guides/auth) for implementation patterns.
+:::
+
 The HTTP API exposes [Shapes](/docs/guides/shapes). There are two phases to syncing a shape:
 
 1. [initial sync](#initial-sync) where you load all the data the server is currently aware of

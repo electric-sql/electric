@@ -28,7 +28,62 @@ The client exports:
 - a [`ShapeStream`](#shapestream) class for consuming a [Shape Log](../http#shape-log); and
 - a [`Shape`](#shape) class for materialising the log stream into a shape object
 
-These compose together, e.g.:
+### Best Practice: Use API Endpoints, Not Direct Access
+
+:::tip Recommended Pattern
+While the Electric client can connect directly to the Electric service, **we strongly recommend proxying requests through your backend API** for production applications. This pattern treats Electric shapes like normal API calls, providing better security, maintainability, and developer experience.
+:::
+
+#### Recommended: API Proxy Pattern
+
+```ts
+// Client code - Clean API pattern
+import { ShapeStream, Shape } from '@electric-sql/client'
+
+const stream = new ShapeStream({
+  url: `http://localhost:3001/api/items`,  // Your API endpoint
+  // No table or SQL exposed to client
+})
+const shape = new Shape(stream)
+shape.subscribe(data => console.log(data))
+```
+
+```ts
+// Server code - Handles Electric details
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+
+app.get('/api/items', async (req, res) => {
+  const electricUrl = new URL('http://localhost:3000/v1/shape')
+  
+  // Forward only Electric protocol parameters
+  ELECTRIC_PROTOCOL_QUERY_PARAMS.forEach(param => {
+    if (req.query[param]) {
+      electricUrl.searchParams.set(param, req.query[param])
+    }
+  })
+  
+  // Server controls table and authorization
+  electricUrl.searchParams.set('table', 'items')
+  electricUrl.searchParams.set('where', `user_id = '${req.user.id}'`)
+  
+  // Proxy response with streaming...
+  const response = await fetch(electricUrl)
+  // Handle streaming (see auth guide for full example)
+})
+```
+
+This pattern provides:
+- **Security**: Credentials and table names never exposed to clients
+- **Authorization**: Server controls data access with WHERE clauses
+- **Type Safety**: Backend validates all operations
+- **Maintainability**: Database changes don't affect client code
+- **Familiarity**: Works like standard REST/GraphQL APIs
+
+**→ See the [authentication guide](/docs/guides/auth) for a detailed explanation and complete implementation examples of the API proxy pattern.**
+
+#### Direct Connection (Development Only)
+
+For development or examples, you can connect directly:
 
 ```ts
 import { ShapeStream, Shape } from '@electric-sql/client'
@@ -40,10 +95,12 @@ const stream = new ShapeStream({
   }
 })
 const shape = new Shape(stream)
-
-// The callback runs every time the Shape data changes.
 shape.subscribe(data => console.log(data))
 ```
+
+:::warning
+Direct connections expose database structure and should only be used for development or trusted environments.
+:::
 
 ### ShapeStream
 

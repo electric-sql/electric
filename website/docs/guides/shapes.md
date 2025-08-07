@@ -18,6 +18,10 @@ import SyncShapeSVG from '/static/img/docs/guides/shapes/sync-shape.svg?url'
 
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
+:::tip Production Best Practice
+While shapes can be requested directly from Electric, **production applications should request shapes through your backend API**. This allows your server to control table access, construct where clauses for authorization, and maintain security. See the [authentication guide](/docs/guides/auth) for implementation patterns.
+:::
+
 ## What is a Shape?
 
 Electric syncs little subsets of your Postgres data into local apps and services. Those subsets are defined using Shapes.

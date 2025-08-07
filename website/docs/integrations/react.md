@@ -26,11 +26,55 @@ The package is published on NPM as [`@electric-sql/react`](https://www.npmjs.com
 npm i @electric-sql/react
 ```
 
-### `useShape`
+### Best Practice: Use API Endpoints
 
-[`useShape`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L131) binds a materialised [Shape](/docs/api/clients/typescript#shape) to a state variable. For example:
+:::tip Recommended Pattern
+Always proxy Electric requests through your backend API for production applications. This provides security, authorization, and a clean API interface.
+:::
 
 ```tsx
+// ✅ Recommended: Clean API pattern
+import { useShape } from '@electric-sql/react'
+
+const MyComponent = () => {
+  const { isLoading, data } = useShape<{title: string}>({
+    url: `http://localhost:3001/api/items`  // Your API endpoint
+  })
+
+  if (isLoading) {
+    return <div>Loading ...</div>
+  }
+
+  return (
+    <div>
+      {data.map(item => <div>{item.title}</div>)}
+    </div>
+  )
+}
+```
+
+Your backend handles the Electric details:
+
+```ts
+// Server code (Express example)
+app.get('/api/items', async (req, res) => {
+  // Proxy to Electric with authorization
+  // See auth guide for complete implementation
+})
+```
+
+**→ See the [authentication guide](/docs/guides/auth) for complete proxy implementation with streaming, error handling, and authorization.**
+
+### `useShape`
+
+[`useShape`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L131) binds a materialised [Shape](/docs/api/clients/typescript#shape) to a state variable.
+
+#### Direct Connection (Development Only)
+
+For development, you can connect directly to Electric:
+
+```tsx
+// ⚠️ Development only - exposes database structure
 import { useShape } from '@electric-sql/react'
 
 const MyComponent = () => {

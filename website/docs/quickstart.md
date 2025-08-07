@@ -228,3 +228,39 @@ UPDATE scores SET name = 'James' WHERE id = 2;
 ```
 
 Congratulations! You've built your first real-time, reactive Electric app!
+
+## Production Best Practices
+
+The examples above connect directly to Electric for simplicity. However, **for production applications, you should always proxy Electric requests through your backend API**.
+
+### Why Use an API Proxy?
+
+Direct connections expose your database structure and require client-side authorization logic. Instead, treat Electric shapes like normal API calls:
+
+```tsx
+// ✅ Production pattern - Clean API endpoint
+const { data } = useShape({
+  url: `http://localhost:3001/api/scores`  // Your API
+})
+```
+
+```ts
+// Backend handles Electric details
+app.get('/api/scores', async (req, res) => {
+  const electricUrl = new URL('http://localhost:3000/v1/shape')
+  
+  // Server controls table and authorization
+  electricUrl.searchParams.set('table', 'scores')
+  electricUrl.searchParams.set('where', `user_id = '${req.user.id}'`)
+  
+  // Proxy with proper streaming...
+})
+```
+
+This pattern provides:
+- **Security**: Database credentials stay on the server
+- **Authorization**: Server controls data access
+- **Maintainability**: Database changes don't affect clients
+- **Familiarity**: Works like standard REST/GraphQL APIs
+
+**→ See the [authentication guide](/docs/guides/auth) for a complete walkthrough of why and how to implement the API proxy pattern.**
