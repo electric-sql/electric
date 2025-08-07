@@ -18,7 +18,8 @@ defmodule Electric.Connection.Manager.Pool do
           pool_size: non_neg_integer(),
           connection_manager: GenServer.server(),
           status: pool_status(),
-          connection_pids: %{pid() => connection_status()}
+          connection_pids: %{pid() => connection_status()},
+          last_connection_error: DbConnectionError.t() | nil
         }
 
   defstruct [
@@ -28,7 +29,8 @@ defmodule Electric.Connection.Manager.Pool do
     :pool_size,
     :connection_manager,
     status: :starting,
-    connection_pids: %{}
+    connection_pids: %{},
+    last_connection_error: nil
   ]
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
@@ -100,11 +102,11 @@ defmodule Electric.Connection.Manager.Pool do
       {:starting, true} ->
         Logger.info("Connection pool is ready with #{state.pool_size} connections")
         notify_connection_pool_ready(state)
-        {:noreply, %{state | status: :ready}}
+        {:noreply, %{state | status: :ready, last_connection_error: nil}}
 
       {:repopulating, true} ->
         Logger.debug("Connection pool fully repopulated with #{state.pool_size} connections")
-        {:noreply, %{state | status: :ready}}
+        {:noreply, %{state | status: :ready, last_connection_error: nil}}
 
       {:ready, false} ->
         Logger.debug("Connection pool no longer fully populated, waiting for more connections")
@@ -156,19 +158,19 @@ defmodule Electric.Connection.Manager.Pool do
   # not set up the specified number of connections.
   def handle_info({:EXIT, pid, :killed}, %{pool_pid: pid, status: status} = state)
       when status in [:starting, :repopulating] do
-    # TODO(msfstef): we should potentially keep track of the reasons pool connections are
-    # failing and propagate one of those instead, as it will be more informative on how they
-    # can be actioned (e.g. if max_connections is too low)
-    {
-      :stop,
-      %DbConnectionError{
-        message: "Connection pool was unable to fill up with healthy connections.",
-        type: :connection_pool_failed_to_populate,
-        original_error: :killed,
-        retry_may_fix?: true
-      },
-      state
-    }
+    error =
+      if is_nil(state.last_connection_error) do
+        %DbConnectionError{
+          message: "Connection pool was unable to fill up with healthy connections.",
+          type: :connection_pool_failed_to_populate,
+          original_error: :killed,
+          retry_may_fix?: true
+        }
+      else
+        state.last_connection_error
+      end
+
+    {:stop, error, state}
   end
 
   def handle_info({:EXIT, pid, reason}, %{pool_pid: pid} = state) do
@@ -182,21 +184,20 @@ defmodule Electric.Connection.Manager.Pool do
 
     Logger.debug("Pooled connection #{inspect(pid)} exited with reason: #{inspect(reason)}")
 
-    if reason not in [:killed, :shutdown] do
-      error =
-        case reason do
-          {:shutdown, error} -> error
-          error -> error
-        end
-        |> DbConnectionError.from_error()
-
-      # If the error is of an unknown type, it would have already been logged by DbConnectionError itself.
-      if error.type != :unknown do
-        Logger.warning(
-          "Pooled database connection encountered an error: " <>
-            DbConnectionError.format_original_error(error)
-        )
+    # Keep track of the most recent pooled connection error seen so we can use it as the
+    # reason for the pool failing as a whole if it does not manage to recover.
+    state =
+      case reason do
+        :killed -> state
+        :shutdown -> state
+        {:shutdown, exit_reason} -> %{state | last_connection_error: exit_reason}
+        reason -> %{state | last_connection_error: reason}
       end
+
+    if not is_nil(state.last_connection_error) do
+      Logger.warning(
+        "Pooled database connection encountered an error: #{inspect(state.last_connection_error, pretty: true)}"
+      )
     end
 
     {
