@@ -304,13 +304,13 @@ defmodule Electric.ShapeCache.FileStorage do
   defp offset({_, tuple_offset}), do: LogOffset.new(tuple_offset)
 
   @impl Electric.ShapeCache.Storage
-  def make_new_snapshot!(data_stream, %FS{stack_id: stack_id} = opts) do
+  def make_new_snapshot!(data_stream, notifier_fn, %FS{stack_id: stack_id} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
       [storage_impl: "mixed_disk", "shape.handle": opts.shape_handle],
       stack_id,
       fn ->
-        last_chunk_num = write_stream_to_chunk_files(data_stream, opts)
+        last_chunk_num = write_stream_to_chunk_files(data_stream, notifier_fn, opts)
 
         opts.db
         |> validate_db_process!()
@@ -320,11 +320,16 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   # Write to a set of "chunk" files, with numbering starting from 0, and return the highest chunk number
-  defp write_stream_to_chunk_files(data_stream, opts) do
+  defp write_stream_to_chunk_files(data_stream, notifier_fn, opts) do
     data_stream
     |> Stream.transform(
       fn -> {0, nil} end,
       fn line, {chunk_num, file} ->
+        if chunk_num == 0 and is_nil(file) do
+          # Invoke notifier_fn on the first line only.
+          notifier_fn.()
+        end
+
         file = file || open_snapshot_chunk_to_write(opts, chunk_num)
 
         case line do
@@ -343,7 +348,9 @@ defmodule Electric.ShapeCache.FileStorage do
       end,
       fn {chunk_num, file} ->
         if is_nil(file) and chunk_num == 0 do
-          # Special case if the source stream has ended before we started writing any chunks - we need to create the empty file for the first chunk.
+          # Special case if the source stream has ended before we started writing any chunks -
+          # we need to create the empty file for the first chunk.
+          notifier_fn.()
           {[chunk_num], {chunk_num, open_snapshot_chunk_to_write(opts, chunk_num)}}
         else
           {[], {chunk_num, file}}
