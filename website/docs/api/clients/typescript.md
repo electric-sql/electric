@@ -416,34 +416,9 @@ When using `replica=full`, the returned rows will include:
 
 This is less efficient and will use more bandwidth for the same shape (especially for tables with large static column values). Note also that shapes with different `replica` settings are distinct, even for the same table and where clause combination.
 
-#### Authentication with Dynamic Tokens
+#### Authentication
 
-When working with authentication tokens that need to be refreshed, the recommended approach is to use a function-based header:
-
-```ts
-const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
-  params: {
-    table: "items",
-  },
-  headers: {
-    Authorization: async () => `Bearer ${await getToken()}`,
-  },
-  onError: async (error) => {
-    if (error instanceof FetchError && error.status === 401) {
-      // Force token refresh
-      await refreshToken()
-      // Return empty object to trigger a retry with the new token
-      // that will be fetched by our function-based header
-      return {}
-    }
-    // Rethrow errors we can't handle
-    throw error
-  },
-})
-```
-
-This approach automatically handles token refresh as the function is called each time a request is made. You can also combine this with an error handler for more complex scenarios.
+For authentication patterns including token refresh and authorization, see the [authentication guide](/docs/guides/auth) which covers both proxy and gatekeeper authentication patterns in detail.
 
 ### Shape
 
