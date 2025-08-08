@@ -45,7 +45,6 @@ Electric’s job sounds deceptively simple but scaling it to handle hundreds of 
 
 One [difference](https://expertofobsolescence.substack.com/p/the-hard-things-about-sync) between sync engines and other types of realtime systems is that sync engines don't miss changes. Realtime systems typically offer at-most-once delivery or temporal buffering windows. if you lose connection, you're done. In Electric, users can resume shapes at any point in history. This makes the sync engine dramatically simpler to use but puts the storage engine at the heart of Electric's performance.
 
-
 ### Starting with an off-the-shelf solution
 
 When we decided to [rebuild Electric](/blog/2024/07/17/electric-next), we decided to start with pragmatic storage solution that would allow us to get a running system fast and tune performance in a second step. As Kyle likes saying: "make it work, make it right, make it fast". 
@@ -72,11 +71,6 @@ The challenges we encountered weren’t a result of CubDb being poorly designed,
 
 Following the lessons from [CockroachDB](https://www.cockroachlabs.com/) when they [replaced RocksDB with Pebble](https://www.cockroachlabs.com/blog/pebble-rocksdb-kv-store/), we chose to build our storage engine from scratch. The scope of our needs was small enough to make this feasible, and doing so allowed us to integrate it deeply with the rest of the system and tailor it to both current and future requirements. Here’s what we needed from our storage:
 
-<figure style="margin: 1rem 0 2rem 0;">
-  <img :src="StorageEngineDiagram" alt="Storage engine diagram – look-up of shape log offset" style="max-width: 100%; height: auto;" />
-  <figcaption style="text-align: center; color: var(--vp-c-text-2); font-size: 0.95em;">Storage engine diagram – look-up of shape log offset</figcaption>
-</figure>
-
 **Performance**: With our initial prototype, we've learned about bottlenecks and the parts of the system that were hard to scale. Essentially, we needed fast append-only writes with low CPU usage and consistent performance either with SSD or network-attached storage, two typical environments where Electric runs.
 
 **No data-parsing in the read-path**: We've designed electric to do all the hard work at write-time to be able to make the read-path extremely efficient. Parsing any data in the read-path is prohibitively expensive, so we want to avoid loading and parsing data as much as possible.
@@ -91,19 +85,24 @@ Following the lessons from [CockroachDB](https://www.cockroachlabs.com/) when th
 
 Our new storage architecture is elegantly simple. For each shape, we maintain two files. The **shape log** that contains the raw data for the shape, and the **offset index** that contains offset pointers into the shape lof for fast look-up of requested offsets.
 
+<figure style="margin: 1rem 0 2rem 0;">
+  <img :src="StorageEngineDiagram" alt="Storage engine diagram – look-up of shape log offset" style="max-width: 100%; height: auto;" />
+  <figcaption style="text-align: center; color: var(--vp-c-text-2); font-size: 0.95em;">Storage engine diagram – look-up of shape log offset</figcaption>
+</figure>
+
 ### Shape log
 
 The shape log contains pre-serialized JSON lines of the shape data (the row change from Postgres's logical replication) divided into fixed-size **chunks**. Each chunk has an header that contains the offset/LSN of the first JSON line in the chunk and the current length of the chunk.
 
 **Immutable chunks**: Once a chunk reaches it's max size it is marked as  completed and becomes immutable. We track the current content length for the chunk, so readers can safely consume the log even with active writers. Coordination is done at file-level, allowing multiple readers to consume shape logs safely in a distributed environment.
 
-**Shape log scanning**: To find the right offset for a user request, we use the offset index to locate the chunk that contains the requested offset and then scan the chunk to find the first JSON line for the requested offset. We use  [read-ahead](https://man7.org/linux/man-pages/man2/readahead.2.html) techinique to reduce the number of syscalls while scanning the file.
+**Shape log scanning**: To find the right offset for a user request, we use the shape index to locate the chunk that contains the requested offset and then scan the chunk to find the first JSON line for the requested offset. We use  [read-ahead](https://man7.org/linux/man-pages/man2/readahead.2.html) techinique to reduce the number of syscalls while scanning the file.
 
 **Buffering writes**: Calling [`fsync()`](https://man7.org/linux/man-pages/man2/fsync.2.html) on every write is prohibitively slow, but not calling `fsync()` immediately is giving up on durability. Any performant storage system needs to address this dilemma in some way. In Electric, we deeply integrate shape logs recovery with logical replication. If Electric crashes without some changes being flushed to disk, we can resume logical replication from the last persisted position and replay missing transactions.
 
-### Offset index
+### Shape index
 
-The offset index provides fast shape random offset lookup through a sparse indexing strategy. The index is simply a list of pointers to chunk boundaries in the shape log. We add a new pointer to the sparse index for every finalized chunk.
+The shape index provides fast shape offset lookup through a sparse indexing strategy. The index is simply a list of pointers to chunk boundaries in the shape log. We add a new pointer to the sparse index for every finalized chunk.
 
 **Finding a chunk**: When a client requests data starting from a specific offset, we do a binary search on the index to locate the appropriate chunk pointer, retrieve that chunk and scan it from there, as explained before.
 
