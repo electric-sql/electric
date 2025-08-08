@@ -1,5 +1,5 @@
 ---
-title: 120 days of hardening – the post‑1.0 reliability sprint
+title: 120 days of hardening – the post‑1.0 reliability sprint
 description: >-
   Our last quarter was a reliability sprint. We set one goal: make ElectricSQL so boring‑reliable that you stop thinking about it and just build.
 excerpt: >-
