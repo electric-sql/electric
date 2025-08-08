@@ -55,16 +55,6 @@ const MyComponent = () => {
 }
 ```
 
-Your backend handles the Electric details:
-
-```ts
-// Server code (Express example)
-app.get("/api/items", async (req, res) => {
-  // Proxy to Electric with authorization
-  // See auth guide for complete implementation
-})
-```
-
 **→ See the [authentication guide](/docs/guides/auth) for complete proxy implementation with streaming, error handling, and authorization.**
 
 ### `useShape`
@@ -150,26 +140,23 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
 [`preloadShape`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L17) is useful to call in route loading functions or elsewhere when you want to ensure Shape data is loaded before rendering a route or component.
 
 ```tsx
+// ✅ Production pattern with API proxy
 export const clientLoader = async () => {
   return await preloadShape({
-    url: `http://localhost:3000/v1/shape`,
-    params: {
-      table: "items",
-    },
+    url: `http://localhost:3001/api/items`,
   })
 }
 ```
 
-You can also preload filtered data:
+For development, you can connect directly:
 
 ```tsx
-export const filteredLoader = async () => {
+// ⚠️ Development only
+export const devLoader = async () => {
   return await preloadShape({
     url: `http://localhost:3000/v1/shape`,
     params: {
       table: "items",
-      where: "category = 'electronics'",
-      columns: ["id", "name", "price"],
     },
   })
 }
@@ -182,11 +169,9 @@ It takes the same options as [ShapeStream](/docs/api/clients/typescript#options)
 [`getShapeStream<T>`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L30) get-or-creates a `ShapeStream` off the global cache.
 
 ```tsx
+// ✅ Production pattern
 const itemsStream = getShapeStream<Item>({
-  url: `http://localhost:3000/v1/shape`,
-  params: {
-    table: "items",
-  },
+  url: `http://localhost:3001/api/items`,
 })
 ```
 
@@ -197,11 +182,9 @@ This allows you to avoid consuming multiple streams for the same shape log.
 [`getShape<T>`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L49) get-or-creates a `Shape` off the global cache.
 
 ```tsx
+// ✅ Production pattern  
 const itemsShape = getShape<Item>({
-  url: `http://localhost:3000/v1/shape`,
-  params: {
-    table: "items",
-  },
+  url: `http://localhost:3001/api/items`,
 })
 ```
 
