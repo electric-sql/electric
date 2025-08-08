@@ -38,6 +38,9 @@ if (!(props.required || props.optional || props.defaultValue !== undefined)) {
 .envVarConfigDescription {
   width: 100%;
 }
+.envVarConfigDescription p {
+  line-height: 22px;
+}
 .envVarConfigDescription p:first-child {
   margin-top: 0;
 }
