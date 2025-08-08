@@ -4,7 +4,7 @@ description: >-
   This is the story of how we've made it and why only now.
 excerpt: >-
   This is the story of how we've made it and why only now.
-authors: [balegas]
+authors: [icehaunter, balegas]
 image: /img/blog/electric-1.1-released/header.png
 tags: [ai, sync]
 outline: [2, 3]
