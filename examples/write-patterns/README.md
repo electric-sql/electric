@@ -1,4 +1,3 @@
-
 # Write patterns example
 
 This example implements and describes four different patterns for handling writes in an application built with [ElectricSQL](https://electric-sql.com).
@@ -44,7 +43,7 @@ It extends the concept of shared, persistent optimistic state all the way to a l
 
 1. syncs data from Electric into an immutable table
 2. persists local optimistic state in a shadow table
-2. combines the two into a view that provides a unified interface for reads and writes
+3. combines the two into a view that provides a unified interface for reads and writes
 4. automatically detects local changes and syncs them to the server
 
 This provides a pure local-first development experience, where the application code talks directly to a single database "table" and changes sync automatically in the background. However, this "power" does come at the cost of increased complexity in the form of an embedded database, complex local schema and loss of context when handling rollbacks.

@@ -1,10 +1,10 @@
-import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core"
 import {
   createSelectSchema,
   createInsertSchema,
   createUpdateSchema,
-} from "drizzle-zod";
-import { z } from "zod";
+} from "drizzle-zod"
+import { z } from "zod"
 
 /**
  * Todos table schema definition
@@ -21,21 +21,19 @@ export const todos = pgTable("todos", {
   updated_at: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+})
 
-export const selectTodoSchema = createSelectSchema(todos);
-export const insertTodoSchema = createInsertSchema(todos);
-export const updateTodoSchema = createUpdateSchema(todos);
+export const selectTodoSchema = createSelectSchema(todos)
+export const insertTodoSchema = createInsertSchema(todos)
+export const updateTodoSchema = createUpdateSchema(todos)
 
 // Validation functions
 export function validateInsertTodo(data: unknown) {
-  return insertTodoSchema
-    .pick({ text: true })
-    .parse(data);
+  return insertTodoSchema.pick({ text: true }).parse(data)
 }
 
 export function validateUpdateTodo(data: unknown) {
-  return updateTodoSchema.parse(data);
+  return updateTodoSchema.parse(data)
 }
 
-export type Todo = z.infer<typeof selectTodoSchema>;
+export type Todo = z.infer<typeof selectTodoSchema>

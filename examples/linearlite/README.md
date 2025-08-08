@@ -1,4 +1,3 @@
-
 # Linearlite
 
 This is a comprehensive example of a local-first [Linear](https://linear.app) clone built with [Electric](https://electric-sql.com) and [PGlite](https://pglite.dev).
@@ -114,6 +113,7 @@ Subsequently, there is a series of triggers on the local database that maintain 
 ### During Sync `electric.syncing = true`
 
 #### Insert
+
 - Checks if the row already exists in the database; if it does, it's handled as an update instead, [see below](#update).
 - Sets `modified_columns` to an empty array
 - Sets `new` flag to false
@@ -121,6 +121,7 @@ Subsequently, there is a series of triggers on the local database that maintain 
 - `synced` flag is set to true to indicate that the row is a pure replica of the server data.
 
 #### Update
+
 - For synced rows or rows where server changes are newer (`sent_to_server = true` and `NEW.modified >= OLD.modified`):
   - Applies all updates
   - Resets `modified_columns` to empty array
@@ -132,17 +133,20 @@ Subsequently, there is a series of triggers on the local database that maintain 
   - Sets `new` flag to false
 
 #### Delete
+
 - Performs actual deletion of the row from the database
 - No soft delete is used during sync operations
 
 ### During Local Writes `electric.syncing = false`
 
 #### Insert
+
 - Adds all non-local-state columns to `modified_columns` array to indicate that they have been modified
 - Sets `new` flag to true, indicating that the row is new
 - Sets `sent_to_server` flag to false, indicating that the row has not been sent to the server
 
 #### Update
+
 - For each changed column that isn't already in `modified_columns`:
   - Adds the column name to `modified_columns`
   - Saves the original value to the `backup` JSONB column
@@ -150,6 +154,7 @@ Subsequently, there is a series of triggers on the local database that maintain 
 - Doesn't modify tracking columns that are already in `modified_columns`
 
 #### Delete
+
 - For new rows (`new = true`):
   - Performs actual deletion since the row hasn't been synced
 - For existing rows:

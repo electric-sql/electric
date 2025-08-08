@@ -1,4 +1,3 @@
-
 # Caddy as authorising proxy
 
 This folder contains example configuration (the [`./Caddyfile`](./Caddyfile)) to run the [Caddy](https://caddyserver.com) web server as a authorising proxy for Electric.

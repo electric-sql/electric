@@ -33,9 +33,9 @@
   margin-right: auto;
   margin-left: auto;
   border-radius: 9px;
-  border: 1px solid #D0BCFF;
+  border: 1px solid #d0bcff;
   background: #1e2123;
-  color: #D0BCFF;
+  color: #d0bcff;
   font-size: 13px;
   padding: 10px 18px;
 }
@@ -47,7 +47,7 @@ form {
   padding: 20px 0;
 }
 
-form input[type=text] {
+form input[type='text'] {
   padding: 12px 18px;
   margin-bottom: 18px;
   background: #1e2123;
@@ -63,12 +63,12 @@ form input[type=text] {
   margin-left: auto;
 }
 
-form input[type=text]::placeholder {
+form input[type='text']::placeholder {
   color: rgba(227, 227, 239, 0.62);
 }
 
-form button[type=submit] {
-  background: #D0BCFF;
+form button[type='submit'] {
+  background: #d0bcff;
   border: none;
   padding: 8px 20px;
   border-radius: 9px;

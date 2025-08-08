@@ -144,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Test remix example
         id: remix
         continue-on-error: true
@@ -152,7 +152,7 @@ jobs:
         with:
           test_folder: remix
           example_url: ${{ needs.deploy.outputs.remix || '' }}
-      
+
       - name: Test nextjs example
         id: nextjs
         continue-on-error: true
@@ -160,7 +160,7 @@ jobs:
         with:
           test_folder: nextjs
           example_url: ${{ needs.deploy.outputs.nextjs || '' }}
-      
+
       - name: Test tanstack example
         id: tanstack
         continue-on-error: true
@@ -168,13 +168,13 @@ jobs:
         with:
           test_folder: tanstack
           example_url: ${{ needs.deploy.outputs.tanstack || '' }}
-      
+
       - name: Test react example
         id: react
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.react || '' }}
 
       - name: Test phoenix liveview example
@@ -190,15 +190,15 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.yjs || '' }}
-      
+
       - name: Test linearlite read-only example
         id: linearlite-read-only
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.linearlite-read-only || '' }}
 
       - name: Test write patterns example
@@ -206,7 +206,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.write-patterns || '' }}
 
       - name: Test todo-app example
@@ -214,7 +214,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.todo-app || '' }}
 
       - name: Report test failures

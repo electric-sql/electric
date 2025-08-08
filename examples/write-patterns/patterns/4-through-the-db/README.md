@@ -1,4 +1,3 @@
-
 # Through-the-database sync pattern
 
 This is an example of an application using:

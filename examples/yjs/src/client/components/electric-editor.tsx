@@ -36,7 +36,6 @@ const users = [
 ]
 const user = users[random.uint32() % users.length]
 
-const shapeUrl = new URL(`/shape-proxy/v1/shape`, serverUrl)
 const room = `electric-demo`
 
 const ydoc = new Y.Doc()
@@ -55,11 +54,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
   doc: ydoc,
   documentUpdates: {
     shape: {
-      url: shapeUrl.href,
-      params: {
-        table: `ydoc_update`,
-        where: `room = '${room}'`,
-      },
+      url: new URL(`/api/ydoc_update?room=${room}`, serverUrl).href,
       parser: parseToDecoder,
     },
     sendUrl: new URL(`/api/update?room=${room}`, serverUrl),
@@ -67,11 +62,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
   },
   awarenessUpdates: {
     shape: {
-      url: shapeUrl.href,
-      params: {
-        table: `ydoc_awareness`,
-        where: `room = '${room}'`,
-      },
+      url: new URL(`/api/ydoc_awareness?room=${room}`, serverUrl).href,
       parser: parseToDecoder,
     },
     sendUrl: new URL(

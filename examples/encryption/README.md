@@ -1,4 +1,3 @@
-
 # Encryption example
 
 This is an example of encryption with Electric. It's a React app with a very simple Express API server.

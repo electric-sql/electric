@@ -1,10 +1,8 @@
 import { PGlite } from '@electric-sql/pglite'
 import { type PGliteWithLive, live } from '@electric-sql/pglite/live'
 import { electricSync } from '@electric-sql/pglite-sync'
-
 import localSchemaMigrations from './local-schema.sql?raw'
-
-import { ELECTRIC_URL, envParams } from '../../shared/app/config'
+import { TODOS_URL } from '../../shared/app/config'
 
 const DATA_DIR = 'idb://electric-write-patterns-example'
 
@@ -34,11 +32,7 @@ async function _loadPGlite(): Promise<PGliteWithLive> {
 
   await pglite.electric.syncShapeToTable({
     shape: {
-      url: `${ELECTRIC_URL}/v1/shape`,
-      params: {
-        table: 'todos',
-        ...envParams,
-      },
+      url: TODOS_URL,
     },
     shapeKey: 'todos',
     table: 'todos_synced',

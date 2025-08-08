@@ -14,10 +14,10 @@ The typical flow for syncing shared documents using Yjs and Electric is the foll
 ### Basic Setup
 
 ```typescript
-import * as Y from "yjs"
-import { ElectricProvider } from "@electric-sql/y-electric"
-import { Awareness } from "y-protocols/awareness"
-import { parseToDecoder } from "@electric-sql/y-electric/utils"
+import * as Y from 'yjs'
+import { ElectricProvider } from '@electric-sql/y-electric'
+import { Awareness } from 'y-protocols/awareness'
+import { parseToDecoder } from '@electric-sql/y-electric/utils'
 
 const ydoc = new Y.Doc()
 const awareness = new Awareness(ydoc)
@@ -87,7 +87,7 @@ CREATE TABLE ydoc_awareness(
   updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (client_id, room)
 );
--- Save 
+-- Save
 INSERT INTO ydoc_awareness (room, client_id, op, updated) VALUES ($1, $2, $3, now())
          ON CONFLICT (client_id, room) DO UPDATE SET op = $3, updated = now()
 ```

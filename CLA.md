@@ -1,4 +1,3 @@
-
 # ElectricSQL Contributor License Agreement
 
 ## Definitions

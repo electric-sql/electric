@@ -3,7 +3,8 @@ body {
   /* background-color: #1b1b1f; */
 }
 
-.dark, .dark-theme {
+.dark,
+.dark-theme {
   --violet-1: #1c1a23;
   --violet-2: #201d28;
   --violet-3: #2f2740;
@@ -38,7 +39,8 @@ body {
 
 @supports (color: color(display-p3 1 1 1)) {
   @media (color-gamut: p3) {
-    .dark, .dark-theme {
+    .dark,
+    .dark-theme {
       --violet-1: oklch(22.4% 0.018 298);
       --violet-2: oklch(23.8% 0.0218 298);
       --violet-3: oklch(29.2% 0.046 298);
@@ -73,6 +75,8 @@ body {
   }
 }
 
-.dark, .dark-theme, :is(.dark, .dark-theme) :where(.radix-themes:not(.light, .light-theme)) {
+.dark,
+.dark-theme,
+:is(.dark, .dark-theme) :where(.radix-themes:not(.light, .light-theme)) {
   --color-background: #1b1b1f;
 }
