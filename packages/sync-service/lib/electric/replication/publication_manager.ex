@@ -28,6 +28,8 @@ defmodule Electric.Replication.PublicationManager do
     :publication_name,
     :db_pool,
     :pg_version,
+    :can_alter_publication?,
+    :manual_table_publishing?,
     :configure_tables_for_replication_fn,
     :shape_cache,
     next_update_forced?: false
@@ -89,6 +91,8 @@ defmodule Electric.Replication.PublicationManager do
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
             shape_cache: [type: :mod_arg, required: false],
             pg_version: [type: :integer, required: true],
+            can_alter_publication?: [type: :boolean, required: false, default: true],
+            manual_table_publishing?: [type: :boolean, required: false, default: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             configure_tables_for_replication_fn: [
               type: {:fun, 5},
@@ -184,6 +188,8 @@ defmodule Electric.Replication.PublicationManager do
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
       pg_version: opts.pg_version,
+      can_alter_publication?: Map.get(opts, :can_alter_publication?, true),
+      manual_table_publishing?: Map.get(opts, :manual_table_publishing?, false),
       shape_cache: Map.get(opts, :shape_cache, {Electric.ShapeCache, [stack_id: opts.stack_id]}),
       configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn
     }
@@ -251,12 +257,15 @@ defmodule Electric.Replication.PublicationManager do
 
   defguardp is_fatal(err)
             when is_exception(err, Postgrex.Error) and
-                   err.postgres.code in ~w|undefined_function undefined_table|a
+                   err.postgres.code in ~w|undefined_function undefined_table insufficient_privilege|a
 
   @impl true
   def handle_info(
         :update_publication,
-        %__MODULE__{prepared_relation_filters: relation_filters, retries: retries} = state
+        %__MODULE__{
+          prepared_relation_filters: relation_filters,
+          retries: retries
+        } = state
       ) do
     state = %{state | scheduled_updated_ref: nil, retries: 0}
 
@@ -284,6 +293,27 @@ defmodule Electric.Replication.PublicationManager do
              # which eventually will do the same thing - this lowers the number of attempted alterations to the DB where we do nothing
              prepared_relation_filters: committed_filters
          }}
+
+      {:error, reason} when is_atom(reason) ->
+        message =
+          case reason do
+            :tables_missing_from_publication ->
+              "Database table is missing from the publication and " <>
+                cond do
+                  state.manual_table_publishing? ->
+                    "the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
+
+                  not state.can_alter_publication? ->
+                    "Electric lacks privileges to add it"
+                end
+
+            :misconfigured_replica_identity ->
+              "Database table does not have its replica identity set to FULL"
+          end
+
+        error = %Electric.DbConfigurationError{type: reason, message: message}
+        state = reply_to_waiters({:error, error}, state)
+        {:noreply, %{state | next_update_forced?: false}}
 
       {:error, err} when retries < @max_retries and not is_fatal(err) ->
         Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
@@ -334,6 +364,7 @@ defmodule Electric.Replication.PublicationManager do
   # to the DB.
   @spec update_publication(state()) ::
           {:ok, state(), [Electric.oid_relation()]} | {:error, term()}
+
   defp update_publication(
          %__MODULE__{
            committed_relation_filters: committed_filters,
@@ -344,6 +375,34 @@ defmodule Electric.Replication.PublicationManager do
        when current_filters == committed_filters and not forced? do
     Logger.debug("No changes to publication, skipping update")
     {:ok, state, []}
+  end
+
+  defp update_publication(
+         %__MODULE__{
+           committed_relation_filters: committed_filters,
+           prepared_relation_filters: current_filters,
+           next_update_forced?: forced?,
+           publication_name: publication_name,
+           db_pool: db_pool
+         } = state
+       )
+       when not state.can_alter_publication? or state.manual_table_publishing? do
+    # We cannot modify the publication, so all that remains is to check whether the
+    # publication is in the right state for the set of currently active relation filters.
+    if not forced? and Map.keys(current_filters) == Map.keys(committed_filters) do
+      Logger.debug("No changes to publication, skipping checkup")
+      {:ok, state, []}
+    else
+      with {:ok, modified_relations} <-
+             Configuration.check_publication_for_missing_relations(
+               db_pool,
+               Map.keys(committed_filters),
+               Map.keys(current_filters),
+               publication_name
+             ) do
+        {:ok, state, modified_relations}
+      end
+    end
   end
 
   defp update_publication(
