@@ -33,3 +33,9 @@ thruflo:
   title: CEO
   image: /img/team/james2.jpg
   url: /about/team#thruflo
+
+icehaunter:
+  name: Ilia Borovitinov
+  title: Founding Engineer
+  image: /img/team/ilia.jpg
+  url: /about/team#ilia
