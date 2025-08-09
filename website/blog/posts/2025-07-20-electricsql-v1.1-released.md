@@ -1,9 +1,9 @@
 ---
-title: Electric 1.1 is shipping with a new storage engine that's 40x faster
+title: Electric 1.1 ships with a new storage engine with  100x speedup on writes
 description: >-
-  This is the story of how we've made it and why only now.
+  How we built a new storage engine for Electric, why we did it now, and how it delivers lower latency, higher throughput, and zero‑downtime deploys.
 excerpt: >-
-  This is the story of how we've made it and why only now.
+  A behind‑the‑scenes look at Electric’s new storage engine: why we built it, how it works, and how it improves performance in production.
 authors: [icehaunter, balegas]
 image: /img/blog/electric-1.1-released/header.png
 tags: [ai, sync]
@@ -17,73 +17,74 @@ import StorageComparisonChartColumn from '../../src/components/StorageComparison
 import StorageEngineDiagram from '/static/img/blog/electric-v1.1-new-storage/storage-engine-diagram.svg'
 </script>
 
-Electric is a [Postgres](https://www.postgresql.org/) sync engine that streams database changes to millions of concurrent users in real-time. Our performance goal: be faster than Postgres. But as Electric grew and customers with more demanding workloads emerged, we hit a wall: our storage layer couldn’t keep up.
+Electric is a [Postgres](https://www.postgresql.org/) sync engine that streams database changes to millions of concurrent users in real time. Our performance goal is simple: be **faster than Postgres**. But as Electric grew and customers with more demanding workloads came on board, we hit a wall: our storage layer couldn’t keep up.
 
-We knew this day would come. It was time to build our own storage engine. This article shares the story of that journey: from recognizing the limitations of our existing system, to designing a solution tailored to Electric’s needs and ultimately seeing it deliver up to 40x performance improvements in production.
+We knew this day would come—time to build a storage engine tailored to our exact use case. This article tells that story: from recognizing the limitations of our existing system, through building a solution from scratch, to ultimately delivering up-to 73x faster reads and 100x faster writes.
 
-## How does Electric works
+## How Electric works
 
-The core primitive for controlling syn in Electric is the [**shape**](/docs/guides/shapes). A shape is a partial replica of a table that includes the subset of rows matching a user-defined WHERE clause. Electric continuously tails Postgres’s logical replication stream for changes, matches them against registered shape, appends them to the corresponding **shape logs** and sends them to connected clients.
+The core primitive for controlling sync in Electric is the [**shape**](/docs/guides/shapes). A shape is a partial replica of a table that includes the subset of rows matching a user-defined WHERE clause. Electric continuously tails Postgres’s logical replication stream for changes, matches them against registered shapes, appends them to the corresponding **[shape logs](/docs/api/http#shape-log)**, and sends them to clients using HTTP long polling.
 
-Electric’s job sounds deceptively simple but scaling it to handle hundreds of thousands of shapes and millions of clients pushes the system to its limits. Shape evaluation needs to happen in microseconds, and the storage engine must keep up with Postgres's write throughput. If it falls behind, real-time updates become sluggish and Postgres’s WAL starts to pile up.
+Electric’s job sounds simple but scaling it to handle hundreds of thousands of shapes and millions of clients pushes the system to its limits. Shape evaluation needs to happen in microseconds, and the storage engine must keep up with Postgres's write throughput. If it falls behind, real-time updates become sluggish and Postgres’s [WAL](https://www.postgresql.org/docs/current/wal-intro.html) starts to pile up.
 
 <figure>
   <a href="/img/api/shape-log.jpg">
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
-        alt="Shape log flow diagramme"
+    alt="Flow diagram showing how changes are matched to shapes, appended to shape logs, and streamed to clients"
     />
   </a>
   <figcaption class="figure-caption text-end">
-    Shape log flow diagramme.
+    Flow of changes into shape logs and out to clients.
   </figcaption>
   
 </figure>
 
 ## Storage is a centerpiece of Electric's performance
 
-One [difference](https://expertofobsolescence.substack.com/p/the-hard-things-about-sync) between sync engines and other types of realtime systems is that sync engines don't miss changes. Realtime systems typically offer at-most-once delivery or temporal buffering windows. if you lose connection, you're done. In Electric, users can resume shapes at any point in history. This makes the sync engine dramatically simpler to use but puts the storage engine at the heart of Electric's performance.
+One [difference](https://expertofobsolescence.substack.com/p/the-hard-things-about-sync) between sync engines and other types of real‑time systems is that sync engines don't miss changes. Real‑time systems typically offer at‑most‑once delivery or temporal buffering windows. If you lose connection, you’re done. In Electric, users can resume shapes at any point in history. This makes the sync engine dramatically simpler to use but puts storage at the heart of Electric's performance.
 
-### Starting with an off-the-shelf solution
+### Picking an off-the-shelf solution
 
-When we decided to [rebuild Electric](/blog/2024/07/17/electric-next), we decided to start with pragmatic storage solution that would allow us to get a running system fast and tune performance in a second step. As Kyle likes saying: "make it work, make it right, make it fast". 
+When we decided to [rebuild Electric](/blog/2024/07/17/electric-next), we focused on shipping a working system that users could trust, and fine-tune performance later. As Kyle likes to say: "make it work, make it right, make it fast".
 
-Writes in Electric are primarily append-only, while reads perform range scans starting from an arbitrary **offset**. Since logs can grow indefinitely we save them in **chunks** and periodically compact them. Compaction in Electric is unique in that it must preserve temporal ordering of creation and deletion in the log. 
+Writes in Electric are append‑only, while reads are mostly range scans. Since logs can grow indefinitely, we compact them periodically. Compaction in Electric is unique in that it must preserve the temporal ordering of creation and deletion of keys in the log. We looked at the available options.
 
-We looked at many off-the-shelf solutions we could use, but it wasn't easy to pick one. [LSM-tree](https://www.cs.umb.edu/~poneil/lsmtree.pdf) based stores like [RocksDB](https://rocksdb.org/) combine the strengths of append-only writes and key-value access. But most of can't do compaction while preserving temporal ordering of creation and deletion of keys. [Apache Kafka](https://kafka.apache.org/) is the only production system that does this type of compaction, but it would be too hard to integrate. Possibly we could modify RocksDb to do what we needed, but was discouraging since we would need to learn a new piece of software with unpredictable success. We also looked into [SQLite](https://sqlite.org/) becuase it is SQLite and it is heavily optimized. It was fast but not always faster and we were worried of hitting issues with a non-customizable system.
+[Apache Kafka](https://kafka.apache.org/) is the production system thatis closest to our needs, but it's too complex and would be hard to integrate. 
+[LSM‑tree](https://www.cs.umb.edu/~poneil/lsmtree.pdf)‑based stores like [RocksDB](https://rocksdb.org/) are good for append‑only writes but not ideal for range scans. We also looked into [SQLite](https://sqlite.org/) because it is heavily optimized. It was fast, but not always faster, and we were worried about hitting issues with a non‑customizable system.
 
-None of the off-the-shelf solutions were a perfect fit for Electric's requirements. So, we ended-up picking [CubDB](https://github.com/lucaong/cubdb) as a pragmatic starting point—a tiny and mighty Elixir key-value store that was would get the job done. Our team has lot's of experience with Elixir so we would get good development speed by keeping the storage engine in the same languange. We knew this was not the best solution, but was one that didn't require a lot of initial investment.
+None of the off‑the‑shelf solutions were a perfect fit for Electric's requirements. So, we ended up picking [CubDB](https://github.com/lucaong/cubdb) as a pragmatic starting point — a tiny and mighty Elixir key‑value store that would get the job done. Our team has lots of experience with Elixir, so we would get good development speed by keeping the storage engine in the same language. We knew this was not the best solution, but it was one that didn't require a lot of initial engineering investment.
 
-### Discovering the limits
+### Reaching the limits
 
-CubDb was performant enough initially and we didn't come across any bugs. We were able to get massive gains in optimizing other parts of the system before storage starting to become a concern. We [launched v1.0](/blog/2025/03/17/electricsql-1.0-released) and launched [Cloud Beta](/blog/2025/04/07/electric-cloud-public-beta-release) with it. As Electric scaled to production traffic with customers like [Trigger.dev](https://trigger.dev/) pushing [20,000 changes per second](https://x.com/triggerdotdev/status/1945876425225171173), the limitations started to emerge.
+CubDb was performing well enough and we didn't come across any bugs. We were able to get  performance gains by optimizing other parts of the system before thinking of looking into the storage. We [launched v1.0](/blog/2025/03/17/electricsql-1.0-released) and later [Cloud Beta](/blog/2025/04/07/electric-cloud-public-beta-release) with it. As Electric scaled to production traffic with customers like [Trigger.dev](https://trigger.dev/) pushing [20,000 changes per second](https://x.com/triggerdotdev/status/1945876425225171173), the limitations started to emerge.
 
-**CPU usage**: Writing to storage was taking up a massive part of our per-transaction time budget, with high CPU usage from updating the index and rewriting chunks.
+**CPU usage**: Writing to storage was lots of CPU time. This was related with updating internal structures in CubDb.
 
-**Latency**: P95 latency was too high due to CubDb slowing down significantly when handling large transactions. These heavy writes ended up blocking reads for extended periods.
+**Latency**: P95 latency was too high due to large transaction blocking reads for extended periods.
 
-**Rolling deploys:** Although it wasn’t part of our initial requirements, we discovered during the development of [Electric Cloud](https://dashboard.electric-sql.cloud/sources) that CubDb would not allow read-only mode, making zero-downtime architecturally impossible.
+**Technical limitations:** we discovered that it would be impossible to do zero-downtime deployments with this architecture in Cloud.
 
-The challenges we encountered weren’t a result of CubDb being poorly designed, it just wasn’t tailored to meet Electric’s requirements. It became clear that we needed to step up and find a solution to these problems.
+The challenges we encountered weren’t a result of CubDb being poorly designed, it just wasn’t a good fit for Electric’s use-case. We knew our largest bottleneck and wws time to do something about it.
 
 ## Building our own storage engine
 
-Following the lessons from [CockroachDB](https://www.cockroachlabs.com/) when they [replaced RocksDB with Pebble](https://www.cockroachlabs.com/blog/pebble-rocksdb-kv-store/), we chose to build our storage engine from scratch. The scope of our needs was small enough to make this feasible, and doing so allowed us to integrate it deeply with the rest of the system and tailor it to both current and future requirements. Here’s what we needed from our storage:
+Following the lessons from [CockroachDB](https://www.cockroachlabs.com/) when they [replaced RocksDB with Pebble](https://www.cockroachlabs.com/blog/pebble-rocksdb-kv-store/), we chose to build our storage engine from scratch and own this layer of the system. The scope of our needs was small enough to make this feasible, and we would more easy be able to adapt it to our needs over time. Here’s what we needed from our storage:
 
-**Performance**: With our initial prototype, we've learned about bottlenecks and the parts of the system that were hard to scale. Essentially, we needed fast append-only writes with low CPU usage and consistent performance either with SSD or network-attached storage, two typical environments where Electric runs.
+**Performance**: With our initial prototype, we learned about bottlenecks and the parts of the system that were hard to scale. reduce CPU-usage for writing and reducing the number of system calls where two tops priorities.
 
-**No data-parsing in the read-path**: We've designed electric to do all the hard work at write-time to be able to make the read-path extremely efficient. Parsing any data in the read-path is prohibitively expensive, so we want to avoid loading and parsing data as much as possible.
+**Optimize read path**: We've designed Electric to do all the hard work at write time to make the read path extremely efficient. Parsing any data in the read path is prohibitively expensive.
 
-**Fast recovery**: We build shape log offsets based on Postgres's [LSNs](https://www.postgresql.org/docs/current/datatype-pg-lsn.html). If Electric restarts or crashes, we can discard data for incomplete transactions and resume streaming from the last acknowledged LSN from Postgres. This property lets us prioritize speed of recovery over complex crash-recovery mechanisms.
+**Fast recovery**: Electric implements the Postgres’s logical replication [protocol](https://www.postgresql.org/docs/current/logical-replication.html). When it crashes, we want to resume replication from a safe checkpoint and recover quickly.
 
-**Cloud native**: Most Electric deployments will be in the Cloud. In our Cloud, we use attached storage, which allows to very easily scale-out readers and have zero-downtime deployments.
+**Cloud native**: Most Electric deployments are in the cloud. In [Electric Cloud](https://dashboard.electric-sql.cloud/sources) we do new deployments constantly. zero-downtime deployments are a non-negotiable.
 
-**Observability and control**: By owning the storage engine, we gain deep visibility into its behavior and performance. This lets us optimize hot paths, resolve issues faster and respond quickly as requirements evolve.
+**Observability and control**: By owning the storage engine, we gain deep visibility into its behavior and performance. This lets us optimize hot paths, resolve issues faster, and respond quickly as requirements evolve.
 
 ## Implementation overview
 
-Our new storage architecture is elegantly simple. For each shape, we maintain two files. The **shape log** that contains the raw data for the shape, and the **offset index** that contains offset pointers into the shape lof for fast look-up of requested offsets.
+Our new storage architecture is elegantly simple. For each shape, we maintain two files: the **shape log**, which contains the raw data for the shape, and the **offset index**, which contains offset pointers into the shape log for fast lookup of requested offsets.
 
 <figure style="margin: 1rem 0 2rem 0;">
   <img :src="StorageEngineDiagram" alt="Storage engine diagram – look-up of shape log offset" style="max-width: 100%; height: auto;" />
@@ -92,47 +93,47 @@ Our new storage architecture is elegantly simple. For each shape, we maintain tw
 
 ### Shape log
 
-The shape log contains pre-serialized JSON lines of the shape data (the row change from Postgres's logical replication) divided into fixed-size **chunks**. Each chunk has an header that contains the offset/LSN of the first JSON line in the chunk and the current length of the chunk.
+The shape log contains pre‑serialized JSON lines of the shape data (the row change from Postgres’s logical replication) divided into fixed‑size **chunks**. Each chunk has a header that contains the offset of the first JSON line in the chunk —the chunk boundary—and the length of the chunk. Changes matching the shape are appended to the end of the log. Appending raw data has a low CPU-usage fingerprint.
 
-**Immutable chunks**: Once a chunk reaches it's max size it is marked as  completed and becomes immutable. We track the current content length for the chunk, so readers can safely consume the log even with active writers. Coordination is done at file-level, allowing multiple readers to consume shape logs safely in a distributed environment.
+**Immutable chunks**: Once a chunk reaches its max size, it is marked as complete and becomes immutable. We track the current content length for the chunk, so readers can safely consume the log even with active writers.
 
-**Shape log scanning**: To find the right offset for a user request, we use the shape index to locate the chunk that contains the requested offset and then scan the chunk to find the first JSON line for the requested offset. We use  [read-ahead](https://man7.org/linux/man-pages/man2/readahead.2.html) techinique to reduce the number of syscalls while scanning the file.
+**Shape‑log scanning**: To find the right offset for a user request, we use the shape index to locate the chunk that contains the requested offset and then scan the chunk to find the first JSON line for that offset. We use a [read‑ahead](https://man7.org/linux/man-pages/man2/readahead.2.html) technique to reduce the number of system calls while scanning the file.
 
-**Buffering writes**: Calling [`fsync()`](https://man7.org/linux/man-pages/man2/fsync.2.html) on every write is prohibitively slow, but not calling `fsync()` immediately is giving up on durability. Any performant storage system needs to address this dilemma in some way. In Electric, we deeply integrate shape logs recovery with logical replication. If Electric crashes without some changes being flushed to disk, we can resume logical replication from the last persisted position and replay missing transactions.
+**Buffering writes**: Calling [`fsync()`](https://man7.org/linux/man-pages/man2/fsync.2.html) on every write is prohibitively slow, but not calling `fsync()` immediately gives up durability. Any high‑performance storage system needs to address this dilemma in some way. In Electric, we deeply integrate shape‑log recovery with logical replication. If Electric crashes without some changes being flushed to disk, we can resume logical replication from the last persisted position and replay missing transactions.
 
 ### Shape index
 
 The shape index provides fast shape offset lookup through a sparse indexing strategy. The index is simply a list of pointers to chunk boundaries in the shape log. We add a new pointer to the sparse index for every finalized chunk.
 
-**Finding a chunk**: When a client requests data starting from a specific offset, we do a binary search on the index to locate the appropriate chunk pointer, retrieve that chunk and scan it from there, as explained before.
+**Finding a chunk**: When a client requests data starting from a specific offset, we do a binary search on the index to locate the appropriate chunk pointer, retrieve that chunk, and scan it from there, as explained above.
 
-**Lock-free** Because shape logs are append-only, offset pointers are always added to the end of the index. This means that the index can be read and written without any locking. For the unfinalized chuck and the last few chuncks, we actually keep the offsets in memory to avoid reading the index in the most common cases.
+**Lock‑free**: Because shape logs are append‑only, offset pointers are always added to the end of the index. This means that the index can be read and written without any locking. For the unfinalized chunk, we keep it in memory to avoid reading the index in the common case of [live requests](/docs/api/http#live-mode).
 
-### Shared logs
+### Read-only mode
 
-The new architecture allows single-writer and multiple reader processes, which is ideal for Electric, since there is only one consumer of logical replication stream at a time, but can have multiple servers accessing the logs in read-only mode.
+The new architecture decouples readers and writers, allowing the Electric server connected to Postgres to share access with other Electric servers acessing the shape logs in read-only mode. This unlocks new capabilities.
 
-**Horizontal read scaling**: Electric is already quite scalable [behind a CDN](/blog/2024/12/10/electric-beta-release), but the new storage architecture allows multiple readers to be attached to shape logs without holding a connection to Postgres, giving us plenty of room to scale beyond anyone's needs.
+**Horizontal read scaling**: Electric is already quite scalable [behind a CDN](/blog/2024/12/10/electric-beta-release), but read-only mode allows horizontal scaling of the read path.
 
-**Zero-downtime deployments**: While an Electric server replaces another during a deployment, the newly started server can start serving shape request from shape logs before both servers agree to exchange the writer role. This was not possible with our previous system and critical for Electric Cloud.
+**Zero‑downtime deployments**: While a new Electric server replaces another during a deployment, the newly started server can start serving shape requests from shape logs before both servers agree to handover the writer role.
 
 ## Performance evaluation
 
-Enough talking, show me the numbers! To validate our new storage engine, we ran a series of performance tests.
+Enough talk — show me the numbers! To validate our new storage engine, we ran a series of performance tests.
+
+Microbenchmarks ran on a local SSD (MacBook Air M4), and end‑to‑end benchmarks ran on AWS t2.medium instances with network-attached storage (EFS). We'vw also conducted end‑to‑end benchmarks to analyze performance in runtime.
 
 ### Micro-benchmarks
 
-We conducted some microbenchmarks to evaluate the new storage engine against CubDb. Tests were run on both local SSDs (MacBook Air M4) and network-attached storage (AWS EFS attached to t2.medium instances), which are common types of storage used with Electric.
-
-We got amazing speedups both on SSD and EFS, with up to 101x and 7x faster writes and 130x and 172x faster reads, respectively.
+We conducted microbenchmarks to evaluate the new storage engine against CubDb. We saw strong speedups on both SSDs and EFS, with up to 101x and 7x faster writes and 73x and 172x faster reads, respectively.
 
 #### Write performance
 
-This benchmark consists in appending a fixed number of rows to a shape log. With CubDb, every insertion needs to update the index to find the right chunk to write to. With the new engine, we simply append to the latest chunk and only modify the index when we reach the chunk size limit.
+This benchmark consists of appending a fixed number of rows to a shape log. With CubDb, every insertion needs to update the index to locate the right chunk to write to. With the new engine, we simply append to the latest chunk and only modify the index when we reach the chunk‑size limit.
 
-On local SSDs, the new engine achieved up to 101x faster writes when we're appending 1000 rows. These results were a bit surprising. We haven't really seen this before as appending this amount of rows to a single shape log is not very common.
+On local SSDs, the new engine achieved up to 101x faster writes when appending 1,000 rows. These results were a bit surprising; we hadn’t really seen this before, as appending this many rows to a single shape log is uncommon.
 
-With network-attached storage, where latency typically dominates, curves follow a similar profile, but now with a 5x to 7x performance improvement.
+With network‑attached storage, where latency typically dominates, curves follow a similar profile, but now with a 5x to 7x performance improvement.
 
 <!-- First charts pair: wrap into two-column container -->
 <div class="charts-2col">
@@ -184,9 +185,9 @@ With network-attached storage, where latency typically dominates, curves follow 
 
 #### Read performance
 
-This benchmark consists in reading a fixed number of chunks starting from an arbitrary offset in a shape log and measure the total time for retrieving all chunks.
+This benchmark consists of reading a fixed number of chunks starting from an arbitrary offset in a shape log and measuring the total time to retrieve all chunks.
 
-In this case, the baseline latency for CubDb is quite high due to to the amount of syscalls to find the requested offset in the initial chunk. The new storage engine uses the read-ahead optimization to reduce the number of syscalls.
+In this case, the baseline latency for CubDb is quite high due to the number of system calls required to find the requested offset in the initial chunk. The new storage engine uses a read‑ahead optimization to reduce the number of system calls.
 
 <!-- Single Reader pair -->
 <div class="charts-2col">
@@ -224,14 +225,14 @@ In this case, the baseline latency for CubDb is quite high due to to the amount 
   </div>
 </div>
 
-### Electric benchmarks
+### End-to-End benchmarks
 
-The following benchmarks run the full Electric stack end‑to‑end and report application‑level latency and throughput. We use network-attached storage (AWS EFS attached to t2.medium instances). The results give a more clear picture of potential improvements in runtime.
+The following benchmarks run the full Electric stack end-to-end and report application‑level latency. The results give a clearer picture of potential improvements at runtime. We ran these experiements in the AWS in the same setting as the micro-benchmarks (t2.medium instances with EFS).
 
-#### Shape Creation
+#### Shape creation
 
-In this benchmarks we create more and more concurrent shapes concurrently until saturating the system. This is a fairly expensive operation as we need to query Postgres and write a new file to disk with each request.
-This is a scenario we had optimized, ao CubDB still does pretty well so it performs relatively well; however, the new engine is still significantly faster overall - about 1.63x on average across the run.
+In this benchmark, we create an increasing number of concurrent shapes until the system saturates. This is a fairly expensive operation, as we need to query Postgres and write a new file to disk with each request.
+This is a scenario we had optimized for CubDB, so it performs reasonably well; however, the new engine is still significantly faster overall — about 1.63x on average across the run.
 
 <StorageComparisonChart
   title="Concurrent shape creation"
@@ -249,7 +250,7 @@ This is a scenario we had optimized, ao CubDB still does pretty well so it perfo
 
 #### Write throughput
 
-This benchmark drives writes to arbitrary shapes and measures the end‑to‑end latency for a client to receive the data. This is the critical path for Electric: the longer writes take, the higher is the lag for consuming Postgres logical replication stream. We've gained significat speedup-~5x at 1500 shapes- and we're able to handle a lot more data before starting to saturate.
+This benchmark drives writes to arbitrary shapes and measures the end‑to‑end latency for a client to receive the data. This is the critical path for Electric: the longer writes take, the greater the replicaion lag becomes. We had a significant speedup for the new storage — 5x at 1,500 shapes — which means that the new storage is able to keep replication lag lower.
 
 <StorageComparisonChart
   title="Write throughput: time to see writes"
@@ -265,31 +266,11 @@ This benchmark drives writes to arbitrary shapes and measures the end‑to‑end
   :height="300"
 />
 
-#### Writes fan-out (maybe exclude this one)
-
-This experiment measures write amplification when a single transaction touches many shapes (50 or 450). It’s an extreme case for Electric — in real apps a transaction usually affects only a handful of shapes — but it’s useful to observe the worst‑case behavior in the write path.
-
-Results show the new storage engine reduces end‑to‑end latency substantially: about ~2.4x faster at 50 shapes and ~3.8x at 450 shapes (1472 ms → 385 ms). Lower fan‑out latency here directly translates to less time holding up the Postgres replication stream and more headroom before I/O becomes the bottleneck.
-
-<StorageComparisonChart
-  title="Writes fan‑out: shapes touched per transaction"
-  :data="[
-    { label: '1.0.24', data: [133.33333333333334, 1472.1764705882354] },
-    { label: '1.1.0', data: [54.57142857142857, 385.1] }
-  ]"
-  :labels="['50','450']"
-  x-axis-title="Shapes per transaction"
-  y-axis-title="Latency"
-  y-axis-suffix=" ms"
-  :columns="1"
-  :height="260"
-/>
-
 #### Reads fan‑out
 
-This benchmark measures read latency when streaming changes from one shape to a large number of connected clients. It stresses the concurrency of the read path until resources saturate. In practice, Most Electric deployments will runs behind a CDN (or an HTTP Cache) which will de-duplicate requests for the same shape. But benchmarks show that Electric can go pretty far without any caching in front of it.
+This benchmark measures read latency when streaming changes from one shape to a large number of connected clients. It stresses the concurrency of the read path until resources saturate. In practice, most Electric deployments will run behind a CDN (or an HTTP cache), which will de‑duplicate requests for the same shape. But benchmarks show that Electric can go pretty far without any caching in front of it.
 
-Across the range, the new engine delivers consistently lower end‑to‑end latency — roughly ~3.5–4.5× faster, and about ~3.8× faster at 1,000 concurrent clients. Lower read‑path latency keeps tail recipients closer to real time and reduces pressure on buffers.
+Across the range, the new engine delivers consistently lower end‑to‑end latency — roughly 3.5–4.5x faster, and about 3.8x faster at 1,000 concurrent clients. Lower read‑path latency keeps tail recipients closer to real time and reduces pressure on buffers.
 
 <StorageComparisonChart
   title="Reads fan‑out: connected clients vs latency"
@@ -307,18 +288,16 @@ Across the range, the new engine delivers consistently lower end‑to‑end late
 
 ## Lessons learned
 
-This journey taught us many lessons. One is that you can get massive speedups when the baseline is really unoptimized for your use-case :). The second (and more seriously) is to know when it is a good time to address performance.
+Starting with CubDb was a good choice. It got us to v1.0 with minimal issues, giving us time to ship software that just works. Before addressing storage performance, We've fixed tons of bugs, made Electric a reliable system and learned a great deal about how it behaves under real‑world workloads, surfacing bottlenecks in many other places that were far more important to our core proposition. Had we chosen to build our own storage system from day one, we likely would’ve made a number of incorrect assumptions and premature optimizations. Instead, our production experience gave us the insight we needed to design the right solution in the right moment.
 
-Starting off with CubDb was a good choice. It got us to v1.0 with minimal issues which gave us enough space to work on shipping a piece of software that just works. During that time, we learned a great deal about how Electric behaves under real-world workloads, surfacing bottlenecks in lots of other places. Had we chosen to build our own storage system from day one, we likely would’ve made a number of incorrect assumptions and premature optimizations. Instead, our production experience gave us the insight we needed to design the right solution.
+This isn’t a universal playbook. It worked well for us because the scope of what we had to build was relatively small, and it was one of our team’s core areas of expertise.
 
-Owning this critical piece of infrastructure allows us to reason deeply about performance, rapidly diagnose issues, and optimize for our exact workloads, all within our codebase.
+## What's next
+We’ve taken a big step toward delivering on our ambitious goal of being  **faster than Postgres**. The new storage engine has given significant performance gains with up-to 100x faster writes on SSD.
 
-This isn’t a universal playbook. It worked well for us because the scope of what we had to build was relatively small and it was one our team’s core areas of expertise.
+Beyond making Electric faster, we're doing groundwork to continue building better open-source and cloud products. In Cloud, we're already seeing benefits with rolling deployments, horizontal scalability but it doesn't end there. There is an exciting roadmap ahead!
 
-## Conclusions
+Ready to experience the sync? [Sign up for Electric Cloud](https://electric-sql.com/cloud)—it’s free.
 
-We’ve taken a big step toward delivering on an ambitious promise: a sync engine that is faster than Postgres. With our new storage engine, we’ve unlocked significant performance headroom and we're laying the foundation for building a more capable sync engine.
+*None of this would've been possible without our incredible engineering team. Huge thanks to the Electric [team](/about/team) for their insight, code reviews, and relentless focus on making Electric better, and a special mention to **Ilia Borovitinov**, who has led the development of this project.*
 
-None of this would've been possible without our incredible engineering team. Huge thanks to the Electric [team](/about/team) for their insight, code reviews, and relentless focus on making Electric better, and a special mention to **Ilia Borovitinov** who has lead the development of this project.
-
-Ready to experience the magic of sync? [Sign up for Electric Cloud](https://electric-sql.com/cloud)—it’s free.
