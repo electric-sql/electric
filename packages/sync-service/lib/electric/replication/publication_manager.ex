@@ -188,8 +188,8 @@ defmodule Electric.Replication.PublicationManager do
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
       pg_version: opts.pg_version,
-      can_alter_publication?: Map.get(opts, :can_alter_publication?, true),
-      manual_table_publishing?: Map.get(opts, :manual_table_publishing?, false),
+      can_alter_publication?: opts.can_alter_publication?,
+      manual_table_publishing?: opts.manual_table_publishing?,
       shape_cache: Map.get(opts, :shape_cache, {Electric.ShapeCache, [stack_id: opts.stack_id]}),
       configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn
     }
