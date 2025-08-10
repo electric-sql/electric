@@ -19,30 +19,62 @@ defmodule Electric.Plug.LowPrivilegeRouterTest do
   setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
 
   describe "/v1/shapes" do
-    setup %{db_conn: conn, escaped_db_name: db_name} do
-      Postgrex.query!(conn, "GRANT CREATE ON DATABASE \"#{db_name}\" TO unprivileged", [])
+    setup %{db_conn: db_conn, escaped_db_name: db_name} do
+      Postgrex.query!(db_conn, "GRANT CREATE ON DATABASE \"#{db_name}\" TO unprivileged", [])
       %{connection_opt_overrides: [port: 54321, username: "unprivileged"]}
     end
 
     setup [:with_complete_stack, :with_router]
 
     @tag with_sql: ["INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"]
-    test "GET fails to create initial snapshot when Electric does not own the user table ", %{
-      opts: opts
-    } do
-      conn =
-        conn("GET", "/v1/shape?table=items&offset=-1")
-        |> Router.call(opts)
+    test "GET fails to create initial snapshot when Electric does not own the user table", ctx do
+      assert {503,
+              %{"message" => "Unable to create initial snapshot: must be owner of table items"}} ==
+               get_shape(ctx)
+    end
+  end
 
-      assert %Plug.Conn{status: 503, resp_body: json_str} = conn
+  describe "/v1/shapes with manual publication management" do
+    setup do
+      %{
+        connection_opt_overrides: [port: 54321, username: "unprivileged"],
+        manual_table_publishing?: true
+      }
+    end
 
-      assert %{"message" => "Unable to create initial snapshot: must be owner of table items"} ==
-               Jason.decode!(json_str)
+    setup [:with_publication, :with_complete_stack, :with_router]
+
+    test "GET fails to create initial snapshot when Electric cannot read from the table", ctx do
+      assert {503,
+              %{
+                "message" =>
+                  "Database table is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
+              }} == get_shape(ctx)
+
+      Postgrex.query!(ctx.pool, "ALTER PUBLICATION \"#{ctx.publication_name}\" ADD TABLE items")
+
+      assert {503,
+              %{"message" => "Database table does not have its replica identity set to FULL"}} ==
+               get_shape(ctx)
+
+      Postgrex.query!(ctx.pool, "ALTER TABLE items REPLICA IDENTITY FULL")
+
+      assert {503, %{"message" => "Lacking permission to read from the database table"}} ==
+               get_shape(ctx)
     end
   end
 
   defp with_router(ctx) do
     :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
     %{opts: Router.init(build_router_opts(ctx))}
+  end
+
+  defp get_shape(ctx) do
+    conn =
+      conn("GET", "/v1/shape?table=items&offset=-1")
+      |> Router.call(ctx.opts)
+
+    assert %Plug.Conn{status: status, resp_body: json_str} = conn
+    {status, Jason.decode!(json_str)}
   end
 end
