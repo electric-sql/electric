@@ -7,7 +7,7 @@ Welcome to your new TanStack [Start](https://tanstack.com/start/latest)/[DB](htt
 To create a new project based on this starter, run the following commands:
 
 ```
-npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-starter my-tanstack-db-project
+npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-tanstack-db-project
 cd my-tanstack-db-project
 ```
 
