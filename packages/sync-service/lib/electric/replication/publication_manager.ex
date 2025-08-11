@@ -260,15 +260,25 @@ defmodule Electric.Replication.PublicationManager do
                    err.postgres.code in ~w|undefined_function undefined_table insufficient_privilege|a
 
   @impl true
-  def handle_info(
-        :update_publication,
-        %__MODULE__{
-          committed_relation_filters: committed_filters,
-          prepared_relation_filters: current_filters,
-          next_update_forced?: forced?
-        } = state
-      )
-      when not state.can_alter_publication? or state.manual_table_publishing? do
+  def handle_info(:update_publication, state) do
+    # Clear out the timer ref
+    state = %{state | scheduled_updated_ref: nil}
+
+    # Invoke the actual handler for the publication update
+    if not state.can_alter_publication? or state.manual_table_publishing? do
+      check_publication_relations(state)
+    else
+      update_publication_state(state)
+    end
+  end
+
+  defp check_publication_relations(
+         %__MODULE__{
+           committed_relation_filters: committed_filters,
+           prepared_relation_filters: current_filters,
+           next_update_forced?: forced?
+         } = state
+       ) do
     if not forced? and Map.keys(current_filters) == Map.keys(committed_filters) do
       Logger.debug("No changes to publication, skipping checkup")
       {:noreply, reply_to_waiters(:ok, state)}
@@ -293,8 +303,8 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  def handle_info(:update_publication, %__MODULE__{retries: retries} = state) do
-    state = %{state | scheduled_updated_ref: nil, retries: 0}
+  defp update_publication_state(%__MODULE__{retries: retries} = state) do
+    state = %{state | retries: 0}
 
     case update_publication(state) do
       {:ok, state, missing_relations} ->
