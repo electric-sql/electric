@@ -283,7 +283,6 @@ defmodule Electric.Replication.PublicationManager do
            ) do
         {:ok, modified_relations} ->
           update_relation_filters(state, modified_relations)
-          nil
 
         {:error, reason} ->
           message = publication_error_message(reason, state)
