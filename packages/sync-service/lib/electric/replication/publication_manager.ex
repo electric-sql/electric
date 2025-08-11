@@ -275,7 +275,7 @@ defmodule Electric.Replication.PublicationManager do
     else
       # We cannot modify the publication, so we only check whether it is in the right state for
       # the set of currently active relation filters.
-      case Configuration.check_publication_for_missing_relations(
+      case Configuration.check_publication_relations_and_identity(
              state.db_pool,
              Map.keys(committed_filters),
              Map.keys(current_filters),

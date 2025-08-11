@@ -11,13 +11,24 @@ defmodule Electric.Postgres.Configuration do
 
   @pg_15 150_000
 
-  @spec check_publication_for_missing_relations(
+  @doc """
+  Check whether the state of the publication relations in the database matches the sets of
+  filters passed into the function.
+
+  If any of the relations in the filters are missing from the publication or don't have their
+  replica identity set to full, an error is returned.
+
+  If some of the relations included in the publication have been modified (e.g. the table name
+  has changed), those will be returned as a list of modified relations from this function to
+  allow for the cleanup of their corresponding shapes.
+  """
+  @spec check_publication_relations_and_identity(
           Postgrex.conn(),
           String.t(),
           [Electric.oid_relation()],
           filters()
         ) :: :ok | {:error, :misconfigured_replica_identity | :table_missing_from_publication}
-  def check_publication_for_missing_relations(
+  def check_publication_relations_and_identity(
         conn,
         previous_relations,
         new_relations,
