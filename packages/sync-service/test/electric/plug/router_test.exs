@@ -1778,6 +1778,26 @@ defmodule Electric.Plug.RouterTest do
                })
                |> Router.call(opts)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INTEGER NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INTEGER NOT NULL REFERENCES parent(id), value INTEGER NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "allows subquery in where clause", %{opts: opts} do
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape", %{
+                 table: "child",
+                 offset: "-1",
+                 where: "parent_id in (SELECT id FROM parent WHERE value = 1)"
+               })
+               |> Router.call(opts)
+
+      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
+               Jason.decode!(conn.resp_body)
+    end
   end
 
   describe "404" do
