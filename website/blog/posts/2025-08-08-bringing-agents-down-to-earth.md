@@ -16,7 +16,7 @@ There's a lot of hype around agentic system development. Concepts like agentic m
 When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
 
 > [!Warning] Agentic demo app
-> See the [🔥 Burn demo app](/demos/burn) and [GitHub repo](https://github.com/thruflo/burn). It's an agentic system built on Postgres and real-time sync, designed to illustrate the concepts in this post.
+> See the [🔥 Burn demo app](/demos/agentic-sync-stack) and [source code](https://github.com/electric-sql/electric/tree/main/examples/agentic-sync-stack). It's an agentic system built on Postgres and real-time sync, designed to illustrate the concepts in this post.
 
 > <br />
 > ... embed video walkthrough ...
@@ -55,9 +55,11 @@ Agentic AI, beneath all the hype, is actually just normal software. You can buil
 
 ## Building an agentic system
 
-[🔥 Burn](#) is an agentic demo app, built on Postgres, [Phoenix]() and [TanStack]().
+[🔥 Burn](/demos/agentic-sync-stack) is an agentic demo app, built on Postgres, [Phoenix](https://www.phoenixframework.org) and [TanStack](https://tanstack.com).
 
-It's a multi-user, multi-agent, "roast-me" app. Users sign-up, create and join threads. Each thread has a producer agent, called Sarah, who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://en.wikipedia.org/wiki/Jerry_Seinfeld) and [Frankie Boyle](https://en.wikipedia.org/wiki/Frankie_Boyle)) who use the facts to roast them.
+It's a multi-user, multi-agent, burn or "roast-me" app.
+
+Users sign-up, create and join threads. Each thread has a producer agent, called Sarah, who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://en.wikipedia.org/wiki/Jerry_Seinfeld) and [Frankie Boyle](https://en.wikipedia.org/wiki/Frankie_Boyle)) who use the facts to roast them.
 
 > ... embed short video of app in process, lots of zoom in ...
 
@@ -81,11 +83,11 @@ These are all stored in a standard Postgres database. No extensions or vectors &
 
 ### Phoenix.Sync
 
-On the backend, Burn uses the [Phoenix framework](#). Phoenix is built in Elixir, which runs on the [BEAM](https://elixirmerge.com/p/understanding-the-high-level-overview-of-otp-in-erlang), the Erlang virtual machine, which gives you extremely [robust primitives for process supervision and messaging](Erlang/OTP) that are a [perfect match for agentic systems](https://goto-code.com/blog/elixir-otp-for-llms/).
+On the backend, Burn uses the [Phoenix framework](https://www.phoenixframework.org). Phoenix is built in [Elixir](https://elixir-lang.org), which runs on the [BEAM](https://blog.stenmans.org/theBeamBook/), the Erlang virtual machine, which gives you extremely [robust primitives for process supervision and messaging](https://hexdocs.pm/elixir/processes.html) that are a [perfect match for agentic systems](https://goto-code.com/blog/elixir-otp-for-llms/).
 
-Phoenix has a sync library, [Phoenix.Sync](#), that uses Electric to consume changes out of Postgres and stream them into back-end and front-end clients as required. Burn uses this to sync data both into the back-end for the agents and into the front-end for the users.
+Phoenix has a sync library, [Phoenix.Sync](https://hexdocs.pm/phoenix_sync), that uses Electric to consume changes out of Postgres and stream them into back-end and front-end clients as required. Burn uses this to sync data both into the back-end for the agents and into the front-end for the users.
 
-In the back-end, we sync into an [agent process supervisor](). This essentially monitors the state of the database and spins up / tears down agent processes at runtime as thread are created and agents are added to and removed from threads.
+In the back-end, we sync into an [agent process supervisor](https://github.com/electric-sql/electric/burn/blob/main/examples/agentic-sync-stack/lib/burn/agents/supervisor.ex). This essentially monitors the state of the database and spins up / tears down agent processes at runtime as thread are created and agents are added to and removed from threads.
 
 > ... supervisor ...
 
