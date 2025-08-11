@@ -222,7 +222,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def make_new_snapshot!(data_stream, %MS{stack_id: stack_id} = opts) do
+  def make_new_snapshot!(data_stream, notifier_fn, %MS{stack_id: stack_id} = opts) do
     OpenTelemetry.with_span(
       "storage.make_new_snapshot",
       [storage_impl: "in_memory", "shape.handle": opts.shape_handle],
@@ -234,21 +234,31 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         data_stream
         |> Stream.with_index(1)
         |> Stream.transform(
-          fn -> 0 end,
+          fn -> {0, nil} end,
           fn
-            {:chunk_boundary, _}, chunk_num ->
+            {:chunk_boundary, index}, {chunk_num, _} ->
               chunk_offset = storage_offset(LogOffset.new(0, chunk_num))
 
               {[
                  {chunk_offset, :snapshot_checkpoint},
                  {snapshot_chunk_end(chunk_offset), nil}
-               ], chunk_num + 1}
+               ], {chunk_num + 1, index}}
 
-            {line, index}, chunk_num ->
+            {line, index}, {chunk_num, _} ->
+              if index == 1 do
+                # Invoke notifier_fn on the first line only.
+                notifier_fn.()
+              end
+
               chunk_offset = storage_offset(LogOffset.new(0, chunk_num))
-              {[{snapshot_key(chunk_offset, index), line}], chunk_num}
+              {[{snapshot_key(chunk_offset, index), line}], {chunk_num, index}}
           end,
-          fn chunk_num ->
+          fn {chunk_num, last_processed_index} ->
+            if is_nil(last_processed_index) do
+              # There weren't any lines to process, so notifier_fn hasn't been invoked yet.
+              notifier_fn.()
+            end
+
             chunk_offset = storage_offset(LogOffset.new(0, chunk_num))
 
             {[{chunk_offset, :snapshot_checkpoint}, {snapshot_chunk_end(chunk_offset), nil}],

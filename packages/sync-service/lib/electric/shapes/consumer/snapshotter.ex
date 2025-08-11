@@ -189,23 +189,24 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               end
             )
 
-            stream =
-              Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
-              |> Stream.transform(
-                fn -> false end,
-                fn item, acc ->
-                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
-                  {[item], true}
-                end,
-                fn acc ->
-                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
-                  acc
-                end
-              )
+            stream = Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
+
+            # The shape consumer process is awaiting a signal letting it know that it can
+            # start streaming response body to the client. Normally, when there are no problems
+            # with querying the database table and writing snapshot data to disk, this function
+            # will be invoked just as the first snapshot chunk is being written to disk. The
+            # consumer process than proceeds with the streaming and will no longer see errors
+            # raised by the snapshot-producing process.
+            #
+            # For correct error handling behaviour in case the snapshot query fails or snapshot
+            # chunks cannot be written to disk, this notifier function is passed down to the
+            # storage implementation so that if an error is raised before it, the consumer
+            # process will see the error and react accordingly.
+            notifier_fn = fn -> GenServer.cast(parent, {:snapshot_started, shape_handle}) end
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
             # that way it has the relation, but it is still missing the pk_cols
-            Storage.make_new_snapshot!(stream, storage)
+            Storage.make_new_snapshot!(stream, notifier_fn, storage)
           end
         )
       end,

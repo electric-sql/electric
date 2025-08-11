@@ -21,11 +21,21 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
   The clients of the storage expect the snapshot chunks to be read in their entirety, which gives us freedom
   to do batched writes for performance, because reads are always going to be faster than we're writing.
   """
-  def write_snapshot_stream!(stream, %ST{} = opts, write_buffer \\ @write_buffer_size) do
+  def write_snapshot_stream!(
+        stream,
+        notifier_fn,
+        %ST{} = opts,
+        write_buffer \\ @write_buffer_size
+      ) do
     stream
     |> Stream.transform(
       fn -> {0, nil, {[], 0}} end,
       fn line, {chunk_num, file, {buffer, buffer_size}} ->
+        if chunk_num == 0 and is_nil(file) do
+          # Invoke notifier_fn on the first line only.
+          notifier_fn.()
+        end
+
         file = file || open_snapshot_chunk_to_write(opts, chunk_num)
 
         case line do
@@ -53,7 +63,9 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
             {[chunk_num], {chunk_num, file, {[], 0}}}
 
           is_nil(file) and chunk_num == 0 ->
-            # Special case if the source stream has ended before we started writing any chunks - we need to create the empty file for the first chunk.
+            # Special case if the source stream has ended before we started writing any chunks -
+            # we need to create the empty file for the first chunk.
+            notifier_fn.()
             file = open_snapshot_chunk_to_write(opts, chunk_num)
             IO.binwrite(file, [buffer, <<4::utf8>>])
             {[chunk_num], {chunk_num, file, {[], 0}}}
@@ -62,8 +74,20 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
             {[chunk_num - 1], {chunk_num, file, {[], 0}}}
         end
       end,
-      fn {_chunk_num, file, _} ->
-        if file, do: File.close(file)
+      fn
+        {0, nil, {[], 0}} ->
+          # Not a single chunk file has been written. We probably don't have the read
+          # permission on the table, so signal an error.
+          # Doing nothing here is not an option because it would cause the response
+          # streaming process to crash when it doesn't find any snapshot chunk files.
+
+          raise %Electric.DbConfigurationError{
+            type: :cannot_read_from_table,
+            message: "Lacking permission to read from the database table"
+          }
+
+        {_chunk_num, file, _} ->
+          if file, do: File.close(file)
       end
     )
     |> Enum.reduce(0, fn chunk_num, _ -> chunk_num end)
