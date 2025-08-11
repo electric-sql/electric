@@ -404,7 +404,7 @@ defmodule Electric.Replication.Eval.ParserTest do
     test "should not allow subqueries in IN clauses" do
       env = Env.new()
 
-      assert {:error, "At location 5: subqueries are not supported"} =
+      assert {:ok, %Expr{eval: _result}} =
                Parser.parse_and_validate_expression(
                  ~S|test IN (SELECT val FROM tester)|,
                  refs: %{["test"] => :int4},

@@ -608,9 +608,20 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  # Explicitly fail on "sublinks" - subqueries are not allowed in any context here
-  defp node_to_ast(%PgQuery.SubLink{location: loc}, _, _, _),
-    do: {:error, {loc, "subqueries are not supported"}}
+  defp node_to_ast(%PgQuery.SubLink{location: location}, %{testexpr: testexpr}, _, _) do
+    {:ok,
+     %Func{
+       strict?: false,
+       location: location,
+       args: [
+         testexpr,
+         %Ref{path: ["$sublink", location], type: {:array, testexpr.type}, location: location}
+       ],
+       type: :bool,
+       name: "sublink",
+       implementation: &PgInterop.Sublink.member?/2
+     }}
+  end
 
   defp node_to_ast(%PgQuery.ParamRef{} = ref, _, %{resolved_params: resolved}, %{
          params: params
@@ -649,11 +660,14 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   # If nothing matched, fail
-  defp node_to_ast(%type_module{} = node, _, _, _),
-    do:
-      {:error,
-       {Map.get(node, :location, 0),
-        "#{type_module |> Module.split() |> List.last()} is not supported in this context"}}
+  defp node_to_ast(%type_module{} = node, children, _, _) do
+    dbg(node)
+    dbg(children)
+
+    {:error,
+     {Map.get(node, :location, 0),
+      "#{type_module |> Module.split() |> List.last()} is not supported in this context"}}
+  end
 
   defp get_type_from_pg_name(["pg_catalog", type_name], _) when type_name in @valid_types,
     do: {:ok, String.to_existing_atom(type_name)}
