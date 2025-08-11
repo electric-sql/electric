@@ -2,7 +2,7 @@
 title: "Data sync"
 description: >-
   Replace APIs, data fetching and network error handling with
-  data sync.
+  data sync.
 image: /img/use-cases/state-transfer.png
 outline: deep
 case: true
@@ -16,11 +16,16 @@ benefits:
 
 <script setup>
 import MasonryTweets from '../src/components/MasonryTweets.vue'
+import { ref } from 'vue'
 
 const tweets = [
   {name: 'johannes', id: '1826338840153571362'},
   {name: 'kyle', id: '1825531359949173019'}
 ]
+
+// Modal states
+const isDataFetchingModalOpen = ref(false)
+const isDataSyncModalOpen = ref(false)
 </script>
 
 ## Replace data fetching with data sync
@@ -38,42 +43,64 @@ Data fetching and data sync are different ways of getting data into a local appl
 With data fetching, you write code to fetch data across the network from web service APIs, such as a REST API or GraphQL endpoint.
 
 <figure>
-  <a href="/img/use-cases/data-fetching.jpg"
-      class="hidden-sm"
-      target="_blank">
+  <div class="clickable-image" @click="isDataFetchingModalOpen = true">
     <img src="/img/use-cases/data-fetching.png"
         alt="Data fetching flow chart diagramme"
+        class="hidden-sm"
     />
-  </a>
-  <a href="/img/use-cases/data-fetching.jpg"
-      class="block-sm"
-      target="_blank">
     <img src="/img/use-cases/data-fetching.sm.png"
         alt="Data fetching flow chart diagramme"
+        class="block-sm"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isDataFetchingModalOpen"
+image-src="/img/use-cases/data-fetching.png"
+image-alt="Data fetching flow chart diagramme"
+@close="isDataFetchingModalOpen = false"
+/>
 
 ### Data sync
 
 With data sync, you declare what data you need and that's it &mdash; the data is loaded and kept in sync for you.
 
 <figure>
-  <a href="/img/use-cases/data-sync.jpg"
-      class="hidden-sm"
-      target="_blank">
+  <div class="clickable-image" @click="isDataSyncModalOpen = true">
     <img src="/img/use-cases/data-sync.png"
         alt="Data sync flow chart diagramme"
+        class="hidden-sm"
     />
-  </a>
-  <a href="/img/use-cases/data-sync.jpg"
-      class="block-sm"
-      target="_blank">
     <img src="/img/use-cases/data-sync.sm.png"
         alt="Data sync flow chart diagramme"
+        class="block-sm"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isDataSyncModalOpen"
+image-src="/img/use-cases/data-sync.png"
+image-alt="Data sync flow chart diagramme"
+@close="isDataSyncModalOpen = false"
+/>
 
 ## Why is sync better?
 

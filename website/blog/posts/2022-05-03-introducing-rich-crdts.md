@@ -12,6 +12,17 @@ outline: deep
 post: true
 ---
 
+<script setup>
+  import { ref } from 'vue'
+
+  // Modal states
+  const isCompositionModalOpen = ref(false)
+  const isCompensationsModalOpen = ref(false)
+  const isInvariantViolationModalOpen = ref(false)
+  const isInvariantPreservedModalOpen = ref(false)
+  const isReservationsModalOpen = ref(false)
+</script>
+
 Rich-CRDTs are conflict-free data types (“CRDTs”) extended to provide additional (“Rich”) database guarantees. These guarantees, such as constraints and referential integrity, make building local-first applications much simpler.
 
 <!--truncate-->
@@ -87,13 +98,27 @@ Composition refers to combining or nesting CRDTs to create richer, higher-order 
 A simple example of CRDT composition is a Positive Negative Counter, or PN Counter. A PN Counter combines two counters: one counts positive changes and one counts negative changes. The PN Counter then combines these two counters to give the net current value.
 
 <figure>
-  <a href="/img/blog/introducing-rich-crdts/composition.png" class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isCompositionModalOpen = true">
     <img src="/img/blog/introducing-rich-crdts/composition.png"
         style="width: 100%; max-width: 350px"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isCompositionModalOpen"
+image-src="/img/blog/introducing-rich-crdts/composition.png"
+image-alt="Composition diagram"
+@close="isCompositionModalOpen = false"
+/>
 
 A more complex example is a JSON CRDT. JSON is in essence a map made up of four data types: string, number, object, array. In a map CRDT, each key can contain a different CRDT object as its value. The JSON CRDT provides sensible defaults for each possible value type provided by JSON.
 
@@ -120,38 +145,77 @@ Each key in this JSON CRDT maps to a different primitive CRDT type, and differen
 Compensations refer to additional operations undertaken by a database (other than the operations specified by the user) that ensure it will maintain an invariant.
 
 <figure>
-  <a href="/img/blog/introducing-rich-crdts/compensations.png"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isCompensationsModalOpen = true">
     <img src="/img/blog/introducing-rich-crdts/compensations.png"
         style="width: 100%; max-width: 450px"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isCompensationsModalOpen"
+image-src="/img/blog/introducing-rich-crdts/compensations.png"
+image-alt="Compensations diagram"
+@close="isCompensationsModalOpen = false"
+/>
 
 In databases, you often have multiple tables linked together by keys – the foreign key in the associated table, which corresponds to a primary key in the parent table. Referential integrity is about making sure that these links are valid at all times. I.e.: that if you delete row 15 in a primary table, there’s no foreign key in any related table with the value of 15.
 
 Referential integrity poses challenges when it comes to concurrent operations, because one operation might delete a row at the same time that another row is being added to an associated table that refers to it. A classic example is a player being enrolled in a tournament concurrently to the tournament being deleted.
 
 <figure>
-  <a href="/img/blog/introducing-rich-crdts/invariant-violation.png"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isInvariantViolationModalOpen = true">
     <img src="/img/blog/introducing-rich-crdts/invariant-violation.png" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isInvariantViolationModalOpen"
+image-src="/img/blog/introducing-rich-crdts/invariant-violation.png"
+image-alt="Invariant violation diagram"
+@close="isInvariantViolationModalOpen = false"
+/>
 
 > Illustration of the player tournament referential integrity violation.
 
 Compensations can offer a solution. For example, by adding a touch operation to the enrol player operation. By adding the additional touch operation into the transaction where the player is being enrolled, it can ensure that the tournament still exists, even when merged with a concurrent transaction removing the tournament, if the set of tournaments follows add-win semantics.
 
 <figure>
-  <a href="/img/blog/introducing-rich-crdts/invariant-preserved.png"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isInvariantPreservedModalOpen = true">
     <img src="/img/blog/introducing-rich-crdts/invariant-preserved.png" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isInvariantPreservedModalOpen"
+image-src="/img/blog/introducing-rich-crdts/invariant-preserved.png"
+image-alt="Invariant preserved diagram"
+@close="isInvariantPreservedModalOpen = false"
+/>
 
 > Illustration of the player tournament compensation, preserving referential integrity by ensuring the tournament exists.
 
@@ -186,14 +250,27 @@ You give each of 10 nodes an allocation of 100 ticket reservations. When any giv
 One of the key optimisations with escrow reservations is to proactively allocate and re-balance the reservations so they are held by the nodes/clusters that require them. If the Justin Bieber concert is in San Francisco and all the tickets are being bought through the US-West cluster, then the rich-CRDT system can notice (or predict) this and pro-actively give the US-West cluster more reservations.
 
 <figure>
-  <a href="/img/blog/introducing-rich-crdts/reservations.png"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isReservationsModalOpen = true">
     <img src="/img/blog/introducing-rich-crdts/reservations.png"
         style="width: 100%; max-width: 450px"
     />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isReservationsModalOpen"
+image-src="/img/blog/introducing-rich-crdts/reservations.png"
+image-alt="Reservations diagram"
+@close="isReservationsModalOpen = false"
+/>
 
 In many cases, when working effectively, proactively rebalancing reservations can avoid coordination for the vast majority of updates.
 

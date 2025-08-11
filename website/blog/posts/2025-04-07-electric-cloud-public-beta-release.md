@@ -15,6 +15,10 @@ post: true
 
 <script setup>
   import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
+  import { ref } from 'vue'
+
+  // Modal states
+  const isDashboardModalOpen = ref(false)
 </script>
 
 [Electric Cloud](https://dashboard.electric-sql.cloud) is in public BETA! It's open to everyone for immediate access.
@@ -25,9 +29,24 @@ Use the new dashboard to connect and manage backing Postgres databases, and see 
 
 Electric Cloud is our managed service for our [open-source Postgres sync engine](https://electric-sql.com/). It solves the hard problems of sync for you, including [partial replication](https://electric-sql.com/docs/guides/shapes), [fan-out](https://electric-sql.com/docs/api/http#caching), and [data delivery](https://electric-sql.com/docs/api/http).
 
-<a href="https://dashboard.electric-sql.cloud" class="no-visual">
+<div class="clickable-image" @click="isDashboardModalOpen = true">
   <img src="/img/blog/electric-cloud-public-beta-release/dashboard.png" />
-</a>
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isDashboardModalOpen"
+image-src="/img/blog/electric-cloud-public-beta-release/dashboard.png"
+image-alt="Electric Cloud dashboard"
+@close="isDashboardModalOpen = false"
+/>
 
 As well as being easy to [use](/docs/intro), [integrate](/blog/2024/11/21/local-first-with-your-existing-api) and [get-started with](/docs/quickstart), Electric Cloud is also [highly performant and scalable](/docs/reference/benchmarks#cloud), with an integrated CDN. Unlike other systems that demo well and fall over, you can build real-time apps on Electric Cloud and not worry that they're going to explode or fall over when you hit hockey stick growth.
 
@@ -102,7 +121,24 @@ Getting started is dead simple:
 2. Specify what data you want to sync using our simple Shape API
 3. Use our client libraries to bind that data directly to your UI
 
-<img src="/img/blog/electric-cloud-public-beta-release/dashboard.png" />
+<div class="clickable-image" @click="isDashboardModalOpen = true">
+  <img src="/img/blog/electric-cloud-public-beta-release/dashboard.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isDashboardModalOpen"
+image-src="/img/blog/electric-cloud-public-beta-release/dashboard.png"
+image-alt="Electric Cloud dashboard"
+@close="isDashboardModalOpen = false"
+/>
 
 That's it. No complex infrastructure to set up or maintain. No opinionated frameworks to adopt. Just real-time sync, solved.
 

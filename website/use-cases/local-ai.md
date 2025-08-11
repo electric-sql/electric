@@ -13,11 +13,16 @@ benefits:
 
 <script setup>
 import MasonryTweets from '../src/components/MasonryTweets.vue'
+import { ref } from 'vue'
 
 const tweets = [
   {name: 'thor', id: '1824023614225854726', hideMedium: true},
   {name: 'postgres.new', id: '1822992862436381032', hideSmall: true},
 ]
+
+// Modal states
+const isLocalRagModalOpen = ref(false)
+const isLocalRagWorkflowModalOpen = ref(false)
 </script>
 
 ## Low-latency data retrieval for local RAG
@@ -25,13 +30,28 @@ const tweets = [
 Local AI applications are apps that run AI models locally. Local AI models need context data. Especially for retrieval-augmented generation (RAG):
 
 <figure>
-  <img src="/img/use-cases/local-rag.png"
-      alt="Diagramme illustrating local RAG"
-      style="margin: 0; width: 100%; max-width: 550px"
-  />
+  <div class="clickable-image" @click="isLocalRagModalOpen = true">
+    <img src="/img/use-cases/local-rag.png"
+        alt="Diagramme illustrating local RAG"
+        style="margin: 0; width: 100%; max-width: 550px"
+    />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
 
-![]()
+<ImageModal
+:is-open="isLocalRagModalOpen"
+image-src="/img/use-cases/local-rag.png"
+image-alt="Diagramme illustrating local RAG"
+@close="isLocalRagModalOpen = false"
+/>
 
 ### Latency and UX
 
@@ -68,7 +88,24 @@ Electric provides live data retrieval for local RAG applications, using hybrid v
 
 Using Electric, you can sync live data, locally, for low-latency retrieval.
 
-![](/img/use-cases/local-rag-workflow.png)
+<div class="clickable-image" @click="isLocalRagWorkflowModalOpen = true">
+  <img src="/img/use-cases/local-rag-workflow.png" />
+  <div class="image-overlay">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <path d="m21 21-4.35-4.35"></path>
+      <line x1="11" y1="8" x2="11" y2="14"></line>
+      <line x1="8" y1="11" x2="14" y2="11"></line>
+    </svg>
+  </div>
+</div>
+
+<ImageModal
+:is-open="isLocalRagWorkflowModalOpen"
+image-src="/img/use-cases/local-rag-workflow.png"
+image-alt="Local RAG workflow"
+@close="isLocalRagWorkflowModalOpen = false"
+/>
 
 Electric's [Shapes](/docs/guides/shapes) allow you to sync the right data onto the local device. This controls the shape of the local knowledge base. This allows your model to find the right context data for the prompt, with context discovery across the relational data model.
 
