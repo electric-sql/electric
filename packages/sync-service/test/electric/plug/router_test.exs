@@ -1798,6 +1798,16 @@ defmodule Electric.Plug.RouterTest do
       assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
                Jason.decode!(conn.resp_body)
     end
+
+    test "return 400 if subquery references unknown table", %{opts: opts} do
+      assert %{status: 400} =
+               conn("GET", "/v1/shape", %{
+                 table: "items",
+                 offset: "-1",
+                 where: "id in (SELECT id FROM unknown_table WHERE value = 1)"
+               })
+               |> Router.call(opts)
+    end
   end
 
   describe "404" do
