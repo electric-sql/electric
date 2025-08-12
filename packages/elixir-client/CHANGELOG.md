@@ -1,5 +1,14 @@
 # @core/elixir-client
 
+## 0.6.5
+
+### Patch Changes
+
+- 421315f: Fix handling of Ecto embeds when deserializing
+- 828f6dc: Translate error responses from Api.validate/2 to the expected form in the embedded client
+- 8e95270: Fix decoding of must-refetch messages
+- 8cc06b5: Support specifying column subsets via Ecto.Query.select/3
+
 ## 0.6.4
 
 ### Patch Changes
