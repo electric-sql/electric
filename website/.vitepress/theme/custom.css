@@ -790,7 +790,7 @@ ul.benefits {
 .cta-actions {
   display: flex;
   gap: 12px;
-  margin: 18px 0 36px;
+  margin: 6px 0 36px;
   justify-content: center;
 }
 .cta-actions.page-footer-actions {
@@ -798,6 +798,9 @@ ul.benefits {
 }
 .cta-actions.left {
   justify-content: left;
+}
+.cta-actions.VPButton {
+  margin-top: 12px;
 }
 
 .embed-container {

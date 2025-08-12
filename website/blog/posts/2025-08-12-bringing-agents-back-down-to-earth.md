@@ -1,0 +1,457 @@
+---
+title: Bringing agents back down to earth
+description: >-
+  Agentic AI, beneath all the hype, is actually just normal software. You can build agentic systems with a database, standard web tooling and real-time sync.
+excerpt: >-
+  Agentic AI, beneath all the hype, is actually just normal software. You can build agentic systems with a database, standard web tooling and real-time sync.
+authors: [thruflo]
+image: /img/blog/bringing-agents-back-down-to-earth/header2.jpg
+tags: [db]
+outline: [2, 3]
+post: true
+---
+
+<script setup>
+  import { data } from '../../data/posts.data.ts'
+  const posts = data.filter(post => {
+    console.log(post.path)
+
+    return post.path === '/blog/2025/07/29/local-first-sync-with-tanstack-db'
+  })
+
+  import BlogPostListing from '../../src/components/BlogPostListing.vue'
+  import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
+</script>
+
+<style scoped>
+  .listing {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 32px;
+    margin: 24px 0;
+    overflow: hidden;
+  }
+  @media (max-width: 1049px) {
+    .listing {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 949px) {
+    .listing {
+      gap: 32px;
+      margin: 24px 0;
+    }
+  }
+  @media (max-width: 749px) {
+    .listing {
+      grid-template-columns: 1fr;
+      gap: 32px;
+      margin: 20px 0;
+    }
+  }
+  @media (max-width: 549px) {
+    .listing {
+      margin: 20px 0;
+    }
+  }
+</style>
+
+There's a lot of hype around agentic system development. Concepts like agentic memory, instruction routing, retrieval and context engineering.
+
+When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
+
+> [!Warning] Agentic demo app
+> See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn). It's an agentic system built on Postgres and real-time sync, designed to illustrate the concepts in this post.
+
+> <br />
+> ... embed video walkthrough ...
+> <br />
+> <br />
+
+## Simplifying the agentic stack
+
+We've had decades to evolve the [patterns of traditional software](https://12factor.net). We're scrambling, as an industry, to figure out the [patterns of agentic software](https://github.com/humanlayer/12-factor-agents).
+
+LangChain, vector databases, instruction routing, specialized memory stores. You'd be forgiven for thinking you need a whole new stack to build agentic systems.
+
+<figure>
+  <a href="https://www.ai.engineer/summit/2025" class="no-visual">
+    <img src="/img/blog/bringing-agents-back-down-to-earth/ai-infra.jpg"
+        alt="AI summit slide showing explosion of AI infra"
+    />
+  </a>
+</figure>
+
+However, that isn't actually the case.
+
+### What is agentic software?
+
+Agents are essentially processes that instruct LLMs to make tool calls.
+
+Instructing LLMs means sending an instruction to an LLM. Agentic memory is where you store data that those instructions are based on. Retrieval is the ability to query that data. Context engineering retrieves and formats the right information to send in the instruction.
+
+Processes are a standard software primitive. As are routing, control flow, supervision hierarchies and functional loops.
+
+### Rubbing a database on it
+
+There's obviously a lot of work involved in putting those aspects together to create a working agentic product. However, from an *infra* point of view, there's nothing there that doesn't [pattern match to a database](https://www.hytradboi.com/2025).
+
+<figure>
+  <img src="/img/blog/bringing-agents-back-down-to-earth/agents-are-database-state.jpg"
+      alt="Astronaut meme template. Wait, agents are just state in the database? Always have been"
+  />
+</figure>
+
+Agentic AI, beneath all the hype, is actually just normal software. You can build agentic systems with a database, standard web tooling and real-time sync.
+
+## Building an agentic system
+
+[🔥 Burn is an agentic demo app](/demos/burn) where the UI, the agentic control flow and the context engineering are all driven by database state and [real-time sync](/blog/2025/04/09/building-ai-apps-on-sync), built on:
+
+- [Postgres](#standard-postgres)
+- [Phoenix.Sync](#phoenix-sync)
+- [TanStack DB](#tanstack-db)
+
+It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create and join threads. Each thread has a producer agent, called Sarah, who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://en.wikipedia.org/wiki/Jerry_Seinfeld) and [Frankie Boyle](https://en.wikipedia.org/wiki/Frankie_Boyle)) who use the facts to roast the users.
+
+> ... embed short video of app in process, lots of zoom in ...
+
+In the back-end, agents subscribe to events in their thread. When something happens, they instruct the LLM by making a request to the [Anthropic API](https://docs.anthropic.com/en/api/messages). The LLM responds with a tool call. Tool calls are handled by the system and potentially generate new events, triggering another instruction loop.
+
+In the front-end, the UI is reactively wired up to the same data model and automatically updates whenever anything happens. The main UI is based around chat threads. Plus there's also a "computer" sidebar that functions a bit like a debug view, showing you what's happening in the database, under the hood, in real-time.
+
+> ... embed short video of the computer, lots of zoom in ...
+
+### Standard Postgres
+
+The data model is based on `Users` joining `Threads`, which are driven by `Events` and accumulate `Facts`. These are all stored in a Postgres database.
+
+```text
+➜  ~ psql "postgresql://postgres:postgres@localhost:5432/burn_dev"
+psql (17.4)
+Type "help" for help.
+
+burn_dev=# \d
+               List of relations
+ Schema |       Name        | Type  |  Owner
+--------+-------------------+-------+----------
+ public | events            | table | postgres
+ public | facts             | table | postgres
+ public | memberships       | table | postgres
+ public | schema_migrations | table | postgres
+ public | threads           | table | postgres
+ public | users             | table | postgres
+(6 rows)
+
+burn_dev=# \d events
+                             Table "public.events"
+   Column    |              Type              | Collation | Nullable | Default
+-------------+--------------------------------+-----------+----------+---------
+ id          | uuid                           |           | not null |
+ type        | character varying(255)         |           | not null |
+ data        | jsonb                          |           | not null |
+ thread_id   | uuid                           |           | not null |
+ user_id     | uuid                           |           | not null |
+ inserted_at | timestamp(0) without time zone |           | not null |
+ updated_at  | timestamp(0) without time zone |           | not null |
+Indexes:
+    "events_pkey" PRIMARY KEY, btree (id)
+    "events_thread_id_index" btree (thread_id)
+    "events_user_id_index" btree (user_id)
+Foreign-key constraints:
+    "events_thread_id_fkey" FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE
+    "events_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "facts" CONSTRAINT "facts_source_event_id_fkey" FOREIGN KEY (source_event_id) REFERENCES events(id) ON DELETE CASCADE
+    TABLE "facts" CONSTRAINT "facts_tool_use_event_id_fkey" FOREIGN KEY (tool_use_event_id) REFERENCES events(id) ON DELETE CASCADE
+Publications:
+    "electric_publication_default"
+```
+
+There are no extensions or vectors. It's just standard rows in standard tables.
+
+### Phoenix.Sync
+
+On the backend, Burn uses the [Phoenix framework](https://www.phoenixframework.org).
+
+Phoenix is built in [Elixir](https://elixir-lang.org), which runs on the [BEAM](https://blog.stenmans.org/theBeamBook/). The BEAM provides a robust agentic runtime environment with built-in primitives for [process supervision and messaging](https://hexdocs.pm/elixir/processes.html). This makes Elixir and Phoenix a perfect match for agentic system development [without needing a seperate agent framework](https://goto-code.com/blog/elixir-otp-for-llms/).
+
+Phoenix also has a sync library, [Phoenix.Sync](https://hexdocs.pm/phoenix_sync), that adds real-time sync to Phoenix:
+
+<figure>
+  <div style="aspect-ratio: 16/9" class="embed-container">
+    <YoutubeEmbed video-id="rlzL5wnWa9o" />
+  </div>
+</figure>
+
+Burn uses Phoenix.Sync to sync data out of Postgres, into both the back-end (for agents) and the front-end (for users). Specifically, the app syncs data about threads and memberships into an [agent process supervisor](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/supervisor.ex). This handles database change events by spinning-up and tearing-down agent processes at runtime.
+
+```elixir
+# From `lib/burn/agents/supervisor.ex`
+
+def init(_opts) do
+  {:ok, supervisor} = DynamicSupervisor.start_link(strategy: :one_for_one)
+  {:ok, _consumer} = DynamicSupervisor.start_child(supervisor, %{
+    id: :membership_consumer,
+    start: {Task, :start_link, [&sync_memberships/0]},
+    restart: :permanent
+  })
+
+  {:ok, %{supervisor: supervisor}}
+end
+
+def handle_info({:stream, :memberships, messages}, state) do
+  # Stop process when agent membership deleted
+  messages
+  |> Enum.filter(&Messages.is_delete/1)
+  |> Enum.map(&Messages.get_value/1)
+  |> Enum.map(&preload_associations/1)
+  |> Enum.filter(&is_agent_membership?/1)
+  |> Enum.each(&stop_agent(&1, state))
+
+  # Start process when agent membership inserted
+  messages
+  |> Enum.filter(&Messages.is_insert/1)
+  |> Enum.map(&Messages.get_value/1)
+  |> Enum.map(&preload_associations/1)
+  |> Enum.filter(&is_agent_membership?/1)
+  |> Enum.each(&start_agent(&1, state))
+
+  {:noreply, state}
+end
+```
+
+This gives us a resilient, scalable, distributable, dynamic supervision tree of agent processes that scales up and down in sync with the contents of the database.
+
+Each agent process then subscribes to the data and events in their thread:
+
+```elixir
+# From `lib/burn/agents/agent.ex`
+
+def init({%Threads.Thread{} = thread, %Accounts.User{type: :agent} = agent, mode}) do
+  {:ok, supervisor} = Task.Supervisor.start_link()
+
+  shapes = [
+    {:events, start_shape(thread, :events)},
+    {:memberships, start_shape(thread, :memberships)},
+    {:thread, start_shape(thread, :thread)}
+  ]
+
+  Enum.each(shapes, fn {key, shape} ->
+    Task.Supervisor.start_child(
+      supervisor,
+      fn -> Consumer.consume(self(), key, shape) end,
+      restart: :permanent
+    )
+  end)
+
+  # ...
+end
+```
+
+When a new event is stored in the database (such as a user joining the thread, posting a message or another agent performing a tool call), the agent instructs the LLM using the Anthropic API. The LLM responds with a tool call. If performing the tool call generates new events, the agents detect them and the loop goes round again.
+
+So that's how Phoenix.Sync is used to drive the agentic control flow in the back-end. It's also used to sync data into the front-end, by exposing sync endpoints in the router.
+
+```elixir
+# From `lib/burn_web/router.ex
+
+defmodule BurnWeb.Router do
+  use BurnWeb, :router
+
+  # ...
+
+  pipeline :api do
+    plug :accepts, ["json"]
+  end
+
+  pipeline :auth do
+    plug :fetch_api_user
+    plug :require_authenticated_user
+  end
+
+  scope "/sync" do
+    pipe_through [:api, :auth]
+
+    sync "/users", Accounts.User
+    sync "/threads", Threads.Thread
+    sync "/memberships", Threads.Membership
+    sync "/events", Threads.Event
+    sync "/facts", Memory.Fact
+  end
+end
+```
+
+In the front-end, we wire these sync endpoints into [TanStack DB collections](/blog/2025/07/29/local-first-sync-with-tanstack-db#collections).
+
+### TanStack DB
+
+[TanStack](https://tanstack.com) is a popular library for building web and mobile apps. TanStack DB is a new reactive client store built into TanStack for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
+
+You can read more about using TanStack DB with Electric on our [Local-first sync with TanStack DB and Electric](/blog/2025/07/29/local-first-sync-with-tanstack-db) blog post. It's a client store that provides a collection primitive to sync data into and a reactive, local-first programming model based on live queries and transactional mutations.
+
+<div class="listing">
+  <BlogPostListing v-for="post in posts"
+      :key="post.slug"
+      :post="post"
+  />
+</div>
+
+Burn defines TanStack DB collections which map to the sync endpoints we saw above, exposed in the Router:
+
+```ts
+// From `assets/src/db/collections.ts`
+
+export const eventCollection = createCollection(
+  electricCollectionOptions({
+    id: 'events',
+    shapeOptions: {
+      url: relativeUrl('/sync/events'),
+      ...baseShapeOptions,
+    },
+    schema: eventSchema
+  })
+)
+
+export const userCollection = createCollection(
+  electricCollectionOptions({
+    id: 'users',
+    shapeOptions: {
+      url: relativeUrl('/sync/users'),
+      ...baseShapeOptions,
+    },
+    schema: userSchema
+  })
+)
+```
+
+Electric collections keep the data in the collection up-to-date and in-sync with the contents of the Postgres database by consuming data from the sync endpoint exposed by the back-end. Components then read data from the collections into state variables using live queries:
+
+```tsx
+// From `assets/src/components/ChatArea.tsx`
+
+import { useLiveQuery, eq } from '@tanstack/react-db'
+import { eventCollection, userCollection } from '../db/collections'
+
+function ChatArea({ threadId }: Props) {
+  const { data: events } = useLiveQuery(
+    (query) => (
+      query
+        .from({ event: eventCollection })
+        .innerJoin({ user: userCollection }, ({ event, user }) =>
+          eq(user.id, event.user_id)
+        )
+        .orderBy(({ event }) => event.inserted_at, {
+          direction: 'asc',
+          nulls: 'last'
+        })
+        .select(({ event, user }) => ({
+          data: event.data,
+          id: event.id,
+          inserted_at: event.inserted_at,
+          thread_id: event.thread_id,
+          type: event.type,
+          user_id: user.id,
+          user_avatar: user.avatar_url,
+          user_name: user.name,
+          user_type: user.type
+        }))
+        .where(({ event }) => eq(event.thread_id, threadId)
+    ),
+    [threadId]
+  )
+```
+
+Live queries are reactive and built on a [super-fast, query engine](/blog/2025/07/29/local-first-sync-with-tanstack-db#sub-millisecond-performance), based on a [Typescript implementation of differential dataflow](https://github.com/electric-sql/d2ts), that supports very fast incremental updates when data changes. So, data syncs through into the collections, incrementally updates the live queries and everything just reacts. Instantly. Across all users and all devices.
+
+> ... multi-user video ...
+
+I want to stress, there's no data fetching in the code. There's no networking code in the components. You're not handling any fetch errors. It just works.
+
+### Under the hood
+
+As we've seen, Burn is a multi-user, multi-agent demo. Users and agents join threads. There's a [producer agent called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex) who asks the users questions and extracts facts about them. There are then [comedian agents](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex) who monitor the facts and, when they have enough to go on, try and roast or burn the users with some sharp humour.
+
+The key thing is that the events driving the thread and the facts being stored in the "agentic memory" are just normal rows in the database. To illustrate this, Burn not only renders a normal, collaborative chat UI for the main user <> agent interaction. It also renders a "computer" sidebar on the right hand side, showing you the raw data in the database that the thread is running on.
+
+> ... memory ...
+
+So the memory literally collects facts in the database. The facts are syncing into the front-end and displayed in real-time in the memory listing in the computer sidebar. Then the "context" section below that show the events that are driving the thread.
+
+> ... context ...
+
+So, the main chat UI is one representation of the database state and the context list is another. More of a debug view. Both are just functional representations of the database state. But then the instruction, the context, sent to the LLM is another.
+
+> ... terminal logging ...
+
+So the context engineering, like the UI, is just a functional representation of the state in the database.
+
+That's how all the fancy layers of agentic software just collapse to rows in the database and real-time sync. Both to drive the agentic control flow and to [keep the agents and the users in sync](/blog/2025/04/09/building-ai-apps-on-sync).
+
+## Back down to earth
+
+There's a lot of hype around agentic system development. Concepts like agentic memory, instruction routing, retrieval and context engineering.
+
+When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
+
+See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example. Build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack DB](https://tanstack.com/db).
+
+<div class="actions cta-actions page-footer-actions left">
+  <div class="action cloud-cta hidden-sm">
+    <VPButton
+      href="/demos/burn"
+      text="Burn demo app"
+      theme="brand"
+    />
+    &nbsp;
+    <VPButton
+        href="https://hexdocs.pm/phoenix_sync"
+        text="Phoenix.Sync"
+        theme="alt"
+    />
+    &nbsp;
+    <VPButton
+        href="https://tanstack.com/db"
+        text="TanStack DB"
+        theme="alt"
+    />
+  </div>
+  <div class="action cloud-cta hidden-xs block-sm">
+    <VPButton
+      href="/demos/burn"
+      text="Burn"
+      theme="brand"
+    />
+    &nbsp;
+    <VPButton
+        href="https://hexdocs.pm/phoenix_sync"
+        text="Phoenix.Sync"
+        theme="alt"
+    />
+    &nbsp;
+    <VPButton
+        href="https://tanstack.com/db"
+        text="TanStack DB"
+        theme="alt"
+    />
+  </div>
+  <div class="action cloud-cta block-xs">
+    <VPButton
+      href="/demos/burn"
+      text="Burn"
+      theme="brand"
+    />
+    &nbsp;
+    <VPButton
+        href="https://hexdocs.pm/phoenix_sync"
+        text="Phoenix"
+        theme="alt"
+    />
+    &nbsp;
+    <VPButton
+        href="https://tanstack.com/db"
+        text="TanStack"
+        theme="alt"
+    />
+  </div>
+</div>
