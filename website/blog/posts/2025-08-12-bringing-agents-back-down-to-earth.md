@@ -63,16 +63,15 @@ When you dig into it, these all collapse down to processes and database state. Y
 > [!Warning] Agentic demo app
 > See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn). It's an agentic system built on Postgres and real-time sync, designed to illustrate the concepts in this post.
 
-> <br />
-> ... embed video walkthrough ...
-> <br />
-> <br />
+<figure>
+  <div class="embed-container" style="padding-bottom: 75.842697%">
+    <YoutubeEmbed video-id="4QpErQ9nVEc" />
+  </div>
+</figure>
 
 ## Simplifying the agentic stack
 
 We've had decades to evolve the [patterns of traditional software](https://12factor.net). We're scrambling, as an industry, to figure out the [patterns of agentic software](https://github.com/humanlayer/12-factor-agents).
-
-LangChain, vector databases, instruction routing, specialized memory stores. You'd be forgiven for thinking you need a whole new stack to build agentic systems.
 
 <figure>
   <a href="https://www.ai.engineer/summit/2025" class="no-visual">
@@ -82,6 +81,8 @@ LangChain, vector databases, instruction routing, specialized memory stores. You
   </a>
 </figure>
 
+LangChain, vector databases, instruction routing, specialized memory stores. You'd be forgiven for thinking you need a whole new stack to build agentic systems.
+
 However, that isn't actually the case.
 
 ### What is agentic software?
@@ -90,11 +91,11 @@ Agents are essentially processes that instruct LLMs to make tool calls.
 
 Instructing LLMs means sending an instruction to an LLM. Agentic memory is where you store data that those instructions are based on. Retrieval is the ability to query that data. Context engineering retrieves and formats the right information to send in the instruction.
 
-Processes are a standard software primitive. As are routing, control flow, supervision hierarchies and functional loops.
-
 ### Rubbing a database on it
 
-There's obviously a lot of work involved in putting those aspects together to create a working agentic product. However, from an *infra* point of view, there's nothing there that doesn't [pattern match to a database](https://www.hytradboi.com/2025).
+There's obviously a lot of work involved in putting those aspects together to create a working agentic product. Memory compaction, finding the right context, the right control flow. Balancing structure and autonomy. These are all hard, fascinating design and engineering challenges.
+
+However, from an *infra* point of view, there's nothing there that doesn't [pattern match to a database](https://www.hytradboi.com/2025), some processes and real-time sync.
 
 <figure>
   <img src="/img/blog/bringing-agents-back-down-to-earth/agents-are-database-state.jpg"
@@ -102,13 +103,13 @@ There's obviously a lot of work involved in putting those aspects together to cr
   />
 </figure>
 
-Agentic AI, beneath all the hype, is actually just normal software. You can build agentic systems with a database, standard web tooling and real-time sync.
+Ultimately, processes are a [standard software primitive](https://hexdocs.pm/elixir/processes.html). As are routing, messaging, control flow, [supervision hierarchies](https://hexdocs.pm/elixir/Supervisor.html) and [loops](https://www.google.com/search?q=recursion).
 
 ## Building an agentic system
 
 [🔥 Burn is an agentic demo app](/demos/burn) where the UI, the agentic control flow and the context engineering are all driven by database state and [real-time sync](/blog/2025/04/09/building-ai-apps-on-sync).
 
-It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create and join threads. Each thread has [a producer agent, called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex), who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/jerry.ex) and [Frankie Boyle](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex)) who monitor the facts and, when they have enough to go on, try and roast or burn the users with some sharp humour.
+It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create and join threads. Each thread has [a producer agent, called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex), who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/jerry.ex) and [Frankie Boyle](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex)) who monitor the facts and roast the users when they have enough to go on.
 
 > ... embed short video of app in process, lots of zoom in ...
 
@@ -120,9 +121,7 @@ Technically, it's built on:
 
 In the back-end, agents subscribe to events in their thread. When something happens, they instruct the LLM by making a request to the [Anthropic API](https://docs.anthropic.com/en/api/messages). The LLM responds with a tool call. Tool calls are handled by the system and potentially generate new events, triggering another instruction loop.
 
-In the front-end, the UI is reactively wired up to the same data model and automatically updates whenever anything happens. The main UI is based around chat threads. Plus there's also a "computer" sidebar that functions a bit like a debug view, showing you what's happening in the database, under the hood, in real-time.
-
-> ... embed short video of the computer, lots of zoom in ...
+In the front-end, the UI is reactively wired up to the same data model and automatically updates whenever anything happens. The main UI is based around chat threads. Plus there's also a ["computer" sidebar](#computer-sidebar) that functions a bit like a debug view, showing you what's happening in the database, under the hood, in real-time.
 
 ### Standard Postgres
 
@@ -176,7 +175,9 @@ There are no extensions or vectors. It's just standard rows in standard tables.
 
 On the backend, Burn uses the [Phoenix framework](https://www.phoenixframework.org).
 
-Phoenix is built in [Elixir](https://elixir-lang.org), which runs on the [BEAM](https://blog.stenmans.org/theBeamBook/). The BEAM provides a robust agentic runtime environment with built-in primitives for [process supervision and messaging](https://hexdocs.pm/elixir/processes.html). This makes Elixir and Phoenix a perfect match for agentic system development [without needing a seperate agent framework](https://goto-code.com/blog/elixir-otp-for-llms/).
+Phoenix is built in [Elixir](https://elixir-lang.org), which runs on the [BEAM](https://blog.stenmans.org/theBeamBook/). The BEAM provides a robust agentic runtime environment with built-in primitives for [process supervision and messaging](https://hexdocs.pm/elixir/processes.html).
+
+This makes Elixir and Phoenix a perfect match for agentic system development [without needing a seperate agent framework](https://goto-code.com/blog/elixir-otp-for-llms/).
 
 Phoenix also has a sync library, [Phoenix.Sync](https://hexdocs.pm/phoenix_sync), that adds real-time sync to Phoenix:
 
@@ -356,8 +357,6 @@ function ChatArea({ threadId }: Props) {
 Live queries are reactive and built on a [super-fast, query engine](/blog/2025/07/29/local-first-sync-with-tanstack-db#sub-millisecond-performance), based on a [Typescript implementation of differential dataflow](https://github.com/electric-sql/d2ts). Data syncs through into the collections, incrementally updates the live queries and everything just reacts. Instantly. Across all users and all devices.
 
 > ... multi-user video ...
-
-There's no data fetching in the code. No networking code in the components. You're not handling any fetch errors. It just works.
 
 ### 𝑓(state)
 
