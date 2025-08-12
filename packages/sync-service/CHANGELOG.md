@@ -1,5 +1,28 @@
 # @core/sync-service
 
+## 1.1.1
+
+### Patch Changes
+
+- ad15a16: fix: improve startup time of Electric when a lot of shapes are present
+- 1da5ef0: fix: ensure dependent applications have a sane otel sampling default
+- 1b26756: Make Sentry logger handler ID configurable.
+- d6173a5: Capture postgres client exits as known and retryable errors.
+- 007b196: Lock connection should fail after timing out on connection or handshake to avoid getting stuck.
+- 71b3d3b: fix: ensure CPU reporter doesn't crash
+- 213d247: Ensure service can recover from unhandleable replication slots, in cases such as too large transactions or incorrectly configured replica identity.
+- c5a2d6c: Don't fail cleanup if directory is already missing
+- e8b6832: Parse more DB errors correctly `pg_code 08P01`
+- 028c45c: Check for changes since request start in SSE requests.
+- cb0e484: fix: ensure Electric doesn't accept where clauses that aren't boolean
+- 6ee031e: fix: fix a crash because of wrong in-memory state initialization for storage
+- f26a425: fix: ensure no crash on restarting the connection process at a weird time
+- 028c45c: Fix streaming of last virtual offset.
+- 3ca82d7: fix: improve CPU usage of PureFileStorage by lowering syscall count
+- 5dfb8fa: Extend replication processing telemetry to cover the entire processing loop
+- 753f9a3: Update pg_query_ex to 0.9 to benefit from parallel compilation speedup
+- 5dfb8fa: Sample telemetry at source for faster replication stream processing
+
 ## 1.1.0
 
 ### Minor Changes
