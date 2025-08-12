@@ -30,6 +30,7 @@ post: true
     gap: 32px;
     margin: 24px 0;
     overflow: hidden;
+    max-width: 512px;
   }
   @media (max-width: 1049px) {
     .listing {
@@ -368,11 +369,13 @@ Live queries are reactive and built on a [super-fast, query engine](/blog/2025/0
 
 I want to stress, there's no data fetching in the code. There's no networking code in the components. You're not handling any fetch errors. It just works.
 
-### Under the hood
+### Computer sidebar
 
 As we've seen, Burn is a multi-user, multi-agent demo. Users and agents join threads. There's a [producer agent called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex) who asks the users questions and extracts facts about them. There are then [comedian agents](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex) who monitor the facts and, when they have enough to go on, try and roast or burn the users with some sharp humour.
 
-The key thing is that the events driving the thread and the facts being stored in the "agentic memory" are just normal rows in the database. To illustrate this, Burn not only renders a normal, collaborative chat UI for the main user <> agent interaction. It also renders a "computer" sidebar on the right hand side, showing you the raw data in the database that the thread is running on.
+The key thing is that the events driving the thread and the facts being stored in the "agentic memory" are just normal rows in the database.
+
+To illustrate this, Burn not only renders a normal, collaborative chat UI for the main user <> agent interaction. It also renders a "computer" sidebar on the right hand side, showing you the raw data in the database that the thread is running on.
 
 > ... memory ...
 
@@ -380,13 +383,15 @@ So the memory literally collects facts in the database. The facts are syncing in
 
 > ... context ...
 
+### Context and UI as 𝑓(state)
+
 So, the main chat UI is one representation of the database state and the context list is another. More of a debug view. Both are just functional representations of the database state. But then the instruction, the context, sent to the LLM is another.
 
 > ... terminal logging ...
 
-So the context engineering, like the UI, is just a functional representation of the state in the database.
+So the context engineering, like the UI, is just a functional representation of the state in the database. That's how all the fancy layers of agentic software just collapse to rows in the database and real-time sync.
 
-That's how all the fancy layers of agentic software just collapse to rows in the database and real-time sync. Both to drive the agentic control flow and to [keep the agents and the users in sync](/blog/2025/04/09/building-ai-apps-on-sync).
+Both to drive the agentic control flow and to [keep the agents and the users in sync](/blog/2025/04/09/building-ai-apps-on-sync).
 
 ## Back down to earth
 
