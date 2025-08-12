@@ -285,7 +285,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     log_table = opts.log_table
     chunk_checkpoint_table = opts.chunk_checkpoint_table
 
-    {log_items, last_offset} =
+    {processed_log_items, last_offset} =
       Enum.map_reduce(log_items, nil, fn
         {:chunk_boundary, offset}, curr ->
           {{storage_offset(offset), :checkpoint}, curr}
@@ -294,13 +294,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           {{{:offset, storage_offset(offset)}, json_log_item}, offset}
       end)
 
-    log_items
+    processed_log_items
     |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)
     |> then(fn {checkpoints, log_items} ->
       :ets.insert(chunk_checkpoint_table, checkpoints)
       :ets.insert(log_table, log_items)
       :ets.insert(opts.snapshot_table, {@latest_offset_key, last_offset})
     end)
+
+    send(self(), {Storage, :flushed, elem(List.last(log_items), 0)})
 
     opts
   end

@@ -229,7 +229,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({ShapeCache.Storage, :flushed, offset}, state) do
-    {state, offset} = normalize_offset(state, offset)
+    {state, offset} = align_to_txn_boundary(state, offset)
 
     ShapeLogCollector.notify_flushed(state.log_producer, state.shape_handle, offset)
     {:noreply, state}
@@ -577,10 +577,10 @@ defmodule Electric.Shapes.Consumer do
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
-  defp normalize_offset(%{txn_offset_mapping: txn_offset_mapping} = state, offset) do
+  defp align_to_txn_boundary(%{txn_offset_mapping: txn_offset_mapping} = state, offset) do
     case Enum.drop_while(txn_offset_mapping, &(LogOffset.compare(elem(&1, 0), offset) == :lt)) do
-      [{^offset, normalized} | rest] ->
-        {%{state | txn_offset_mapping: rest}, normalized}
+      [{^offset, boundary} | rest] ->
+        {%{state | txn_offset_mapping: rest}, boundary}
 
       rest ->
         {%{state | txn_offset_mapping: rest}, offset}

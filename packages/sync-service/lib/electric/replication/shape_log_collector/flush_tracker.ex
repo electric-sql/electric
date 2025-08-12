@@ -176,27 +176,29 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   end
 
   defp update_global_offset(
+         %__MODULE__{last_flushed: last_flushed, last_seen_offset: last_seen} = state
+       )
+       when last_flushed == %{} do
+    %__MODULE__{state | last_global_flushed_offset: last_seen}
+    |> notify_global_offset_updated()
+  end
+
+  defp update_global_offset(
          %__MODULE__{
            min_incomlete_flush_tree: min_incomlete_flush_tree,
-           last_global_flushed_offset: prev_last_global_flushed_offset,
-           last_flushed: last_flushed
+           last_global_flushed_offset: prev_last_global_flushed_offset
          } = state
        ) do
-    if last_flushed == %{} do
-      %__MODULE__{state | last_global_flushed_offset: state.last_seen_offset}
+    {offset, _} = :gb_trees.smallest(min_incomlete_flush_tree)
+
+    last_global_flushed_offset =
+      LogOffset.max(prev_last_global_flushed_offset, LogOffset.new(offset))
+
+    if prev_last_global_flushed_offset != last_global_flushed_offset do
+      %__MODULE__{state | last_global_flushed_offset: last_global_flushed_offset}
       |> notify_global_offset_updated()
     else
-      {offset, _} = :gb_trees.smallest(min_incomlete_flush_tree)
-
-      last_global_flushed_offset =
-        LogOffset.max(prev_last_global_flushed_offset, LogOffset.new(offset))
-
-      if prev_last_global_flushed_offset != last_global_flushed_offset do
-        %__MODULE__{state | last_global_flushed_offset: last_global_flushed_offset}
-        |> notify_global_offset_updated()
-      else
-        state
-      end
+      state
     end
   end
 
