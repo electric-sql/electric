@@ -29,12 +29,12 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   It also might be worth it eventually to break lock-step writes. We need to tell Postgres accurately (enough) when we’ve actually flushed the data it sent us.
 
   Main problem is that we’re not only flushing on different cadences, but also each shape might not see every operation, so our flush acknowledgement
-  should take a complicated minimum across all shapes depending on what they are seeing. What’s more is that we want to normalize the acknowledged WALs
+  should take a complicated minimum across all shapes depending on what they are seeing. What’s more is that we want to align the acknowledged WALs
   to transaction boundaries, because that’s how PG is sending the data.
 
   It’s important to note that because shapes are not seeing all operations, they don’t necessarily see the last-in-transaction operation, while the
   sender doesn’t know how many operations will be sent upfront. Because of that it’s up to the writer to acknowledge the intermediate flushes but also
-  to normalize the last-seen operation to the transaction offset so that the sender can be sure the writer has caught up.
+  to align the last-seen operation to the transaction offset so that the sender can be sure the writer has caught up.
 
   ### Tracked state:
   - `last_global_flushed_offset`
@@ -71,10 +71,10 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     2. Otherwise, it’s complicated to determine which transactions have been flushed completely without keeping track of
        all intermediate points, so notify with LSN = tx_offset - 1, essentially lagging the flush by one transaction just in case.
 
-  Normalization of the txn flush on a writer:
-  1. On incoming transaction, store a mapping of last offset that’s meant to be written by this writer to the whole txn offset
+  Aligning the writers flushed offset with the transaction boundary:
+  1. On incoming transaction, store a mapping of last offset that’s meant to be written by this writer to the last offset for the txn
   2. On a flush, the writer should remove from the mapping all elements that are less-then-or-equal to last flushed offset, and then
-    1. If last removed element from the mapping is equal to the flushed, then use the whole txn offset instead to notify the sender
+    1. If last removed element from the mapping is equal to the flushed, then use the transaction last offset instead to notify the sender
     2. Otherwise, use actual last flushed offset to notify the sender.
   """
   def new(opts \\ []) do
