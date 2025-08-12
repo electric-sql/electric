@@ -378,6 +378,14 @@ defmodule Electric.Shapes.ShapeTest do
                ["The following columns are generated and cannot be included in replication: id"]}} =
                Shape.new("gen_col_table", inspector: inspector)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS testing_table (id uuid PRIMARY KEY)"
+         ]
+    test "validates where clause return type", %{inspector: inspector} do
+      assert {:error, {:where, "WHERE clause must return a boolean"}} =
+               Shape.new("testing_table", inspector: inspector, where: "id")
+    end
   end
 
   describe "new!/2" do
@@ -514,7 +522,8 @@ defmodule Electric.Shapes.ShapeTest do
             columns: [
               %{name: "id", type: "int8", pk_position: 0},
               %{name: "value", type: "int8", pk_position: nil},
-              %{name: "size", type: "int8", pk_position: nil}
+              %{name: "size", type: "int8", pk_position: nil},
+              %{name: "created_at", type: "timestamp", pk_position: nil}
             ]
           )
       ]
@@ -572,10 +581,10 @@ defmodule Electric.Shapes.ShapeTest do
       tests = [
         {"(FALSE)", ["false", "(false)", " false "]},
         {"(VALUE IN (1,2,3))", ["value in (1, 2, 3)", ~s[("value" in (1, 2, 3))]]},
-        {~S|time '20:00:00' + date '2024-01-01'|,
+        {~S|time '20:00:00' + date '2024-01-01' > created_at|,
          [
-           ~S|((TIME '20:00:00') + (DATE '2024-01-01'))|,
-           ~S| (((time  '20:00:00')  +  (date  '2024-01-01')))|
+           ~S|((TIME '20:00:00') + (DATE '2024-01-01')) > created_at|,
+           ~S| (((time  '20:00:00')  +  (date  '2024-01-01')) >   created_at)|
          ]}
       ]
 

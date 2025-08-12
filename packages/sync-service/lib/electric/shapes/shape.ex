@@ -171,7 +171,8 @@ defmodule Electric.Shapes.Shape do
          {:ok, selected_columns} <-
            validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
-         {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), opts[:params], refs) do
+         {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), opts[:params], refs),
+         {:ok, where} <- validate_where_return_type(where) do
       flags =
         [
           if(is_nil(Access.get(opts, :columns)), do: :selects_all_columns),
@@ -203,6 +204,15 @@ defmodule Electric.Shapes.Shape do
     case Parser.parse_and_validate_expression(where, params: params, refs: refs) do
       {:ok, expr} -> {:ok, expr}
       {:error, reason} -> {:error, {:where, reason}}
+    end
+  end
+
+  defp validate_where_return_type(nil), do: {:ok, nil}
+
+  defp validate_where_return_type(where) do
+    case where.eval.type do
+      :bool -> {:ok, where}
+      _ -> {:error, {:where, "WHERE clause must return a boolean"}}
     end
   end
 
