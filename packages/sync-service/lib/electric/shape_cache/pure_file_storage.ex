@@ -1301,6 +1301,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
       write_metadata!(storage, :last_persisted_txn_offset, last_seen_txn)
     end
 
+    # Tell the parent process that we've flushed up to this point
+    send(self(), {Storage, :flushed, last_seen_offset})
+
     # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
     writer_acc(acc,
       buffer: [],

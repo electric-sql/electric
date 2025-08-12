@@ -52,7 +52,8 @@ defmodule Electric.Postgres.ReplicationClient do
       # "applied" offsets but we only keep track of the "applied" offset which we define as the
       # end LSN of the last transaction that we have successfully processed and persisted in the
       # shape log storage.
-      applied_wal: 0
+      received_wal: 0,
+      flushed_wal: 0
     ]
 
     @type t() :: %__MODULE__{
@@ -70,7 +71,8 @@ defmodule Electric.Postgres.ReplicationClient do
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
-            applied_wal: non_neg_integer()
+            received_wal: non_neg_integer(),
+            flushed_wal: non_neg_integer()
           }
 
     @opts_schema NimbleOptions.new!(
@@ -218,6 +220,13 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   @impl true
+  def handle_info({:flush_boundary_updated, lsn}, state) do
+    state = %{state | flushed_wal: lsn}
+
+    {:noreply, [encode_standby_status_update(state)], state}
+  end
+
+  @impl true
   def handle_info(:start_streaming, %State{step: :ready_to_stream} = state) do
     ConnectionSetup.start_streaming(state)
   end
@@ -271,7 +280,7 @@ defmodule Electric.Postgres.ReplicationClient do
       # with keepalives to avoid it getting filled with irrelevant changes, like
       # heartbeats from the database provider
       1 ->
-        state = update_applied_wal(state, wal_end)
+        state = update_received_wal(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
 
       0 ->
@@ -367,12 +376,12 @@ defmodule Electric.Postgres.ReplicationClient do
 
             case apply(m, f, [txn | args]) do
               :ok ->
-                OpenTelemetry.start_interval("replication_client.update_applied_wal")
+                OpenTelemetry.start_interval("replication_client.update_received_wal")
                 # We currently process incoming replication messages sequentially, persisting each
                 # new transaction into the shape log store. So, when the applied function
                 # returns, we can safely advance the replication slot past the transaction's commit
                 # LSN.
-                state = update_applied_wal(state, Electric.Postgres.Lsn.to_integer(txn.lsn))
+                state = update_received_wal(state, Electric.Postgres.Lsn.to_integer(txn.lsn))
                 response = [encode_standby_status_update(state)]
 
                 OpenTelemetry.stop_and_save_intervals(
@@ -407,9 +416,9 @@ defmodule Electric.Postgres.ReplicationClient do
   defp encode_standby_status_update(state) do
     <<
       @repl_msg_standby_status_update,
-      state.applied_wal + 1::64,
-      state.applied_wal + 1::64,
-      state.applied_wal + 1::64,
+      state.received_wal + 1::64,
+      state.flushed_wal + 1::64,
+      state.flushed_wal + 1::64,
       current_time()::64,
       0
     >>
@@ -418,10 +427,10 @@ defmodule Electric.Postgres.ReplicationClient do
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
 
-  defp update_applied_wal(state, wal) when is_number(wal) and wal >= state.applied_wal,
-    do: %{state | applied_wal: wal}
+  defp update_received_wal(state, wal) when is_number(wal) and wal >= state.received_wal,
+    do: %{state | received_wal: wal}
 
-  defp update_applied_wal(state, wal) when is_number(wal), do: state
+  defp update_received_wal(state, wal) when is_number(wal), do: state
 
   defp notify_connection_opened(%State{connection_manager: manager} = state) do
     :ok = Electric.Connection.Manager.replication_client_started(manager)

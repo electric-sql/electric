@@ -6,6 +6,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   use GenServer
 
   require Electric.Postgres.Lsn
+  alias Electric.Postgres.ReplicationClient
+  alias Electric.Replication.ShapeLogCollector.FlushTracker
   alias Electric.LsnTracker
   alias Electric.Replication.ShapeLogCollector.AffectedColumns
   alias Electric.Postgres.Lsn
@@ -78,6 +80,10 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.call(server, {:subscribe, shape})
   end
 
+  def notify_flushed(server, _shape_handle, offset) do
+    GenServer.cast(server, {:writer_flushed, self(), offset})
+  end
+
   def init(opts) do
     Process.set_label({:shape_log_collector, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
@@ -99,7 +105,16 @@ defmodule Electric.Replication.ShapeLogCollector do
         persistent_replication_data_opts: persistent_replication_data_opts,
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
-        filter: Filter.new(Keyword.new(opts))
+        filter: Filter.new(Keyword.new(opts)),
+        flush_tracker:
+          FlushTracker.new(
+            notify_fn: fn lsn ->
+              case GenServer.whereis(ReplicationClient.name(opts.stack_id)) do
+                nil -> :ok
+                pid -> send(pid, {:flush_boundary_updated, lsn})
+              end
+            end
+          )
       })
 
     {:ok, state}
@@ -107,7 +122,10 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_info({:unsubscribe, ref, :process, pid, _reason}, state) do
     OpenTelemetry.with_span("shape_log_collector.unsubscribe", [], state.stack_id, fn ->
-      {:noreply, remove_subscription({pid, ref}, state)}
+      {:noreply,
+       state
+       |> remove_subscription({pid, ref})
+       |> Map.update!(:flush_tracker, &FlushTracker.handle_shape_removed(&1, pid))}
     end)
   end
 
@@ -175,12 +193,18 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, handle_relation(rel, from, state)}
   end
 
+  def handle_cast({:writer_flushed, shape_id, offset}, state) do
+    {:noreply,
+     state
+     |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
+  end
+
   # If no-one is listening to the replication stream, then just return without
   # emitting the transaction.
   defp handle_transaction(%{subscriptions: {0, _}} = state, txn) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    state
+    %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}
   end
 
   # If we've already processed a transaction, then drop it without processing
@@ -240,7 +264,18 @@ defmodule Electric.Replication.ShapeLogCollector do
       state.stack_id
     )
 
-    %{state | partitions: partitions}
+    flush_tracker =
+      if is_struct(event, Transaction) do
+        FlushTracker.handle_transaction(state.flush_tracker, event, affected_shapes)
+      else
+        state.flush_tracker
+      end
+
+    %{
+      state
+      | partitions: partitions,
+        flush_tracker: flush_tracker
+    }
   end
 
   defp handle_relation(rel, _from, state) do
@@ -276,7 +311,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
-  defp remove_subscription({pid, _} = from, %{subscriptions: {count, set}} = state) do
+  defp remove_subscription(%{subscriptions: {count, set}} = state, {pid, _} = from) do
     subscriptions =
       if MapSet.member?(set, from) do
         {count - 1, MapSet.delete(set, from)}
