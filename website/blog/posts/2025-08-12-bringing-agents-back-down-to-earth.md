@@ -30,7 +30,6 @@ post: true
     gap: 32px;
     margin: 24px 0;
     overflow: hidden;
-    max-width: 512px;
   }
   @media (max-width: 1049px) {
     .listing {
@@ -348,17 +347,6 @@ function ChatArea({ threadId }: Props) {
           direction: 'asc',
           nulls: 'last'
         })
-        .select(({ event, user }) => ({
-          data: event.data,
-          id: event.id,
-          inserted_at: event.inserted_at,
-          thread_id: event.thread_id,
-          type: event.type,
-          user_id: user.id,
-          user_avatar: user.avatar_url,
-          user_name: user.name,
-          user_type: user.type
-        }))
         .where(({ event }) => eq(event.thread_id, threadId)
     ),
     [threadId]
