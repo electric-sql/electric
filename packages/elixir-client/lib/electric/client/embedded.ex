@@ -33,9 +33,13 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
 
       timestamp = DateTime.utc_now()
 
-      with {:ok, request} <- Api.validate(api, request_to_params(request)),
-           %Api.Response{} = response = Api.serve_shape_log(request) do
-        {:ok, translate_response(response, timestamp)}
+      case Api.validate(api, request_to_params(request)) do
+        {:ok, request} ->
+          %Api.Response{} = response = Api.serve_shape_log(request)
+          {:ok, translate_response(response, timestamp)}
+
+        {:error, response} ->
+          {:error, translate_response(response, timestamp)}
       end
     end
 
