@@ -107,15 +107,17 @@ Agentic AI, beneath all the hype, is actually just normal software. You can buil
 
 ## Building an agentic system
 
-[🔥 Burn is an agentic demo app](/demos/burn) where the UI, the agentic control flow and the context engineering are all driven by database state and [real-time sync](/blog/2025/04/09/building-ai-apps-on-sync), built on:
+[🔥 Burn is an agentic demo app](/demos/burn) where the UI, the agentic control flow and the context engineering are all driven by database state and [real-time sync](/blog/2025/04/09/building-ai-apps-on-sync).
+
+It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create and join threads. Each thread has [a producer agent, called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex), who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/jerry.ex) and [Frankie Boyle](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex)) who monitor the facts and, when they have enough to go on, try and roast or burn the users with some sharp humour.
+
+> ... embed short video of app in process, lots of zoom in ...
+
+Technically, it's built on:
 
 - [Postgres](#standard-postgres)
 - [Phoenix.Sync](#phoenix-sync)
 - [TanStack DB](#tanstack-db)
-
-It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create and join threads. Each thread has a producer agent, called Sarah, who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://en.wikipedia.org/wiki/Jerry_Seinfeld) and [Frankie Boyle](https://en.wikipedia.org/wiki/Frankie_Boyle)) who use the facts to roast the users.
-
-> ... embed short video of app in process, lots of zoom in ...
 
 In the back-end, agents subscribe to events in their thread. When something happens, they instruct the LLM by making a request to the [Anthropic API](https://docs.anthropic.com/en/api/messages). The LLM responds with a tool call. Tool calls are handled by the system and potentially generate new events, triggering another instruction loop.
 
@@ -326,7 +328,7 @@ export const userCollection = createCollection(
 )
 ```
 
-Electric collections keep the data in the collection up-to-date and in-sync with the contents of the Postgres database by consuming data from the sync endpoint exposed by the back-end. Components then read data from the collections into state variables using live queries:
+Electric collections use the [Electric sync engine](/product/electric) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
 
 ```tsx
 // From `assets/src/components/ChatArea.tsx`
@@ -363,35 +365,33 @@ function ChatArea({ threadId }: Props) {
   )
 ```
 
-Live queries are reactive and built on a [super-fast, query engine](/blog/2025/07/29/local-first-sync-with-tanstack-db#sub-millisecond-performance), based on a [Typescript implementation of differential dataflow](https://github.com/electric-sql/d2ts), that supports very fast incremental updates when data changes. So, data syncs through into the collections, incrementally updates the live queries and everything just reacts. Instantly. Across all users and all devices.
+Live queries are reactive and built on a [super-fast, query engine](/blog/2025/07/29/local-first-sync-with-tanstack-db#sub-millisecond-performance), based on a [Typescript implementation of differential dataflow](https://github.com/electric-sql/d2ts). Data syncs through into the collections, incrementally updates the live queries and everything just reacts. Instantly. Across all users and all devices.
 
 > ... multi-user video ...
 
-I want to stress, there's no data fetching in the code. There's no networking code in the components. You're not handling any fetch errors. It just works.
+There's no data fetching in the code. No networking code in the components. You're not handling any fetch errors. It just works.
 
-### Computer sidebar
+### 𝑓(state)
 
-As we've seen, Burn is a multi-user, multi-agent demo. Users and agents join threads. There's a [producer agent called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex) who asks the users questions and extracts facts about them. There are then [comedian agents](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex) who monitor the facts and, when they have enough to go on, try and roast or burn the users with some sharp humour.
+The key thing making this work is that the events driving the thread and the facts being stored in the "agentic memory" are just normal rows in the database.
 
-The key thing is that the events driving the thread and the facts being stored in the "agentic memory" are just normal rows in the database.
-
-To illustrate this, Burn not only renders a normal, collaborative chat UI for the main user <> agent interaction. It also renders a "computer" sidebar on the right hand side, showing you the raw data in the database that the thread is running on.
+To illustrate this, Burn renders not only a normal, collaborative chat UI for the main user <> agent interaction but also a "computer" sidebar on the right hand side, showing you the raw data in the database that the thread is running on.
 
 > ... memory ...
 
-So the memory literally collects facts in the database. The facts are syncing into the front-end and displayed in real-time in the memory listing in the computer sidebar. Then the "context" section below that show the events that are driving the thread.
+The memory collects facts in the database. The facts sync into the front-end, where they're displayed in real-time in the memory listing in the computer sidebar. Then the "context" section below that show the events that are driving the thread.
 
 > ... context ...
 
-### Context and UI as 𝑓(state)
+Both UIs (the main chat UI and the computer sidebar) are functional representations of the database state. But then so is the instruction sent to the LLM.
 
-So, the main chat UI is one representation of the database state and the context list is another. More of a debug view. Both are just functional representations of the database state. But then the instruction, the context, sent to the LLM is another.
+When an agent instructs the LLM, it retrieves the state of the current thread and renders in it a text format that the LLM likes.
 
 > ... terminal logging ...
 
-So the context engineering, like the UI, is just a functional representation of the state in the database. That's how all the fancy layers of agentic software just collapse to rows in the database and real-time sync.
+This retrieval and rendering process is the context engineering behind the system. As you can see, it's also just a functional representation of the database state.
 
-Both to drive the agentic control flow and to [keep the agents and the users in sync](/blog/2025/04/09/building-ai-apps-on-sync).
+That's how all the fancy layers of agentic software just collapse to rows in the database and real-time sync. It's all just a functional representation of state. With real-time sync driving both the [human UI and agentic control flow](/blog/2025/04/09/building-ai-apps-on-sync).
 
 ## Back down to earth
 
@@ -399,7 +399,7 @@ There's a lot of hype around agentic system development. Concepts like agentic m
 
 When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
 
-See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example. Build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack DB](https://tanstack.com/db).
+See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack DB](https://tanstack.com/db).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta hidden-sm">
