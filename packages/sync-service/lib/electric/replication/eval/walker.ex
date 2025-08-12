@@ -219,12 +219,16 @@ defimpl Electric.Walkable, for: PgQuery.List do
 end
 
 defimpl Electric.Walkable, for: PgQuery.SubLink do
-  def children(%PgQuery.SubLink{testexpr: testexpr}), do: [testexpr: testexpr]
+  def children(%PgQuery.SubLink{testexpr: testexpr}),
+    do: [testexpr: testexpr]
 end
 
-defimpl Electric.Walkable,
-  for: [PgQuery.A_Const, PgQuery.String, PgQuery.ParamRef] do
-  def children(_), do: []
+defimpl Electric.Walkable, for: PgQuery.ResTarget do
+  def children(%PgQuery.ResTarget{val: val}), do: [val: val]
+end
+
+defimpl Electric.Walkable, for: PgQuery.RowExpr do
+  def children(%PgQuery.RowExpr{args: args}), do: [args: args]
 end
 
 defimpl Electric.Walkable, for: Electric.Replication.Eval.Parser.Func do

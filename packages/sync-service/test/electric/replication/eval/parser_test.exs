@@ -12,6 +12,26 @@ defmodule Electric.Replication.Eval.ParserTest do
     {:bool, :int4} => {ExplicitCasts, :bool_to_int4}
   }
 
+  describe "extract_parts_from_select/1" do
+    test "should correctly extract columns" do
+      assert {:ok, {columns, from, where}} =
+               Parser.extract_parts_from_select("SELECT c1, c2 FROM t2")
+
+      assert columns == ["c1", "c2"]
+      assert from == {"public", "t2"}
+      assert where == nil
+    end
+
+    test "should correctly extract where clause" do
+      assert {:ok, {columns, from, where}} =
+               Parser.extract_parts_from_select("SELECT c1, c2 FROM t2 WHERE c1 = 1")
+
+      assert columns == ["c1", "c2"]
+      assert from == {"public", "t2"}
+      assert %PgQuery.Node{} = where
+    end
+  end
+
   describe "parse_and_validate_expression/3 basics" do
     test "should correctly parse constants" do
       assert {:ok, %Expr{eval: result}} = Parser.parse_and_validate_expression("TRUE")
