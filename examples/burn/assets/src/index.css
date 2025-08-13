@@ -1,0 +1,276 @@
+:root {
+  /* Electric theme colors */
+  --electric-purple: rgb(126, 120, 219);
+  --electric-light-purple: rgb(208, 188, 255);
+  --electric-dark: rgb(27, 27, 31);
+  --electric-darker: rgb(22, 22, 24);
+
+  /* Custom CSS variables for black and white theme */
+  --pure-white: #ffffff;
+  --off-white: #f9f9f9;
+  --light-gray: #e1e1e1;
+  --mid-gray: #a0a0a0;
+  --dark-gray: var(--electric-dark);
+  --off-black: var(--electric-darker);
+  --pure-black: #000000;
+
+  /* Override Radix UI theme variables with Electric colors */
+  --purple-1: #f8f7ff;
+  --purple-2: #f0eeff;
+  --purple-3: #e4e0ff;
+  --purple-4: #d4cdff;
+  --purple-5: #c7beff;
+  --purple-6: #b8adff;
+  --purple-7: #a69aff;
+  --purple-8: #9281ff;
+  --purple-9: var(--electric-purple);
+  --purple-10: #6b5dd0;
+  --purple-11: #5e4fc7;
+  --purple-12: #3a2c8a;
+
+  /* Iris colors for button styling */
+  --iris-1: #fdfdff;
+  --iris-2: #f8f8ff;
+  --iris-3: #f0f1fe;
+  --iris-4: #e6e7ff;
+  --iris-5: #d9daff;
+  --iris-6: #c8caff;
+  --iris-7: #b1b4ff;
+  --iris-8: #9b9ef9;
+  --iris-9: #5b5bd6;
+  --iris-10: #5151cd;
+  --iris-11: #5753c6;
+  --iris-12: #2f2d78;
+}
+
+/* Light theme */
+.light {
+  --background: var(--pure-white);
+  --sidebar-bg: var(--off-white);
+  --border-color: var(--light-gray);
+  --text-primary: var(--pure-black);
+  --text-secondary: var(--dark-gray);
+  --message-user-bg: var(--light-gray);
+  --message-ai-bg: var(--off-white);
+  --button-hover: var(--light-gray);
+  --active-item-bg: var(--light-gray);
+  --accent-color: var(--electric-purple);
+}
+
+/* Dark theme */
+.dark {
+  --background: var(--electric-dark);
+  --sidebar-bg: var(--electric-darker);
+  --border-color: #2a2a2a;
+  --text-primary: var(--pure-white);
+  --text-secondary: #a0a0a0;
+  --message-user-bg: #2a2a2a;
+  --message-ai-bg: var(--electric-dark);
+  --button-hover: var(--electric-darker);
+  --active-item-bg: var(--electric-darker);
+  --accent-color: var(--electric-purple);
+}
+
+/* Global styles */
+html,
+body,
+#root {
+  height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height for mobile */
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family:
+    'Open Sauce One',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+
+/* Radix Themes font overrides */
+.radix-themes {
+  --default-font-family:
+    'Open Sauce One', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --heading-font-family:
+    'Open Sauce One', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --strong-font-family:
+    'Open Sauce One', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --em-font-family:
+    'Open Sauce One', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --quote-font-family:
+    'Open Sauce One', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+/* Make all buttons and links use pointer cursor */
+button,
+a,
+[role='button'],
+.rt-Button,
+.rt-IconButton,
+.rt-Link,
+.rt-SelectTrigger,
+.rt-DropdownMenuTrigger,
+.rt-SelectItem,
+.rt-DropdownMenuItem,
+.rt-TooltipTrigger,
+.clickable {
+  cursor: pointer !important;
+}
+
+.content-area {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dark a,
+.dark button {
+  color: var(--purple-3);
+}
+
+.dark :focus-visible {
+  outline-color: var(--purple-3);
+}
+
+/* Scrollbar styling for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: var(--electric-darker);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+
+/* Dark mode sidebar enhancements */
+.dark .sidebar {
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.no-wrap {
+  text-wrap: nowrap;
+}
+
+pre:has(.syntax-highlighter) {
+  overflow: auto;
+}
+
+.rt-ScrollAreaViewport > div {
+  width: 100%;
+}
+
+/* Mobile viewport height fixes */
+@media (max-width: 768px) {
+  .content-area {
+    height: 100dvh;
+  }
+
+  .sidebar {
+    height: 100dvh;
+  }
+}
+
+/* Responsive layout for large screens */
+@media (min-width: 1121px) {
+  .app-layout {
+    display: grid !important;
+    height: 100vh !important;
+    /* At 1120px: left=280px, main=560px, right=280px (total 1120px)
+       Above 1120px: additional width split equally between main and right
+       So: 280px + (560px + 0.5 * extra) + (280px + 0.5 * extra) */
+    grid-template-columns: 280px calc(560px + 50vw - 560px) calc(
+        280px + 50vw - 560px
+      );
+    grid-template-areas: 'left-sidebar main-content right-sidebar';
+    grid-template-rows: 1fr;
+  }
+
+  .app-layout .content-area {
+    grid-area: main-content;
+    width: auto !important;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* Ensure left sidebar participates in grid */
+  .app-layout .sidebar {
+    grid-area: left-sidebar;
+    width: auto !important;
+    min-height: 0;
+  }
+
+  /* Ensure right sidebar participates in grid and its contents grow */
+  .app-layout .right-sidebar {
+    grid-area: right-sidebar;
+    width: auto !important;
+    min-width: 280px;
+    min-height: 0;
+  }
+
+  /* Make sure right sidebar contents fill available width */
+  .right-sidebar .rt-Flex,
+  .right-sidebar .rt-Box {
+    width: 100% !important;
+  }
+}
+
+/* Sidebar responsive behavior */
+/* Hide close buttons on desktop */
+@media (min-width: 970px) {
+  .sidebar .closeButton {
+    display: none !important;
+  }
+}
+
+@media (min-width: 700px) {
+  .right-sidebar .closeButton {
+    display: none !important;
+  }
+}
+
+/* Hide close buttons when sidebars are closed */
+.sidebar:not(.sidebarOpen) .closeButton,
+.right-sidebar:not(.sidebarOpen) .closeButton {
+  display: none !important;
+}
+
+/* Typing indicator animation */
+@keyframes bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-6px);
+  }
+}
+
+/* Custom iris button styling - target specific buttons without affecting global colors */
+@media (hover: hover) {
+  .rt-BaseButton:where(.rt-variant-soft):where(:hover) {
+    background-color: var(--iris-a6);
+  }
+}
+
+.rt-BaseButton:where(.rt-variant-soft) {
+  background-color: var(--iris-a5);
+}
