@@ -13,7 +13,11 @@ defmodule Electric.Telemetry.Sampler do
   def include_span?("pg_txn.replication_client.transaction_received"), do: sample?()
   def include_span?(_), do: true
 
-  def sample? do
+  defp sample? do
     :rand.uniform() <= Electric.Config.get_env(:otel_sampling_ratio)
+  end
+
+  def sample_metrics? do
+    :rand.uniform() <= Electric.Config.get_env(:metrics_sampling_ratio)
   end
 end
