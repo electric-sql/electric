@@ -33,6 +33,8 @@ jobs:
             path: examples/remix
           - name: react
             path: examples/react
+          - name: burn
+            path: examples/burn
 
     env:
       DEPLOY_ENV: "production"
@@ -51,6 +53,7 @@ jobs:
       ELECTRIC_API: ${{ secrets.ELECTRIC_API }}
       ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
       ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
+      ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
       # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
 
     steps:
