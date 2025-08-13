@@ -74,6 +74,10 @@ defmodule Electric.Shapes.ConsumerSupervisor do
     end
   end
 
+  def start_materializer(opts) do
+    Supervisor.start_child(name(opts), {Electric.Shapes.Consumer.Materializer, opts})
+  end
+
   def init(config) when is_map(config) do
     %{shape_handle: shape_handle, storage: {_, _} = storage} = config
 

@@ -30,6 +30,7 @@ defmodule Electric.ShapeCache do
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
+  alias Electric.Shapes.ConsumerSupervisor
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -301,18 +302,7 @@ defmodule Electric.ShapeCache do
         _from,
         %{shape_status: shape_status} = state
       ) do
-    {{shape_handle, latest_offset}, state} =
-      if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
-        {shape_state, state}
-      else
-        {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
-
-        {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
-
-        send(self(), :maybe_expire_shapes)
-        {{shape_handle, latest_offset}, state}
-      end
-
+    {shape_handle, latest_offset} = maybe_create_shape(shape, otel_ctx, state)
     Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
     {:reply, {shape_handle, latest_offset}, state}
   end
@@ -425,7 +415,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp purge_shape(state, shape_handle, shape) do
-    case Electric.Shapes.ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
+    case ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously
         :ok = Electric.Shapes.Monitor.purge_shape(state.stack_id, shape_handle, shape)
@@ -507,6 +497,28 @@ defmodule Electric.ShapeCache do
       # clean up corrupted data to avoid persisting bad state
       purge_shape(state, shape_handle, shape)
       []
+  end
+
+  defp maybe_create_shape(shape, otel_ctx, state) do
+    if shape_state = state.shape_status.get_existing_shape(state.shape_status_state, shape) do
+      shape_state
+    else
+      shape.shape_dependencies
+      |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
+      |> Enum.map(fn {shape_handle, _latest_offset} ->
+        ConsumerSupervisor.start_materializer(%{
+          stack_id: state.stack_id,
+          shape_handle: shape_handle
+        })
+      end)
+
+      {:ok, shape_handle} = state.shape_status.add_shape(state.shape_status_state, shape)
+
+      {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
+
+      send(self(), :maybe_expire_shapes)
+      {shape_handle, latest_offset}
+    end
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
