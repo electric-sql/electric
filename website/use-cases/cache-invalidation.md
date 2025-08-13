@@ -75,7 +75,7 @@ Electric solves data plumbing with realtime sync and solves stale data with auto
 
 ### Realtime sync
 
-Electric syncs data into caches in realtime. It's fast and reliable, handles durability/delivery and reconnecting after downtime. You just declare the Shape of the data you want in the cache and Electric keeps it in sync.
+Electric syncs data into caches in realtime. [It's fast and reliable](/blog/2025/08/13/electricsql-v1.1-released), handles durability/delivery and reconnecting after downtime. You just declare the Shape of the data you want in the cache and Electric keeps it in sync.
 
 <figure>
   <div class="cache-invalidation-diagramme">
