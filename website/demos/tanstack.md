@@ -2,7 +2,7 @@
 title: Tanstack
 description: >-
   Example of an Electric app using Tanstack Query for optimistic state.
-deployed_url: https://tanstack.examples.electric-sql.com/
+deployed_url: https://tanstack-app.examples.electric-sql.com/
 source_url: https://github.com/electric-sql/electric/tree/main/examples/tanstack
 image: /img/demos/items-screenshot.png
 example: true
