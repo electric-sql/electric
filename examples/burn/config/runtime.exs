@@ -34,11 +34,12 @@ config :burn, Burn.Adapters.Anthropic, api_key: env!("ANTHROPIC_KEY")
 
 if config_env() == :prod do
   database_url = env!("DATABASE_URL")
+  database_ssl = env!("DATABASE_SSL", :boolean?, true)
   maybe_ipv6 = if env!("ECTO_IPV6", :boolean?, false) === true, do: [:inet6], else: []
 
   config :burn, Burn.Repo,
-    # ssl: true,
     url: database_url,
+    ssl: database_ssl,
     pool_size: env!("POOL_SIZE", :integer, 10),
     socket_options: maybe_ipv6
 
