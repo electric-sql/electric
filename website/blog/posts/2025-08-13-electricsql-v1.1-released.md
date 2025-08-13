@@ -15,6 +15,28 @@ post: true
 import StorageComparisonChart from '../../src/components/StorageComparisonChart.vue'
 import StorageComparisonChartColumn from '../../src/components/StorageComparisonChartColumn.vue'
 import StorageEngineDiagram from '/static/img/blog/electric-v1.1-new-storage/storage-engine-diagram.svg'
+
+// Raw performance data
+const readPerformanceData = {
+  '1.0.24': [131.68, 154.07, 1690.00, 2550.00],
+  '1.1.0': [2.64, 2.10, 14.00, 14.80]
+}
+
+const writePerformanceData = {
+  '1.0.24': [0.32, 3.49, 167.68, 1.4, 15.5, 712.58],
+  '1.1.0': [0.01, 0.12, 1.65, 0.26, 3.39, 99.29]
+}
+
+// Compute normalized data (relative to 1.0.24)
+const normalizedReadData = {
+  '1.0.24': readPerformanceData['1.0.24'].map(() => 1.0),
+  '1.1.0': readPerformanceData['1.1.0'].map((value, index) => value / readPerformanceData['1.0.24'][index])
+}
+
+const normalizedWriteData = {
+  '1.0.24': writePerformanceData['1.0.24'].map(() => 1.0),
+  '1.1.0': writePerformanceData['1.1.0'].map((value, index) => value / writePerformanceData['1.0.24'][index])
+}
 </script>
 
 Electric is a [Postgres](https://www.postgresql.org/) sync engine that streams database changes to millions of concurrent users in real time. Our mission is simple: be faster than Postgres.
@@ -137,51 +159,22 @@ On local SSDs, the new engine achieved up to 101x faster writes when appending 1
 
 With network‑attached storage, where latency typically dominates, curves follow a similar profile, but now with a 5x to 7x performance improvement.
 
-<!-- First charts pair: wrap into two-column container -->
-<div class="charts-2col">
-  <div class="col">
-    <StorageComparisonChartColumn 
-        title="Write performance - SSD"
-          :data="[
-            { label: '1.0.24', data: [0.32, 3.49, 167.68] },
-    { label: '1.1.0', data: [0.01, 0.12, 1.65] }
-  ]"
-        :labels="['1 row', '20 rows', '1000 rows']"
-        x-axis-title="Number of Rows"
-        y-axis-title="Latency"
-        y-axis-suffix=" ms"
-        speedup-new-label="1.1.0"
-        speedup-old-label="1.0.24"
-      />
-  </div>
-  <div class="col">
-    <StorageComparisonChartColumn 
-        title="Write performance - EFS"
-          :data="[
-            { label: '1.0.24', data: [1.4, 15.5, 712.58] },
-    { label: '1.1.0', data: [0.26, 3.39, 99.29] }
-  ]"
-        :labels="['1 row', '20 rows', '1000 rows']"
-        x-axis-title="Number of Rows"
-        y-axis-title="Latency"
-        y-axis-suffix=" ms"
-        speedup-new-label="1.1.0"
-        speedup-old-label="1.0.24"
-      />
-  </div>
-</div>
+<!-- Write performance chart - normalized to 1.0.24 -->
 
-<style>
-.charts-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin: 0 0 3rem 0;
-}
-.charts-2col .col { width: 100%; }
-@media (max-width: 860px) {
-  .charts-2col { grid-template-columns: 1fr; }
-}
-</style>
+<StorageComparisonChartColumn 
+  title="Write performance"
+  :data="[
+    { label: '1.0.24', data: normalizedWriteData['1.0.24'] },
+    { label: '1.1.0', data: normalizedWriteData['1.1.0'] }
+  ]"
+  :labels="['1 row (SSD)', '20 rows (SSD)', '1000 rows (SSD)', '1 row (EFS)', '20 rows (EFS)', '1000 rows (EFS)']"
+  x-axis-title="Test Configuration"
+  y-axis-title="Relative Latency"
+  y-axis-suffix=""
+  speedup-new-label="1.1.0"
+  speedup-old-label="1.0.24"
+  :raw-data="writePerformanceData"
+/>
 
 #### Read performance
 
@@ -189,39 +182,22 @@ This benchmark consists of reading a fixed number of chunks starting from an arb
 
 In this case, the baseline latency for CubDB is quite high due to the number of system calls required to find the requested offset in the initial chunk. The new storage engine uses a read‑ahead optimization to reduce the number of system calls.
 
-<!-- Single Reader pair -->
-<div class="charts-2col">
-  <div class="col">
-    <StorageComparisonChartColumn 
-              title="Read performance - SSD"
-        :data="[
-          { label: '1.0.24', data: [131.68, 154.07] },
-    { label: '1.1.0', data: [2.64, 2.10] }
+<!-- Read performance chart - normalized to 1.0.24 -->
+
+<StorageComparisonChartColumn 
+  title="Read performance"
+  :data="[
+    { label: '1.0.24', data: normalizedReadData['1.0.24'] },
+    { label: '1.1.0', data: normalizedReadData['1.1.0'] }
   ]"
-      :labels="['5 chunks', '10 chunks']"
-      x-axis-title="Number of Chunks"
-      y-axis-title="Latency"
-      y-axis-suffix=" ms"
-      speedup-new-label="1.1.0"
-      speedup-old-label="1.0.24"
-    />
-  </div>
-  <div class="col">
-    <StorageComparisonChartColumn 
-              title="Read performance - EFS"
-        :data="[
-          { label: '1.0.24', data: [1690.00, 2550.00] },
-    { label: '1.1.0', data: [14.00, 14.80] }
-  ]"
-      :labels="['5 chunks', '10 chunks']"
-      x-axis-title="Number of Chunks"
-      y-axis-title="Latency"
-      y-axis-suffix=" ms"
-      speedup-new-label="1.1.0"
-      speedup-old-label="1.0.24"
-    />
-  </div>
-</div>
+  :labels="['5 chunks (SSD)', '10 chunks (SSD)', '5 chunks (EFS)', '10 chunks (EFS)']"
+  x-axis-title="Test Configuration"
+  y-axis-title="Relative Latency"
+  y-axis-suffix=""
+  speedup-new-label="1.1.0"
+  speedup-old-label="1.0.24"
+  :raw-data="readPerformanceData"
+/>
 
 ### End-to-End benchmarks
 
