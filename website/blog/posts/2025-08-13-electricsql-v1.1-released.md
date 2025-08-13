@@ -71,7 +71,7 @@ One [difference](https://expertofobsolescence.substack.com/p/the-hard-things-abo
 
 ### Picking an off-the-shelf solution
 
-When we decided to [rebuild Electric](/blog/2024/07/17/electric-next), we focused on shipping a working system that users could trust, and fine-tune performance later. As Kyle Matthews says: "make it work, make it right, make it fast".
+When we decided to [rebuild Electric](/blog/2024/07/17/electric-next), we focused on shipping a working system that users could trust, and fine-tune performance later. As Kyle Mathews says: "make it work, make it right, make it fast".
 
 Writes in Electric are append‑only, while reads are mostly range scans. Since logs can grow indefinitely, we compact them periodically. Compaction in Electric is unique in that it must preserve the temporal ordering of creation and deletion of keys in the log. We looked at the available options.
 
