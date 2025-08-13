@@ -314,7 +314,7 @@ defmodule Electric.Replication.Eval.Parser do
       stmt,
       &node_to_ast/4,
       fn preimage, postimage, _, acc, _ ->
-        with {ok, acc} <- maybe_save_used_param(acc, postimage) do
+        with {:ok, acc} <- maybe_save_used_param(acc, postimage) do
           if is_struct(preimage, PgQuery.SubLink) do
             {:ok, %{acc | encountered_sublinks: acc.encountered_sublinks + 1}}
           else
