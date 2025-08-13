@@ -17,7 +17,7 @@ import StorageComparisonChartColumn from '../../src/components/StorageComparison
 import StorageEngineDiagram from '/static/img/blog/electric-v1.1-new-storage/storage-engine-diagram.svg'
 </script>
 
-Electric is a [Postgres](https://www.postgresql.org/) sync engine that streams database changes to millions of concurrent users in real time. Our mission is simple: be faster than Postgres. 
+Electric is a [Postgres](https://www.postgresql.org/) sync engine that streams database changes to millions of concurrent users in real time. Our mission is simple: be faster than Postgres.
 
 We’ve been working toward that goal for the last year, but when usage started growing and workloads began pushing the limits of the system, we hit a wall — our storage engine had become a bottleneck. Replication lag was creeping up, CPU usage was climbing higher and higher and the system was having trouble keeping pace with Postgres itself. It was time to act, and we went big: we built our own storage engine from the ground up.
 
@@ -53,7 +53,7 @@ When we decided to [rebuild Electric](/blog/2024/07/17/electric-next), we focuse
 
 Writes in Electric are append‑only, while reads are mostly range scans. Since logs can grow indefinitely, we compact them periodically. Compaction in Electric is unique in that it must preserve the temporal ordering of creation and deletion of keys in the log. We looked at the available options.
 
-[Apache Kafka](https://kafka.apache.org/) is the production system that is closest to our needs. However, it's too complex and would be hard to integrate. 
+[Apache Kafka](https://kafka.apache.org/) is the production system that is closest to our needs. However, it's too complex and would be hard to integrate.
 [LSM‑tree](https://www.cs.umb.edu/~poneil/lsmtree.pdf)‑based stores like [RocksDB](https://rocksdb.org/) are good for append‑only writes but not ideal for range scans. We also looked into [SQLite](https://sqlite.org/) because it is heavily optimized. It was fast, but not always faster, and we were worried about hitting issues with a non‑customizable system.
 
 None of the off‑the‑shelf solutions were a perfect fit for Electric's requirements. So, we ended up picking [CubDB](https://github.com/lucaong/cubdb) as a pragmatic starting point — a tiny and mighty Elixir key‑value store that would get the job done. Our team has lots of experience with Elixir, so we would get good development speed by keeping the storage engine in the same language. We knew this was not the best solution, but it was one that didn't require a lot of initial engineering investment.
@@ -86,7 +86,7 @@ Following the lessons from [CockroachDB](https://www.cockroachlabs.com/) when th
 
 ## Implementation overview
 
-Our new storage architecture is elegantly simple. For each shape, we maintain two files: the **shape log**, which contains the raw data for the shape, and the **offset index**, which is a list of pointers into the shape log for fast lookup of offsets. Addressing shape logs by offset matches how [clients request shapes](/docs/api/http#shape-log). 
+Our new storage architecture is elegantly simple. For each shape, we maintain two files: the **shape log**, which contains the raw data for the shape, and the **offset index**, which is a list of pointers into the shape log for fast lookup of offsets. Addressing shape logs by offset matches how [clients request shapes](/docs/api/http#shape-log).
 
 <figure style="margin: 1rem auto 2rem auto; text-align: center; max-width: 100%;">
   <img :src="StorageEngineDiagram" alt="Storage engine diagram – look-up of shape log offset" style="max-width: 80%; height: auto; display: block; margin: 0 auto;" />
@@ -150,7 +150,6 @@ With network‑attached storage, where latency typically dominates, curves follo
         x-axis-title="Number of Rows"
         y-axis-title="Latency"
         y-axis-suffix=" ms"
-        y-scale-type="logarithmic"
         speedup-new-label="1.1.0"
         speedup-old-label="1.0.24"
       />
@@ -166,7 +165,6 @@ With network‑attached storage, where latency typically dominates, curves follo
         x-axis-title="Number of Rows"
         y-axis-title="Latency"
         y-axis-suffix=" ms"
-        y-scale-type="logarithmic"
         speedup-new-label="1.1.0"
         speedup-old-label="1.0.24"
       />
@@ -204,7 +202,6 @@ In this case, the baseline latency for CubDB is quite high due to the number of 
       x-axis-title="Number of Chunks"
       y-axis-title="Latency"
       y-axis-suffix=" ms"
-      y-scale-type="logarithmic"
       speedup-new-label="1.1.0"
       speedup-old-label="1.0.24"
     />
@@ -220,7 +217,6 @@ In this case, the baseline latency for CubDB is quite high due to the number of 
       x-axis-title="Number of Chunks"
       y-axis-title="Latency"
       y-axis-suffix=" ms"
-      y-scale-type="logarithmic"
       speedup-new-label="1.1.0"
       speedup-old-label="1.0.24"
     />
@@ -295,6 +291,7 @@ Starting with CubDB was a good choice. It got us to v1.0 with minimal issues, gi
 This isn't a universal playbook. It worked well for us because the scope of what we had to build was relatively small, and it was one of our team's core areas of expertise.
 
 ## What's next
+
 We've taken a big step toward our ambitious goal: being **faster than Postgres**. The new storage engine has delivered significant performance gains with up to 100x faster writes on SSD.
 
 Beyond making Electric faster, we're laying the groundwork to continue building better open-source and cloud products. In Cloud, we're already seeing benefits with rolling deployments, horizontal scalability but it doesn't end there. There is an exciting roadmap ahead!
