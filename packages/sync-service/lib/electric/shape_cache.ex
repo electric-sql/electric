@@ -25,6 +25,7 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
+  alias Electric.Shapes.Consumer.Materializer
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
@@ -503,14 +504,26 @@ defmodule Electric.ShapeCache do
     if shape_state = state.shape_status.get_existing_shape(state.shape_status_state, shape) do
       shape_state
     else
-      shape.shape_dependencies
-      |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
-      |> Enum.map(fn {shape_handle, _latest_offset} ->
-        ConsumerSupervisor.start_materializer(%{
-          stack_id: state.stack_id,
-          shape_handle: shape_handle
-        })
-      end)
+      shape_handles =
+        shape.shape_dependencies
+        |> Enum.map(&{&1, maybe_create_shape(&1, otel_ctx, state)})
+        |> Enum.map(fn {shape, {shape_handle, _latest_offset}} ->
+          ConsumerSupervisor.start_materializer(%{
+            stack_id: state.stack_id,
+            shape_handle: shape_handle,
+            storage: state.storage,
+            columns: shape.selected_columns
+          })
+
+          Materializer.wait_until_ready(%{
+            stack_id: state.stack_id,
+            shape_handle: shape_handle
+          })
+
+          shape_handle
+        end)
+
+      shape = %{shape | shape_dependencies_handles: shape_handles}
 
       {:ok, shape_handle} = state.shape_status.add_shape(state.shape_status_state, shape)
 

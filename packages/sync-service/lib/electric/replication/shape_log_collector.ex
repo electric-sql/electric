@@ -87,6 +87,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   def init(opts) do
     Process.set_label({:shape_log_collector, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
+    Process.put(:stack_id, opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
     persistent_replication_data_opts = [

@@ -32,6 +32,7 @@ defmodule Electric.Shapes.Shape do
     :where,
     :selected_columns,
     :shape_dependencies,
+    :shape_dependencies_handles,
     flags: %{},
     storage: %{compaction: :disabled},
     replica: @default_replica
