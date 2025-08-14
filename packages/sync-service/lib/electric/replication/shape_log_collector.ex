@@ -16,6 +16,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Publisher
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
+  alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
@@ -87,7 +88,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   def init(opts) do
     Process.set_label({:shape_log_collector, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
-    Process.put(:stack_id, opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
     persistent_replication_data_opts = [
@@ -106,7 +106,11 @@ defmodule Electric.Replication.ShapeLogCollector do
         persistent_replication_data_opts: persistent_replication_data_opts,
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
-        filter: Filter.new(Keyword.new(opts)),
+        filter:
+          opts
+          |> Map.put(:refs_fun, &sublink_refs(&1, opts.stack_id))
+          |> Keyword.new()
+          |> Filter.new(),
         flush_tracker:
           FlushTracker.new(
             notify_fn: fn lsn ->
@@ -247,7 +251,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     {partitions, event} = Partitions.handle_event(state.partitions, event)
 
     OpenTelemetry.start_interval("shape_log_collector.affected_shapes")
+
     affected_shapes = Filter.affected_shapes(state.filter, event)
+
     affected_shape_count = MapSet.size(affected_shapes)
 
     OpenTelemetry.add_span_attributes(
@@ -346,4 +352,16 @@ defmodule Electric.Replication.ShapeLogCollector do
        do: %{state | last_processed_lsn: lsn}
 
   defp put_last_processed_lsn(state, _lsn), do: state
+
+  defp sublink_refs(shape, stack_id) do
+    shape.shape_dependencies_handles
+    |> Enum.with_index()
+    |> Map.new(fn {shape_handle, index} ->
+      {["$sublink", Integer.to_string(index)],
+       Materializer.get_link_values(%{
+         shape_handle: shape_handle,
+         stack_id: stack_id
+       })}
+    end)
+  end
 end
