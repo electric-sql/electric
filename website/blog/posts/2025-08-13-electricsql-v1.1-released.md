@@ -51,7 +51,7 @@ The core primitive for controlling sync in Electric is the [**shape**](/docs/gui
 
 :::info Why this architecture is different
 
-**CDN-native fan-out**: CDNs de-duplicate shape requests and collapse load, moving the load out of your infrastructure, with infinite scalability.
+**CDN-native fan-out**: CDNs de-duplicate shape requests and collapse load, moving it out of your infrastructure.
 
 **Cost physics**: There's no persistent socket tax—you pay only for actual data transfer, which means lower egress costs and fewer hot servers at scale.
 
