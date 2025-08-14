@@ -5,14 +5,19 @@ defmodule Electric.Client.Message do
   alias Electric.Client.Offset
 
   defmodule Headers do
-    defstruct [:operation, :relation, :handle]
+    defstruct [:operation, :relation, :handle, :lsn, txids: [], op_position: 0]
 
     @type operation :: :insert | :update | :delete
     @type relation :: [String.t(), ...]
+    @type lsn :: binary()
+    @type txids :: [pos_integer(), ...] | nil
     @type t :: %__MODULE__{
             operation: operation(),
             relation: relation(),
-            handle: Client.shape_handle()
+            handle: Client.shape_handle(),
+            lsn: lsn(),
+            txids: txids(),
+            op_position: non_neg_integer()
           }
 
     @doc false
@@ -20,9 +25,12 @@ defmodule Electric.Client.Message do
       %{"operation" => operation} = msg
 
       %__MODULE__{
-        relation: msg["relation"],
+        relation: Map.get(msg, "relation"),
         operation: parse_operation(operation),
-        handle: handle
+        handle: handle,
+        txids: Map.get(msg, "txids", []),
+        lsn: Map.get(msg, "lsn", nil),
+        op_position: Map.get(msg, "op_position", 0)
       }
     end
 

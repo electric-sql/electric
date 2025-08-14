@@ -780,7 +780,12 @@ defmodule Electric.ClientTest do
     test "client is resilient to server errors", ctx do
       body1 = [
         %{
-          "headers" => %{"operation" => "insert"},
+          "headers" => %{
+            "operation" => "insert",
+            "txids" => [1010],
+            "op_position" => 0,
+            "lsn" => "00101"
+          },
           "value" => %{"id" => "1111"}
         },
         %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
@@ -788,7 +793,12 @@ defmodule Electric.ClientTest do
 
       body2 = [
         %{
-          "headers" => %{"operation" => "insert"},
+          "headers" => %{
+            "operation" => "insert",
+            "txids" => [1020],
+            "op_position" => 1,
+            "lsn" => "00102"
+          },
           "value" => %{"id" => "2222"}
         },
         %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
@@ -879,12 +889,12 @@ defmodule Electric.ClientTest do
 
       assert [
                %ChangeMessage{
-                 headers: @insert,
+                 headers: %{operation: :insert, lsn: "00101", txids: [1010]},
                  value: %{"id" => "1111"}
                },
                up_to_date(9998),
                %ChangeMessage{
-                 headers: @insert,
+                 headers: %{operation: :insert, lsn: "00102", txids: [1020]},
                  value: %{"id" => "2222"}
                },
                up_to_date(9999)
