@@ -78,8 +78,16 @@ app.get(`/todos`, async (req, res) => {
     const nodeStream = Readable.fromWeb(response.body)
     await pipeline(nodeStream, res)
   } catch (error) {
-    console.error(`Error proxying to Electric:`, error)
-    res.status(500).json({ error: `Internal server error` })
+    // Ignore premature close errors - these happen when clients disconnect early
+    if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
+      return
+    }
+
+    console.error("Error proxying to Electric:", error)
+    // Only write headers if they haven't been sent yet
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error" })
+    }
   }
 })
 
