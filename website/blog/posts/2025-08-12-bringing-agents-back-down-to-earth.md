@@ -56,7 +56,7 @@ post: true
 
 There's a lot of hype around agentic system development. Concepts like agentic memory, instruction routing, retrieval and context engineering.
 
-When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
+But when you dig into it, these all collapse to processes and database state. In fact, you can build agentic systems with a database, standard web tooling and real-time sync.
 
 > [!Warning] Agentic demo app
 > See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn). It's an agentic system built on Postgres and real-time sync, designed to illustrate the concepts in this post.
