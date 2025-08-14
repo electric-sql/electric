@@ -337,6 +337,8 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
             deadline: 3_000
           )
 
+        dbg(wal_size)
+
         # The query above can return `-1` which I'm assuming means "up-to-date".
         # This is a confusing stat if we're measuring in bytes, so normalise to
         # [0, :infinity)
