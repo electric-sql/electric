@@ -61,6 +61,13 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
           try do
             [task1, task2, task3]
             |> Task.await_many(@cleanup_timeout)
+          catch
+            :exit, {:timeout, _} ->
+              Logger.warning(
+                "Shape cleanup tasks for shape #{shape_handle} timed out after #{@cleanup_timeout}ms"
+              )
+
+              :ok
           after
             on_cleanup.(shape_handle)
           end
