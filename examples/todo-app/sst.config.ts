@@ -52,6 +52,8 @@ export default $config({
       environment: {
         DATABASE_URL: pooledDatabaseUri,
         ELECTRIC_URL: process.env.ELECTRIC_API,
+        ELECTRIC_SOURCE_SECRET: sourceSecret,
+        ELECTRIC_SOURCE_ID: sourceId,
       },
       image: {
         context: "../..",
@@ -72,8 +74,6 @@ export default $config({
           url.slice(0, url.length - 1)
         ),
         VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-        VITE_ELECTRIC_SOURCE_SECRET: sourceSecret,
-        VITE_ELECTRIC_SOURCE_ID: sourceId,
       },
       domain: {
         name: `todo-app${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,

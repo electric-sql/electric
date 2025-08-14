@@ -44,16 +44,16 @@ app.get(`/todos`, async (req, res) => {
   electricUrl.searchParams.set(`table`, `todos`)
 
   // Add source credentials if available
-  if (process.env.VITE_ELECTRIC_SOURCE_ID) {
+  if (process.env.ELECTRIC_SOURCE_ID) {
     electricUrl.searchParams.set(
       `source_id`,
-      process.env.VITE_ELECTRIC_SOURCE_ID
+      process.env.ELECTRIC_SOURCE_ID
     )
   }
-  if (process.env.VITE_ELECTRIC_SOURCE_SECRET) {
+  if (process.env.ELECTRIC_SOURCE_SECRET) {
     electricUrl.searchParams.set(
       `secret`,
-      process.env.VITE_ELECTRIC_SOURCE_SECRET
+      process.env.ELECTRIC_SOURCE_SECRET
     )
   }
 
