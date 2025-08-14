@@ -9,6 +9,7 @@
     "url": "https://github.com/electric-sql/electric/issues"
   },
   "dependencies": {
+    "@electric-sql/client": "workspace:*",
     "@electric-sql/react": "workspace:*",
     "@fontsource/alegreya-sans": "^5.0.13",
     "@radix-ui/themes": "^3.1.0",
