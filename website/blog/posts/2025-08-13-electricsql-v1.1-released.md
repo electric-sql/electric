@@ -41,7 +41,7 @@ const normalizedWriteData = {
 
 Electric is a [Postgres](https://www.postgresql.org/) sync engine that [streams database changes to millions of concurrent users in real time](https://electric-sql.com/blog/2024/12/10/electric-beta-release#scalable). Our mission is simple: be faster than Postgres.
 
-We’ve been working toward that goal for the last year, but when usage started growing and workloads began pushing the limits of the system, we hit a wall — our storage engine had become a bottleneck. Replication lag was creeping up, CPU usage was climbing higher and higher and the system was having trouble keeping pace with Postgres itself. It was time to act, and we went big: we built our own storage engine from the ground up.
+After a year of progress, rapid growth exposed our limits. The storage engine had become a critical bottleneck — replication lag climbing, CPUs maxing out, and the system was having trouble keeping pace with the largest deployments. We made a bold decision: build our own storage engine from scratch.
 
 The result? 102X faster writes and 73X faster reads on SSD. This is the story of how we made it.
 
