@@ -40,7 +40,7 @@ export default $config({
     const cluster = getSharedCluster(`tanstack-app-${$app.stage}`)
     const service = cluster.addService(`tanstack-app-${$app.stage}-service`, {
       loadBalancer: {
-        ports: [{ listen: `443/https`, forward: `3010/http` }],
+        ports: [{ listen: `443/https`, forward: `3001/http` }],
         domain: {
           name: `tanstack-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
