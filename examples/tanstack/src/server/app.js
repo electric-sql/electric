@@ -98,19 +98,18 @@ const server = http.createServer(async (req, res) => {
         // Convert Web Streams to Node.js stream and pipe
         const nodeStream = Readable.fromWeb(response.body)
         await pipeline(nodeStream, res)
-        console.log("Pipeline complete")
         return
       } catch (error) {
         // Ignore premature close errors - these happen when clients disconnect early
         if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
-          console.log("Premature close")
           return
         }
 
         console.error("Error proxying to Electric:", error)
         // Only write headers if they haven't been sent yet
         if (!res.headersSent) {
-          res.status(500).json({ error: "Internal server error" })
+          res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADER })
+          res.end(JSON.stringify({ error: "Internal server error" }))
         }
       }
     }
@@ -138,7 +137,7 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     console.error("Error handling request:", error)
     res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
-    res.end(JSON.stringify({ error: `Something went wrong + ${error.message}` }))
+    res.end(JSON.stringify({ error: `Something went wrong` }))
   }
 })
 
