@@ -332,6 +332,106 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert msg =~
                "Received an update from PG for public.items that did not have old data included in the message."
     end
+
+    @tag with_empty_publication?: true
+    test "flushes are advanced based on standby messages when publication is otherwise silent",
+         %{db_conn: conn} = ctx do
+      pid = start_client(ctx)
+
+      Process.sleep(100)
+
+      confirmed_flush_lsn = get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+      for _ <- 1..10 do
+        insert_item(conn, "test value")
+      end
+
+      send(pid, {:flush_boundary_updated, 100})
+
+      # This is to pass the time instead of a sleep - if PG is responsive, it probably has processed the wal acknowledge too
+      Postgrex.query!(conn, "SELECT * FROM items", [])
+
+      new_confirmed_flush_lsn = get_confirmed_flush_lsn(conn, ctx.slot_name)
+      assert Lsn.compare(confirmed_flush_lsn, new_confirmed_flush_lsn) == :lt
+    end
+
+    @tag with_empty_publication?: true
+    test "flushes are not advancing if something isn't actually getting flushed",
+         %{db_conn: conn} = ctx do
+      Postgrex.query!(conn, "ALTER PUBLICATION #{ctx.slot_name} SET TABLE serial_ids", [])
+
+      pid = start_client(ctx)
+
+      confirmed_flush_lsn1 = get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (1)", [])
+
+      assert %NewRecord{record: %{"id" => "1"}} = receive_tx_change()
+
+      assert confirmed_flush_lsn1 ==
+               get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+      for _ <- 1..10 do
+        insert_item(conn, "test value")
+      end
+
+      send(pid, {:flush_boundary_updated, 100})
+
+      # This is to pass the time instead of a sleep - if PG is responsive, it probably has processed the wal acknowledge too
+      Postgrex.query!(conn, "SELECT * FROM items", [])
+
+      assert confirmed_flush_lsn1 == get_confirmed_flush_lsn(conn, ctx.slot_name)
+    end
+
+    @tag with_empty_publication?: true
+    test "flushes are advanced once confirmed, and advance beyond the last seen txn once up-to-date",
+         %{db_conn: conn} = ctx do
+      Postgrex.query!(conn, "ALTER PUBLICATION #{ctx.slot_name} SET TABLE serial_ids", [])
+
+      pid = start_client(ctx)
+
+      confirmed_flush_lsn1 = get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (1)", [])
+
+      {lsn1, %NewRecord{record: %{"id" => "1"}}} = receive_tx_change_with_lsn()
+
+      assert confirmed_flush_lsn1 ==
+               get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+      Postgrex.query!(conn, "INSERT INTO serial_ids (id) VALUES (2)", [])
+
+      {lsn2, %NewRecord{record: %{"id" => "2"}}} = receive_tx_change_with_lsn()
+
+      send(pid, {:flush_boundary_updated, Lsn.to_integer(lsn1)})
+
+      # Unrelated writes
+      for _ <- 1..10, do: insert_item(conn, "test value")
+
+      assert lsn1 == get_confirmed_flush_lsn(conn, ctx.slot_name)
+
+      send(pid, {:flush_boundary_updated, Lsn.to_integer(lsn2)})
+      Process.sleep(50)
+
+      # This is to pass the time instead of a sleep - if PG is responsive, it probably has processed the wal acknowledge too
+      Postgrex.query!(conn, "SELECT * FROM items", [])
+
+      # We should be using a higher LSN - one of the received ones - as "last seen"
+
+      assert Lsn.to_integer(get_confirmed_flush_lsn(conn, ctx.slot_name)) >
+               Lsn.to_integer(lsn2)
+    end
+  end
+
+  defp get_confirmed_flush_lsn(conn, slot_name) do
+    %Postgrex.Result{rows: [[confirmed_flush_lsn]]} =
+      Postgrex.query!(
+        conn,
+        "SELECT confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = $1",
+        [slot_name]
+      )
+
+    confirmed_flush_lsn
   end
 
   describe "ReplicationClient against real db (toast)" do
@@ -439,8 +539,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
     assert flushed_wal == state.flushed_wal + 1
   end
 
-  defp with_publication(%{db_conn: conn, slot_name: slot_name}) do
-    Postgrex.query!(conn, "CREATE PUBLICATION #{slot_name} FOR ALL TABLES", [])
+  defp with_publication(%{db_conn: conn, slot_name: slot_name} = ctx) do
+    if Map.get(ctx, :with_empty_publication?, false) do
+      Postgrex.query!(conn, "CREATE PUBLICATION #{slot_name}", [])
+    else
+      Postgrex.query!(conn, "CREATE PUBLICATION #{slot_name} FOR ALL TABLES", [])
+    end
+
     :ok
   end
 
@@ -530,6 +635,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
                    @assert_receive_db_timeout
 
     change
+  end
+
+  defp receive_tx_change_with_lsn do
+    assert_receive {:from_replication, %Transaction{lsn: lsn, changes: [change]}},
+                   @assert_receive_db_timeout
+
+    {lsn, change}
   end
 
   defp start_client(ctx, overrides \\ []) do
