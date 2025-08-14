@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.1.2
+
+### Patch Changes
+
+- 5b340f0: Log warning rarther than error if the shape cleanup tasks time out
+
 ## 1.1.1
 
 ### Patch Changes
