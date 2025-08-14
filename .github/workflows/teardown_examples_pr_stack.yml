@@ -28,6 +28,7 @@ jobs:
             "tanstack",
             "remix",
             "react",
+            "burn",
           ]
 
     env:

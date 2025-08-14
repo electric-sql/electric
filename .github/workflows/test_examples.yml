@@ -44,6 +44,14 @@ jobs:
           test_folder: phoenix-liveview
           example_url: https://phoenix-liveview.examples.electric-sql.com
 
+      - name: Test burn example
+        id: burn
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: burn
+          example_url: https://burn.examples.electric-sql.com
+
       - name: Test react example
         id: react
         continue-on-error: true

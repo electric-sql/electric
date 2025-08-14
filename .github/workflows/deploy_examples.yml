@@ -37,6 +37,7 @@ jobs:
             tanstack/**
             remix/**
             react/**
+            burn/**
 
       - name: Create example matrix
         id: create-example-matrix
@@ -83,6 +84,7 @@ jobs:
       tanstack: ${{ steps.deploy.outputs.tanstack }}
       remix: ${{ steps.deploy.outputs.remix }}
       react: ${{ steps.deploy.outputs.react }}
+      burn: ${{ steps.deploy.outputs.burn }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -103,6 +105,7 @@ jobs:
       ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
       ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
       SECRET_KEY_BASE: ${{ secrets.LIVEVIEW_EXAMPLE_SECRET_KEY_BASE }}
+      ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -184,6 +187,14 @@ jobs:
         with:
           test_folder: phoenix-liveview
           example_url: ${{ needs.deploy.outputs.phoenix-liveview || '' }}
+
+      - name: Test burn example
+        id: burn
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: burn
+          example_url: ${{ needs.deploy.outputs.burn || '' }}
 
       - name: Test yjs example
         id: yjs

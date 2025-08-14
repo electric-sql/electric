@@ -1,0 +1,14 @@
+{
+  "name": "burn",
+  "private": true,
+  "version": "0.0.1",
+  "dependencies": {
+    "camelcase": "^8.0.0"
+  },
+  "devDependencies": {
+    "sst": "3.6.35"
+  },
+  "scripts": {
+    "deploy": "sst deploy --stage production"
+  }
+}

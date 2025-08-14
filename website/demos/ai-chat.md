@@ -8,7 +8,7 @@ blog_post_url: /blog/2025/04/09/building-ai-apps-on-sync
 image: /img/demos/ai-chat-demo.png
 demo: true
 homepage: true
-order: 1
+order: 5
 ---
 
 <style scoped>
