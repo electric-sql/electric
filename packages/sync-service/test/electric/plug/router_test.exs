@@ -1780,10 +1780,10 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
-           "CREATE TABLE parent (id TEXT PRIMARY KEY, value INTEGER NOT NULL)",
-           "CREATE TABLE child (id INT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES parent(id), value INTEGER NOT NULL)",
-           "INSERT INTO parent (id, value) VALUES ('1', 1), (2, 2)",
-           "INSERT INTO child (id, parent_id, value) VALUES (1, '1', 10), (2, '2', 20)"
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
     test "allows subquery in where clause", %{opts: opts, db_conn: db_conn} do
       where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
@@ -1814,7 +1814,7 @@ defmodule Electric.Plug.RouterTest do
           |> Router.call(opts)
         end)
 
-      Postgrex.query!(db_conn, "INSERT INTO child (id, parent_id, value) VALUES (3, '1', 30)", [])
+      Postgrex.query!(db_conn, "INSERT INTO child (id, parent_id, value) VALUES (3, 1, 30)", [])
 
       assert %{status: 200} = conn = Task.await(task)
 

@@ -13,6 +13,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.Shapes.Consumer
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.Eval
   import Electric.Replication.LogOffset
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
@@ -61,7 +62,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_continue(:start_materializer, state) do
-    _ = Consumer.name(state) |> GenServer.call(:await_snapshot_start)
+    _ = Consumer.await_snapshot_start(state)
 
     {:noreply, state, {:continue, :read_stream}}
   end
@@ -80,10 +81,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
                                     view ->
         case operation do
           "insert" ->
-            Map.put(view, key, value)
+            Map.put(view, key, cast!(value, state))
 
           "update" ->
-            Map.update!(view, key, &Map.merge(&1, value))
+            Map.put(view, key, cast!(value, state))
 
           "delete" ->
             Map.delete(view, key)
@@ -94,8 +95,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def get_stream_up_to_date(min_offset, state) do
-    dbg(min_offset)
-
     case Storage.get_chunk_end_log_offset(min_offset, state.storage) do
       nil ->
         {:ok, max_offset, _} = Storage.get_current_position(state.storage)
@@ -123,10 +122,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
   #   {:noreply, state, {:continue, :read_stream}}
   # end
 
-  def handle_call(:get_link_values, _from, %{columns: [column]} = state) do
-    values =
-      state.view
-      |> MapSet.new(fn {_, value} -> Map.fetch!(value, column) end)
+  def handle_call(:get_link_values, _from, %{view: view} = state) do
+    values = MapSet.new(Map.values(view))
 
     {:reply, values, state}
   end
@@ -139,15 +136,20 @@ defmodule Electric.Shapes.Consumer.Materializer do
     view =
       Enum.reduce(changes, state.view, fn
         %Changes.NewRecord{key: key, record: record}, view ->
-          Map.put(view, key, record)
+          Map.put(view, key, cast!(record, state))
 
         %Changes.UpdatedRecord{key: key, record: record}, view ->
-          Map.update!(view, key, &Map.merge(&1, record))
+          Map.put(view, key, cast!(record, state))
 
         %Changes.DeletedRecord{key: key}, view ->
           Map.delete(view, key)
       end)
 
     {:reply, :ok, %{state | view: view}}
+  end
+
+  defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
+    {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
+    value
   end
 end

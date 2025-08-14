@@ -35,6 +35,14 @@ defmodule Electric.Shapes.Consumer do
     GenServer.call(consumer, :initial_state, 30_000)
   end
 
+  def await_snapshot_start(consumer) when is_pid(consumer) do
+    GenServer.call(consumer, :await_snapshot_start, 30_000)
+  end
+
+  def await_snapshot_start(consumer) do
+    GenServer.call(name(consumer), :await_snapshot_start, 30_000)
+  end
+
   @doc false
   # use in tests to avoid race conditions. registers `pid` to be notified
   # when the `shape_handle` consumer has processed every transaction.
