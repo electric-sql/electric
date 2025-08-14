@@ -459,7 +459,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp notify_new_changes(state, latest_log_offset) do
     if state.materializer_subscribed? do
-      Materializer.notify_new_changes(state.materializer, latest_log_offset)
+      Materializer.new_changes(state.materializer, latest_log_offset)
     end
 
     Registry.dispatch(state.registry, state.shape_handle, fn registered ->

@@ -301,7 +301,7 @@ defmodule Electric.ShapeCache do
   def handle_call(
         {:create_or_wait_shape_handle, shape, otel_ctx},
         _from,
-        %{shape_status: shape_status} = state
+        %{shape_status: _shape_status} = state
       ) do
     {shape_handle, latest_offset} = maybe_create_shape(shape, otel_ctx, state)
     Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
