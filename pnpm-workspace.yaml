@@ -3,3 +3,5 @@ packages:
   - 'examples/*'
   - 'website'
   - 'examples/.shared'
+  - '!examples/burn'
+  - '!examples/burn/assets'

@@ -36,24 +36,38 @@ function SidebarThreads({ threadId }: Props) {
   const classes = useClasses()
   const navigate = useNavigate()
 
-  const { data: threads } = useLiveQuery(
-    (query) =>
+  const { collection: threadResults } = useLiveQuery(
+    (query) => (
       query
         .from({ thread: threadCollection })
         .innerJoin(
           { membership: membershipCollection },
           ({ thread, membership }) => eq(thread.id, membership.thread_id)
         )
-        .orderBy(({ thread }) => thread.inserted_at, {
-          direction: 'desc',
-          nulls: 'first',
-        })
         .select(({ thread }) => ({
           id: thread.id,
           name: thread.name,
+          inserted_at: thread.inserted_at!
         }))
-        .where(({ membership }) => eq(membership.user_id, currentUserId)),
+        .where(({ membership }) => eq(membership.user_id, currentUserId))
+    ),
     [currentUserId]
+  )
+
+  const { data: threads } = useLiveQuery(
+    (query) => (
+      query
+        .from({ result: threadResults })
+        .orderBy(({ result }) => result.inserted_at, {
+          direction: 'desc',
+          nulls: 'first',
+        })
+        .select(({ result }) => ({
+          id: result.id,
+          name: result.name,
+        }))
+    ),
+    [threadResults]
   )
 
   const createNewThread = () => {

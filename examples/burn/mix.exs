@@ -50,7 +50,7 @@ defmodule Burn.MixProject do
       {:phoenix_html, "~> 4.2"},
       {:phoenix_live_reload, "~> 1.6", only: :dev},
       {:phoenix_live_view, "~> 1.1"},
-      {:phoenix_sync, git: "https://github.com/electric-sql/phoenix_sync.git", branch: "main"},
+      {:phoenix_sync, "~> 0.5"},
       {:postgrex, "~> 0.21"},
       {:req, "~> 0.5.15"},
       {:yamel, "~> 2.0"}
@@ -75,7 +75,7 @@ defmodule Burn.MixProject do
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       "ecto.reset.quiet": ["ecto.drop --quiet", "ecto.setup.quiet"],
       test: ["ecto.reset.quiet", "test"],
-      "assets.setup": ["cmd --cd assets pnpm install"],
+      "assets.setup": ["cmd --cd assets pnpm install --ignore-workspace"],
       "assets.build": [
         "cmd --cd assets pnpm vite build --config vite.config.js --mode development"
       ],

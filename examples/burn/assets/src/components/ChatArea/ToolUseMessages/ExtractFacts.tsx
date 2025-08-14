@@ -31,7 +31,7 @@ function ExtractFacts({ event }: Props) {
   return (
     <>
       extracted{' '}
-      {results.map(({ id, subject, count }, index) => {
+      {results.map(({ subject, count }, index) => {
         const [countStr, label] =
           count > 1 ? [`${count}`, 'facts'] : ['a', 'fact']
 

@@ -14,8 +14,6 @@ post: true
 <script setup>
   import { data } from '../../data/posts.data.ts'
   const posts = data.filter(post => {
-    console.log(post.path)
-
     return post.path === '/blog/2025/07/29/local-first-sync-with-tanstack-db'
   })
 
@@ -111,7 +109,11 @@ Ultimately, processes are a [standard software primitive](https://hexdocs.pm/eli
 
 It's a multi-user, multi-agent, burn or "roast-me" app. Users sign-up, create and join threads. Each thread has [a producer agent, called Sarah](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/sarah.ex), who finds out facts about the users and two comedian agents ([Jerry Seinfeld](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/jerry.ex) and [Frankie Boyle](https://github.com/electric-sql/electric/burn/blob/main/examples/burn/lib/burn/agents/frankie.ex)) who monitor the facts and roast the users when they have enough to go on.
 
-> ... embed short video of app in process, lots of zoom in ...
+<figure>
+  <div class="embed-container" style="padding-bottom: 75.842697%">
+    <YoutubeEmbed video-id="2DhGHnk3Ebc" />
+  </div>
+</figure>
 
 Technically, it's built on:
 
@@ -356,7 +358,11 @@ function ChatArea({ threadId }: Props) {
 
 Live queries are reactive and built on a [super-fast, query engine](/blog/2025/07/29/local-first-sync-with-tanstack-db#sub-millisecond-performance), based on a [Typescript implementation of differential dataflow](https://github.com/electric-sql/d2ts). Data syncs through into the collections, incrementally updates the live queries and everything just reacts. Instantly. Across all users and all devices.
 
-> ... multi-user video ...
+<figure>
+  <div class="embed-container" style="padding-bottom: 62.5%">
+    <YoutubeEmbed video-id="_5__QSphP24" />
+  </div>
+</figure>
 
 ### 𝑓(state)
 
@@ -364,21 +370,76 @@ The key thing making this work is that the events driving the thread and the fac
 
 To illustrate this, Burn renders not only a normal, collaborative chat UI for the main user <> agent interaction but also a "computer" sidebar on the right hand side, showing you the raw data in the database that the thread is running on.
 
-> ... memory ...
-
 The memory collects facts in the database. The facts sync into the front-end, where they're displayed in real-time in the memory listing in the computer sidebar. Then the "context" section below that show the events that are driving the thread.
 
-> ... context ...
+<figure>
+  <div class="embed-container" style="padding-bottom: 75.842697%">
+    <YoutubeEmbed video-id="qEs8ITbb1ZA" />
+  </div>
+</figure>
 
-Both UIs (the main chat UI and the computer sidebar) are functional representations of the database state. But then so is the instruction sent to the LLM.
+Both UIs (the main chat UI and the computer sidebar) are functional representations of the database state. But then so is the instruction sent to the LLM. When an agent instructs the LLM, it retrieves the state of the current thread and renders in it a text format that the LLM likes.
 
-When an agent instructs the LLM, it retrieves the state of the current thread and renders in it a text format that the LLM likes.
+```
+Here's everything that happened so far:
 
-> ... terminal logging ...
+<system_message>
+  action: created
+  target: thread
+  user:
+    id: c15d31e2-b3ee-4ca6-b90b-1596d739d4fd
+    name: thruflo
+</system_message>
 
-This retrieval and rendering process is the context engineering behind the system. As you can see, it's also just a functional representation of the database state.
+<ask_user_about_themselves>
+  from: d4351246-7a34-4a29-9c5e-367fb348b08c
+  id: toolu_01YQMvbaLA3f4stDjNHzPT3F
+  input:
+    question: What's something you're particularly passionate about or spend most of your free time doing?
+    subject: c15d31e2-b3ee-4ca6-b90b-1596d739d4fd
+  name: ask_user_about_themselves
+</ask_user_about_themselves>
 
-That's how all the fancy layers of agentic software just collapse to rows in the database and real-time sync. It's all just a functional representation of state. With real-time sync driving both the [human UI and agentic control flow](/blog/2025/04/09/building-ai-apps-on-sync).
+<user_message>
+  from: c15d31e2-b3ee-4ca6-b90b-1596d739d4fd
+  id: cea5082a-4e13-4dac-b418-9c2d78d5d2ee
+  text: I like chess and cooking
+</user_message>
+
+<extract_facts>
+  from: d4351246-7a34-4a29-9c5e-367fb348b08c
+  id: toolu_01RQV95gUkfKAkuByBv1bFPB
+  input:
+    facts:
+      -
+        category: hobby
+        confidence: 0.9
+        disputed: false
+        object: chess
+        predicate: likes
+        source_event: cea5082a-4e13-4dac-b418-9c2d78d5d2ee
+        subject: c15d31e2-b3ee-4ca6-b90b-1596d739d4fd
+      -
+        category: hobby
+        confidence: 0.9
+        disputed: false
+        object: cooking
+        predicate: likes
+        source_event: cea5082a-4e13-4dac-b418-9c2d78d5d2ee
+        subject: c15d31e2-b3ee-4ca6-b90b-1596d739d4fd
+  name: extract_facts
+</extract_facts>
+
+What's the next step?
+```
+
+This retrieval and rendering process *is* the context engineering behind the system. It's all just a functional representation of database state.
+
+<figure>
+  <div class="embed-container" style="padding-bottom: 56.25%">
+    <YoutubeEmbed video-id="sUpFc9qO0jA" />
+  </div>
+</figure>
 
 ## Back down to earth
 
