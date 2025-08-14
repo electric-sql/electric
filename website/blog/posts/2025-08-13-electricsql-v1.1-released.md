@@ -1,5 +1,5 @@
 ---
-title: Electric 1.1 ships with a new storage engine with 100x faster writes
+title: Electric 1.1: new storage engine with 102x faster writes
 description: >-
   How we built a new storage engine for Electric, why we did it now, and how it delivers lower latency, higher throughput, and zero‑downtime deploys.
 excerpt: >-
@@ -39,7 +39,7 @@ const normalizedWriteData = {
 }
 </script>
 
-Electric is a [Postgres](https://www.postgresql.org/) sync engine that streams database changes to millions of concurrent users in real time. Our mission is simple: be faster than Postgres.
+Electric is a [Postgres](https://www.postgresql.org/) sync engine that [streams database changes to millions of concurrent users in real time](https://electric-sql.com/blog/2024/12/10/electric-beta-release#scalable). Our mission is simple: be faster than Postgres.
 
 We’ve been working toward that goal for the last year, but when usage started growing and workloads began pushing the limits of the system, we hit a wall — our storage engine had become a bottleneck. Replication lag was creeping up, CPU usage was climbing higher and higher and the system was having trouble keeping pace with Postgres itself. It was time to act, and we went big: we built our own storage engine from the ground up.
 
@@ -67,7 +67,7 @@ Electric's job sounds simple, until you have hundreds of thousands of shapes to 
 
 ## Storage is the beating heart of Electric
 
-One [difference](https://expertofobsolescence.substack.com/p/the-hard-things-about-sync) between sync engines and other types of real‑time systems is that sync engines don't miss changes. Real‑time systems typically offer at‑most‑once delivery or temporal buffering windows. If you lose connection, you're done. In Electric, users can resume shapes at any point in history. This makes the sync engine dramatically simpler to use but storage becomes the beating heart of the sytem.
+One [difference](https://expertofobsolescence.substack.com/p/the-hard-things-about-sync) between sync engines and other types of real‑time systems is that sync engines don't miss changes. Real‑time systems typically offer at‑most‑once delivery or temporal buffering windows. If you lose connection, you're done. In Electric, users can resume shapes at any point in history. This makes the sync engine dramatically simpler to use but storage becomes the beating heart of the system.
 
 ### Picking an off-the-shelf solution
 
@@ -139,7 +139,7 @@ The new architecture decouples readers and writers, allowing the Electric server
 
 **Horizontal read scaling**: Electric is already quite scalable [behind a CDN](/blog/2024/12/10/electric-beta-release), but read-only mode allows horizontal scaling of the read path. Electric can scale to any read workload.
 
-**Zero‑downtime deployments**: Keeping the system available during deploys is criticial for our Cloud infrastructe. We achieve zero-downtime deployments by allowing servers to continue serving data from shape logs, while the old and new server switchover the connection to Postgres.
+**Zero‑downtime deployments**: Keeping the system available during deploys is critical for our Cloud infrastructure. We achieve zero-downtime deployments by allowing servers to continue serving data from shape logs, while the old and new server switchover the connection to Postgres.
 
 ## Performance evaluation
 
@@ -149,15 +149,15 @@ Microbenchmarks ran on a local SSD (MacBook Air M4), and end‑to‑end benchmar
 
 ### Micro-benchmarks
 
-We conducted a series of microbenchmarks to evaluate the new storage engine against CubDB. We saw strong speedups on both SSDs and EFS, with up to 101x and 7x faster writes and 73x and 172x faster reads, respectively.
+We conducted a series of microbenchmarks to evaluate the new storage engine against CubDB. We saw strong speedups on both SSDs and EFS, with 102x and 7x faster writes and 73x and 172x faster reads, respectively.
 
 #### Write performance
 
 This benchmark consists of appending a fixed number of rows to a shape log. With CubDB, every insertion needs to update the index to locate the right chunk to write to. With the new engine, we simply append to the latest chunk and only modify the index when we reach the chunk‑size limit.
 
-On local SSDs, the new engine achieved up to 101x faster writes when appending 1,000 rows. These results were a bit surprising; we hadn't really seen this before, as appending this many rows to a single shape log is uncommon.
+On local SSDs, the new engine wrote 102x faster when appending 1,000 rows.
 
-With network‑attached storage, where latency typically dominates, curves follow a similar profile, but now with a 5x to 7x performance improvement.
+With network‑attached storage, the network latency slows both storage engines down but we still see the same sort of speedup, but now with a 5x to 7x performance improvement.
 
 <!-- Write performance chart - normalized to 1.0.24 -->
 
@@ -201,7 +201,7 @@ In this case, the baseline latency for CubDB is quite high due to the number of 
 
 ### End-to-End benchmarks
 
-The following benchmarks run the full Electric stack end-to-end and report application‑level latency. The results give a clearer picture of potential improvements at runtime. We ran these experiments in AWS in the same setting as the micro-benchmarks (t2.medium instances with EFS).
+The following [benchmarks](/docs/reference/benchmarks) run the full Electric stack end-to-end and report application‑level latency. The results give a clearer picture of potential improvements at runtime. We ran these experiments in AWS in the same setting as the micro-benchmarks (t2.medium instances with EFS).
 
 #### Shape creation
 
@@ -262,16 +262,16 @@ Across the range, the new engine delivers consistently lower end‑to‑end late
 
 ## Lessons learned
 
-Starting with CubDB was a good choice. It got us to v1.0 with minimal issues, giving us time to ship software that just works. Before addressing storage performance, we've fixed tons of bugs, made Electric a reliable system and learned a great deal about how it behaves under real‑world workloads, surfacing bottlenecks in many other places that were far more important to our core proposition. Had we chosen to build our own storage system from day one, surely we would have made the wrong assumptions and done lots on premature optimizations. Instead, our production experience gave us the insight we needed to design the right solution in the right moment.
+Starting with CubDB was a good choice. It got us to v1.0 with minimal issues, giving us time to ship software that just works. Before addressing storage performance, [we've fixed tons of bugs, made Electric a reliable system](https://electric-sql.com/blog/2025/08/04/reliability-sprint) and learned a great deal about how it behaves under real‑world workloads, surfacing bottlenecks in many other places that were far more important to our core proposition. Had we chosen to build our own storage system from day one, we would have made some wrong assumptions and done lots of premature optimizations. Instead, our production experience gave us the insight we needed to design the right solution in the right moment.
 
 This isn't a universal playbook. It worked well for us because the scope of what we had to build was relatively small, and it was one of our team's core areas of expertise.
 
 ## What's next
 
-We've taken a big step toward our ambitious goal: being **faster than Postgres**. The new storage engine has delivered significant performance gains with up to 100x faster writes on SSD.
+We've taken a big step toward our ambitious goal: being **faster than Postgres**. The new storage engine has delivered significant performance gains with 100x faster writes on SSD.
 
-Beyond making Electric faster, we're laying the groundwork to continue building better open-source and cloud products. In Cloud, we're already seeing benefits with rolling deployments, horizontal scalability but it doesn't end there. There is an exciting roadmap ahead!
+Beyond making Electric faster, we're laying the groundwork to continue building better open-source and cloud products. In Cloud, we're already seeing benefits with rolling deployments, horizontal scalabfty but it doesn't end there. There is an exciting roadmap ahead!
 
-None of this would've been possible without our incredible engineering team. Huge thanks to the Electric [team](/about/team) for their insight, code reviews, and relentless focus on making Electric better, and a special mention to **Ilia Borovitinov**, who has led the development of this project.
+None of this would've been possible without our incredible engineering team. Huge thanks to the Electric [team](/about/team) for their insight, code reviews, and relentless focus on making Electric better.
 
 Ready to experience the sync? [Sign up for Electric Cloud](https://electric-sql.com/cloud)—it's free.
