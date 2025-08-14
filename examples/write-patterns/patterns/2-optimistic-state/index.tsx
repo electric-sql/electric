@@ -4,7 +4,7 @@ import { matchBy, matchStream } from '@electric-sql/experimental'
 import { useShape } from '@electric-sql/react'
 
 import api from '../../shared/app/client'
-import { ELECTRIC_URL, envParams } from '../../shared/app/config'
+import { TODOS_URL } from '../../shared/app/config'
 
 type Todo = {
   id: string
@@ -31,11 +31,7 @@ export default function OptimisticState() {
   // return value, so that we can monitor it below to detect
   // local writes syncing back from the server.
   const { isLoading, data, stream } = useShape<Todo>({
-    url: `${ELECTRIC_URL}/v1/shape`,
-    params: {
-      table: 'todos',
-      ...envParams,
-    },
+    url: TODOS_URL,
     parser: {
       timestamptz: (value: string) => new Date(value),
     },

@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { useShape } from '@electric-sql/react'
 
 import api from '../../shared/app/client'
-import { ELECTRIC_URL, envParams } from '../../shared/app/config'
+import { TODOS_URL } from '../../shared/app/config'
 
 type Todo = {
   id: string
@@ -16,11 +16,7 @@ export default function OnlineWrites() {
   // Use Electric's `useShape` hook to sync data from Postgres
   // into a React state variable.
   const { isLoading, data } = useShape<Todo>({
-    url: `${ELECTRIC_URL}/v1/shape`,
-    params: {
-      table: 'todos',
-      ...envParams,
-    },
+    url: TODOS_URL,
     parser: {
       timestamptz: (value: string) => new Date(value),
     },

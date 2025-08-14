@@ -4,6 +4,9 @@ import express from 'express'
 import pg from 'pg'
 
 import { z } from 'zod'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
 
 // Connect to Postgres.
 const DATABASE_URL =
@@ -62,6 +65,77 @@ const deleteTodo = async (id) => {
 }
 
 // Expose the shared REST API to create, update and delete todos.
+
+// GET /todos - proxy to Electric for syncing todos
+app.get('/todos', async (req, res) => {
+  const ELECTRIC_URL = process.env.ELECTRIC_URL || 'http://localhost:3000'
+  const electricUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
+
+  // Only pass through Electric protocol parameters
+  Object.keys(req.query).forEach((key) => {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
+      electricUrl.searchParams.set(key, req.query[key])
+    }
+  })
+
+  // Set the table server-side
+  electricUrl.searchParams.set('table', 'todos')
+
+  // Add source credentials if available
+  if (process.env.ELECTRIC_SOURCE_ID) {
+    electricUrl.searchParams.set('source_id', process.env.ELECTRIC_SOURCE_ID)
+  }
+  if (process.env.ELECTRIC_SOURCE_SECRET) {
+    electricUrl.searchParams.set('secret', process.env.ELECTRIC_SOURCE_SECRET)
+  }
+
+  try {
+    const response = await fetch(electricUrl)
+
+    // Remove problematic headers that could break decoding
+    const headers = {}
+    response.headers.forEach((value, key) => {
+      if (
+        key.toLowerCase() !== 'content-encoding' &&
+        key.toLowerCase() !== 'content-length'
+      ) {
+        headers[key] = value
+      }
+    })
+
+    // Set status and headers
+    res.writeHead(response.status, response.statusText, headers)
+
+    // Convert Web Streams to Node.js stream and pipe
+    const nodeStream = Readable.fromWeb(response.body)
+
+    // Handle stream errors gracefully
+    nodeStream.on('error', (err) => {
+      console.error('Stream error:', err)
+      if (!res.headersSent) {
+        res.writeHead(500)
+      }
+      res.end()
+    })
+
+    res.on('close', () => {
+      nodeStream.destroy()
+    })
+
+    await pipeline(nodeStream, res)
+  } catch (error) {
+    // Ignore premature close errors - these happen when clients disconnect early
+    if (error.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+      return
+    }
+
+    console.error('Error proxying to Electric:', error)
+    // Only write headers if they haven't been sent yet
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+})
 
 app.post('/todos', async (req, res) => {
   let data

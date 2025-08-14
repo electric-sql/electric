@@ -10,17 +10,11 @@ import "./Example.css"
 
 type Item = { id: string }
 
-const baseUrl = import.meta.env.VITE_ELECTRIC_URL ?? `http://localhost:3000`
 const baseApiUrl = import.meta.env.VITE_SERVER_URL ?? `http://localhost:3001`
 const itemsUrl = new URL(`/items`, baseApiUrl)
 
 const itemShape = () => ({
-  url: new URL(`/v1/shape`, baseUrl).href,
-  params: {
-    table: `items`,
-    source_id: import.meta.env.VITE_ELECTRIC_SOURCE_ID,
-    secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
-  },
+  url: itemsUrl.href,
 })
 
 async function createItem(newId: string) {

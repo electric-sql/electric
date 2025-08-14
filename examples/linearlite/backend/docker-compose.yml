@@ -1,5 +1,5 @@
-version: "3.3"
-name: "pglite-linearlite"
+version: '3.3'
+name: 'pglite-linearlite'
 
 services:
   postgres:

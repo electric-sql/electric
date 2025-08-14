@@ -17,14 +17,14 @@ This packages exposes a `useShape` hook for pulling shape data into your React c
 Add `useShape` to a component
 
 ```tsx
-import { useShape } from "@electric-sql/react"
+import { useShape } from '@electric-sql/react'
 
-export default function MyComponent () {
+export default function MyComponent() {
   const { isLoading, data } = useShape({
-    url: "http://my-api.com/shape",
+    url: 'http://my-api.com/shape',
     params: {
-      table: `foo`
-    }
+      table: `foo`,
+    },
   })
 
   if (isLoading) {
@@ -33,7 +33,9 @@ export default function MyComponent () {
 
   return (
     <div>
-      {data.map(foo => <div>{foo.title}</div>)}
+      {data.map((foo) => (
+        <div>{foo.title}</div>
+      ))}
     </div>
   )
 }

@@ -50,8 +50,8 @@ curl -i 'http://localhost:3000/v1/shape?table=scores&offset=-1'
 
 - `/v1/shape` is a standard prefix with the API version and the shape sync endpoint path
 - `scores` is the name of the [`table`](/docs/guides/shapes#table) of the shape (and is required); if you wanted to sync data from the `items` table, you would change the path to `/v1/shape?table=items`
-- `offset=-1` means we're asking for the *entire* Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
-:::
+- `offset=-1` means we're asking for the _entire_ Shape as we don't have any of the data cached locally yet. If we had previously fetched the shape and wanted to see if there were any updates, we'd set the offset to the last offset we'd already seen.
+  :::
 
 You should get a response like this:
 
@@ -163,19 +163,17 @@ npm install @electric-sql/react
 Replace the contents of `src/App.tsx` with the following. Note that we're requesting the same shape as before:
 
 ```tsx
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 function Component() {
   const { data } = useShape({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: `scores`
-    }
+      table: `scores`,
+    },
   })
 
-  return (
-    <pre>{ JSON.stringify(data, null, 2) }</pre>
-  )
+  return <pre>{JSON.stringify(data, null, 2)}</pre>
 }
 
 export default Component
@@ -191,31 +189,31 @@ Navigate to http://localhost:5173 in your web browser. You should see output lik
 
 ```json
 [
-    {
-        "id": 1,
-        "name": "Alice",
-        "value": 3.14
-    },
-    {
-        "id": 2,
-        "name": "Bob",
-        "value": 2.71
-    },
-    {
-        "id": 3,
-        "name": "Charlie",
-        "value": -1.618
-    },
-    {
-        "id": 4,
-        "name": "David",
-        "value": 1.414
-    },
-    {
-        "id": 5,
-        "name": "Eve",
-        "value": 0
-    }
+  {
+    "id": 1,
+    "name": "Alice",
+    "value": 3.14
+  },
+  {
+    "id": 2,
+    "name": "Bob",
+    "value": 2.71
+  },
+  {
+    "id": 3,
+    "name": "Charlie",
+    "value": -1.618
+  },
+  {
+    "id": 4,
+    "name": "David",
+    "value": 1.414
+  },
+  {
+    "id": 5,
+    "name": "Eve",
+    "value": 0
+  }
 ]
 ```
 
@@ -228,3 +226,13 @@ UPDATE scores SET name = 'James' WHERE id = 2;
 ```
 
 Congratulations! You've built your first real-time, reactive Electric app!
+
+## Production Best Practices
+
+The examples above connect directly to Electric for simplicity. However, **for production applications, you should always proxy Electric requests through your backend API**.
+
+### Why Use an API Proxy?
+
+Direct connections expose your database structure and require client-side authorization logic. Instead, treat Electric shapes like normal API calls.
+
+**→ See the [authentication guide](/docs/guides/auth) for a complete walkthrough of why and how to implement the API proxy pattern.**

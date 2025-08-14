@@ -1,4 +1,3 @@
-
 # Optimistic state pattern
 
 This is an example of an application using:

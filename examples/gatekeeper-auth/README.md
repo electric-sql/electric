@@ -1,4 +1,3 @@
-
 # Electric - Gatekeeper auth example
 
 This example demonstrates a number of ways of implementing the [gatekeeper auth](https://electric-sql.com/docs/guides/auth#gatekeeper-auth) pattern for [securing access](https://electric-sql.com/docs/guides/auth) to the [Electric sync service](https://electric-sql.com/product/electric).
@@ -7,9 +6,9 @@ It includes:
 
 - an [`./api`](./api) service for generating auth tokens
 - three options for validating those auth tokens when proxying requests to Electric:
-    - [`./api`](./api) the API itself
-    - [`./caddy`](./caddy) a Caddy web server as a reverse proxy
-    - [`./edge`](./edge) an edge function that you can run in front of a CDN
+  - [`./api`](./api) the API itself
+  - [`./caddy`](./caddy) a Caddy web server as a reverse proxy
+  - [`./edge`](./edge) an edge function that you can run in front of a CDN
 
 > [!TIP]
 > You can see an alternative pattern for auth in the [proxy-auth](../proxy-auth) example.
@@ -21,10 +20,10 @@ There are two steps to the gatekeeper pattern:
 1. first a client posts authentication credentials to a gatekeeper endpoint to generate an auth token
 2. the client then makes requests to Electric via an authorising proxy that validates the auth token against the shape request
 
-The auth token can be *shape-scoped* (i.e.: can include a claim containing the shape definition). This allows the proxy to authorize a shape request by comparing the shape claim signed into the token with the [shape defined in the request parameters](https://electric-sql.com/docs/quickstart#http-api). This allows you to:
+The auth token can be _shape-scoped_ (i.e.: can include a claim containing the shape definition). This allows the proxy to authorize a shape request by comparing the shape claim signed into the token with the [shape defined in the request parameters](https://electric-sql.com/docs/quickstart#http-api). This allows you to:
 
 - keep your main authorization logic in your API (in the gatekeeper endpoint) where it's natural to do things like query the database and call external authorization services; and to
-- run your authorization logic *once* when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
+- run your authorization logic _once_ when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
 
 ### Implementation
 
@@ -53,9 +52,8 @@ The core of this example is an [Elixir/Phoenix](https://www.phoenixframework.org
 
 4. the proxy validates the JWT auth token and verifies that the shape definition in the token matches the shape being requested; if so it reverse-proxies the request onto Electric
 5. Electric then handles the request as normal
-6. sending a response back *through the proxy* to the client
+6. sending a response back _through the proxy_ to the client
 7. the client can then process the data and make additional requests using the same auth token (step 3); if the auth token expires or is rejected, the client starts again (step 1).
-
 
 ## How to run
 
@@ -125,7 +123,7 @@ Copy the auth token and set it to an env var:
 export AUTH_TOKEN="<token>"
 ```
 
-First let's make a `GET` request to the proxy endpoint *without* the auth token. It will be rejected with a `403` status:
+First let's make a `GET` request to the proxy endpoint _without_ the auth token. It will be rejected with a `403` status:
 
 ```console
 $ curl -sv "http://localhost:4000/proxy/v1/shape?table=items&offset=-1"
@@ -266,7 +264,7 @@ $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
 ...
 ```
 
-Caddy validates the shape request against the shape definition signed into the auth token. So an authorized request *for the wrong shape* will fail:
+Caddy validates the shape request against the shape definition signed into the auth token. So an authorized request _for the wrong shape_ will fail:
 
 ```console
 $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
@@ -353,7 +351,6 @@ $ curl -sv --header "Authorization: Bearer ${AUTH_TOKEN}" \
 ### Example client
 
 See the [./client](./client) folder for an example that uses the [Typescript client]() with gatekeeper and proxy endpoints.
-
 
 ## More information
 

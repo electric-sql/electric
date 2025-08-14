@@ -52,23 +52,23 @@ import { ShapeStream } from '@electric-sql/client'
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
   params: {
-    table: `foo`
-  }
+    table: `foo`,
+  },
 })
 
 // You can also add custom headers and URL parameters
 const streamWithParams = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
   headers: {
-    'Authorization': 'Bearer token'
+    Authorization: 'Bearer token',
   },
   params: {
     table: `foo`,
-    'custom-param': 'value'
-  }
+    'custom-param': 'value',
+  },
 })
 
-stream.subscribe(messages => {
+stream.subscribe((messages) => {
   // messages is an array with one or more row updates
   // and the stream will wait for all subscribers to process them
   // before proceeding
@@ -102,22 +102,24 @@ shape.subscribe(({ rows }) => {
 The ShapeStream provides two ways to handle errors:
 
 1. Using the `onError` handler:
+
 ```typescript
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
   params: {
-    table: `foo`
+    table: `foo`,
   },
   onError: (error) => {
     // Handle all stream errors here
     console.error('Stream error:', error)
-  }
+  },
 })
 ```
 
 If no `onError` handler is provided, the ShapeStream will throw errors that occur during streaming.
 
 2. Individual subscribers can optionally handle errors specific to their subscription:
+
 ```typescript
 stream.subscribe(
   (messages) => {
@@ -131,11 +133,13 @@ stream.subscribe(
 ```
 
 Common error types include:
+
 - `MissingShapeUrlError`: Missing required URL parameter
 - `InvalidSignalError`: Invalid AbortSignal instance
 - `ReservedParamError`: Using reserved parameter names
 
 Runtime errors:
+
 - `FetchError`: HTTP errors during shape fetching
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle
