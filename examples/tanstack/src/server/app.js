@@ -98,10 +98,12 @@ const server = http.createServer(async (req, res) => {
         // Convert Web Streams to Node.js stream and pipe
         const nodeStream = Readable.fromWeb(response.body)
         await pipeline(nodeStream, res)
+        console.log("Pipeline complete")
         return
       } catch (error) {
         // Ignore premature close errors - these happen when clients disconnect early
         if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
+          console.log("Premature close")
           return
         }
 
@@ -133,9 +135,10 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(404, { ...JSON_HEADERS, ...CORS_HEADERS })
     res.end(JSON.stringify({ error: `Not Found` }))
-  } catch (_error) {
+  } catch (error) {
+    console.error("Error handling request:", error)
     res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
-    res.end(JSON.stringify({ error: `Something went wrong` }))
+    res.end(JSON.stringify({ error: `Something went wrong + ${error.message}` }))
   }
 })
 
