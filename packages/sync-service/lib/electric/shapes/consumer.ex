@@ -42,6 +42,10 @@ defmodule Electric.Shapes.Consumer do
     GenServer.call(name(consumer), :await_snapshot_start, 30_000)
   end
 
+  def subscribe_materializer(consumer) do
+    GenServer.call(name(consumer), :subscribe_materializer)
+  end
+
   @doc false
   # use in tests to avoid race conditions. registers `pid` to be notified
   # when the `shape_handle` consumer has processed every transaction.
@@ -81,7 +85,8 @@ defmodule Electric.Shapes.Consumer do
         awaiting_snapshot_start: [],
         buffer: [],
         monitors: [],
-        cleaned?: false
+        cleaned?: false,
+        materializer_subscribed?: false
       })
 
     :ok =
@@ -171,6 +176,12 @@ defmodule Electric.Shapes.Consumer do
   def handle_call({:handle_event, event, trace_context}, _from, state) do
     OpenTelemetry.set_current_context(trace_context)
     {:reply, :ok, handle_event(event, state)}
+  end
+
+  @impl GenServer
+  def handle_call(:subscribe_materializer, _from, state) do
+    Logger.debug("Subscribing materializer for #{state.shape_handle}")
+    {:reply, :ok, %{state | materializer_subscribed?: true}}
   end
 
   @impl GenServer
@@ -412,8 +423,6 @@ defmodule Electric.Shapes.Consumer do
 
         notify_new_changes(state, last_log_offset)
 
-        Materializer.new_changes(state, changes)
-
         lag = calculate_replication_lag(txn)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
 
@@ -434,6 +443,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp notify_new_changes(state, latest_log_offset) do
+    if state.materializer_subscribed? do
+      Materializer.notify_new_changes(state.materializer, latest_log_offset)
+    end
+
     Registry.dispatch(state.registry, state.shape_handle, fn registered ->
       Logger.debug(fn ->
         "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"

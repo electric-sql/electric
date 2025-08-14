@@ -63,6 +63,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def handle_continue(:start_materializer, state) do
     _ = Consumer.await_snapshot_start(state)
+    Consumer.subscribe_materializer(state)
 
     {:noreply, state, {:continue, :read_stream}}
   end
