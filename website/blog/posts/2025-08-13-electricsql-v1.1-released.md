@@ -280,7 +280,7 @@ This isn't a universal playbook. It worked well for us because the scope of what
 
 We've taken a big step toward our ambitious goal: being **faster than Postgres**. The new storage engine has delivered significant performance gains with 102x faster writes on SSD.
 
-Beyond making Electric faster, we're laying the groundwork to continue building better open-source and cloud products. In Cloud, we're already seeing benefits with rolling deployments, horizontal scalabfty but it doesn't end there. There is an exciting roadmap ahead!
+Beyond making Electric faster, we're laying the groundwork to continue building better open-source and cloud products. In Cloud, we're already seeing benefits with rolling deployments, horizontal scalability but it doesn't end there. There is an exciting roadmap ahead!
 
 None of this would've been possible without our incredible engineering team. Huge thanks to the Electric [team](/about/team) for their insight, code reviews, and relentless focus on making Electric better.
 
