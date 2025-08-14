@@ -1,5 +1,5 @@
 ---
-title: Electric 1.1: new storage engine with 102x faster writes
+title: "Electric 1.1: new storage engine with 102x faster writes"
 description: >-
   How we built a new storage engine for Electric, why we did it now, and how it delivers lower latency, higher throughput, and zero‑downtime deploys.
 excerpt: >-
@@ -43,11 +43,21 @@ Electric is a [Postgres](https://www.postgresql.org/) sync engine that [streams 
 
 We’ve been working toward that goal for the last year, but when usage started growing and workloads began pushing the limits of the system, we hit a wall — our storage engine had become a bottleneck. Replication lag was creeping up, CPU usage was climbing higher and higher and the system was having trouble keeping pace with Postgres itself. It was time to act, and we went big: we built our own storage engine from the ground up.
 
-The result? Up to 100X faster writes and 73X faster reads on SSD. This is the story of how we made it.
+The result? 102X faster writes and 73X faster reads on SSD. This is the story of how we made it.
 
 ## How Electric works
 
 The core primitive for controlling sync in Electric is the [**shape**](/docs/guides/shapes). A shape is a partial replica of a table that includes the subset of rows matching a user-defined WHERE clause. Electric continuously tails Postgres's logical replication stream for changes, matches them against registered shapes, appends them to the corresponding **[shape logs](/docs/api/http#shape-log)**, and sends them to clients using HTTP long polling.
+
+:::info Why this architecture is different
+
+**CDN-native fan-out**: CDNs de-duplicate shape requests and collapse load, moving the load out of your infrastructure, with infinite scalability.
+
+**Cost physics**: There's no persistent socket tax—you pay only for actual data transfer, which means lower egress costs and fewer hot servers at scale.
+
+**Operational simplicity**: Shape log persistence means zero-downtime deploys without managing stateful socket fleets.
+
+:::
 
 Electric's job sounds simple, until you have hundreds of thousands of shapes to match and millions of clients hitting the system at once. At that scale, every microsecond counts. Fall behind Postgres throughput and real-time becomes sluggish and Postgres's [WAL](https://www.postgresql.org/docs/current/wal-intro.html) starts to pile up. It's not pretty.
 
@@ -268,7 +278,7 @@ This isn't a universal playbook. It worked well for us because the scope of what
 
 ## What's next
 
-We've taken a big step toward our ambitious goal: being **faster than Postgres**. The new storage engine has delivered significant performance gains with 100x faster writes on SSD.
+We've taken a big step toward our ambitious goal: being **faster than Postgres**. The new storage engine has delivered significant performance gains with 102x faster writes on SSD.
 
 Beyond making Electric faster, we're laying the groundwork to continue building better open-source and cloud products. In Cloud, we're already seeing benefits with rolling deployments, horizontal scalabfty but it doesn't end there. There is an exciting roadmap ahead!
 
