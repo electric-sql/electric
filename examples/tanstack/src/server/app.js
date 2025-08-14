@@ -47,6 +47,7 @@ const server = http.createServer(async (req, res) => {
 
     // Handle GET /items - proxy to Electric for syncing items
     if (req.method === `GET` && req.url?.startsWith(`/items`)) {
+      console.log("GET /items")
       const url = new URL(req.url, `http://localhost:${PORT}`)
       const originUrl = new URL(`http://localhost:3000/v1/shape`)
 
@@ -74,26 +75,42 @@ const server = http.createServer(async (req, res) => {
         )
       }
 
-      const response = await fetch(originUrl)
+      try {
+        const response = await fetch(originUrl)
 
-      // Copy headers, excluding problematic ones
-      const headers = { ...CORS_HEADERS }
-      response.headers.forEach((value, key) => {
-        if (
-          key.toLowerCase() !== `content-encoding` &&
-          key.toLowerCase() !== `content-length`
-        ) {
-          headers[key] = value
+        // Copy headers, excluding problematic ones
+        const headers = { ...CORS_HEADERS }
+        response.headers.forEach((value, key) => {
+          if (
+            key.toLowerCase() !== `content-encoding` &&
+            key.toLowerCase() !== `content-length` &&
+            key.toLowerCase() !== `access-control-allow-origin` &&
+            key.toLowerCase() !== `access-control-allow-methods` &&
+            key.toLowerCase() !== `access-control-allow-headers`
+          ) {
+            headers[key] = value
+          }
+        })
+
+        // Set status and headers
+        res.writeHead(response.status, response.statusText, headers)
+
+        // Convert Web Streams to Node.js stream and pipe
+        const nodeStream = Readable.fromWeb(response.body)
+        await pipeline(nodeStream, res)
+        return
+      } catch (error) {
+        // Ignore premature close errors - these happen when clients disconnect early
+        if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
+          return
         }
-      })
 
-      // Set status and headers
-      res.writeHead(response.status, response.statusText, headers)
-
-      // Convert Web Streams to Node.js stream and pipe
-      const nodeStream = Readable.fromWeb(response.body)
-      await pipeline(nodeStream, res)
-      return
+        console.error("Error proxying to Electric:", error)
+        // Only write headers if they haven't been sent yet
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Internal server error" })
+        }
+      }
     }
 
     // Handle adding an item
@@ -122,7 +139,7 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-const PORT = process.env.PORT || 3010
+const PORT = process.env.PORT || 3001
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
