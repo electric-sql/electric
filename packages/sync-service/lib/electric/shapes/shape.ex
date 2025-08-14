@@ -31,8 +31,8 @@ defmodule Electric.Shapes.Shape do
     :root_column_count,
     :where,
     :selected_columns,
-    :shape_dependencies,
-    :shape_dependencies_handles,
+    shape_dependencies: [],
+    shape_dependencies_handles: [],
     flags: %{},
     storage: %{compaction: :disabled},
     replica: @default_replica
@@ -174,7 +174,9 @@ defmodule Electric.Shapes.Shape do
   #
 
   def new(opts) when is_list(opts) or is_map(opts) do
-    if Access.get(opts, :select) do
+    opts = Map.new(opts)
+
+    if Map.get(opts, :select) do
       with {:ok, opts} <- make_opts_from_select(opts[:select], opts) do
         make_new(Map.drop(opts, [:select]))
       end
