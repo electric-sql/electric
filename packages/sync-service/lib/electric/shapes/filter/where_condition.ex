@@ -11,7 +11,6 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   and thus a tree of optimised conditions is formed.
   """
 
-  alias Electric.Shapes.Consumer.Materializer
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Parser.Const
@@ -131,10 +130,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     |> Map.new()
   end
 
-  def affected_shapes(%WhereCondition{} = condition, record) do
+  def affected_shapes(%WhereCondition{} = condition, record, refs_fun \\ fn _ -> %{} end) do
     MapSet.union(
       indexed_shapes_affected(condition, record),
-      other_shapes_affected(condition, record)
+      other_shapes_affected(condition, record, refs_fun)
     )
   rescue
     error ->
@@ -163,31 +162,18 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  defp other_shapes_affected(condition, record) do
+  defp other_shapes_affected(condition, record, refs_fun) do
     OpenTelemetry.with_child_span(
       "filter.filter_other_shapes",
       [shape_count: map_size(condition.other_shapes)],
       fn ->
         for {shape_id, %{where: where, shape: shape}} <- condition.other_shapes,
-            WhereClause.includes_record?(where |> dbg, record, make_sublink_refs(shape) |> dbg)
-            |> dbg,
+            WhereClause.includes_record?(where, record, refs_fun.(shape)),
             into: MapSet.new() do
           shape_id
         end
       end
     )
-  end
-
-  defp make_sublink_refs(shape) do
-    shape.shape_dependencies_handles
-    |> Enum.with_index()
-    |> Map.new(fn {shape_handle, index} ->
-      {["$sublink", Integer.to_string(index)],
-       Materializer.get_link_values(%{
-         shape_handle: shape_handle,
-         stack_id: Process.get(:stack_id)
-       })}
-    end)
   end
 
   def all_shapes(%WhereCondition{indexes: indexes, other_shapes: other_shapes}) do

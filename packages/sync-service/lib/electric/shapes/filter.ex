@@ -23,14 +23,14 @@ defmodule Electric.Shapes.Filter do
 
   require Logger
 
-  defstruct tables: %{}
+  defstruct tables: %{}, refs_fun: nil
 
   @type t :: %Filter{}
   @type shape_id :: any()
 
   @spec new(keyword()) :: Filter.t()
-  def new(_opts \\ []) do
-    %Filter{}
+  def new(opts \\ []) do
+    %Filter{refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)}
   end
 
   @doc """
@@ -40,17 +40,18 @@ defmodule Electric.Shapes.Filter do
   by `affected_shapes/2` when the shape is affected by a change.
   """
   @spec add_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
-  def add_shape(%Filter{tables: tables}, shape_id, shape) do
+  def add_shape(%Filter{} = filter, shape_id, shape) do
     %Filter{
-      tables:
-        Map.update(
-          tables,
-          shape.root_table,
-          WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}, shape.where),
-          fn condition ->
-            WhereCondition.add_shape(condition, {shape_id, shape}, shape.where)
-          end
-        )
+      filter
+      | tables:
+          Map.update(
+            filter.tables,
+            shape.root_table,
+            WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}, shape.where),
+            fn condition ->
+              WhereCondition.add_shape(condition, {shape_id, shape}, shape.where)
+            end
+          )
     }
   end
 
@@ -58,15 +59,16 @@ defmodule Electric.Shapes.Filter do
   Remove a shape from the filter.
   """
   @spec remove_shape(Filter.t(), shape_id()) :: Filter.t()
-  def remove_shape(%Filter{tables: tables}, shape_id) do
+  def remove_shape(%Filter{} = filter, shape_id) do
     %Filter{
-      tables:
-        tables
-        |> Enum.map(fn {table_name, condition} ->
-          {table_name, WhereCondition.remove_shape(condition, shape_id)}
-        end)
-        |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
-        |> Map.new()
+      filter
+      | tables:
+          filter.tables
+          |> Enum.map(fn {table_name, condition} ->
+            {table_name, WhereCondition.remove_shape(condition, shape_id)}
+          end)
+          |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
+          |> Map.new()
     }
   end
 
@@ -145,7 +147,7 @@ defmodule Electric.Shapes.Filter do
         MapSet.new()
 
       condition ->
-        WhereCondition.affected_shapes(condition, record)
+        WhereCondition.affected_shapes(condition, record, filter.refs_fun)
     end
   end
 
