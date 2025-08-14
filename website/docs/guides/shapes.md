@@ -210,7 +210,7 @@ With non-optimized where clauses, throughput is inversely proportional to the nu
 
 With optimized where clauses, Electric can evaluate millions of clauses at once and maintain a consistent throughput of ~5,000 row changes per second **no matter how many shapes you have**. If you have 10 shapes, Electric can process 5,000 changes per second. If you have 1,000 shapes, throughput remains at 5,000 changes per second.
 
-For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throughput-with-optimized-where-clauses).
+For more details see the [benchmarks](/docs/reference/benchmarks#_7-write-throughput-with-optimized-where-clauses) and [this blog post](/blog/2025/08/13/electricsql-v1.1-released) about our storage engine.
 
 ### Optimized where clauses
 
