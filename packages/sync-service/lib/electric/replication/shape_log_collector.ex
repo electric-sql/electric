@@ -17,6 +17,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
   alias Electric.Shapes.Consumer.Materializer
+  alias Electric.Shapes.DependencyLayers
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
@@ -106,6 +107,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         persistent_replication_data_opts: persistent_replication_data_opts,
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
+        dependency_layers: DependencyLayers.new(),
         filter:
           opts
           |> Map.put(:refs_fun, &sublink_refs(&1, opts.stack_id))
