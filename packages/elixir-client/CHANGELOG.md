@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.7.0
+
+### Minor Changes
+
+- 2284ffd: Include txid information in message headers and bump electric requirement to ~> 1.1.1
+
 ## 0.6.5
 
 ### Patch Changes
