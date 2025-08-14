@@ -804,7 +804,7 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   # If nothing matched, fail
-  defp node_to_ast(%type_module{} = node, children, _, _) do
+  defp node_to_ast(%type_module{} = node, _children, _, _) do
     {:error,
      {Map.get(node, :location, 0),
       "#{type_module |> Module.split() |> List.last()} is not supported in this context"}}
