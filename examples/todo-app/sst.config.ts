@@ -30,6 +30,10 @@ export default $config({
         dbName,
         migrationsDirectory: `./db/migrations`,
       })
+    
+    if (!process.env.ELECTRIC_API) {
+      throw new Error(`ELECTRIC_API environment variable is required`)
+    }
 
     const cluster = getSharedCluster(`todo-app-${$app.stage}`)
     const service = cluster.addService(`todo-app-${$app.stage}-service`, {
@@ -47,6 +51,7 @@ export default $config({
       },
       environment: {
         DATABASE_URL: pooledDatabaseUri,
+        ELECTRIC_URL: process.env.ELECTRIC_API,
       },
       image: {
         context: "../..",
@@ -56,10 +61,6 @@ export default $config({
         command: "node server.js",
       },
     })
-
-    if (!process.env.ELECTRIC_API) {
-      throw new Error(`ELECTRIC_API environment variable is required`)
-    }
 
     const website = new sst.aws.StaticSite("todo-app-website", {
       build: {
