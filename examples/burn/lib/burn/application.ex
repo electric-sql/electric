@@ -11,6 +11,7 @@ defmodule Burn.Application do
       [
         # BurnWeb.Telemetry,
         Burn.Repo,
+        Burn.Scheduler,
         {DNSCluster, query: Application.get_env(:burn, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Burn.PubSub},
         {Finch, name: Burn.Finch},

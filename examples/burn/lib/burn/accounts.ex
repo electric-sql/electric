@@ -199,4 +199,38 @@ defmodule Burn.Accounts do
       })
     end
   end
+
+  @doc """
+  Deletes all human users who have no associated threads.
+
+  This function finds users who don't have any memberships in threads
+  and removes them from the system.
+
+  Returns `{:ok, count}` where count is the number of deleted users,
+  or `{:error, reason}` if the operation fails.
+
+  ## Examples
+
+      iex> delete_human_users_with_no_threads()
+      {:ok, 3}
+
+      iex> delete_users_with_no_threads()
+      {:ok, 0}
+  """
+  def delete_human_users_with_no_threads do
+    subquery =
+      from m in Threads.Membership,
+      select: m.user_id
+
+    query =
+      from u in User,
+      where:
+        u.id not in subquery(subquery) and
+        u.type == :human
+
+    case Repo.delete_all(query) do
+      {count, _} -> {:ok, count}
+      error -> {:error, error}
+    end
+  end
 end

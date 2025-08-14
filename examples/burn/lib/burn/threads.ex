@@ -139,6 +139,35 @@ defmodule Burn.Threads do
   end
 
   @doc """
+  Deletes all threads that are older than 4 hours.
+
+  Returns `{:ok, count}` where count is the number of deleted threads,
+  or `{:error, reason}` if the operation fails.
+
+  ## Examples
+
+      iex> delete_threads_older_than(8, :hour)
+      {:ok, 5}
+
+      iex> delete_old_threads(8, :hour)
+      {:ok, 0}
+  """
+  def delete_threads_older_than(n, unit) do
+    cut_off_date =
+      DateTime.utc_now()
+      |> DateTime.add(0 - n, unit)
+
+    query =
+      from t in Thread,
+      where: t.inserted_at < ^cut_off_date
+
+    case Repo.delete_all(query) do
+      {count, _} -> {:ok, count}
+      error -> {:error, error}
+    end
+  end
+
+  @doc """
   Returns an `%Changeset{}` for tracking thread changes.
 
   ## Examples

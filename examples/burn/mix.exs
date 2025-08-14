@@ -52,6 +52,7 @@ defmodule Burn.MixProject do
       {:phoenix_live_view, "~> 1.1"},
       {:phoenix_sync, "~> 0.5"},
       {:postgrex, "~> 0.21"},
+      {:quantum, "~> 3.0"},
       {:req, "~> 0.5.15"},
       {:yamel, "~> 2.0"}
     ]

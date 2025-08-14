@@ -37,6 +37,9 @@ defmodule Burn.Agents.Supervisor do
   def init(_opts) do
     pid = self()
 
+    # Don't spam the LLM with loads of old threads on startup
+    {:ok, _counts} = Burn.Cleanup.threads_older_than(30, :minute)
+
     {:ok, supervisor} = DynamicSupervisor.start_link(strategy: :one_for_one)
     {:ok, _consumer} =
       DynamicSupervisor.start_child(supervisor, %{
@@ -108,7 +111,7 @@ defmodule Burn.Agents.Supervisor do
     child_spec = %{
       id: agent_module.process_name(thread),
       start: {agent_module, :start_link, [thread, user]},
-      restart: :permanent
+      restart: :transient
     }
 
     result =

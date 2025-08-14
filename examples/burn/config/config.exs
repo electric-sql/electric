@@ -30,6 +30,12 @@ config :burn, BurnWeb.Endpoint,
   pubsub_server: Burn.PubSub,
   live_view: [signing_salt: "DcrMg+jk"]
 
+# Configures the Quantum scheduler
+config :burn, Burn.Scheduler,
+  jobs: [
+    {"@hourly", {Burn.Cleanup, :threads_older_than, []}}
+  ]
+
 # Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",

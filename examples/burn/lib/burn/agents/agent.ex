@@ -114,7 +114,13 @@ defmodule Burn.Agents.Agent do
       def handle_info({:stream, :thread, []}, state), do: {:noreply, state}
 
       def handle_info({:stream, :thread, _messages}, %{thread: %{id: thread_id}} = state) do
-        {:noreply, %{state | thread: Threads.get_thread!(thread_id)}}
+        case Threads.get_thread(thread_id) do
+          %Threads.Thread{} = thread ->
+            {:noreply, %{state | thread: thread}}
+
+          nil ->
+            {:stop, :normal, state}
+        end
       end
 
       @impl true
