@@ -336,7 +336,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
         OpenTelemetry.start_interval("replication_client.telemetry_execute")
 
-        if Sampler.sample?() do
+        if Sampler.sample_metrics?() do
           :telemetry.execute(
             [:electric, :postgres, :replication, :transaction_received],
             %{
