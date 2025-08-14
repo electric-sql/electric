@@ -507,12 +507,16 @@ defmodule Electric.ShapeCache do
       shape_handles =
         shape.shape_dependencies
         |> Enum.map(&{&1, maybe_create_shape(&1, otel_ctx, state)})
-        |> Enum.map(fn {shape, {shape_handle, _latest_offset}} ->
+        |> Enum.with_index(fn {inner_shape, {shape_handle, _latest_offset}}, index ->
+          materialized_type =
+            shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
+
           ConsumerSupervisor.start_materializer(%{
             stack_id: state.stack_id,
             shape_handle: shape_handle,
             storage: state.storage,
-            columns: shape.selected_columns
+            columns: inner_shape.selected_columns,
+            materialized_type: materialized_type
           })
 
           Materializer.wait_until_ready(%{
