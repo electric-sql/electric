@@ -56,11 +56,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Set PG settings"
+      - name: Set PG settings
         run: |
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "max_replication_slots=100" >> /var/lib/postgresql/data/postgresql.conf'
           docker restart ${{ job.services.postgres.id }}
+
+      - name: Seed the database
+        run: psql -d postgresql://postgres:password@localhost:54321/postgres?sslmode=disable -f dev/init.sql
 
       - uses: erlef/setup-beam@v1
         with:
