@@ -125,7 +125,7 @@ defmodule Electric.Shapes.Consumer do
         normalized_latest_offset
       )
 
-    ShapeLogCollector.subscribe(producer, state.shape)
+    ShapeLogCollector.subscribe(producer, state.shape_handle, state.shape)
 
     Logger.debug("Writer for #{state.shape_handle} initialized")
 

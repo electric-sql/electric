@@ -42,7 +42,8 @@ defmodule Support.TransactionConsumer do
     {:ok, parent} = Keyword.fetch(opts, :parent)
     {:ok, id} = Keyword.fetch(opts, :id)
     shape = Keyword.fetch!(opts, :shape)
-    Electric.Replication.ShapeLogCollector.subscribe(producer, shape)
+    shape_handle = Keyword.fetch!(opts, :shape_handle)
+    Electric.Replication.ShapeLogCollector.subscribe(producer, shape_handle, shape)
 
     {:ok, {id, parent}}
   end

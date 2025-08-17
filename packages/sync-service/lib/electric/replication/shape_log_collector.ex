@@ -78,8 +78,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
-  def subscribe(server, shape) do
-    GenServer.call(server, {:subscribe, shape})
+  def subscribe(server, shape_handle, shape) do
+    GenServer.call(server, {:subscribe, shape_handle, shape})
   end
 
   def notify_flushed(server, _shape_handle, offset) do
@@ -108,6 +108,8 @@ defmodule Electric.Replication.ShapeLogCollector do
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
         dependency_layers: DependencyLayers.new(),
+        shape_handles_by_pid: %{},
+        pids_by_shape_handle: %{},
         filter:
           opts
           |> Map.put(:refs_fun, &sublink_refs(&1, opts.stack_id))
@@ -136,7 +138,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     end)
   end
 
-  def handle_call({:subscribe, shape}, {pid, _ref}, state) do
+  def handle_call({:subscribe, shape_handle, shape}, {pid, _ref}, state) do
     OpenTelemetry.with_span("shape_log_collector.subscribe", [], state.stack_id, fn ->
       ref = Process.monitor(pid, tag: :unsubscribe)
       from = {pid, ref}
@@ -144,8 +146,10 @@ defmodule Electric.Replication.ShapeLogCollector do
       state =
         %{
           state
-          | partitions: Partitions.add_shape(state.partitions, from, shape),
-            filter: Filter.add_shape(state.filter, pid, shape)
+          | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
+            filter: Filter.add_shape(state.filter, shape_handle, shape),
+            shape_handles_by_pid: Map.put(state.shape_handles_by_pid, pid, shape_handle),
+            pids_by_shape_handle: Map.put(state.pids_by_shape_handle, shape_handle, pid)
         }
         |> Map.update!(:subscriptions, fn {count, set} ->
           {count + 1, MapSet.put(set, from)}
@@ -264,7 +268,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.start_interval("shape_log_collector.publish")
     context = OpenTelemetry.get_current_context()
-    Publisher.publish(affected_shapes, {:handle_event, event, context})
+
+    affected_shapes
+    |> Enum.map(fn shape_handle -> Map.fetch!(state.pids_by_shape_handle, shape_handle) end)
+    |> dbg()
+    |> Publisher.publish({:handle_event, event, context})
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
 
@@ -332,11 +340,15 @@ defmodule Electric.Replication.ShapeLogCollector do
         {count, set}
       end
 
+    shape_handle = Map.fetch!(state.shape_handles_by_pid, pid)
+
     %{
       state
       | subscriptions: subscriptions,
-        filter: Filter.remove_shape(state.filter, pid),
-        partitions: Partitions.remove_shape(state.partitions, from)
+        filter: Filter.remove_shape(state.filter, shape_handle),
+        partitions: Partitions.remove_shape(state.partitions, shape_handle),
+        shape_handles_by_pid: Map.delete(state.shape_handles_by_pid, pid),
+        pids_by_shape_handle: Map.delete(state.pids_by_shape_handle, shape_handle)
     }
     |> log_subscription_status()
   end

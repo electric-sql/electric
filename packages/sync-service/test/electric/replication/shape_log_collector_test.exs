@@ -39,6 +39,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              )
 
   @shape Shape.new!("test_table", inspector: @inspector)
+  @shape_handle "the-shape-handle"
 
   def setup_log_collector(ctx) do
     # Start a test Registry
@@ -108,7 +109,15 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
               id: {:consumer, id},
               start:
                 {Support.TransactionConsumer, :start_link,
-                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]},
+                 [
+                   [
+                     id: id,
+                     parent: parent,
+                     producer: ctx.server,
+                     shape: @shape,
+                     shape_handle: @shape_handle
+                   ]
+                 ]},
               restart: :temporary
             })
 
@@ -246,7 +255,15 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
               id: {:consumer, id},
               start:
                 {Support.TransactionConsumer, :start_link,
-                 [[id: id, parent: parent, producer: ctx.server, shape: @shape]]},
+                 [
+                   [
+                     id: id,
+                     parent: parent,
+                     producer: ctx.server,
+                     shape: @shape,
+                     shape_handle: @shape_handle
+                   ]
+                 ]},
               restart: :temporary
             })
 
@@ -343,10 +360,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     consumer =
       start_link_supervised!(
         {Support.TransactionConsumer,
-         id: consumer_id, parent: self(), producer: pid, shape: @shape}
+         id: consumer_id,
+         parent: self(),
+         producer: pid,
+         shape: @shape,
+         shape_handle: @shape_handle}
       )
 
-    consumers = [{consumer_id, consumer}]
+    consumers = [{@shape_handle, consumer}]
 
     start_lsn = Lsn.from_integer(100)
     prev_lsn = Lsn.increment(start_lsn, -1)
