@@ -93,6 +93,8 @@ You usually want to connect directly to Postgres and not via a connection pool. 
 
 You can optionally provide a separate [`ELECTRIC_QUERY_DATABASE_URL`](/docs/api/config#electric-query-database-url) env var, which can use a pooler and will be used for all queries other than replication.
 
+To force Electric to verify the database server's certificate when connecting to it using TLS, set the [`ELECTRIC_DATABASE_CA_CERTIFICATE_FILE`](/docs/api/config#electric-database-ca-certificate-file) config option.
+
 > [!Tip] Troubleshooting common errors
 > If you get a TCP connection error saying `non-existing domain - :nxdomain` or `network is unreachable - :enetunreach` then you may need to connect using IPv6. You can enable this by setting [`ELECTRIC_DATABASE_USE_IPV6=true`](/docs/api/config#database-use-ipv6).
 >
