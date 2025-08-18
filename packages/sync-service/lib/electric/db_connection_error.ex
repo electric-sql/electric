@@ -66,6 +66,7 @@ defmodule Electric.DbConnectionError do
   def from_error(%DBConnection.ConnectionError{} = error) do
     maybe_nxdomain_error(error) ||
       maybe_connection_refused_error(error) ||
+      maybe_ssl_connection_error(error) ||
       maybe_connection_timeout_error(error) ||
       maybe_pool_queue_timeout_error(error) ||
       maybe_client_exit_error(error) ||
@@ -385,6 +386,28 @@ defmodule Electric.DbConnectionError do
     end
   end
 
+  defp maybe_ssl_connection_error(error) do
+    case error.message do
+      "ssl connect: " <> message ->
+        if String.contains?(message, [
+             "Unknown CA",
+             "unknown_ca",
+             "Bad Certificate",
+             "Invalid CA certificate file"
+           ]) do
+          %DbConnectionError{
+            message: "SSL connection failed to verify server certificate: " <> message,
+            type: :ssl_connection_failed,
+            original_error: error,
+            retry_may_fix?: false
+          }
+        end
+
+      _ ->
+        nil
+    end
+  end
+
   defp maybe_connection_timeout_error(error) do
     ~r/tcp connect \((?<destination>.*)\): (?:timeout|connection timed out - :etimedout)/
     |> Regex.named_captures(error.message)
@@ -419,10 +442,7 @@ defmodule Electric.DbConnectionError do
   defp maybe_client_exit_error(
          %DBConnection.ConnectionError{message: message, severity: :info, reason: :error} = error
        ) do
-    if Regex.match?(
-         ~r/^client #PID<\d+.\d+.\d+> exited$/,
-         message
-       ) do
+    if Regex.match?(~r/^client #PID<\d+.\d+.\d+> exited$/, message) do
       %DbConnectionError{
         message: "connection exited",
         type: :client_exit,

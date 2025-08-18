@@ -13,7 +13,7 @@
 
     # Create a named network for the PG container to be able to attach pooler
     !docker network ls | grep ${pg_container_name}-network || docker network create ${pg_container_name}-network
-  
+
     !docker run \
       --name $pg_container_name \
       --network ${pg_container_name}-network \
@@ -37,6 +37,34 @@
 
 [macro setup_pg]
   [invoke setup_pg_with_shell_name "pg" "" ""]
+[endmacro]
+
+[macro setup_pg_with_ssl]
+  [shell pg]
+    -$fail_pattern
+
+    !docker run \
+      --name $pg_container_name \
+      -e POSTGRES_DB=electric \
+      -e POSTGRES_USER=postgres \
+      -e POSTGRES_PASSWORD=password \
+      -p $pg_host_port:5432 \
+      -v $(realpath ../scripts/pg-entrypoint-ssl.sh):/usr/local/bin/entrypoint-ssl.sh:ro \
+      -v $(realpath ../support_files/postgresql_ssl.conf):/etc/postgresql.conf:ro \
+      -v $(realpath ../support_files/pg_hba.conf):/etc/pg_hba.conf:ro \
+      -v $(realpath ../support_files/server.crt):/etc/server.crt:ro \
+      -v $(realpath ../support_files/server.key):/etc/server.key:ro \
+      --entrypoint entrypoint-ssl.sh \
+      postgres:17-alpine \
+        -c config_file=/etc/postgresql.conf
+
+    [timeout 15]
+    ??PostgreSQL init process complete; ready for start up.
+    ??database system is ready to accept connections
+
+    # Reset the failure pattern to avoid false failures when Electric tries to create an already
+    # existing publication or replication slot.
+    -
 [endmacro]
 
 [macro setup_pg_with_pooler]
@@ -90,7 +118,7 @@
 [macro seed_pg]
   [shell psql]
     !docker exec -u postgres -it $pg_container_name psql --dbname electric
-  
+
     """!
     CREATE TABLE items2 (
       id UUID PRIMARY KEY,
@@ -99,7 +127,7 @@
     );
     """
     ??CREATE TABLE
-  
+
     """!
     INSERT INTO
       items2 (id, val1, val2)
@@ -130,14 +158,29 @@
 [endmacro]
 
 [macro setup_electric_shell shell_name port env]
+  [invoke start_electric_script $shell_name $port $env]
+
   [shell $shell_name]
     -$fail_pattern
-  
-    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
 
     ??[info] Starting ElectricSQL
 
     !{:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack"))
+[endmacro]
+
+[macro start_electric_script shell_name port env]
+  [shell $shell_name]
+    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+[endmacro]
+
+[macro stop_electric]
+  [invoke stop_electric_shell "electric"]
+[endmacro]
+
+[macro stop_electric_shell shell_name]
+  [shell $shell_name]
+    !:init.stop()
+    ??$PS1
 [endmacro]
 
 [macro setup_electric_shell_with_tenant shell_name port]
