@@ -307,10 +307,20 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
           #
           # My version would give value of 550 / 256 / 24 = 9%
           [:avg1, :avg5, :avg15]
-          |> Map.new(fn probe ->
-            {probe, 100 * (apply(:cpu_sup, probe, []) / 256 / cores)}
+          |> Enum.reduce(%{}, fn probe, acc ->
+            case apply(:cpu_sup, probe, []) do
+              {:error, reason} ->
+                Logger.debug("Failed to collect system load #{probe}: #{inspect(reason)}")
+                acc
+
+              value ->
+                Map.put(acc, probe, 100 * (value / 256 / cores))
+            end
           end)
-          |> then(&:telemetry.execute([:system, :load_percent], &1))
+          |> case do
+            x when x == %{} -> :ok
+            map -> :telemetry.execute([:system, :load_percent], map)
+          end
 
         _ ->
           Logger.debug("Failed to collect system load average: no cores reported")
