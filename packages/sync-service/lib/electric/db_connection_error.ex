@@ -37,6 +37,8 @@ defmodule Electric.DbConnectionError do
              "tcp recv: connection timed out - :etimedout",
              "tcp recv (idle): timeout",
              "ssl recv (idle): timeout",
+             "ssl async_recv: timeout",
+             "tcp async_recv: timeout",
              "tcp recv: timeout",
              "ssl recv: timeout"
            ] do

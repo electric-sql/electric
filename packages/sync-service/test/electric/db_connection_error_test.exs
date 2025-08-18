@@ -187,6 +187,8 @@ defmodule Electric.DbConnectionErrorTest do
       for message <- [
             "tcp recv: connection timed out - :etimedout",
             "ssl recv (idle): timeout",
+            "ssl async_recv: timeout",
+            "tcp async_recv: timeout",
             "tcp recv: timeout"
           ] do
         error = %DBConnection.ConnectionError{
