@@ -177,11 +177,7 @@ defmodule Electric.Connection.Manager.Pool do
     {:stop, reason, state}
   end
 
-  def handle_info({:EXIT, pid, reason}, state) do
-    if not Map.has_key?(state.connection_pids, pid) do
-      raise RuntimeError, "Received EXIT for unknown process #{inspect(pid)}: #{inspect(reason)}"
-    end
-
+  def handle_info({:EXIT, pid, reason}, state) when is_map_key(state.connection_pids, pid) do
     Logger.debug("Pooled connection #{inspect(pid)} exited with reason: #{inspect(reason)}")
 
     # Keep track of the most recent pooled connection error seen so we can use it as the
