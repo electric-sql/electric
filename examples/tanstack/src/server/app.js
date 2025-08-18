@@ -3,6 +3,8 @@ import pg from "pg"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 
+const baseUrl = process.env.ELECTRIC_URL ?? `http://localhost:3000`
+
 const db = new pg.Pool({
   connectionString:
     process.env.DATABASE_URL ??
@@ -49,7 +51,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === `GET` && req.url?.startsWith(`/items`)) {
       console.log("GET /items")
       const url = new URL(req.url, `http://localhost:${PORT}`)
-      const originUrl = new URL(`http://localhost:3000/v1/shape`)
+      const originUrl = new URL(`/v1/shape`, baseUrl)
 
       // Copy relevant query params
       url.searchParams.forEach((value, key) => {
@@ -62,16 +64,16 @@ const server = http.createServer(async (req, res) => {
       originUrl.searchParams.set(`table`, `items`)
 
       // Add source credentials if available
-      if (process.env.VITE_ELECTRIC_SOURCE_ID) {
+      if (process.env.ELECTRIC_SOURCE_ID) {
         originUrl.searchParams.set(
           `source_id`,
-          process.env.VITE_ELECTRIC_SOURCE_ID
+          process.env.ELECTRIC_SOURCE_ID
         )
       }
-      if (process.env.VITE_ELECTRIC_SOURCE_SECRET) {
+      if (process.env.ELECTRIC_SOURCE_SECRET) {
         originUrl.searchParams.set(
           `secret`,
-          process.env.VITE_ELECTRIC_SOURCE_SECRET
+          process.env.ELECTRIC_SOURCE_SECRET
         )
       }
 
