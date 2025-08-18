@@ -33,6 +33,10 @@ export default $config({
         dbName,
         migrationsDirectory: `./shared/migrations`,
       })
+    
+    if (!process.env.ELECTRIC_API) {
+      throw new Error('ELECTRIC_API environment variable is required')
+    }
 
     const cluster = getSharedCluster(`write-patterns-${$app.stage}`)
 
@@ -53,6 +57,9 @@ export default $config({
       },
       environment: {
         DATABASE_URL: pooledDatabaseUri,
+        ELECTRIC_URL: process.env.ELECTRIC_API,
+        ELECTRIC_SOURCE_ID: sourceId,
+        ELECTRIC_SOURCE_SECRET: sourceSecret,
       },
       image: {
         context: '../..',
@@ -63,10 +70,6 @@ export default $config({
       },
     })
 
-    if (!process.env.ELECTRIC_API) {
-      throw new Error('ELECTRIC_API environment variable is required')
-    }
-
     const website = new sst.aws.StaticSite('write-patterns-website', {
       build: {
         command: 'npm run build',
@@ -76,9 +79,6 @@ export default $config({
         VITE_SERVER_URL: service.url.apply((url) =>
           url.slice(0, url.length - 1)
         ),
-        VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-        VITE_ELECTRIC_SOURCE_ID: sourceId,
-        VITE_ELECTRIC_SOURCE_SECRET: sourceSecret,
       },
       domain: {
         name: `write-patterns${
