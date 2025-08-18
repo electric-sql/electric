@@ -3,7 +3,7 @@ defmodule Electric.Connection.Manager.Pool do
   A connection pool for managing multiple connections to a PostgreSQL database.
   """
 
-  use GenServer
+  use GenServer, shutdown: :infinity
   require Logger
   alias Electric.DbConnectionError
 
@@ -201,6 +201,24 @@ defmodule Electric.Connection.Manager.Pool do
       %{state | connection_pids: Map.delete(state.connection_pids, pid)},
       {:continue, :update_pool_status}
     }
+  end
+
+  @impl true
+  def terminate(_reason, %{pool_pid: pool_pid}) do
+    # ensure pool is terminated along with pool manager
+    ref = Process.monitor(pool_pid)
+    Process.exit(pool_pid, :shutdown)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pool_pid, _reason} -> :ok
+    after
+      5000 ->
+        Process.exit(pool_pid, :kill)
+
+        receive do
+          {:DOWN, ^ref, :process, ^pool_pid, _reason} -> :ok
+        end
+    end
   end
 
   # We call this before configuring pool connections in order to fully monitor them

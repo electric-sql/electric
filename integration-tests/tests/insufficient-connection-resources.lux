@@ -1,0 +1,40 @@
+[doc Verify handling of insufficient resources that lead to a pool of connections not being able to be established]
+
+[include _macros.luxinc]
+
+[global pg_container_name=insufficient-connection-resources__pg]
+
+###
+
+## Start a new Postgres cluster with limited max connections
+[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=10"]
+
+## Start the sync service.
+[invoke setup_electric]
+
+[shell electric]
+  ??[info] Lock acquired from postgres
+
+  # Reset the failure pattern because we'll be matching on an error.
+  -
+
+## Observe the connection error.
+[shell electric]
+  ??[warning] Database connection in connection_pool mode failed: sorry, too many clients already
+  ??[warning] Reconnecting in 
+
+
+## Restarting Postgres with a higher number of max_connections should fix the issue
+[invoke stop_pg]
+[invoke teardown_container $pg_container_name]
+[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=100"]
+
+
+[shell electric]
+  # Increase the timeout before the next match to give Electric time to reconnect
+  [timeout 15]
+
+  ??[info] Starting replication from postgres
+
+[cleanup]
+  [invoke teardown]

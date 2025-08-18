@@ -385,6 +385,7 @@ defmodule Electric.Connection.Manager do
           pool_pid: nil
         } = state
       ) do
+    Logger.debug("Starting connection pool for stack #{state.stack_id}")
     conn_opts = pooled_connection_opts(state) |> Electric.Utils.deobfuscate_password()
 
     {:ok, pool_pid} =
