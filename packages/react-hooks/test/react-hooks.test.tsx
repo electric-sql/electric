@@ -369,4 +369,119 @@ describe(`useShape`, () => {
 
     expect(result.current.data.length).toEqual(1)
   })
+
+  it(`should return disabled result when enabled is false`, async ({
+    aborter,
+    issuesTableUrl,
+  }) => {
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        enabled: false,
+      })
+    )
+
+    expect(result.current.isEnabled).toBe(false)
+    expect(result.current.data).toEqual([])
+    expect(result.current.shape).toBeUndefined()
+    expect(result.current.stream).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.lastSyncedAt).toBeUndefined()
+    expect(result.current.error).toBeUndefined()
+    expect(result.current.isError).toBe(false)
+  })
+
+  it(`should return enabled result when enabled is true`, async ({
+    aborter,
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const [id] = await insertIssues({ title: `test row` })
+
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        enabled: true,
+      })
+    )
+
+    await waitFor(() => expect(result.current.isEnabled).toBe(true))
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    )
+    expect(result.current.shape).toBeInstanceOf(Shape)
+    expect(result.current.stream).toBeInstanceOf(ShapeStream)
+  })
+
+  it(`should return enabled result when enabled is undefined (default)`, async ({
+    aborter,
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const [id] = await insertIssues({ title: `test row` })
+
+    const { result } = renderHook(() =>
+      useShape({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+      })
+    )
+
+    await waitFor(() => expect(result.current.isEnabled).toBe(true))
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    )
+    expect(result.current.shape).toBeInstanceOf(Shape)
+    expect(result.current.stream).toBeInstanceOf(ShapeStream)
+  })
+
+  it(`should toggle between enabled and disabled states`, async ({
+    aborter,
+    issuesTableUrl,
+    insertIssues,
+  }) => {
+    const [id] = await insertIssues({ title: `test row` })
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) =>
+        useShape({
+          url: `${BASE_URL}/v1/shape`,
+          params: {
+            table: issuesTableUrl,
+          },
+          signal: aborter.signal,
+          enabled,
+        }),
+      { initialProps: { enabled: true } }
+    )
+
+    await waitFor(() => expect(result.current.isEnabled).toBe(true))
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    )
+
+    rerender({ enabled: false })
+
+    expect(result.current.isEnabled).toBe(false)
+    expect(result.current.data).toEqual([])
+    expect(result.current.shape).toBeUndefined()
+
+    rerender({ enabled: true })
+
+    await waitFor(() => expect(result.current.isEnabled).toBe(true))
+    await waitFor(() =>
+      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+    )
+  })
 })

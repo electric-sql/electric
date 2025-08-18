@@ -91,7 +91,7 @@ export function getShape<T extends Row<unknown>>(
   return newShape
 }
 
-export interface UseShapeResult<T extends Row<unknown> = Row> {
+export interface UseShapeResultEnabled<T extends Row<unknown> = Row> {
   /**
    * The array of rows that make up the Shape.
    * @type {T[]}
@@ -113,7 +113,35 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
   lastSyncedAt?: number
   error: Shape<T>[`error`]
   isError: boolean
+  /** True when the shape is enabled and active */
+  isEnabled: true
 }
+
+export interface UseShapeResultDisabled<T extends Row<unknown> = Row> {
+  /**
+   * Empty array when disabled
+   * @type {T[]}
+   */
+  data: T[]
+  /** Undefined when disabled */
+  shape: undefined
+  /** Undefined when disabled */
+  stream: undefined
+  /** False when disabled */
+  isLoading: false
+  /** Undefined when disabled */
+  lastSyncedAt: undefined
+  /** Undefined when disabled */
+  error: undefined
+  /** False when disabled */
+  isError: false
+  /** False when the shape is disabled */
+  isEnabled: false
+}
+
+export type UseShapeResult<T extends Row<unknown> = Row> =
+  | UseShapeResultEnabled<T>
+  | UseShapeResultDisabled<T>
 
 function shapeSubscribe<T extends Row<unknown>>(
   shape: Shape<T>,
@@ -127,7 +155,7 @@ function shapeSubscribe<T extends Row<unknown>>(
 
 function parseShapeData<T extends Row<unknown>>(
   shape: Shape<T>
-): UseShapeResult<T> {
+): UseShapeResultEnabled<T> {
   return {
     data: shape.currentRows,
     isLoading: shape.isLoading(),
@@ -136,6 +164,7 @@ function parseShapeData<T extends Row<unknown>>(
     shape,
     stream: shape.stream as ShapeStream<T>,
     error: shape.error,
+    isEnabled: true,
   }
 }
 
@@ -145,12 +174,15 @@ function shapeResultChanged<T extends Row<unknown>>(
 ): boolean {
   return (
     !oldRes ||
+    oldRes.isEnabled !== newRes.isEnabled ||
     oldRes.isLoading !== newRes.isLoading ||
     oldRes.lastSyncedAt !== newRes.lastSyncedAt ||
     oldRes.isError !== newRes.isError ||
     oldRes.error !== newRes.error ||
-    oldRes.shape.lastOffset !== newRes.shape.lastOffset ||
-    oldRes.shape.handle !== newRes.shape.handle
+    (oldRes.isEnabled &&
+      newRes.isEnabled &&
+      (oldRes.shape.lastOffset !== newRes.shape.lastOffset ||
+        oldRes.shape.handle !== newRes.shape.handle))
   )
 }
 
@@ -161,29 +193,81 @@ function identity<T>(arg: T): T {
 interface UseShapeOptions<SourceData extends Row<unknown>, Selection>
   extends ShapeStreamOptions<GetExtensions<SourceData>> {
   selector?: (value: UseShapeResult<SourceData>) => Selection
+  /** Whether the shape should be enabled. Defaults to true when undefined. */
+  enabled?: boolean
 }
 
+export function useShape<
+  SourceData extends Row<unknown> = Row,
+  Selection = UseShapeResultEnabled<SourceData>,
+>(
+  options: UseShapeOptions<SourceData, Selection> & { enabled: true }
+): Selection
+export function useShape<
+  SourceData extends Row<unknown> = Row,
+  Selection = UseShapeResultDisabled<SourceData>,
+>(
+  options: UseShapeOptions<SourceData, Selection> & { enabled: false }
+): Selection
+export function useShape<
+  SourceData extends Row<unknown> = Row,
+  Selection = UseShapeResultEnabled<SourceData>,
+>(
+  options: UseShapeOptions<SourceData, Selection> & {
+    enabled?: true | undefined
+  }
+): Selection
+export function useShape<
+  SourceData extends Row<unknown> = Row,
+  Selection = UseShapeResult<SourceData>,
+>(
+  options: UseShapeOptions<SourceData, Selection> & { enabled?: boolean }
+): Selection
 export function useShape<
   SourceData extends Row<unknown> = Row,
   Selection = UseShapeResult<SourceData>,
 >({
   selector = identity as (arg: UseShapeResult<SourceData>) => Selection,
+  enabled = true,
   ...options
 }: UseShapeOptions<SourceData, Selection>): Selection {
-  const shapeStream = getShapeStream<SourceData>(
-    options as ShapeStreamOptions<GetExtensions<SourceData>>
+  const shapeStream = enabled
+    ? getShapeStream<SourceData>(
+        options as ShapeStreamOptions<GetExtensions<SourceData>>
+      )
+    : null
+  const shape =
+    enabled && shapeStream ? getShape<SourceData>(shapeStream) : null
+
+  // Stable disabled result
+  const disabledResult = React.useMemo(
+    (): UseShapeResultDisabled<SourceData> => ({
+      data: [],
+      shape: undefined,
+      stream: undefined,
+      isLoading: false,
+      lastSyncedAt: undefined,
+      error: undefined,
+      isError: false,
+      isEnabled: false,
+    }),
+    []
   )
-  const shape = getShape<SourceData>(shapeStream)
 
   const useShapeData = React.useMemo(() => {
-    let latestShapeData: UseShapeResult<SourceData> | undefined
+    let latestShapeData: UseShapeResultEnabled<SourceData> | undefined
 
     const getSnapshot = () => {
+      if (!enabled || !shape) return disabledResult
       latestShapeData ??= parseShapeData(shape)
       return latestShapeData
     }
 
     const subscribe = (onStoreChange: () => void) => {
+      if (!enabled || !shape) {
+        return () => {}
+      }
+
       // check if shape has changed between the initial snapshot
       // and subscribing, as there are no guarantees that the
       // two will occur synchronously with each other
@@ -199,15 +283,14 @@ export function useShape<
       })
     }
 
-    return () => {
-      return useSyncExternalStoreWithSelector(
+    return () =>
+      useSyncExternalStoreWithSelector(
         subscribe,
         getSnapshot,
         getSnapshot,
         selector
       )
-    }
-  }, [shape, selector])
+  }, [enabled, shape, selector, disabledResult])
 
   return useShapeData()
 }
