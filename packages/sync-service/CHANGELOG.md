@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.1.3
+
+### Patch Changes
+
+- 871d4e9: fix: make sure the flush acknowledgements are advancing on WAL slot advancement
+- e377333: Introduce a new configuration option ELECTRIC_DATABASE_CA_CERTIFICATE_FILE that enables Electric to verify the database server identity when establishing a secure connection to it.
+- a26544e: Handle cases where telemetry `:cpu_sup` calls errors gracefully.
+- 9d09390: Parse more TCP DB connection timeout errors
+
 ## 1.1.2
 
 ### Patch Changes
