@@ -53,7 +53,9 @@ defmodule Electric.Postgres.ReplicationClient do
       # end LSN of the last transaction that we have successfully processed and persisted in the
       # shape log storage.
       received_wal: 0,
-      flushed_wal: 0
+      flushed_wal: 0,
+      last_seen_txn_lsn: 0,
+      flush_up_to_date?: true
     ]
 
     @type t() :: %__MODULE__{
@@ -72,7 +74,9 @@ defmodule Electric.Postgres.ReplicationClient do
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
             received_wal: non_neg_integer(),
-            flushed_wal: non_neg_integer()
+            flushed_wal: non_neg_integer(),
+            last_seen_txn_lsn: non_neg_integer(),
+            flush_up_to_date?: boolean()
           }
 
     @opts_schema NimbleOptions.new!(
@@ -221,7 +225,17 @@ defmodule Electric.Postgres.ReplicationClient do
 
   @impl true
   def handle_info({:flush_boundary_updated, lsn}, state) do
-    state = %{state | flushed_wal: lsn}
+    state =
+      if Lsn.from_integer(lsn) == state.last_seen_txn_lsn do
+        %{
+          state
+          | flush_up_to_date?: true,
+            flushed_wal: state.received_wal,
+            received_wal: max(lsn, state.received_wal)
+        }
+      else
+        %{state | flushed_wal: max(lsn, state.flushed_wal), received_wal: state.received_wal}
+      end
 
     {:noreply, [encode_standby_status_update(state)], state}
   end
@@ -280,21 +294,25 @@ defmodule Electric.Postgres.ReplicationClient do
       # with keepalives to avoid it getting filled with irrelevant changes, like
       # heartbeats from the database provider
       1 ->
-        state = update_received_wal(state, wal_end)
+        state = update_stored_wals(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
 
+      0 when Collector.is_collecting(state.txn_collector) ->
+        {:noreply, [], state}
+
       0 ->
+        state = update_stored_wals(state, wal_end)
         {:noreply, [], state}
     end
   end
 
   def handle_data(
-        <<@repl_msg_x_log_data, _wal_start::64, _wal_end::64, _clock::64, data::binary>>,
+        <<@repl_msg_x_log_data, _wal_start::64, _server_wal_end::64, _clock::64, data::binary>>,
         %State{stack_id: stack_id} = state
       ) do
     data
     |> OpenTelemetry.start_interval("replication_client.decode_message")
-    |> decode_message()
+    |> Decoder.decode()
     # # Useful for debugging:
     # |> tap(fn %struct{} = msg ->
     #   message_type = struct |> to_string() |> String.split(".") |> List.last()
@@ -313,7 +331,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
       %Collector{} = txn_collector ->
         OpenTelemetry.start_interval("replication_client.await_more_data")
-        {:noreply, %{state | txn_collector: txn_collector}}
+        {:noreply, %{state | txn_collector: txn_collector, flush_up_to_date?: false}}
 
       {%Relation{} = rel, %Collector{} = txn_collector} ->
         OpenTelemetry.wipe_interval_timer()
@@ -330,7 +348,7 @@ defmodule Electric.Postgres.ReplicationClient do
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {%Transaction{} = txn, %Collector{} = txn_collector} ->
-        state = %{state | txn_collector: txn_collector}
+        state = %{state | txn_collector: txn_collector, last_seen_txn_lsn: txn.lsn}
 
         {m, f, args} = state.transaction_received
 
@@ -409,11 +427,11 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
-  defp decode_message(data) do
-    Decoder.decode(data)
-  end
-
   defp encode_standby_status_update(state) do
+    Logger.debug(fn ->
+      "Standby status update: received_wal=#{Lsn.from_integer(state.received_wal)}, flushed_wal=#{Lsn.from_integer(state.flushed_wal)}"
+    end)
+
     <<
       @repl_msg_standby_status_update,
       state.received_wal + 1::64,
@@ -426,6 +444,20 @@ defmodule Electric.Postgres.ReplicationClient do
 
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
+
+  defp update_stored_wals(
+         %{
+           received_wal: received_wal,
+           flushed_wal: flushed_wal,
+           flush_up_to_date?: flush_up_to_date?
+         } = state,
+         wal
+       ) do
+    received_wal = max(received_wal, wal)
+    flushed_wal = if flush_up_to_date?, do: max(flushed_wal, wal), else: flushed_wal
+
+    %{state | received_wal: received_wal, flushed_wal: flushed_wal}
+  end
 
   defp update_received_wal(state, wal) when is_number(wal) and wal >= state.received_wal,
     do: %{state | received_wal: wal}
