@@ -9,6 +9,14 @@ defmodule Electric.DbConnectionError do
     drop_slot_and_restart?: false
   ]
 
+  @type t() :: %{
+          message: String.t(),
+          type: atom(),
+          original_error: any(),
+          retry_may_fix?: boolean(),
+          drop_slot_and_restart?: boolean()
+        }
+
   alias Electric.DbConnectionError
 
   def from_error(%DbConnectionError{} = error), do: error
