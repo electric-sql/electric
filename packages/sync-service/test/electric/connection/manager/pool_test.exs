@@ -154,7 +154,7 @@ defmodule Electric.Connection.Manager.PoolTest do
       retry_may_fix?: false
     }
 
-    Process.kill(c1, {:shutdown, expected_error})
+    send(pool_pid, {:EXIT, c1, {:shutdown, expected_error}})
 
     # Now kill the pool process so the pool manager stops, using the last error above
     mon = Process.monitor(pool_pid)

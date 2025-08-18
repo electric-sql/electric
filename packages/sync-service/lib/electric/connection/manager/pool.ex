@@ -34,6 +34,20 @@ defmodule Electric.Connection.Manager.Pool do
     last_connection_error: nil
   ]
 
+  # NimbleOptions schema (keep style consistent with other modules)
+  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
+  @schema NimbleOptions.new!(
+            stack_id: [type: :string, required: true],
+            # GenServer.server() — allow pid or a registered name
+            connection_manager: [type: {:or, [:pid, :atom, @name_schema_tuple]}, required: true],
+            # Pool implementation module (e.g. Postgrex)
+            pool_mod: [type: :atom, default: Postgrex],
+            # Forwarded to the pool implementation
+            pool_opts: [type: :keyword_list, required: true],
+            # Forwarded DB connection options (e.g. hostname, username, etc.)
+            conn_opts: [type: :keyword_list, required: true]
+          )
+
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -43,7 +57,9 @@ defmodule Electric.Connection.Manager.Pool do
   end
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: name(opts))
+    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
+      GenServer.start_link(__MODULE__, opts, name: name(opts))
+    end
   end
 
   @impl true
