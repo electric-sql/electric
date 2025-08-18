@@ -140,7 +140,7 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     console.error("Error handling request:", error)
     res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
-    res.end(JSON.stringify({ error: `Something went wrong + ${error.message}` }))
+    res.end(JSON.stringify({ error: `Something went wrong` }))
   }
 })
 
