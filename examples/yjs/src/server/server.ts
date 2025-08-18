@@ -4,7 +4,6 @@ import type { Context } from "hono"
 import { cors } from "hono/cors"
 import pg, { Pool } from "pg"
 import { logger } from "hono/logger"
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 
 type InvalidRequest = { isValid: false; error?: string }
 type ValidRequest = (Update | AwarenessUpdate) & { isValid: true }
@@ -89,39 +88,36 @@ app.put(`/api/update`, async (c: Context) => {
   }
 })
 
-// Helper function to proxy Electric shape requests
-const proxyToElectric = async (c: Context, table: string, room: string) => {
+// Shape proxy endpoint to forward requests to Electric and handle required headers
+app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
   const url = new URL(c.req.url)
   const electricUrl = process.env.ELECTRIC_URL || `http://localhost:3000`
   const originUrl = new URL(`${electricUrl}/v1/shape/`)
 
-  // Only pass through Electric protocol parameters
+  // Forward all query parameters
   url.searchParams.forEach((value, key) => {
-    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
-      originUrl.searchParams.set(key, value)
-    }
+    originUrl.searchParams.set(key, value)
   })
 
-  // Set table and where clause server-side
-  originUrl.searchParams.set(`table`, table)
-  originUrl.searchParams.set(`where`, `room = '${room}'`)
-
-  // Add Electric source credentials
+  // Add Electric source ID and secret if available
   if (process.env.ELECTRIC_SOURCE_ID) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
   }
-  if (process.env.ELECTRIC_SOURCE_SECRET) {
-    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
-  }
 
-  // Copy headers (excluding host)
+  // Copy all headers from the original request to forward to Electric
   const headers = new Headers()
   c.req.raw.headers.forEach((value, key) => {
     if (key !== `host`) {
+      // Skip host header to avoid conflicts
       headers.set(key, value)
     }
   })
 
+  if (process.env.ELECTRIC_SOURCE_SECRET) {
+    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+  }
+
+  // Make the request to Electric
   try {
     const newRequest = new Request(originUrl.toString(), {
       method: `GET`,
@@ -173,18 +169,6 @@ const proxyToElectric = async (c: Context, table: string, room: string) => {
     console.error(`Error proxying to Electric:`, error)
     return c.json({ error: `Failed to proxy request to Electric` }, 500)
   }
-}
-
-// Specific endpoints for YJS document updates
-app.get(`/api/ydoc_update`, async (c: Context) => {
-  const room = c.req.query(`room`) || `electric-demo`
-  return proxyToElectric(c, `ydoc_update`, room)
-})
-
-// Specific endpoints for YJS awareness updates
-app.get(`/api/ydoc_awareness`, async (c: Context) => {
-  const room = c.req.query(`room`) || `electric-demo`
-  return proxyToElectric(c, `ydoc_awareness`, room)
 })
 
 app.get(`/health`, (c: Context) => {

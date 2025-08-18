@@ -18,12 +18,6 @@
     },
     "types": ["vite/client"]
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "components/**/*.ts",
-    "components/**/*.tsx",
-    "common/**/*.ts"
-  ],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "components/**/*.ts", "components/**/*.tsx", "common/**/*.ts"],
   "exclude": ["node_modules", "dist", "src/server"]
 }

@@ -1409,9 +1409,6 @@ importers:
       '@codemirror/view':
         specifier: ^6.32.0
         version: 6.35.2
-      '@electric-sql/client':
-        specifier: workspace:*
-        version: link:../../packages/typescript-client
       '@electric-sql/y-electric':
         specifier: workspace:*
         version: link:../../packages/y-electric

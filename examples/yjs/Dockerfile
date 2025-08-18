@@ -11,14 +11,12 @@ COPY package.json ./
 COPY tsconfig.base.json ./
 COPY tsconfig.build.json ./
 COPY patches/ ./patches/
-COPY packages/typescript-client/ packages/typescript-client/
-COPY packages/y-electric/ packages/y-electric/
 COPY examples/yjs examples/yjs/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
-RUN pnpm run -r build
-RUN pnpm run -r build:server
+RUN pnpm run -r build:server 
+
 
 # Need to make production image more clean
 FROM base AS prod
