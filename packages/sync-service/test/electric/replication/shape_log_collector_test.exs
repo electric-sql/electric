@@ -115,7 +115,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      parent: parent,
                      producer: ctx.server,
                      shape: @shape,
-                     shape_handle: @shape_handle
+                     shape_handle: "#{@shape_handle}-#{id}"
                    ]
                  ]},
               restart: :temporary
@@ -261,7 +261,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      parent: parent,
                      producer: ctx.server,
                      shape: @shape,
-                     shape_handle: @shape_handle
+                     shape_handle: "#{@shape_handle}-#{id}"
                    ]
                  ]},
               restart: :temporary
@@ -367,7 +367,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
          shape_handle: @shape_handle}
       )
 
-    consumers = [{@shape_handle, consumer}]
+    consumers = [{consumer_id, consumer}]
 
     start_lsn = Lsn.from_integer(100)
     prev_lsn = Lsn.increment(start_lsn, -1)

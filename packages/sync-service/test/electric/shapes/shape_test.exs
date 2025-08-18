@@ -402,7 +402,7 @@ defmodule Electric.Shapes.ShapeTest do
                     root_pk: ["id"],
                     selected_columns: ["id"],
                     where: %{query: "id > 5"}
-                  } = inner_shape
+                  }
                 ]
               } = outer_shape} =
                Shape.new("child",

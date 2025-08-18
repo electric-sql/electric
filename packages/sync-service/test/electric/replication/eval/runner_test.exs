@@ -187,8 +187,10 @@ defmodule Electric.Replication.Eval.RunnerTest do
     test "subquery" do
       assert {:ok, true} =
                ~S|test IN (SELECT val FROM tester)|
-               |> Parser.parse_and_validate_expression!(refs: %{["test"] => :int4})
-               |> Runner.execute(%{["test"] => 4, ["$sublink", 20] => MapSet.new([2, 3, 4])})
+               |> Parser.parse_and_validate_expression!(
+                 refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}}
+               )
+               |> Runner.execute(%{["test"] => 4, ["$sublink", "0"] => MapSet.new([2, 3, 4])})
     end
   end
 

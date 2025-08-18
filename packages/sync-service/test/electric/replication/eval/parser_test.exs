@@ -427,7 +427,7 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, %Expr{eval: _result}} =
                Parser.parse_and_validate_expression(
                  ~S|test IN (SELECT val FROM tester)|,
-                 refs: %{["test"] => :int4},
+                 refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}},
                  env: env
                )
     end

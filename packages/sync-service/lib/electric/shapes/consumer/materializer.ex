@@ -27,6 +27,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
     name(stack_id, shape_handle)
   end
 
+  def whereis(%{stack_id: stack_id, shape_handle: shape_handle}),
+    do: whereis(stack_id, shape_handle)
+
+  def whereis(stack_id, shape_handle), do: GenServer.whereis(name(stack_id, shape_handle))
+
   def new_changes(state, changes) do
     GenServer.call(name(state), {:new_changes, changes}, :infinity)
   end
@@ -37,6 +42,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def get_link_values(opts) do
     GenServer.call(name(opts), :get_link_values)
+  end
+
+  def subscribe(stack_id, shape_handle) do
+    GenServer.call(name(stack_id, shape_handle), :subscribe)
   end
 
   def start_link(opts) do
@@ -54,7 +63,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
       Map.merge(opts, %{
         view: %{},
         offset: LogOffset.before_all(),
-        ref: nil
+        ref: nil,
+        subscribers: MapSet.new()
       })
 
     {:ok, state |> Map.update!(:storage, &Storage.for_shape(shape_handle, &1)),
@@ -134,19 +144,37 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_call({:new_changes, changes}, _from, state) do
-    view =
-      Enum.reduce(changes, state.view, fn
-        %Changes.NewRecord{key: key, record: record}, view ->
-          Map.put(view, key, cast!(record, state))
+    {view, events} =
+      Enum.reduce(changes, {state.view, []}, fn
+        %Changes.NewRecord{key: key, record: record}, {view, events} ->
+          value = cast!(record, state)
+          {Map.put(view, key, value), [{:move_in, value} | events]}
 
-        %Changes.UpdatedRecord{key: key, record: record}, view ->
-          Map.put(view, key, cast!(record, state))
+        %Changes.UpdatedRecord{key: key, record: record}, {view, events} ->
+          # For now materializer for inner shape expects only PKs, so updates are not expected
+          # We might need to figure out move in/out for updates if something other than PK is selected
+          {Map.put(view, key, cast!(record, state)), events}
 
-        %Changes.DeletedRecord{key: key}, view ->
-          Map.delete(view, key)
+        %Changes.DeletedRecord{key: key, old_record: old_record}, {view, events} ->
+          value = cast!(old_record, state)
+          {Map.delete(view, key), [{:move_out, value} | events]}
       end)
 
+    for pid <- state.subscribers do
+      send(pid, {:materializer_changes, state.shape_handle, events})
+    end
+
     {:reply, :ok, %{state | view: view}}
+  end
+
+  def handle_call(:subscribe, {pid, _ref} = _from, state) do
+    Process.monitor(pid)
+
+    {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
   end
 
   defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do

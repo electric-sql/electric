@@ -24,7 +24,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
   test "can get ready",
        %{storage: storage, stack_id: stack_id, shape_handle: shape_handle} = ctx do
-    {:ok, pid} =
+    {:ok, _pid} =
       Materializer.start_link(%{
         stack_id: stack_id,
         shape_handle: shape_handle,
@@ -33,9 +33,12 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    receive do
-      {:"$gen_call", {from, ref}, :await_snapshot_start} ->
-        send(from, {ref, :ok})
+    for _ <- 1..2 do
+      receive do
+        {:"$gen_call", {from, ref}, x}
+        when x in [:await_snapshot_start, :subscribe_materializer] ->
+          send(from, {ref, :ok})
+      end
     end
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -43,7 +46,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
   test "new changes are materialized correctly",
        %{storage: storage, stack_id: stack_id, shape_handle: shape_handle} = ctx do
-    {:ok, pid} =
+    {:ok, _pid} =
       Materializer.start_link(%{
         stack_id: stack_id,
         shape_handle: shape_handle,
@@ -52,9 +55,12 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    receive do
-      {:"$gen_call", {from, ref}, :await_snapshot_start} ->
-        send(from, {ref, :ok})
+    for _ <- 1..2 do
+      receive do
+        {:"$gen_call", {from, ref}, x}
+        when x in [:await_snapshot_start, :subscribe_materializer] ->
+          send(from, {ref, :ok})
+      end
     end
 
     assert Materializer.wait_until_ready(ctx) == :ok

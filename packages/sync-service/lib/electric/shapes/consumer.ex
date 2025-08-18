@@ -94,6 +94,14 @@ defmodule Electric.Shapes.Consumer do
     :ok =
       Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
 
+    for shape_handle <- config.shape.shape_dependencies_handles do
+      Process.monitor(Materializer.whereis(config.stack_id, shape_handle),
+        tag: {:dependency_materializer_down, shape_handle}
+      )
+
+      Materializer.subscribe(config.stack_id, shape_handle)
+    end
+
     {:ok, state, {:continue, :init_storage}}
   end
 
@@ -260,6 +268,16 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, %{state | writer: writer}}
   end
 
+  def handle_info({:materializer_changes, shape_handle, events}, state) do
+    Logger.debug("Materializer changes for #{shape_handle}: #{inspect(events)}")
+    {:noreply, terminate_safely(state)}
+  end
+
+  def handle_info({{:dependency_materializer_down, handle}, _ref, :process, pid, reason}, state) do
+    Logger.warning("Materializer down for a dependency: #{handle} (#{inspect(pid)})")
+    {:stop, reason, state}
+  end
+
   # We're trapping exists so that `terminate` is called to clean up the writer,
   # otherwise we respect the OTP exit protocol.
   def handle_info({:EXIT, _from, reason}, state) do
@@ -271,7 +289,7 @@ defmodule Electric.Shapes.Consumer do
   def terminate(reason, state) do
     Logger.debug(fn ->
       case reason do
-        {error, stacktrace} ->
+        {error, stacktrace} when is_tuple(error) and is_list(stacktrace) ->
           "Shapes.Consumer terminating with reason: #{Exception.format(:error, error, stacktrace)}"
 
         other ->

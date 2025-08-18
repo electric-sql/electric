@@ -4,20 +4,19 @@ defmodule Electric.Shapes.DependencyLayers do
   end
 
   def add_dependency(layers, shape, shape_handle) do
-    add_to_first_layer(layers, shape_handle)
-    # case shape.shape_dependencies_handles do
-    #   [] ->
-    #     add_to_first_layer(layers, shape_handle)
+    case shape.shape_dependencies_handles do
+      [] ->
+        add_to_first_layer(layers, shape_handle)
 
-    #   [dependency_handle] ->
-    #     [first_layer | rest] = layers
+      [dependency_handle] ->
+        [first_layer | rest] = layers
 
-    #     if MapSet.member?(first_layer, dependency_handle) do
-    #       [first_layer | add_to_first_layer(rest, shape_handle)]
-    #     else
-    #       [first_layer | add_dependency(rest, shape, shape_handle)]
-    #     end
-    # end
+        if MapSet.member?(first_layer, dependency_handle) do
+          [first_layer | add_to_first_layer(rest, shape_handle)]
+        else
+          [first_layer | add_dependency(rest, shape, shape_handle)]
+        end
+    end
   end
 
   def remove_dependency(layers, shape_handle) do
