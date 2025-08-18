@@ -60,6 +60,7 @@ export default $config({
         ELECTRIC_URL: process.env.ELECTRIC_API,
         ELECTRIC_SOURCE_ID: sourceId,
         ELECTRIC_SOURCE_SECRET: sourceSecret,
+        DEBUG_FORCE_DEPLOY: 'true',
       },
       image: {
         context: '../..',
