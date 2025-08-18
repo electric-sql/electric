@@ -1293,7 +1293,8 @@ defmodule Electric.Connection.Manager do
     Logger.warning("Skipping slot drop, pool connection not available")
   end
 
-  defp drop_slot(%State{pool_pid: pool} = state) do
+  defp drop_slot(state) do
+    pool = pool_name(state.stack_id)
     publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
     slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
     slot_temporary? = Keyword.fetch!(state.replication_opts, :slot_temporary?)
