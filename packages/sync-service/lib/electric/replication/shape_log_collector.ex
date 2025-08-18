@@ -149,7 +149,9 @@ defmodule Electric.Replication.ShapeLogCollector do
           | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
             filter: Filter.add_shape(state.filter, shape_handle, shape),
             shape_handles_by_pid: Map.put(state.shape_handles_by_pid, pid, shape_handle),
-            pids_by_shape_handle: Map.put(state.pids_by_shape_handle, shape_handle, pid)
+            pids_by_shape_handle: Map.put(state.pids_by_shape_handle, shape_handle, pid),
+            dependency_layers:
+              DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
         }
         |> Map.update!(:subscriptions, fn {count, set} ->
           {count + 1, MapSet.put(set, from)}
@@ -269,10 +271,12 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval("shape_log_collector.publish")
     context = OpenTelemetry.get_current_context()
 
-    affected_shapes
-    |> Enum.map(fn shape_handle -> Map.fetch!(state.pids_by_shape_handle, shape_handle) end)
-    |> dbg()
-    |> Publisher.publish({:handle_event, event, context})
+    for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
+      # Each publish is synchronous, so layers will be processed in order
+      layer
+      |> Enum.map(&Map.fetch!(state.pids_by_shape_handle, &1))
+      |> Publisher.publish({:handle_event, event, context})
+    end
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
 
@@ -348,7 +352,9 @@ defmodule Electric.Replication.ShapeLogCollector do
         filter: Filter.remove_shape(state.filter, shape_handle),
         partitions: Partitions.remove_shape(state.partitions, shape_handle),
         shape_handles_by_pid: Map.delete(state.shape_handles_by_pid, pid),
-        pids_by_shape_handle: Map.delete(state.pids_by_shape_handle, shape_handle)
+        pids_by_shape_handle: Map.delete(state.pids_by_shape_handle, shape_handle),
+        dependency_layers:
+          DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)
     }
     |> log_subscription_status()
   end
