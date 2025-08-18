@@ -111,6 +111,7 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
           res.end(JSON.stringify({ error: "Internal server error" }))
         }
+        return
       }
     }
 
