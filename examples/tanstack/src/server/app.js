@@ -108,7 +108,7 @@ const server = http.createServer(async (req, res) => {
         console.error("Error proxying to Electric:", error)
         // Only write headers if they haven't been sent yet
         if (!res.headersSent) {
-          res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADER })
+          res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
           res.end(JSON.stringify({ error: "Internal server error" }))
         }
       }
