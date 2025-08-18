@@ -1830,6 +1830,71 @@ defmodule Electric.Plug.RouterTest do
                })
                |> Router.call(opts)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "a move-out of a parent + update of a child doesn't expose a child change", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+
+      assert %{status: 200} =
+               conn1 =
+               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
+               |> Router.call(opts)
+
+      # Parallel shape without filters to ensure we see the txn
+      assert %{status: 200} =
+               conn2 =
+               conn("GET", "/v1/shape", %{table: "child", offset: "-1"})
+               |> Router.call(opts)
+
+      shape_handle1 = get_resp_shape_handle(conn1)
+      shape_handle2 = get_resp_shape_handle(conn2)
+
+      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
+               Jason.decode!(conn1.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "child",
+            offset: "0_0",
+            handle: shape_handle2,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      Postgrex.transaction(db_conn, fn db_conn ->
+        Postgrex.query!(db_conn, "INSERT INTO child (id, parent_id, value) VALUES (3, 1, 30)", [])
+        Postgrex.query!(db_conn, "UPDATE parent SET value = 3 WHERE id = 1", [])
+      end)
+
+      assert %{status: 200} = conn2 = Task.await(task)
+
+      assert [%{"value" => %{"value" => "30"}}, %{"headers" => %{"global_last_seen_lsn" => lsn}}] =
+               Jason.decode!(conn2.resp_body) |> dbg
+
+      # Now we should get nothing from the first shape
+      assert %{status: 200} =
+               conn1 =
+               conn("GET", "/v1/shape", %{
+                 table: "child",
+                 offset: "0_0",
+                 where: where,
+                 handle: shape_handle1,
+                 live: true
+               })
+               |> Router.call(opts)
+
+      assert [%{"headers" => %{"global_last_seen_lsn" => ^lsn}}] = Jason.decode!(conn1.resp_body)
+    end
   end
 
   describe "404" do

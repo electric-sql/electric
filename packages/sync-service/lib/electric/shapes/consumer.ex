@@ -263,12 +263,21 @@ defmodule Electric.Shapes.Consumer do
   # We're trapping exists so that `terminate` is called to clean up the writer,
   # otherwise we respect the OTP exit protocol.
   def handle_info({:EXIT, _from, reason}, state) do
+    Logger.debug("Caught EXIT: #{inspect(reason)}")
     {:stop, reason, state}
   end
 
   @impl GenServer
   def terminate(reason, state) do
-    Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
+    Logger.debug(fn ->
+      case reason do
+        {error, stacktrace} ->
+          "Shapes.Consumer terminating with reason: #{Exception.format(:error, error, stacktrace)}"
+
+        other ->
+          "Shapes.Consumer terminating with reason: #{inspect(other)}"
+      end
+    end)
 
     ShapeCache.Storage.terminate(state.writer)
 
@@ -430,7 +439,7 @@ defmodule Electric.Shapes.Consumer do
 
         shape_status.set_latest_offset(shape_status_state, shape_handle, last_log_offset)
 
-        notify_new_changes(state, last_log_offset)
+        notify_new_changes(state, changes, last_log_offset)
 
         lag = calculate_replication_lag(txn)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
@@ -457,9 +466,9 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_new_changes(state, latest_log_offset) do
+  defp notify_new_changes(state, changes, latest_log_offset) do
     if state.materializer_subscribed? do
-      Materializer.new_changes(state.materializer, latest_log_offset)
+      Materializer.new_changes(state, changes)
     end
 
     Registry.dispatch(state.registry, state.shape_handle, fn registered ->
