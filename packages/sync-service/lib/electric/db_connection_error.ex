@@ -222,6 +222,7 @@ defmodule Electric.DbConnectionError do
       maybe_endpoint_does_not_exist(error) ||
       maybe_compute_quota_exceeded(error) ||
       maybe_data_transfer_quota_exceeded(error) ||
+      maybe_password_authentication_failed(error) ||
       unknown_error(error)
   end
 
@@ -334,6 +335,17 @@ defmodule Electric.DbConnectionError do
 
       _ ->
         nil
+    end
+  end
+
+  defp maybe_password_authentication_failed(error) do
+    if Regex.match?(~r/^password authentication failed for user '.*'$/, error.postgres.message) do
+      %DbConnectionError{
+        message: error.postgres.message,
+        type: :invalid_username_or_password,
+        original_error: error,
+        retry_may_fix?: false
+      }
     end
   end
 

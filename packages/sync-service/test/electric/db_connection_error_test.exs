@@ -29,6 +29,27 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with an invalid username or password error (internal)" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message: "password authentication failed for user 'foo'",
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: ~s|password authentication failed for user 'foo'|,
+               type: :invalid_username_or_password,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with database does not exist error" do
       error = %Postgrex.Error{
         message: nil,
