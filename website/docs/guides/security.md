@@ -64,7 +64,7 @@ This is the primary method for securing data access to clients and apps and is d
 
 ### API token
 
-Access to Electric can be secured with an [API token](/docs/api/config#electric-secret). This is a secret string that can be set when starting Electric and will be used to authenticate requests to the Electric HTTP API. When an API token is set, Electric will require all requests to include the API token. 
+Access to Electric can be secured with an [API token](/docs/api/config#electric-secret). This is a secret string that can be set when starting Electric and will be used to authenticate requests to the Electric HTTP API with a `secret` query paramenter e.g. `curl http://localhost:3000/v1/shape?table=test&offset=-1&secret=MY_SECRET`. When an API token is set, Electric will require all requests to include the API token. 
 
 The token should *not* be sent from the client as it will be exposed in the HTTP requests. Instead, it should be added by the [authorizing proxy](/docs/guides/auth#requests-can-be-proxied) when proxying requests to Electric.
 
