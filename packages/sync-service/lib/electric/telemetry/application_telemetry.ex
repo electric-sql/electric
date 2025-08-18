@@ -317,11 +317,10 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
                 Map.put(acc, probe, 100 * (value / 256 / cores))
             end
           end)
-          |> then(fn load_map ->
-            unless Enum.empty?(load_map) do
-              :telemetry.execute([:system, :load_percent], load_map)
-            end
-          end)
+          |> case do
+            x when x == %{} -> :ok
+            map -> :telemetry.execute([:system, :load_percent], map)
+          end
 
         _ ->
           Logger.debug("Failed to collect system load average: no cores reported")
