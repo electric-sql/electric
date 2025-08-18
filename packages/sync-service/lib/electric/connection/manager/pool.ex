@@ -28,6 +28,7 @@ defmodule Electric.Connection.Manager.Pool do
     :pool_pid,
     :pool_size,
     :connection_manager,
+    pool_mod: Postgrex,
     status: :starting,
     connection_pids: %{},
     last_connection_error: nil
@@ -53,6 +54,7 @@ defmodule Electric.Connection.Manager.Pool do
     Logger.metadata(stack_id: opts[:stack_id])
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
 
+    pool_mod = Access.fetch!(opts, :pool_mod)
     pool_opts = Access.fetch!(opts, :pool_opts)
     conn_opts = Access.fetch!(opts, :conn_opts)
 
@@ -81,7 +83,7 @@ defmodule Electric.Connection.Manager.Pool do
       ]
 
     {:ok, pool_pid} =
-      Postgrex.start_link(pool_config ++ pool_opts ++ conn_opts)
+      pool_mod.start_link(pool_config ++ pool_opts ++ conn_opts)
 
     state = %__MODULE__{
       stack_id: Access.fetch!(opts, :stack_id),
