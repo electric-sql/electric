@@ -28,22 +28,80 @@ The client exports:
 - a [`ShapeStream`](#shapestream) class for consuming a [Shape Log](../http#shape-log); and
 - a [`Shape`](#shape) class for materialising the log stream into a shape object
 
-These compose together, e.g.:
+### Best Practice: Use API Endpoints, Not Direct Access
+
+:::tip Recommended Pattern
+While the Electric client can connect directly to the Electric service, **we strongly recommend proxying requests through your backend API** for production applications. This pattern treats Electric shapes like normal API calls, providing better security, maintainability, and developer experience.
+:::
+
+#### Recommended: API Proxy Pattern
 
 ```ts
-import { ShapeStream, Shape } from '@electric-sql/client'
+// Client code - Clean API pattern
+import { ShapeStream, Shape } from "@electric-sql/client"
+
+const stream = new ShapeStream({
+  url: `http://localhost:3001/api/items`, // Your API endpoint
+  // No table or SQL exposed to client
+})
+const shape = new Shape(stream)
+shape.subscribe((data) => console.log(data))
+```
+
+```ts
+// Server code - Handles Electric details
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+
+app.get("/api/items", async (req, res) => {
+  const electricUrl = new URL("http://localhost:3000/v1/shape")
+
+  // Forward only Electric protocol parameters
+  ELECTRIC_PROTOCOL_QUERY_PARAMS.forEach((param) => {
+    if (req.query[param]) {
+      electricUrl.searchParams.set(param, req.query[param])
+    }
+  })
+
+  // Server controls table and authorization
+  electricUrl.searchParams.set("table", "items")
+  electricUrl.searchParams.set("where", `user_id = '${req.user.id}'`)
+
+  // Proxy response with streaming...
+  const response = await fetch(electricUrl)
+  // Handle streaming (see auth guide for full example)
+})
+```
+
+This pattern provides:
+
+- **Security**: Credentials and table names never exposed to clients
+- **Authorization**: Server controls data access with WHERE clauses
+- **Type Safety**: Backend validates all operations
+- **Maintainability**: Database changes don't affect client code
+- **Familiarity**: Works like standard REST/GraphQL APIs
+
+**→ See the [authentication guide](/docs/guides/auth) for a detailed explanation and complete implementation examples of the API proxy pattern.**
+
+#### Direct Connection (Development Only)
+
+For development or examples, you can connect directly:
+
+```ts
+import { ShapeStream, Shape } from "@electric-sql/client"
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
   params: {
-    table: 'items'
-  }
+    table: "items",
+  },
 })
 const shape = new Shape(stream)
-
-// The callback runs every time the Shape data changes.
-shape.subscribe(data => console.log(data))
+shape.subscribe((data) => console.log(data))
 ```
+
+:::warning
+Direct connections expose database structure and should only be used for development or trusted environments.
+:::
 
 ### ShapeStream
 
@@ -52,17 +110,17 @@ The [`ShapeStream`](https://github.com/electric-sql/electric/blob/main/packages/
 Construct with a shape definition and options and then either subscribe to the shape log messages directly or pass into a [`Shape`](#shape) to materialise the stream into an object.
 
 ```tsx
-import { ShapeStream } from '@electric-sql/client'
+import { ShapeStream } from "@electric-sql/client"
 
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
   params: {
-    table: `foo`
-  }
+    table: `foo`,
+  },
 })
 
-stream.subscribe(messages => {
+stream.subscribe((messages) => {
   // messages is an array with one or more row updates
   // and the stream will wait for all subscribers to process them
   // before proceeding
@@ -102,11 +160,11 @@ export interface ShapeStreamOptions<T = never> {
 
     /**
      * Positional where clause paramater values. These will be passed to the server
-     * and will substitute `$i` parameters in the where clause. 
-     * 
+     * and will substitute `$i` parameters in the where clause.
+     *
      * It can be an array (note that positional arguments start at 1, the array will be mapped
      * accordingly), or an object with keys matching the used positional parameters in the where clause.
-     * 
+     *
      * If where clause is `id = $1 or id = $2`, params must have keys `"1"` and `"2"`, or be an array with length 2.
      */
     params?: Record<`${number}`, string> | string[]
@@ -203,6 +261,7 @@ type ShapeStreamErrorHandler = (
 ```
 
 Note that certain parameter names are reserved for Electric's internal use and cannot be used in custom params:
+
 - `offset`
 - `handle`
 - `live`
@@ -210,6 +269,7 @@ Note that certain parameter names are reserved for Electric's internal use and c
 - `source_id`
 
 The following PostgreSQL-specific parameters should be included within the `params` object:
+
 - `table` - The root table for the shape
 - `where` - SQL where clause for filtering rows
 - `params` - Values for positional parameters in the where clause (e.g. `$1`)
@@ -217,27 +277,29 @@ The following PostgreSQL-specific parameters should be included within the `para
 - `replica` - Controls whether to send full or partial row updates
 
 Example with PostgreSQL-specific parameters:
+
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   params: {
-    table: 'users',
-    where: 'age > $1',
-    columns: ['id', 'name', 'email'],
+    table: "users",
+    where: "age > $1",
+    columns: ["id", "name", "email"],
     params: ["18"],
-    replica: 'full'
-  }
+    replica: "full",
+  },
 })
 ```
 
 You can also include additional custom parameters in the `params` object alongside the PostgreSQL-specific ones:
+
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   params: {
-    table: 'users',
-    customParam: 'value'
-  }
+    table: "users",
+    customParam: "value",
+  },
 })
 ```
 
@@ -247,20 +309,21 @@ Both `params` and `headers` support function options that are resolved when need
 
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   params: {
-    table: 'items',
+    table: "items",
     userId: () => getCurrentUserId(),
-    filter: async () => await getUserPreferences()
+    filter: async () => await getUserPreferences(),
   },
   headers: {
-    'Authorization': async () => `Bearer ${await getAccessToken()}`,
-    'X-Tenant-Id': () => getCurrentTenant()
-  }
+    Authorization: async () => `Bearer ${await getAccessToken()}`,
+    "X-Tenant-Id": () => getCurrentTenant(),
+  },
 })
 ```
 
 Function options are resolved in parallel, making this pattern efficient for multiple async operations like fetching auth tokens and user context. Common use cases include:
+
 - Authentication tokens that need to be refreshed
 - User-specific parameters that may change
 - Dynamic filtering based on current state
@@ -303,22 +366,22 @@ You can extend the default parsing behavior by defining custom parsers for speci
 type CustomRow = {
   id: number
   title: string
-  created_at: Date  // We want this to be a Date object
+  created_at: Date // We want this to be a Date object
 }
 
 const stream = new ShapeStream<CustomRow>({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   params: {
-    table: 'posts'
+    table: "posts",
   },
   parser: {
     // Parse timestamp columns into JavaScript Date objects
-    timestamptz: (date: string) => new Date(date)
-  }
+    timestamptz: (date: string) => new Date(date),
+  },
 })
 
 const shape = new Shape(stream)
-shape.subscribe(data => {
+shape.subscribe((data) => {
   console.log(data.created_at instanceof Date) // true
 })
 ```
@@ -340,8 +403,8 @@ const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
   params: {
     table: `foo`,
-    replica: `full`
-  }
+    replica: `full`,
+  },
 })
 ```
 
@@ -353,34 +416,9 @@ When using `replica=full`, the returned rows will include:
 
 This is less efficient and will use more bandwidth for the same shape (especially for tables with large static column values). Note also that shapes with different `replica` settings are distinct, even for the same table and where clause combination.
 
-#### Authentication with Dynamic Tokens
+#### Authentication
 
-When working with authentication tokens that need to be refreshed, the recommended approach is to use a function-based header:
-
-```ts
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  params: {
-    table: 'items'
-  },
-  headers: {
-    'Authorization': async () => `Bearer ${await getToken()}`
-  },
-  onError: async (error) => {
-    if (error instanceof FetchError && error.status === 401) {
-      // Force token refresh
-      await refreshToken()
-      // Return empty object to trigger a retry with the new token
-      // that will be fetched by our function-based header
-      return {}
-    }
-    // Rethrow errors we can't handle
-    throw error
-  }
-})
-```
-
-This approach automatically handles token refresh as the function is called each time a request is made. You can also combine this with an error handler for more complex scenarios.
+For authentication patterns including token refresh and authorization, see the [authentication guide](/docs/guides/auth) which covers both proxy and gatekeeper authentication patterns in detail.
 
 ### Shape
 
@@ -389,13 +427,13 @@ The [`Shape`](https://github.com/electric-sql/electric/blob/main/packages/typesc
 It takes a [`ShapeStream`](#shapestream), consumes the stream, materialises it into a Shape object and notifies you when this changes.
 
 ```tsx
-import { ShapeStream, Shape } from '@electric-sql/client'
+import { ShapeStream, Shape } from "@electric-sql/client"
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
   params: {
-    table: `foo`
-  }
+    table: `foo`,
+  },
 })
 const shape = new Shape(stream)
 
@@ -411,26 +449,27 @@ shape.subscribe(({ rows }) => {
 ### Subscribing to updates
 
 The `subscribe` method allows you to receive updates whenever the shape changes. It takes two arguments:
+
 1. A message handler callback (required)
 2. An error handler callback (optional)
 
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   params: {
-    table: 'issues'
-  }
+    table: "issues",
+  },
 })
 
 // Subscribe to both message and error handlers
 stream.subscribe(
   (messages) => {
     // Process messages
-    console.log('Received messages:', messages)
+    console.log("Received messages:", messages)
   },
   (error) => {
     // Get notified about errors
-    console.error('Error in subscription:', error)
+    console.error("Error in subscription:", error)
   }
 )
 ```
@@ -438,13 +477,14 @@ stream.subscribe(
 You can have multiple active subscriptions to the same stream. Each subscription will receive the same messages, and the stream will wait for all subscribers to process their messages before proceeding.
 
 To stop receiving updates, you can either:
+
 - Unsubscribe a specific subscription using the function returned by `subscribe`
 - Unsubscribe all subscriptions using `unsubscribeAll()`
 
 ```typescript
 // Store the unsubscribe function
-const unsubscribe = stream.subscribe(messages => {
-  console.log('Received messages:', messages)
+const unsubscribe = stream.subscribe((messages) => {
+  console.log("Received messages:", messages)
 })
 
 // Later, unsubscribe this specific subscription
@@ -459,26 +499,28 @@ stream.unsubscribeAll()
 The ShapeStream provides two ways to handle errors:
 
 1. Using the `onError` handler (recommended):
+
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   params: {
-    table: 'issues'
+    table: "issues",
   },
   onError: (error) => {
     // Handle all stream errors here
     if (error instanceof FetchError) {
-      console.error('HTTP error:', error.status, error.message)
+      console.error("HTTP error:", error.status, error.message)
     } else {
-      console.error('Stream error:', error)
+      console.error("Stream error:", error)
     }
-  }
+  },
 })
 ```
 
 If no `onError` handler is provided, the ShapeStream will throw errors that occur during streaming.
 
 2. Individual subscribers can optionally handle errors specific to their subscription:
+
 ```typescript
 stream.subscribe(
   (messages) => {
@@ -486,7 +528,7 @@ stream.subscribe(
   },
   (error) => {
     // Handle errors for this specific subscription
-    console.error('Subscription error:', error)
+    console.error("Subscription error:", error)
   }
 )
 ```
@@ -496,11 +538,13 @@ stream.subscribe(
 The following error types may be encountered:
 
 **Initialization Errors** (thrown by constructor):
+
 - `MissingShapeUrlError`: Missing required URL parameter
 - `InvalidSignalError`: Invalid AbortSignal instance
 - `ReservedParamError`: Using reserved parameter names
 
 **Runtime Errors** (handled by `onError` or thrown):
+
 - `FetchError`: HTTP errors during shape fetching
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle

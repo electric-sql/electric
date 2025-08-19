@@ -29,12 +29,16 @@ The rest of this page will describe the features of the API.
   <p class="custom-block-no-title">💡 If you haven't already, you may like to walkthrough the <a href="/docs/quickstart">Quickstart</a> to get a feel for using the HTTP API.</p>
 </div>
 
+:::warning Production Best Practice
+While this page documents the HTTP API directly, **production applications should proxy Electric requests through your backend API** rather than exposing Electric directly to clients. This provides security, authorization, and a clean API interface. See the [authentication guide](/docs/guides/auth) for implementation details.
+:::
+
 ## Syncing shapes
 
 The API allows you to sync [Shapes](/docs/guides/shapes) of data out of Postgres using the
 <a href="/openapi.html#/paths/~1v1~1shape/get"
     target="_blank">
-  <code>GET /v1/shape</code></a> endpoint. The pattern is as follows.
+<code>GET /v1/shape</code></a> endpoint. The pattern is as follows.
 
 First you make an initial sync request to get the current data for the Shape, such as:
 
@@ -80,7 +84,7 @@ Sometimes a log can fit in a single response. Sometimes it's too big and require
 The client will then receive an `up-to-date` control message at the end of the response data:
 
 ```json
-{"headers": {"control": "up-to-date"}}
+{ "headers": { "control": "up-to-date" } }
 ```
 
 This indicates that the client has all the data that the server was aware of when fulfilling the request. The client can then switch into live mode to receive real-time updates.
@@ -89,8 +93,9 @@ This indicates that the client has all the data that the server was aware of whe
 Note that the other control message is `must-refetch` which indicates that the client must throw away their local shape data and re-sync from scratch:
 
 ```json
-{"headers": {"control": "must-refetch"}}
+{ "headers": { "control": "must-refetch" } }
 ```
+
 :::
 
 ### Live mode

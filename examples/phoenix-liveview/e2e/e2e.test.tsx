@@ -41,12 +41,20 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   expect(page2Items.length).toBe(initialCount + 1)
 
   // Get all todo items text content
-  const page1Texts = await Promise.all(page1Items.map(item => item.textContent()))
-  const page2Texts = await Promise.all(page2Items.map(item => item.textContent()))
+  const page1Texts = await Promise.all(
+    page1Items.map((item) => item.textContent())
+  )
+  const page2Texts = await Promise.all(
+    page2Items.map((item) => item.textContent())
+  )
 
   // Verify the new todo item appears in both browsers
-  expect(page1Texts.some(text => text?.includes(timestamp1.toString()))).toBe(true)
-  expect(page2Texts.some(text => text?.includes(timestamp1.toString()))).toBe(true)
+  expect(page1Texts.some((text) => text?.includes(timestamp1.toString()))).toBe(
+    true
+  )
+  expect(page2Texts.some((text) => text?.includes(timestamp1.toString()))).toBe(
+    true
+  )
 
   // Add another todo item in second browser with timestamp
   const timestamp2 = Date.now()
@@ -73,8 +81,16 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   )
 
   // Verify both timestamps are present in both browsers
-  expect(allItemsPage1.some(text => text?.includes(timestamp1.toString()))).toBe(true)
-  expect(allItemsPage1.some(text => text?.includes(timestamp2.toString()))).toBe(true)
-  expect(allItemsPage2.some(text => text?.includes(timestamp1.toString()))).toBe(true)
-  expect(allItemsPage2.some(text => text?.includes(timestamp2.toString()))).toBe(true)
+  expect(
+    allItemsPage1.some((text) => text?.includes(timestamp1.toString()))
+  ).toBe(true)
+  expect(
+    allItemsPage1.some((text) => text?.includes(timestamp2.toString()))
+  ).toBe(true)
+  expect(
+    allItemsPage2.some((text) => text?.includes(timestamp1.toString()))
+  ).toBe(true)
+  expect(
+    allItemsPage2.some((text) => text?.includes(timestamp2.toString()))
+  ).toBe(true)
 })

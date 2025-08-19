@@ -6,7 +6,6 @@ import { execSync } from 'child_process'
 const isProduction = (stage: string) =>
   stage.toLocaleLowerCase() === `production`
 
-
 const adminApiAuthToken = process.env.ELECTRIC_ADMIN_API_AUTH_TOKEN
 
 export default $config({

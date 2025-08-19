@@ -1,5 +1,10 @@
 import http from "http"
 import pg from "pg"
+import { Readable } from "stream"
+import { pipeline } from "stream/promises"
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+
+const baseUrl = process.env.ELECTRIC_URL ?? `http://localhost:3000`
 
 const db = new pg.Pool({
   connectionString:
@@ -43,6 +48,75 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // Handle GET /items - proxy to Electric for syncing items
+    if (req.method === `GET` && req.url === `/items`) {
+      const url = new URL(req.url, `http://localhost:${PORT}`)
+      const originUrl = new URL(`/v1/shape`, baseUrl)
+
+      // Copy relevant query params
+      url.searchParams.forEach((value, key) => {
+        if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
+          originUrl.searchParams.set(key, value)
+        }
+      })
+
+      // Set the table server-side
+      originUrl.searchParams.set(`table`, `items`)
+
+      // Add source credentials if available
+      if (process.env.ELECTRIC_SOURCE_ID) {
+        originUrl.searchParams.set(
+          `source_id`,
+          process.env.ELECTRIC_SOURCE_ID
+        )
+      }
+      if (process.env.ELECTRIC_SOURCE_SECRET) {
+        originUrl.searchParams.set(
+          `secret`,
+          process.env.ELECTRIC_SOURCE_SECRET
+        )
+      }
+
+      try {
+        const response = await fetch(originUrl)
+
+        // Copy headers, excluding problematic ones
+        const headers = { ...CORS_HEADERS }
+        response.headers.forEach((value, key) => {
+          if (
+            key.toLowerCase() !== `content-encoding` &&
+            key.toLowerCase() !== `content-length` &&
+            key.toLowerCase() !== `access-control-allow-origin` &&
+            key.toLowerCase() !== `access-control-allow-methods` &&
+            key.toLowerCase() !== `access-control-allow-headers`
+          ) {
+            headers[key] = value
+          }
+        })
+
+        // Set status and headers
+        res.writeHead(response.status, response.statusText, headers)
+
+        // Convert Web Streams to Node.js stream and pipe
+        const nodeStream = Readable.fromWeb(response.body)
+        await pipeline(nodeStream, res)
+        return
+      } catch (error) {
+        // Ignore premature close errors - these happen when clients disconnect early
+        if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
+          return
+        }
+
+        console.error("Error proxying to Electric:", error)
+        // Only write headers if they haven't been sent yet
+        if (!res.headersSent) {
+          res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
+          res.end(JSON.stringify({ error: "Internal server error" }))
+        }
+        return
+      }
+    }
+
     // Handle adding an item
     if (req.method === `POST` && req.url === `/items`) {
       const body = await getRequestBody(req)
@@ -63,13 +137,14 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(404, { ...JSON_HEADERS, ...CORS_HEADERS })
     res.end(JSON.stringify({ error: `Not Found` }))
-  } catch (_error) {
+  } catch (error) {
+    console.error("Error handling request:", error)
     res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
     res.end(JSON.stringify({ error: `Something went wrong` }))
   }
 })
 
-const PORT = process.env.PORT || 3010
+const PORT = process.env.PORT || 3001
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })

@@ -11,7 +11,8 @@ body {
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('assets/fonts/Inter-UI-Regular.woff2') format('woff2'),
+  src:
+    url('assets/fonts/Inter-UI-Regular.woff2') format('woff2'),
     url('assets/fonts/Inter-UI-Regular.woff') format('woff');
 }
 
@@ -20,7 +21,8 @@ body {
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('assets/fonts/Inter-UI-Medium.woff2') format('woff2'),
+  src:
+    url('assets/fonts/Inter-UI-Medium.woff2') format('woff2'),
     url('assets/fonts/Inter-UI-Medium.woff') format('woff');
 }
 
@@ -29,7 +31,8 @@ body {
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('assets/fonts/Inter-UI-SemiBold.woff2') format('woff2'),
+  src:
+    url('assets/fonts/Inter-UI-SemiBold.woff2') format('woff2'),
     url('assets/fonts/Inter-UI-SemiBold.woff') format('woff');
 }
 
@@ -38,7 +41,8 @@ body {
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url('assets/fonts/Inter-UI-ExtraBold.woff2') format('woff2'),
+  src:
+    url('assets/fonts/Inter-UI-ExtraBold.woff2') format('woff2'),
     url('assets/fonts/Inter-UI-ExtraBold.woff') format('woff');
 }
 

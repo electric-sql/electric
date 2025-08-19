@@ -1,4 +1,3 @@
-
 # Edge function as an authorising proxy
 
 This folder contains example edge function ([`./index.ts`](./index.ts)) which you can run as a authorising proxy for Electric.

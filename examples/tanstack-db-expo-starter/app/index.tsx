@@ -1,5 +1,5 @@
-import "react-native-random-uuid";
-import React, { useState } from "react";
+import "react-native-random-uuid"
+import React, { useState } from "react"
 import {
   View,
   Text,
@@ -8,14 +8,14 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-} from "react-native";
-import { useLiveQuery } from "@tanstack/react-db";
-import { StatusBar } from "expo-status-bar";
-import { apiClient, hostname } from "../src/utils/api-client";
-import { selectTodoSchema } from "../src/db/schema";
-import { electricCollectionOptions } from "@tanstack/db-collections";
-import { createCollection } from "@tanstack/react-db";
-import { parseISO } from "date-fns";
+} from "react-native"
+import { useLiveQuery } from "@tanstack/react-db"
+import { StatusBar } from "expo-status-bar"
+import { apiClient, hostname } from "../src/utils/api-client"
+import { selectTodoSchema } from "../src/db/schema"
+import { electricCollectionOptions } from "@tanstack/electric-db-collection"
+import { createCollection } from "@tanstack/react-db"
+import { parseISO } from "date-fns"
 
 const todoCollection = createCollection(
   electricCollectionOptions({
@@ -24,48 +24,45 @@ const todoCollection = createCollection(
     // Electric syncs data using "shapes". These are filtered views
     // on database tables that Electric keeps in sync for you.
     shapeOptions: {
-      url: `http://${hostname}:3000/v1/shape`,
-      params: {
-        table: "todos",
-      },
+      url: `http://${hostname}:3001/api/todos`,
       parser: {
         // Parse timestamp columns into JavaScript Date objects
         timestamptz: (date: string) => {
-          return parseISO(date);
+          return parseISO(date)
         },
       },
     },
     onInsert: async ({ transaction }) => {
       const { txid } = await apiClient.createTodo(
-        transaction.mutations[0].modified,
-      );
+        transaction.mutations[0].modified
+      )
 
-      return { txid: String(txid) };
+      return { txid: String(txid) }
     },
     onUpdate: async ({ transaction }) => {
       const {
         original: { id },
         changes,
-      } = transaction.mutations[0];
-      const { txid } = await apiClient.updateTodo(id, changes);
+      } = transaction.mutations[0]
+      const { txid } = await apiClient.updateTodo(id, changes)
 
-      return { txid: String(txid) };
+      return { txid: String(txid) }
     },
     onDelete: async ({ transaction }) => {
-      const { id } = transaction.mutations[0].original;
-      const { txid } = await apiClient.deleteTodo(id);
+      const { id } = transaction.mutations[0].original
+      const { txid } = await apiClient.deleteTodo(id)
 
-      return { txid: String(txid) };
+      return { txid: String(txid) }
     },
     getKey: (item) => item.id,
-  }),
-);
+  })
+)
 
 export default function HomeScreen() {
-  const [newTodoText, setNewTodoText] = useState("");
+  const [newTodoText, setNewTodoText] = useState("")
 
   // Query todos from the collection
-  const { data: todos } = useLiveQuery((q) => q.from({ todoCollection }));
+  const { data: todos } = useLiveQuery((q) => q.from({ todoCollection }))
 
   return (
     <View style={styles.container}>
@@ -90,8 +87,8 @@ export default function HomeScreen() {
                 completed: false,
                 created_at: new Date(),
                 updated_at: new Date(),
-              });
-              setNewTodoText("");
+              })
+              setNewTodoText("")
             }
           }}
         />
@@ -108,8 +105,8 @@ export default function HomeScreen() {
               style={styles.todoCheckbox}
               onPress={() => {
                 todoCollection.update(item.id, (draft) => {
-                  draft.completed = !draft.completed;
-                });
+                  draft.completed = !draft.completed
+                })
               }}
             >
               {item.completed && <Text style={styles.checkmark}>✓</Text>}
@@ -132,7 +129,7 @@ export default function HomeScreen() {
 
       <StatusBar style="auto" />
     </View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -192,4 +189,4 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-});
+})

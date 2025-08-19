@@ -1,4 +1,3 @@
-
 # ElectricSQL Elixir client
 
 An Elixir client for [ElectricSQL](https://electric-sql.com).

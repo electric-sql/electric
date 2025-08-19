@@ -38,4 +38,4 @@ module.exports = {
     `vitest.config.ts`,
     `.eslintrc.js`,
   ],
-};
+}

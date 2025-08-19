@@ -40,7 +40,7 @@ export default $config({
     const cluster = getSharedCluster(`tanstack-app-${$app.stage}`)
     const service = cluster.addService(`tanstack-app-${$app.stage}-service`, {
       loadBalancer: {
-        ports: [{ listen: `443/https`, forward: `3010/http` }],
+        ports: [{ listen: `443/https`, forward: `3001/http` }],
         domain: {
           name: `tanstack-app-backend${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
           dns: sst.cloudflare.dns(),
@@ -48,6 +48,9 @@ export default $config({
       },
       environment: {
         DATABASE_URL: pooledDatabaseUri,
+        ELECTRIC_URL: process.env.ELECTRIC_API,
+        ELECTRIC_SOURCE_SECRET: sourceSecret,
+        ELECTRIC_SOURCE_ID: sourceId,
       },
       image: {
         context: `../..`,
@@ -67,9 +70,6 @@ export default $config({
         VITE_SERVER_URL: service.url.apply((url) =>
           url.slice(0, url.length - 1)
         ),
-        VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
-        VITE_ELECTRIC_SOURCE_SECRET: sourceSecret,
-        VITE_ELECTRIC_SOURCE_ID: sourceId,
       },
       domain: {
         name: `tanstack-app${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,

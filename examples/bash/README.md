@@ -15,6 +15,7 @@ A simple bash client for consuming Electric shape logs. This client can connect 
 ```
 
 For example:
+
 ```bash
 ./client.bash 'http://localhost:3000/v1/shape?table=notes'
 ```
@@ -22,6 +23,7 @@ For example:
 ## Example Output
 
 When first connecting, you'll see the initial shape data:
+
 ```json
 [
   {
@@ -33,10 +35,7 @@ When first connecting, you'll see the initial shape data:
     },
     "headers": {
       "operation": "insert",
-      "relation": [
-        "public",
-        "notes"
-      ]
+      "relation": ["public", "notes"]
     },
     "offset": "0_0"
   }
@@ -44,6 +43,7 @@ When first connecting, you'll see the initial shape data:
 ```
 
 Once caught up, the client switches to live mode and streams updates:
+
 ```
 Found control message
 Control value: up-to-date

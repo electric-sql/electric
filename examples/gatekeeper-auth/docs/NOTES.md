@@ -7,6 +7,6 @@ The gatekeeper pattern avoids these concerns by separating the steps of:
 1. running authorization logic to determine whether a user should be able to access a shape
 2. authorising a shape request to Electric
 
-Specifically, the gatekeeper endpoint is designed to perform authorization logic *once* when generating the shape-scoped token. The proxy endpoint can then authorize multiple shape requests by validating the token against the shape definition in the request, without needing to know or do anything else.
+Specifically, the gatekeeper endpoint is designed to perform authorization logic _once_ when generating the shape-scoped token. The proxy endpoint can then authorize multiple shape requests by validating the token against the shape definition in the request, without needing to know or do anything else.
 
 [1] Proxies can mitigate this in a number of ways, for example with some kind of local cache of client credentials against authorization state.

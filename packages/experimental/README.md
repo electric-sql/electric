@@ -1,4 +1,3 @@
-
 # Experimental TypeScript features for ElectricSQL
 
 ## Install

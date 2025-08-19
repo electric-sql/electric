@@ -8,7 +8,7 @@ import { matchBy, matchStream } from '@electric-sql/experimental'
 import { useShape } from '@electric-sql/react'
 
 import api from '../../shared/app/client'
-import { ELECTRIC_URL, envParams } from '../../shared/app/config'
+import { TODOS_URL } from '../../shared/app/config'
 
 const KEY = 'electric-sql/examples/write-patterns/shared-persistent'
 
@@ -109,11 +109,7 @@ export default function SharedPersistent() {
 
   // Use Electric's `useShape` hook to sync data from Postgres.
   const { isLoading, data, stream } = useShape<Todo>({
-    url: `${ELECTRIC_URL}/v1/shape`,
-    params: {
-      table: 'todos',
-      ...envParams,
-    },
+    url: TODOS_URL,
     parser: {
       timestamptz: (value: string) => new Date(value),
     },

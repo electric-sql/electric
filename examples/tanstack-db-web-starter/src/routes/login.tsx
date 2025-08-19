@@ -40,7 +40,7 @@ function Layout() {
           },
           {
             onSuccess: async () => {
-              const { data: session, error } = await authClient.getSession()
+              await authClient.getSession()
               window.location.href = "/"
             },
           }
@@ -49,7 +49,6 @@ function Layout() {
         data = result.data
         error = result.error
       }
-
 
       if (error) {
         console.log(`error logging in`, error)

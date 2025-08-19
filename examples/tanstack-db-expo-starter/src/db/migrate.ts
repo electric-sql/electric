@@ -1,10 +1,10 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Pool } from "pg";
-import * as dotenv from "dotenv";
+import { drizzle } from "drizzle-orm/node-postgres"
+import { migrate } from "drizzle-orm/node-postgres/migrator"
+import { Pool } from "pg"
+import * as dotenv from "dotenv"
 
 // Load environment variables
-dotenv.config();
+dotenv.config()
 
 // Database connection configuration
 const pool = new Pool({
@@ -13,24 +13,24 @@ const pool = new Pool({
   user: process.env.DB_USER || "postgres",
   password: process.env.DB_PASSWORD || "password",
   database: process.env.DB_NAME || "electric",
-});
+})
 
 // Initialize Drizzle with the database connection
-const db = drizzle(pool);
+const db = drizzle(pool)
 
 // Run migrations
 async function main() {
-  console.log("Running migrations...");
+  console.log("Running migrations...")
 
   try {
-    await migrate(db, { migrationsFolder: "src/db/migrations" });
-    console.log("Migrations completed successfully!");
+    await migrate(db, { migrationsFolder: "src/db/migrations" })
+    console.log("Migrations completed successfully!")
   } catch (error) {
-    console.error("Migration failed:", error);
-    process.exit(1);
+    console.error("Migration failed:", error)
+    process.exit(1)
   } finally {
-    await pool.end();
+    await pool.end()
   }
 }
 
-main();
+main()
