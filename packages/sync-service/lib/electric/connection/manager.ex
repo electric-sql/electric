@@ -62,7 +62,8 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, nil}
             | {:start_replication_client, :connecting}
             | {:start_replication_client, :configuring_connection}
-            | :start_connection_pool
+            | {:start_connection_pool, nil}
+            | {:start_connection_pool, :connecting}
             | :start_shapes_supervisor
             | {:waiting_for_consumers, integer()}
             | {:start_replication_client, :start_streaming}
@@ -88,8 +89,6 @@ defmodule Electric.Connection.Manager do
       :shared_connection_opts,
       # Database connection pool options
       :pool_opts,
-      # Unique ref for matching on :connected and :disconnected events the connection pool
-      :pool_ref,
       # Options specific to `Electric.Timeline`
       :timeline_opts,
       # Options passed to the Replication.Supervisor's start_link() function
@@ -230,6 +229,10 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, {:pg_info_obtained, pg_info})
   end
 
+  def connection_pool_ready(manager) do
+    GenServer.cast(manager, :connection_pool_ready)
+  end
+
   # Used for testing the responsiveness of the manager process
   def ping(manager, timeout \\ 1000) do
     GenServer.call(manager, :ping, timeout)
@@ -255,7 +258,6 @@ defmodule Electric.Connection.Manager do
         current_phase: :connection_setup,
         current_step: {:start_lock_connection, nil},
         pool_opts: pool_opts,
-        pool_ref: make_ref(),
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         connection_backoff: {ConnectionBackoff.init(1000, 10_000), nil},
@@ -379,44 +381,23 @@ defmodule Electric.Connection.Manager do
         :start_connection_pool,
         %State{
           current_phase: :connection_setup,
-          current_step: :start_connection_pool,
+          current_step: {:start_connection_pool, _},
           pool_pid: nil
         } = state
       ) do
-    pool_size = Keyword.get(state.pool_opts, :pool_size, 2)
+    Logger.debug("Starting connection pool for stack #{state.stack_id}")
     conn_opts = pooled_connection_opts(state) |> Electric.Utils.deobfuscate_password()
 
-    pool_config =
-      [
-        # Disable automatic reconnection for pooled connections making them terminate on
-        # error. This lets us observe connection errors by configuring the current process
-        # as a connection listener in the pool.
-        # The value for `max_restarts` is based on the pool size so the pool supervisor
-        # doesn't shutdown unless all pooled connections fall into a restart loop within
-        # the 5 second grace interval.
-        backoff_type: :stop,
-        max_restarts: pool_size * 3,
-        max_seconds: 5,
-        connection_listeners: {[self()], state.pool_ref},
-        # Assume the manager connection might be pooled, so use unnamed prepared
-        # statements to avoid issues with the pooler
-        #
-        # See https://hexdocs.pm/postgrex/0.19.3/readme.html#pgbouncer
-        prepare: :unnamed
-      ]
-
     {:ok, pool_pid} =
-      Postgrex.start_link(pool_config ++ state.pool_opts ++ conn_opts)
+      Electric.Connection.Manager.Pool.start_link(
+        stack_id: state.stack_id,
+        connection_manager: self(),
+        pool_opts: state.pool_opts,
+        conn_opts: conn_opts
+      )
 
-    # NOTE(alco): We're jumping ahead of ourselves here a bit because at this point we don't
-    # yet have a confirmation that the connection pool has succeeded in opening a database
-    # connection. But since we already have a lock connection and a replication connection
-    # open, it's likely the connection pool will also succeed.
-    Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
-    state = mark_connection_succeeded(state)
-
-    state = %{state | pool_pid: pool_pid, current_step: :start_shapes_supervisor}
-    {:noreply, state, {:continue, :start_shapes_supervisor}}
+    state = %{state | pool_pid: pool_pid, current_step: {:start_connection_pool, :connecting}}
+    {:noreply, state}
   end
 
   def handle_continue(
@@ -715,38 +696,6 @@ defmodule Electric.Connection.Manager do
     {:noreply, %{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
   end
 
-  # The following two messages are sent by the DBConnection library because we've configured
-  # the connection manager process as connection listener for the DB connection pool.
-  def handle_info({:connected, conn_pid, ref}, %State{pool_ref: ref} = state) do
-    Process.monitor(conn_pid, tag: :pool_conn_down)
-    {:noreply, state}
-  end
-
-  def handle_info({:disconnected, _pid, ref}, %State{pool_ref: ref} = state) do
-    {:noreply, state}
-  end
-
-  # When a pooled connection terminates, we log its exit reason, but more connections will
-  # be started by the connection pool supervisor, so we don't need to do anything else.
-  def handle_info({:pool_conn_down, _ref, :process, _pid, reason}, state)
-      when reason in [:shutdown, :noproc] do
-    {:noreply, state}
-  end
-
-  def handle_info({:pool_conn_down, _ref, :process, _pid, {:shutdown, exit_reason}}, state) do
-    error = DbConnectionError.from_error(exit_reason)
-
-    # If the error is of an unknown type, it would have already been logged by DbConnectionError itself.
-    if error.type != :unknown do
-      Logger.warning(
-        "Pooled database connection encountered an error: " <>
-          DbConnectionError.format_original_error(error)
-      )
-    end
-
-    {:noreply, state}
-  end
-
   @impl true
   def handle_cast(:drop_replication_slot_on_stop, state) do
     {:noreply, %{state | drop_slot_requested: true}}
@@ -871,7 +820,7 @@ defmodule Electric.Connection.Manager do
         # This is the case where Connection.Manager starts connections from the initial state.
         # Replication connection is opened after the lock connection has acquired the
         # exclusive lock. Now it's time to start the connection pool.
-        state = %{state | current_step: :start_connection_pool}
+        state = %{state | current_step: {:start_connection_pool, nil}}
         {:noreply, state, {:continue, :start_connection_pool}}
 
       :restarting_replication_client ->
@@ -882,6 +831,21 @@ defmodule Electric.Connection.Manager do
         state = %{state | current_step: {:start_replication_client, :start_streaming}}
         {:noreply, state, {:continue, :start_streaming}}
     end
+  end
+
+  def handle_cast(
+        :connection_pool_ready,
+        %State{
+          pool_pid: pool_pid,
+          current_phase: :connection_setup,
+          current_step: {:start_connection_pool, :connecting}
+        } = state
+      ) do
+    Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
+    state = mark_connection_succeeded(state)
+
+    {:noreply, %{state | current_step: :start_shapes_supervisor},
+     {:continue, :start_shapes_supervisor}}
   end
 
   def handle_cast(
@@ -903,7 +867,7 @@ defmodule Electric.Connection.Manager do
       %{stack_id: state.stack_id}
     )
 
-    state = %State{state | current_step: {:start_replication_client, :start_streaming}}
+    state = %{state | current_step: {:start_replication_client, :start_streaming}}
     {:noreply, state, {:continue, :start_streaming}}
   end
 
@@ -1332,7 +1296,8 @@ defmodule Electric.Connection.Manager do
     Logger.warning("Skipping slot drop, pool connection not available")
   end
 
-  defp drop_slot(%State{pool_pid: pool} = state) do
+  defp drop_slot(state) do
+    pool = pool_name(state.stack_id)
     publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
     slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
     slot_temporary? = Keyword.fetch!(state.replication_opts, :slot_temporary?)
