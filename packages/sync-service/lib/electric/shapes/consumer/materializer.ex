@@ -44,6 +44,18 @@ defmodule Electric.Shapes.Consumer.Materializer do
     GenServer.call(name(opts), :get_link_values)
   end
 
+  def get_all_as_refs(shape, stack_id) do
+    shape.shape_dependencies_handles
+    |> Enum.with_index()
+    |> Map.new(fn {shape_handle, index} ->
+      {["$sublink", Integer.to_string(index)],
+       get_link_values(%{
+         shape_handle: shape_handle,
+         stack_id: stack_id
+       })}
+    end)
+  end
+
   def subscribe(stack_id, shape_handle) do
     GenServer.call(name(stack_id, shape_handle), :subscribe)
   end

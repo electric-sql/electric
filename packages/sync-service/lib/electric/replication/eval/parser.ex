@@ -108,9 +108,6 @@ defmodule Electric.Replication.Eval.Parser do
 
   @prefix_length String.length("SELECT 1 WHERE ")
 
-  def maybe_extract_subqueries(nil), do: {:ok, []}
-  def maybe_extract_subqueries(ast), do: extract_subqueries(ast)
-
   def extract_subqueries(ast) do
     Walker.reduce(
       ast,

@@ -413,16 +413,7 @@ defmodule Electric.Shapes.Consumer do
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
-    extra_refs =
-      shape.shape_dependencies_handles
-      |> Enum.with_index()
-      |> Map.new(fn {shape_handle, index} ->
-        {["$sublink", Integer.to_string(index)],
-         Materializer.get_link_values(%{
-           shape_handle: shape_handle,
-           stack_id: state.stack_id
-         })}
-      end)
+    extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
 
     case filter_changes(changes, shape, extra_refs) do
       :includes_truncate ->
@@ -486,7 +477,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp notify_new_changes(state, changes, latest_log_offset) do
     if state.materializer_subscribed? do
-      Materializer.new_changes(state, changes)
+      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes)
     end
 
     Registry.dispatch(state.registry, state.shape_handle, fn registered ->

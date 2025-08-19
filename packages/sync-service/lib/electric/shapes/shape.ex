@@ -171,8 +171,6 @@ defmodule Electric.Shapes.Shape do
   # We parse the complete SELECT statement, and get a topologically sorted list of subqueries
   # (including the root query)
   # Then for each subquery we create a shape struct, and put it into context so that next shape
-  #
-
   def new(opts) when is_list(opts) or is_map(opts) do
     opts = Map.new(opts)
 
@@ -188,20 +186,14 @@ defmodule Electric.Shapes.Shape do
   defp make_new(opts) when is_list(opts) or is_map(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          opts = Map.new(opts),
-         inspector <- Access.fetch!(opts, :inspector),
+         inspector = Map.fetch!(opts, :inspector),
          {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
          {:ok, selected_columns} <-
            validate_selected_columns(column_info, pk_cols, Map.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
-         {:ok, parsed_where} <- maybe_parse_where(Map.get(opts, :where)),
-         {:ok, subqueries} <- Parser.maybe_extract_subqueries(parsed_where),
-         :ok <- check_feature_flag(subqueries),
-         {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
-         {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
-         {:ok, where} <-
-           validate_where_clause(parsed_where, opts[:params], refs |> Map.merge(dependency_refs)),
-         {:ok, where} <- validate_where_return_type(where) do
+         {:ok, where, shape_dependencies} <-
+           validate_where_clause(Map.get(opts, :where), opts, refs) do
       flags =
         [
           if(is_nil(Map.get(opts, :columns)), do: :selects_all_columns),
@@ -228,22 +220,30 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
+  defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
+
+  defp validate_where_clause(where, %{inspector: inspector} = opts, refs) do
+    with {:ok, where} <- Parser.parse_query(where),
+         {:ok, subqueries} <- Parser.extract_subqueries(where),
+         :ok <- check_feature_flag(subqueries),
+         {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
+         {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
+         all_refs = Map.merge(refs, dependency_refs),
+         {:ok, where} <- Parser.validate_where_ast(where, params: opts[:params], refs: all_refs),
+         {:ok, where} <- validate_where_return_type(where) do
+      {:ok, where, shape_dependencies}
+    else
+      {:error, {part, reason}} -> {:error, {part, reason}}
+      {:error, reason} -> {:error, {:where, reason}}
+    end
+  end
+
   defp check_feature_flag(subqueries) do
     if subqueries != [] and
          not Enum.member?(Electric.Config.get_env(:feature_flags), "allow_subqueries") do
       {:error, {:where, "Subqueries are not supported"}}
     else
       :ok
-    end
-  end
-
-  defp maybe_parse_where(nil), do: {:ok, nil}
-  defp maybe_parse_where(where) when is_map(where), do: {:ok, where}
-
-  defp maybe_parse_where(where) when is_binary(where) do
-    case Parser.parse_query(where) do
-      {:ok, where} -> {:ok, where}
-      {:error, reason} -> {:error, {:where, reason}}
     end
   end
 
@@ -263,6 +263,7 @@ defmodule Electric.Shapes.Shape do
           if Enum.sort(pk) == Enum.sort(selected_columns) do
             {:cont, {:ok, [shape | acc]}}
           else
+            # Supporting anything but primary keys requires a more complex state in the materializer that we're not supporting yet
             {:halt,
              {:error,
               {:where,
@@ -290,23 +291,12 @@ defmodule Electric.Shapes.Shape do
           [{_, type}] ->
             {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
 
-          [_, _] ->
+          _ ->
             {:error, {:where, "Subquery has multiple columns, which is not supported right now"}}
         end
       end
     end)
   end
-
-  defp validate_where_clause(nil, _, _), do: {:ok, nil}
-
-  defp validate_where_clause(where, params, refs) when is_map(where) do
-    case Parser.validate_where_ast(where, params: params, refs: refs) do
-      {:ok, expr} -> {:ok, expr}
-      {:error, reason} -> {:error, {:where, reason}}
-    end
-  end
-
-  defp validate_where_return_type(nil), do: {:ok, nil}
 
   defp validate_where_return_type(where) do
     case where.eval.type do
@@ -336,28 +326,20 @@ defmodule Electric.Shapes.Shape do
 
     cond do
       missing_pk_cols != [] ->
-        {:error,
-         {:columns,
-          [
-            "Must include all primary key columns, missing: #{missing_pk_cols |> Enum.join(", ")}"
-          ]}}
+        "Must include all primary key columns, missing: #{missing_pk_cols |> Enum.join(", ")}"
 
       invalid_cols != [] ->
-        {:error,
-         {:columns,
-          [
-            "The following columns could not be found: #{invalid_cols |> Enum.join(", ")}"
-          ]}}
+        "The following columns could not be found: #{invalid_cols |> Enum.join(", ")}"
 
       generated_cols != [] ->
-        {:error,
-         {:columns,
-          [
-            "The following columns are generated and cannot be included in replication: #{generated_cols |> Enum.join(", ")}"
-          ]}}
+        "The following columns are generated and cannot be included in replication: #{generated_cols |> Enum.join(", ")}"
 
       true ->
-        {:ok, Enum.sort(columns_to_select)}
+        :ok
+    end
+    |> case do
+      :ok -> {:ok, Enum.sort(columns_to_select)}
+      reason when is_binary(reason) -> {:error, {:columns, [reason]}}
     end
   end
 
@@ -615,9 +597,17 @@ defmodule Electric.Shapes.Shape do
       end)
 
     %{columns: column_info, pk: pk} = Map.fetch!(table_info, {schema, name})
-    refs = Inspector.columns_to_expr(column_info)
-    {:ok, where} = maybe_parse_where(where)
-    {:ok, where} = validate_where_clause(where, Map.get(data, "params", %{}), refs)
+
+    {:ok, where} =
+      case where do
+        nil ->
+          {:ok, nil}
+
+        where ->
+          refs = Inspector.columns_to_expr(column_info)
+          {:ok, where} = Parser.parse_query(where)
+          Parser.validate_where_ast(where, params: Map.get(data, "params", %{}), refs: refs)
+      end
 
     flags =
       Enum.reject(

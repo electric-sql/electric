@@ -112,7 +112,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         pids_by_shape_handle: %{},
         filter:
           opts
-          |> Map.put(:refs_fun, &sublink_refs(&1, opts.stack_id))
+          |> Map.put(:refs_fun, &Materializer.get_all_as_refs(&1, opts.stack_id))
           |> Keyword.new()
           |> Filter.new(),
         flush_tracker:
@@ -372,16 +372,4 @@ defmodule Electric.Replication.ShapeLogCollector do
        do: %{state | last_processed_lsn: lsn}
 
   defp put_last_processed_lsn(state, _lsn), do: state
-
-  defp sublink_refs(shape, stack_id) do
-    shape.shape_dependencies_handles
-    |> Enum.with_index()
-    |> Map.new(fn {shape_handle, index} ->
-      {["$sublink", Integer.to_string(index)],
-       Materializer.get_link_values(%{
-         shape_handle: shape_handle,
-         stack_id: stack_id
-       })}
-    end)
-  end
 end
