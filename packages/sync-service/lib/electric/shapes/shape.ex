@@ -196,6 +196,7 @@ defmodule Electric.Shapes.Shape do
          refs = Inspector.columns_to_expr(column_info),
          {:ok, parsed_where} <- maybe_parse_where(Map.get(opts, :where)),
          {:ok, subqueries} <- Parser.maybe_extract_subqueries(parsed_where),
+         :ok <- check_feature_flag(subqueries),
          {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
          {:ok, where} <-
@@ -228,6 +229,15 @@ defmodule Electric.Shapes.Shape do
          storage: Map.get(opts, :storage) || %{compaction: :disabled},
          shape_dependencies: shape_dependencies
        }}
+    end
+  end
+
+  defp check_feature_flag(subqueries) do
+    if subqueries != [] and
+         not Enum.member?(Electric.Config.get_env(:feature_flags), "allow_subqueries") do
+      {:error, {:where, "Subqueries are not supported"}}
+    else
+      :ok
     end
   end
 
