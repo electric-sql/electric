@@ -108,7 +108,6 @@ defmodule Electric.Replication.ShapeLogCollector do
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
         dependency_layers: DependencyLayers.new(),
-        shape_handles_by_pid: %{},
         pids_by_shape_handle: %{},
         filter:
           opts
@@ -129,18 +128,18 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:ok, state}
   end
 
-  def handle_info({:unsubscribe, ref, :process, pid, _reason}, state) do
+  def handle_info({{:unsubscribe, shape_handle}, ref, :process, pid, _reason}, state) do
     OpenTelemetry.with_span("shape_log_collector.unsubscribe", [], state.stack_id, fn ->
       {:noreply,
        state
-       |> remove_subscription({pid, ref})
+       |> remove_subscription({pid, ref}, shape_handle)
        |> Map.update!(:flush_tracker, &FlushTracker.handle_shape_removed(&1, pid))}
     end)
   end
 
   def handle_call({:subscribe, shape_handle, shape}, {pid, _ref}, state) do
     OpenTelemetry.with_span("shape_log_collector.subscribe", [], state.stack_id, fn ->
-      ref = Process.monitor(pid, tag: :unsubscribe)
+      ref = Process.monitor(pid, tag: {:unsubscribe, shape_handle})
       from = {pid, ref}
 
       state =
@@ -148,7 +147,6 @@ defmodule Electric.Replication.ShapeLogCollector do
           state
           | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
             filter: Filter.add_shape(state.filter, shape_handle, shape),
-            shape_handles_by_pid: Map.put(state.shape_handles_by_pid, pid, shape_handle),
             pids_by_shape_handle: Map.put(state.pids_by_shape_handle, shape_handle, pid),
             dependency_layers:
               DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
@@ -332,7 +330,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
-  defp remove_subscription(%{subscriptions: {count, set}} = state, {pid, _} = from) do
+  defp remove_subscription(%{subscriptions: {count, set}} = state, from, shape_handle) do
     subscriptions =
       if MapSet.member?(set, from) do
         {count - 1, MapSet.delete(set, from)}
@@ -344,14 +342,11 @@ defmodule Electric.Replication.ShapeLogCollector do
         {count, set}
       end
 
-    shape_handle = Map.fetch!(state.shape_handles_by_pid, pid)
-
     %{
       state
       | subscriptions: subscriptions,
         filter: Filter.remove_shape(state.filter, shape_handle),
         partitions: Partitions.remove_shape(state.partitions, shape_handle),
-        shape_handles_by_pid: Map.delete(state.shape_handles_by_pid, pid),
         pids_by_shape_handle: Map.delete(state.pids_by_shape_handle, shape_handle),
         dependency_layers:
           DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)
