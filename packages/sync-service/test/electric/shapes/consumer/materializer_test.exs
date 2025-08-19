@@ -33,13 +33,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    for _ <- 1..2 do
-      receive do
-        {:"$gen_call", {from, ref}, x}
-        when x in [:await_snapshot_start, :subscribe_materializer] ->
-          send(from, {ref, :ok})
-      end
-    end
+    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok
   end
@@ -55,13 +50,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    for _ <- 1..2 do
-      receive do
-        {:"$gen_call", {from, ref}, x}
-        when x in [:await_snapshot_start, :subscribe_materializer] ->
-          send(from, {ref, :ok})
-      end
-    end
+    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok
 
@@ -72,5 +62,12 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     ])
 
     assert Materializer.get_link_values(ctx) == MapSet.new([1, 2, 3])
+  end
+
+  defp respond_to_call(request, response) do
+    receive do
+      {:"$gen_call", {from, ref}, ^request} ->
+        send(from, {ref, response})
+    end
   end
 end
