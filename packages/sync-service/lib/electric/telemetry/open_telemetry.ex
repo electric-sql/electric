@@ -55,11 +55,17 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @spec with_span(span_name(), span_attrs(), String.t() | nil, (-> t)) :: t when t: term
   def with_span(name, attributes, stack_id \\ nil, fun)
       when is_binary(name) and (is_list(attributes) or is_map(attributes)) do
-    if Sampler.include_span?(name) do
-      do_with_span(name, attributes, stack_id, fun)
-    else
-      fun.()
-    end
+    erlang_telemetry_event = [
+      :electric | name |> String.split(".", trim: true) |> Enum.map(&String.to_atom/1)
+    ]
+
+    stack_id = stack_id || get_from_baggage("stack_id")
+    stack_attributes = get_stack_span_attrs(stack_id)
+    all_attributes = stack_attributes |> Map.merge(Map.new(attributes))
+
+    :telemetry.span(erlang_telemetry_event, all_attributes, fn ->
+      {maybe_with_otel_span(name, all_attributes, stack_id, fun), %{}}
+    end)
   end
 
   @doc """
@@ -77,32 +83,29 @@ defmodule Electric.Telemetry.OpenTelemetry do
     end
   end
 
-  defp do_with_span(name, attributes, stack_id, fun) do
-    stack_id = stack_id || get_from_baggage("stack_id")
-    stack_attributes = get_stack_span_attrs(stack_id)
-    all_attributes = stack_attributes |> Map.merge(Map.new(attributes))
+  defp maybe_with_otel_span(name, attributes, stack_id, fun) do
+    if Sampler.include_span?(name) do
+      with_otel_span(name, attributes, stack_id, fun)
+    else
+      fun.()
+    end
+  end
 
+  defp with_otel_span(name, attributes, stack_id, fun) do
     # This map is populated with default values that `:otel_tracer.with_span()` whould have set
     # anyway. But we're forced to do it here to avoid having like 50% of our code covered with
     # Dialyzer warnings (I dare you to try and only leave the `attributes` key here).
     span_opts = %{
-      attributes: all_attributes,
+      attributes: attributes,
       links: [],
       is_recording: true,
       start_time: :opentelemetry.timestamp(),
       kind: :internal
     }
 
-    erlang_telemetry_event = [
-      :electric | name |> String.split(".", trim: true) |> Enum.map(&String.to_atom/1)
-    ]
-
     set_in_baggage("stack_id", stack_id)
 
-    :telemetry.span(erlang_telemetry_event, all_attributes, fn ->
-      fun_result = :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
-      {fun_result, %{}}
-    end)
+    :otel_tracer.with_span(tracer(), name, span_opts, fn _span_ctx -> fun.() end)
   end
 
   @doc """
