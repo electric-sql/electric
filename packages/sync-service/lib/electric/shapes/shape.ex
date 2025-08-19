@@ -200,11 +200,7 @@ defmodule Electric.Shapes.Shape do
          {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
          {:ok, where} <-
-           maybe_parse_where_clause(
-             Map.get(opts, :where),
-             opts[:params],
-             refs |> Map.merge(dependency_refs)
-           ),
+           validate_where_clause(parsed_where, opts[:params], refs |> Map.merge(dependency_refs)),
          {:ok, where} <- validate_where_return_type(where) do
       flags =
         [
@@ -242,8 +238,14 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp maybe_parse_where(nil), do: {:ok, nil}
-  defp maybe_parse_where(where) when is_binary(where), do: Parser.parse_query(where)
   defp maybe_parse_where(where) when is_map(where), do: {:ok, where}
+
+  defp maybe_parse_where(where) when is_binary(where) do
+    case Parser.parse_query(where) do
+      {:ok, where} -> {:ok, where}
+      {:error, reason} -> {:error, {:where, reason}}
+    end
+  end
 
   defp make_opts_from_select(select, opts) do
     with {:ok, {columns, from, where}} <- Parser.extract_parts_from_select(select) do
@@ -295,16 +297,9 @@ defmodule Electric.Shapes.Shape do
     end)
   end
 
-  defp maybe_parse_where_clause(nil, _, _), do: {:ok, nil}
+  defp validate_where_clause(nil, _, _), do: {:ok, nil}
 
-  defp maybe_parse_where_clause(where, params, refs) when is_binary(where) do
-    case Parser.parse_and_validate_expression(where, params: params, refs: refs) do
-      {:ok, expr} -> {:ok, expr}
-      {:error, reason} -> {:error, {:where, reason}}
-    end
-  end
-
-  defp maybe_parse_where_clause(where, params, refs) when is_map(where) do
+  defp validate_where_clause(where, params, refs) when is_map(where) do
     case Parser.validate_where_ast(where, params: params, refs: refs) do
       {:ok, expr} -> {:ok, expr}
       {:error, reason} -> {:error, {:where, reason}}
@@ -621,7 +616,8 @@ defmodule Electric.Shapes.Shape do
 
     %{columns: column_info, pk: pk} = Map.fetch!(table_info, {schema, name})
     refs = Inspector.columns_to_expr(column_info)
-    {:ok, where} = maybe_parse_where_clause(where, Map.get(data, "params", %{}), refs)
+    {:ok, where} = maybe_parse_where(where)
+    {:ok, where} = validate_where_clause(where, Map.get(data, "params", %{}), refs)
 
     flags =
       Enum.reject(
