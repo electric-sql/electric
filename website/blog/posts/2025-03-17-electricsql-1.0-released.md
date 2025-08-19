@@ -20,6 +20,10 @@ post: true
   import LogoStripXxs from '/static/img/blog/electric-beta-release/logo-strip.xxs.svg'
   import LinearLiteScreenshot from '/static/img/blog/electric-beta-release/linearlite-screenshot.png'
   import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
+  import { ref } from 'vue'
+
+  // Modal states
+  const isLogoStripModalOpen = ref(false)
 </script>
 
 With [version 1.0.0](https://github.com/electric-sql/electric/releases/tag/%40core%2Fsync-service%401.0.0), Electric is now in GA. The APIs are stable and the sync engine is ready for mission critical, production apps.
@@ -49,11 +53,28 @@ Our policy is now no backwards-incompatible changes in patch or minor releases. 
 ## Production ready
 
 <figure>
-  <img :src="LogoStrip" class="hidden-sm" />
-  <img :src="LogoStripSm" class="hidden-xs block-sm" />
-  <img :src="LogoStripXs" class="hidden-xxs block-xs" />
-  <img :src="LogoStripXxs" class="block-xxs" />
+  <div class="clickable-image" @click="isLogoStripModalOpen = true">
+    <img :src="LogoStrip" class="hidden-sm" />
+    <img :src="LogoStripSm" class="hidden-xs block-sm" />
+    <img :src="LogoStripXs" class="hidden-xxs block-xs" />
+    <img :src="LogoStripXxs" class="block-xxs" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isLogoStripModalOpen"
+:image-src="LogoStrip"
+image-alt="Logo strip"
+@close="isLogoStripModalOpen = false"
+/>
 
 Electric is stable, reliable and scales. It's been stress-tested in production for some time now by companies like [Trigger](https://trigger.dev), [Otto](https://ottogrid.ai) and [IP.world](https://ip.world).
 

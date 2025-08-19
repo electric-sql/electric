@@ -7,7 +7,11 @@ outline: deep
 ---
 
 <script setup>
+import { ref } from 'vue'
 import SyncShapeSVG from '/static/img/docs/guides/shapes/sync-shape.svg?url'
+
+// Modal state
+const isSyncShapeModalOpen = ref(false)
 </script>
 
 <img src="/img/icons/shapes.svg"
@@ -33,11 +37,28 @@ Imagine a Postgres database in the cloud with lots of data stored in it. It's of
 A shape is a way of defining a subset of that data that you'd like to sync into a local app. Defining shapes allows you to sync just the data you want and just the data that's practical to sync onto the local device.
 
 <figure>
-  <img :src="SyncShapeSVG"
-      alt="Illustration of syncing a shape"
-      style="width: 100%; max-width: 576px;"
-  />
+  <div class="clickable-image" @click="isSyncShapeModalOpen = true">
+    <img :src="SyncShapeSVG"
+        alt="Illustration of syncing a shape"
+        style="width: 100%; max-width: 576px;"
+    />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isSyncShapeModalOpen"
+:image-src="SyncShapeSVG"
+image-alt="Illustration of syncing a shape"
+@close="isSyncShapeModalOpen = false"
+/>
 
 A client can choose to sync one shape, or lots of shapes. Many clients can sync the same shape. Multiple shapes can overlap.
 

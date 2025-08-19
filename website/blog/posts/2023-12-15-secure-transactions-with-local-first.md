@@ -9,6 +9,15 @@ outline: deep
 post: true
 ---
 
+<script setup>
+  import { ref } from 'vue'
+
+  // Modal states
+  const isCloudFirstModalOpen = ref(false)
+  const isLocalFirstModalOpen = ref(false)
+  const isStateMachineModalOpen = ref(false)
+</script>
+
 One of the most common questions we get asked about developing on ElectricSQL and local-first in general is how to do secure, confirmed transactions like bookings and payments. <!--truncate-->It's a great question, because you typically need to use a server for these type of transactions. You don't want to bundle secrets into a client app and the server can make sure that a transaction is only executed once.
 
 The good news is that there's a simple pattern you can easily implement to do secure transactions with ElectricSQL and local-first applications in general. Read ahead for more context, or [jump straight to the solution](#solution--use-a-state-machine).
@@ -16,12 +25,25 @@ The good news is that there's a simple pattern you can easily implement to do se
 ## What's the problem with secure transactions?
 
 <figure>
-  <a href="/img/blog/secure-transactions-with-local-first/cloud-first-with-bg.jpg"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isCloudFirstModalOpen = true">
     <img src="/img/blog/secure-transactions-with-local-first/cloud-first.png" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isCloudFirstModalOpen"
+image-src="/img/blog/secure-transactions-with-local-first/cloud-first.png"
+image-alt="Cloud first architecture diagram"
+@close="isCloudFirstModalOpen = false"
+/>
 
 With a cloud-first architecture, the client typically makes a request to the server, the server processes the request, often interacting with a database, and then sends back a response. Two key aspects of this to highlight:
 
@@ -29,12 +51,25 @@ With a cloud-first architecture, the client typically makes a request to the ser
 1. the server can usually secure unique access to a task or database resource in order to prevent problems like double spending or placing orders twice
 
 <figure>
-  <a href="/img/blog/secure-transactions-with-local-first/local-first-with-bg.jpg"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isLocalFirstModalOpen = true">
     <img src="/img/blog/secure-transactions-with-local-first/local-first.png" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isLocalFirstModalOpen"
+image-src="/img/blog/secure-transactions-with-local-first/local-first.png"
+image-alt="Local first architecture diagram"
+@close="isLocalFirstModalOpen = false"
+/>
 
 In contrast, with a local-first architecture, your app code talks directly to a local embedded database and runs in an untrusted environment. You can't have secrets or private API keys available because bundling them into your app exposes them to anyone who reads or decompiles your source code.
 
@@ -57,12 +92,25 @@ This can cause a range of [integrity violations and anomalies](https://legacy.el
 Luckily, there is a simple solution. Use a state machine to emulate a request - response workflow over the in-band replication protocol. This supports secure background processing without losing consistency.
 
 <figure>
-  <a href="/img/blog/secure-transactions-with-local-first/state-machine.jpg"
-      class="no-visual"
-      target="_blank">
+  <div class="clickable-image" @click="isStateMachineModalOpen = true">
     <img src="/img/blog/secure-transactions-with-local-first/state-machine.png" />
-  </a>
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
 </figure>
+
+<ImageModal
+:is-open="isStateMachineModalOpen"
+image-src="/img/blog/secure-transactions-with-local-first/state-machine.png"
+image-alt="State machine diagram"
+@close="isStateMachineModalOpen = false"
+/>
 
 The workflow is as follows:
 

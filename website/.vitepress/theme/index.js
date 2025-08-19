@@ -8,6 +8,7 @@ import DemoEmbed from '../../src/components/DemoEmbed.vue'
 import DemoListing from '../../src/components/DemoListing.vue'
 import HelpWanted from '../../src/components/HelpWanted.vue'
 import HTML5Video from '../../src/components/HTML5Video.vue'
+import ImageModal from '../../src/components/ImageModal.vue'
 import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
@@ -20,6 +21,7 @@ export default {
     app.component('DemoListing', DemoListing)
     app.component('HelpWanted', HelpWanted)
     app.component('HTML5Video', HTML5Video)
+    app.component('ImageModal', ImageModal)
     app.component('NavSignupButton', NavSignupButton)
     app.component('VPButton', VPButton)
     app.component('YoutubeEmbed', YoutubeEmbed)

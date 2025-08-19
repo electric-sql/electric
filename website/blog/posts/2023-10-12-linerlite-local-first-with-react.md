@@ -12,12 +12,38 @@ outline: deep
 post: true
 ---
 
+<script setup>
+  import { ref } from 'vue'
+
+  // Modal states
+  const isAppModalOpen = ref(false)
+</script>
+
 > [!WARNING]
 > This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
 
 Recently at Electric we’ve been building some demo apps; this is both to demonstrate the capability and use of Electric as platform, and to help inform our design process. The first of these demos is what we’re calling “Linearlite” - a simplified, lightweight clone of the Linear project management and issue tracking tool. <!--truncate--> It uses the standard ElectricSQL architecture of Postgres on the server, SQLite in the browser, and Electric’s sync layer in the middle.
 
-![](/img/blog/linerlite-local-first-with-react/app.png)
+<figure>
+  <div class="clickable-image" @click="isAppModalOpen = true">
+    <img src="/img/blog/linerlite-local-first-with-react/app.png" />
+    <div class="image-overlay">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+        <line x1="11" y1="8" x2="11" y2="14"></line>
+        <line x1="8" y1="11" x2="14" y2="11"></line>
+      </svg>
+    </div>
+  </div>
+</figure>
+
+<ImageModal
+:is-open="isAppModalOpen"
+image-src="/img/blog/linerlite-local-first-with-react/app.png"
+image-alt="Linearlite app screenshot"
+@close="isAppModalOpen = false"
+/>
 
 You can try out Linearlite here: [https://linearlite.examples.electric-sql.com/](https://linearlite.examples.electric-sql.com/)
 
@@ -47,7 +73,7 @@ Electric comprises a [sync layer](https://legacy.electric-sql.com/docs/api/servi
 
 In some ways Electric is similar to Hasura or PostgREST in that it can provide a plug-and-play API to your Postgres database. However, there are three key differences:
 
-- SQL throughout - it’s SQL on the server _and_ SQL on the client. 
+- SQL throughout - it’s SQL on the server _and_ SQL on the client.
 - Offline support - you get offline _for free,_ you don’t have to build any complex syncing logic.
 - Reactive queries - build a UI declaratively that updates as the underlying database changes.
 
@@ -224,7 +250,7 @@ In the `App.tsx` file you will find code that imports `initElectric`, runs it to
 import { ElectricProvider, initElectric } from './electric'
 
 const App = () => {
- const [electric, setElectric] = useState<Electric>()
+  const [electric, setElectric] = useState<Electric>()
 
  useEffect(() => {
   const init = async () => {
@@ -257,9 +283,9 @@ In the `init` function inside the useEffect in the App component we add the code
 ```typescript
 // src/App.tsx
 const { synced } = await client.db.issue.sync({
- include: {
-  comment: true,
- },
+  include: {
+    comment: true,
+  },
 })
 await synced
 ```
@@ -313,15 +339,14 @@ See the [documentation for ".create()"](https://legacy.electric-sql.com/docs/usa
 ```typescript
 // src/pages/Issue/index.tsx
 await db.issue.update({
- data: {
-  title: title,
-  modified: new Date().toISOString(),
- },
- where: {
-  id: issue.id,
- },
+  data: {
+    title: title,
+    modified: new Date().toISOString(),
+  },
+  where: {
+    id: issue.id,
+  },
 })
-
 ```
 
 This uses the `.update()` method with a `where` clause to specify which issue to update.
