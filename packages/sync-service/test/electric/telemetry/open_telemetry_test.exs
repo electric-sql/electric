@@ -103,5 +103,19 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
 
       assert_receive :span_started
     end
+
+    test "does not create a span if the sampler does not include the child span" do
+      OpenTelemetry.with_span("parent_span", %{}, @stack_id, fn ->
+        Repatch.spy(:otel_tracer)
+
+        Repatch.patch(Sampler, :include_span?, fn _ -> false end)
+
+        OpenTelemetry.with_child_span("child_span", %{}, @stack_id, fn ->
+          :some_code
+        end)
+
+        refute Repatch.called?(:otel_tracer, :with_span, 4)
+      end)
+    end
   end
 end

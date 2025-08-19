@@ -66,7 +66,13 @@ defmodule Electric.Telemetry.OpenTelemetry do
   will not be created either.
   """
   def with_child_span(name, attributes, stack_id \\ nil, fun) do
-    do_with_span(name, attributes, stack_id, fun, in_span_context?())
+    do_with_span(
+      name,
+      attributes,
+      stack_id,
+      fun,
+      in_span_context?() && Sampler.include_span?(name)
+    )
   end
 
   defp do_with_span(name, attributes, stack_id, fun, include_otel_span?) do
