@@ -49,8 +49,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Handle GET /items - proxy to Electric for syncing items
-    if (req.method === `GET` && req.url?.startsWith(`/items`)) {
-      console.log("GET /items")
+    if (req.method === `GET` && req.url === `/items`) {
       const url = new URL(req.url, `http://localhost:${PORT}`)
       const originUrl = new URL(`/v1/shape`, baseUrl)
 
