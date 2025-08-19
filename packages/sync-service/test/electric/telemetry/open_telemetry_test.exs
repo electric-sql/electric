@@ -86,5 +86,22 @@ defmodule Electric.Telemetry.OpenTelemetryTest do
 
       refute Repatch.called?(:otel_tracer, :with_span, 4)
     end
+
+    test "calls :telemetry.span/3 even if there is not a parent span" do
+      pid = self()
+
+      :telemetry.attach(
+        pid,
+        [:electric, :child_span, :start],
+        fn _, _, _, _ -> send(pid, :span_started) end,
+        nil
+      )
+
+      OpenTelemetry.with_child_span("child_span", %{}, @stack_id, fn ->
+        :some_code
+      end)
+
+      assert_receive :span_started
+    end
   end
 end
