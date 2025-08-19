@@ -211,7 +211,8 @@ defmodule Electric.Replication.Eval.Parser do
   Parses a query into a Postgres AST
   """
   def parse_query(nil), do: {:ok, nil}
-  def parse_query(query), do: get_where_internal_ast(query)
+  def parse_query(query) when is_binary(query), do: get_where_internal_ast(query)
+  def parse_query(ast) when is_map(ast), do: {:ok, ast}
 
   def validate_where_ast(ast, opts) do
     params = Keyword.get(opts, :params, %{})

@@ -25,7 +25,6 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
-  alias Electric.Shapes.Consumer.Materializer
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
@@ -479,7 +478,10 @@ defmodule Electric.ShapeCache do
     %{publication_manager: {publication_manager, publication_manager_opts}} = state
 
     case start_shape(shape_handle, shape, state) do
-      {:ok, latest_offset} ->
+      :ok ->
+        consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
+        # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
+        {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
         publication_manager.recover_shape(shape_handle, shape, publication_manager_opts)
         [LogOffset.extract_lsn(latest_offset)]
 
@@ -507,7 +509,7 @@ defmodule Electric.ShapeCache do
       shape_handles =
         shape.shape_dependencies
         |> Enum.map(&{&1, maybe_create_shape(&1, otel_ctx, state)})
-        |> Enum.with_index(fn {inner_shape, {shape_handle, _latest_offset}}, index ->
+        |> Enum.with_index(fn {inner_shape, {shape_handle, _}}, index ->
           materialized_type =
             shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
 
@@ -519,11 +521,6 @@ defmodule Electric.ShapeCache do
             materialized_type: materialized_type
           })
 
-          Materializer.wait_until_ready(%{
-            stack_id: state.stack_id,
-            shape_handle: shape_handle
-          })
-
           shape_handle
         end)
 
@@ -531,10 +528,13 @@ defmodule Electric.ShapeCache do
 
       {:ok, shape_handle} = state.shape_status.add_shape(state.shape_status_state, shape)
 
-      {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
+      :ok = start_shape(shape_handle, shape, state, otel_ctx)
 
       send(self(), :maybe_expire_shapes)
-      {shape_handle, latest_offset}
+
+      # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
+      # "latest offset" because it'll be in the snapshotting stage
+      {shape_handle, LogOffset.last_before_real_offsets()}
     end
   end
 
@@ -557,9 +557,7 @@ defmodule Electric.ShapeCache do
            otel_ctx: otel_ctx
          ) do
       {:ok, _supervisor_pid} ->
-        consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
-        # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
-        {:ok, _latest_offset} = Shapes.Consumer.initial_state(consumer)
+        :ok
 
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")

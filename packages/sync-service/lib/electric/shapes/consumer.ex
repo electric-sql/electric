@@ -94,14 +94,6 @@ defmodule Electric.Shapes.Consumer do
     :ok =
       Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
 
-    for shape_handle <- config.shape.shape_dependencies_handles do
-      Process.monitor(Materializer.whereis(config.stack_id, shape_handle),
-        tag: {:dependency_materializer_down, shape_handle}
-      )
-
-      Materializer.subscribe(config.stack_id, shape_handle)
-    end
-
     {:ok, state, {:continue, :init_storage}}
   end
 
@@ -132,6 +124,15 @@ defmodule Electric.Shapes.Consumer do
         pg_snapshot[:xmin],
         normalized_latest_offset
       )
+
+    for shape_handle <- state.shape.shape_dependencies_handles do
+      # TODO: handle a case when materializer is down
+      Process.monitor(Materializer.whereis(state.stack_id, shape_handle),
+        tag: {:dependency_materializer_down, shape_handle}
+      )
+
+      Materializer.subscribe(state.stack_id, shape_handle)
+    end
 
     ShapeLogCollector.subscribe(producer, state.shape_handle, state.shape)
 
@@ -297,7 +298,9 @@ defmodule Electric.Shapes.Consumer do
       end
     end)
 
-    ShapeCache.Storage.terminate(state.writer)
+    if is_map_key(state, :writer) do
+      ShapeCache.Storage.terminate(state.writer)
+    end
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
