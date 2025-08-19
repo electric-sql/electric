@@ -35,12 +35,10 @@ defmodule Electric.Replication.PublicationManager do
     next_update_forced?: false
   ]
 
-  @typep oid_rel() :: {non_neg_integer(), Electric.relation()}
-
   @typep state() :: %__MODULE__{
-           relation_filter_counters: %{oid_rel() => map()},
-           prepared_relation_filters: %{oid_rel() => __MODULE__.RelationFilter.t()},
-           committed_relation_filters: %{oid_rel() => __MODULE__.RelationFilter.t()},
+           relation_filter_counters: %{Electric.oid_relation() => map()},
+           prepared_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
+           committed_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
            row_filtering_enabled: boolean(),
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),

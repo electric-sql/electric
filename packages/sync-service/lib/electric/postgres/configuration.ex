@@ -24,9 +24,9 @@ defmodule Electric.Postgres.Configuration do
   """
   @spec check_publication_relations_and_identity(
           Postgrex.conn(),
-          String.t(),
           [Electric.oid_relation()],
-          filters()
+          [Electric.oid_relation()],
+          String.t()
         ) :: :ok | {:error, :misconfigured_replica_identity | :table_missing_from_publication}
   def check_publication_relations_and_identity(
         conn,
