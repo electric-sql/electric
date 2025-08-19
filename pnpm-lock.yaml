@@ -983,14 +983,14 @@ importers:
   examples/tanstack-db-expo-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: workspace:*
-        version: link:../../packages/typescript-client
+        specifier: 1.0.7
+        version: 1.0.7
       '@expo/metro-runtime':
         specifier: ~5.0.4
         version: 5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))
       '@tanstack/electric-db-collection':
         specifier: ^0.0.15
-        version: 0.0.15(@electric-sql/client@packages+typescript-client)(typescript@5.8.3)
+        version: 0.0.15(@electric-sql/client@1.0.7)(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.0.27
         version: 0.0.27(react@19.1.0)(typescript@5.8.3)
@@ -20138,9 +20138,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/electric-db-collection@0.0.15(@electric-sql/client@packages+typescript-client)(typescript@5.8.3)':
+  '@tanstack/electric-db-collection@0.0.15(@electric-sql/client@1.0.7)(typescript@5.8.3)':
     dependencies:
-      '@electric-sql/client': link:packages/typescript-client
+      '@electric-sql/client': 1.0.7
       '@standard-schema/spec': 1.0.0
       '@tanstack/db': 0.0.33(typescript@5.8.3)
       '@tanstack/store': 0.7.2
