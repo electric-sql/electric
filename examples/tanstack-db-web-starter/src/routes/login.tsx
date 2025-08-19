@@ -19,7 +19,7 @@ function Layout() {
     setError("")
 
     try {
-      let { data: _data, error } = await authClient.signUp.email(
+      let { data, error } = await authClient.signUp.email(
         {
           email,
           password,
@@ -40,14 +40,13 @@ function Layout() {
           },
           {
             onSuccess: async () => {
-              const { data: _session, error: _error } =
-                await authClient.getSession()
+              await authClient.getSession()
               window.location.href = "/"
             },
           }
         )
 
-        _data = result.data
+        data = result.data
         error = result.error
       }
 
