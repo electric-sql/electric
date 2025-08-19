@@ -2,6 +2,7 @@ import bodyParser from 'body-parser'
 import cors from 'cors'
 import express from 'express'
 import pg from 'pg'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
 import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 
@@ -71,9 +72,8 @@ app.get('/items', async (req, res) => {
   const electricUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
 
   // Pass through Electric protocol parameters
-  const allowedParams = ['live', 'handle', 'offset', 'cursor']
   for (const [key, value] of Object.entries(req.query)) {
-    if (allowedParams.includes(key)) {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
       electricUrl.searchParams.set(key, value)
     }
   }

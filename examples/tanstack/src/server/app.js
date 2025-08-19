@@ -2,6 +2,7 @@ import http from "http"
 import pg from "pg"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 
 const baseUrl = process.env.ELECTRIC_URL ?? `http://localhost:3000`
 
@@ -55,7 +56,7 @@ const server = http.createServer(async (req, res) => {
 
       // Copy relevant query params
       url.searchParams.forEach((value, key) => {
-        if ([`live`, `handle`, `offset`, `cursor`].includes(key)) {
+        if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
           originUrl.searchParams.set(key, value)
         }
       })
