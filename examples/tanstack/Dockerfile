@@ -31,4 +31,7 @@ COPY --from=deps /app/examples/tanstack/dist ./dist
 COPY --from=deps /app/examples/tanstack/public ./public
 COPY --from=deps /app/examples/tanstack/package.json ./
 COPY --from=deps /app/examples/tanstack/src/server ./src/server
+COPY --from=deps /app/packages/typescript-client ../../packages/typescript-client
+COPY --from=deps /app/packages/react-hooks ../../packages/react-hooks
+
 CMD ["npm", "start"]
