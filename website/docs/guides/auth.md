@@ -253,6 +253,89 @@ This pattern is particularly useful when:
 
 The function is called when needed and its value is resolved in parallel with other dynamic options, making it efficient for real-world auth scenarios.
 
+## Session Invalidation with Vary Headers
+
+When users log out or their authentication status changes, it's important to ensure they can't access cached shapes that they should no longer have access to. The HTTP `Vary` header is crucial for this.
+
+### The Problem
+
+Without proper cache control, browsers and CDNs might serve cached shape responses even after a user logs out. This happens because the cache key typically only includes the URL, not the authentication context.
+
+### The Solution: Vary Header
+
+Add a `Vary` header to your shape responses to include authentication information in the cache key:
+
+```http
+Vary: Authorization
+```
+
+or for cookie-based auth:
+
+```http
+Vary: Cookie
+```
+
+### Implementation Examples
+
+#### With Authorization Headers
+
+```tsx
+export async function GET(request: Request) {
+  // ... auth logic ...
+  
+  const response = await fetch(originUrl)
+  const headers = new Headers(response.headers)
+  
+  // Add Vary header for Authorization-based auth
+  headers.set('Vary', 'Authorization')
+  
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+```
+
+#### With Cookie-based Auth
+
+```tsx
+export async function GET(request: Request) {
+  // ... auth logic ...
+  
+  const response = await fetch(originUrl)
+  const headers = new Headers(response.headers)
+  
+  // Add Vary header for cookie-based auth
+  headers.set('Vary', 'Cookie')
+  
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+```
+
+#### Multiple Auth Methods
+
+If you support multiple authentication methods:
+
+```tsx
+// For both Authorization header and Cookie support
+headers.set('Vary', 'Authorization, Cookie')
+```
+
+### How It Works
+
+The `Vary` header tells browsers and CDNs to include the specified headers when creating cache keys. This means:
+
+- Authenticated requests get cached separately from unauthenticated ones
+- Different users' requests are cached separately
+- When a user logs out and loses their auth credentials, they can't access cached authenticated responses
+
+This ensures proper isolation of cached shape data based on authentication context.
+
 ## Notes
 
 ### External services
