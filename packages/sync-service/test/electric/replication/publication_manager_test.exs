@@ -1,12 +1,12 @@
 defmodule Electric.Replication.PublicationManagerTest do
-  alias Electric.Replication.Eval.Expr
-  alias Electric.Replication.PublicationManager.RelationFilter
-  alias Electric.Shapes.Shape
-  alias Electric.Replication.PublicationManager
-
   use ExUnit.Case, async: true
 
   import Support.ComponentSetup
+  import Support.TestUtils
+
+  alias Electric.Replication.Eval.Expr
+  alias Electric.Replication.PublicationManager.RelationFilter
+  alias Electric.Replication.PublicationManager
 
   @shape_handle_1 "shape_handle_1"
   @shape_handle_2 "shape_handle_2"
@@ -18,24 +18,6 @@ defmodule Electric.Replication.PublicationManagerTest do
     query: "id = '1' AND foo_enum::text = 'bar'",
     used_refs: %{["foo_enum"] => {:enum, "foo_enum"}}
   }
-
-  defp generate_shape(relation, where_clause \\ nil, selected_columns \\ nil) do
-    all_columns = Enum.uniq(["id", "value", "foo_enum"] ++ (selected_columns || []))
-    selected_columns = selected_columns || all_columns
-
-    %Shape{
-      root_table: relation,
-      root_table_id: 1,
-      root_pk: ["id"],
-      selected_columns: selected_columns,
-      flags: %{
-        selects_all_columns: selected_columns == all_columns,
-        non_primitive_columns_in_where:
-          where_clause && is_map_key(where_clause.used_refs, ["foo_enum"])
-      },
-      where: where_clause
-    }
-  end
 
   def clean_all_shapes_for_relations(relations, [parent_pid]) do
     send(parent_pid, {:clean_all_shapes_for_relations, relations})
