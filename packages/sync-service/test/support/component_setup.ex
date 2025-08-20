@@ -114,6 +114,7 @@ defmodule Support.ComponentSetup do
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
             db_pool: ctx.pool,
             pg_version: Access.get(ctx, :pg_version, 150_001),
+            manual_table_publishing?: Access.get(ctx, :manual_table_publishing?, false),
             configure_tables_for_replication_fn:
               Access.get(
                 ctx,
