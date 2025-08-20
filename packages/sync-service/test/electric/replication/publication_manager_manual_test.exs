@@ -51,11 +51,13 @@ defmodule Electric.Replication.PublicationManagerManualTest do
       shape = generate_shape(ctx.relation_with_oid)
 
       assert_raise Electric.DbConfigurationError,
-                   "Database table is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting " <>
+                   "Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting " <>
                      "prevents Electric from adding it",
                    fn ->
                      PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
                    end
+
+      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
 
     test "raises if the table's replica identity is not full", ctx do
@@ -64,10 +66,12 @@ defmodule Electric.Replication.PublicationManagerManualTest do
       shape = generate_shape(ctx.relation_with_oid)
 
       assert_raise Electric.DbConfigurationError,
-                   "Database table does not have its replica identity set to FULL",
+                   "Database table \"public.items\" does not have its replica identity set to FULL",
                    fn ->
                      PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
                    end
+
+      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
   end
 

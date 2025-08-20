@@ -1,11 +1,13 @@
 defmodule Electric.Replication.PublicationManager do
   @moduledoc false
-  require Logger
   use GenServer
 
   alias Electric.Postgres.Configuration
   alias Electric.Replication.Eval.Expr
   alias Electric.Shapes.Shape
+  alias Electric.Utils
+
+  require Logger
 
   @callback name(binary() | Keyword.t()) :: term()
   @callback recover_shape(Electric.ShapeCacheBehaviour.shape_handle(), Shape.t(), Keyword.t()) ::
@@ -293,8 +295,22 @@ defmodule Electric.Replication.PublicationManager do
           update_relation_filters(state, modified_relations)
 
         {:error, reason} ->
-          message = publication_error_message(reason, state)
+          # Whatever the error, we must invalidate the shapes that match the errored relations
+          # to ensure there's no missed data for a shape after the publication state has been
+          # corrected by the database admin.
+          {error_type, relations} = reason
+
+          Logger.info(
+            "Cleaning up shapes for misconfigured or unpublished relations #{inspect(relations)}"
+          )
+
+          {mod, args} = state.shape_cache
+          mod.clean_all_shapes_for_relations(relations, args)
+
+          tables = Enum.map(relations, fn {_oid, relation} -> Utils.relation_to_sql(relation) end)
+          message = publication_error_message(error_type, tables, state)
           error = %Electric.DbConfigurationError{type: reason, message: message}
+
           state = reply_to_waiters({:error, error}, state)
           {:noreply, %{state | next_update_forced?: false}}
       end
@@ -346,21 +362,33 @@ defmodule Electric.Replication.PublicationManager do
      }}
   end
 
-  defp publication_error_message(:tables_missing_from_publication, state) do
+  defp publication_error_message(:tables_missing_from_publication, tables, state) do
     tail =
       cond do
         state.manual_table_publishing? ->
-          "the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
+          "the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding "
 
         not state.can_alter_publication? ->
-          "Electric lacks privileges to add it"
+          "Electric lacks privileges to add "
       end
 
-    "Database table is missing from the publication and " <> tail
+    {table_clause, pronoun} =
+      case tables do
+        [table] -> {"table " <> inspect(table) <> " is", "it"}
+        _ -> {"tables " <> inspect(tables) <> " are", "them"}
+      end
+
+    "Database #{table_clause} missing from the publication and " <> tail <> pronoun
   end
 
-  defp publication_error_message(:misconfigured_replica_identity, _state) do
-    "Database table does not have its replica identity set to FULL"
+  defp publication_error_message(:misconfigured_replica_identity, tables, _state) do
+    table_clause =
+      case tables do
+        [table] -> "table #{inspect(table)} does not have its"
+        _ -> "tables #{inspect(tables)} do not have their"
+      end
+
+    "Database #{table_clause} replica identity set to FULL"
   end
 
   @spec schedule_update_publication(timeout(), boolean(), state()) :: state()

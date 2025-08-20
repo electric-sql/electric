@@ -85,12 +85,12 @@
 
   [invoke shape_get_snapshot items]
   ??HTTP/1.1 503
-  ??{"message":"Database table is missing from the publication and Electric lacks privileges to add it"}
+  ??{"message":"Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it"}
 
 [shell electric]
   -
 
-  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table is missing from the publication and Electric lacks privileges to add it
+  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it
   ?\[info\] Sent 503 in [\d]+ms
 
 ## Add the table to the publication and try again
@@ -102,12 +102,12 @@
 [shell client]
   [invoke shape_get_snapshot items]
   ??HTTP/1.1 503
-  ??{"message":"Database table does not have its replica identity set to FULL"}
+  ??{"message":"Database table \"public.items\" does not have its replica identity set to FULL"}
 
 [shell electric]
   -
 
-  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table does not have its replica identity set to FULL
+  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" does not have its replica identity set to FULL
   ?\[info\] Sent 503 in [\d]+ms
 
 ## Set table's replica identity to FULL

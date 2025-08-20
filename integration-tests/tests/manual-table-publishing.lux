@@ -36,10 +36,10 @@
   # Electric fails to add the table to the publication
   [invoke shape_get_snapshot items]
   ??HTTP/1.1 503
-  ??{"message":"Database table is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"}
+  ??{"message":"Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"}
 
 [shell electric]
-  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
+  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
 
 ## Add the table to the publication and try again
 [shell psql]
@@ -55,10 +55,10 @@
   # Electric still fails because the table's replica identity requirement isn't met
   [invoke shape_get_snapshot items]
   ??HTTP/1.1 503
-  ??{"message":"Database table does not have its replica identity set to FULL"}
+  ??{"message":"Database table \"public.items\" does not have its replica identity set to FULL"}
 
 [shell electric]
-  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table does not have its replica identity set to FULL
+  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" does not have its replica identity set to FULL
 
 ## Set table's replica identity to FULL and grant Electric read access to it
 [shell psql]
