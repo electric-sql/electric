@@ -65,6 +65,9 @@
   handle @get_shape {
     handle @definition_matches {
       reverse_proxy {$ELECTRIC_URL:"http://localhost:3000"}
+      header {
+        Vary "Authorization"
+      }
     }
 
     respond "Forbidden" 403 {

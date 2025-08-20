@@ -3,4 +3,7 @@ localhost:4001 {
 	encode {
 		gzip
 	}
+	header {
+		Vary "Authorization"
+	}
 }

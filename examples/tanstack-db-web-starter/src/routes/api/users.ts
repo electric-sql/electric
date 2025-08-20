@@ -26,6 +26,7 @@ const serve = async ({ request }: { request: Request }) => {
   const headers = new Headers(response.headers)
   headers.delete("content-encoding")
   headers.delete("content-length")
+  headers.set("Vary", "Cookie")
 
   return new Response(response.body, {
     status: response.status,

@@ -54,6 +54,7 @@ export async function GET(request: Request) {
   const headers = new Headers(response.headers)
   headers.delete(`content-encoding`)
   headers.delete(`content-length`)
+  headers.set(`Vary`, `Authorization`)
 
   return new Response(response.body, {
     status: response.status,
