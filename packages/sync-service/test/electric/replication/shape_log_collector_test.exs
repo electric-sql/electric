@@ -17,6 +17,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   import Support.ComponentSetup,
     only: [
       with_in_memory_storage: 1,
+      with_shape_status: 1,
       with_stack_id_from_test: 1,
       with_noop_publication_manager: 1,
       with_persistent_kv: 1
@@ -29,6 +30,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   setup [
     :with_stack_id_from_test,
     :with_in_memory_storage,
+    :with_shape_status,
     :with_noop_publication_manager,
     :with_persistent_kv
   ]
@@ -61,20 +63,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     Repatch.allow(self(), pid)
 
-    Mock.ShapeStatus
-    |> expect(:initialise, 1, fn _opts -> {:ok, %{}} end)
-    |> expect(:list_shapes, 1, fn _ -> [] end)
-    # allow the ShapeCache to call this mock
-    |> allow(self(), fn ->
-      GenServer.whereis(Electric.ShapeCache.name(ctx.stack_id))
-    end)
-
     shape_cache_opts =
       [
         storage: {Mock.Storage, []},
         chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
         inspector: {Mock.Inspector, elem(@inspector, 1)},
-        shape_status: Mock.ShapeStatus,
+        shape_status: ctx.shape_status,
         publication_manager: ctx.publication_manager,
         log_producer: ShapeLogCollector.name(ctx.stack_id),
         stack_id: ctx.stack_id,
