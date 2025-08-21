@@ -172,7 +172,7 @@ A unique identifier for the Electric instance. Defaults to a randomly generated 
     defaultValue="electric"
     example="my-electric-service">
 
-Name of the electric service. Used as a resource identifier and namespace.
+Name of the electric service. Used as a resource name in OTEL traces and metrics.
 
 </EnvVarConfig>
 
