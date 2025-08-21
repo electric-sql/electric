@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.1.4
+
+### Patch Changes
+
+- 1c0103c: Fully monitor pool connections and gracefully handle failures.
+- 90eadb2: Include span metrics even if the OTEL span has been not included because of sampling
+
 ## 1.1.3
 
 ### Patch Changes
