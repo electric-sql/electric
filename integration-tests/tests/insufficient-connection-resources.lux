@@ -27,7 +27,7 @@
 ## Restarting Postgres with a higher number of max_connections should fix the issue
 [invoke stop_pg]
 [invoke teardown_container $pg_container_name]
-[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=100"]
+[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=100" ""]
 
 
 [shell electric]
