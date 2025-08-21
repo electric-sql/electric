@@ -1778,6 +1778,138 @@ defmodule Electric.Plug.RouterTest do
                })
                |> Router.call(opts)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "allows subquery in where clause", %{opts: opts, db_conn: db_conn} do
+      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape", %{
+                 table: "child",
+                 offset: "-1",
+                 where: where
+               })
+               |> Router.call(opts)
+
+      shape_handle = get_resp_shape_handle(conn)
+
+      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
+               Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "child",
+            offset: "0_0",
+            handle: shape_handle,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "INSERT INTO child (id, parent_id, value) VALUES (3, 1, 30)", [])
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [%{"value" => %{"value" => "30"}}, _] = Jason.decode!(conn.resp_body)
+    end
+
+    test "return 400 if subquery references unknown table", %{opts: opts} do
+      assert %{status: 400} =
+               conn("GET", "/v1/shape", %{
+                 table: "items",
+                 offset: "-1",
+                 where: "id in (SELECT id FROM unknown_table WHERE value = 1)"
+               })
+               |> Router.call(opts)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "a move-out from the inner shape invalidates all outer shapes", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # TEMPORARY: this test is expected to fail once proper move handling is added
+      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
+               |> Router.call(opts)
+
+      shape_handle = get_resp_shape_handle(conn)
+
+      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
+               Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "child",
+            offset: "0_0",
+            handle: shape_handle,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "UPDATE parent SET value = 3 WHERE id = 1", [])
+
+      assert %{status: 409} = Task.await(task)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "a move-in from the inner shape invalidates all outer shapes", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # TEMPORARY: this test is expected to fail once proper move handling is added
+      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
+               |> Router.call(opts)
+
+      shape_handle = get_resp_shape_handle(conn)
+
+      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
+               Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "child",
+            offset: "0_0",
+            handle: shape_handle,
+            where: where,
+            live: true
+          })
+          |> Router.call(opts)
+        end)
+
+      Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
+
+      assert %{status: 409} = Task.await(task)
+    end
   end
 
   describe "404" do

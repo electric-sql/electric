@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Consumer do
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
   alias Electric.Replication.LogOffset
+  alias Electric.Shapes.Consumer.Materializer
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
@@ -32,6 +33,18 @@ defmodule Electric.Shapes.Consumer do
 
   def initial_state(consumer) do
     GenServer.call(consumer, :initial_state, 30_000)
+  end
+
+  def await_snapshot_start(consumer) when is_pid(consumer) do
+    GenServer.call(consumer, :await_snapshot_start, 30_000)
+  end
+
+  def await_snapshot_start(consumer) do
+    GenServer.call(name(consumer), :await_snapshot_start, 30_000)
+  end
+
+  def subscribe_materializer(consumer) do
+    GenServer.call(name(consumer), :subscribe_materializer)
   end
 
   @doc false
@@ -74,7 +87,8 @@ defmodule Electric.Shapes.Consumer do
         buffer: [],
         monitors: [],
         cleaned?: false,
-        txn_offset_mapping: []
+        txn_offset_mapping: [],
+        materializer_subscribed?: false
       })
 
     :ok =
@@ -111,7 +125,16 @@ defmodule Electric.Shapes.Consumer do
         normalized_latest_offset
       )
 
-    ShapeLogCollector.subscribe(producer, state.shape)
+    for shape_handle <- state.shape.shape_dependencies_handles do
+      # TODO: handle a case when materializer is down
+      Process.monitor(Materializer.whereis(state.stack_id, shape_handle),
+        tag: {:dependency_materializer_down, shape_handle}
+      )
+
+      Materializer.subscribe(state.stack_id, shape_handle)
+    end
+
+    ShapeLogCollector.subscribe(producer, state.shape_handle, state.shape)
 
     Logger.debug("Writer for #{state.shape_handle} initialized")
 
@@ -164,6 +187,12 @@ defmodule Electric.Shapes.Consumer do
   def handle_call({:handle_event, event, trace_context}, _from, state) do
     OpenTelemetry.set_current_context(trace_context)
     {:reply, :ok, handle_event(event, state)}
+  end
+
+  @impl GenServer
+  def handle_call(:subscribe_materializer, _from, state) do
+    Logger.debug("Subscribing materializer for #{state.shape_handle}")
+    {:reply, :ok, %{state | materializer_subscribed?: true}}
   end
 
   @impl GenServer
@@ -240,17 +269,38 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, %{state | writer: writer}}
   end
 
+  def handle_info({:materializer_changes, shape_handle, events}, state) do
+    Logger.debug("Materializer changes for #{shape_handle}: #{inspect(events)}")
+    {:noreply, terminate_safely(state)}
+  end
+
+  def handle_info({{:dependency_materializer_down, handle}, _ref, :process, pid, reason}, state) do
+    Logger.warning("Materializer down for a dependency: #{handle} (#{inspect(pid)})")
+    {:stop, reason, state}
+  end
+
   # We're trapping exists so that `terminate` is called to clean up the writer,
   # otherwise we respect the OTP exit protocol.
   def handle_info({:EXIT, _from, reason}, state) do
+    Logger.debug("Caught EXIT: #{inspect(reason)}")
     {:stop, reason, state}
   end
 
   @impl GenServer
   def terminate(reason, state) do
-    Logger.debug("Shapes.Consumer terminating with reason: #{inspect(reason)}")
+    Logger.debug(fn ->
+      case reason do
+        {error, stacktrace} when is_tuple(error) and is_list(stacktrace) ->
+          "Shapes.Consumer terminating with reason: #{Exception.format(:error, error, stacktrace)}"
 
-    ShapeCache.Storage.terminate(state.writer)
+        other ->
+          "Shapes.Consumer terminating with reason: #{inspect(other)}"
+      end
+    end)
+
+    if is_map_key(state, :writer) do
+      ShapeCache.Storage.terminate(state.writer)
+    end
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
@@ -366,7 +416,9 @@ defmodule Electric.Shapes.Consumer do
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
-    case filter_changes(changes, shape) do
+    extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
+
+    case filter_changes(changes, shape, extra_refs) do
       :includes_truncate ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
@@ -399,7 +451,7 @@ defmodule Electric.Shapes.Consumer do
 
         shape_status.set_latest_offset(shape_status_state, shape_handle, last_log_offset)
 
-        notify_new_changes(state, last_log_offset)
+        notify_new_changes(state, changes, last_log_offset)
 
         lag = calculate_replication_lag(txn)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
@@ -426,7 +478,11 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_new_changes(state, latest_log_offset) do
+  defp notify_new_changes(state, changes, latest_log_offset) do
+    if state.materializer_subscribed? do
+      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes)
+    end
+
     Registry.dispatch(state.registry, state.shape_handle, fn registered ->
       Logger.debug(fn ->
         "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
@@ -525,21 +581,21 @@ defmodule Electric.Shapes.Consumer do
 
   # Apply shape filter to keep only relevant changes, returning the list of changes.
   # Marks the last change, and infers the last offset after possible splits.
-  defp filter_changes(changes, shape, change_acc \\ [], total_ops_acc \\ 0)
-  defp filter_changes([], _shape, [], 0), do: {[], 0, nil}
+  defp filter_changes(changes, shape, extra_refs, change_acc \\ [], total_ops_acc \\ 0)
+  defp filter_changes([], _shape, _, [], 0), do: {[], 0, nil}
 
-  defp filter_changes([], _shape, [change | rest], total_ops),
+  defp filter_changes([], _shape, _, [change | rest], total_ops),
     do:
       {Enum.reverse([%{change | last?: true} | rest]), total_ops,
        LogItems.expected_offset_after_split(change)}
 
-  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _),
+  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _),
     do: :includes_truncate
 
-  defp filter_changes([change | rest], shape, change_acc, total_ops) do
-    case Shape.convert_change(shape, change) do
-      [] -> filter_changes(rest, shape, change_acc, total_ops)
-      [change] -> filter_changes(rest, shape, [change | change_acc], total_ops + 1)
+  defp filter_changes([change | rest], shape, extra_refs, change_acc, total_ops) do
+    case Shape.convert_change(shape, change, extra_refs) do
+      [] -> filter_changes(rest, shape, extra_refs, change_acc, total_ops)
+      [change] -> filter_changes(rest, shape, extra_refs, [change | change_acc], total_ops + 1)
     end
   end
 

@@ -7,7 +7,7 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
   alias Electric.Shapes.WhereClause
-
+  alias Electric.Utils
   require Logger
 
   defprotocol Comparable do
@@ -31,6 +31,8 @@ defmodule Electric.Shapes.Shape do
     :root_column_count,
     :where,
     :selected_columns,
+    shape_dependencies: [],
+    shape_dependencies_handles: [],
     flags: %{},
     storage: %{compaction: :disabled},
     replica: @default_replica
@@ -54,7 +56,8 @@ defmodule Electric.Shapes.Shape do
           where: Electric.Replication.Eval.Expr.t() | nil,
           selected_columns: [String.t(), ...],
           replica: replica(),
-          storage: storage_config() | nil
+          storage: storage_config() | nil,
+          shape_dependencies: [t(), ...]
         }
 
   @type json_relation() :: [String.t(), ...]
@@ -70,7 +73,8 @@ defmodule Electric.Shapes.Shape do
           selected_columns: [String.t(), ...],
           flags: %{optional(flag()) => boolean()},
           replica: String.t(),
-          storage: storage_config() | nil
+          storage: storage_config() | nil,
+          shape_dependencies: [json_safe(), ...]
         }
 
   @doc """
@@ -120,7 +124,7 @@ defmodule Electric.Shapes.Shape do
 
   @schema_options [
     relation: [type: {:tuple, [:string, :string]}, required: true],
-    where: [type: {:or, [:string, nil]}],
+    where: [type: :any],
     columns: [type: {:or, [{:list, :string}, nil]}],
     params: [type: {:map, :string, :string}, default: %{}],
     replica: [
@@ -163,19 +167,36 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
+  # We get (table, columns, where) -> we prepare SELECT columns FROM table WHERE where
+  # We parse the complete SELECT statement, and get a topologically sorted list of subqueries
+  # (including the root query)
+  # Then for each subquery we create a shape struct, and put it into context so that next shape
   def new(opts) when is_list(opts) or is_map(opts) do
+    opts = Map.new(opts)
+
+    if Map.get(opts, :select) do
+      with {:ok, opts} <- make_opts_from_select(opts[:select], opts) do
+        make_new(Map.drop(opts, [:select]))
+      end
+    else
+      make_new(opts)
+    end
+  end
+
+  defp make_new(opts) when is_list(opts) or is_map(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
-         inspector <- Access.fetch!(opts, :inspector),
+         opts = Map.new(opts),
+         inspector = Map.fetch!(opts, :inspector),
          {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
          {:ok, selected_columns} <-
-           validate_selected_columns(column_info, pk_cols, Access.get(opts, :columns)),
+           validate_selected_columns(column_info, pk_cols, Map.get(opts, :columns)),
          refs = Inspector.columns_to_expr(column_info),
-         {:ok, where} <- maybe_parse_where_clause(Access.get(opts, :where), opts[:params], refs),
-         {:ok, where} <- validate_where_return_type(where) do
+         {:ok, where, shape_dependencies} <-
+           validate_where_clause(Map.get(opts, :where), opts, refs) do
       flags =
         [
-          if(is_nil(Access.get(opts, :columns)), do: :selects_all_columns),
+          if(is_nil(Map.get(opts, :columns)), do: :selects_all_columns),
           if(any_columns_non_primitive?(column_info, where),
             do: :non_primitive_columns_in_where
           )
@@ -192,22 +213,90 @@ defmodule Electric.Shapes.Shape do
          flags: flags,
          where: where,
          selected_columns: selected_columns,
-         replica: Access.get(opts, :replica, :default),
-         storage: Access.get(opts, :storage) || %{compaction: :disabled}
+         replica: Map.get(opts, :replica, :default),
+         storage: Map.get(opts, :storage) || %{compaction: :disabled},
+         shape_dependencies: shape_dependencies
        }}
     end
   end
 
-  defp maybe_parse_where_clause(nil, _, _), do: {:ok, nil}
+  defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
 
-  defp maybe_parse_where_clause(where, params, refs) do
-    case Parser.parse_and_validate_expression(where, params: params, refs: refs) do
-      {:ok, expr} -> {:ok, expr}
+  defp validate_where_clause(where, %{inspector: inspector} = opts, refs) do
+    with {:ok, where} <- Parser.parse_query(where),
+         {:ok, subqueries} <- Parser.extract_subqueries(where),
+         :ok <- check_feature_flag(subqueries),
+         {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
+         {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
+         all_refs = Map.merge(refs, dependency_refs),
+         {:ok, where} <- Parser.validate_where_ast(where, params: opts[:params], refs: all_refs),
+         {:ok, where} <- validate_where_return_type(where) do
+      {:ok, where, shape_dependencies}
+    else
+      {:error, {part, reason}} -> {:error, {part, reason}}
       {:error, reason} -> {:error, {:where, reason}}
     end
   end
 
-  defp validate_where_return_type(nil), do: {:ok, nil}
+  defp check_feature_flag(subqueries) do
+    if subqueries != [] and
+         not Enum.member?(Electric.Config.get_env(:feature_flags), "allow_subqueries") do
+      {:error, {:where, "Subqueries are not supported"}}
+    else
+      :ok
+    end
+  end
+
+  defp make_opts_from_select(select, opts) do
+    with {:ok, {columns, from, where}} <- Parser.extract_parts_from_select(select) do
+      {:ok,
+       opts |> Map.put(:columns, columns) |> Map.put(:where, where) |> Map.put(:relation, from)}
+    end
+  end
+
+  defp build_shape_dependencies(subqueries, opts) do
+    shared_opts = Map.drop(opts, [:where, :columns, :relation])
+
+    Enum.reduce_while(subqueries, {:ok, []}, fn subquery, {:ok, acc} ->
+      case new(Map.put(shared_opts, :select, subquery)) do
+        {:ok, %__MODULE__{root_pk: pk, selected_columns: selected_columns} = shape} ->
+          if Enum.sort(pk) == Enum.sort(selected_columns) do
+            {:cont, {:ok, [shape | acc]}}
+          else
+            # Supporting anything but primary keys requires a more complex state in the materializer that we're not supporting yet
+            {:halt,
+             {:error,
+              {:where,
+               "Subquery has selected #{selected_columns |> Enum.join(", ")} but primary key is #{pk |> Enum.join(", ")}. `IN (SELECT ...)` is supported only for primary key columns."}}}
+          end
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp build_dependency_refs(shape_dependencies, inspector) do
+    shape_dependencies
+    |> Enum.with_index()
+    |> Utils.reduce_while_ok(%{}, fn {shape, i}, acc ->
+      relation = {shape.root_table_id, shape.root_table}
+
+      with {:ok, column_info, _} <- load_column_info(relation, inspector) do
+        column_info
+        |> Enum.filter(&(&1.name in shape.selected_columns))
+        |> Inspector.columns_to_expr()
+        |> Map.to_list()
+        |> case do
+          [{_, type}] ->
+            {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
+
+          _ ->
+            {:error, {:where, "Subquery has multiple columns, which is not supported right now"}}
+        end
+      end
+    end)
+  end
 
   defp validate_where_return_type(where) do
     case where.eval.type do
@@ -237,28 +326,20 @@ defmodule Electric.Shapes.Shape do
 
     cond do
       missing_pk_cols != [] ->
-        {:error,
-         {:columns,
-          [
-            "Must include all primary key columns, missing: #{missing_pk_cols |> Enum.join(", ")}"
-          ]}}
+        "Must include all primary key columns, missing: #{missing_pk_cols |> Enum.join(", ")}"
 
       invalid_cols != [] ->
-        {:error,
-         {:columns,
-          [
-            "The following columns could not be found: #{invalid_cols |> Enum.join(", ")}"
-          ]}}
+        "The following columns could not be found: #{invalid_cols |> Enum.join(", ")}"
 
       generated_cols != [] ->
-        {:error,
-         {:columns,
-          [
-            "The following columns are generated and cannot be included in replication: #{generated_cols |> Enum.join(", ")}"
-          ]}}
+        "The following columns are generated and cannot be included in replication: #{generated_cols |> Enum.join(", ")}"
 
       true ->
-        {:ok, Enum.sort(columns_to_select)}
+        :ok
+    end
+    |> case do
+      :ok -> {:ok, Enum.sort(columns_to_select)}
+      reason when is_binary(reason) -> {:error, {:columns, [reason]}}
     end
   end
 
@@ -304,11 +385,9 @@ defmodule Electric.Shapes.Shape do
             "If the table name contains capitals or special characters you must quote it."
         ]}}
 
-  @spec validate_relation(Keyword.t(), term()) ::
+  @spec validate_relation(map(), term()) ::
           {:ok, Electric.oid_relation()} | {:error, {:table, [String.t()]}}
-  defp validate_relation(opts, inspector) do
-    relation = Keyword.fetch!(opts, :relation)
-
+  defp validate_relation(%{relation: relation}, inspector) do
     # Parse identifier locally first to avoid hitting PG for invalid tables
     case Inspector.load_relation_oid(relation, inspector) do
       {:ok, rel} -> {:ok, rel}
@@ -340,11 +419,13 @@ defmodule Electric.Shapes.Shape do
   Updates, on the other hand, may be converted to an "new record" or a "deleted record"
   if the previous/new version of the updated row isn't in the shape.
   """
-  def convert_change(%__MODULE__{root_table: table}, %{relation: relation})
+  def convert_change(shape, change, extra_refs \\ %{})
+
+  def convert_change(%__MODULE__{root_table: table}, %{relation: relation}, _)
       when table != relation,
       do: []
 
-  def convert_change(%__MODULE__{where: nil, flags: %{selects_all_columns: true}}, change) do
+  def convert_change(%__MODULE__{where: nil, flags: %{selects_all_columns: true}}, change, _) do
     # If the change actually doesn't change any columns, we can skip it - this is possible on Postgres but we don't care for those.
     if is_struct(change, Changes.UpdatedRecord) and change.changed_columns == MapSet.new() do
       []
@@ -353,24 +434,29 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change), do: [change]
+  def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _), do: [change]
 
-  def convert_change(%__MODULE__{where: where, selected_columns: selected_columns}, change)
+  def convert_change(
+        %__MODULE__{where: where, selected_columns: selected_columns},
+        change,
+        extra_refs
+      )
       when is_struct(change, Changes.NewRecord)
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
-    if WhereClause.includes_record?(where, record),
+    if WhereClause.includes_record?(where, record, extra_refs),
       do: [filter_change_columns(selected_columns, change)],
       else: []
   end
 
   def convert_change(
         %__MODULE__{where: where, selected_columns: selected_columns},
-        %Changes.UpdatedRecord{old_record: old_record, record: record} = change
+        %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
+        extra_refs
       ) do
-    old_record_in_shape = WhereClause.includes_record?(where, old_record)
-    new_record_in_shape = WhereClause.includes_record?(where, record)
+    old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs)
+    new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs)
 
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
@@ -449,24 +535,29 @@ defmodule Electric.Shapes.Shape do
       where: shape.where,
       selected_columns: shape.selected_columns,
       storage: shape.storage,
-      replica: shape.replica
+      replica: shape.replica,
+      shape_dependencies: Enum.map(shape.shape_dependencies, &to_json_safe/1)
     }
   end
 
   @spec from_json_safe(map()) :: {:ok, t()} | {:error, String.t()}
-  def from_json_safe(%{
-        "version" => 1,
-        "root_table" => [schema, name],
-        "root_table_id" => root_table_id,
-        "root_pks" => root_pks,
-        "root_column_count" => root_column_count,
-        "flags" => flags,
-        "where" => where,
-        "selected_columns" => selected_columns,
-        "storage" => storage,
-        "replica" => replica
-      }) do
-    with {:ok, where} <- if(where != nil, do: Expr.from_json_safe(where), else: {:ok, nil}) do
+  def from_json_safe(
+        %{
+          "version" => 1,
+          "root_table" => [schema, name],
+          "root_table_id" => root_table_id,
+          "root_pks" => root_pks,
+          "root_column_count" => root_column_count,
+          "flags" => flags,
+          "where" => where,
+          "selected_columns" => selected_columns,
+          "storage" => storage,
+          "replica" => replica
+        } = data
+      ) do
+    with {:ok, where} <- if(where != nil, do: Expr.from_json_safe(where), else: {:ok, nil}),
+         {:ok, shape_dependencies} <-
+           Utils.map_while_ok(Map.get(data, "shape_dependencies", []), &from_json_safe/1) do
       {:ok,
        %__MODULE__{
          root_table: {schema, name},
@@ -477,7 +568,8 @@ defmodule Electric.Shapes.Shape do
          where: where,
          selected_columns: selected_columns,
          storage: storage_config_from_json(storage),
-         replica: String.to_existing_atom(replica)
+         replica: String.to_existing_atom(replica),
+         shape_dependencies: shape_dependencies
        }}
     end
   end
@@ -505,8 +597,17 @@ defmodule Electric.Shapes.Shape do
       end)
 
     %{columns: column_info, pk: pk} = Map.fetch!(table_info, {schema, name})
-    refs = Inspector.columns_to_expr(column_info)
-    {:ok, where} = maybe_parse_where_clause(where, Map.get(data, "params", %{}), refs)
+
+    {:ok, where} =
+      case where do
+        nil ->
+          {:ok, nil}
+
+        where ->
+          refs = Inspector.columns_to_expr(column_info)
+          {:ok, where} = Parser.parse_query(where)
+          Parser.validate_where_ast(where, params: Map.get(data, "params", %{}), refs: refs)
+      end
 
     flags =
       Enum.reject(

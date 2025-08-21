@@ -130,10 +130,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     |> Map.new()
   end
 
-  def affected_shapes(%WhereCondition{} = condition, record) do
+  def affected_shapes(%WhereCondition{} = condition, record, refs_fun \\ fn _ -> %{} end) do
     MapSet.union(
       indexed_shapes_affected(condition, record),
-      other_shapes_affected(condition, record)
+      other_shapes_affected(condition, record, refs_fun)
     )
   rescue
     error ->
@@ -162,13 +162,13 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  defp other_shapes_affected(condition, record) do
+  defp other_shapes_affected(condition, record, refs_fun) do
     OpenTelemetry.with_child_span(
       "filter.filter_other_shapes",
       [shape_count: map_size(condition.other_shapes)],
       fn ->
-        for {shape_id, %{where: where}} <- condition.other_shapes,
-            WhereClause.includes_record?(where, record),
+        for {shape_id, %{where: where, shape: shape}} <- condition.other_shapes,
+            WhereClause.includes_record?(where, record, refs_fun.(shape)),
             into: MapSet.new() do
           shape_id
         end

@@ -93,6 +93,22 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Reduce an enumerable while accumulating an accumulator, unwrapping a result tuple returned by
+  the reducer and stopping on error.
+  """
+  @spec reduce_while_ok(Enumerable.t(elem), acc, (elem, acc -> {:ok, acc} | {:error, term()})) ::
+          {:ok, acc} | {:error, term()}
+        when elem: var, acc: var
+  def reduce_while_ok(enum, acc, fun) do
+    Enum.reduce_while(enum, {:ok, acc}, fn elem, {:ok, acc} ->
+      case fun.(elem, acc) do
+        {:ok, new_acc} -> {:cont, {:ok, new_acc}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  @doc """
   Apply a function to each element of an enumerable, recursively if the element is an enumerable itself.
 
   ## Examples

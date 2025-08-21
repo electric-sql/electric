@@ -183,6 +183,15 @@ defmodule Electric.Replication.Eval.RunnerTest do
                )
                |> Runner.execute(%{["x"] => [[[3, 4]]]})
     end
+
+    test "subquery" do
+      assert {:ok, true} =
+               ~S|test IN (SELECT val FROM tester)|
+               |> Parser.parse_and_validate_expression!(
+                 refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}}
+               )
+               |> Runner.execute(%{["test"] => 4, ["$sublink", "0"] => MapSet.new([2, 3, 4])})
+    end
   end
 
   describe "execute/2 against PG results" do

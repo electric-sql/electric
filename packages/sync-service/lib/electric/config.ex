@@ -36,6 +36,8 @@ defmodule Electric.Config do
 
   @build_env Mix.env()
 
+  @known_feature_flags ~w[allow_subqueries]
+
   @defaults [
     ## Database
     provided_database_id: "single_stack",
@@ -84,7 +86,8 @@ defmodule Electric.Config do
     ## Performance tweaks
     publication_alter_debounce_ms: 0,
     ## Misc
-    process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0
+    process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
+    feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: [])
   ]
 
   @installation_id_key "electric_installation_id"
@@ -444,4 +447,21 @@ defmodule Electric.Config do
     do: {:ok, Electric.Utils.deobfuscate_password(connection_opts)}
 
   def deobfuscate(other), do: other
+
+  def parse_feature_flags(str) do
+    str
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.split_with(&(&1 in @known_feature_flags))
+    |> case do
+      {known, []} ->
+        known
+
+      {_, unknown} ->
+        raise Dotenvy.Error,
+          message:
+            "Unknown feature flags specified: #{inspect(unknown)}. Known feature flags: #{inspect(@known_feature_flags)}"
+    end
+  end
 end

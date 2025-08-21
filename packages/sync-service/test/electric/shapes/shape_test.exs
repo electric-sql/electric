@@ -386,6 +386,50 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:error, {:where, "WHERE clause must return a boolean"}} =
                Shape.new("testing_table", inspector: inspector, where: "id")
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS child (id INT PRIMARY KEY, par_id INT REFERENCES parent(id))"
+         ]
+    test "correctly creates nested shapes", %{inspector: inspector} do
+      assert {:ok,
+              %Shape{
+                root_table: {"public", "child"},
+                where: %{query: "par_id IN (SELECT id FROM parent WHERE id > 5)"},
+                shape_dependencies: [
+                  %Shape{
+                    root_table: {"public", "parent"},
+                    root_pk: ["id"],
+                    selected_columns: ["id"],
+                    where: %{query: "id > 5"}
+                  }
+                ]
+              } = outer_shape} =
+               Shape.new("child",
+                 inspector: inspector,
+                 where: "par_id IN (SELECT id FROM parent where id > 5)"
+               )
+
+      assert [_] =
+               Shape.convert_change(
+                 outer_shape,
+                 %Changes.NewRecord{
+                   relation: {"public", "child"},
+                   record: %{"id" => "1", "par_id" => "1"}
+                 },
+                 %{["$sublink", "0"] => MapSet.new([1])}
+               )
+
+      assert [] =
+               Shape.convert_change(
+                 outer_shape,
+                 %Changes.NewRecord{
+                   relation: {"public", "child"},
+                   record: %{"id" => "1", "par_id" => "1"}
+                 },
+                 %{["$sublink", "0"] => MapSet.new([2])}
+               )
+    end
   end
 
   describe "new!/2" do

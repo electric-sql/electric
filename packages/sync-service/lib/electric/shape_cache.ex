@@ -30,6 +30,7 @@ defmodule Electric.ShapeCache do
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
+  alias Electric.Shapes.ConsumerSupervisor
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -299,20 +300,9 @@ defmodule Electric.ShapeCache do
   def handle_call(
         {:create_or_wait_shape_handle, shape, otel_ctx},
         _from,
-        %{shape_status: shape_status} = state
+        %{shape_status: _shape_status} = state
       ) do
-    {{shape_handle, latest_offset}, state} =
-      if shape_state = shape_status.get_existing_shape(state.shape_status_state, shape) do
-        {shape_state, state}
-      else
-        {:ok, shape_handle} = shape_status.add_shape(state.shape_status_state, shape)
-
-        {:ok, latest_offset} = start_shape(shape_handle, shape, state, otel_ctx)
-
-        send(self(), :maybe_expire_shapes)
-        {{shape_handle, latest_offset}, state}
-      end
-
+    {shape_handle, latest_offset} = maybe_create_shape(shape, otel_ctx, state)
     Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
     {:reply, {shape_handle, latest_offset}, state}
   end
@@ -425,7 +415,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp purge_shape(state, shape_handle, shape) do
-    case Electric.Shapes.ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
+    case ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously
         :ok = Electric.Shapes.Monitor.purge_shape(state.stack_id, shape_handle, shape)
@@ -488,7 +478,10 @@ defmodule Electric.ShapeCache do
     %{publication_manager: {publication_manager, publication_manager_opts}} = state
 
     case start_shape(shape_handle, shape, state) do
-      {:ok, latest_offset} ->
+      :ok ->
+        consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
+        # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
+        {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
         publication_manager.recover_shape(shape_handle, shape, publication_manager_opts)
         [LogOffset.extract_lsn(latest_offset)]
 
@@ -507,6 +500,42 @@ defmodule Electric.ShapeCache do
       # clean up corrupted data to avoid persisting bad state
       purge_shape(state, shape_handle, shape)
       []
+  end
+
+  defp maybe_create_shape(shape, otel_ctx, state) do
+    if shape_state = state.shape_status.get_existing_shape(state.shape_status_state, shape) do
+      shape_state
+    else
+      shape_handles =
+        shape.shape_dependencies
+        |> Enum.map(&{&1, maybe_create_shape(&1, otel_ctx, state)})
+        |> Enum.with_index(fn {inner_shape, {shape_handle, _}}, index ->
+          materialized_type =
+            shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
+
+          ConsumerSupervisor.start_materializer(%{
+            stack_id: state.stack_id,
+            shape_handle: shape_handle,
+            storage: state.storage,
+            columns: inner_shape.selected_columns,
+            materialized_type: materialized_type
+          })
+
+          shape_handle
+        end)
+
+      shape = %{shape | shape_dependencies_handles: shape_handles}
+
+      {:ok, shape_handle} = state.shape_status.add_shape(state.shape_status_state, shape)
+
+      :ok = start_shape(shape_handle, shape, state, otel_ctx)
+
+      send(self(), :maybe_expire_shapes)
+
+      # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
+      # "latest offset" because it'll be in the snapshotting stage
+      {shape_handle, LogOffset.last_before_real_offsets()}
+    end
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
@@ -528,9 +557,7 @@ defmodule Electric.ShapeCache do
            otel_ctx: otel_ctx
          ) do
       {:ok, _supervisor_pid} ->
-        consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
-        # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
-        {:ok, _latest_offset} = Shapes.Consumer.initial_state(consumer)
+        :ok
 
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")

@@ -108,6 +108,134 @@ defmodule Electric.Replication.Eval.Parser do
 
   @prefix_length String.length("SELECT 1 WHERE ")
 
+  def extract_subqueries(ast) do
+    Walker.reduce(
+      ast,
+      fn
+        %PgQuery.SubLink{subselect: %{node: {:select_stmt, stmt}}}, acc, _ ->
+          {:ok, [stmt | acc]}
+
+        _, acc, _ ->
+          {:ok, acc}
+      end,
+      []
+    )
+  end
+
+  def extract_parts_from_select(select) when is_binary(select) do
+    case PgQuery.parse(select) do
+      {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]}} ->
+        extract_parts_from_select(stmt)
+
+      {:ok, _} ->
+        {:error, "Expected exactly one SELECT statement"}
+
+      {:error, %{cursorpos: loc, message: reason}} ->
+        {:error, "At location #{loc}: #{reason}"}
+    end
+  end
+
+  def extract_parts_from_select(%PgQuery.SelectStmt{} = stmt) do
+    with {:ok, columns} <- extract_columns(stmt.target_list),
+         {:ok, from} <- extract_from(stmt.from_clause),
+         :ok <- validate_select_stmt(stmt) do
+      {:ok, {columns, from, stmt.where_clause}}
+    end
+  end
+
+  defp validate_select_stmt(%PgQuery.SelectStmt{} = stmt)
+       when stmt.distinct_clause != []
+       when stmt.group_clause != []
+       when stmt.having_clause != nil
+       when stmt.window_clause != []
+       when stmt.limit_offset != nil
+       when stmt.sort_clause != []
+       when stmt.locking_clause != []
+       when stmt.with_clause != nil do
+    {:error, "SELECT statement must not contain any clauses"}
+  end
+
+  defp validate_select_stmt(%PgQuery.SelectStmt{}), do: :ok
+
+  defp extract_columns(target_list) do
+    Enum.reduce_while(target_list, {:ok, []}, fn elem, {:ok, acc} ->
+      case elem do
+        %{
+          node:
+            {:res_target,
+             %PgQuery.ResTarget{
+               val: %{
+                 node:
+                   {:column_ref,
+                    %PgQuery.ColumnRef{
+                      fields: [
+                        %{node: {:string, %PgQuery.String{sval: column_name}}}
+                      ]
+                    }}
+               }
+             }}
+        } ->
+          {:cont, {:ok, [column_name | acc]}}
+
+        %{node: {:res_target, %PgQuery.ResTarget{location: loc}}} ->
+          {:halt, {:error, "At location #{loc}: Expected a plain column reference"}}
+      end
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp extract_from(from_clause) do
+    case from_clause do
+      [
+        %PgQuery.Node{
+          node:
+            {:range_var,
+             %PgQuery.RangeVar{
+               relname: table_name,
+               schemaname: schema_name
+             }}
+        }
+      ] ->
+        schema_name = if schema_name == "", do: "public", else: schema_name
+        {:ok, {schema_name, table_name}}
+
+      _ ->
+        {:error, "Expected a single table reference"}
+    end
+  end
+
+  @doc """
+  Parses a query into a Postgres AST
+  """
+  def parse_query(nil), do: {:ok, nil}
+  def parse_query(query) when is_binary(query), do: get_where_internal_ast(query)
+  def parse_query(ast) when is_map(ast), do: {:ok, ast}
+
+  def validate_where_ast(ast, opts) do
+    params = Keyword.get(opts, :params, %{})
+    refs = Keyword.get(opts, :refs, %{})
+    env = Keyword.get(opts, :env, Env.new())
+
+    case parse_where_stmt(ast, params, refs, env) do
+      {:ok, value, computed_params} ->
+        updated_query = rebuild_query_with_substituted_params(ast, {params, computed_params})
+
+        {:ok,
+         %Expr{
+           query: updated_query,
+           eval: value,
+           returns: value.type,
+           used_refs: find_refs(value)
+         }}
+
+      {:error, {loc, reason}} ->
+        {:error, "At location #{max(loc - @prefix_length, 0)}: #{reason}"}
+    end
+  end
+
   @doc """
   Parses and validates a WHERE clause in PostgreSQL SQL syntax.
 
@@ -129,26 +257,8 @@ defmodule Electric.Replication.Eval.Parser do
           {:ok, Expr.t()} | {:error, String.t()}
   def parse_and_validate_expression(query, opts \\ [])
       when is_binary(query) and is_list(opts) do
-    params = Keyword.get(opts, :params, %{})
-    refs = Keyword.get(opts, :refs, %{})
-    env = Keyword.get(opts, :env, Env.new())
-
-    with {:ok, stmt} <- get_where_internal_ast(query) do
-      case parse_where_stmt(stmt, params, refs, env) do
-        {:ok, value, computed_params} ->
-          updated_query = rebuild_query_with_substituted_params(stmt, {params, computed_params})
-
-          {:ok,
-           %Expr{
-             query: updated_query,
-             eval: value,
-             returns: value.type,
-             used_refs: find_refs(value)
-           }}
-
-        {:error, {loc, reason}} ->
-          {:error, "At location #{max(loc - @prefix_length, 0)}: #{reason}"}
-      end
+    with {:ok, ast} <- get_where_internal_ast(query) do
+      validate_where_ast(ast, opts)
     end
   end
 
@@ -201,21 +311,27 @@ defmodule Electric.Replication.Eval.Parser do
     Walker.accumulating_fold(
       stmt,
       &node_to_ast/4,
-      fn
-        _, postimage, _, acc, _ when is_struct(postimage) ->
-          # In this accumulator function we want to save the computed params
-          # so that they can be used further in the fold.
-          acc
-          |> count_used_param(postimage)
-          |> save_used_param(postimage)
-
-        _, _, _, acc, _ ->
-          {:ok, acc}
+      fn preimage, postimage, _, acc, _ ->
+        with {:ok, acc} <- maybe_save_used_param(acc, postimage) do
+          if is_struct(preimage, PgQuery.SubLink) do
+            {:ok, %{acc | encountered_sublinks: acc.encountered_sublinks + 1}}
+          else
+            {:ok, acc}
+          end
+        end
       end,
-      %{used_params: MapSet.new(), resolved_params: %{}},
+      %{used_params: MapSet.new(), resolved_params: %{}, encountered_sublinks: 0},
       context
     )
   end
+
+  defp maybe_save_used_param(acc, postimage) when is_struct(postimage) do
+    acc
+    |> count_used_param(postimage)
+    |> save_used_param(postimage)
+  end
+
+  defp maybe_save_used_param(acc, _), do: {:ok, acc}
 
   defp count_used_param(acc, %UnknownConst{meta: %{param_ref: ref}}),
     do:
@@ -608,9 +724,46 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  # Explicitly fail on "sublinks" - subqueries are not allowed in any context here
-  defp node_to_ast(%PgQuery.SubLink{location: loc}, _, _, _),
-    do: {:error, {loc, "subqueries are not supported"}}
+  # This match only `... IN (SELECT ...)` sublinks
+  defp node_to_ast(
+         %PgQuery.SubLink{location: location, oper_name: [], sub_link_type: :ANY_SUBLINK},
+         %{testexpr: testexpr},
+         %{encountered_sublinks: nth_sublink},
+         %{refs: refs}
+       ) do
+    cond do
+      not is_struct(testexpr, Ref) ->
+        {:error,
+         {location, "currently, left side of `IN (SELECT ...)` can only be a column reference"}}
+
+      {:array, testexpr.type} != Map.fetch!(refs, ["$sublink", "#{nth_sublink}"]) ->
+        {:error,
+         {location,
+          "left side of `IN (SELECT ...)` has type #{readable(testexpr.type)} but subquery returns #{readable(Map.fetch!(refs, ["$sublink", nth_sublink]))}"}}
+
+      true ->
+        {:ok,
+         %Func{
+           strict?: false,
+           location: location,
+           args: [
+             testexpr,
+             %Ref{
+               path: ["$sublink", "#{nth_sublink}"],
+               type: Map.fetch!(refs, ["$sublink", "#{nth_sublink}"]),
+               location: location
+             }
+           ],
+           type: :bool,
+           name: "sublink_membership_check",
+           implementation: &PgInterop.Sublink.member?/2
+         }}
+    end
+  end
+
+  defp node_to_ast(%PgQuery.SubLink{location: location}, _, _, _) do
+    {:error, {location, "only `value IN (SELECT ...)` sublinks are supported right now"}}
+  end
 
   defp node_to_ast(%PgQuery.ParamRef{} = ref, _, %{resolved_params: resolved}, %{
          params: params
@@ -649,11 +802,11 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   # If nothing matched, fail
-  defp node_to_ast(%type_module{} = node, _, _, _),
-    do:
-      {:error,
-       {Map.get(node, :location, 0),
-        "#{type_module |> Module.split() |> List.last()} is not supported in this context"}}
+  defp node_to_ast(%type_module{} = node, _children, _, _) do
+    {:error,
+     {Map.get(node, :location, 0),
+      "#{type_module |> Module.split() |> List.last()} is not supported in this context"}}
+  end
 
   defp get_type_from_pg_name(["pg_catalog", type_name], _) when type_name in @valid_types,
     do: {:ok, String.to_existing_atom(type_name)}
