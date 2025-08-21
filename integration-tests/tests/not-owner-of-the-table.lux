@@ -35,7 +35,7 @@
 
   # Electric fails to add the table to the publication
   [invoke shape_get_snapshot items]
-  ??HTTP/1.1 403
+  ??HTTP/1.1 503
   ??{"message":"Unable to create initial snapshot: must be owner of table items"}
 
 [shell electric]
@@ -58,7 +58,7 @@
   # Electric still fails because it's trying to alter items' replica identity
   # (it doesn't check whether it's already there)
   [invoke shape_get_snapshot items]
-  ??HTTP/1.1 403
+  ??HTTP/1.1 503
   ??{"message":"Unable to create initial snapshot: must be owner of table items"}
 
 [shell electric]

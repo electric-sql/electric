@@ -34,7 +34,7 @@ defmodule Electric.Plug.LowPrivilegeRouterTest do
         conn("GET", "/v1/shape?table=items&offset=-1")
         |> Router.call(opts)
 
-      assert %Plug.Conn{status: 403, resp_body: json_str} = conn
+      assert %Plug.Conn{status: 503, resp_body: json_str} = conn
 
       assert %{"message" => "Unable to create initial snapshot: must be owner of table items"} ==
                Jason.decode!(json_str)

@@ -548,7 +548,7 @@ defmodule Electric.Shapes.Api do
       {:error, %SnapshotError{type: :missing_privilege} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
         message = "Unable to create initial snapshot: " <> error.message
-        Response.error(request, message, status: 403)
+        Response.error(request, message, status: 503, known_error: true)
 
       {:error, %SnapshotError{} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
