@@ -135,7 +135,7 @@ defmodule Electric.Shapes.Api.Params do
     offset = fetch_change!(changeset, :offset)
 
     if offset == LogOffset.before_all() do
-      changeset
+      delete_change(changeset, :handle)
     else
       validate_required(changeset, [:handle], message: "can't be blank when offset != -1")
     end

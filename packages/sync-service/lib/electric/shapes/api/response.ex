@@ -249,10 +249,14 @@ defmodule Electric.Shapes.Api.Response do
   # is either invalidated or does not match the requested definition, and thus
   # can benefit from persisting this cache for a brief period of time to avoid
   # surges of traffic hitting the server whenever a shape is invalidated
-  defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
+  defp put_cache_headers(conn, %__MODULE__{status: status, api: api, handle: handle})
        when status in [409] do
+    # if handle is not present, cache for a minimum time just to allow request coalescing,
+    # as 409s without handles are suboptimal redirects
+    age = if is_nil(handle), do: 1, else: 60
+
     conn
-    |> put_cache_header("cache-control", "public, max-age=60, must-revalidate", api)
+    |> put_cache_header("cache-control", "public, max-age=#{age}, must-revalidate", api)
   end
 
   # All other 4xx and 5xx responses should never be cached
