@@ -12,9 +12,13 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   import Support.DbStructureSetup
   import Support.TestUtils
 
+  alias Electric.Replication.Eval.Expr
   alias Electric.Replication.PublicationManager
 
-  @shape_handle "pub_mgr_db_test_shape_handle"
+  @shape_handle_1 "pub_mgr_db_test_shape_handle_1"
+  @shape_handle_2 "pub_mgr_db_test_shape_handle_2"
+  @where_clause_1 %Expr{query: "id = '1'", used_refs: %{["id"] => :text}}
+  @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
 
   def clean_all_shapes_for_relations(relations, [parent_pid]) do
     send(parent_pid, {:clean_all_shapes_for_relations, relations})
@@ -48,15 +52,32 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   describe "add_shape()" do
     test "adds the table to the publication when a shape is created for it", ctx do
       shape = generate_shape(ctx.relation_with_oid)
-      assert :ok == PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
       assert [ctx.relation] == fetch_pub_tables(ctx)
+    end
+
+    test "keeps the table in the publication when shapes with different where clauses are added and removed",
+         ctx do
+      shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+      assert [ctx.relation] == fetch_pub_tables(ctx)
+
+      shape_2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
+      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
+      assert [ctx.relation] == fetch_pub_tables(ctx)
+
+      assert :ok == PublicationManager.remove_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
+      assert [ctx.relation] == fetch_pub_tables(ctx)
+
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+      assert [] == fetch_pub_tables(ctx)
     end
   end
 
   describe "refresh_publication()" do
     setup ctx do
       shape = generate_shape(ctx.relation_with_oid)
-      :ok = PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
+      :ok = PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
     end
 
     test "updates the publication if a published table is dropped", ctx do
