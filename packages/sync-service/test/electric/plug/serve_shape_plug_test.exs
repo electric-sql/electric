@@ -453,6 +453,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "the 304 response includes caching headers that are appropriate for the offset", ctx do
       Mock.ShapeCache
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      |> stub(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
       |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
 
       Mock.Storage

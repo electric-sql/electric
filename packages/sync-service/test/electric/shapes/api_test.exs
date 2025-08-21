@@ -211,7 +211,7 @@ defmodule Electric.Shapes.ApiTest do
                  %{
                    table: "public.users",
                    handle: "#{request_handle}",
-                   offset: "-1"
+                   offset: "0_0"
                  }
                )
 
@@ -231,7 +231,7 @@ defmodule Electric.Shapes.ApiTest do
                  %{
                    table: "public.users",
                    handle: request_handle,
-                   offset: "-1"
+                   offset: "0_0"
                  }
                )
 
@@ -251,7 +251,7 @@ defmodule Electric.Shapes.ApiTest do
                  %{
                    table: "public.users",
                    handle: request_handle,
-                   offset: "-1"
+                   offset: "0_0"
                  }
                )
 
