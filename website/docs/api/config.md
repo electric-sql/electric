@@ -176,18 +176,6 @@ Name of the electric service. Used as a resource identifier and namespace.
 
 </EnvVarConfig>
 
-### ELECTRIC_ENABLE_INTEGRATION_TESTING
-
-<EnvVarConfig
-    name="ELECTRIC_ENABLE_INTEGRATION_TESTING"
-    defaultValue="false"
-    example="true">
-
-Expose some unsafe operations that faciliate integration testing.
-Do not enable this in production.
-
-</EnvVarConfig>
-
 ### ELECTRIC_LISTEN_ON_IPV6
 
 <EnvVarConfig
