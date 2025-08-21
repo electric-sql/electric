@@ -7,7 +7,7 @@
 ###
 
 ## Start a new Postgres cluster with limited max connections
-[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=10"]
+[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=10" ""]
 
 ## Start the sync service.
 [invoke setup_electric]
