@@ -37,10 +37,11 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
 
-    assert Electric.Postgres.Configuration.get_publication_tables(
-             ctx.db_conn,
-             ctx.publication_name
-           ) == [{"public", "partitioned_items"}]
+    assert [{_, {"public", "partitioned_items"}, _}] =
+             Electric.Postgres.Configuration.get_publication_tables(
+               ctx.db_conn,
+               ctx.publication_name
+             )
 
     ref = subscribe(shape_handle, ctx)
 
@@ -86,10 +87,11 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
 
-    assert Electric.Postgres.Configuration.get_publication_tables(
-             ctx.db_conn,
-             ctx.publication_name
-           ) == [{"public", "partitioned_items_100"}]
+    assert [{_, {"public", "partitioned_items_100"}, _}] =
+             Electric.Postgres.Configuration.get_publication_tables(
+               ctx.db_conn,
+               ctx.publication_name
+             )
 
     ref = subscribe(shape_handle, ctx)
 
@@ -206,10 +208,11 @@ defmodule Electric.Shapes.PartitionedTablesTest do
              MapSet.new([partition_shape_handle])
            )
 
-    assert Electric.Postgres.Configuration.get_publication_tables(
-             ctx.db_conn,
-             ctx.publication_name
-           ) == [{"public", "partitioned_items_100"}]
+    assert [{_, {"public", "partitioned_items_100"}, _}] =
+             Electric.Postgres.Configuration.get_publication_tables(
+               ctx.db_conn,
+               ctx.publication_name
+             )
   end
 
   test "truncation of partition root truncates all partitions", ctx do
@@ -225,10 +228,11 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
     :started = ShapeCache.await_snapshot_start(partition_shape_handle, stack_id: ctx.stack_id)
 
-    assert Electric.Postgres.Configuration.get_publication_tables(
-             ctx.db_conn,
-             ctx.publication_name
-           ) == [{"public", "partitioned_items"}, {"public", "partitioned_items_100"}]
+    assert [{_, {"public", "partitioned_items"}, _}, {_, {"public", "partitioned_items_100"}, _}] =
+             Electric.Postgres.Configuration.get_publication_tables(
+               ctx.db_conn,
+               ctx.publication_name
+             )
 
     ref = subscribe(shape_handle, ctx)
     partition_ref = subscribe(partition_shape_handle, ctx)

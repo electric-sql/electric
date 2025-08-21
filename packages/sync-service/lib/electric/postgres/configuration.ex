@@ -40,7 +40,7 @@ defmodule Electric.Postgres.Configuration do
       ) do
     known_relations = known_relations(previous_relations, new_relations)
     changed_relations = list_changed_relations(conn, known_relations)
-    published_relations = lookup_published_relations(conn, publication_name)
+    published_relations = get_publication_tables(conn, publication_name)
 
     with :ok <-
            check_relations_in_publication(
@@ -217,32 +217,12 @@ defmodule Electric.Postgres.Configuration do
     Enum.map(rows, &List.to_tuple/1)
   end
 
-  defp lookup_published_relations(conn, publication_name) do
-    # Look up all relations included in the given publication, along with their oid and replica identity.
-
-    %Postgrex.Result{rows: rows} =
-      Postgrex.query!(
-        conn,
-        """
-        SELECT
-          pc.oid, (pt.schemaname, pt.tablename), pc.relreplident
-        FROM pg_publication_tables pt
-        JOIN pg_namespace pn ON pn.nspname = pt.schemaname
-        JOIN pg_class pc ON pc.relname = pt.tablename AND pc.relnamespace = pn.oid
-        WHERE pt.pubname = $1
-        """,
-        [publication_name]
-      )
-
-    Enum.map(rows, &List.to_tuple/1)
-  end
-
   defp alter_pub_set_whole_tables!(conn, publication_name, relation_filters) do
     publication = Utils.quote_name(publication_name)
 
     prev_published_tables =
       get_publication_tables(conn, publication_name)
-      |> Enum.map(&Utils.relation_to_sql/1)
+      |> Enum.map(fn {_oid, relation, _replident} -> Utils.relation_to_sql(relation) end)
       |> MapSet.new()
 
     new_published_tables =
@@ -328,7 +308,8 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  @spec get_publication_tables(Postgrex.conn(), String.t()) :: list(Electric.relation())
+  @spec get_publication_tables(Postgrex.conn(), String.t()) ::
+          list({Electric.relation_id(), Electric.relation(), String.t()})
   def get_publication_tables(conn, publication) do
     # `pg_publication_tables` is too clever for us -- if you add a partitioned
     # table to the publication `pg_publication_tables` lists all the partitions
@@ -336,24 +317,29 @@ defmodule Electric.Postgres.Configuration do
     # doesn't do this, it returns a direct list of the tables that were added
     # using `ALTER PUBLICATION` and doesn't expand a partitioned table into its
     # partitions.
-    Postgrex.query!(
-      conn,
-      """
-      SELECT pn.nspname, pc.relname
-        FROM pg_publication_rel ppr
-        JOIN pg_publication pp
-          ON ppr.prpubid = pp.oid
-        JOIN pg_class pc
-          ON pc.oid = ppr.prrelid
-        JOIN pg_namespace pn
-          ON pc.relnamespace = pn.oid
-        WHERE pp.pubname = $1
-        ORDER BY pn.nspname, pc.relname;
-      """,
-      [publication]
-    )
-    |> Map.fetch!(:rows)
-    |> Enum.map(&(Enum.take(&1, 2) |> List.to_tuple()))
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        SELECT
+          pc.oid, (pn.nspname, pc.relname), pc.relreplident
+        FROM
+          pg_publication_rel ppr
+        JOIN
+          pg_publication pp ON ppr.prpubid = pp.oid
+        JOIN
+          pg_class pc ON pc.oid = ppr.prrelid
+        JOIN
+          pg_namespace pn ON pc.relnamespace = pn.oid
+        WHERE
+          pp.pubname = $1
+        ORDER BY
+          pn.nspname, pc.relname
+        """,
+        [publication]
+      )
+
+    Enum.map(rows, &List.to_tuple/1)
   end
 
   # Makes an SQL query that alters the given publication whith the given tables and filters.
