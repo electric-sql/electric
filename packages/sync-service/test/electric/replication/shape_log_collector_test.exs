@@ -197,7 +197,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       1..@num_comparisons
       |> Enum.reduce({1, 0, 1, 0}, fn _, {xid, prev_xid, lsn_int, prev_lsn_int} ->
         # advance xid and lsn randomly along their potential values to simulate
-        # trnasactions coming in at different points in the DBs lifetime
+        # transactions coming in at different points in the DBs lifetime
         xid = xid + (:rand.uniform(2 ** 32 - xid) - 1)
         prev_xid = xid - (:rand.uniform(xid - prev_xid) + 1)
         lsn_int = lsn_int + (:rand.uniform(2 ** 64 - lsn_int) - 1)
@@ -230,6 +230,30 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         Support.TransactionConsumer.refute_consume(ctx.consumers, @transaction_timeout * 2)
         {xid, prev_xid, lsn_int, prev_lsn_int}
       end)
+    end
+
+    # This is a regression test. It used to fail before #2853 was fixed.
+    test "succeeds in building a key for a change containing null", ctx do
+      Mock.Inspector
+      |> stub(:load_column_info, fn 1234, _ ->
+        {:ok,
+         [
+           %{name: "id", pk_position: nil},
+           %{name: "name", pk_position: nil}
+         ]}
+      end)
+      |> allow(self(), ctx.server)
+
+      change = %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: %{"id" => nil, "name" => "foo"}
+      }
+
+      txn =
+        %Transaction{xid: 1, lsn: 1, last_log_offset: LogOffset.new(1, 0)}
+        |> Transaction.prepend_change(change)
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
     end
   end
 
