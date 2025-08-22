@@ -25,8 +25,8 @@ function ProjectPage() {
   const [newTodoText, setNewTodoText] = useState("")
 
   const { data: todos } = useLiveQuery(
-    (q) =>
-      q
+    (query) =>
+      query
         .from({ todoCollection })
         .where(({ todoCollection }) =>
           eq(todoCollection.project_id, parseInt(projectId, 10))
@@ -35,12 +35,13 @@ function ProjectPage() {
     [projectId]
   )
 
-  const { data: users } = useLiveQuery((q) =>
-    q.from({ users: usersCollection })
+  const { data: users } = useLiveQuery((query) =>
+    query.from({ users: usersCollection })
   )
+
   const { data: usersInProjects } = useLiveQuery(
-    (q) =>
-      q
+    (query) =>
+      query
         .from({ projects: projectCollection })
         .where(({ projects }) => eq(projects.id, parseInt(projectId, 10)))
         .fn.select(({ projects }) => ({
@@ -52,8 +53,8 @@ function ProjectPage() {
   const usersInProject = usersInProjects?.[0]
 
   const { data: projects } = useLiveQuery(
-    (q) =>
-      q
+    (query) =>
+      query
         .from({ projectCollection })
         .where(({ projectCollection }) =>
           eq(projectCollection.id, parseInt(projectId, 10))

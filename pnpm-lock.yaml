@@ -1096,11 +1096,11 @@ importers:
         specifier: ^4.0.6
         version: 4.1.11(vite@6.3.5(@types/node@20.17.6)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.36.0)(tsx@4.20.3)(yaml@2.6.0))
       '@tanstack/electric-db-collection':
-        specifier: ^0.0.15
-        version: 0.0.15(@electric-sql/client@1.0.7)(typescript@5.7.2)
+        specifier: ^0.1.6
+        version: 0.1.6(@electric-sql/client@1.0.7)(typescript@5.7.2)
       '@tanstack/react-db':
-        specifier: ^0.0.33
-        version: 0.0.33(react@19.1.1)(typescript@5.7.2)
+        specifier: ^0.1.6
+        version: 0.1.6(react@19.1.1)(typescript@5.7.2)
       '@tanstack/react-router':
         specifier: ^1.130.2
         version: 1.130.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
@@ -6120,6 +6120,11 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7
 
+  '@tanstack/db-ivm@0.1.2':
+    resolution: {integrity: sha512-byXz+tsaVT2Wi/9F6dbZIiTG/L/Kq6tAN+lpQsp5g6URk2Tw/tZ9zB3503UkZpTyHLdKDk23+qiPKiHZCb5efw==}
+    peerDependencies:
+      typescript: '>=4.7'
+
   '@tanstack/db@0.0.27':
     resolution: {integrity: sha512-zFrfYxBF+8zbxlp0nXtcJnLaj0ZN5sxij3F0r+mVFVC1GNHcgJFZp81RuMJbx9nuC4c2h3P9r2Mb81e6wnJyeA==}
     peerDependencies:
@@ -6127,6 +6132,11 @@ packages:
 
   '@tanstack/db@0.0.33':
     resolution: {integrity: sha512-G5h2dlrC3CFtZIBqnfb4Zgyvcl1XqHrKwT8itbrLGUirEcZ6n/ck5iClDROyondc7Z3qk+qHURMTprLlWR698A==}
+    peerDependencies:
+      typescript: '>=4.7'
+
+  '@tanstack/db@0.1.6':
+    resolution: {integrity: sha512-qGjXkb/zjNmazE+6GMQ6lR6k5aaR945iS2kg+fBGFTprPFtbdyGulYfXye6rcj+iBTGKb4jII6cfx6GpuNmI7w==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -6138,6 +6148,12 @@ packages:
 
   '@tanstack/electric-db-collection@0.0.15':
     resolution: {integrity: sha512-39XdtkgQAmqj4GupyFxOtK6M2nloTGRBh84W/F7d+hyWMJnsP4ptuTqF6LCjzkXkyxGxwLRFb31Glwoz/bJjrA==}
+    peerDependencies:
+      '@electric-sql/client': '>=1.0.0'
+      typescript: '>=4.7'
+
+  '@tanstack/electric-db-collection@0.1.6':
+    resolution: {integrity: sha512-sSVxS7euZx6CsgK3lXd8vRkdtUzVF4/DXS/Tg60j8I/wfswe03O0AcffrV/7KPylQoRSIhUYvPd2Q8X1i0x0Zg==}
     peerDependencies:
       '@electric-sql/client': '>=1.0.0'
       typescript: '>=4.7'
@@ -6160,8 +6176,8 @@ packages:
     peerDependencies:
       react: '>=16.8.0'
 
-  '@tanstack/react-db@0.0.33':
-    resolution: {integrity: sha512-U7HyPHOg9HJBy+6qlhwEvhum+z8WOrOlfcT9nI1OgEYX+MWYw6sZnfMGTNK0rpPJ3d+pt1PV1GQ+dOlU7lzGQA==}
+  '@tanstack/react-db@0.1.6':
+    resolution: {integrity: sha512-4nj6cRyAFd9bW2oDo0mh7Ol04JwIOFsSL1xfADMMKZohknC2YQpb1mA7CBZPKl04mxTZ7KnfpySw8Qox4ZIAhw==}
     peerDependencies:
       react: '>=16.8.0'
 
@@ -20106,23 +20122,30 @@ snapshots:
       tailwindcss: 4.1.11
       vite: 6.3.5(@types/node@20.17.6)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.36.0)(tsx@4.20.3)(yaml@2.6.0)
 
+  '@tanstack/db-ivm@0.1.2(typescript@5.7.2)':
+    dependencies:
+      fractional-indexing: 3.2.0
+      murmurhash-js: 1.0.0
+      sorted-btree: 1.8.1
+      typescript: 5.7.2
+
   '@tanstack/db@0.0.27(typescript@5.8.3)':
     dependencies:
       '@electric-sql/d2mini': 0.1.8
       '@standard-schema/spec': 1.0.0
       typescript: 5.8.3
 
-  '@tanstack/db@0.0.33(typescript@5.7.2)':
-    dependencies:
-      '@electric-sql/d2mini': 0.1.8
-      '@standard-schema/spec': 1.0.0
-      typescript: 5.7.2
-
   '@tanstack/db@0.0.33(typescript@5.8.3)':
     dependencies:
       '@electric-sql/d2mini': 0.1.8
       '@standard-schema/spec': 1.0.0
       typescript: 5.8.3
+
+  '@tanstack/db@0.1.6(typescript@5.7.2)':
+    dependencies:
+      '@standard-schema/spec': 1.0.0
+      '@tanstack/db-ivm': 0.1.2(typescript@5.7.2)
+      typescript: 5.7.2
 
   '@tanstack/directive-functions-plugin@1.129.7(vite@6.3.5(@types/node@20.17.6)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.36.0)(tsx@4.20.3)(yaml@2.6.0))':
     dependencies:
@@ -20137,17 +20160,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/electric-db-collection@0.0.15(@electric-sql/client@1.0.7)(typescript@5.7.2)':
-    dependencies:
-      '@electric-sql/client': 1.0.7
-      '@standard-schema/spec': 1.0.0
-      '@tanstack/db': 0.0.33(typescript@5.7.2)
-      '@tanstack/store': 0.7.2
-      debug: 4.4.1
-      typescript: 5.7.2
-    transitivePeerDependencies:
-      - supports-color
-
   '@tanstack/electric-db-collection@0.0.15(@electric-sql/client@1.0.7)(typescript@5.8.3)':
     dependencies:
       '@electric-sql/client': 1.0.7
@@ -20156,6 +20168,17 @@ snapshots:
       '@tanstack/store': 0.7.2
       debug: 4.4.1
       typescript: 5.8.3
+    transitivePeerDependencies:
+      - supports-color
+
+  '@tanstack/electric-db-collection@0.1.6(@electric-sql/client@1.0.7)(typescript@5.7.2)':
+    dependencies:
+      '@electric-sql/client': 1.0.7
+      '@standard-schema/spec': 1.0.0
+      '@tanstack/db': 0.1.6(typescript@5.7.2)
+      '@tanstack/store': 0.7.2
+      debug: 4.4.1
+      typescript: 5.7.2
     transitivePeerDependencies:
       - supports-color
 
@@ -20180,9 +20203,9 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@tanstack/react-db@0.0.33(react@19.1.1)(typescript@5.7.2)':
+  '@tanstack/react-db@0.1.6(react@19.1.1)(typescript@5.7.2)':
     dependencies:
-      '@tanstack/db': 0.0.33(typescript@5.7.2)
+      '@tanstack/db': 0.1.6(typescript@5.7.2)
       react: 19.1.1
       use-sync-external-store: 1.5.0(react@19.1.1)
     transitivePeerDependencies:

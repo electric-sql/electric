@@ -31,7 +31,9 @@ export const Route = createFileRoute(`/_authenticated/`)({
 
 function IndexRedirect() {
   const navigate = useNavigate()
-  const { data: projects } = useLiveQuery((q) => q.from({ projectCollection }))
+  const { data: projects } = useLiveQuery((query) =>
+    query.from({ projectCollection })
+  )
 
   useEffect(() => {
     if (projects.length > 0) {

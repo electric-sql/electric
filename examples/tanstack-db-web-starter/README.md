@@ -21,7 +21,7 @@ _You can edit the values in the `.env` file, although the default values are fin
 
 ## Pre-requisites
 
-This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io) and [Caddy](https://caddyserver.com/). You can see compatible versions in the  `.tool-versions` file.
+This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io) and [Caddy](https://caddyserver.com/). You can see compatible versions in the `.tool-versions` file.
 
 ### Docker
 
@@ -65,7 +65,6 @@ pnpm run migrate
 ```
 
 Visit [https://tanstack-start-db-electric-starter.localhost](https://tanstack-start-db-electric-starter.localhost) to see the application.
-
 
 ## Building For Production
 
@@ -256,20 +255,23 @@ const AddTodo = () => {
 Use live queries to read data reactively across collections:
 
 ```tsx
-import { useLiveQuery } from "@tanstack/react-db"
+import { useLiveQuery, eq } from "@tanstack/react-db"
 
 const Todos = () => {
   // Read data using live queries with cross-collection joins
   const { data: todos } = useLiveQuery((query) =>
     query
-      .from({ t: todoCollection })
-      .join({
-        type: "inner",
-        from: { l: listCollection },
-        on: [`@l.id`, `=`, `@t.list_id`],
-      })
-      .where("@l.active", "=", true)
-      .select("@t.id", "@t.text", "@t.status", "@l.name")
+      .from({ todo: todoCollection })
+      .join({ list: listCollection }, ({ list, todo }) =>
+        eq(list.id, todo.list_id)
+      )
+      .where(({ list }) => eq(list.active, true))
+      .select(({ list, todo }) => ({
+        id: todo.id,
+        status: todo.status,
+        text: todo.text,
+        list_name: list.name,
+      }))
   )
 
   return (
