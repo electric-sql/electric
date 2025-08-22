@@ -38,6 +38,7 @@ function ProjectPage() {
   const { data: users } = useLiveQuery((q) =>
     q.from({ users: usersCollection })
   )
+
   const { data: usersInProjects } = useLiveQuery(
     (q) =>
       q

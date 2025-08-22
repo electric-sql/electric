@@ -17,8 +17,8 @@
   "dependencies": {
     "@electric-sql/client": "^1.0.7",
     "@tailwindcss/vite": "^4.0.6",
-    "@tanstack/electric-db-collection": "^0.0.15",
-    "@tanstack/react-db": "^0.0.33",
+    "@tanstack/electric-db-collection": "^0.1.6",
+    "@tanstack/react-db": "^0.1.6",
     "@tanstack/react-router": "^1.130.2",
     "@tanstack/react-router-devtools": "^1.130.2",
     "@tanstack/react-router-with-query": "^1.130.2",

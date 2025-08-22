@@ -1,4 +1,4 @@
-Welcome to your new TanStack [Start](https://tanstack.com/start/latest)/[DB](https://tanstack.com/db/latest) + [Electric](https://electric-sql.com/) app!
+Welcome to your new TanStack [Start](https://tanstack.com/start/latest) / [DB](https://tanstack.com/db/latest) + [Electric](https://electric-sql.com/) app!
 
 # Getting Started
 
@@ -6,48 +6,67 @@ Welcome to your new TanStack [Start](https://tanstack.com/start/latest)/[DB](htt
 
 To create a new project based on this starter, run the following commands:
 
-```
+```sh
 npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-tanstack-db-project
 cd my-tanstack-db-project
 ```
 
-Copy the .env.example file to .env and fill in the values.
+Copy the `.env.example` file to `.env`:
 
-_The database url will be set by default to development postgres docker container, and during development the better-auth secret is not required._
-
-```
+```sh
 cp .env.example .env
 ```
 
-## Prerequisites
+_You can edit the values in the `.env` file, although the default values are fine for local development (with the `DATABASE_URL` defaulting to the development Postgres docker container and the `BETTER_AUTH_SECRET` not required)._
 
-This project uses [Caddy](https://caddyserver.com/) for local HTTPS development:
+## Pre-requisites
 
-1. **Install Caddy** for your OS — https://caddyserver.com/docs/install
-2. **Run `caddy trust`** so Caddy can install its certificate into your OS. This is necessary for http/2 to Just Work™ without SSL warnings/errors in the browser — https://caddyserver.com/docs/command-line#caddy-trust
+This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io) and [Caddy](https://caddyserver.com/). You can see compatible versions in the `.tool-versions` file.
 
-Docker is also required to run Postgres and the ElectricSQL sync engine.
+### Docker
 
-## Running the Application
+Make sure you have Docker running. Docker is used to run the Postgres and Electric services defined in `docker-compose.yaml`.
 
-Install dependencies and run the application.
+### Caddy
 
+Caddy is used for http/2 support, which requires HTTPS. See the [docs here for context](https://electric-sql.com/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development).
+
+One you've [installed Caddy](https://caddyserver.com/docs/install), install its root certificate using:
+
+```sh
+caddy trust
 ```
+
+This is necessary for http/2 to Just Work™ [without SSL warnings/errors in the browser](https://caddyserver.com/docs/command-line#caddy-trust).
+
+## Running the application
+
+Install the dependencies:
+
+```sh
 pnpm install
+```
+
+Run the application:
+
+```sh
 pnpm run dev
 ```
 
-The `dev` command will start both the dev server and a docker compose with Postgres and the ElectricSQL sync engine.
+The `dev` command starts both the dev server and a docker compose with Postgres and the [ElectricSQL sync engine](https://electric-sql.com).
+
+> [!Tip]
+> If you see errors like `Caddy exited with code 1` when you run the development server, then Caddy is not configured correctly. Try running `caddy start` manually to see what the error is.
 
 In another terminal, run the migrations.
 
-```
+```sh
 pnpm run migrate
 ```
 
-Visit `https://tanstack-start-db-electric-starter.localhost/` to see the application.
+Visit [https://tanstack-start-db-electric-starter.localhost](https://tanstack-start-db-electric-starter.localhost) to see the application.
 
-# Building For Production
+## Building For Production
 
 To build this application for production:
 
@@ -193,7 +212,7 @@ export const todoCollection = createCollection(
     schema: todoSchema,
     // Electric syncs data using "shapes" - filtered views on database tables
     shapeOptions: {
-      url: "https://api.electric-sql.cloud/v1/shape",
+      url: "http://localhost:3000/v1/shape",
       params: {
         table: "todos",
       },
@@ -236,20 +255,23 @@ const AddTodo = () => {
 Use live queries to read data reactively across collections:
 
 ```tsx
-import { useLiveQuery } from "@tanstack/react-db"
+import { useLiveQuery, eq } from "@tanstack/react-db"
 
 const Todos = () => {
   // Read data using live queries with cross-collection joins
-  const { data: todos } = useLiveQuery((query) =>
-    query
-      .from({ t: todoCollection })
-      .join({
-        type: "inner",
-        from: { l: listCollection },
-        on: [`@l.id`, `=`, `@t.list_id`],
-      })
-      .where("@l.active", "=", true)
-      .select("@t.id", "@t.text", "@t.status", "@l.name")
+  const { data: todos } = useLiveQuery((q) =>
+    q
+      .from({ todo: todoCollection })
+      .join({ list: listCollection }, ({ list, todo }) =>
+        eq(list.id, todo.list_id)
+      )
+      .where(({ list }) => eq(list.active, true))
+      .select(({ list, todo }) => ({
+        id: todo.id,
+        status: todo.status,
+        text: todo.text,
+        list_name: list.name,
+      }))
   )
 
   return (
@@ -312,8 +334,9 @@ onUpdate: async ({ transaction }) => {
 - `/api/auth/*` - Authentication via better-auth
 - `/api/projects`, `/api/todos`, `/api/users` - Electric sync shapes for reads
 
-You can learn more about TanStack DB in the [TanStack DB documentation](https://tanstack.com/db/latest/docs/overview).
-
 # Learn More
 
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
+- [TanStack documentation](https://tanstack.com)
+- [TanStack DB documentation](https://tanstack.com/db/latest/docs/overview)
+- [Stop Re-Rendering — TanStack DB, the Embedded Client Database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
+- [Local-first sync with TanStack DB and Electric](https://electric-sql.com/blog/2025/07/29/local-first-sync-with-tanstack-db)
