@@ -91,16 +91,18 @@ defmodule Electric.Shapes.Querying do
 
     # Because relation part of the key is known at query building time, we can use $1 to inject escaped version of the relation
     ~s['"key":' || ] <>
-      pg_escape_string_for_json(~s['#{escape_relation(root_table)}' || '/"' || #{pk_part} || '"'])
+      pg_escape_string_for_json(~s['#{escape_relation(root_table)}' || '/' || #{pk_part}])
   end
 
+  # This is a bespoke derivation of the record from its contents for Postgres but it must
+  # exactly match the algorithm implemented in `Electric.Replication.Changes.build_key/3`.
   defp join_primary_keys(pk_cols) do
     pk_cols
     |> Enum.map(&pg_cast_column_to_text/1)
-    |> Enum.map(&~s[replace(#{&1}, '/', '//')])
+    |> Enum.map(&~s['"' || replace(#{&1}, '/', '//') || '"'])
     # NULL values are not allowed in PKs, but they are possible on pk-less tables where we consider all columns to be PKs
-    |> Enum.map(&~s[coalesce(#{&1}, '')])
-    |> Enum.join(~s[ || '"/"' || ])
+    |> Enum.map(&~s[coalesce(#{&1}, '_')])
+    |> Enum.join(~s[ || '/' || ])
   end
 
   defp build_value_part(columns) do

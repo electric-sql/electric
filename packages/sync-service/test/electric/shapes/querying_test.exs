@@ -155,6 +155,34 @@ defmodule Electric.Shapes.QueryingTest do
            ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
   end
 
+  test "works with null values when no PK constraint is present", %{db_conn: conn} do
+    Postgrex.query!(
+      conn,
+      """
+      CREATE TABLE items (
+        id INTEGER,
+        val TEXT
+      )
+      """,
+      []
+    )
+
+    Postgrex.query!(
+      conn,
+      "INSERT INTO items (id, val) VALUES (1, ''), (2, null), (null, ''), (null, null)",
+      []
+    )
+
+    shape = Shape.new!("items", inspector: {DirectInspector, conn})
+
+    assert [
+             %{key: ~S["public"."items"/"1"/""], value: %{id: "1", val: ""}},
+             %{key: ~S["public"."items"/"2"/_], value: %{id: "2", val: nil}},
+             %{key: ~S["public"."items"/_/""], value: %{id: nil, val: ""}},
+             %{key: ~S["public"."items"/_/_], value: %{id: nil, val: nil}}
+           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+  end
+
   test "works with null values & values with special characters", %{db_conn: conn} do
     Postgrex.query!(
       conn,
