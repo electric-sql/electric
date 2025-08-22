@@ -16,8 +16,8 @@ function AuthenticatedLayout() {
   const [showNewProjectForm, setShowNewProjectForm] = useState(false)
   const [newProjectName, setNewProjectName] = useState("")
 
-  const { data: projects, isLoading } = useLiveQuery((query) =>
-    query.from({ projectCollection })
+  const { data: projects, isLoading } = useLiveQuery((q) =>
+    q.from({ projectCollection })
   )
 
   // Create an initial default project if the user doesn't yet have any.

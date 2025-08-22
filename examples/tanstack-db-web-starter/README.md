@@ -259,8 +259,8 @@ import { useLiveQuery, eq } from "@tanstack/react-db"
 
 const Todos = () => {
   // Read data using live queries with cross-collection joins
-  const { data: todos } = useLiveQuery((query) =>
-    query
+  const { data: todos } = useLiveQuery((q) =>
+    q
       .from({ todo: todoCollection })
       .join({ list: listCollection }, ({ list, todo }) =>
         eq(list.id, todo.list_id)
