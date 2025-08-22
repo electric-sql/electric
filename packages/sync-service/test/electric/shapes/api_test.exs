@@ -301,7 +301,9 @@ defmodule Electric.Shapes.ApiTest do
       assert response_body(response) == %{
                message: "Invalid request",
                errors: %{
-                 columns: ["Must include all primary key columns, missing: id"]
+                 columns: [
+                   "The list of columns must include all primary key columns, missing: id"
+                 ]
                }
              }
     end
