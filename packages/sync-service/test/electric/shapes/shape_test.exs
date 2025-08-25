@@ -344,7 +344,7 @@ defmodule Electric.Shapes.ShapeTest do
            "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
          ]
     test "validates selected columns for invalid columns", %{inspector: inspector} do
-      assert {:error, {:columns, ["The following columns could not be found: invalid"]}} =
+      assert {:error, {:columns, ["The following columns are not found on the table: invalid"]}} =
                Shape.new("col_table", inspector: inspector, columns: ["id", "invalid"])
     end
 
@@ -352,7 +352,9 @@ defmodule Electric.Shapes.ShapeTest do
            "CREATE TABLE IF NOT EXISTS col_table (id INT PRIMARY KEY, value1 TEXT, value2 TEXT)"
          ]
     test "validates selected columns for missing PK columns", %{inspector: inspector} do
-      assert {:error, {:columns, ["Must include all primary key columns, missing: id"]}} =
+      assert {:error,
+              {:columns,
+               ["The list of columns must include all primary key columns, missing: id"]}} =
                Shape.new("col_table", inspector: inspector, columns: ["value1"])
     end
 
@@ -375,7 +377,10 @@ defmodule Electric.Shapes.ShapeTest do
     test "validates selected columns for generated columns", %{inspector: inspector} do
       assert {:error,
               {:columns,
-               ["The following columns are generated and cannot be included in replication: id"]}} =
+               [
+                 "The following columns are generated and cannot be included in the shape: id. " <>
+                   "You can exclude them from the shape by explicitly listing which columns to fetch in the 'columns' query param"
+               ]}} =
                Shape.new("gen_col_table", inspector: inspector)
     end
 
