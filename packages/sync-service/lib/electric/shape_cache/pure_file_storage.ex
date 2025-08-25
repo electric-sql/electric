@@ -860,8 +860,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
        when is_log_offset_lte(max, offset),
        do: find_chunk_positions_in_cache(rest, offset)
 
-  def make_new_snapshot!(stream, %__MODULE__{} = opts) do
-    last_chunk_num = Snapshot.write_snapshot_stream!(stream, opts)
+  def make_new_snapshot!(stream, notifier_fn, %__MODULE__{} = opts) do
+    last_chunk_num = Snapshot.write_snapshot_stream!(stream, notifier_fn, opts)
     write_cached_metadata!(opts, :last_snapshot_chunk, LogOffset.new(0, last_chunk_num))
     :ok
   end

@@ -72,10 +72,13 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Make a new snapshot for a shape handle based on the meta information about the table and a stream of plain string rows
 
-  Should raise an error if making the snapshot had failed for any reason.
+  The notifier function passed as the 2nd argument must be invoked just before streaming of snapshot chunk starts.
+
+  Should raise an error if making the snapshot fails for any reason.
   """
   @callback make_new_snapshot!(
               Querying.json_result_stream(),
+              (-> term),
               shape_opts()
             ) :: :ok
 
@@ -207,8 +210,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def make_new_snapshot!(stream, {mod, shape_opts}) do
-    mod.make_new_snapshot!(stream, shape_opts)
+  def make_new_snapshot!(stream, notifier_fn \\ fn -> nil end, {mod, shape_opts}) do
+    mod.make_new_snapshot!(stream, notifier_fn, shape_opts)
   end
 
   @impl __MODULE__
