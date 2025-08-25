@@ -436,8 +436,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
                   {:ok, table}
 
                 {:error, reason} ->
-                  dbg("failed integrity")
-
                   Logger.warning(
                     "Loaded shape status backup but failed integrity check with #{inspect(reason)} - aborting restore"
                   )
