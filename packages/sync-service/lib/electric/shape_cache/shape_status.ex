@@ -107,6 +107,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
+  @impl true
   def terminate(state) do
     store_table_backup(state)
   end
@@ -429,7 +430,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
           case :ets.file2tab(backup_file_path(state), verify: true) do
             {:ok, recovered_table} ->
               if recovered_table != table, do: :ets.rename(recovered_table, table)
-              {:ok, table}
+
+              case verify_storage_integrity(state) do
+                :ok ->
+                  {:ok, table}
+
+                {:error, reason} ->
+                  dbg("failed integrity")
+
+                  Logger.warning(
+                    "Loaded shape status backup but failed integrity check with #{inspect(reason)} - aborting restore"
+                  )
+
+                  :ets.delete(table)
+                  {:error, reason}
+              end
 
             {:error, reason} ->
               {:error, reason}
@@ -437,6 +452,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
         File.rm_rf(backup_dir)
         result
+    end
+  end
+
+  defp verify_storage_integrity(%__MODULE__{storage: storage} = state) do
+    with {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
+      in_memory_handles = list_shapes(state) |> Enum.map(&elem(&1, 0)) |> MapSet.new()
+
+      if MapSet.equal?(in_memory_handles, stored_handles) do
+        :ok
+      else
+        {:error, :storage_integrity_check_failed}
+      end
     end
   end
 

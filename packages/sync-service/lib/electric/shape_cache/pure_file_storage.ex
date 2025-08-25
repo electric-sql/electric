@@ -179,7 +179,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     case File.ls(base_path) do
       {:ok, shape_handles} ->
         shape_handles
-        |> Enum.reject(&match?(@metadata_storage_dir, &1))
+        |> Enum.reject(&String.starts_with?(&1, "."))
         |> Enum.reject(&File.exists?(deletion_marker_path(for_shape(&1, opts)), [:raw]))
         |> then(&{:ok, MapSet.new(&1)})
 
@@ -191,7 +191,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def get_all_stored_shapes(%{base_path: base_path} = opts) do
+  def get_all_stored_shapes(opts) do
     case get_all_stored_shape_handles(opts) do
       {:ok, shape_handles} ->
         shape_handles
@@ -209,7 +209,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def metadata_backup_dir(%{base_path: base_path} = opts) do
+  def metadata_backup_dir(%{base_path: base_path}) do
     base_path |> Path.join(@metadata_storage_dir) |> Path.join("backups")
   end
 
@@ -565,7 +565,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp maybe_use_cached_writer(opts, _), do: :cache_not_found
+  defp maybe_use_cached_writer(_opts, _), do: :cache_not_found
 
   def terminate(writer_state(opts: opts) = state) do
     writer_state(writer_acc: writer_acc) = close_all_files(state)
@@ -795,6 +795,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     snapshot_started = read_metadata!(opts, :snapshot_started?) || false
     compaction_started = read_metadata!(opts, :compaction_started?) || false
     last_snapshot_chunk = read_metadata!(opts, :last_snapshot_chunk)
+    pg_snapshot = read_metadata!(opts, :pg_snapshot)
 
     :ets.insert(
       opts.stack_ets,
@@ -807,6 +808,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         compaction_boundary: compaction_boundary,
         latest_name: suffix,
         snapshot_started?: snapshot_started,
+        pg_snapshot: pg_snapshot,
         compaction_started?: compaction_started,
         last_snapshot_chunk: last_snapshot_chunk,
         cached_chunk_boundaries: chunks

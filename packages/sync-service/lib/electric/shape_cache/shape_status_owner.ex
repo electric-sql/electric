@@ -12,8 +12,6 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   require Logger
 
-  alias Electric.ShapeCache.ShapeStatus
-
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true]
@@ -52,7 +50,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   @impl true
   def terminate(_reason, %{shape_status: {shape_status, shape_status_state}}) do
-    Logger.info("Terminating shape status owner, backing up state.")
+    Logger.info("Terminating shape status owner, backing up state for faster recovery.")
     shape_status.terminate(shape_status_state)
     :ok
   end
