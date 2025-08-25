@@ -189,11 +189,12 @@ defmodule Electric.Client.Stream do
   end
 
   # 409: Upon receiving a 409, we should start from scratch with the newly
-  #      provided shape handle
+  #      provided shape handle or with a fallback pseudo-handle to ensure
+  #      a consistent cache buster is used
   defp handle_response({:error, %Fetch.Response{status: status} = resp}, stream)
        when status in [409] do
     %{value_mapper_fun: value_mapper_fun} = stream
-    handle = shape_handle(resp)
+    handle = shape_handle(resp) || "#{stream.shape_handle}-next"
 
     stream
     |> reset(handle)

@@ -514,8 +514,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (e.status == 409) {
         // Upon receiving a 409, we should start from scratch
-        // with the newly provided shape handle
-        const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+        // with the newly provided shape handle, or a fallback
+        // pseudo-handle based on the current one to act as a
+        // consistent cache buster
+        const newShapeHandle =
+          e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
         this.#reset(newShapeHandle)
         await this.#publish(e.json as Message<T>[])
         return this.#requestShape()
