@@ -1236,7 +1236,7 @@ defmodule Electric.ShapeCacheTest do
             ctx.shape_cache_opts[:server],
             ctx.consumer_supervisor,
             ctx.shape_log_collector,
-            ctx.shape_status_agent,
+            ctx.shape_status_owner,
             "shape_task_supervisor"
           ] do
         stop_supervised(name)

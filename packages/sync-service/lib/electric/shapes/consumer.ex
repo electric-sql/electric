@@ -104,7 +104,12 @@ defmodule Electric.Shapes.Consumer do
       shape_status: {shape_status, shape_status_state}
     } = state
 
-    writer = ShapeCache.Storage.init_writer!(storage, state.shape)
+    writer =
+      ShapeCache.Storage.init_writer!(
+        storage,
+        state.shape,
+        shape_status.consume_shape_storage_state(shape_status_state, state.shape_handle)
+      )
 
     {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
@@ -289,7 +294,17 @@ defmodule Electric.Shapes.Consumer do
     end)
 
     if is_map_key(state, :writer) do
-      ShapeCache.Storage.terminate(state.writer)
+      storage_recovery_state = ShapeCache.Storage.terminate(state.writer)
+
+      {shape_status, shape_status_state} = state.shape_status
+
+      if not is_nil(shape_status.get_existing_shape(shape_status_state, state.shape_handle)) do
+        shape_status.set_shape_storage_state(
+          shape_status_state,
+          state.shape_handle,
+          storage_recovery_state
+        )
+      end
     end
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
@@ -497,7 +512,7 @@ defmodule Electric.Shapes.Consumer do
     state
   end
 
-  defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) do
+  defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) when not is_nil(pg_snapshot) do
     ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
     set_pg_snapshot(pg_snapshot, %{state | pg_snapshot: pg_snapshot})
   end

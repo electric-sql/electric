@@ -55,12 +55,12 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def init_writer!({parent, shape_handle, init, storage}, shape_definition) do
-    send(parent, {__MODULE__, :init_writer!, shape_handle, shape_definition})
+  def init_writer!({parent, shape_handle, init, storage}, shape_definition, recovery_state) do
+    send(parent, {__MODULE__, :init_writer!, shape_handle, shape_definition, recovery_state})
 
     {module, opts} = storage
 
-    with state <- Storage.init_writer!(storage, shape_definition) do
+    with state <- Storage.init_writer!(storage, shape_definition, recovery_state) do
       for {name, args} <- init do
         apply(module, name, args ++ [opts])
       end
@@ -70,9 +70,21 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def get_all_stored_shape_handles({parent, _init, storage}) do
+    send(parent, {__MODULE__, :get_all_stored_shape_handles})
+    Storage.get_all_stored_shape_handles(storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
   def get_all_stored_shapes({parent, _init, storage}) do
     send(parent, {__MODULE__, :get_all_stored_shapes})
     Storage.get_all_stored_shapes(storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def metadata_backup_dir({parent, _init, storage}) do
+    send(parent, {__MODULE__, :metadata_backup_dir})
+    Storage.metadata_backup_dir(storage)
   end
 
   @impl Electric.ShapeCache.Storage
