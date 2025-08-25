@@ -98,7 +98,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   commitTransaction: CommitTransactionFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
-    const tableName = `"issues for ${task.id}_${Math.random().toString(16).replace('.', '_')}"`
+    const tableName = `"issues for ${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
     await dbClient.query(`
     DROP TABLE IF EXISTS ${tableName};
     CREATE TABLE ${tableName} (
