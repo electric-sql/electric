@@ -188,7 +188,7 @@ export const testWithMultitypeTable = testWithDbClient.extend<{
   tableUrl: string
 }>({
   tableSql: async ({ dbClient, task }, use) => {
-    const tableName = `"multitype table for ${task.id}_${Math.random().toString(16).replace('.', '_')}"`
+    const tableName = `"multitype table for ${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
 
     await dbClient.query(`
       DROP TABLE IF EXISTS ${tableName};
