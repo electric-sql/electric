@@ -97,11 +97,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def initialise(%__MODULE__{shape_meta_table: table} = state) do
     case load_table_backup(state) do
       {:ok, ^table} ->
-        Logger.info("Loaded shape status from backup")
-        :ok
-
-      {:ok, other_table} ->
-        :ets.rename(other_table, table)
+        Logger.info("Loaded shape status from backup at #{backup_file_path(state)}")
         :ok
 
       _ ->
@@ -109,9 +105,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
         :ets.new(table, [:named_table, :public, :ordered_set])
         load(state)
     end
-
-    # :ets.new(table, [:named_table, :public, :ordered_set])
-    # load(state)
   end
 
   def terminate(state) do
@@ -421,10 +414,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp load_table_backup(%__MODULE__{shape_meta_table: table} = state) do
-    res = :ets.file2tab(backup_file_path(state), verify: true)
-    dbg("Loaded backup #{inspect(res)}")
+    result =
+      case :ets.file2tab(backup_file_path(state), verify: true) do
+        {:ok, recovered_table} ->
+          if recovered_table != table, do: :ets.rename(recovered_table, table)
+          {:ok, table}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+
     File.rm_rf(backup_dir(state))
-    res
+    result
   end
 
   defp backup_file_path(%__MODULE__{} = state) do
