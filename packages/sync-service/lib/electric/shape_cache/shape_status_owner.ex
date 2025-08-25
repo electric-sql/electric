@@ -10,6 +10,8 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   use GenServer, shutdown: 60_000
 
+  require Logger
+
   alias Electric.ShapeCache.ShapeStatus
 
   @schema NimbleOptions.new!(
@@ -31,11 +33,14 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
-    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    Process.set_label({:shape_status_owner, opts[:stack_id]})
+    Logger.metadata(stack_id: opts[:stack_id])
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
+
     {shape_status, shape_status_state} = Keyword.fetch!(opts, :shape_status)
 
     :ok = shape_status.initialise(shape_status_state)
-    dbg("Initialised shape status")
 
     {:ok, %{shape_status: {shape_status, shape_status_state}}}
   end
@@ -46,8 +51,8 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   end
 
   @impl true
-  def terminate(reason, %{shape_status: {shape_status, shape_status_state}}) do
-    dbg("storing shape status ets table")
+  def terminate(_reason, %{shape_status: {shape_status, shape_status_state}}) do
+    Logger.info("Terminating shape status owner, backing up state.")
     shape_status.terminate(shape_status_state)
     :ok
   end

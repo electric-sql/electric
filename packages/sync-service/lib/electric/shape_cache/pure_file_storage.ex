@@ -53,6 +53,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :last_seen_txn_offset,
     :compaction_boundary,
     :latest_name,
+    :pg_snapshot,
     snapshot_started?: false,
     compaction_started?: false,
     last_snapshot_chunk: nil,
@@ -435,7 +436,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     do: FileInfo.recursive_disk_usage(base_path)
 
   def set_pg_snapshot(pg_snapshot, %__MODULE__{} = opts),
-    do: write_metadata!(opts, :pg_snapshot, pg_snapshot)
+    do: write_cached_metadata!(opts, :pg_snapshot, pg_snapshot)
 
   def mark_snapshot_as_started(%__MODULE__{} = opts),
     do: write_cached_metadata!(opts, :snapshot_started?, true)
@@ -470,7 +471,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   def get_current_position(%__MODULE__{} = opts) do
-    {:ok, get_latest_offset(opts), read_metadata!(opts, :pg_snapshot)}
+    {:ok, get_latest_offset(opts), read_cached_metadata(opts, :pg_snapshot)}
   end
 
   defp get_latest_offset(%__MODULE__{} = opts) do
@@ -531,11 +532,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
   end
 
-  defp maybe_use_cached_writer(opts, {version, writer_acc() = acc, storage_meta() = meta}) and
-         version == opts.version do
+  defp maybe_use_cached_writer(opts, {version, writer_acc() = acc, storage_meta() = meta})
+       when version == opts.version do
     :ets.insert(opts.stack_ets, meta)
 
-    if not snapshot_complete?(opts) or is_nil(read_metadata!(opts, :pg_snapshot)) do
+    if not snapshot_complete?(opts) or is_nil(read_cached_metadata(opts, :pg_snapshot)) do
       :cache_not_found
     else
       {:ok, {acc, storage_meta(meta, :latest_name)}}
@@ -678,6 +679,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   @cached_keys [
     :snapshot_started?,
+    :pg_snapshot,
     :compaction_started?,
     :last_snapshot_chunk,
     :last_seen_txn_offset,
@@ -725,6 +727,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
         :last_snapshot_chunk ->
           :ets.update_element(stack_ets, handle, {storage_meta(:last_snapshot_chunk) + 1, value})
+
+        :pg_snapshot ->
+          :ets.update_element(stack_ets, handle, {storage_meta(:pg_snapshot) + 1, value})
       end
     rescue
       ArgumentError ->
