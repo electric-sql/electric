@@ -25,16 +25,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   defp table_name,
-    do:
-      :ets.new(:"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}", [
-        :public,
-        :ordered_set
-      ])
+    do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
 
   defp new_state(_ctx, opts \\ []) do
     table = Keyword.get(opts, :table, table_name())
 
     Mock.Storage
+    |> stub(:metadata_backup_dir, fn _ -> nil end)
     |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end)
 
     shape_status_opts =
