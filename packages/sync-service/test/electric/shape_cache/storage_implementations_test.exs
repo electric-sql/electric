@@ -742,6 +742,30 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
+    describe "#{module_name}.get_all_stored_shape_handles/1" do
+      @describetag skip_initialise: true
+      setup :start_storage
+
+      test "retrieves no shape handles if no shapes persisted", %{storage: opts} do
+        assert {:ok, MapSet.new()} == Storage.get_all_stored_shape_handles(opts)
+      end
+
+      test "retrieves stored shape handles", %{storage: opts} do
+        _writer = Storage.init_writer!(opts, @shape)
+
+        assert {:ok, MapSet.new([@shape_handle])} == Storage.get_all_stored_shape_handles(opts)
+      end
+
+      test "ignores shapes marked for deletion", %{storage: opts} do
+        _writer = Storage.init_writer!(opts, @shape)
+
+        {PureFileStorage, shape_opts} = opts
+        File.touch(PureFileStorage.deletion_marker_path(shape_opts))
+
+        assert {:ok, MapSet.new()} == Storage.get_all_stored_shape_handles(opts)
+      end
+    end
+
     describe "#{module_name}.get_all_stored_shapes/1" do
       @describetag skip_initialise: true
       setup :start_storage
@@ -756,6 +780,17 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert {:ok, %{@shape_handle => parsed}} = Storage.get_all_stored_shapes(opts)
 
         assert @shape == parsed
+      end
+    end
+
+    describe "#{module_name}.metadata_backup_dir/1" do
+      @describetag skip_initialise: true
+      setup :start_storage
+
+      test "returns metadata backup directory", %{storage: opts} do
+        assert dir = Storage.metadata_backup_dir(opts)
+        assert is_binary(dir)
+        assert Path.type(dir) == :absolute
       end
     end
 
