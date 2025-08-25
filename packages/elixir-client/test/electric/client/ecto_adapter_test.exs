@@ -1,12 +1,13 @@
 defmodule Electric.Client.EctoAdapterTest do
   use ExUnit.Case, async: true
 
+  import Support.DbSetup
+
   alias Electric.Client.ShapeDefinition
   alias Electric.Client
   alias Electric.Client.EctoAdapter
   alias Electric.Client.Message
   alias Support.Money
-  import Support.DbSetup
 
   defp stream(ctx, query) do
     Client.stream(ctx.client, query)
@@ -130,6 +131,8 @@ defmodule Electric.Client.EctoAdapterTest do
     Enum.map(module.__schema__(:fields), &to_string(module.__schema__(:field_source, &1)))
   end
 
+  @repo Module.concat(__MODULE__, Repo)
+
   setup do
     {:ok, client} =
       Client.new(base_url: Application.fetch_env!(:electric_client, :electric_url))
@@ -138,9 +141,10 @@ defmodule Electric.Client.EctoAdapterTest do
   end
 
   setup do
-    {:ok, _} = start_supervised(Support.Repo)
+    _ = start_supervised!({Support.Repo, name: @repo})
+    Support.Repo.put_dynamic_repo(@repo)
 
-    table_name = "test_table_#{<<System.monotonic_time(:microsecond)::64>> |> Base.encode16()}"
+    table_name = "test_table_" <> :binary.replace(to_string(:rand.uniform()), "0.", "")
 
     columns = [
       {"id", "uuid primary key"},

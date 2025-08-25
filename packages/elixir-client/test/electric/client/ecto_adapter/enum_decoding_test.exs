@@ -1,11 +1,11 @@
 defmodule Electric.Client.EctoAdapter.EnumDecodingTest do
   use ExUnit.Case, async: true
 
+  import Ecto.Query, only: [from: 2]
+  import Support.DbSetup
+
   alias Electric.Client
   alias Electric.Client.Message
-
-  import Support.DbSetup
-  import Ecto.Query, only: [from: 2]
 
   defmodule Event do
     use Ecto.Schema
@@ -19,6 +19,8 @@ defmodule Electric.Client.EctoAdapter.EnumDecodingTest do
     end
   end
 
+  @repo Module.concat(__MODULE__, Repo)
+
   setup do
     {:ok, client} = Client.new(base_url: Application.fetch_env!(:electric_client, :electric_url))
 
@@ -26,7 +28,8 @@ defmodule Electric.Client.EctoAdapter.EnumDecodingTest do
   end
 
   setup do
-    {:ok, _} = start_supervised(Support.Repo)
+    {:ok, _} = start_supervised({Support.Repo, name: @repo})
+    Support.Repo.put_dynamic_repo(@repo)
 
     table_name = "test_table_#{<<System.monotonic_time(:microsecond)::64>> |> Base.encode16()}"
 
