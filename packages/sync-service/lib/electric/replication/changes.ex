@@ -205,7 +205,7 @@ defmodule Electric.Replication.Changes do
   end
 
   @doc """
-  Build a unique key for a given record based on it's relation and PK.
+  Build a unique key for a given record based on its relation and PK.
 
   Uses the `/` symbol as a PK separator, so any `/`s in the PK will
   be escaped to avoid collisions.
@@ -216,13 +216,15 @@ defmodule Electric.Replication.Changes do
 
       iex> build_key({"hello", "world"}, %{"c" => "d", "a" => "b"}, ["a", "c"])
       ~S|"hello"."world"/"b"/"d"|
-      iex> build_key({"hello", "world"}, %{"a" => "b", "c" => "d"}, ["a", "c"])
-      ~S|"hello"."world"/"b"/"d"|
+
+      iex> build_key({"hello", "world"}, %{"a" => "b", "c" => "d"}, ["c", "a"])
+      ~S|"hello"."world"/"d"/"b"|
 
   Build key has `/` symbol in the PK escaped by repetition:
 
       iex> build_key({"hello", "world"}, %{"a" => "test/test", "c" => "test"}, ["a", "c"])
       ~S|"hello"."world"/"test//test"/"test"|
+
       iex> build_key({"hello", "world"}, %{"a" => "test", "c" => "test/test"}, ["a", "c"])
       ~S|"hello"."world"/"test"/"test//test"|
 
@@ -230,6 +232,9 @@ defmodule Electric.Replication.Changes do
 
       iex> build_key({"hello", "world"}, %{"c" => "d", "a" => "b"}, [])
       ~S|"hello"."world"/"b"/"d"|
+
+      iex> build_key({"hello", "world"}, %{"a" => "1", "b" => nil, "c" => "2"}, [])
+      ~S|"hello"."world"/"1"/_/"2"|
 
   All pk sections are wrapped in quotes to allow for empty strings without generating a `//` pair.
 
@@ -268,7 +273,10 @@ defmodule Electric.Replication.Changes do
   defp join_escape_pk(record, pk_cols),
     do: Enum.map(pk_cols, fn col -> escape_pk_section(Map.fetch!(record, col)) end)
 
-  defp escape_pk_section(v), do: [?/, ?", :binary.replace(v, "/", "//", [:global]), ?"]
+  defp escape_pk_section(nil), do: [?/, ?_]
+
+  defp escape_pk_section(v) when is_binary(v),
+    do: [?/, ?", :binary.replace(v, "/", "//", [:global]), ?"]
 
   @doc """
   Convert an UpdatedRecord into the corresponding NewRecord or DeletedRecord
