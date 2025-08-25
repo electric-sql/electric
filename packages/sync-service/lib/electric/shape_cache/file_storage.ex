@@ -167,7 +167,7 @@ defmodule Electric.ShapeCache.FileStorage do
     case File.ls(shapes_dir) do
       {:ok, shape_handles} ->
         shape_handles
-        |> Enum.reject(&match?(@metadata_storage_dir, &1))
+        |> Enum.reject(&String.starts_with?(&1, "."))
         |> Enum.reject(&exists?(deletion_marker_path(shapes_dir, &1)))
         |> then(&{:ok, MapSet.new(&1)})
 
@@ -208,7 +208,7 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def metadata_backup_dir(%{base_path: base_path} = opts) do
+  def metadata_backup_dir(%{base_path: base_path}) do
     base_path |> Path.join(@metadata_storage_dir) |> Path.join("backups")
   end
 

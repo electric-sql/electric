@@ -512,7 +512,7 @@ defmodule Electric.Shapes.Consumer do
     state
   end
 
-  defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) do
+  defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) when not is_nil(pg_snapshot) do
     ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
     set_pg_snapshot(pg_snapshot, %{state | pg_snapshot: pg_snapshot})
   end
