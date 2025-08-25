@@ -113,7 +113,7 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def init_writer!(%FS{} = opts, shape_definition) do
+  def init_writer!(%FS{} = opts, shape_definition, _storage_recovery_state \\ nil) do
     stored_version = stored_version(opts)
     db = validate_db_process!(opts.db)
 

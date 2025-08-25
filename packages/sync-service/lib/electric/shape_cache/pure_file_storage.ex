@@ -496,19 +496,28 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def start_link(_), do: :ignore
 
-  def init_writer!(opts, shape_definition) do
+  def init_writer!(opts, shape_definition, storage_recovery_state \\ nil) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix} = initialise_filesystem!(opts, shape_definition)
+    {initial_acc, suffix} =
+      case maybe_use_cached_writer(opts, storage_recovery_state) do
+        {:ok, {acc, latest_name}} ->
+          {acc, latest_name}
 
-    register_with_stack(
-      opts,
-      table,
-      writer_acc(initial_acc, :last_persisted_txn_offset),
-      compaction_boundary(opts),
-      suffix,
-      writer_acc(initial_acc, :cached_chunk_boundaries)
-    )
+        :cache_not_found ->
+          {initial_acc, suffix} = initialise_filesystem!(opts, shape_definition)
+
+          register_with_stack(
+            opts,
+            table,
+            writer_acc(initial_acc, :last_persisted_txn_offset),
+            compaction_boundary(opts),
+            suffix,
+            writer_acc(initial_acc, :cached_chunk_boundaries)
+          )
+
+          {initial_acc, suffix}
+      end
 
     if shape_definition.storage.compaction == :enabled do
       schedule_compaction(opts)
@@ -522,17 +531,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
   end
 
+  defp maybe_use_cached_writer(opts, {version, writer_acc() = acc, storage_meta() = meta}) and
+         version == opts.version do
+    :ets.insert(opts.stack_ets, meta)
+
+    if not snapshot_complete?(opts) or is_nil(read_metadata!(opts, :pg_snapshot)) do
+      :cache_not_found
+    else
+      {:ok, {acc, storage_meta(meta, :latest_name)}}
+    end
+  end
+
+  defp maybe_use_cached_writer(opts, _), do: :cache_not_found
+
   def terminate(writer_state(opts: opts) = state) do
-    close_all_files(state)
+    writer_state(writer_acc: writer_acc) = close_all_files(state)
 
     try do
-      :ets.delete(opts.stack_ets, opts.shape_handle)
-    rescue
-      ArgumentError ->
-        :ok
-    end
+      case :ets.lookup(opts.stack_ets, opts.shape_handle) do
+        [storage_meta] ->
+          :ets.delete(opts.stack_ets, opts.shape_handle)
+          {opts.version, writer_acc, storage_meta}
 
-    :ok
+        [] ->
+          nil
+      end
+    rescue
+      ArgumentError -> nil
+    end
   end
 
   defp close_all_files(writer_state() = state) do

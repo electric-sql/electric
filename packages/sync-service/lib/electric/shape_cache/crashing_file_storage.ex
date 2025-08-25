@@ -31,7 +31,7 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
     |> Map.put(:extra_opts, %{num_calls_until_crash: Keyword.fetch!(opts, :num_calls_until_crash)})
   end
 
-  def init_writer!(opts, shape_definition) do
+  def init_writer!(opts, shape_definition, _storage_recovery_state) do
     CubDB.put(opts.db, @num_calls_until_crash_key, opts.extra_opts.num_calls_until_crash)
     FileStorage.init_writer!(opts, shape_definition)
   end
