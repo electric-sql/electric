@@ -48,13 +48,16 @@ defmodule Electric.Plug.LowPrivilegeRouterTest do
       assert {503,
               %{
                 "message" =>
-                  "Database table is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
+                  "Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
               }} == get_shape(ctx)
 
       Postgrex.query!(ctx.pool, "ALTER PUBLICATION \"#{ctx.publication_name}\" ADD TABLE items")
 
       assert {503,
-              %{"message" => "Database table does not have its replica identity set to FULL"}} ==
+              %{
+                "message" =>
+                  "Database table \"public.items\" does not have its replica identity set to FULL"
+              }} ==
                get_shape(ctx)
 
       Postgrex.query!(ctx.pool, "ALTER TABLE items REPLICA IDENTITY FULL")
