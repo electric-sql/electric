@@ -176,7 +176,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   def get_all_stored_shape_handles(%{base_path: base_path} = opts) do
-    case File.ls(base_path) do
+    case ls(base_path) do
       {:ok, shape_handles} ->
         shape_handles
         |> Enum.reject(&String.starts_with?(&1, "."))
