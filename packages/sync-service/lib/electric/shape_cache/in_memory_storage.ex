@@ -123,7 +123,13 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def get_all_stored_shape_handles(_opts), do: {:ok, MapSet.new()}
+
+  @impl Electric.ShapeCache.Storage
   def get_all_stored_shapes(_opts), do: {:ok, %{}}
+
+  @impl Electric.ShapeCache.Storage
+  def metadata_backup_dir(_opts), do: nil
 
   @impl Electric.ShapeCache.Storage
   def get_total_disk_usage(_opts), do: 0

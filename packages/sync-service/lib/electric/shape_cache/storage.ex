@@ -49,9 +49,16 @@ defmodule Electric.ShapeCache.Storage do
   @doc "Prepare the in-process writer state, returning an accumulator."
   @callback init_writer!(shape_opts(), shape_definition :: Shape.t(), term()) :: writer_state()
 
+  @doc "Retrieve all stored shape handles"
+  @callback get_all_stored_shape_handles(compiled_opts()) ::
+              {:ok, MapSet.t(shape_handle())} | {:error, term()}
+
   @doc "Retrieve all stored shapes"
   @callback get_all_stored_shapes(compiled_opts()) ::
               {:ok, %{shape_handle() => Shape.t()}} | {:error, term()}
+
+  @doc "Get the directory where metadata backups are stored."
+  @callback metadata_backup_dir(compiled_opts()) :: String.t() | nil
 
   @doc "Get the total disk usage for all shapes"
   @callback get_total_disk_usage(compiled_opts()) :: non_neg_integer()
@@ -182,8 +189,18 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
+  def get_all_stored_shape_handles({mod, opts}) do
+    mod.get_all_stored_shape_handles(opts)
+  end
+
+  @impl __MODULE__
   def get_all_stored_shapes({mod, opts}) do
     mod.get_all_stored_shapes(opts)
+  end
+
+  @impl __MODULE__
+  def metadata_backup_dir({mod, opts}) do
+    mod.metadata_backup_dir(opts)
   end
 
   @impl __MODULE__

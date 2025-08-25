@@ -403,41 +403,55 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp store_table_backup(%__MODULE__{shape_meta_table: table} = state) do
-    File.mkdir_p!(backup_dir(state))
+    case backup_dir(state) do
+      nil ->
+        :ok
 
-    :ets.tab2file(
-      table,
-      backup_file_path(state),
-      sync: true,
-      extended_info: [:object_count]
-    )
+      backup_dir ->
+        File.mkdir_p!(backup_dir)
+
+        :ets.tab2file(
+          table,
+          backup_file_path(state),
+          sync: true,
+          extended_info: [:object_count]
+        )
+    end
   end
 
   defp load_table_backup(%__MODULE__{shape_meta_table: table} = state) do
-    result =
-      case :ets.file2tab(backup_file_path(state), verify: true) do
-        {:ok, recovered_table} ->
-          if recovered_table != table, do: :ets.rename(recovered_table, table)
-          {:ok, table}
+    case backup_dir(state) do
+      nil ->
+        {:error, :no_backup_dir}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
+      backup_dir ->
+        result =
+          case :ets.file2tab(backup_file_path(state), verify: true) do
+            {:ok, recovered_table} ->
+              if recovered_table != table, do: :ets.rename(recovered_table, table)
+              {:ok, table}
 
-    File.rm_rf(backup_dir(state))
-    result
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        File.rm_rf(backup_dir)
+        result
+    end
   end
 
   defp backup_file_path(%__MODULE__{} = state) do
-    backup_dir(state)
-    |> Path.join(@backup_file)
-    |> String.to_charlist()
+    case backup_dir(state) do
+      nil -> nil
+      dir -> dir |> Path.join(@backup_file) |> String.to_charlist()
+    end
   end
 
-  defp backup_dir(%__MODULE__{storage: {_, storage_opts}}) do
-    storage_opts.base_path
-    |> Path.join(@backup_dir)
-    |> String.to_charlist()
+  defp backup_dir(%__MODULE__{storage: storage}) do
+    case Storage.metadata_backup_dir(storage) do
+      nil -> nil
+      dir -> Path.join(dir, @backup_dir)
+    end
   end
 
   defp turn_raise_into_error(fun) do
