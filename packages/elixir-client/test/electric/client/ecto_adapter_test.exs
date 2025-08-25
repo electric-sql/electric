@@ -137,10 +137,13 @@ defmodule Electric.Client.EctoAdapterTest do
     [client: client]
   end
 
-  setup do
-    {:ok, _} = start_supervised(Support.Repo)
+  setup_all do
+    _ = start_supervised!(Support.Repo)
+    :ok
+  end
 
-    table_name = "test_table_#{<<System.monotonic_time(:microsecond)::64>> |> Base.encode16()}"
+  setup do
+    table_name = "test_table_" <> :binary.replace(to_string(:rand.uniform()), "0.", "")
 
     columns = [
       {"id", "uuid primary key"},
