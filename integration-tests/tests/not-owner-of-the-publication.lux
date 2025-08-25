@@ -1,0 +1,142 @@
+[doc Verify that Electric can work without ownership of the Postgres publication if its external requirements are met by hand]
+
+[include _macros.luxinc]
+
+[global pg_container_name=not-owner-of-the-publication__pg]
+[global database_url=postgresql://low_privilege:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+###
+
+## Start a Postgres cluster with no publication and an unprivileged role
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "" \
+  "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+## Start the sync service
+[invoke setup_electric]
+
+## Verify that the sync service fails to initialize because of missing publication in the database
+[shell electric]
+  # Reset the failure pattern to make it possible to pattern-match on errors below
+  -
+
+  ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" not found in the database
+	??[emergency] Publication "electric_publication_integration" not found in the database
+	??[notice] Application electric exited: shutdown
+
+[invoke stop_electric]
+[invoke stop_and_remove_pg]
+
+###
+
+## Start a Postgres cluster with incorrectly configured publication and an unprivileged role
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e LOW_PRIVILEGE_TEST_INIT_SQL='CREATE PUBLICATION electric_publication_integration WITH (publish = 'insert')'" \
+  "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+## Start the sync service
+[invoke setup_electric]
+
+# Verify that the sync service fails to initialize because the publication has incorrect parameters
+[shell electric]
+  # Reset the failure pattern to make it possible to pattern-match on errors below
+  -
+
+  ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE
+	??[emergency] Publication "electric_publication_integration" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE
+	??[notice] Application electric exited: shutdown
+
+[invoke stop_electric]
+[invoke stop_and_remove_pg]
+
+###
+
+## Start a Postgres cluster with precreated publication and an unprivileged role
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e LOW_PRIVILEGE_TEST_INIT_SQL='CREATE PUBLICATION electric_publication_integration'" \
+  "" \
+  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+
+## Start the sync service
+[invoke setup_electric]
+
+## Confirm that the replication pipeline has initialized successfully
+[shell electric]
+  -$fail_pattern
+
+  ??Starting shape replication pipeline
+  ??Starting replication from postgres
+
+## Create a table and verify that Electric reports an error because it cannot update the publication
+[invoke start_psql]
+
+[shell psql]
+  !CREATE TABLE items(val text);
+  !INSERT INTO items VALUES ('hello');
+  ??INSERT 0 1
+
+[shell client]
+  -
+
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it"}
+
+[shell electric]
+  -
+
+  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it
+  ?\[info\] Sent 503 in [\d]+ms
+
+## Add the table to the publication and try again
+[shell psql]
+  !ALTER PUBLICATION electric_publication_integration ADD TABLE items;
+  ??ALTER PUBLICATION
+  ??ALTER PUBLICATION
+
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Database table \"public.items\" does not have its replica identity set to FULL"}
+
+[shell electric]
+  -
+
+  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" does not have its replica identity set to FULL
+  ?\[info\] Sent 503 in [\d]+ms
+
+## Set table's replica identity to FULL
+
+[shell psql]
+  !ALTER TABLE items REPLICA IDENTITY FULL;
+  ??ALTER TABLE
+  ??ALTER TABLE
+
+  !GRANT SELECT ON items TO low_privilege;
+  ??GRANT
+  ??GRANT
+
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 200
+  ??transfer-encoding: chunked
+  ??electric-schema: {"val":{"type":"text"}}
+  ??electric-offset: 0_0
+
+  ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"operation":"insert","relation":["public","items"]}}]
+
+[shell electric]
+  -$fail_pattern
+
+  ??GET /v1/shape
+  ??Starting a wait on the snapshot
+  ??Snapshot started
+  ?\[info\] Chunked 200 in [\d]+ms
+
+[cleanup]
+  [invoke teardown]

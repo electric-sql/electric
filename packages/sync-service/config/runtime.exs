@@ -241,7 +241,14 @@ config :electric,
   http_api_num_acceptors: env!("ELECTRIC_TWEAKS_HTTP_API_NUM_ACCEPTORS", :integer, 100),
   tcp_send_timeout:
     env!("ELECTRIC_TCP_SEND_TIMEOUT", &Electric.Config.parse_human_readable_time!/1, nil),
-  feature_flags: env!("ELECTRIC_FEATURE_FLAGS", &Electric.Config.parse_feature_flags/1, nil)
+  feature_flags: env!("ELECTRIC_FEATURE_FLAGS", &Electric.Config.parse_feature_flags/1, nil),
+  manual_table_publishing?: env!("ELECTRIC_MANUAL_TABLE_PUBLISHING", :boolean, nil),
+  schema_reconciler_period:
+    env!(
+      "ELECTRIC_TWEAKS_SCHEMA_RECONCILER_PERIOD",
+      &Electric.Config.parse_human_readable_time!/1,
+      nil
+    )
 
 if Electric.telemetry_enabled?() do
   config :sentry,

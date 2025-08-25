@@ -545,13 +545,19 @@ defmodule Electric.Shapes.Api do
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
+      {:error, %SnapshotError{type: :missing_privilege} = error} ->
+        Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
+        message = "Unable to create initial snapshot: " <> error.message
+        Response.error(request, message, status: 503, known_error: true)
+
       {:error, %SnapshotError{} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
 
         if error.type == :unknown &&
              DbConnectionError.from_error(error.original_error).type == :unknown do
           Logger.error("Unknown error while creating snapshot: #{inspect(error.original_error)}")
-          Response.error(request, error.message, status: 500)
+          message = "Unexpected error while creating snapshot: " <> error.message
+          Response.error(request, message, status: 500)
         else
           Response.error(request, error.message, status: 503, known_error: true)
         end

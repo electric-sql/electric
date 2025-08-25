@@ -90,6 +90,8 @@ defmodule Electric.Connection.Supervisor do
        stack_id: stack_id,
        publication_name: Keyword.fetch!(replication_opts, :publication_name),
        pg_version: Keyword.fetch!(opts, :pg_version),
+       can_alter_publication?: Keyword.fetch!(opts, :can_alter_publication?),
+       manual_table_publishing?: Keyword.fetch!(opts, :manual_table_publishing?),
        db_pool: Keyword.fetch!(db_pool_opts, :name),
        update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0)}
 
@@ -101,7 +103,8 @@ defmodule Electric.Connection.Supervisor do
       {Electric.Replication.SchemaReconciler,
        stack_id: stack_id,
        inspector: inspector,
-       shape_cache: {Electric.ShapeCache, stack_id: stack_id}}
+       shape_cache: {Electric.ShapeCache, stack_id: stack_id},
+       period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)}
 
     child_spec =
       Supervisor.child_spec(

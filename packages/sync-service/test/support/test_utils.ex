@@ -1,7 +1,8 @@
 defmodule Support.TestUtils do
-  alias Electric.Replication.LogOffset
   alias Electric.LogItems
   alias Electric.Replication.Changes
+  alias Electric.Replication.LogOffset
+  alias Electric.Shapes.Shape
 
   @doc """
   Preprocess a list of `Changes.data_change()` structs in the same way they
@@ -77,5 +78,50 @@ defmodule Support.TestUtils do
 
   def set_status_to_errored(%{stack_id: stack_id}, error_message) do
     Electric.StatusMonitor.mark_pg_lock_as_errored(stack_id, error_message)
+  end
+
+  def generate_shape(relation, where_clause \\ nil, selected_columns \\ nil) do
+    all_columns = Enum.uniq(["id", "value", "foo_enum"] ++ (selected_columns || []))
+    selected_columns = selected_columns || all_columns
+
+    {oid, relation} =
+      case relation do
+        {oid, {namespace, table}}
+        when is_integer(oid) and oid > 0 and is_binary(namespace) and is_binary(table) ->
+          relation
+
+        {namespace, table} when is_binary(namespace) and is_binary(table) ->
+          {1, relation}
+      end
+
+    %Shape{
+      root_table: relation,
+      root_table_id: oid,
+      root_pk: ["id"],
+      selected_columns: selected_columns,
+      flags: %{
+        selects_all_columns: selected_columns == all_columns,
+        non_primitive_columns_in_where:
+          where_clause && is_map_key(where_clause.used_refs, ["foo_enum"])
+      },
+      where: where_clause
+    }
+  end
+
+  def lookup_relation_oid(conn, {namespace, table}) do
+    %Postgrex.Result{columns: ["oid"], rows: [[oid]]} =
+      Postgrex.query!(conn, "SELECT '#{namespace}.#{table}'::regclass::oid")
+
+    oid
+  end
+
+  def fetch_publication_tables(conn, publication_name) do
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = '#{publication_name}'"
+      )
+
+    for [schema_name, table_name] <- rows, do: {schema_name, table_name}
   end
 end

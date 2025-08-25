@@ -26,7 +26,7 @@ defmodule Support.DbSetup do
     Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
 
     Enum.each(database_settings(ctx), fn setting ->
-      Postgrex.query!(utility_pool, "ALTER DATABASE \"#{db_name}\" SET #{setting}", [])
+      Postgrex.query!(utility_pool, "ALTER DATABASE \"#{escaped_db_name}\" SET #{setting}", [])
     end)
 
     # schedule cleanup of the database after all tests have run
@@ -59,7 +59,8 @@ defmodule Support.DbSetup do
        db_config: updated_replication_config,
        pooled_db_config: updated_query_config,
        pool: pool,
-       db_conn: pool
+       db_conn: pool,
+       escaped_db_name: escaped_db_name
      }}
   end
 
@@ -90,10 +91,17 @@ defmodule Support.DbSetup do
     )
   end
 
+  def with_publication_name(_ctx), do: %{publication_name: "pub_manual_publishing_test"}
+
   def with_publication(ctx) do
-    publication_name = "electric_test_publication_#{small_hash(ctx.test)}"
+    publication_name =
+      Map.get_lazy(ctx, :publication_name, fn ->
+        "electric_test_publication_#{small_hash(ctx.test)}"
+      end)
+
     Postgrex.query!(ctx.pool, "CREATE PUBLICATION \"#{publication_name}\"", [])
-    {:ok, %{publication_name: publication_name}}
+
+    %{publication_name: publication_name}
   end
 
   def with_pg_version(ctx) do

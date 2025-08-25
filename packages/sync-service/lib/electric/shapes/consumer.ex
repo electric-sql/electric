@@ -14,7 +14,6 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
-  alias Electric.Shapes.Api
   alias Electric.Shapes.Consumer.Snapshotter
   alias Electric.Shapes.Shape
   alias Electric.SnapshotError
@@ -161,16 +160,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_call(:stop_and_clean, _from, state) do
-    # Waiter will receive this response if the snapshot wasn't done yet, but
-    # given that this is definitely a cleanup call, a 409 is appropriate
-    # as old shape handle is no longer valid
-
-    state =
-      state
-      |> reply_to_snapshot_waiters({:error, Api.Error.must_refetch([])})
-      |> terminate_safely()
-
-    {:reply, :ok, state}
+    {:reply, :ok, terminate_safely(state)}
   end
 
   def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do

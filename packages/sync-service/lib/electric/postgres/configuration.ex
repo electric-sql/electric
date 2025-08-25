@@ -12,6 +12,108 @@ defmodule Electric.Postgres.Configuration do
   @pg_15 150_000
 
   @doc """
+  Check whether the state of the publication relations in the database matches the sets of
+  filters passed into the function.
+
+  If any of the relations in the filters are missing from the publication or don't have their
+  replica identity set to full, an error is returned.
+
+  If some of the relations included in the publication have been modified (e.g. the table name
+  has changed), those will be returned as a list of modified relations from this function to
+  allow for the cleanup of their corresponding shapes.
+  """
+  @spec check_publication_relations_and_identity(
+          Postgrex.conn(),
+          [Electric.oid_relation()],
+          [Electric.oid_relation()],
+          String.t()
+        ) ::
+          :ok
+          | {:error,
+             {:misconfigured_replica_identity, [Electric.oid_relation()]}
+             | {:table_missing_from_publication, [Electric.oid_relation()]}}
+  def check_publication_relations_and_identity(
+        conn,
+        previous_relations,
+        new_relations,
+        publication_name
+      ) do
+    known_relations = known_relations(previous_relations, new_relations)
+    changed_relations = list_changed_relations(conn, known_relations)
+    published_relations = get_publication_tables(conn, publication_name)
+
+    with :ok <-
+           check_relations_in_publication(
+             published_relations,
+             Enum.uniq(previous_relations ++ new_relations),
+             changed_relations
+           ),
+         :ok <- check_replica_identity(published_relations) do
+      tables = for {_, relation, _} <- published_relations, do: Utils.relation_to_sql(relation)
+
+      Logger.info(
+        "Verified publication #{publication_name} to include #{inspect(tables)} tables with REPLICA IDENTITY FULL"
+      )
+
+      {:ok, Enum.map(changed_relations, &trim_changed_relation/1)}
+    end
+  end
+
+  defp check_relations_in_publication(published_relations, known_relations, changed_relations) do
+    known_relations_set = MapSet.new(known_relations)
+
+    published_relations_set =
+      MapSet.new(published_relations, fn {oid, relation, _replica_identity} -> {oid, relation} end)
+
+    diff_set = MapSet.difference(known_relations_set, published_relations_set)
+
+    if MapSet.size(diff_set) == 0 do
+      :ok
+    else
+      # Some of the known relations are not published. It's okay if they have been dropped or
+      # renamed, their corresponding shapes will get cleaned up by the publication manager.
+      missing_relations =
+        Enum.filter(diff_set, fn {oid, relation} ->
+          case List.keyfind(changed_relations, oid, 0) do
+            {^oid, ^relation, nil, _} ->
+              # Dropped relation, so it physically can no longer be included in the publication.
+              false
+
+            {^oid, ^relation, ^oid, renamed_relation} when relation != renamed_relation ->
+              # Renamed relation. Its shape will be cleaned up and the validation performed on
+              # the next add_shape() request will succeed since the new relation is already
+              # included in the publication under the new name.
+              false
+
+            nil ->
+              # The relation is not included in the publication and hasn't been changed, so it
+              # is indeed an error which must be corrected by the database admin.
+              true
+          end
+        end)
+
+      if missing_relations == [] do
+        :ok
+      else
+        {:error, {:tables_missing_from_publication, missing_relations}}
+      end
+    end
+  end
+
+  defp check_replica_identity(relations) do
+    bad_relations =
+      Enum.reject(relations, fn {_oid, _relation, replica_identity} -> replica_identity == "f" end)
+
+    if bad_relations == [] do
+      :ok
+    else
+      {:error,
+       {:misconfigured_replica_identity,
+        Enum.map(bad_relations, fn {oid, relation, _ident} -> {oid, relation} end)}}
+    end
+  end
+
+  @doc """
   Configure the publication to include all relevant tables, also setting table identity to `FULL`
   if necessary. Return a list of tables that could not be configured.
 
@@ -44,9 +146,9 @@ defmodule Electric.Postgres.Configuration do
       # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)
       # so we need to check if any of the relations were dropped/renamed since then
       changed_relations =
-        (previous_relations ++ Map.keys(new_filters))
-        |> Enum.uniq()
-        |> list_changed_relations(conn)
+        conn
+        |> list_changed_relations(known_relations(previous_relations, Map.keys(new_filters)))
+        |> Enum.map(&trim_changed_relation/1)
 
       used_filters = Map.drop(new_filters, changed_relations)
 
@@ -78,15 +180,21 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  defp list_changed_relations(known_relations, conn) do
+  defp known_relations(previous_relations, new_relations) do
+    known_relations = Enum.uniq(previous_relations ++ new_relations)
+    {oids, relations} = Enum.unzip(known_relations)
+    {schemas, tables} = Enum.unzip(relations)
+    {oids, schemas, tables}
+  end
+
+  defp list_changed_relations(conn, known_relations) do
     # We're checking whether the table has been renamed (same oid, different name) or
     # dropped (maybe same name exists, but different oid). If either is true, we need to update
     # the new filters and maybe notify existing shapes.
 
-    {oids, relations} = Enum.unzip(known_relations)
-    {schemas, tables} = Enum.unzip(relations)
+    {oids, schemas, tables} = known_relations
 
-    result =
+    %Postgrex.Result{rows: rows} =
       Postgrex.query!(
         conn,
         """
@@ -97,18 +205,16 @@ defmodule Electric.Postgres.Configuration do
             UNNEST($3::text[]) AS input_relname
         )
         SELECT
-          ir.oid, (ir.input_nspname, ir.input_relname) as input_relation
+          ir.oid, (ir.input_nspname, ir.input_relname) as input_relation, pc.oid, (pn.nspname, pc.relname)
         FROM input_relations ir
         LEFT JOIN pg_class pc ON pc.oid = ir.oid
         LEFT JOIN pg_namespace pn ON pc.relnamespace = pn.oid
-        WHERE pc.oid IS NULL OR (relname != input_relname OR nspname != input_nspname)
+        WHERE pc.oid IS NULL OR (pc.relname != input_relname OR pn.nspname != input_nspname)
         """,
         [oids, schemas, tables]
       )
 
-    for [input_oid, input_relation] <- result.rows do
-      {input_oid, input_relation}
-    end
+    Enum.map(rows, &List.to_tuple/1)
   end
 
   defp alter_pub_set_whole_tables!(conn, publication_name, relation_filters) do
@@ -116,7 +222,7 @@ defmodule Electric.Postgres.Configuration do
 
     prev_published_tables =
       get_publication_tables(conn, publication_name)
-      |> Enum.map(&Utils.relation_to_sql/1)
+      |> Enum.map(fn {_oid, relation, _replident} -> Utils.relation_to_sql(relation) end)
       |> MapSet.new()
 
     new_published_tables =
@@ -202,7 +308,8 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  @spec get_publication_tables(Postgrex.conn(), String.t()) :: list(Electric.relation())
+  @spec get_publication_tables(Postgrex.conn(), String.t()) ::
+          list({Electric.relation_id(), Electric.relation(), String.t()})
   def get_publication_tables(conn, publication) do
     # `pg_publication_tables` is too clever for us -- if you add a partitioned
     # table to the publication `pg_publication_tables` lists all the partitions
@@ -210,24 +317,29 @@ defmodule Electric.Postgres.Configuration do
     # doesn't do this, it returns a direct list of the tables that were added
     # using `ALTER PUBLICATION` and doesn't expand a partitioned table into its
     # partitions.
-    Postgrex.query!(
-      conn,
-      """
-      SELECT pn.nspname, pc.relname
-        FROM pg_publication_rel ppr
-        JOIN pg_publication pp
-          ON ppr.prpubid = pp.oid
-        JOIN pg_class pc
-          ON pc.oid = ppr.prrelid
-        JOIN pg_namespace pn
-          ON pc.relnamespace = pn.oid
-        WHERE pp.pubname = $1
-        ORDER BY pn.nspname, pc.relname;
-      """,
-      [publication]
-    )
-    |> Map.fetch!(:rows)
-    |> Enum.map(&(Enum.take(&1, 2) |> List.to_tuple()))
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        SELECT
+          pc.oid, (pn.nspname, pc.relname), pc.relreplident
+        FROM
+          pg_publication_rel ppr
+        JOIN
+          pg_publication pp ON ppr.prpubid = pp.oid
+        JOIN
+          pg_class pc ON pc.oid = ppr.prrelid
+        JOIN
+          pg_namespace pn ON pc.relnamespace = pn.oid
+        WHERE
+          pp.pubname = $1
+        ORDER BY
+          pn.nspname, pc.relname
+        """,
+        [publication]
+      )
+
+    Enum.map(rows, &List.to_tuple/1)
   end
 
   # Makes an SQL query that alters the given publication whith the given tables and filters.
@@ -299,4 +411,6 @@ defmodule Electric.Postgres.Configuration do
 
     table <> cols <> where
   end
+
+  defp trim_changed_relation({oid, relation, _new_oid, _renamed_relation}), do: {oid, relation}
 end

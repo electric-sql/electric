@@ -6,7 +6,7 @@
 [global num_items_per_batch=10]
 
 [macro setup_pg_with_lsn lsn_pos]
-  [invoke setup_pg_with_shell_name "pg-$lsn_pos" "-e ELECTRIC_PG_START_WAL=00000001$lsn_pos" ""]
+  [invoke setup_pg_with_shell_name "pg-$lsn_pos" "-e ELECTRIC_PG_START_WAL=00000001$lsn_pos" "" ""]
 [endmacro]
 
 
