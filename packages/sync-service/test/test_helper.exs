@@ -10,4 +10,6 @@ ExUnit.start(assert_receive_timeout: 400, exclude: [:slow, :telemetry_target], c
 # Repatch in async tests has lazy recompilation issues, so as a temporary fix
 # we force recompilation in the setup. The issue is tracked here:
 # https://github.com/hissssst/repatch/issues/2
-Repatch.setup(recompile: [Postgrex, Electric.StatusMonitor])
+Repatch.setup(
+  recompile: [Postgrex, Electric.StatusMonitor, Electric.Telemetry.Sampler, :otel_tracer]
+)

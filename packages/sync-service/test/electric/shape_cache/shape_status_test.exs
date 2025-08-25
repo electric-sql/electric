@@ -37,21 +37,23 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     Mock.Storage
     |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end)
 
-    {:ok, state} =
-      ShapeStatus.initialise(
+    shape_status_opts =
+      ShapeStatus.opts(
         storage: {Mock.Storage, []},
         shape_meta_table: table
       )
+
+    :ok = ShapeStatus.initialise(shape_status_opts)
 
     shapes = Keyword.get(opts, :shapes, [])
 
     shape_handles =
       for shape <- shapes do
-        {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+        {:ok, shape_handle} = ShapeStatus.add_shape(shape_status_opts, shape)
         shape_handle
       end
 
-    {:ok, state, shape_handles}
+    {:ok, shape_status_opts, shape_handles}
   end
 
   test "starts empty", ctx do

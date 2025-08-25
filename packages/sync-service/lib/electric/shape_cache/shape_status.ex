@@ -7,9 +7,10 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   alias Electric.Replication.LogOffset
 
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
+  @type xmin() :: non_neg_integer()
 
-  @callback initialise(ShapeStatus.options()) :: {:ok, ShapeStatus.t()} | {:error, term()}
+  @callback opts(ShapeStatus.options()) :: ShapeStatus.t()
+  @callback initialise(ShapeStatus.t()) :: :ok | {:error, term()}
   @callback list_shapes(ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
   @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
@@ -23,6 +24,8 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback snapshot_started?(ShapeStatus.t(), shape_handle()) :: boolean()
   @callback remove_shape(ShapeStatus.t(), shape_handle()) ::
               {:ok, Shape.t()} | {:error, term()}
+
+  @callback shape_meta_table(Keyword.t() | binary()) :: atom()
 end
 
 defmodule Electric.ShapeCache.ShapeStatus do
@@ -51,17 +54,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @schema NimbleOptions.new!(
             shape_meta_table: [type: {:or, [:atom, :reference]}, required: true],
-            storage: [type: :mod_arg, required: true],
-            root: [type: :string, default: "./shape_cache"]
+            storage: [type: :mod_arg, required: true]
           )
 
-  defstruct [:root, :shape_meta_table, :storage]
+  defstruct [:shape_meta_table, :storage]
 
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type xmin() :: Electric.ShapeCacheBehaviour.xmin()
   @type table() :: atom() | reference()
   @type t() :: %__MODULE__{
-          root: String.t(),
           storage: Storage.storage(),
           shape_meta_table: table()
         }
@@ -78,20 +78,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @snapshot_started :snapshot_started
 
   @impl true
-  def initialise(opts) do
-    with {:ok, config} <- NimbleOptions.validate(opts, @schema),
-         {:ok, meta_table} = Access.fetch(config, :shape_meta_table),
-         {:ok, storage} = Access.fetch(config, :storage) do
-      state =
-        struct(
-          __MODULE__,
-          Keyword.merge(config,
-            shape_meta_table: meta_table,
-            storage: storage
-          )
-        )
+  def opts(opts) do
+    opts = NimbleOptions.validate!(opts, @schema)
+    struct(__MODULE__, opts)
+  end
 
-      load(state)
+  @impl true
+  def initialise(opts) do
+    with {:ok, _} <- load(opts) do
+      :ok
     end
   end
 
@@ -120,8 +115,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def list_shapes(state) do
-    :ets.select(state.shape_meta_table, [
+  def list_shapes(%__MODULE__{shape_meta_table: table}) do
+    list_shapes(table)
+  end
+
+  def list_shapes(table) do
+    :ets.select(table, [
       {
         {{@shape_meta_data, :"$1"}, :"$2", :_, :_, :_},
         [true],
@@ -329,6 +328,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.insert(table, {{@snapshot_started, shape_handle}, true})
     :ok
   end
+
+  @impl true
+  def shape_meta_table(opts) when is_list(opts), do: shape_meta_table(opts[:stack_id])
+  def shape_meta_table(stack_id) when is_binary(stack_id), do: :"#{stack_id}:shape_meta_table"
 
   defp load(state) do
     with {:ok, shapes} <- Storage.get_all_stored_shapes(state.storage) do

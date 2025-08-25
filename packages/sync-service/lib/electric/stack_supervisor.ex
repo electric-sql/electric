@@ -282,10 +282,18 @@ defmodule Electric.StackSupervisor do
 
     shape_changes_registry_name = registry_name(stack_id)
 
+    shape_status =
+      {ShapeStatus,
+       ShapeStatus.opts(
+         shape_meta_table: ShapeStatus.shape_meta_table(stack_id),
+         storage: storage
+       )}
+
     shape_cache_opts = [
       stack_id: stack_id,
       storage: storage,
       inspector: inspector,
+      shape_status: shape_status,
       publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
@@ -340,12 +348,6 @@ defmodule Electric.StackSupervisor do
       else
         []
       end
-
-    shape_status =
-      {ShapeStatus,
-       %ShapeStatus{
-         shape_meta_table: Electric.ShapeCache.get_shape_meta_table(stack_id: stack_id)
-       }}
 
     children =
       telemetry_children ++

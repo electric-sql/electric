@@ -74,6 +74,7 @@ defmodule Electric.ShapeCacheTest do
     :with_persistent_kv,
     :with_stack_id_from_test,
     :with_pure_file_storage,
+    :with_shape_status,
     :with_status_monitor,
     :with_shape_monitor
   ]
@@ -320,8 +321,7 @@ defmodule Electric.ShapeCacheTest do
       assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
 
       # should have cleaned up the shape
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
-      assert nil == ShapeStatus.get_existing_shape(meta_table, shape_handle)
+      assert nil == ShapeStatus.get_existing_shape(ctx.shape_status_opts, shape_handle)
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(storage)
       assert map_size(found) == 0
     end
@@ -513,9 +513,7 @@ defmodule Electric.ShapeCacheTest do
           run_with_conn_fn: &run_with_conn_noop/2
         )
 
-      meta_table = Access.fetch!(opts, :shape_meta_table)
-
-      assert ShapeCache.list_shapes(%{shape_meta_table: meta_table}) == []
+      assert ShapeCache.list_shapes(opts) == []
     end
 
     test "lists the shape as active once there is a snapshot", ctx do
@@ -531,9 +529,9 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-      meta_table = Access.fetch!(opts, :shape_meta_table)
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
-      assert {:ok, 10} = ShapeStatus.snapshot_xmin(meta_table, shape_handle)
+
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
+      assert {:ok, 10} = ShapeStatus.snapshot_xmin(ctx.shape_status_opts, shape_handle)
     end
 
     test "lists the shape even if we don't know xmin", ctx do
@@ -557,13 +555,12 @@ defmodule Electric.ShapeCacheTest do
       # Wait until we get to the waiting point in the snapshot
       assert_receive {:waiting_point, ref, pid}
 
-      meta_table = Access.fetch!(opts, :shape_meta_table)
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
 
       send(pid, {:continue, ref})
 
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
     end
   end
 
@@ -1055,19 +1052,17 @@ defmodule Electric.ShapeCacheTest do
     test "restores snapshot xmins", %{shape_cache_opts: opts} = context do
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
 
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
 
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_handle)
+      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.shape_status_opts, shape_handle)
       assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
 
       %{shape_cache_opts: opts} = restart_shape_cache(context)
       :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
-      meta_table = Keyword.fetch!(opts, :shape_meta_table)
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(%{shape_meta_table: meta_table})
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(meta_table, shape_handle)
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
+      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.shape_status_opts, shape_handle)
       assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
     end
 
@@ -1219,7 +1214,10 @@ defmodule Electric.ShapeCacheTest do
     defp restart_shape_cache(context, opts \\ []) do
       stop_shape_cache(context)
 
-      context = Map.merge(context, with_shape_log_collector(context))
+      context =
+        context
+        |> Map.merge(with_shape_log_collector(context))
+        |> Map.merge(with_shape_status(context))
 
       with_shape_cache(
         Map.put(context, :inspector, @stub_inspector),
@@ -1238,6 +1236,7 @@ defmodule Electric.ShapeCacheTest do
             ctx.shape_cache_opts[:server],
             ctx.consumer_supervisor,
             ctx.shape_log_collector,
+            ctx.shape_status_agent,
             "shape_task_supervisor"
           ] do
         stop_supervised(name)

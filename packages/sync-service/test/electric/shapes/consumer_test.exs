@@ -82,6 +82,7 @@ defmodule Electric.Shapes.ConsumerTest do
   describe "event handling" do
     setup [
       :with_in_memory_storage,
+      :with_shape_status,
       :with_persistent_kv,
       :with_status_monitor,
       :with_shape_monitor
@@ -636,6 +637,7 @@ defmodule Electric.Shapes.ConsumerTest do
     setup [
       :with_registry,
       :with_pure_file_storage,
+      :with_shape_status,
       :with_log_chunking,
       :with_persistent_kv,
       :with_shape_log_collector,
