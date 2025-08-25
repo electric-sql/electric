@@ -106,6 +106,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     version: @version
   ]
 
+  # Directory for storing metadata
+  @metadata_storage_dir ".meta"
+
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
@@ -172,15 +175,27 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
   end
 
-  def get_all_stored_shapes(%{base_path: base_path} = opts) do
-    case ls(base_path) do
-      {:error, :enoent} ->
-        {:ok, %{}}
+  def get_all_stored_shape_handles(%{base_path: base_path} = opts) do
+    case File.ls(base_path) do
+      {:ok, shape_handles} ->
+        shape_handles
+        |> Enum.reject(&match?(@metadata_storage_dir, &1))
+        |> Enum.reject(&File.exists?(deletion_marker_path(for_shape(&1, opts)), [:raw]))
+        |> then(&{:ok, MapSet.new(&1)})
 
+      {:error, :enoent} ->
+        {:ok, MapSet.new()}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def get_all_stored_shapes(%{base_path: base_path} = opts) do
+    case get_all_stored_shape_handles(opts) do
       {:ok, shape_handles} ->
         shape_handles
         |> Enum.map(&for_shape(&1, opts))
-        |> Enum.reject(&File.exists?(deletion_marker_path(&1), [:raw]))
         |> Enum.reduce(%{}, fn opts, acc ->
           case read_shape_definition(opts) do
             {:ok, shape} -> Map.put(acc, opts.shape_handle, shape)
@@ -188,7 +203,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
           end
         end)
         |> then(&{:ok, &1})
+
+      {:error, reason} ->
+        {:error, reason}
     end
+  end
+
+  def metadata_backup_dir(%{base_path: base_path} = opts) do
+    base_path |> Path.join(@metadata_storage_dir) |> Path.join("backups")
   end
 
   def cleanup!(%__MODULE__{} = opts) do

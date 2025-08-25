@@ -17,6 +17,7 @@ defmodule Electric.ShapeCache.FileStorage do
   @version_key :version
 
   @shape_definition_file_name "shape_defintion.json"
+  @metadata_storage_dir ".meta"
 
   @xmin_key :snapshot_xmin
   @pg_snapshot_key :pg_snapshot
@@ -160,13 +161,30 @@ defmodule Electric.ShapeCache.FileStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_all_stored_shapes(opts) do
+  def get_all_stored_shape_handles(opts) do
     shapes_dir = opts.base_path
 
     case File.ls(shapes_dir) do
       {:ok, shape_handles} ->
         shape_handles
+        |> Enum.reject(&match?(@metadata_storage_dir, &1))
         |> Enum.reject(&exists?(deletion_marker_path(shapes_dir, &1)))
+        |> then(&{:ok, MapSet.new(&1)})
+
+      {:error, :enoent} ->
+        # if not present, there's no stored shapes
+        {:ok, MapSet.new()}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def get_all_stored_shapes(opts) do
+    case get_all_stored_shape_handles(opts) do
+      {:ok, shape_handles} ->
+        shape_handles
         |> Enum.reduce(%{}, fn shape_handle, acc ->
           shape_def_path =
             shape_definition_path(%{
@@ -184,13 +202,14 @@ defmodule Electric.ShapeCache.FileStorage do
         end)
         |> then(&{:ok, &1})
 
-      {:error, :enoent} ->
-        # if not present, there's no stored shapes
-        {:ok, %{}}
-
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def metadata_backup_dir(%{base_path: base_path} = opts) do
+    base_path |> Path.join(@metadata_storage_dir) |> Path.join("backups")
   end
 
   @impl Electric.ShapeCache.Storage
