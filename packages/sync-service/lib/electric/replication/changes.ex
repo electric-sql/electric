@@ -204,7 +204,7 @@ defmodule Electric.Replication.Changes do
           }
   end
 
-  @doc """
+  @doc ~S"""
   Build a unique key for a given record based on its relation and PK.
 
   Uses the `/` symbol as a PK separator, so any `/`s in the PK will
@@ -240,6 +240,20 @@ defmodule Electric.Replication.Changes do
 
       iex> build_key({"hello", "world"}, %{"a" => "1", "b" => "", "c" => "2"}, [])
       ~S|"hello"."world"/"1"/""/"2"|
+
+  Dots and slashes in relation names are escaped by repetition:
+
+      iex> build_key({"a\".\"b", "c"}, %{"a" => ""}, [])
+      ~S|"a".."b"."c"/""|
+
+      iex> build_key({"a", "b\".\"c"}, %{"a" => ""}, [])
+      ~S|"a"."b".."c"/""|
+
+      iex> build_key({"a", "b"}, %{"a" => "", "b" => ""}, [])
+      ~S|"a"."b"/""/""|
+
+      iex> build_key({"a", "b\"/\""}, %{"a" => ""}, [])
+      ~S|"a"."b"//""/""|
   """
   def build_key(rel, record, pk_cols) when is_list(pk_cols) do
     IO.iodata_to_binary([prefix_from_rel(rel), join_escape_pk(record, pk_cols)])
@@ -262,7 +276,11 @@ defmodule Electric.Replication.Changes do
   def fill_key(%DeletedRecord{relation: relation, old_record: old_record} = change, pk),
     do: %{change | key: build_key(relation, old_record, pk)}
 
-  defp prefix_from_rel({schema, table}), do: [?", schema, ?", ?., ?", table, ?"]
+  defp prefix_from_rel({schema, table}),
+    do: [?", escape_rel_component(schema), ?", ?., ?", escape_rel_component(table), ?"]
+
+  defp escape_rel_component(relcomp),
+    do: relcomp |> :binary.replace("/", "//", [:global]) |> :binary.replace(".", "..", [:global])
 
   defp join_escape_pk(record, []),
     do:

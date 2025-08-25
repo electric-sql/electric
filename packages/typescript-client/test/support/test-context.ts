@@ -90,7 +90,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   waitForIssues: WaitForIssuesFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
-    const tableName = `"issues for ${task.id}_${Math.random().toString(16)}"`
+    const tableName = `"issues for ${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
     await dbClient.query(`
     DROP TABLE IF EXISTS ${tableName};
     CREATE TABLE ${tableName} (
@@ -166,7 +166,7 @@ export const testWithMultitypeTable = testWithDbClient.extend<{
   tableUrl: string
 }>({
   tableSql: async ({ dbClient, task }, use) => {
-    const tableName = `"multitype table for ${task.id}_${Math.random().toString(16)}"`
+    const tableName = `"multitype table for ${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
 
     await dbClient.query(`
       DROP TABLE IF EXISTS ${tableName};
