@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.7.1
+
+### Patch Changes
+
+- 2c19914: Ensure 409s do not lead to infinite request cycles because of caching.
+
 ## 0.7.0
 
 ### Minor Changes
