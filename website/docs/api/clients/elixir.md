@@ -8,7 +8,7 @@ outline: deep
 
 # Elixir client
 
-Electric provides an [Elixir client](#how-to-use) that wraps the [HTTP API](/docs/api/http) into a higher-level stream interface and a [Phoenix integration](#phoenix-integration) that adds sync to your Phoenix application.
+Electric has an [Elixir client](#how-to-use) and deep [Phoenix integration](#phoenix-integration).
 
 ## How to use
 
@@ -48,9 +48,6 @@ See the documentation at [hexdocs.pm/electric_client](https://hexdocs.pm/electri
 
 ## Phoenix integration
 
-Electric also provides an [`Electric.Phoenix`](https://hex.pm/packages/electric_phoenix) integration allows you to:
+Electric has deep integration into the Phoenix framework via the official [Phoenix.Sync](https://hex.pm/packages/phoenix_sync) library.
 
-- sync data into a [front-end app](/docs/integrations/phoenix#front-end-sync) from a Postgres-backed Phoenix application; and
-- add real-time streaming from Postgres into Phoenix LiveView via [Phoenix.Streams](/docs/integrations/phoenix#liveview-sync)
-
-See the [Phoenix framework integration page](/docs/integrations/phoenix) for more details.
+See the [Phoenix integration page](/docs/integrations/phoenix) for more details.
