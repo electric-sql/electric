@@ -150,9 +150,9 @@ defmodule Support.ComponentSetup do
       )
 
     start_link_supervised!(%{
-      id: "shape_status_agent",
+      id: "shape_status_owner",
       start:
-        {Electric.ShapeCache.ShapeStatusAgent, :start_link,
+        {Electric.ShapeCache.ShapeStatusOwner, :start_link,
          [
            [
              stack_id: ctx.stack_id,
@@ -163,7 +163,7 @@ defmodule Support.ComponentSetup do
     })
 
     %{
-      shape_status_agent: "shape_status_agent",
+      shape_status_owner: "shape_status_owner",
       shape_status_opts: shape_status_opts,
       shape_status: {Electric.ShapeCache.ShapeStatus, shape_status_opts}
     }

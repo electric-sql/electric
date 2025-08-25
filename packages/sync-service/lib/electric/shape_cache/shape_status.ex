@@ -11,6 +11,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
 
   @callback opts(ShapeStatus.options()) :: ShapeStatus.t()
   @callback initialise(ShapeStatus.t()) :: :ok | {:error, term()}
+  @callback terminate(ShapeStatus.t()) :: :ok | {:error, term()}
   @callback list_shapes(ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
   @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
@@ -24,6 +25,10 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback snapshot_started?(ShapeStatus.t(), shape_handle()) :: boolean()
   @callback remove_shape(ShapeStatus.t(), shape_handle()) ::
               {:ok, Shape.t()} | {:error, term()}
+
+  @callback set_shape_storage_state(ShapeStatus.t(), shape_handle(), term()) :: :ok
+  @callback consume_shape_storage_state(ShapeStatus.t(), shape_handle()) ::
+              term() | nil
 
   @callback shape_meta_table(Keyword.t() | binary()) :: atom()
 end
@@ -68,9 +73,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @type option() :: unquote(NimbleOptions.option_typespec(@schema))
   @type options() :: [option()]
 
+  @table_version "v1"
+  @backup_dir "shape_status_backups"
+  @backup_file "shape_status_#{@table_version}.ets.backup"
+
   @shape_meta_data :shape_meta_data
   @shape_hash_lookup :shape_hash_lookup
   @shape_relation_lookup :shape_relation_lookup
+  @shape_storage_state_backup :shape_storage_state_backup
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
@@ -84,10 +94,28 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def initialise(opts) do
-    with {:ok, _} <- load(opts) do
-      :ok
+  def initialise(%__MODULE__{shape_meta_table: table} = state) do
+    case load_table_backup(state) do
+      {:ok, ^table} ->
+        Logger.info("Loaded shape status from backup")
+        :ok
+
+      {:ok, other_table} ->
+        :ets.rename(other_table, table)
+        :ok
+
+      _ ->
+        Logger.debug("No shape status backup loaded, creating new table #{table}")
+        :ets.new(table, [:named_table, :public, :ordered_set])
+        load(state)
     end
+
+    # :ets.new(table, [:named_table, :public, :ordered_set])
+    # load(state)
+  end
+
+  def terminate(state) do
+    store_table_backup(state)
   end
 
   @impl true
@@ -154,6 +182,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         [
           {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
           {{{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle}, [], [true]},
+          {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]},
           {{{@snapshot_started, shape_handle}, :_}, [], [true]}
           | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
               {{{@shape_relation_lookup, oid, shape_handle}, :_}, [], [true]}
@@ -330,6 +359,29 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
+  def set_shape_storage_state(%__MODULE__{shape_meta_table: table}, shape_handle, storage_state) do
+    set_shape_storage_state(table, shape_handle, storage_state)
+  end
+
+  def set_shape_storage_state(meta_table, shape_handle, storage_state) do
+    :ets.insert(meta_table, {{@shape_storage_state_backup, shape_handle}, storage_state})
+    :ok
+  end
+
+  @impl true
+  def consume_shape_storage_state(%__MODULE__{shape_meta_table: table}, shape_handle) do
+    consume_shape_storage_state(table, shape_handle)
+  end
+
+  def consume_shape_storage_state(meta_table, shape_handle) do
+    res = :ets.lookup_element(meta_table, {@shape_storage_state_backup, shape_handle}, 2)
+    :ets.delete(meta_table, {@shape_storage_state_backup, shape_handle})
+    res
+  rescue
+    ArgumentError -> nil
+  end
+
+  @impl true
   def shape_meta_table(opts) when is_list(opts), do: shape_meta_table(opts[:stack_id])
   def shape_meta_table(stack_id) when is_binary(stack_id), do: :"#{stack_id}:shape_meta_table"
 
@@ -353,8 +405,38 @@ defmodule Electric.ShapeCache.ShapeStatus do
         ])
       )
 
-      {:ok, state}
+      :ok
     end
+  end
+
+  defp store_table_backup(%__MODULE__{shape_meta_table: table} = state) do
+    File.mkdir_p!(backup_dir(state))
+
+    :ets.tab2file(
+      table,
+      backup_file_path(state),
+      sync: true,
+      extended_info: [:object_count]
+    )
+  end
+
+  defp load_table_backup(%__MODULE__{shape_meta_table: table} = state) do
+    res = :ets.file2tab(backup_file_path(state), verify: true)
+    dbg("Loaded backup #{inspect(res)}")
+    File.rm_rf(backup_dir(state))
+    res
+  end
+
+  defp backup_file_path(%__MODULE__{} = state) do
+    backup_dir(state)
+    |> Path.join(@backup_file)
+    |> String.to_charlist()
+  end
+
+  defp backup_dir(%__MODULE__{storage: {_, storage_opts}}) do
+    storage_opts.base_path
+    |> Path.join(@backup_dir)
+    |> String.to_charlist()
   end
 
   defp turn_raise_into_error(fun) do

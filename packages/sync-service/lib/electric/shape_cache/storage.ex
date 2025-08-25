@@ -47,7 +47,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback start_link(shape_opts()) :: GenServer.on_start()
 
   @doc "Prepare the in-process writer state, returning an accumulator."
-  @callback init_writer!(shape_opts(), shape_definition :: Shape.t()) :: writer_state()
+  @callback init_writer!(shape_opts(), shape_definition :: Shape.t(), term()) :: writer_state()
 
   @doc "Retrieve all stored shapes"
   @callback get_all_stored_shapes(compiled_opts()) ::
@@ -177,8 +177,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def init_writer!({mod, shape_opts}, shape_definition) do
-    {mod, mod.init_writer!(shape_opts, shape_definition)}
+  def init_writer!({mod, shape_opts}, shape_definition, storage_recovery_state \\ nil) do
+    {mod, mod.init_writer!(shape_opts, shape_definition, storage_recovery_state)}
   end
 
   @impl __MODULE__
