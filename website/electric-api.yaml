@@ -414,12 +414,25 @@ paths:
         "409":
           description:
             The requested offset for the given shape no longer exists.
-            Client should sync the shape using the relative path from the location header.
+            Client should resync the shape using the new shape handle if provided, or
+            using a consistent cache buster for their next `offset=-1` request.
           headers:
             electric-handle:
               schema:
                 type: string
-              description: Handle of the new shape that must be used in client requests from now on.
+              description: |-
+                Handle of the new shape that must be used in client requests from now on.
+
+                This will not always be returned, as a new shape handle might not be immediately
+                available at the point of invalidation of the current operation.
+
+                If the replacement handle is not present, clients should attempt to use a
+                consistent cache buster for their next `offset=-1` request to avoid running into
+                the cached response for the invalidated shape.
+
+                A suggested approach is to set the handle in the next `offset=-1` approach as the
+                current shape's handle with a suffix like `-next` - the handle will be ignored
+                by the server, and it can act as a consistent cache buster between clients.
           content:
             application/json:
               schema:
