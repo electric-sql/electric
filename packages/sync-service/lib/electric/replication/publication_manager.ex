@@ -21,7 +21,6 @@ defmodule Electric.Replication.PublicationManager do
     :relation_filter_counters,
     :prepared_relation_filters,
     :committed_relation_filters,
-    :row_filtering_enabled,
     :update_debounce_timeout,
     :scheduled_updated_ref,
     :retries,
@@ -29,7 +28,6 @@ defmodule Electric.Replication.PublicationManager do
     :tracked_shape_handles,
     :publication_name,
     :db_pool,
-    :pg_version,
     :can_alter_publication?,
     :manual_table_publishing?,
     :configure_tables_for_replication_fn,
@@ -41,14 +39,12 @@ defmodule Electric.Replication.PublicationManager do
            relation_filter_counters: %{Electric.oid_relation() => map()},
            prepared_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
            committed_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
-           row_filtering_enabled: boolean(),
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
            tracked_shape_handles: MapSet.t(),
            publication_name: String.t(),
            db_pool: term(),
-           pg_version: non_neg_integer(),
            configure_tables_for_replication_fn: fun(),
            shape_cache: {module(), term()},
            next_update_forced?: boolean()
@@ -70,7 +66,6 @@ defmodule Electric.Replication.PublicationManager do
 
   @retry_timeout 300
   @max_retries 3
-  @pg_15 150_000
 
   # The default debounce timeout is 0, which means that the publication update
   # will be scheduled immediately to run at the end of the current process
@@ -90,14 +85,13 @@ defmodule Electric.Replication.PublicationManager do
             publication_name: [type: :string, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
             shape_cache: [type: :mod_arg, required: false],
-            pg_version: [type: :integer, required: true],
             can_alter_publication?: [type: :boolean, required: false, default: true],
             manual_table_publishing?: [type: :boolean, required: false, default: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             configure_tables_for_replication_fn: [
-              type: {:fun, 5},
+              type: {:fun, 4},
               required: false,
-              default: &Configuration.configure_publication!/5
+              default: &Configuration.configure_publication!/4
             ],
             server: [type: :any, required: false]
           )
@@ -179,7 +173,6 @@ defmodule Electric.Replication.PublicationManager do
       relation_filter_counters: %{},
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
-      row_filtering_enabled: opts.pg_version >= @pg_15,
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
@@ -187,7 +180,6 @@ defmodule Electric.Replication.PublicationManager do
       update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
-      pg_version: opts.pg_version,
       can_alter_publication?: opts.can_alter_publication?,
       manual_table_publishing?: opts.manual_table_publishing?,
       shape_cache: Map.get(opts, :shape_cache, {Electric.ShapeCache, [stack_id: opts.stack_id]}),
@@ -279,7 +271,7 @@ defmodule Electric.Replication.PublicationManager do
            next_update_forced?: forced?
          } = state
        ) do
-    if not forced? and Map.keys(current_filters) == Map.keys(committed_filters) do
+    if not forced? and filters_are_equal?(current_filters, committed_filters) do
       Logger.debug("No changes to publication, skipping checkup")
       {:noreply, reply_to_waiters(:ok, state)}
     else
@@ -411,15 +403,10 @@ defmodule Electric.Replication.PublicationManager do
        do: %{state | next_update_forced?: forced? or state.next_update_forced?}
 
   defp update_needed?(%__MODULE__{
-         prepared_relation_filters: commited,
-         committed_relation_filters: prepared,
-         row_filtering_enabled: row_filtering_enabled
+         prepared_relation_filters: prepared,
+         committed_relation_filters: committed
        }) do
-    cond do
-      prepared == commited -> false
-      not row_filtering_enabled and Map.keys(prepared) == Map.keys(commited) -> false
-      true -> true
-    end
+    not filters_are_equal?(prepared, committed)
   end
 
   # Updates are forced when we're doing periodic checks: we expect no changes to the filters,
@@ -445,17 +432,15 @@ defmodule Electric.Replication.PublicationManager do
          %__MODULE__{
            committed_relation_filters: committed_filters,
            prepared_relation_filters: current_filters,
-           row_filtering_enabled: false,
            publication_name: publication_name,
            db_pool: db_pool,
-           pg_version: pg_version,
            configure_tables_for_replication_fn: configure_tables_for_replication_fn,
            next_update_forced?: forced?
          } = state
        ) do
     # If row filtering is disabled, we only care about changes in actual relations
     # included in the publication
-    if not forced? and Map.keys(current_filters) == Map.keys(committed_filters) do
+    if not forced? and filters_are_equal?(current_filters, committed_filters) do
       Logger.debug("No changes to publication, skipping update")
       {:ok, state, []}
     else
@@ -464,10 +449,7 @@ defmodule Electric.Replication.PublicationManager do
           configure_tables_for_replication_fn.(
             db_pool,
             Map.keys(committed_filters),
-            Map.new(current_filters, fn {rel, filter} ->
-              {rel, RelationFilter.relation_only(filter)}
-            end),
-            pg_version,
+            current_filters,
             publication_name
           )
 
@@ -476,50 +458,6 @@ defmodule Electric.Replication.PublicationManager do
         err -> {:error, err}
       end
     end
-  end
-
-  defp update_publication(
-         %__MODULE__{
-           committed_relation_filters: committed_filters,
-           prepared_relation_filters: relation_filters,
-           row_filtering_enabled: true,
-           publication_name: publication_name,
-           db_pool: db_pool,
-           pg_version: pg_version,
-           configure_tables_for_replication_fn: configure_tables_for_replication_fn
-         } = state
-       ) do
-    missing_relations =
-      configure_tables_for_replication_fn.(
-        db_pool,
-        Map.keys(committed_filters),
-        relation_filters,
-        pg_version,
-        publication_name
-      )
-
-    {:ok, state, missing_relations}
-  rescue
-    # if we are unable to do row filtering for whatever reason, fall back to doing only
-    # relation-based filtering - this is a fallback for unsupported where clauses that we
-    # do not detect when composing relation filters
-    err ->
-      case err do
-        %Postgrex.Error{postgres: %{code: :feature_not_supported}} ->
-          Logger.warning(
-            "Row filtering is not supported, falling back to relation-based filtering"
-          )
-
-          update_publication(%{
-            state
-            | # disable row filtering and reset committed filters
-              row_filtering_enabled: false,
-              committed_relation_filters: %{}
-          })
-
-        _ ->
-          {:error, err}
-      end
   end
 
   @spec update_relation_filters_for_shape(Shape.t(), filter_operation(), state()) :: state()
@@ -677,5 +615,13 @@ defmodule Electric.Replication.PublicationManager do
          %__MODULE__{tracked_shape_handles: tracked_shape_handles}
        ) do
     MapSet.member?(tracked_shape_handles, shape_handle)
+  end
+
+  defp filters_are_equal?(old_filters, new_filters) do
+    Map.keys(old_filters) == Map.keys(new_filters) and
+      Enum.all?(old_filters, fn {key, old_filter} ->
+        new_filter = Map.fetch!(new_filters, key)
+        Map.delete(old_filter, :where_clauses) == Map.delete(new_filter, :where_clauses)
+      end)
   end
 end

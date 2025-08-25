@@ -458,7 +458,6 @@ defmodule Electric.Connection.Manager do
              pool_opts: state.pool_opts,
              replication_opts: state.replication_opts,
              tweaks: state.tweaks,
-             pg_version: state.pg_version,
              can_alter_publication?: state.can_alter_publication?,
              manual_table_publishing?: state.manual_table_publishing?,
              persistent_kv: state.persistent_kv

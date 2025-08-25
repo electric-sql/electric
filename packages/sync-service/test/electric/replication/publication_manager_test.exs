@@ -13,7 +13,6 @@ defmodule Electric.Replication.PublicationManagerTest do
   @shape_handle_3 "shape_handle_3"
   @where_clause_1 %Expr{query: "id = '1'", used_refs: %{["id"] => :text}}
   @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
-  @where_clause_3 %Expr{query: "id = '3'", used_refs: %{["id"] => :text}}
   @where_clause_enum %Expr{
     query: "id = '1' AND foo_enum::text = 'bar'",
     used_refs: %{["foo_enum"] => {:enum, "foo_enum"}}
@@ -28,7 +27,7 @@ defmodule Electric.Replication.PublicationManagerTest do
   setup ctx do
     test_pid = self()
 
-    configure_tables_fn = fn _, _, filters, _, _ ->
+    configure_tables_fn = fn _, _, filters, _ ->
       send(test_pid, {:filters, Map.values(filters)})
       Map.get(ctx, :returned_relations, [])
     end
@@ -42,7 +41,6 @@ defmodule Electric.Replication.PublicationManagerTest do
         shape_cache: {__MODULE__, [self()]},
         publication_name: "pub_#{ctx.stack_id}",
         pool: :no_pool,
-        pg_version: Access.get(ctx, :pg_version, 150_001),
         configure_tables_for_replication_fn: configure_tables_fn
       })
 
@@ -95,7 +93,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                       ]}
     end
 
-    test "should merge where clauses for same relation", %{opts: opts} do
+    test "should not update publication when only the where clause changes", %{opts: opts} do
       shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "items"}, @where_clause_2)
       shape3 = generate_shape({"public", "items"}, @where_clause_1)
@@ -103,28 +101,16 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
       assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
 
+      # Since only the first addition of the shape makes changes to the publication, we only expect to see the first where clause.
       assert_receive {:filters,
                       [
                         %RelationFilter{
                           relation: {"public", "items"},
-                          where_clauses: [@where_clause_2, @where_clause_1]
+                          where_clauses: [@where_clause_1]
                         }
                       ]}
-    end
 
-    test "should remove where clauses when one covers everything", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, nil)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape2, opts)
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: nil
-                        }
-                      ]}
+      refute_receive {:filters, _}, 500
     end
 
     test "should ignore where clauses that use unsupported column types (enums)", %{opts: opts} do
@@ -195,7 +181,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                       ]}
     end
 
-    @tag update_debounce_timeout: 50
+    @tag update_debounce_timeout: 100
     test "should not update publication if new shape adds nothing", %{opts: opts} do
       shape1 = generate_shape({"public", "items"}, @where_clause_1)
       shape2 = generate_shape({"public", "items"}, @where_clause_2)
@@ -217,89 +203,6 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
 
       refute_receive {:filters, _}, 500
-    end
-
-    @tag update_debounce_timeout: 100
-    @tag pg_version: 14_0001
-    test "should not update publication if new shape adds nothing when where clauses aren't considered",
-         %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
-      # different clause, but PG 14 doesn't support those filters
-      shape3 = generate_shape({"public", "items"}, @where_clause_3)
-
-      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
-      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
-
-      Task.await_many([task1, task2])
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: nil
-                        }
-                      ]}
-
-      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
-
-      refute_receive {:filters, _}, 500
-    end
-
-    test "should fallback to relation-only filtering if we cannot do row filtering", %{
-      ctx: ctx,
-      opts: opts
-    } do
-      stop_supervised!(opts[:server])
-
-      test_id = self()
-
-      configure_tables_fn = fn _, _old_relations, filters, _, _ ->
-        if filters |> Map.values() |> Enum.any?(&(&1.where_clauses != nil)) do
-          send(test_id, {:got_filters, :with_where_clauses})
-          raise %Postgrex.Error{postgres: %{code: :feature_not_supported}}
-        end
-
-        send(test_id, {:got_filters, :without_where_clauses})
-        []
-      end
-
-      %{publication_manager: {_, publication_manager_opts}} =
-        with_publication_manager(%{
-          module: ctx.module,
-          test: ctx.test,
-          stack_id: ctx.stack_id,
-          update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
-          publication_name: "pub_#{ctx.stack_id}",
-          pool: :no_pool,
-          pg_version: 150_001,
-          configure_tables_for_replication_fn: configure_tables_fn
-        })
-
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
-      shape3 = generate_shape({"public", "items_other"}, @where_clause_2)
-
-      # should fall back to relation-only filtering
-      assert :ok ==
-               PublicationManager.add_shape(@shape_handle_1, shape1, publication_manager_opts)
-
-      assert_receive {:got_filters, :with_where_clauses}
-      assert_receive {:got_filters, :without_where_clauses}
-      refute_receive {:got_filters, _}, 50
-
-      # should remain in relation-only filtering mode after that, which
-      # only updates the publication if the tracked relations change
-      assert :ok ==
-               PublicationManager.add_shape(@shape_handle_2, shape2, publication_manager_opts)
-
-      refute_receive {:got_filters, _}, 50
-
-      assert :ok ==
-               PublicationManager.add_shape(@shape_handle_3, shape3, publication_manager_opts)
-
-      assert_receive {:got_filters, :without_where_clauses}
-      refute_receive {:got_filters, _}, 50
     end
 
     @tag returned_relations: [{10, {"public", "another_table"}}]
