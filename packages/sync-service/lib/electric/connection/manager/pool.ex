@@ -243,7 +243,12 @@ defmodule Electric.Connection.Manager.Pool do
   # and log any issues before and after the connection is established.
   def configure_pool_conn(opts, supervisor_pid) do
     send(supervisor_pid, {:pool_conn_started, self()})
-    Process.link(supervisor_pid)
+
+    # If supervisor process not alive when initializing connection, abort it
+    if Process.alive?(supervisor_pid),
+      do: Process.link(supervisor_pid),
+      else: exit({:shutdown, {:supervisor_not_alive, supervisor_pid}})
+
     opts
   end
 
