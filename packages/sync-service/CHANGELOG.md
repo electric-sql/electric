@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.1.6
+
+### Patch Changes
+
+- 8beda6f: fix: flush tracker was using wrong shape identity
+- ee4826e: Gracefully handle termination while waiting for stack readiness
+
 ## 1.1.5
 
 ### Patch Changes
