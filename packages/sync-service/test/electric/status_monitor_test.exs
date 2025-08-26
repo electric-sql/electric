@@ -208,25 +208,23 @@ defmodule Electric.StatusMonitorTest do
       task =
         Task.async(fn ->
           send(parent, {:monitor, :wait})
-          StatusMonitor.wait_until_active(stack_id, 10_000)
+          StatusMonitor.wait_until_active(stack_id, 100)
         end)
 
       ref = Process.monitor(pid)
 
       assert_receive {:monitor, :wait}, 200
 
-      # a little nap to make sure functions have been called
-      # without this the test is unreliable -- maybe because of
-      # sleeps inside the wait_until_active/2 implementation
-      Process.sleep(10)
+      Process.exit(
+        pid,
+        Enum.random([:shutdown, {:shutdown, :normal}, {:error, "broken"}, :kill])
+      )
 
-      Process.exit(pid, :shutdown)
+      assert_receive {:DOWN, ^ref, :process, ^pid, _}, 200
 
-      assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 200
-
-      assert {:error, message} = Task.await(task, 1_000)
-
-      assert message =~ "Stack #{inspect(stack_id)} has terminated"
+      # the actual returned error is caused by the status monitor pid not
+      # existing, not by the exit message
+      assert {:error, _message} = Task.await(task, 1_000)
     end
   end
 end
