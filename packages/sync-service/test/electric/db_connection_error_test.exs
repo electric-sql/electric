@@ -142,6 +142,27 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with query cancelled error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :query_canceled,
+          message: "canceling statement due to user request",
+          severity: "ERROR",
+          pg_code: "57014"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "canceling statement due to user request",
+               type: :query_canceled,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with insufficient privileges error" do
       error = %Postgrex.Error{
         message: nil,
