@@ -159,4 +159,10 @@ defmodule Support.TestStorage do
     send(parent, {__MODULE__, :terminate, shape_handle})
     Storage.terminate(storage)
   end
+
+  @impl Electric.ShapeCache.Storage
+  def hibernate({parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :hibernate, shape_handle})
+    Storage.hibernate(storage)
+  end
 end

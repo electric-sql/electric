@@ -62,9 +62,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def start_link(config) when is_map(config) do
-    GenServer.start_link(__MODULE__, config,
-      name: name(config),
-      hibernate_after: Electric.Config.get_env(:shape_hibernate_after)
+    GenServer.start_link(
+      __MODULE__,
+      Map.put(config, :hibernate_after, Electric.Config.get_env(:shape_hibernate_after)),
+      name: name(config)
     )
   end
 
@@ -87,7 +88,8 @@ defmodule Electric.Shapes.Consumer do
         monitors: [],
         cleaned?: false,
         txn_offset_mapping: [],
-        materializer_subscribed?: false
+        materializer_subscribed?: false,
+        hibernate_timer: nil
       })
 
     :ok =
@@ -149,19 +151,20 @@ defmodule Electric.Shapes.Consumer do
        latest_offset: normalized_latest_offset,
        writer: writer,
        pg_snapshot: pg_snapshot
-     })}
+     })
+     |> hibernate()}
   end
 
   @impl GenServer
   def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
     Logger.debug("Returning latest offset for #{state.shape_handle}: #{inspect(offset)}")
 
-    {:reply, {:ok, offset}, state}
+    {:reply, {:ok, offset}, state |> hibernate()}
   end
 
   def handle_call({:monitor, pid}, _from, %{monitors: monitors} = state) do
     ref = make_ref()
-    {:reply, ref, %{state | monitors: [{pid, ref} | monitors]}}
+    {:reply, ref, %{state | monitors: [{pid, ref} | monitors]} |> hibernate()}
   end
 
   def handle_call(:stop_and_clean, _from, state) do
@@ -169,7 +172,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
-    {:reply, :started, state}
+    {:reply, :started, state |> hibernate()}
   end
 
   def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
@@ -181,13 +184,13 @@ defmodule Electric.Shapes.Consumer do
   @impl GenServer
   def handle_call({:handle_event, event, trace_context}, _from, state) do
     OpenTelemetry.set_current_context(trace_context)
-    {:reply, :ok, handle_event(event, state)}
+    {:reply, :ok, handle_event(event, state) |> hibernate()}
   end
 
   @impl GenServer
   def handle_call(:subscribe_materializer, _from, state) do
     Logger.debug("Subscribing materializer for #{state.shape_handle}")
-    {:reply, :ok, %{state | materializer_subscribed?: true}}
+    {:reply, :ok, %{state | materializer_subscribed?: true} |> hibernate()}
   end
 
   @impl GenServer
@@ -208,13 +211,13 @@ defmodule Electric.Shapes.Consumer do
       }
       |> set_pg_snapshot(state)
 
-    {:noreply, handle_txns(state.buffer, %{state | buffer: []})}
+    {:noreply, handle_txns(state.buffer, %{state | buffer: []}) |> hibernate()}
   end
 
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
     Logger.debug("Snapshot started shape_handle: #{shape_handle}")
     state = set_snapshot_started(state)
-    {:noreply, state}
+    {:noreply, state |> hibernate()}
   end
 
   def handle_cast(
@@ -239,7 +242,7 @@ defmodule Electric.Shapes.Consumer do
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
     state = set_pg_snapshot(state.pg_snapshot, state)
     state = set_snapshot_started(state)
-    {:noreply, state}
+    {:noreply, state |> hibernate()}
   end
 
   @impl GenServer
@@ -256,12 +259,12 @@ defmodule Electric.Shapes.Consumer do
     {state, offset} = align_to_txn_boundary(state, offset)
 
     ShapeLogCollector.notify_flushed(state.log_producer, state.shape_handle, offset)
-    {:noreply, state}
+    {:noreply, state |> hibernate()}
   end
 
   def handle_info({ShapeCache.Storage, message}, state) do
     writer = ShapeCache.Storage.apply_message(state.writer, message)
-    {:noreply, %{state | writer: writer}}
+    {:noreply, %{state | writer: writer} |> hibernate()}
   end
 
   def handle_info({:materializer_changes, shape_handle, events}, state) do
@@ -279,6 +282,12 @@ defmodule Electric.Shapes.Consumer do
   def handle_info({:EXIT, _from, reason}, state) do
     Logger.debug("Caught EXIT: #{inspect(reason)}")
     {:stop, reason, state}
+  end
+
+  def handle_info(:hibernate, state) do
+    state = %{state | hibernate_timer: nil, writer: ShapeCache.Storage.hibernate(state.writer)}
+
+    {:noreply, state, :hibernate}
   end
 
   @impl GenServer
@@ -308,6 +317,18 @@ defmodule Electric.Shapes.Consumer do
     end
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
+  end
+
+  defp hibernate(state) do
+    if state.hibernate_timer do
+      Process.cancel_timer(state.hibernate_timer)
+    end
+
+    Map.put(
+      state,
+      :hibernate_timer,
+      Process.send_after(self(), :hibernate, state.hibernate_after)
+    )
   end
 
   # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
