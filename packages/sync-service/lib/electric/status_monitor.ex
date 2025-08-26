@@ -85,7 +85,22 @@ defmodule Electric.StatusMonitor do
       :ok
     else
       try do
-        GenServer.call(name(stack_id), {:wait_until_active, timeout}, :infinity)
+        stack_id
+        |> name()
+        |> GenServer.whereis()
+        |> case do
+          nil ->
+            # Either the status monitor has not started yet, or the stack has
+            # been terminated in some permanent way
+            maybe_retry_wait_until_active(
+              stack_id,
+              timeout,
+              "Status monitor not found for stack ID: #{stack_id}"
+            )
+
+          pid when is_pid(pid) ->
+            GenServer.call(pid, {:wait_until_active, timeout}, :infinity)
+        end
       rescue
         ArgumentError ->
           # This happens when the Process Registry has not been created yet
@@ -95,12 +110,11 @@ defmodule Electric.StatusMonitor do
             "Stack ID not recognised: #{stack_id}"
           )
       catch
-        :exit, {:noproc, _} ->
-          # This happens when the StatusMonitor process has not been started yet
+        :exit, _reason ->
           maybe_retry_wait_until_active(
             stack_id,
             timeout,
-            "Status monitor not found for stack ID: #{stack_id}"
+            "Stack #{inspect(stack_id)} has terminated"
           )
       end
     end
@@ -221,7 +235,7 @@ defmodule Electric.StatusMonitor do
   defp format_details(%{error: error}), do: ": #{error}"
   defp format_details(_), do: ""
 
-  defp name(stack_id) do
+  def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
