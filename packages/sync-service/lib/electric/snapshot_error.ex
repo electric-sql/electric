@@ -37,6 +37,23 @@ defmodule Electric.SnapshotError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :undefined_object,
+            message: "publication " <> _ = message,
+            severity: "ERROR",
+            pg_code: "42704"
+          }
+        } = error
+      ) do
+    %SnapshotError{
+      type: :missing_publication,
+      message: message,
+      original_error: error
+    }
+  end
+
   def from_error(%Postgrex.Error{} = error) do
     %SnapshotError{
       type: :unknown,
