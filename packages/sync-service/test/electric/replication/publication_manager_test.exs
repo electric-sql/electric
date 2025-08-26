@@ -323,6 +323,8 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   describe "missing publication handling" do
     test "add_shape raises and server stops when publication is missing", ctx do
+      stop_supervised!(ctx.opts[:server])
+
       # Simulate the PublicationManager detecting a missing publication (undefined_object 42704)
       missing_pub_error = %Postgrex.Error{
         postgres: %{
@@ -338,7 +340,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       end
 
       # Start a fresh publication manager with the failing configure function
-      %{publication_manager: {pid, publication_manager_opts}} =
+      %{publication_manager: {_, publication_manager_opts}} =
         with_publication_manager(%{
           module: ctx.module,
           test: ctx.test,
@@ -350,7 +352,9 @@ defmodule Electric.Replication.PublicationManagerTest do
           configure_tables_for_replication_fn: configure_tables_fn
         })
 
+      pid = GenServer.whereis(publication_manager_opts[:server])
       mref = Process.monitor(pid)
+      Process.unlink(pid)
 
       shape = generate_shape({"public", "items"}, @where_clause_1)
 
