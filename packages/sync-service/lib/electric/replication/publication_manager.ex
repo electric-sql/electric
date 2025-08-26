@@ -316,6 +316,23 @@ defmodule Electric.Replication.PublicationManager do
       {:ok, state, missing_relations} ->
         update_relation_filters(state, missing_relations)
 
+      # Handle the case where the publication is not present as a fatal one
+      {:error,
+       %Postgrex.Error{
+         postgres: %{
+           code: :undefined_object,
+           message: "publication" <> _,
+           severity: "ERROR",
+           pg_code: "42704"
+         }
+       } = err} ->
+        Logger.warning(
+          "The publication was expected to be present but was not found: #{inspect(err)}"
+        )
+
+        state = reply_to_waiters({:error, err}, state)
+        {:stop, {:shutdown, err}, state}
+
       {:error, err} when retries < @max_retries and not is_fatal(err) ->
         Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
         state = schedule_update_publication(@retry_timeout, %{state | retries: retries + 1})
