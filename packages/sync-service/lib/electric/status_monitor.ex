@@ -110,7 +110,7 @@ defmodule Electric.StatusMonitor do
             "Stack ID not recognised: #{stack_id}"
           )
       catch
-        :exit, reason ->
+        :exit, _reason ->
           maybe_retry_wait_until_active(
             stack_id,
             timeout,
