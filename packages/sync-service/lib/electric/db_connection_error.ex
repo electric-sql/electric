@@ -247,6 +247,29 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :undefined_object,
+            message: "publication" <> _,
+            severity: "ERROR",
+            pg_code: "42704"
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message: """
+      The publication was expected to be present but was not found.
+      Publications and replication slots created by Electric should not
+      be manually modified or deleted, as it breaks replication integrity.
+      """,
+      type: :missing_publication,
+      original_error: error,
+      retry_may_fix?: false,
+      drop_slot_and_restart?: true
+    }
+  end
+
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
     maybe_database_does_not_exist(error) ||
       maybe_endpoint_does_not_exist(error) ||

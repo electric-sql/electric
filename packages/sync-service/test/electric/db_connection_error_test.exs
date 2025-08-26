@@ -163,6 +163,32 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with publication not found error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :undefined_object,
+          message: "publication \"cloud_electric_pub_random_tenant_id\" does not exist",
+          severity: "ERROR",
+          pg_code: "42704"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: """
+               The publication was expected to be present but was not found.
+               Publications and replication slots created by Electric should not
+               be manually modified or deleted, as it breaks replication integrity.
+               """,
+               type: :missing_publication,
+               original_error: error,
+               retry_may_fix?: false,
+               drop_slot_and_restart?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with insufficient privileges error" do
       error = %Postgrex.Error{
         message: nil,
