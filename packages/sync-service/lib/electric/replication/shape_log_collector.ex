@@ -82,8 +82,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.call(server, {:subscribe, shape_handle, shape})
   end
 
-  def notify_flushed(server, _shape_handle, offset) do
-    GenServer.cast(server, {:writer_flushed, self(), offset})
+  def notify_flushed(server, shape_handle, offset) do
+    GenServer.cast(server, {:writer_flushed, shape_handle, offset})
   end
 
   def init(opts) do

@@ -249,6 +249,47 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
     end
+
+    test "correctly handles flush notifications", ctx do
+      lsn = Lsn.from_string("0/10")
+
+      Mock.Inspector
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:ok, {1234, {"public", "test_table"}}}
+      end)
+      |> stub(:load_relation_info, fn 1234, _ ->
+        {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> stub(:load_column_info, fn 1234, _ ->
+        {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+      end)
+      |> allow(self(), ctx.server)
+
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+
+      Registry.register(name, key, nil)
+
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"},
+          log_offset: LogOffset.new(lsn, 0)
+        })
+        |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      refute_receive {:flush_boundary_updated, _}, 50
+
+      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-1", txn.last_log_offset)
+      refute_receive {:flush_boundary_updated, _}, 50
+      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-2", txn.last_log_offset)
+      refute_receive {:flush_boundary_updated, _}, 50
+      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-3", txn.last_log_offset)
+
+      expected_lsn = Lsn.to_integer(lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}, 100
+    end
   end
 
   describe "handle_relation_msg/2" do
