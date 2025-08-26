@@ -114,7 +114,7 @@ defmodule Electric.StatusMonitor do
           maybe_retry_wait_until_active(
             stack_id,
             timeout,
-            "Stack #{inspect(stack_id)} has terminated with reason: #{inspect(reason)}"
+            "Stack #{inspect(stack_id)} has terminated"
           )
       end
     end
