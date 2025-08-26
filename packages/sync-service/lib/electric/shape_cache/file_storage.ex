@@ -209,7 +209,7 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def metadata_backup_dir(%{base_path: base_path}) do
-    base_path |> Path.join(@metadata_storage_dir) |> Path.join("backups")
+    Path.join([base_path, @metadata_storage_dir, "backups"])
   end
 
   @impl Electric.ShapeCache.Storage
