@@ -309,37 +309,54 @@ defmodule Electric.Shapes.Shape do
           [Inspector.column_info()],
           [String.t()],
           [String.t(), ...] | nil
-        ) ::
-          {:ok, [String.t(), ...] | nil} | {:error, {:columns, [String.t()]}}
-  defp validate_selected_columns(column_info, pk_cols, nil) do
-    validate_selected_columns(column_info, pk_cols, Enum.map(column_info, & &1.name))
+        ) :: {:ok, [String.t(), ...]} | {:error, {:columns, [String.t()]}}
+
+  # No explicit column list was included in the shape request. Only check for the presence of
+  # generated columns in the table schema.
+  defp validate_selected_columns(column_info, _pk_cols, nil) do
+    generated_cols = Enum.filter(column_info, & &1.is_generated)
+
+    if generated_cols == [] do
+      {:ok, column_info |> Enum.map(& &1.name) |> Enum.sort()}
+    else
+      err_msg =
+        "The following columns are generated and cannot be included in the shape: " <>
+          (generated_cols |> Enum.map(& &1.name) |> Enum.join(", ")) <>
+          ". You can exclude them from the shape by explicitly listing which columns " <>
+          "to fetch in the 'columns' query param"
+
+      {:error, {:columns, [err_msg]}}
+    end
   end
 
+  # When an explicit list of columns was included in the shape request, make sure that they are
+  # valid, they cover all the PK columns and none of them is a generated column.
   defp validate_selected_columns(column_info, pk_cols, columns_to_select) do
     missing_pk_cols = pk_cols -- columns_to_select
     invalid_cols = columns_to_select -- Enum.map(column_info, & &1.name)
+    generated_cols = Enum.filter(column_info, &(&1.is_generated and &1.name in columns_to_select))
 
-    generated_cols =
-      column_info
-      |> Enum.filter(&(&1.is_generated and &1.name in columns_to_select))
-      |> Enum.map(& &1.name)
+    err_msg =
+      cond do
+        missing_pk_cols != [] ->
+          "The list of columns must include all primary key columns, missing: " <>
+            Enum.join(missing_pk_cols, ", ")
 
-    cond do
-      missing_pk_cols != [] ->
-        "Must include all primary key columns, missing: #{missing_pk_cols |> Enum.join(", ")}"
+        invalid_cols != [] ->
+          "The following columns are not found on the table: " <> Enum.join(invalid_cols, ", ")
 
-      invalid_cols != [] ->
-        "The following columns could not be found: #{invalid_cols |> Enum.join(", ")}"
+        generated_cols != [] ->
+          "The following columns are generated and cannot be included in the shape: " <>
+            (generated_cols |> Enum.map(& &1.name) |> Enum.join(", "))
 
-      generated_cols != [] ->
-        "The following columns are generated and cannot be included in replication: #{generated_cols |> Enum.join(", ")}"
+        true ->
+          nil
+      end
 
-      true ->
-        :ok
-    end
-    |> case do
-      :ok -> {:ok, Enum.sort(columns_to_select)}
-      reason when is_binary(reason) -> {:error, {:columns, [reason]}}
+    if is_nil(err_msg) do
+      {:ok, Enum.sort(columns_to_select)}
+    else
+      {:error, {:columns, [err_msg]}}
     end
   end
 

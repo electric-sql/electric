@@ -737,7 +737,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
                "errors" => %{
-                 "columns" => ["Must include all primary key columns, missing: id"]
+                 "columns" => [
+                   "The list of columns must include all primary key columns, missing: id"
+                 ]
                }
              }
     end
@@ -753,7 +755,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
                "errors" => %{
-                 "columns" => ["The following columns could not be found: invalid"]
+                 "columns" => ["The following columns are not found on the table: invalid"]
                }
              }
     end

@@ -660,7 +660,8 @@ defmodule Electric.Plug.RouterTest do
                %{
                  "errors" => %{
                    "columns" => [
-                     "The following columns are generated and cannot be included in replication: id"
+                     "The following columns are generated and cannot be included in the shape: id. " <>
+                       "You can exclude them from the shape by explicitly listing which columns to fetch in the 'columns' query param"
                    ]
                  },
                  "message" => "Invalid request"
@@ -675,7 +676,11 @@ defmodule Electric.Plug.RouterTest do
 
       assert Jason.decode!(conn.resp_body) ==
                %{
-                 "errors" => %{"columns" => ["Must include all primary key columns, missing: id"]},
+                 "errors" => %{
+                   "columns" => [
+                     "The list of columns must include all primary key columns, missing: id"
+                   ]
+                 },
                  "message" => "Invalid request"
                }
 
@@ -690,7 +695,7 @@ defmodule Electric.Plug.RouterTest do
                %{
                  "errors" => %{
                    "columns" => [
-                     "The following columns are generated and cannot be included in replication: id"
+                     "The following columns are generated and cannot be included in the shape: id"
                    ]
                  },
                  "message" => "Invalid request"
