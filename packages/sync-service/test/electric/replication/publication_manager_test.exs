@@ -320,4 +320,50 @@ defmodule Electric.Replication.PublicationManagerTest do
                       ]}
     end
   end
+
+  describe "missing publication handling" do
+    test "add_shape raises and server stops when publication is missing", ctx do
+      # Simulate the PublicationManager detecting a missing publication (undefined_object 42704)
+      missing_pub_error = %Postgrex.Error{
+        postgres: %{
+          code: :undefined_object,
+          pg_code: "42704",
+          severity: "ERROR",
+          message: "publication \"pub_#{ctx.stack_id}\" does not exist"
+        }
+      }
+
+      configure_tables_fn = fn _pool, _publication_name, _filters, _opts ->
+        raise missing_pub_error
+      end
+
+      # Start a fresh publication manager with the failing configure function
+      %{publication_manager: {pid, publication_manager_opts}} =
+        with_publication_manager(%{
+          module: ctx.module,
+          test: ctx.test,
+          stack_id: ctx.stack_id,
+          update_debounce_timeout: 0,
+          shape_cache: {__MODULE__, [self()]},
+          publication_name: "pub_#{ctx.stack_id}",
+          pool: :no_pool,
+          configure_tables_for_replication_fn: configure_tables_fn
+        })
+
+      mref = Process.monitor(pid)
+
+      shape = generate_shape({"public", "items"}, @where_clause_1)
+
+      raised =
+        assert_raise(Postgrex.Error, fn ->
+          PublicationManager.add_shape(@shape_handle_1, shape, publication_manager_opts)
+        end)
+
+      assert raised.postgres.code == :undefined_object
+
+      # Ensure the GenServer terminates with the expected shutdown reason containing the error
+      assert_receive {:DOWN, ^mref, :process, ^pid,
+                      {:shutdown, %Postgrex.Error{postgres: %{code: :undefined_object}}}}
+    end
+  end
 end
