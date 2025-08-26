@@ -1,5 +1,26 @@
 # @core/sync-service
 
+## 1.1.5
+
+### Patch Changes
+
+- 6358ce6: Gracefully handle NULL values when deriving a record key.
+- 25313bd: fix: ensure flush timer is properly reset
+- 10de9cb: Prevent derivation of the same record key from different relations.
+- 4decc4e: Handle missing publication at runtime by dropping slot and restarting - expected to happen with manual editing of Electric slots and publications.
+- e5f79c3: Disable the use of row filters in the Postgres publication.
+- 2c19914: Ensure 409s do not lead to infinite request cycles because of caching.
+- 727de25: Parse DB query cancellation errors as retryable.
+- 49ac877: Move `ShapeStatus` ETS table to initialise before all consumers and `ShapeCache`.
+- 1d268b5: Add a configuration option ELECTRIC_MANUAL_TABLE_PUBLISHING. Setting it to true
+  disables Electric's automatic addition/removal of tables from the Postgres
+  publication.
+
+  This is useful when the database role that Electric uses to connect to Postgres
+  does not own user tables. Adding tables to the publication by hand and
+  setting their REPLICA IDENTITY to FULL allows Electric to stream changes from
+  them regardless.
+
 ## 1.1.4
 
 ### Patch Changes
