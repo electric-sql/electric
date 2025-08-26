@@ -30,7 +30,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       PureFileStorage.shared_opts(
         stack_id: ctx.stack_id,
         storage_dir: ctx.tmp_dir,
-        chunk_bytes_threshold: ctx[:chunk_size] || 10 * 1024 * 1024
+        chunk_bytes_threshold: ctx[:chunk_size] || 10 * 1024 * 1024,
+        flush_period: ctx[:flush_period] || 1000
       )
 
     start_link_supervised!(Storage.stack_child_spec({PureFileStorage, base_opts}))
@@ -372,6 +373,57 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
     assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(13, 0), opts)
            |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|, ~S|{"test":3}|, ~S|{"test":4}|]
+  end
+
+  describe "flush timer" do
+    setup :with_started_writer
+    @describetag flush_period: 100
+
+    test "flush message arrives after flush period", %{writer: writer} do
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+        writer
+      )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+    end
+
+    @tag flush_period: 100
+    test "multiple writes cause only one flush message", %{writer: writer} do
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+          writer
+        )
+
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+        writer
+      )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+      refute_receive {Storage, {PureFileStorage, :perform_scheduled_flush, _}}, 200
+    end
+
+    @tag flush_period: 50
+    test "state after flush is correct", %{writer: writer} do
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+          writer
+        )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+
+      writer = PureFileStorage.perform_scheduled_flush(writer, 0)
+
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":1}|}],
+        writer
+      )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [1]}}
+    end
   end
 
   defp with_started_writer(%{opts: opts}) do
