@@ -1181,7 +1181,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   # No flushes happened between the last scheduled flush and now, so we can just do a normal flush
   def perform_scheduled_flush(writer_state(writer_acc: acc) = state, _) do
-    writer_state(state, writer_acc: flush_buffer(acc, state, true))
+    writer_state(state, writer_acc: flush_buffer(acc, state, true), write_timer: nil)
   end
 
   defp store_lines_in_ets(

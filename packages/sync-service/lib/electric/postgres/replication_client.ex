@@ -56,7 +56,7 @@ defmodule Electric.Postgres.ReplicationClient do
       # shape log storage.
       received_wal: 0,
       flushed_wal: 0,
-      last_seen_txn_lsn: 0,
+      last_seen_txn_lsn: Lsn.from_integer(0),
       flush_up_to_date?: true
     ]
 
@@ -77,7 +77,7 @@ defmodule Electric.Postgres.ReplicationClient do
             display_settings: [String.t()],
             received_wal: non_neg_integer(),
             flushed_wal: non_neg_integer(),
-            last_seen_txn_lsn: non_neg_integer(),
+            last_seen_txn_lsn: Lsn.t(),
             flush_up_to_date?: boolean()
           }
 
