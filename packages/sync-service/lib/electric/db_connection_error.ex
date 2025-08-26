@@ -229,6 +229,24 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :query_canceled,
+            message: "canceling statement due to user request",
+            severity: "ERROR",
+            pg_code: "57014"
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :query_canceled,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error(%Postgrex.Error{postgres: %{code: :internal_error, pg_code: "XX000"}} = error) do
     maybe_database_does_not_exist(error) ||
       maybe_endpoint_does_not_exist(error) ||
