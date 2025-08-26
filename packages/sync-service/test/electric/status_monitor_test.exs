@@ -185,5 +185,48 @@ defmodule Electric.StatusMonitorTest do
                {:error,
                 "Timeout waiting for database connection pool to be ready: #{error_message}"}
     end
+
+    test "returns error if stack is terminated before fully initialized", %{stack_id: stack_id} do
+      parent = self()
+
+      {:via, mod, name} = StatusMonitor.name(stack_id)
+
+      pid =
+        start_supervised!(
+          {Task,
+           fn ->
+             mod.register_name(name, self())
+
+             send(parent, {:monitor, :ready})
+
+             Process.sleep(:infinity)
+           end}
+        )
+
+      assert_receive {:monitor, :ready}, 200
+
+      task =
+        Task.async(fn ->
+          send(parent, {:monitor, :wait})
+          StatusMonitor.wait_until_active(stack_id, 10_000)
+        end)
+
+      ref = Process.monitor(pid)
+
+      assert_receive {:monitor, :wait}, 200
+
+      # a little nap to make sure functions have been called
+      # without this the test is unreliable -- maybe because of
+      # sleeps inside the wait_until_active/2 implementation
+      Process.sleep(10)
+
+      Process.exit(pid, :shutdown)
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 200
+
+      assert {:error, message} = Task.await(task, 1_000)
+
+      assert message =~ "Stack #{inspect(stack_id)} has terminated"
+    end
   end
 end

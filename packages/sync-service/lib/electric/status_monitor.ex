@@ -102,6 +102,9 @@ defmodule Electric.StatusMonitor do
             timeout,
             "Status monitor not found for stack ID: #{stack_id}"
           )
+
+        :exit, reason ->
+          {:error, "Stack #{inspect(stack_id)} has terminated: #{inspect(reason)}"}
       end
     end
   end
@@ -221,7 +224,7 @@ defmodule Electric.StatusMonitor do
   defp format_details(%{error: error}), do: ": #{error}"
   defp format_details(_), do: ""
 
-  defp name(stack_id) do
+  def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
