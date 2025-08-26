@@ -184,8 +184,7 @@ defmodule Electric.DbConnectionErrorTest do
                """,
                type: :missing_publication,
                original_error: error,
-               retry_may_fix?: false,
-               drop_slot_and_restart?: true
+               retry_may_fix?: true
              } == DbConnectionError.from_error(error)
     end
 
