@@ -693,12 +693,6 @@ defmodule Electric.Connection.Manager do
     # log collector had exited, the below call to `stop()` will also exit (with same exit reason or
     # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
     # try-catch block.
-    #
-    # If the cause of the error was not the shape log collector crashing but an error
-    # in a different process under that supervisor, then the reason here is not
-    # the original error, but `:shutdown`. This is passed to the replication client
-    # as the reason to stop, then returns to us in the `:EXIT` callback.
-    Logger.debug("ShapeLogCollector down: #{inspect(reason)}")
 
     try do
       _ =
