@@ -219,7 +219,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
 
     new_mapset = MapSet.delete(:gb_trees.get(offset_tuple, tree), shape_id)
 
-    if MapSet.equal?(new_mapset, MapSet.new()) do
+    if MapSet.size(new_mapset) == 0 do
       :gb_trees.delete(offset_tuple, tree)
     else
       :gb_trees.update(offset_tuple, new_mapset, tree)

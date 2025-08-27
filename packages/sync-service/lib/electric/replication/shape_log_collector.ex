@@ -226,7 +226,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     end)
 
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    state
+    %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}
   end
 
   defp handle_transaction(state, txn) do
