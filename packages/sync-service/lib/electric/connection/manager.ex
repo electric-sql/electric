@@ -584,6 +584,13 @@ defmodule Electric.Connection.Manager do
       ),
       do: {:noreply, state}
 
+  # Special-case the explicit shutdown of the supervision tree.
+  #
+  # Supervisors send `:shutdown` exit signals to its children when they themselves are shutting
+  # down. We don't need to react to this signal coming from any of our linked processes, just
+  # ignore it.
+  def handle_info({:EXIT, _pid, :shutdown}, state), do: {:noreply, state}
+
   # A process exited as it was trying to open a database connection.
   def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
     # Try repairing the connection opts and try connecting again. If we're already using noSSL
@@ -623,34 +630,6 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  # The replication client has exited because we called stop after some
-  # process in the Replication.Supervisor tree exited (that wasn't)
-  # the shape log collector.
-  # We get here because:
-  # 1. Some process like the PublicationManager exits after an error
-  # 2. This brings down the ShapeLogCollector, which we monitor, with reason `:shutdown`
-  # 3. We call ReplicationClient.stop/2 with reason `:shutdown`
-  # 4. We get this message...
-  #
-  # So the error is not with the replciation client connection and we should
-  # definitely try to restart (since the Replication.Supervisor has restarted)
-  # it's processes).
-  def handle_info(
-        {:EXIT, pid, :shutdown},
-        %State{replication_client_pid: pid, current_phase: :running} = state
-      ) do
-    step = :start_replication_client
-
-    state = %{
-      state
-      | replication_client_pid: nil,
-        current_phase: :restarting_replication_client,
-        current_step: {step, nil}
-    }
-
-    {:noreply, schedule_reconnection(step, state)}
-  end
-
   # The replication client exited after the connection setup has completed, it can be restarted
   # independently of the lock connection and the DB pool. On the other hand, if any of the
   # latter two shut down, Connection.Manager will itself terminate to be restarted by its
@@ -669,13 +648,6 @@ defmodule Electric.Connection.Manager do
 
     shutdown_or_reconnect(reason, state)
   end
-
-  # Special-case the explicit shutdown of the supervision tree.
-  #
-  # Supervisors send `:shutdown` exit signals to its children when they themselves are shutting
-  # down. We don't need to react to this signal coming from any of our linked processes, just
-  # ignore it.
-  def handle_info({:EXIT, _pid, :shutdown}, state), do: {:noreply, state}
 
   # The most likely reason for any database connection to get closed after we've already opened a
   # bunch of them is the database server going offline or shutting down. Stop
@@ -729,7 +701,11 @@ defmodule Electric.Connection.Manager do
     Logger.debug("ShapeLogCollector down: #{inspect(reason)}")
 
     try do
-      _ = Electric.Postgres.ReplicationClient.stop(state.replication_client_pid, reason)
+      _ =
+        Electric.Postgres.ReplicationClient.stop(
+          state.replication_client_pid,
+          :shape_log_collector_down
+        )
     catch
       :exit, _reason ->
         # The replication client has already exited, so nothing else to do here.
