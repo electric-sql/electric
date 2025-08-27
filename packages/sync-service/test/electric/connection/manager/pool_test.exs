@@ -163,11 +163,11 @@ defmodule Electric.Connection.Manager.PoolTest do
     assert_receive {:DOWN, ^mon, :process, ^pool_pid, ^expected_error}
   end
 
-  test "configure_pool_conn sends :pool_conn_started and returns opts" do
+  test "configure_pool_conn sends :pool_conn_started and returns opts", ctx do
     parent = self()
     opts = [foo: :bar]
 
-    returned = Pool.configure_pool_conn(opts, parent)
+    returned = Pool.configure_pool_conn(opts, parent, ctx.stack_id)
     assert returned == opts
 
     assert_receive {:pool_conn_started, pid} when is_pid(pid)
