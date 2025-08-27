@@ -326,6 +326,15 @@ defmodule Electric.DbConnectionError do
     end
   end
 
+  def from_error(:shape_log_collector_down) do
+    %DbConnectionError{
+      message: "Linked ShapeLogCollector process terminated",
+      type: :shutdown,
+      original_error: :shape_log_collector_down,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error(error), do: unknown_error(error)
 
   def format_original_error(%DbConnectionError{original_error: %DbConfigurationError{} = error}) do
