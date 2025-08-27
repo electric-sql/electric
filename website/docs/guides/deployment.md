@@ -106,6 +106,8 @@ To force Electric to verify the database server's certificate when connecting to
 
 Electric creates a logical replication [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) and [replication slot](https://www.postgresql.org/docs/current/logical-replication-subscription.html#LOGICAL-REPLICATION-SUBSCRIPTION-SLOT) inside Postgres. These are called `electric_publication_default` and `electric_slot_default` by default. You can configure the name suffix using the [`ELECTRIC_REPLICATION_STREAM_ID`](/docs/api/config#replication-stream-id) env var.
 
+If the database role that Electric connects to Postgres as doesn't have the required privileges to create or update the publication, Electric will check that the publication exists in the database and that it is in the right state, meaning that any table for which a shape request is created must have been added to the publication by hand, in advance. This behaviour can also be enforced with the [`ELECTRIC_MANUAL_TABLE_PUBLISHING`](/docs/api/config#electric-manual-table-publishing) config option.
+
 When running, Electric also keeps a pool of active database connections open. The size of this pool defaults to `20` and can be configured using [`ELECTRIC_DB_POOL_SIZE`](/docs/api/config#electric-db-pool-size).
 
 > [!Tip] Cleaning up resources
