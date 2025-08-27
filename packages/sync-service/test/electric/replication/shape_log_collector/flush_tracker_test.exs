@@ -91,6 +91,22 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
 
       refute_receive {:flush_confirmed, _}, 50
     end
+
+    test "should correctly handle no affected shapes", %{tracker: tracker} do
+      tracker =
+        tracker
+        |> FlushTracker.handle_transaction(txn(lsn: 7, last_offset: 10), [])
+        |> FlushTracker.handle_transaction(txn(lsn: 10, last_offset: 10), ["shape1"])
+        |> FlushTracker.handle_transaction(txn(lsn: 11, last_offset: 10), [])
+        |> FlushTracker.handle_transaction(txn(lsn: 12, last_offset: 10), ["shape2"])
+        |> FlushTracker.handle_flush_notification("shape1", LogOffset.new(10, 10))
+        |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(12, 10))
+
+      assert_receive {:flush_confirmed, 7}
+      assert_receive {:flush_confirmed, 12}
+
+      assert FlushTracker.empty?(tracker)
+    end
   end
 
   describe "handle_shape_removed/2" do

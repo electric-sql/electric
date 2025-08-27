@@ -343,6 +343,43 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
       assert_receive {:flush_boundary_updated, 20}, 50
     end
+
+    test "correctly broadcasts flush when consumers die", ctx do
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      Mock.Inspector
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:ok, {1234, {"public", "test_table"}}}
+      end)
+      |> stub(:load_relation_info, fn 1234, _ ->
+        {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+      end)
+      |> stub(:load_column_info, fn 1234, _ ->
+        {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+      end)
+      |> allow(self(), ctx.server)
+
+      lsn = Lsn.from_integer(20)
+
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2"},
+          log_offset: LogOffset.new(lsn, 0)
+        })
+        |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+
+      for {id, pid} <- ctx.consumers do
+        Process.unlink(pid)
+        stop_supervised!({:consumer, id})
+      end
+
+      assert_receive {:flush_boundary_updated, 20}, 50
+    end
   end
 
   describe "handle_relation_msg/2" do

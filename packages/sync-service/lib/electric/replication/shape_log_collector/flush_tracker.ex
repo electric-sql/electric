@@ -87,6 +87,10 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     }
   end
 
+  def empty?(%__MODULE__{last_flushed: last_flushed, min_incomplete_flush_tree: tree}) do
+    last_flushed == %{} and :gb_trees.size(tree) == 0
+  end
+
   @spec handle_transaction(t(), Transaction.t(), Enumerable.t(shape_id())) :: t()
   def handle_transaction(
         %__MODULE__{
@@ -144,15 +148,6 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
            min_incomplete_flush_tree
            |> delete_from_tree(prev_flushed_offset, shape_id)
            |> add_to_tree(last_flushed_offset, shape_id)}
-      end
-
-    # TODO: I'm not sure, but the tree ends up non-empty, but with empty mapsets as values.
-    #       - couldn't reproduce in tests
-    min_incomplete_flush_tree =
-      if last_flushed == %{} do
-        :gb_trees.empty()
-      else
-        min_incomplete_flush_tree
       end
 
     %__MODULE__{
@@ -254,14 +249,18 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     end
   end
 
+  @empty_mapset MapSet.new()
   defp tree_enter_shape_set(
          %__MODULE__{min_incomplete_flush_tree: tree} = state,
          offset,
          %MapSet{} = mapset
-       ) do
+       )
+       when mapset != @empty_mapset do
     %__MODULE__{
       state
       | min_incomplete_flush_tree: :gb_trees.enter(LogOffset.to_tuple(offset), mapset, tree)
     }
   end
+
+  defp tree_enter_shape_set(state, _, _), do: state
 end
