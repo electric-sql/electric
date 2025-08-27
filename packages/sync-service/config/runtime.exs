@@ -117,10 +117,10 @@ storage_spec =
         "memory" ->
           {Electric.ShapeCache.InMemoryStorage, []}
 
-        "file" ->
+        "legacy_file" ->
           {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
 
-        "pure_file" ->
+        s when s in ["file", "pure_file"] ->
           {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
 
         "crashing_file" ->
@@ -131,7 +131,7 @@ storage_spec =
            storage_dir: shape_path, num_calls_until_crash: num_calls_until_crash}
 
         _ ->
-          raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE"
+          raise Dotenvy.Error, message: "storage must be one of: MEMORY, FILE, LEGACY_FILE"
       end
     end,
     nil
