@@ -78,6 +78,8 @@ defmodule Electric.Postgres.LockConnection do
 
     metadata = [
       lock_name: opts.lock_name,
+      # flag used for error filtering
+      is_connection_process?: true,
       stack_id: opts.stack_id
     ]
 
