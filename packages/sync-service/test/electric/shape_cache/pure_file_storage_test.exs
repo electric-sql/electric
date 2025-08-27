@@ -44,7 +44,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       writer = PureFileStorage.init_writer!(opts, @shape)
       PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
       PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([~S|{"test": 1}|, ~S|{"test": 2}|], opts)
+      PureFileStorage.make_new_snapshot!([~S|{"test": 1}|, ~S|{"test": 2}|], fn -> nil end, opts)
       PureFileStorage.terminate(writer)
 
       assert PureFileStorage.get_log_stream(
@@ -59,7 +59,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       writer = PureFileStorage.init_writer!(opts, @shape)
       PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
       PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
+      PureFileStorage.make_new_snapshot!([], fn -> nil end, opts)
 
       writer =
         PureFileStorage.append_to_log!(
@@ -86,7 +86,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       writer = PureFileStorage.init_writer!(opts, @shape)
       PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
       PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
+      PureFileStorage.make_new_snapshot!([], fn -> nil end, opts)
 
       suffix = PureFileStorage.latest_name(opts)
 
@@ -116,7 +116,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       writer = PureFileStorage.init_writer!(opts, @shape)
       PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
       PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
+      PureFileStorage.make_new_snapshot!([], fn -> nil end, opts)
 
       writer =
         for i <- 1..10 do
@@ -460,7 +460,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     writer = PureFileStorage.init_writer!(opts, @shape)
     PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
     PureFileStorage.mark_snapshot_as_started(opts)
-    PureFileStorage.make_new_snapshot!([], opts)
+    PureFileStorage.make_new_snapshot!([], fn -> nil end, opts)
 
     %{writer: writer}
   end

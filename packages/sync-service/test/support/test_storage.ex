@@ -112,9 +112,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def make_new_snapshot!(data_stream, {parent, shape_handle, _, storage}) do
+  def make_new_snapshot!(data_stream, notifier_fn, {parent, shape_handle, _, storage}) do
     send(parent, {__MODULE__, :make_new_snapshot!, shape_handle, data_stream})
-    Storage.make_new_snapshot!(data_stream, storage)
+    Storage.make_new_snapshot!(data_stream, notifier_fn, storage)
   end
 
   @impl Electric.ShapeCache.Storage
