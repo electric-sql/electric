@@ -315,7 +315,7 @@ defmodule Electric.DbConnectionError do
   if Mix.env() == :test do
     def from_error(:shutdown) do
       %DbConnectionError{
-        message: "Test database connection has beed shutdown",
+        message: "Test database connection has been shutdown",
         type: :shutdown,
         original_error: :shutdown,
         # We don't want for this error to be treated as fatal because what would interfere with the
