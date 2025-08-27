@@ -66,7 +66,7 @@
 </style>
 
 <template>
-  <Section :actions="actions">
+  <Section :actions="actions" id="latest-news-section">
     <template #title>
       Latest news and updates
     </template>

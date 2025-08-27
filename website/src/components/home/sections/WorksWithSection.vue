@@ -299,7 +299,7 @@
 </style>
 
 <template>
-  <Section :actions="actions" :wideSectionHead="false">
+  <Section :actions="actions" :wideSectionHead="false" id="works-with-section">
     <template #title>
       With your existing&nbsp;stack
     </template>
