@@ -58,7 +58,8 @@ defmodule Electric.Connection.Supervisor do
 
     children = [
       {Electric.StatusMonitor, opts[:stack_id]},
-      {Electric.Connection.Manager, opts}
+      {Electric.Connection.Manager, opts},
+      {Electric.Connection.Manager.ProcessMonitor, opts[:stack_id]}
     ]
 
     # The `rest_for_one` strategy is used here to ensure that if the StatusMonitor unexpectedly dies,

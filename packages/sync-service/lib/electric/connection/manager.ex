@@ -243,6 +243,8 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :connection_pool_ready)
   end
 
+  defdelegate monitor(stack_id, module, pid), to: __MODULE__.ProcessMonitor
+
   # Used for testing the responsiveness of the manager process
   def ping(manager, timeout \\ 1000) do
     GenServer.call(manager, :ping, timeout)
@@ -451,7 +453,7 @@ defmodule Electric.Connection.Manager do
 
     start_time = System.monotonic_time()
 
-    shapes_sup_pid =
+    _shapes_sup_pid =
       case Electric.Connection.Supervisor.start_shapes_supervisor(
              stack_id: state.stack_id,
              shape_cache_opts: shape_cache_opts,
@@ -472,8 +474,10 @@ defmodule Electric.Connection.Manager do
 
     # Remember the shape log collector pid for later because we want to tie the replication
     # client's lifetime to it.
-    log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
-    Process.monitor(log_collector_pid)
+    log_collector_pid =
+      receive do
+        {:process_monitored, Electric.Replication.ShapeLogCollector, pid, _ref} -> pid
+      end
 
     state = %{
       state
@@ -1304,15 +1308,6 @@ defmodule Electric.Connection.Manager do
 
   defp update_connection_opts(_step, conn_opts, state) do
     %{state | shared_connection_opts: conn_opts}
-  end
-
-  defp lookup_log_collector_pid(shapes_supervisor) do
-    {Electric.Replication.ShapeLogCollector, log_collector_pid, :worker, _modules} =
-      shapes_supervisor
-      |> Supervisor.which_children()
-      |> List.keyfind(Electric.Replication.ShapeLogCollector, 0)
-
-    log_collector_pid
   end
 
   defp drop_slot(%State{pool_pid: nil} = _state) do
