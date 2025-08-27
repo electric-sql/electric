@@ -1,5 +1,17 @@
 # @core/sync-service
 
+## 1.1.7
+
+### Patch Changes
+
+- 375ba10: fix: ensure correct acknowledgements on silent PG after electric restart
+- ade2f42: fix: ensure skipped transactions are still marked as flushed
+- 2b71260: Ensure flush timer always gets reset to guarantee write buffer is always emptied.
+- e49342b: fix: memory leak on internal flush tracker structure & usage of a correct shape id when cleaning up
+- 3b3f743: Prevent pool connections from starting if supervisor is found to already be dead.
+- bd42233: Add logger metadata flag for postgrex processes
+- 3b3f743: Change order of replication supervisor processes to ensure consumers can perform all operations.
+
 ## 1.1.6
 
 ### Patch Changes
