@@ -290,6 +290,59 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 100
     end
+
+    test "correctly broadcasts flush when transaction is not relevant to any shape", ctx do
+      Mock.Inspector
+      |> stub(:load_relation_oid, fn {"public", "irrelevant_table"}, _ ->
+        {:ok, {1234, {"public", "irrelevant_table"}}}
+      end)
+      |> stub(:load_relation_info, fn 1234, _ ->
+        {:ok, %{id: 1234, schema: "public", name: "irrelevant_table", parent: nil, children: nil}}
+      end)
+      |> stub(:load_column_info, fn 1234, _ ->
+        {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+      end)
+      |> allow(self(), ctx.server)
+
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+
+      Registry.register(name, key, nil)
+
+      lsn = Lsn.from_integer(55)
+
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "irrelevant_table"},
+          record: %{"id" => "2", "name" => "foo"},
+          log_offset: LogOffset.new(lsn, 0)
+        })
+        |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      assert_receive {:flush_boundary_updated, 55}, 50
+    end
+
+    test "correctly broadcasts flush when transaction has already been processed before", ctx do
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      assert :ok = ShapeLogCollector.set_last_processed_lsn(ctx.server, Lsn.from_integer(50))
+
+      lsn = Lsn.from_integer(20)
+
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "irrelevant_table"},
+          record: %{"id" => "2", "name" => "foo"},
+          log_offset: LogOffset.new(lsn, 0)
+        })
+        |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      assert_receive {:flush_boundary_updated, 20}, 50
+    end
   end
 
   describe "handle_relation_msg/2" do
