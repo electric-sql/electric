@@ -133,7 +133,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       {:noreply,
        state
        |> remove_subscription({pid, ref}, shape_handle)
-       |> Map.update!(:flush_tracker, &FlushTracker.handle_shape_removed(&1, pid))}
+       |> Map.update!(:flush_tracker, &FlushTracker.handle_shape_removed(&1, shape_handle))}
     end)
   end
 
