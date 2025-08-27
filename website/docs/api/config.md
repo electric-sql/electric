@@ -196,19 +196,7 @@ A unique identifier for the Electric instance. Defaults to a randomly generated 
     defaultValue="electric"
     example="my-electric-service">
 
-Name of the electric service. Used as a resource identifier and namespace.
-
-</EnvVarConfig>
-
-### ELECTRIC_ENABLE_INTEGRATION_TESTING
-
-<EnvVarConfig
-    name="ELECTRIC_ENABLE_INTEGRATION_TESTING"
-    defaultValue="false"
-    example="true">
-
-Expose some unsafe operations that faciliate integration testing.
-Do not enable this in production.
+Name of the electric service. Used as a resource name in OTEL traces and metrics.
 
 </EnvVarConfig>
 
