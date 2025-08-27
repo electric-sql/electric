@@ -89,7 +89,7 @@ defmodule Electric.Connection.Manager.Pool do
         backoff_type: :stop,
         max_restarts: pool_size * 3,
         max_seconds: 5,
-        configure: {__MODULE__, :configure_pool_conn, [self()]},
+        configure: {__MODULE__, :configure_pool_conn, [self(), opts[:stack_id]]},
         connection_listeners: {[self()], pool_ref},
         # Assume the manager connection might be pooled, so use unnamed prepared
         # statements to avoid issues with the pooler
@@ -241,8 +241,14 @@ defmodule Electric.Connection.Manager.Pool do
 
   # We call this before configuring pool connections in order to fully monitor them
   # and log any issues before and after the connection is established.
-  def configure_pool_conn(opts, supervisor_pid) do
+  def configure_pool_conn(opts, supervisor_pid, stack_id) do
     send(supervisor_pid, {:pool_conn_started, self()})
+
+    Logger.metadata(
+      # flag used for error filtering
+      is_connection_process?: true,
+      stack_id: stack_id
+    )
 
     # If supervisor process not alive when initializing connection, abort it
     try do
