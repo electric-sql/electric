@@ -29,13 +29,21 @@ defmodule Electric.Shapes.ConsumerTest do
                       "something else",
                       {"random", "definitely_different"}
                     ],
-                    columns: [%{name: "id", type: "int8", pk_position: 0}]
+                    columns: [
+                      %{name: "id", type: "int8", pk_position: 0}
+                    ]
                   )
   @shape_handle1 "#{__MODULE__}-shape1"
   @shape1 Shape.new!("public.test_table", inspector: @base_inspector)
 
   @shape_handle2 "#{__MODULE__}-shape2"
   @shape2 Shape.new!("public.other_table", inspector: @base_inspector)
+
+  @shape_handle3 "#{__MODULE__}-shape3"
+  @shape3 Shape.new!("public.test_table",
+            inspector: @base_inspector,
+            where: "id = 1"
+          )
 
   @shape_position %{
     @shape_handle1 => %{
@@ -45,6 +53,10 @@ defmodule Electric.Shapes.ConsumerTest do
     @shape_handle2 => %{
       latest_offset: LogOffset.new(Lsn.from_string("0/50"), 0),
       snapshot_xmin: 120
+    },
+    @shape_handle3 => %{
+      latest_offset: LogOffset.new(Lsn.from_string("0/1"), 0),
+      snapshot_xmin: 10
     }
   }
 
@@ -659,7 +671,7 @@ defmodule Electric.Shapes.ConsumerTest do
           run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
-            pg_snapshot = {10, 11, [10]}
+            pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
             GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
             GenServer.cast(parent, {:snapshot_started, shape_handle})
             Storage.make_new_snapshot!([], storage)
@@ -837,6 +849,94 @@ defmodule Electric.Shapes.ConsumerTest do
       assert {_, offset2} = ShapeCache.get_shape(shape_handle, shape_cache_opts)
 
       assert LogOffset.compare(offset2, offset1) != :lt
+    end
+
+    @tag with_pure_file_storage_opts: [flush_period: 50]
+    test "should correctly normalize a flush boundary to txn", ctx do
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      %{
+        shape_cache_opts: shape_cache_opts
+      } = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape3, shape_cache_opts)
+
+      :started =
+        ShapeCache.await_snapshot_start(
+          shape_handle,
+          shape_cache_opts
+        )
+
+      lsn = Lsn.from_integer(10)
+
+      txn =
+        %Transaction{
+          xid: 10,
+          lsn: lsn,
+          commit_timestamp: DateTime.utc_now()
+        }
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "21"},
+          log_offset: LogOffset.new(lsn, 0)
+        })
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "1"},
+          log_offset: LogOffset.new(lsn, 2)
+        })
+        |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
+
+      assert_receive {:flush_boundary_updated, 10}, 1_000
+    end
+
+    @tag pg_snapshot: {10, 15, [12]}
+    test "should notify txns skipped because of xmin/xip as flushed", ctx do
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      %{shape_cache_opts: shape_cache_opts} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, shape_cache_opts)
+      lsn1 = Lsn.from_integer(300)
+      lsn2 = Lsn.from_integer(301)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, shape_cache_opts)
+
+      txn =
+        %Transaction{
+          xid: 2,
+          lsn: lsn1,
+          commit_timestamp: DateTime.utc_now()
+        }
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "21"},
+          log_offset: LogOffset.new(lsn1, 0)
+        })
+        |> Transaction.finalize()
+
+      txn2 =
+        %Transaction{
+          xid: 11,
+          lsn: lsn2,
+          commit_timestamp: DateTime.utc_now()
+        }
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "21"},
+          log_offset: LogOffset.new(lsn2, 0)
+        })
+        |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.producer)
+
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+      assert_receive {:flush_boundary_updated, 301}, 1_000
     end
   end
 end

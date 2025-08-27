@@ -356,11 +356,11 @@ defmodule Electric.Shapes.Consumer do
       compare(xid, xmin) == :lt ->
         # Transaction already included in the shape snapshot because it had committed before
         # the snapshot transaction started.
-        {:cont, state}
+        {:cont, consider_flushed(state, txn)}
 
       compare(xid, xmax) == :lt and xid not in xip_list ->
         # Transaction commited sometime between xmin and the start of the snapshot transaction.
-        {:cont, state}
+        {:cont, consider_flushed(state, txn)}
 
       compare(xid, xmin) == :eq or xid in xip_list ->
         # Transaction was active at the time of taking the snapshot so its effects weren't
@@ -426,7 +426,7 @@ defmodule Electric.Shapes.Consumer do
           "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
         end)
 
-        {:cont, state}
+        {:cont, consider_flushed(state, txn)}
 
       {changes, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
@@ -630,6 +630,33 @@ defmodule Electric.Shapes.Consumer do
 
       rest ->
         {%{state | txn_offset_mapping: rest}, offset}
+    end
+  end
+
+  defp consider_flushed(state, %Transaction{last_log_offset: new_boundary}) do
+    if state.txn_offset_mapping == [] do
+      # No relevant txns have been observed and unflushed, we can notify immediately
+      ShapeLogCollector.notify_flushed(state.log_producer, state.shape_handle, new_boundary)
+      state
+    else
+      # We're looking to "relabel" the next flush to include this txn, so we're looking for the
+      # boundary that has a highest boundary less than this offset
+
+      {head, tail} =
+        Enum.split_while(
+          state.txn_offset_mapping,
+          &(LogOffset.compare(elem(&1, 1), new_boundary) == :lt)
+        )
+
+      case Enum.reverse(head) do
+        [] ->
+          # Nothing lower than this, any flush will advance beyond this txn point
+          state
+
+        [{offset, _} | rest] ->
+          # Found one to relabel the upper boundary to include this txn
+          %{state | txn_offset_mapping: Enum.reverse([{offset, new_boundary} | rest], tail)}
+      end
     end
   end
 end
