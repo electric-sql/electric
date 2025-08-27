@@ -1059,11 +1059,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
     |> case do
       # If the buffer has been fully flushed, no need to schedule more flushes
       writer_acc(buffer_size: 0, last_seen_offset: offset) = acc ->
+        timer_ref = writer_state(state, :write_timer)
+        if not is_nil(timer_ref), do: Process.cancel_timer(timer_ref)
+
         acc
         |> writer_acc(last_seen_txn_offset: offset)
         # Flushing the buffer again just to update metadata on last persisted transaction, and bring keyfile up to date
         |> flush_buffer(state, true)
-        |> then(&writer_state(state, writer_acc: &1))
+        |> then(&writer_state(state, writer_acc: &1, write_timer: nil))
 
       writer_acc(last_seen_offset: offset) = acc ->
         acc

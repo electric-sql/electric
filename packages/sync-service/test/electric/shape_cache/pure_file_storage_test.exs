@@ -424,6 +424,36 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [1]}}
     end
+
+    @flush_alignment_bytes 64 * 1024
+    @tag flush_period: 100
+    test "should run scheduled flush after empty buffer alignment", %{writer: writer} do
+      large_data = String.duplicate("x", @flush_alignment_bytes + 1000)
+
+      # write small piece of data to trigger scheduling of flush
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+          writer
+        )
+
+      # write large piece of data that goes over buffer limit and forces a flush
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(11, 0), "test_key", :insert, ~s|{"test":"#{large_data}"}|}],
+          writer
+        )
+
+      # next small piece of data should schedule new flush with larger flush counter
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(12, 0), "test_key", :insert, ~S|{"test":1}|}],
+        writer
+      )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [times_flushed]}}
+      assert times_flushed > 0
+      refute_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [_]}}
+    end
   end
 
   defp with_started_writer(%{opts: opts}) do
