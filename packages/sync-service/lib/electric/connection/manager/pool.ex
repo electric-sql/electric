@@ -245,9 +245,12 @@ defmodule Electric.Connection.Manager.Pool do
     send(supervisor_pid, {:pool_conn_started, self()})
 
     # If supervisor process not alive when initializing connection, abort it
-    if Process.alive?(supervisor_pid),
-      do: Process.link(supervisor_pid),
-      else: exit({:shutdown, {:supervisor_not_alive, supervisor_pid}})
+    try do
+      Process.link(supervisor_pid)
+    rescue
+      ErlangError ->
+        exit({:shutdown, {:supervisor_not_alive, supervisor_pid}})
+    end
 
     opts
   end
