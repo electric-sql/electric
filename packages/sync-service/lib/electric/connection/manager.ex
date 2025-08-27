@@ -678,7 +678,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_info(
-        {:DOWN, _ref, :process, pid, reason},
+        {:DOWN, _ref, :process, pid, _reason},
         %State{shape_log_collector_pid: pid} = state
       ) do
     # The replication client would normally exit together with the shape log collector when it
