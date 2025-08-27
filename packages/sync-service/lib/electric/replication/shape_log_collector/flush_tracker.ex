@@ -146,6 +146,13 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
            |> add_to_tree(last_flushed_offset, shape_id)}
       end
 
+    min_incomlete_flush_tree =
+      if last_flushed == %{} do
+        :gb_trees.empty()
+      else
+        min_incomlete_flush_tree
+      end
+
     %__MODULE__{
       state
       | last_flushed: last_flushed,

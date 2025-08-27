@@ -82,7 +82,11 @@ defmodule Support.ComponentSetup do
 
   def with_pure_file_storage(ctx) do
     storage =
-      Storage.shared_opts({PureFileStorage, storage_dir: ctx.tmp_dir, stack_id: ctx.stack_id})
+      Storage.shared_opts(
+        {PureFileStorage,
+         [storage_dir: ctx.tmp_dir, stack_id: ctx.stack_id] ++
+           Map.get(ctx, :with_pure_file_storage_opts, [])}
+      )
 
     start_supervised!(Storage.stack_child_spec(storage), restart: :temporary)
 
