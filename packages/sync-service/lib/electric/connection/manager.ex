@@ -474,15 +474,10 @@ defmodule Electric.Connection.Manager do
 
     # Remember the shape log collector pid for later because we want to tie the replication
     # client's lifetime to it.
-    log_collector_pid =
-      receive do
-        {:process_monitored, Electric.Replication.ShapeLogCollector, pid, _ref} -> pid
-      end
 
     state = %{
       state
-      | shape_log_collector_pid: log_collector_pid,
-        current_step: {:waiting_for_consumers, start_time},
+      | current_step: {:waiting_for_consumers, start_time},
         purge_all_shapes?: false
     }
 
@@ -698,6 +693,8 @@ defmodule Electric.Connection.Manager do
     # log collector had exited, the below call to `stop()` will also exit (with same exit reason or
     # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
     # try-catch block.
+    Logger.debug("ShapeLogCollector down: #{inspect(reason)}")
+
     try do
       _ = Electric.Postgres.ReplicationClient.stop(state.replication_client_pid, reason)
     catch
@@ -711,6 +708,10 @@ defmodule Electric.Connection.Manager do
     end
 
     {:noreply, %{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
+  end
+
+  def handle_info({:process_monitored, Electric.Replication.ShapeLogCollector, pid, _ref}, state) do
+    {:noreply, %{state | shape_log_collector_pid: pid}}
   end
 
   @impl true
@@ -896,6 +897,11 @@ defmodule Electric.Connection.Manager do
 
     state = %{state | current_step: {:start_replication_client, :start_streaming}}
     {:noreply, state, {:continue, :start_streaming}}
+  end
+
+  def handle_cast({:consumers_ready, _recovered, _failed} = msg, state) do
+    Logger.debug("received #{inspect(msg)} in phase #{state.current_phase}: ignoring")
+    {:noreply, state}
   end
 
   def handle_cast(
