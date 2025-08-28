@@ -243,6 +243,8 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :connection_pool_ready)
   end
 
+  defdelegate monitor(stack_id, module, pid), to: __MODULE__.ProcessMonitor
+
   # Used for testing the responsiveness of the manager process
   def ping(manager, timeout \\ 1000) do
     GenServer.call(manager, :ping, timeout)
@@ -451,7 +453,7 @@ defmodule Electric.Connection.Manager do
 
     start_time = System.monotonic_time()
 
-    shapes_sup_pid =
+    _shapes_sup_pid =
       case Electric.Connection.Supervisor.start_shapes_supervisor(
              stack_id: state.stack_id,
              shape_cache_opts: shape_cache_opts,
@@ -472,13 +474,10 @@ defmodule Electric.Connection.Manager do
 
     # Remember the shape log collector pid for later because we want to tie the replication
     # client's lifetime to it.
-    log_collector_pid = lookup_log_collector_pid(shapes_sup_pid)
-    Process.monitor(log_collector_pid)
 
     state = %{
       state
-      | shape_log_collector_pid: log_collector_pid,
-        current_step: {:waiting_for_consumers, start_time},
+      | current_step: {:waiting_for_consumers, start_time},
         purge_all_shapes?: false
     }
 
@@ -590,7 +589,7 @@ defmodule Electric.Connection.Manager do
   # Supervisors send `:shutdown` exit signals to its children when they themselves are shutting
   # down. We don't need to react to this signal coming from any of our linked processes, just
   # ignore it.
-  def handle_info({:EXIT, _, :shutdown}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, :shutdown}, state), do: {:noreply, state}
 
   # A process exited as it was trying to open a database connection.
   def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
@@ -679,7 +678,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_info(
-        {:DOWN, _ref, :process, pid, reason},
+        {:DOWN, _ref, :process, pid, _reason},
         %State{shape_log_collector_pid: pid} = state
       ) do
     # The replication client would normally exit together with the shape log collector when it
@@ -694,8 +693,13 @@ defmodule Electric.Connection.Manager do
     # log collector had exited, the below call to `stop()` will also exit (with same exit reason or
     # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
     # try-catch block.
+
     try do
-      _ = Electric.Postgres.ReplicationClient.stop(state.replication_client_pid, reason)
+      _ =
+        Electric.Postgres.ReplicationClient.stop(
+          state.replication_client_pid,
+          :shape_log_collector_down
+        )
     catch
       :exit, _reason ->
         # The replication client has already exited, so nothing else to do here.
@@ -706,7 +710,13 @@ defmodule Electric.Connection.Manager do
       drop_slot(state)
     end
 
-    {:noreply, %{state | shape_log_collector_pid: nil, replication_client_pid: nil}}
+    # Don't clear the replication_client_pid here, it will be cleared when the
+    # {:EXIT, ...} message arrives
+    {:noreply, %{state | shape_log_collector_pid: nil}}
+  end
+
+  def handle_info({:process_monitored, Electric.Replication.ShapeLogCollector, pid, _ref}, state) do
+    {:noreply, %{state | shape_log_collector_pid: pid}}
   end
 
   @impl true
@@ -892,6 +902,11 @@ defmodule Electric.Connection.Manager do
 
     state = %{state | current_step: {:start_replication_client, :start_streaming}}
     {:noreply, state, {:continue, :start_streaming}}
+  end
+
+  def handle_cast({:consumers_ready, _recovered, _failed} = msg, state) do
+    Logger.debug("Received #{inspect(msg)} in phase #{state.current_phase}: ignoring")
+    {:noreply, state}
   end
 
   def handle_cast(
@@ -1304,15 +1319,6 @@ defmodule Electric.Connection.Manager do
 
   defp update_connection_opts(_step, conn_opts, state) do
     %{state | shared_connection_opts: conn_opts}
-  end
-
-  defp lookup_log_collector_pid(shapes_supervisor) do
-    {Electric.Replication.ShapeLogCollector, log_collector_pid, :worker, _modules} =
-      shapes_supervisor
-      |> Supervisor.which_children()
-      |> List.keyfind(Electric.Replication.ShapeLogCollector, 0)
-
-    log_collector_pid
   end
 
   defp drop_slot(%State{pool_pid: nil} = _state) do

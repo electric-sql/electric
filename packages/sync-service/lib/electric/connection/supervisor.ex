@@ -58,7 +58,21 @@ defmodule Electric.Connection.Supervisor do
 
     children = [
       {Electric.StatusMonitor, opts[:stack_id]},
-      {Electric.Connection.Manager, opts}
+      # the process monitor and the connection manager are a mutual dependency
+      # if either one dies then both should die
+      %{
+        id: Electric.Connection.Manager,
+        start:
+          {Supervisor, :start_link,
+           [
+             [
+               {Electric.Connection.Manager.ProcessMonitor, opts[:stack_id]},
+               {Electric.Connection.Manager, opts}
+             ],
+             [strategy: :one_for_all]
+           ]},
+        type: :supervisor
+      }
     ]
 
     # The `rest_for_one` strategy is used here to ensure that if the StatusMonitor unexpectedly dies,

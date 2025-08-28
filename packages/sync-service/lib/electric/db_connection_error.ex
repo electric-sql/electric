@@ -334,7 +334,7 @@ defmodule Electric.DbConnectionError do
   if Mix.env() == :test do
     def from_error(:shutdown) do
       %DbConnectionError{
-        message: "Test database connection has beed shutdown",
+        message: "Test database connection has been shutdown",
         type: :shutdown,
         original_error: :shutdown,
         # We don't want for this error to be treated as fatal because what would interfere with the
@@ -343,6 +343,15 @@ defmodule Electric.DbConnectionError do
         retry_may_fix?: true
       }
     end
+  end
+
+  def from_error(:shape_log_collector_down) do
+    %DbConnectionError{
+      message: "Internal stream processing encountered an error",
+      type: :shutdown,
+      original_error: :shape_log_collector_down,
+      retry_may_fix?: true
+    }
   end
 
   def from_error(error), do: unknown_error(error)
