@@ -25,16 +25,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   defp table_name,
-    do:
-      :ets.new(:"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}", [
-        :public,
-        :ordered_set
-      ])
+    do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
 
   defp new_state(_ctx, opts \\ []) do
     table = Keyword.get(opts, :table, table_name())
 
     Mock.Storage
+    |> stub(:metadata_backup_dir, fn _ -> nil end)
     |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end)
 
     shape_status_opts =
@@ -263,6 +260,132 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       ShapeStatus.remove_shape(state, shape2)
 
       assert [] == ShapeStatus.least_recently_used(state, _count = 1)
+    end
+  end
+
+  describe "shape storage and backup" do
+    test "can set and consume shape storage state", ctx do
+      {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
+
+      assert :ok = ShapeStatus.set_shape_storage_state(state, shape_handle, %{foo: :bar})
+      assert %{foo: :bar} = ShapeStatus.consume_shape_storage_state(state, shape_handle)
+      # entry is deleted after consumption
+      assert nil == ShapeStatus.consume_shape_storage_state(state, shape_handle)
+
+      # unknown shape returns nil
+      assert nil == ShapeStatus.consume_shape_storage_state(state, "missing")
+    end
+
+    test "removing shape clears stored shape storage state", ctx do
+      {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
+      assert :ok = ShapeStatus.set_shape_storage_state(state, shape_handle, :some_state)
+      assert {:ok, _shape} = ShapeStatus.remove_shape(state, shape_handle)
+      # cleanup removes backup entry so nothing to consume
+      assert nil == ShapeStatus.consume_shape_storage_state(state, shape_handle)
+    end
+
+    test "terminate stores backup and initialise loads from backup instead of storage", _ctx do
+      backup_base_dir =
+        Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
+
+      table = table_name()
+
+      # First lifecycle: no shapes in storage, start empty, add a shape, terminate to create backup
+      Mock.Storage
+      |> stub(:metadata_backup_dir, fn _ -> backup_base_dir end)
+      |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, %{}} end)
+      |> stub(:get_all_stored_shape_handles, fn _ -> {:ok, MapSet.new()} end)
+
+      state =
+        ShapeStatus.opts(
+          storage: {Mock.Storage, []},
+          shape_meta_table: table
+        )
+
+      assert :ok = ShapeStatus.initialise(state)
+      shape = shape!()
+      assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
+
+      # Persist backup
+      assert :ok = ShapeStatus.terminate(state)
+
+      backup_file =
+        Path.join([backup_base_dir, "shape_status_backups", "shape_status_v1.ets.backup"])
+
+      assert File.exists?(backup_file)
+
+      # Simulate restart: remove ETS table (would be removed with process exit in real system)
+      :ets.delete(table)
+
+      # Second lifecycle: should load from backup (so must NOT call get_all_stored_shapes)
+      Mock.Storage
+      |> stub(:metadata_backup_dir, fn _ -> backup_base_dir end)
+      |> stub(:get_all_stored_shapes, fn _ ->
+        flunk("get_all_stored_shapes should not be called when backup exists")
+      end)
+      |> expect(:get_all_stored_shape_handles, 1, fn _ -> {:ok, MapSet.new([shape_handle])} end)
+
+      state2 =
+        ShapeStatus.opts(
+          storage: {Mock.Storage, []},
+          shape_meta_table: table
+        )
+
+      assert :ok = ShapeStatus.initialise(state2)
+      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state2)
+      # consuming backup directory should have removed it after load
+      refute File.exists?(backup_file)
+    end
+
+    test "backup restore aborted on storage integrity failure", _ctx do
+      backup_base_dir =
+        Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
+
+      table = table_name()
+
+      # First lifecycle: create backup containing one shape
+      Mock.Storage
+      |> stub(:metadata_backup_dir, fn _ -> backup_base_dir end)
+      |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, %{}} end)
+      |> stub(:get_all_stored_shape_handles, fn _ -> {:ok, MapSet.new()} end)
+
+      state =
+        ShapeStatus.opts(
+          storage: {Mock.Storage, []},
+          shape_meta_table: table
+        )
+
+      assert :ok = ShapeStatus.initialise(state)
+      shape = shape!()
+      assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
+      assert :ok = ShapeStatus.terminate(state)
+
+      backup_file =
+        Path.join([backup_base_dir, "shape_status_backups", "shape_status_v1.ets.backup"])
+
+      assert File.exists?(backup_file)
+
+      :ets.delete(table)
+
+      # Second lifecycle: integrity check fails because storage reports NO handles
+      Mock.Storage
+      |> stub(:metadata_backup_dir, fn _ -> backup_base_dir end)
+      |> expect(:get_all_stored_shape_handles, 1, fn _ -> {:ok, MapSet.new()} end)
+      # After integrity failure, initialise will call load/1 -> get_all_stored_shapes
+      |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, %{}} end)
+
+      state2 =
+        ShapeStatus.opts(
+          storage: {Mock.Storage, []},
+          shape_meta_table: table
+        )
+
+      assert :ok = ShapeStatus.initialise(state2)
+      # Shape from backup should NOT be present after failed integrity
+      assert [] == ShapeStatus.list_shapes(state2)
+      refute File.exists?(backup_file)
     end
   end
 

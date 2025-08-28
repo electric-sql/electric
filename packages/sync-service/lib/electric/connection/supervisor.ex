@@ -77,8 +77,8 @@ defmodule Electric.Connection.Supervisor do
     persistent_kv = Keyword.fetch!(opts, :persistent_kv)
     tweaks = Keyword.fetch!(opts, :tweaks)
 
-    shape_status_agent_spec =
-      {Electric.ShapeCache.ShapeStatusAgent,
+    shape_status_owner_spec =
+      {Electric.ShapeCache.ShapeStatusOwner,
        [stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)]}
 
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
@@ -110,7 +110,7 @@ defmodule Electric.Connection.Supervisor do
         {
           Electric.Replication.Supervisor,
           stack_id: stack_id,
-          shape_status_agent: shape_status_agent_spec,
+          shape_status_owner: shape_status_owner_spec,
           consumer_supervisor: consumer_supervisor_spec,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,

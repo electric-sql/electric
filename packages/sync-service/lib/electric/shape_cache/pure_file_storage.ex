@@ -53,6 +53,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :last_seen_txn_offset,
     :compaction_boundary,
     :latest_name,
+    :pg_snapshot,
     snapshot_started?: false,
     compaction_started?: false,
     last_snapshot_chunk: nil,
@@ -104,6 +105,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :compaction_config,
     version: @version
   ]
+
+  # Directory for storing metadata
+  @metadata_storage_dir ".meta"
 
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -171,15 +175,27 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
   end
 
-  def get_all_stored_shapes(%{base_path: base_path} = opts) do
+  def get_all_stored_shape_handles(%{base_path: base_path} = opts) do
     case ls(base_path) do
-      {:error, :enoent} ->
-        {:ok, %{}}
+      {:ok, shape_handles} ->
+        shape_handles
+        |> Enum.reject(&String.starts_with?(&1, "."))
+        |> Enum.reject(&File.exists?(deletion_marker_path(for_shape(&1, opts)), [:raw]))
+        |> then(&{:ok, MapSet.new(&1)})
 
+      {:error, :enoent} ->
+        {:ok, MapSet.new()}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def get_all_stored_shapes(opts) do
+    case get_all_stored_shape_handles(opts) do
       {:ok, shape_handles} ->
         shape_handles
         |> Enum.map(&for_shape(&1, opts))
-        |> Enum.reject(&File.exists?(deletion_marker_path(&1), [:raw]))
         |> Enum.reduce(%{}, fn opts, acc ->
           case read_shape_definition(opts) do
             {:ok, shape} -> Map.put(acc, opts.shape_handle, shape)
@@ -187,7 +203,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
           end
         end)
         |> then(&{:ok, &1})
+
+      {:error, reason} ->
+        {:error, reason}
     end
+  end
+
+  def metadata_backup_dir(%{base_path: base_path}) do
+    Path.join([base_path, @metadata_storage_dir, "backups"])
   end
 
   def cleanup!(%__MODULE__{} = opts) do
@@ -435,7 +458,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     do: FileInfo.recursive_disk_usage(base_path)
 
   def set_pg_snapshot(pg_snapshot, %__MODULE__{} = opts),
-    do: write_metadata!(opts, :pg_snapshot, pg_snapshot)
+    do: write_cached_metadata!(opts, :pg_snapshot, pg_snapshot)
 
   def mark_snapshot_as_started(%__MODULE__{} = opts),
     do: write_cached_metadata!(opts, :snapshot_started?, true)
@@ -470,7 +493,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   def get_current_position(%__MODULE__{} = opts) do
-    {:ok, get_latest_offset(opts), read_metadata!(opts, :pg_snapshot)}
+    {:ok, get_latest_offset(opts), read_cached_metadata(opts, :pg_snapshot)}
   end
 
   defp get_latest_offset(%__MODULE__{} = opts) do
@@ -496,19 +519,28 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def start_link(_), do: :ignore
 
-  def init_writer!(opts, shape_definition) do
+  def init_writer!(opts, shape_definition, storage_recovery_state \\ nil) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix} = initialise_filesystem!(opts, shape_definition)
+    {initial_acc, suffix} =
+      case maybe_use_cached_writer(opts, storage_recovery_state) do
+        {:ok, {acc, latest_name}} ->
+          {acc, latest_name}
 
-    register_with_stack(
-      opts,
-      table,
-      writer_acc(initial_acc, :last_persisted_txn_offset),
-      compaction_boundary(opts),
-      suffix,
-      writer_acc(initial_acc, :cached_chunk_boundaries)
-    )
+        :cache_not_found ->
+          {initial_acc, suffix} = initialise_filesystem!(opts, shape_definition)
+
+          register_with_stack(
+            opts,
+            table,
+            writer_acc(initial_acc, :last_persisted_txn_offset),
+            compaction_boundary(opts),
+            suffix,
+            writer_acc(initial_acc, :cached_chunk_boundaries)
+          )
+
+          {initial_acc, suffix}
+      end
 
     if shape_definition.storage.compaction == :enabled do
       schedule_compaction(opts)
@@ -522,17 +554,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
   end
 
+  defp maybe_use_cached_writer(opts, {version, writer_acc() = acc, storage_meta() = meta})
+       when version == opts.version do
+    :ets.insert(opts.stack_ets, meta)
+
+    if not snapshot_complete?(opts) or is_nil(read_cached_metadata(opts, :pg_snapshot)) do
+      :cache_not_found
+    else
+      {:ok, {acc, storage_meta(meta, :latest_name)}}
+    end
+  end
+
+  defp maybe_use_cached_writer(_opts, _), do: :cache_not_found
+
   def terminate(writer_state(opts: opts) = state) do
-    close_all_files(state)
+    writer_state(writer_acc: writer_acc) = close_all_files(state)
 
     try do
-      :ets.delete(opts.stack_ets, opts.shape_handle)
-    rescue
-      ArgumentError ->
-        :ok
-    end
+      case :ets.lookup(opts.stack_ets, opts.shape_handle) do
+        [storage_meta] ->
+          :ets.delete(opts.stack_ets, opts.shape_handle)
+          {opts.version, writer_acc, storage_meta}
 
-    :ok
+        [] ->
+          nil
+      end
+    rescue
+      ArgumentError -> nil
+    end
   end
 
   defp close_all_files(writer_state() = state) do
@@ -652,6 +701,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   @cached_keys [
     :snapshot_started?,
+    :pg_snapshot,
     :compaction_started?,
     :last_snapshot_chunk,
     :last_seen_txn_offset,
@@ -699,6 +749,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
         :last_snapshot_chunk ->
           :ets.update_element(stack_ets, handle, {storage_meta(:last_snapshot_chunk) + 1, value})
+
+        :pg_snapshot ->
+          :ets.update_element(stack_ets, handle, {storage_meta(:pg_snapshot) + 1, value})
       end
     rescue
       ArgumentError ->
@@ -742,6 +795,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     snapshot_started = read_metadata!(opts, :snapshot_started?) || false
     compaction_started = read_metadata!(opts, :compaction_started?) || false
     last_snapshot_chunk = read_metadata!(opts, :last_snapshot_chunk)
+    pg_snapshot = read_metadata!(opts, :pg_snapshot)
 
     :ets.insert(
       opts.stack_ets,
@@ -754,6 +808,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         compaction_boundary: compaction_boundary,
         latest_name: suffix,
         snapshot_started?: snapshot_started,
+        pg_snapshot: pg_snapshot,
         compaction_started?: compaction_started,
         last_snapshot_chunk: last_snapshot_chunk,
         cached_chunk_boundaries: chunks

@@ -12,7 +12,9 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate for_shape(shape_handle, opts), to: FileStorage
   defdelegate stack_start_link(opts), to: FileStorage
   defdelegate start_link(opts), to: FileStorage
+  defdelegate get_all_stored_shape_handles(opts), to: FileStorage
   defdelegate get_all_stored_shapes(opts), to: FileStorage
+  defdelegate metadata_backup_dir(opts), to: FileStorage
   defdelegate get_total_disk_usage(opts), to: FileStorage
   defdelegate get_current_position(opts), to: FileStorage
   defdelegate set_pg_snapshot(pg_snapshot, opts), to: FileStorage
@@ -31,7 +33,7 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
     |> Map.put(:extra_opts, %{num_calls_until_crash: Keyword.fetch!(opts, :num_calls_until_crash)})
   end
 
-  def init_writer!(opts, shape_definition) do
+  def init_writer!(opts, shape_definition, _storage_recovery_state) do
     CubDB.put(opts.db, @num_calls_until_crash_key, opts.extra_opts.num_calls_until_crash)
     FileStorage.init_writer!(opts, shape_definition)
   end
