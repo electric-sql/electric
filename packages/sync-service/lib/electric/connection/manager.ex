@@ -106,8 +106,6 @@ defmodule Electric.Connection.Manager do
       :lock_connection_timer,
       # PID of the database connection pool
       :pool_pid,
-      # PID of the shape log collector
-      :shape_log_collector_pid,
       # Backoff term used for reconnection with exponential back-off
       :connection_backoff,
       # PostgreSQL server version
@@ -242,8 +240,6 @@ defmodule Electric.Connection.Manager do
   def connection_pool_ready(manager) do
     GenServer.cast(manager, :connection_pool_ready)
   end
-
-  defdelegate monitor(stack_id, module, pid), to: __MODULE__.ProcessMonitor
 
   # Used for testing the responsiveness of the manager process
   def ping(manager, timeout \\ 1000) do
@@ -418,8 +414,7 @@ defmodule Electric.Connection.Manager do
         :start_shapes_supervisor,
         %State{
           current_phase: :connection_setup,
-          current_step: :start_shapes_supervisor,
-          shape_log_collector_pid: nil
+          current_step: :start_shapes_supervisor
         } = state
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -675,48 +670,6 @@ defmodule Electric.Connection.Manager do
     )
 
     {:stop, {:shutdown, reason}, state}
-  end
-
-  def handle_info(
-        {:DOWN, _ref, :process, pid, _reason},
-        %State{shape_log_collector_pid: pid} = state
-      ) do
-    # The replication client would normally exit together with the shape log collector when it
-    # is blocked on a call to either `ShapeLogCollector.handle_relation_msg/2` or
-    # `ShapeLogCollector.store_transaction/2` and the log collector encounters a storage error.
-    #
-    # Just to make sure that we restart the replication client when the shape log collector
-    # crashes for any other reason, we explicitly stop the client here. It will be
-    # automatically restarted by Connection.Manager upon the reception of the `{:EXIT, ...}` message.
-    #
-    # Note, though, that if the replication client process has already exited because the shape
-    # log collector had exited, the below call to `stop()` will also exit (with same exit reason or
-    # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
-    # try-catch block.
-
-    try do
-      _ =
-        Electric.Postgres.ReplicationClient.stop(
-          state.replication_client_pid,
-          :shape_log_collector_down
-        )
-    catch
-      :exit, _reason ->
-        # The replication client has already exited, so nothing else to do here.
-        state
-    end
-
-    if state.drop_slot_requested do
-      drop_slot(state)
-    end
-
-    # Don't clear the replication_client_pid here, it will be cleared when the
-    # {:EXIT, ...} message arrives
-    {:noreply, %{state | shape_log_collector_pid: nil}}
-  end
-
-  def handle_info({:process_monitored, Electric.Replication.ShapeLogCollector, pid, _ref}, state) do
-    {:noreply, %{state | shape_log_collector_pid: pid}}
   end
 
   @impl true
@@ -1394,9 +1347,6 @@ defmodule Electric.Connection.Manager do
 
   defp nillify_pid(%State{pool_pid: pid} = state, pid),
     do: %{state | pool_pid: nil}
-
-  defp nillify_pid(%State{shape_log_collector_pid: pid} = state, pid),
-    do: %{state | shape_log_collector_pid: nil}
 
   defp nillify_timer(%State{lock_connection_timer: tref} = state, tref),
     do: %{state | lock_connection_timer: nil}
