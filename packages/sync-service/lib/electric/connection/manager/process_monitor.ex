@@ -1,7 +1,10 @@
 defmodule Electric.Connection.Manager.ProcessMonitor do
-  # Exists to allow child processes to synchronously register themselves and be
-  # monitored in their init/1 callback without deadlocks.
-  # DOWN messages are forwarded to the connection manager.
+  @moduledoc """
+  Exists to allow child processes to synchronously register themselves and be
+  monitored in their init/1 callback without deadlocks.
+
+  DOWN messages are forwarded to the connection manager.
+  """
   use GenServer
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
