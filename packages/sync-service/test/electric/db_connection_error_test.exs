@@ -121,6 +121,29 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with remaining connection slots reserved error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message:
+            "remaining connection slots are reserved for roles with the SUPERUSER attribute",
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 "remaining connection slots are reserved for roles with the SUPERUSER attribute",
+               type: :insufficient_resources,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with server connection crashed error" do
       error = %Postgrex.Error{
         message: nil,
