@@ -2,4 +2,4 @@
 "@core/sync-service": patch
 ---
 
-Fix potential race conditions when monitoring the log collector process and improve connection manager's handling of shape process crashes.
+Improve connection manager's handling of shape process crashes and remove shape log collector monitoring.
