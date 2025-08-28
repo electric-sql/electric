@@ -91,7 +91,7 @@
   -
 
   ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it
-  ?\[info\] Sent 503 in [\d]+ms
+  ?\[debug\] Sent 503 in [\d]+ms
 
 ## Add the table to the publication and try again
 [shell psql]
@@ -108,7 +108,7 @@
   -
 
   ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" does not have its replica identity set to FULL
-  ?\[info\] Sent 503 in [\d]+ms
+  ?\[debug\] Sent 503 in [\d]+ms
 
 ## Set table's replica identity to FULL
 
@@ -136,7 +136,7 @@
   ??GET /v1/shape
   ??Starting a wait on the snapshot
   ??Snapshot started
-  ?\[info\] Chunked 200 in [\d]+ms
+  ?\[debug\] Chunked 200 in [\d]+ms
 
 [cleanup]
   [invoke teardown]
