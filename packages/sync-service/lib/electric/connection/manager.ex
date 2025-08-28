@@ -589,7 +589,8 @@ defmodule Electric.Connection.Manager do
   def handle_info({:EXIT, pid, reason}, %{shapes_supervisor_pid: pid} = state) do
     reason =
       case reason do
-        r when r in [:normal, :shutdown, :killed] -> r
+        :normal -> :normal
+        :shutdown -> :shutdown
         {:shutdown, reason} -> {:shutdown, reason}
         err -> {:shutdown, err}
       end
