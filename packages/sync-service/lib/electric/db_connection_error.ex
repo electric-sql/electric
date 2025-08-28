@@ -328,7 +328,7 @@ defmodule Electric.DbConnectionError do
 
   def from_error(:shape_log_collector_down) do
     %DbConnectionError{
-      message: "Linked ShapeLogCollector process terminated",
+      message: "Internal stream processing encountered an error",
       type: :shutdown,
       original_error: :shape_log_collector_down,
       retry_may_fix?: true
