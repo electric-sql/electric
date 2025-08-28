@@ -138,6 +138,36 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       assert StatusMonitor.status(stack_id) == :waiting
     end
+
+    test "backtracks the status when the shape log collector goes down", %{stack_id: stack_id} do
+      wait_until_active(stack_id)
+
+      :ok = GenServer.stop(Electric.Replication.ShapeLogCollector.name(stack_id), :shutdown)
+
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
+    end
+
+    test "backtracks the status when the shape cache goes down", %{stack_id: stack_id} do
+      wait_until_active(stack_id)
+
+      # should backtrack the status by virtue of the shape log collector being shut down
+      # by the replication supervisor
+      monitor =
+        stack_id
+        |> Electric.Replication.ShapeLogCollector.name()
+        |> GenServer.whereis()
+        |> Process.monitor()
+
+      :ok = GenServer.stop(Electric.ShapeCache.name(stack_id), :shutdown)
+
+      assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
+
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
+    end
   end
 
   describe "process dependencies" do
