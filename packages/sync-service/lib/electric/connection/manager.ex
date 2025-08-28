@@ -905,7 +905,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast({:consumers_ready, _recovered, _failed} = msg, state) do
-    Logger.debug("received #{inspect(msg)} in phase #{state.current_phase}: ignoring")
+    Logger.debug("Received #{inspect(msg)} in phase #{state.current_phase}: ignoring")
     {:noreply, state}
   end
 
