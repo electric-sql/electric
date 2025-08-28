@@ -24,7 +24,7 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :end_telemetry_span
 
   defp validate_request(%Conn{assigns: %{config: config}} = conn, _) do
-    Logger.info("Query String: #{conn.query_string}")
+    Logger.debug("Query String: #{conn.query_string}")
 
     api = Access.fetch!(config, :api)
 

@@ -19,7 +19,7 @@ defmodule Electric.Plug.Router do
   plug Electric.Plug.LabelProcessPlug
   plug Electric.Plug.TraceContextPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
-  plug Plug.Logger
+  plug Plug.Logger, log: :debug
 
   with_telemetry Sentry.PlugCapture do
     plug Sentry.PlugContext
