@@ -3,9 +3,11 @@ defmodule Electric.Replication.Supervisor do
 
   require Logger
 
-  def name(opts) do
-    Electric.ProcessRegistry.name(opts[:stack_id], __MODULE__)
+  def name(stack_id) when is_binary(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
+
+  def name(opts), do: name(opts[:stack_id])
 
   def start_link(opts) do
     name = Access.get(opts, :name, name(opts))

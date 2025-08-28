@@ -469,6 +469,10 @@ defmodule Electric.Connection.Manager do
           exit(reason)
       end
 
+    # Link shapes supervisor to the connection manager to ensure that
+    # if the shapes supervisor dies we restart the connection manager
+    Process.link(shapes_sup_pid)
+
     state = %{
       state
       | current_step: {:waiting_for_consumers, start_time},
@@ -583,7 +587,14 @@ defmodule Electric.Connection.Manager do
   # the whole connection manager, as it means it has given up restarting its own
   # children for whatever reason.
   def handle_info({:EXIT, pid, reason}, %{shapes_supervisor_pid: pid} = state) do
-    {:stop, {:shutdown, reason}, state}
+    reason =
+      case reason do
+        r when r in [:normal, :shutdown, :killed] -> r
+        {:shutdown, reason} -> {:shutdown, reason}
+        err -> {:shutdown, err}
+      end
+
+    {:stop, reason, state}
   end
 
   # Special-case the explicit shutdown of the supervision tree.

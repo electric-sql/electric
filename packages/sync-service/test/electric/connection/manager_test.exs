@@ -159,6 +159,22 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       refute_receive {:DOWN, ^ref, :process, ^manager_pid, _reason}, 300
     end
+
+    test "manager dies after replication supervisor death", ctx do
+      %{stack_id: stack_id} = ctx
+
+      wait_until_active(stack_id)
+
+      supervisor_pid = stack_id |> Electric.Replication.Supervisor.name() |> GenServer.whereis()
+      assert Process.alive?(supervisor_pid)
+
+      manager_pid = GenServer.whereis(Electric.Connection.Manager.name(stack_id))
+      ref = Process.monitor(manager_pid)
+
+      Supervisor.stop(supervisor_pid, :reason)
+
+      assert_receive {:DOWN, ^ref, :process, ^manager_pid, {:shutdown, :reason}}
+    end
   end
 
   defp wait_until_active(stack_id) do
