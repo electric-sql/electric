@@ -449,7 +449,7 @@ defmodule Electric.Connection.Manager do
     start_time = System.monotonic_time()
 
     with {:error, reason} <-
-           Electric.Connection.Supervisor.start_replication_supervisor(
+           Electric.Connection.Manager.Supervisor.start_replication_supervisor(
              stack_id: state.stack_id,
              shape_cache_opts: shape_cache_opts,
              pool_opts: state.pool_opts,
@@ -924,7 +924,6 @@ defmodule Electric.Connection.Manager do
       lock_connection_pid: lock_connection_pid
     } = state
 
-    Electric.Connection.Supervisor.stop_replication_supervisor(state.stack_id)
     if is_pid(pool_pid), do: shutdown_child(pool_pid, :shutdown)
     if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
 

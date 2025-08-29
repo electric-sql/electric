@@ -58,7 +58,7 @@ defmodule Electric.Connection.Supervisor do
 
     children = [
       {Electric.StatusMonitor, opts[:stack_id]},
-      {Electric.Connection.Manager, opts}
+      {Electric.Connection.Manager.Supervisor, opts}
     ]
 
     # The `rest_for_one` strategy is used here to ensure that if the StatusMonitor unexpectedly dies,
@@ -66,69 +66,5 @@ defmodule Electric.Connection.Supervisor do
     # statuses of the other children, losing it means losing that state. Restarting the other children
     # ensures they re-notify the StatusMonitor, allowing it to rebuild its internal state correctly.
     Supervisor.init(children, strategy: :rest_for_one)
-  end
-
-  def start_replication_supervisor(opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
-    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
-    db_pool_opts = Keyword.fetch!(opts, :pool_opts)
-    replication_opts = Keyword.fetch!(opts, :replication_opts)
-    inspector = Keyword.fetch!(shape_cache_opts, :inspector)
-    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
-    tweaks = Keyword.fetch!(opts, :tweaks)
-
-    shape_status_owner_spec =
-      {Electric.ShapeCache.ShapeStatusOwner,
-       [stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)]}
-
-    consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
-
-    shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
-
-    publication_manager_spec =
-      {Electric.Replication.PublicationManager,
-       stack_id: stack_id,
-       publication_name: Keyword.fetch!(replication_opts, :publication_name),
-       can_alter_publication?: Keyword.fetch!(opts, :can_alter_publication?),
-       manual_table_publishing?: Keyword.fetch!(opts, :manual_table_publishing?),
-       db_pool: Keyword.fetch!(db_pool_opts, :name),
-       update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0)}
-
-    shape_log_collector_spec =
-      {Electric.Replication.ShapeLogCollector,
-       stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv}
-
-    schema_reconciler_spec =
-      {Electric.Replication.SchemaReconciler,
-       stack_id: stack_id,
-       inspector: inspector,
-       shape_cache: {Electric.ShapeCache, stack_id: stack_id},
-       period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)}
-
-    child_spec =
-      Supervisor.child_spec(
-        {
-          Electric.Replication.Supervisor,
-          stack_id: stack_id,
-          shape_status_owner: shape_status_owner_spec,
-          consumer_supervisor: consumer_supervisor_spec,
-          shape_cache: shape_cache_spec,
-          publication_manager: publication_manager_spec,
-          log_collector: shape_log_collector_spec,
-          schema_reconciler: schema_reconciler_spec
-        },
-        restart: :temporary
-      )
-
-    Supervisor.start_child(name(opts), child_spec)
-  end
-
-  def stop_replication_supervisor(stack_id) do
-    name = Electric.Replication.Supervisor.name(stack_id: stack_id)
-
-    case GenServer.whereis(name) do
-      pid when is_pid(pid) -> Supervisor.stop(name, :shutdown)
-      nil -> :ok
-    end
   end
 end
