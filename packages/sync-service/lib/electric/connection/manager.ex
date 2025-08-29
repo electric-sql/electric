@@ -106,8 +106,6 @@ defmodule Electric.Connection.Manager do
       :lock_connection_timer,
       # PID of the database connection pool
       :pool_pid,
-      # PID of the shapes supervisor
-      :shapes_supervisor_pid,
       # Backoff term used for reconnection with exponential back-off
       :connection_backoff,
       # PostgreSQL server version
@@ -450,7 +448,7 @@ defmodule Electric.Connection.Manager do
 
     start_time = System.monotonic_time()
 
-    shapes_sup_pid =
+    _shapes_sup_pid =
       case Electric.Connection.Supervisor.start_shapes_supervisor(
              stack_id: state.stack_id,
              shape_cache_opts: shape_cache_opts,
@@ -469,15 +467,10 @@ defmodule Electric.Connection.Manager do
           exit(reason)
       end
 
-    # Link shapes supervisor to the connection manager to ensure that
-    # if the shapes supervisor dies we restart the connection manager
-    Process.link(shapes_sup_pid)
-
     state = %{
       state
       | current_step: {:waiting_for_consumers, start_time},
-        purge_all_shapes?: false,
-        shapes_supervisor_pid: shapes_sup_pid
+        purge_all_shapes?: false
     }
 
     {:noreply, state}
@@ -582,21 +575,6 @@ defmodule Electric.Connection.Manager do
         state
       ),
       do: {:noreply, state}
-
-  # Special-case any exit of the shapes supervisor - if it happens we need to restart
-  # the whole connection manager, as it means it has given up restarting its own
-  # children for whatever reason.
-  def handle_info({:EXIT, pid, reason}, %{shapes_supervisor_pid: pid} = state) do
-    reason =
-      case reason do
-        :normal -> :normal
-        :shutdown -> :shutdown
-        {:shutdown, reason} -> {:shutdown, reason}
-        err -> {:shutdown, err}
-      end
-
-    {:stop, reason, state}
-  end
 
   # Special-case the explicit shutdown of the supervision tree.
   #
