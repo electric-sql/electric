@@ -21,6 +21,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     root_pk: ["id"],
     root_column_count: 1,
     selected_columns: ["id"],
+    explicitly_selected_columns: ["id"],
     flags: %{selects_all_columns: true}
   }
   @test_shape_handle "test-shape-handle"

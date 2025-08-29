@@ -24,6 +24,7 @@ defmodule Electric.Shapes.ApiTest do
     root_column_count: 2,
     root_pk: ["id"],
     selected_columns: ["id", "value"],
+    explicitly_selected_columns: ["id", "value"],
     flags: %{selects_all_columns: true}
   }
   @registry __MODULE__.Registry

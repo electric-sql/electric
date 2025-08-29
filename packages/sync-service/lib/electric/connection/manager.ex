@@ -678,7 +678,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_info(
-        {:DOWN, _ref, :process, pid, _reason},
+        {:DOWN, _ref, :process, pid, reason},
         %State{shape_log_collector_pid: pid} = state
       ) do
     # The replication client would normally exit together with the shape log collector when it
@@ -694,11 +694,19 @@ defmodule Electric.Connection.Manager do
     # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
     # try-catch block.
 
+    reason =
+      case reason do
+        :normal -> :normal
+        :shutdown -> :shutdown
+        {:shutdown, term} -> {:shutdown, term}
+        _ -> :shape_log_collector_down
+      end
+
     try do
       _ =
         Electric.Postgres.ReplicationClient.stop(
           state.replication_client_pid,
-          :shape_log_collector_down
+          reason
         )
     catch
       :exit, _reason ->

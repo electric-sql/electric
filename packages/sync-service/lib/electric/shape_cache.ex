@@ -511,7 +511,7 @@ defmodule Electric.ShapeCache do
             stack_id: state.stack_id,
             shape_handle: shape_handle,
             storage: state.storage,
-            columns: inner_shape.selected_columns,
+            columns: inner_shape.explicitly_selected_columns,
             materialized_type: materialized_type
           })
 

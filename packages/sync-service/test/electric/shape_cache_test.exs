@@ -477,7 +477,8 @@ defmodule Electric.ShapeCacheTest do
         root_table: {"public", "partitioned_items"},
         root_table_id: 1,
         root_pk: ["a", "b"],
-        selected_columns: ["a", "b"]
+        selected_columns: ["a", "b"],
+        explicitly_selected_columns: ["a", "b"]
       }
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.shape_cache_opts)

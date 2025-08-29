@@ -33,6 +33,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
     root_column_count: 2,
     root_pk: ["id"],
     selected_columns: ["id", "value"],
+    explicitly_selected_columns: ["id", "value"],
     flags: %{selects_all_columns: true}
   }
   @test_shape_handle "test-shape-handle"
