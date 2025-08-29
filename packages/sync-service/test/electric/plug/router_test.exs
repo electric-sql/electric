@@ -1959,6 +1959,53 @@ defmodule Electric.Plug.RouterTest do
 
       assert {_, 409, _} = Task.await(task)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE grandparent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL, grandparent_id INT NOT NULL REFERENCES grandparent(id))",
+           "CREATE TABLE child (id INT PRIMARY KEY, value INT NOT NULL, parent_id INT NOT NULL REFERENCES parent(id))",
+           "INSERT INTO grandparent (id, value) VALUES (1, 10), (2, 20)",
+           "INSERT INTO parent (id, value, grandparent_id) VALUES (1, 10, 1), (2, 20, 2)",
+           "INSERT INTO child (id, value, parent_id) VALUES (1, 10, 1), (2, 20, 2)"
+         ]
+    test "allows 3 level subquery in where clauses", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id in (SELECT id FROM parent WHERE grandparent_id in (SELECT id FROM grandparent WHERE value = 10))"
+        )
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "value" => "10"}}]} =
+               shape_req(orig_req, opts)
+
+      # Basic update should be visible
+      task = live_shape_req(req, opts)
+      Postgrex.query!(db_conn, "UPDATE child SET value = 2 WHERE id = 1")
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "value" => "2"}}, _]} =
+               Task.await(task)
+
+      # Grandparent move should invalidate the shape
+      task = live_shape_req(req, opts)
+      Postgrex.query!(db_conn, "UPDATE grandparent SET value = 10 WHERE id = 2")
+
+      assert {_, 409, _} = Task.await(task)
+
+      # And fresh view should now see everything
+      assert {_, 200,
+              [
+                %{"value" => _},
+                %{"value" => _}
+              ] = results} = shape_req(orig_req, opts)
+
+      assert [
+               %{"value" => %{"id" => "1", "value" => "2"}},
+               %{"value" => %{"id" => "2", "value" => "20"}}
+             ] = Enum.sort_by(results, & &1["value"]["id"])
+    end
   end
 
   describe "404" do
@@ -2111,7 +2158,7 @@ defmodule Electric.Plug.RouterTest do
         |> Map.put(:offset, get_resp_last_offset(result))
         |> then(&{&1, result.status, Jason.decode!(result.resp_body)})
 
-      409 ->
+      _ ->
         {base, result.status, Jason.decode!(result.resp_body)}
     end
   end
