@@ -2,8 +2,8 @@
   "description": "Electric SQL monorepo",
   "version": "0.0.0",
   "dependencies": {
-    "@changesets/cli": "^2.27.10",
-    "dotenv-cli": "^7.4.2"
+    "@changesets/cli": "^2.29.6",
+    "dotenv-cli": "^7.4.4"
   },
   "packageManager": "pnpm@9.15.0",
   "private": true,
@@ -19,7 +19,7 @@
     "stylecheck-all": "pnpm --if-present --recursive run stylecheck"
   },
   "devDependencies": {
-    "glob": "^10.3.10"
+    "glob": "^10.4.5"
   },
   "pnpm": {
     "patchedDependencies": {
