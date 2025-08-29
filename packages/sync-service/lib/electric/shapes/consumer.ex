@@ -273,8 +273,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({{:dependency_materializer_down, handle}, _ref, :process, pid, reason}, state) do
-    Logger.warning("Materializer down for a dependency: #{handle} (#{inspect(pid)})")
-    {:stop, reason, state}
+    Logger.warning(
+      "Materializer down for a dependency: #{handle} (#{inspect(pid)}) (#{inspect(reason)})"
+    )
+
+    {:noreply, terminate_safely(state)}
   end
 
   # We're trapping exists so that `terminate` is called to clean up the writer,
