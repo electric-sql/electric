@@ -1,21 +1,25 @@
 defmodule Electric.Connection.Supervisor do
   @moduledoc """
-  The connection supervisor is a rest-for-one supervisor that starts `Connection.Manager`,
-  followed by `Replication.Supervisor`.
+  The main connection supervisor that looks after Connection.Manager and Replication.Supervisor.
 
-  Connection.Manager monitors all of the connection process that it starts and if any one of
-  the goes down with a critical error (such as Postgres shutting down), the connection manager
-  itself will shut down. This will cause the shutdown of Replication.Supervisor, due to the nature
-  of the rest-for-one supervision strategy, and, since the latter supervisor is started as a
-  `temporary` child of the connection supervisor, it won't be restarted until its child spec is
-  re-added by a new call to `start_shapes_supervisor/0`.
+  It actually starts Connection.Manager.Supervisor and this latter then directly supervises
+  Connection.Manager and Replication.Supervisor processes. This is done with the goal of tying
+  the lifetimes of those two together (by configuring Connection.Manager.Supervisor
+  appropriately) while still being able to configure this Connection.Supervisor with the
+  rest_for_all strategy as explained further down in the code.
 
-  This supervision design is deliberate: none of the "shapes" processes can function without a
-  working DB pool and we only have a DB pool when the Connection.Manager process can see that
-  all of its database connections are healthy. Connection.Manager tries to reopen connections
-  when they are closed, with an exponential backoff, so it is the first process to know when a
-  connection has been restored and it's also the one that starts Replication.Supervisor once it
-  has successfully initialized a database connection pool.
+  Connection.Manager acts a bit like a supervisor for database connection processes:
+
+    - it opens database connections in the right order
+    - restarts them during initialization of they fail for recoverable reasons
+    - restarts the replication client at any point if it crashes due to a non-fatal error
+    - starts the Replication.Supervisor at the right point in time, passing it the right set of
+      options that have been informed by connection manager's own initialization sequence up to
+      that point
+
+  If a database connection shuts down due to a non-recoverable error, the connection manager
+  process will ask this supervisor to shut down, which in the single-tenant mode results in the
+  whole OTP application shutting down.
   """
 
   # This supervisor is meant to be a child of Electric.StackSupervisor.
@@ -61,7 +65,7 @@ defmodule Electric.Connection.Supervisor do
       {Electric.Connection.Manager.Supervisor, opts}
     ]
 
-    # The `rest_for_one` strategy is used here to ensure that if the StatusMonitor unexpectedly dies,
+    # The :rest_for_one strategy is used here to ensure that if the StatusMonitor unexpectedly dies,
     # all subsequent child processes are also restarted. Since the StatusMonitor keeps track of the
     # statuses of the other children, losing it means losing that state. Restarting the other children
     # ensures they re-notify the StatusMonitor, allowing it to rebuild its internal state correctly.

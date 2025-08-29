@@ -1,4 +1,8 @@
 defmodule Electric.Connection.Manager.Supervisor do
+  @moduledoc """
+  Intermediate supervisor that helps tie Connection.Manager's lifetime to that of Replication.Supervisor.
+  """
+
   use Supervisor
 
   def name(opts) do
@@ -17,7 +21,7 @@ defmodule Electric.Connection.Manager.Supervisor do
     children = [{Electric.Connection.Manager, opts}]
 
     # Electric.Connection.Manager is a permanent child of the supervisor, so when it dies, the
-    # one_for_all strategy will kick in and restart the other children.
+    # :one_for_all strategy will kick in and restart the other children.
     # This is not the case for Electric.Replication.Supervisor which needs to be a temporary
     # child such that Electric.Connection.Manager decides when it starts. Because of this, when
     # Electric.Replication.Supervisor dies, even due to an error, it doesn't activate the
@@ -27,6 +31,13 @@ defmodule Electric.Connection.Manager.Supervisor do
     Supervisor.init(children, strategy: :one_for_all, auto_shutdown: :any_significant)
   end
 
+  @doc """
+  This function is supposed to be called from Connection.Manager at the right point in its
+  initialization sequence.
+
+  Replication.Supervisor is started as a temporary child so that, when it dies, it is up to the
+  Connection.Manager process to restart it again at the right point in time.
+  """
   def start_replication_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)

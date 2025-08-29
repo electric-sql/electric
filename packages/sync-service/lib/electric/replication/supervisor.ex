@@ -1,4 +1,13 @@
 defmodule Electric.Replication.Supervisor do
+  @moduledoc """
+  Supervisor responsible for the entire shape subsystem.
+
+  It starts up and supervises the processes that manage shapes (create/remove), keep the
+  Postgres publication up to date, consume incoming transactions and write them to shape logs.
+  It also supervisers the consumer supervisor which starts a new consumer process for each
+  shape.
+  """
+
   use Supervisor
 
   require Logger
@@ -19,6 +28,7 @@ defmodule Electric.Replication.Supervisor do
     Process.set_label({:replication_supervisor, opts[:stack_id]})
     Logger.metadata(stack_id: opts[:stack_id])
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
+
     Logger.info("Starting shape replication pipeline")
 
     shape_status_owner = Keyword.fetch!(opts, :shape_status_owner)
