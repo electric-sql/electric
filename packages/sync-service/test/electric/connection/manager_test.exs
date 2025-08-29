@@ -129,7 +129,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       :ok =
         Supervisor.terminate_child(
-          Connection.Supervisor.name(stack_id: stack_id),
+          Connection.Manager.Supervisor.name(stack_id: stack_id),
           Connection.Manager
         )
 
@@ -137,6 +137,36 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       assert StatusMonitor.status(stack_id) == :waiting
+    end
+
+    test "backtracks the status when the shape log collector goes down", %{stack_id: stack_id} do
+      wait_until_active(stack_id)
+
+      :ok = GenServer.stop(Electric.Replication.ShapeLogCollector.name(stack_id), :shutdown)
+
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
+    end
+
+    test "backtracks the status when the shape cache goes down", %{stack_id: stack_id} do
+      wait_until_active(stack_id)
+
+      # should backtrack the status by virtue of the shape log collector being shut down
+      # by the replication supervisor
+      monitor =
+        stack_id
+        |> Electric.Replication.ShapeLogCollector.name()
+        |> GenServer.whereis()
+        |> Process.monitor()
+
+      :ok = GenServer.stop(Electric.ShapeCache.name(stack_id), :shutdown)
+
+      assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
+
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
     end
   end
 
@@ -158,6 +188,27 @@ defmodule Electric.Connection.ConnectionManagerTest do
       Process.exit(shape_cache_pid, {:error, :reason})
 
       refute_receive {:DOWN, ^ref, :process, ^manager_pid, _reason}, 300
+    end
+
+    test "manager dies after replication supervisor death", ctx do
+      %{stack_id: stack_id} = ctx
+
+      wait_until_active(stack_id)
+
+      supervisor_pid = stack_id |> Electric.Replication.Supervisor.name() |> GenServer.whereis()
+      assert Process.alive?(supervisor_pid)
+
+      manager_pid = GenServer.whereis(Electric.Connection.Manager.name(stack_id))
+      ref = Process.monitor(manager_pid)
+
+      Supervisor.stop(supervisor_pid, :reason)
+
+      # When the Replication.Supervisor process exits (for whatever reason)
+      # Connection.Manager.Supervisor terminates the rest of its children and shuts down itself
+      # (thanks to [auto_shutdown: :any_significant]).  This is why Connection.Manager exits
+      # with reason :shutdown and is then restarted by Connection.Supervsior under
+      # Connection.Manager.Supervisor again.
+      assert_receive {:DOWN, ^ref, :process, ^manager_pid, :shutdown}
     end
   end
 

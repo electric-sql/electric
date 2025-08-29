@@ -91,8 +91,6 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
-    :ok = Electric.Connection.Manager.monitor(opts.stack_id, __MODULE__, self())
-
     persistent_replication_data_opts = [
       stack_id: opts.stack_id,
       persistent_kv: opts.persistent_kv
