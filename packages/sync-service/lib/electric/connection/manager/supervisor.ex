@@ -16,7 +16,15 @@ defmodule Electric.Connection.Manager.Supervisor do
 
     children = [{Electric.Connection.Manager, opts}]
 
-    Supervisor.init(children, strategy: :one_for_all)
+    # Electric.Connection.Manager is a permanent child of the supervisor, so when it dies, the
+    # one_for_all strategy will kick in and restart the other children.
+    # This is not the case for Electric.Replication.Supervisor which needs to be a temporary
+    # child such that Electric.Connection.Manager decides when it starts. Because of this, when
+    # Electric.Replication.Supervisor dies, even due to an error, it doesn't activate the
+    # :one_for_all strategy.
+    # We work around this by marking Electric.Replication.Supervisor as significant and
+    # configuring this supervisor with [auto_shutdown: :any_significant].
+    Supervisor.init(children, strategy: :one_for_all, auto_shutdown: :any_significant)
   end
 
   def start_replication_supervisor(opts) do
@@ -68,7 +76,8 @@ defmodule Electric.Connection.Manager.Supervisor do
           log_collector: shape_log_collector_spec,
           schema_reconciler: schema_reconciler_spec
         },
-        restart: :temporary
+        restart: :temporary,
+        significant: true
       )
 
     Supervisor.start_child(name(opts), child_spec)

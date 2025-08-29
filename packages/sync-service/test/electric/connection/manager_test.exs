@@ -129,7 +129,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       :ok =
         Supervisor.terminate_child(
-          Connection.Supervisor.name(stack_id: stack_id),
+          Connection.Manager.Supervisor.name(stack_id: stack_id),
           Connection.Manager
         )
 
@@ -203,7 +203,12 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       Supervisor.stop(supervisor_pid, :reason)
 
-      assert_receive {:DOWN, ^ref, :process, ^manager_pid, {:shutdown, :reason}}
+      # When the Replication.Supervisor process exits (for whatever reason)
+      # Connection.Manager.Supervisor terminates the rest of its children and shuts down itself
+      # (thanks to [auto_shutdown: :any_significant]).  This is why Connection.Manager exits
+      # with reason :shutdown and is then restarted by Connection.Supervsior under
+      # Connection.Manager.Supervisor again.
+      assert_receive {:DOWN, ^ref, :process, ^manager_pid, :shutdown}
     end
   end
 
