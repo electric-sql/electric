@@ -31,6 +31,7 @@ defmodule Electric.Shapes.Shape do
     :root_column_count,
     :where,
     :selected_columns,
+    :explicitly_selected_columns,
     shape_dependencies: [],
     shape_dependencies_handles: [],
     flags: %{},
@@ -55,6 +56,7 @@ defmodule Electric.Shapes.Shape do
           flags: %{optional(flag()) => boolean()},
           where: Electric.Replication.Eval.Expr.t() | nil,
           selected_columns: [String.t(), ...],
+          explicitly_selected_columns: [String.t(), ...],
           replica: replica(),
           storage: storage_config() | nil,
           shape_dependencies: [t(), ...]
@@ -127,6 +129,7 @@ defmodule Electric.Shapes.Shape do
     where: [type: :any],
     columns: [type: {:or, [{:list, :string}, nil]}],
     params: [type: {:map, :string, :string}, default: %{}],
+    autofill_pk_select?: [type: :boolean, default: false],
     replica: [
       type: {:custom, __MODULE__, :verify_replica, []},
       default: :default
@@ -189,8 +192,8 @@ defmodule Electric.Shapes.Shape do
          inspector = Map.fetch!(opts, :inspector),
          {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
-         {:ok, selected_columns} <-
-           validate_selected_columns(column_info, pk_cols, Map.get(opts, :columns)),
+         {:ok, selected_columns, explicitly_selected_columns} <-
+           validate_selected_columns(column_info, pk_cols, opts),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where, shape_dependencies} <-
            validate_where_clause(Map.get(opts, :where), opts, refs) do
@@ -213,6 +216,7 @@ defmodule Electric.Shapes.Shape do
          flags: flags,
          where: where,
          selected_columns: selected_columns,
+         explicitly_selected_columns: explicitly_selected_columns,
          replica: Map.get(opts, :replica, :default),
          storage: Map.get(opts, :storage) || %{compaction: :disabled},
          shape_dependencies: shape_dependencies
@@ -258,16 +262,19 @@ defmodule Electric.Shapes.Shape do
     shared_opts = Map.drop(opts, [:where, :columns, :relation])
 
     Enum.reduce_while(subqueries, {:ok, []}, fn subquery, {:ok, acc} ->
-      case new(Map.put(shared_opts, :select, subquery)) do
-        {:ok, %__MODULE__{root_pk: pk, selected_columns: selected_columns} = shape} ->
-          if Enum.sort(pk) == Enum.sort(selected_columns) do
+      shared_opts
+      |> Map.put(:select, subquery)
+      |> Map.put(:autofill_pk_select?, true)
+      |> new()
+      |> case do
+        {:ok,
+         %__MODULE__{explicitly_selected_columns: explicitly_selected_columns} =
+             shape} ->
+          if length(explicitly_selected_columns) == 1 do
             {:cont, {:ok, [shape | acc]}}
           else
-            # Supporting anything but primary keys requires a more complex state in the materializer that we're not supporting yet
             {:halt,
-             {:error,
-              {:where,
-               "Subquery has selected #{selected_columns |> Enum.join(", ")} but primary key is #{pk |> Enum.join(", ")}. `IN (SELECT ...)` is supported only for primary key columns."}}}
+             {:error, {:where, "Subquery has multiple columns, which is not supported right now"}}}
           end
 
         {:error, reason} ->
@@ -284,7 +291,7 @@ defmodule Electric.Shapes.Shape do
 
       with {:ok, column_info, _} <- load_column_info(relation, inspector) do
         column_info
-        |> Enum.filter(&(&1.name in shape.selected_columns))
+        |> Enum.filter(&(&1.name in shape.explicitly_selected_columns))
         |> Inspector.columns_to_expr()
         |> Map.to_list()
         |> case do
@@ -308,37 +315,24 @@ defmodule Electric.Shapes.Shape do
   @spec validate_selected_columns(
           [Inspector.column_info()],
           [String.t()],
-          [String.t(), ...] | nil
-        ) :: {:ok, [String.t(), ...]} | {:error, {:columns, [String.t()]}}
-
-  # No explicit column list was included in the shape request. Only check for the presence of
-  # generated columns in the table schema.
-  defp validate_selected_columns(column_info, _pk_cols, nil) do
-    generated_cols = Enum.filter(column_info, & &1.is_generated)
-
-    if generated_cols == [] do
-      {:ok, column_info |> Enum.map(& &1.name) |> Enum.sort()}
-    else
-      err_msg =
-        "The following columns are generated and cannot be included in the shape: " <>
-          (generated_cols |> Enum.map(& &1.name) |> Enum.join(", ")) <>
-          ". You can exclude them from the shape by explicitly listing which columns " <>
-          "to fetch in the 'columns' query param"
-
-      {:error, {:columns, [err_msg]}}
-    end
-  end
+          map()
+        ) ::
+          {:ok, needed :: [String.t(), ...], selected :: [String.t(), ...]}
+          | {:error, {:columns, [String.t()]}}
 
   # When an explicit list of columns was included in the shape request, make sure that they are
   # valid, they cover all the PK columns and none of them is a generated column.
-  defp validate_selected_columns(column_info, pk_cols, columns_to_select) do
+  defp validate_selected_columns(column_info, pk_cols, %{columns: columns_to_select} = opts)
+       when is_list(columns_to_select) do
+    autofill_pk_select? = Map.fetch!(opts, :autofill_pk_select?)
+
     missing_pk_cols = pk_cols -- columns_to_select
     invalid_cols = columns_to_select -- Enum.map(column_info, & &1.name)
     generated_cols = Enum.filter(column_info, &(&1.is_generated and &1.name in columns_to_select))
 
     err_msg =
       cond do
-        missing_pk_cols != [] ->
+        missing_pk_cols != [] and not autofill_pk_select? ->
           "The list of columns must include all primary key columns, missing: " <>
             Enum.join(missing_pk_cols, ", ")
 
@@ -353,9 +347,30 @@ defmodule Electric.Shapes.Shape do
           nil
       end
 
+    all_columns = Enum.uniq(columns_to_select ++ pk_cols)
+
     if is_nil(err_msg) do
-      {:ok, Enum.sort(columns_to_select)}
+      {:ok, Enum.sort(all_columns), Enum.sort(columns_to_select)}
     else
+      {:error, {:columns, [err_msg]}}
+    end
+  end
+
+  # No explicit column list was included in the shape request. Only check for the presence of
+  # generated columns in the table schema.
+  defp validate_selected_columns(column_info, _pk_cols, _) do
+    generated_cols = Enum.filter(column_info, & &1.is_generated)
+
+    if generated_cols == [] do
+      all_columns = column_info |> Enum.map(& &1.name) |> Enum.sort()
+      {:ok, all_columns, all_columns}
+    else
+      err_msg =
+        "The following columns are generated and cannot be included in the shape: " <>
+          (generated_cols |> Enum.map(& &1.name) |> Enum.join(", ")) <>
+          ". You can exclude them from the shape by explicitly listing which columns " <>
+          "to fetch in the 'columns' query param"
+
       {:error, {:columns, [err_msg]}}
     end
   end
@@ -551,6 +566,7 @@ defmodule Electric.Shapes.Shape do
       flags: shape.flags,
       where: shape.where,
       selected_columns: shape.selected_columns,
+      explicitly_selected_columns: shape.explicitly_selected_columns,
       storage: shape.storage,
       replica: shape.replica,
       shape_dependencies: Enum.map(shape.shape_dependencies, &to_json_safe/1)
@@ -584,6 +600,8 @@ defmodule Electric.Shapes.Shape do
          flags: Map.new(flags, fn {k, v} -> {String.to_existing_atom(k), v} end),
          where: where,
          selected_columns: selected_columns,
+         explicitly_selected_columns:
+           Map.get(data, "explicitly_selected_columns", selected_columns),
          storage: storage_config_from_json(storage),
          replica: String.to_existing_atom(replica),
          shape_dependencies: shape_dependencies
@@ -665,18 +683,56 @@ end
 defimpl Inspect, for: Electric.Shapes.Shape do
   import Inspect.Algebra
 
-  def inspect(%Electric.Shapes.Shape{} = shape, _opts) do
+  def inspect(%Electric.Shapes.Shape{} = shape, opts) do
     %{root_table: {schema, table}, root_table_id: root_table_id} = shape
 
+    kwlist = []
+
     # some tests have invalid, unparsed, where clauses
-    where =
+    kwlist =
       case shape.where do
-        %{query: query} -> concat([", where: \"", query, "\""])
-        query when is_binary(query) -> concat([", where: \"", query, "\""])
-        nil -> ""
+        %{query: query} -> [{:where, query} | kwlist]
+        query when is_binary(query) -> [{:where, query} | kwlist]
+        nil -> kwlist
       end
 
-    concat(["Shape.new!(\"", schema, ".", table, "\" [OID #{root_table_id}]", where, ")"])
+    kwlist =
+      case shape.flags do
+        %{selects_all_columns: true} ->
+          kwlist
+
+        _ ->
+          [{:columns, shape.explicitly_selected_columns} | kwlist]
+      end
+
+    kwlist =
+      case shape.shape_dependencies do
+        [] ->
+          kwlist
+
+        deps ->
+          [{:deps, deps} | kwlist]
+      end
+
+    base =
+      concat([
+        to_doc(Shape, opts),
+        ".new!({",
+        to_doc(root_table_id, opts),
+        ", ",
+        color_doc(concat([~S|"|, schema, ".", table, ~S|"|]), :string, opts),
+        "}"
+      ])
+
+    if kwlist != [] do
+      base
+      |> concat(", ")
+      |> container_doc(Enum.reverse(kwlist), ")", opts, fn {key, value}, opts ->
+        concat([to_string(key), ": ", to_doc(value, opts)])
+      end)
+    else
+      concat(base, ")")
+    end
   end
 end
 

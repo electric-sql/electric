@@ -435,6 +435,50 @@ defmodule Electric.Shapes.ShapeTest do
                  %{["$sublink", "0"] => MapSet.new([2])}
                )
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS project (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
+         ]
+    test "allows non-PK references in subqueries", %{inspector: inspector} do
+      assert {:ok,
+              %Shape{
+                root_table: {"public", "item"},
+                where: %{query: "value IN (SELECT value FROM project WHERE value > 5)"},
+                shape_dependencies: [
+                  %Shape{
+                    root_table: {"public", "project"},
+                    root_pk: ["id"],
+                    selected_columns: ["id", "value"],
+                    where: %{query: "value > 5"}
+                  }
+                ]
+              } = outer_shape} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: "value IN (SELECT value FROM project where value > 5)"
+               )
+
+      assert [_] =
+               Shape.convert_change(
+                 outer_shape,
+                 %Changes.NewRecord{
+                   relation: {"public", "item"},
+                   record: %{"id" => "1", "value" => "10"}
+                 },
+                 %{["$sublink", "0"] => MapSet.new([10])}
+               )
+
+      assert [] =
+               Shape.convert_change(
+                 outer_shape,
+                 %Changes.NewRecord{
+                   relation: {"public", "item"},
+                   record: %{"id" => "1", "value" => "10"}
+                 },
+                 %{["$sublink", "0"] => MapSet.new([20])}
+               )
+    end
   end
 
   describe "new!/2" do

@@ -19,6 +19,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     root_table_id: 1,
     root_pk: ["id"],
     selected_columns: ["id"],
+    explicitly_selected_columns: ["id"],
     where:
       Electric.Replication.Eval.Parser.parse_and_validate_expression!("id != '1'",
         refs: %{["id"] => :text}
