@@ -68,7 +68,7 @@ defmodule Electric.Connection.Supervisor do
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
-  def start_shapes_supervisor(opts) do
+  def start_replication_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     db_pool_opts = Keyword.fetch!(opts, :pool_opts)
@@ -123,11 +123,11 @@ defmodule Electric.Connection.Supervisor do
     Supervisor.start_child(name(opts), child_spec)
   end
 
-  def stop_shapes_supervisor(stack_id) do
-    shapes_sup_name = Electric.Replication.Supervisor.name(stack_id: stack_id)
+  def stop_replication_supervisor(stack_id) do
+    name = Electric.Replication.Supervisor.name(stack_id: stack_id)
 
-    case GenServer.whereis(shapes_sup_name) do
-      pid when is_pid(pid) -> Supervisor.stop(shapes_sup_name, :shutdown)
+    case GenServer.whereis(name) do
+      pid when is_pid(pid) -> Supervisor.stop(name, :shutdown)
       nil -> :ok
     end
   end

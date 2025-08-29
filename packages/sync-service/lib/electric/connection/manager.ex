@@ -64,7 +64,7 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, :configuring_connection}
             | {:start_connection_pool, nil}
             | {:start_connection_pool, :connecting}
-            | :start_shapes_supervisor
+            | :start_replication_supervisor
             | {:waiting_for_consumers, integer()}
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
@@ -411,10 +411,10 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(
-        :start_shapes_supervisor,
+        :start_replication_supervisor,
         %State{
           current_phase: :connection_setup,
-          current_step: :start_shapes_supervisor
+          current_step: :start_replication_supervisor
         } = state
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -448,8 +448,8 @@ defmodule Electric.Connection.Manager do
 
     start_time = System.monotonic_time()
 
-    _shapes_sup_pid =
-      case Electric.Connection.Supervisor.start_shapes_supervisor(
+    with {:error, reason} <-
+           Electric.Connection.Supervisor.start_replication_supervisor(
              stack_id: state.stack_id,
              shape_cache_opts: shape_cache_opts,
              pool_opts: state.pool_opts,
@@ -459,13 +459,9 @@ defmodule Electric.Connection.Manager do
              manual_table_publishing?: state.manual_table_publishing?,
              persistent_kv: state.persistent_kv
            ) do
-        {:ok, shapes_sup_pid} ->
-          shapes_sup_pid
-
-        {:error, reason} ->
-          Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
-          exit(reason)
-      end
+      Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+      exit(reason)
+    end
 
     state = %{
       state
@@ -827,8 +823,8 @@ defmodule Electric.Connection.Manager do
     Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
     state = mark_connection_succeeded(state)
 
-    {:noreply, %{state | current_step: :start_shapes_supervisor},
-     {:continue, :start_shapes_supervisor}}
+    {:noreply, %{state | current_step: :start_replication_supervisor},
+     {:continue, :start_replication_supervisor}}
   end
 
   def handle_cast(
@@ -928,7 +924,7 @@ defmodule Electric.Connection.Manager do
       lock_connection_pid: lock_connection_pid
     } = state
 
-    Electric.Connection.Supervisor.stop_shapes_supervisor(state.stack_id)
+    Electric.Connection.Supervisor.stop_replication_supervisor(state.stack_id)
     if is_pid(pool_pid), do: shutdown_child(pool_pid, :shutdown)
     if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
 
