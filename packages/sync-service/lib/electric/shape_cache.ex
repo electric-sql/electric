@@ -522,6 +522,8 @@ defmodule Electric.ShapeCache do
 
       {:ok, shape_handle} = shape_status.add_shape(shape_status_state, shape)
 
+      Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
+
       :ok = start_shape(shape_handle, shape, state, otel_ctx)
 
       send(self(), :maybe_expire_shapes)

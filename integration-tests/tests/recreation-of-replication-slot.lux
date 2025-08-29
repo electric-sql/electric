@@ -76,7 +76,7 @@
 
 [shell electric]
   ??[debug] Snapshot started shape_handle: $new_shape_handle
-  ??[info] Chunked 200
+  ??[debug] Chunked 200
 
 [cleanup]
   [invoke teardown]
