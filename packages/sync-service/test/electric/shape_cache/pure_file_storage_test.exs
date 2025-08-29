@@ -456,6 +456,32 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     end
   end
 
+  test "correctly continues writing after hibernation", %{opts: opts} do
+    %{writer: writer} = with_started_writer(%{opts: opts})
+
+    writer =
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+        writer
+      )
+
+    writer = PureFileStorage.hibernate(writer)
+
+    assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(13, 0), opts)
+           |> Enum.to_list() == [~S|{"test":1}|]
+
+    writer =
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":2}|}],
+        writer
+      )
+
+    PureFileStorage.terminate(writer)
+
+    assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(12, 0), opts)
+           |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|]
+  end
+
   defp with_started_writer(%{opts: opts}) do
     writer = PureFileStorage.init_writer!(opts, @shape)
     PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
