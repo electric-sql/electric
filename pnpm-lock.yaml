@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@microsoft/fetch-event-source':
-    hash: lgwcujj3mimdfutlwueisfm32u
+    hash: 46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188
     path: patches/@microsoft__fetch-event-source.patch
 
 importers:
@@ -793,10 +793,6 @@ importers:
       redis:
         specifier: ^4.6.14
         version: 4.7.0
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64':
-        specifier: ^4.18.1
-        version: 4.24.4
     devDependencies:
       '@databases/pg-migrations':
         specifier: ^5.0.3
@@ -840,6 +836,10 @@ importers:
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64':
+        specifier: ^4.18.1
+        version: 4.24.4
 
   examples/remix:
     dependencies:
@@ -1030,7 +1030,7 @@ importers:
         version: 17.1.7(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0)))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))(react@19.1.0))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))
       expo-router:
         specifier: ~5.1.4
-        version: 5.1.4(y4jtnr2g2s4ue3hjudtn7mmiri)
+        version: 5.1.4(4385c7d2ebe6e555b6505e0ac211d063)
       expo-status-bar:
         specifier: ~2.2.0
         version: 2.2.3(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))(react@19.1.0)
@@ -1496,10 +1496,6 @@ importers:
   packages/elixir-client: {}
 
   packages/experimental:
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64':
-        specifier: ^4.18.1
-        version: 4.24.4
     devDependencies:
       '@electric-sql/client':
         specifier: workspace:*
@@ -1555,6 +1551,10 @@ importers:
       vitest:
         specifier: ^2.0.2
         version: 2.1.4(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.36.0)
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64':
+        specifier: ^4.18.1
+        version: 4.24.4
 
   packages/react-hooks:
     dependencies:
@@ -1641,11 +1641,7 @@ importers:
     dependencies:
       '@microsoft/fetch-event-source':
         specifier: ^2.0.1
-        version: 2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64':
-        specifier: ^4.18.1
-        version: 4.24.4
+        version: 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
     devDependencies:
       '@types/pg':
         specifier: ^8.11.6
@@ -1701,6 +1697,10 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.36.0)
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64':
+        specifier: ^4.18.1
+        version: 4.24.4
 
   packages/y-electric:
     dependencies:
@@ -16844,7 +16844,7 @@ snapshots:
 
   '@electric-sql/client@1.0.7':
     dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.46.1
 
@@ -18135,7 +18135,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@microsoft/fetch-event-source@2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)': {}
+  '@microsoft/fetch-event-source@2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)': {}
 
   '@netlify/binary-info@1.0.0': {}
 
@@ -24484,7 +24484,7 @@ snapshots:
     dependencies:
       invariant: 2.2.4
 
-  expo-router@5.1.4(y4jtnr2g2s4ue3hjudtn7mmiri):
+  expo-router@5.1.4(4385c7d2ebe6e555b6505e0ac211d063):
     dependencies:
       '@expo/metro-runtime': 5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))
       '@expo/server': 0.6.3
