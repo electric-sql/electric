@@ -1,25 +1,15 @@
-<template>
-  <div class="banner">
-    <div class="container">
-      <div>
-        🔥
-        <a href="/blog/2025/07/29/local-first-sync-with-tanstack-db">
-          Introducing Tanstack DB</a
-        >
-        &ndash;
-        <span class="inline-md"> now in BETA! </span>
-        <span class="hidden-md">
-          Reactive client store for building super fast apps on sync!
-        </span>
-      </div>
-    </div>
-  </div>
-</template>
+<script setup>
+const { link, subtitle, description, background } = defineProps([
+  'link',
+  'subtitle',
+  'description',
+  'background',
+])
+</script>
 
 <style scoped>
 .banner {
   color: var(--vp-c-text-1);
-  background-color: var(--vp-c-indigo-3);
   font-weight: 500;
 
   padding: 12px 24px 14px;
@@ -32,6 +22,34 @@
   text-decoration: underline;
 }
 </style>
+
+<template>
+  <div class="banner" :style="{ background: background }">
+    <div class="container">
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        "
+      >
+        <a :href="link" style="display: inline-flex; align-items: center">
+          <slot name="icon"></slot>
+          <slot name="title"></slot>
+        </a>
+        <span>&ndash;</span>
+        <span class="inline-md">
+          {{ subtitle }}
+        </span>
+        <span class="hidden-md">
+          {{ description }}
+        </span>
+      </div>
+    </div>
+  </div>
+</template>
+
 <style>
 .nav-relative .VPNav {
   position: relative !important;

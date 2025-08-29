@@ -26,8 +26,9 @@ Welcome to the ElectricSQL developer documentation!
 
 ElectricSQL is a Postgres sync engine. Use it to sync [subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/data-sync), services and [environments](/use-cases/dev-and-test).
 
-> [!Tip] 🔥 TanStack DB - now in BETA!
-> [Introducing TanStack DB](/blog/2025/07/29/local-first-sync-with-tanstack-db) - a reactive client store for building super fast apps on sync!
+> [!Tip] 🟢 Vue is here!
+> <img src="https://vuejs.org/logo.svg" alt="Vue.js logo" style="width: 48px; height: 48px; vertical-align: middle; margin-right: 8px;" />
+> Introducing Vue composables for ElectricSQL - build reactive Vue apps with seamless sync!
 
 ## New to ElectricSQL?
 
