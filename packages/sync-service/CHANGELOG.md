@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.1.8
+
+### Patch Changes
+
+- 324d1b8: Fix potential race conditions when monitoring the log collector process and improve connection manager's handling of shape process crashes.
+- f888d0a: Lower log level of request logs from `info` to `debug` - too verbose.
+- 02faf7c: Parse DB error about remaining slots being reserved as insufficient resources.
+- b92909a: Add controlled shutdown backing up of storage and shape metadata for significantly faster recovery on restart.
+
 ## 1.1.7
 
 ### Patch Changes
