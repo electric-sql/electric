@@ -64,7 +64,7 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, :configuring_connection}
             | {:start_connection_pool, nil}
             | {:start_connection_pool, :connecting}
-            | :start_shapes_supervisor
+            | :start_replication_supervisor
             | {:waiting_for_consumers, integer()}
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
@@ -106,8 +106,6 @@ defmodule Electric.Connection.Manager do
       :lock_connection_timer,
       # PID of the database connection pool
       :pool_pid,
-      # PID of the shape log collector
-      :shape_log_collector_pid,
       # Backoff term used for reconnection with exponential back-off
       :connection_backoff,
       # PostgreSQL server version
@@ -242,8 +240,6 @@ defmodule Electric.Connection.Manager do
   def connection_pool_ready(manager) do
     GenServer.cast(manager, :connection_pool_ready)
   end
-
-  defdelegate monitor(stack_id, module, pid), to: __MODULE__.ProcessMonitor
 
   # Used for testing the responsiveness of the manager process
   def ping(manager, timeout \\ 1000) do
@@ -415,11 +411,10 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(
-        :start_shapes_supervisor,
+        :start_replication_supervisor,
         %State{
           current_phase: :connection_setup,
-          current_step: :start_shapes_supervisor,
-          shape_log_collector_pid: nil
+          current_step: :start_replication_supervisor
         } = state
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -453,8 +448,8 @@ defmodule Electric.Connection.Manager do
 
     start_time = System.monotonic_time()
 
-    _shapes_sup_pid =
-      case Electric.Connection.Supervisor.start_shapes_supervisor(
+    with {:error, reason} <-
+           Electric.Connection.Manager.Supervisor.start_replication_supervisor(
              stack_id: state.stack_id,
              shape_cache_opts: shape_cache_opts,
              pool_opts: state.pool_opts,
@@ -464,16 +459,9 @@ defmodule Electric.Connection.Manager do
              manual_table_publishing?: state.manual_table_publishing?,
              persistent_kv: state.persistent_kv
            ) do
-        {:ok, shapes_sup_pid} ->
-          shapes_sup_pid
-
-        {:error, reason} ->
-          Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
-          exit(reason)
-      end
-
-    # Remember the shape log collector pid for later because we want to tie the replication
-    # client's lifetime to it.
+      Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+      exit(reason)
+    end
 
     state = %{
       state
@@ -677,48 +665,6 @@ defmodule Electric.Connection.Manager do
     {:stop, {:shutdown, reason}, state}
   end
 
-  def handle_info(
-        {:DOWN, _ref, :process, pid, _reason},
-        %State{shape_log_collector_pid: pid} = state
-      ) do
-    # The replication client would normally exit together with the shape log collector when it
-    # is blocked on a call to either `ShapeLogCollector.handle_relation_msg/2` or
-    # `ShapeLogCollector.store_transaction/2` and the log collector encounters a storage error.
-    #
-    # Just to make sure that we restart the replication client when the shape log collector
-    # crashes for any other reason, we explicitly stop the client here. It will be
-    # automatically restarted by Connection.Manager upon the reception of the `{:EXIT, ...}` message.
-    #
-    # Note, though, that if the replication client process has already exited because the shape
-    # log collector had exited, the below call to `stop()` will also exit (with same exit reason or
-    # due to a timeout in `:gen_statem.call()`). Hence the wrapping of the function call in a
-    # try-catch block.
-
-    try do
-      _ =
-        Electric.Postgres.ReplicationClient.stop(
-          state.replication_client_pid,
-          :shape_log_collector_down
-        )
-    catch
-      :exit, _reason ->
-        # The replication client has already exited, so nothing else to do here.
-        state
-    end
-
-    if state.drop_slot_requested do
-      drop_slot(state)
-    end
-
-    # Don't clear the replication_client_pid here, it will be cleared when the
-    # {:EXIT, ...} message arrives
-    {:noreply, %{state | shape_log_collector_pid: nil}}
-  end
-
-  def handle_info({:process_monitored, Electric.Replication.ShapeLogCollector, pid, _ref}, state) do
-    {:noreply, %{state | shape_log_collector_pid: pid}}
-  end
-
   @impl true
   def handle_cast(:drop_replication_slot_on_stop, state) do
     {:noreply, %{state | drop_slot_requested: true}}
@@ -877,8 +823,8 @@ defmodule Electric.Connection.Manager do
     Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
     state = mark_connection_succeeded(state)
 
-    {:noreply, %{state | current_step: :start_shapes_supervisor},
-     {:continue, :start_shapes_supervisor}}
+    {:noreply, %{state | current_step: :start_replication_supervisor},
+     {:continue, :start_replication_supervisor}}
   end
 
   def handle_cast(
@@ -978,7 +924,6 @@ defmodule Electric.Connection.Manager do
       lock_connection_pid: lock_connection_pid
     } = state
 
-    Electric.Connection.Supervisor.stop_shapes_supervisor(state.stack_id)
     if is_pid(pool_pid), do: shutdown_child(pool_pid, :shutdown)
     if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
 
@@ -1394,9 +1339,6 @@ defmodule Electric.Connection.Manager do
 
   defp nillify_pid(%State{pool_pid: pid} = state, pid),
     do: %{state | pool_pid: nil}
-
-  defp nillify_pid(%State{shape_log_collector_pid: pid} = state, pid),
-    do: %{state | shape_log_collector_pid: nil}
 
   defp nillify_timer(%State{lock_connection_timer: tref} = state, tref),
     do: %{state | lock_connection_timer: nil}
