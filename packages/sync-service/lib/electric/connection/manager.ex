@@ -919,17 +919,20 @@ defmodule Electric.Connection.Manager do
     Logger.debug("Terminating connection manager with reason #{inspect(reason)}.")
 
     %{
-      pool_pid: pool_pid,
       replication_client_pid: replication_client_pid,
+      pool_pid: pool_pid,
       lock_connection_pid: lock_connection_pid
     } = state
 
-    if state.drop_slot_requested do
-      drop_slot(state)
-    end
-
-    if is_pid(pool_pid), do: shutdown_child(pool_pid, :shutdown)
     if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
+
+    if is_pid(pool_pid) do
+      if state.drop_slot_requested do
+        drop_slot(state)
+      end
+
+      shutdown_child(pool_pid, :shutdown)
+    end
 
     # We brutally kill the lock connection process as it might hang on waiting
     # to establish a connection and can't be gracefully killed
