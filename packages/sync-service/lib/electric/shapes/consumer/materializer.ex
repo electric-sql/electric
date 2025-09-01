@@ -56,9 +56,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end)
   end
 
-  def subscribe(stack_id, shape_handle) do
-    GenServer.call(name(stack_id, shape_handle), :subscribe)
-  end
+  def subscribe(opts), do: GenServer.call(name(opts), :subscribe)
+
+  def subscribe(stack_id, shape_handle),
+    do: subscribe(%{stack_id: stack_id, shape_handle: shape_handle})
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: name(opts))
@@ -73,7 +74,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
     state =
       Map.merge(opts, %{
-        view: %{},
+        index: %{},
+        value_counts: %{},
         offset: LogOffset.before_all(),
         ref: nil,
         subscribers: MapSet.new()
@@ -93,28 +95,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
   def handle_continue(:read_stream, state) do
     {:ok, offset, stream} = get_stream_up_to_date(state.offset, state)
 
-    view =
+    {state, _} =
       stream
       |> Stream.map(&Jason.decode!/1)
-      |> Enum.reduce(state.view, fn %{
-                                      "key" => key,
-                                      "value" => value,
-                                      "headers" => %{"operation" => operation}
-                                    },
-                                    view ->
+      |> Enum.map(fn %{"key" => key, "value" => value, "headers" => %{"operation" => operation}} ->
         case operation do
-          "insert" ->
-            Map.put(view, key, cast!(value, state))
-
-          "update" ->
-            Map.put(view, key, cast!(value, state))
-
-          "delete" ->
-            Map.delete(view, key)
+          "insert" -> %Changes.NewRecord{key: key, record: value}
+          "update" -> %Changes.UpdatedRecord{key: key, record: value}
+          "delete" -> %Changes.DeletedRecord{key: key, old_record: value}
         end
       end)
+      |> apply_changes(state)
 
-    {:noreply, %{state | offset: offset, view: view}}
+    {:noreply, %{state | offset: offset}}
   end
 
   def get_stream_up_to_date(min_offset, state) do
@@ -145,8 +138,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
   #   {:noreply, state, {:continue, :read_stream}}
   # end
 
-  def handle_call(:get_link_values, _from, %{view: view} = state) do
-    values = MapSet.new(Map.values(view))
+  def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
+    values = MapSet.new(Map.keys(value_counts))
 
     {:reply, values, state}
   end
@@ -156,27 +149,15 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_call({:new_changes, changes}, _from, state) do
-    {view, events} =
-      Enum.reduce(changes, {state.view, []}, fn
-        %Changes.NewRecord{key: key, record: record}, {view, events} ->
-          value = cast!(record, state)
-          {Map.put(view, key, value), [{:move_in, value} | events]}
+    {state, events} = apply_changes(changes, state)
 
-        %Changes.UpdatedRecord{key: key, record: record}, {view, events} ->
-          # For now materializer for inner shape expects only PKs, so updates are not expected
-          # We might need to figure out move in/out for updates if something other than PK is selected
-          {Map.put(view, key, cast!(record, state)), events}
-
-        %Changes.DeletedRecord{key: key, old_record: old_record}, {view, events} ->
-          value = cast!(old_record, state)
-          {Map.delete(view, key), [{:move_out, value} | events]}
-      end)
-
-    for pid <- state.subscribers do
-      send(pid, {:materializer_changes, state.shape_handle, events})
+    if events != [] do
+      for pid <- state.subscribers do
+        send(pid, {:materializer_changes, state.shape_handle, events})
+      end
     end
 
-    {:reply, :ok, %{state | view: view}}
+    {:reply, :ok, state}
   end
 
   def handle_call(:subscribe, {pid, _ref} = _from, state) do
@@ -192,5 +173,58 @@ defmodule Electric.Shapes.Consumer.Materializer do
   defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
     {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
     value
+  end
+
+  defp apply_changes(changes, state) when is_list(changes) do
+    {index, {value_counts, events}} =
+      Enum.reduce(changes, {state.index, {state.value_counts, []}}, fn
+        %Changes.NewRecord{key: key, record: record}, {index, counts_and_events} ->
+          value = cast!(record, state)
+          if is_map_key(index, key), do: raise("Key #{key} already exists")
+          index = Map.put(index, key, value)
+
+          {index, increment_value(counts_and_events, value)}
+
+        %Changes.UpdatedRecord{key: key, record: record}, {index, counts_and_events} ->
+          # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
+          if Enum.any?(state.columns, &is_map_key(record, &1)) do
+            value = cast!(record, state)
+            old_value = Map.fetch!(index, key)
+            index = Map.put(index, key, value)
+
+            {index, counts_and_events |> decrement_value(old_value) |> increment_value(value)}
+          else
+            # Nothing relevant to this materializer has been updated
+            {index, counts_and_events}
+          end
+
+        %Changes.DeletedRecord{key: key}, {index, counts_and_events} ->
+          {value, index} = Map.pop!(index, key)
+
+          {index, decrement_value(counts_and_events, value)}
+      end)
+
+    {%{state | index: index, value_counts: value_counts}, Enum.reverse(events)}
+  end
+
+  defp increment_value({value_counts, events}, value) do
+    case Map.fetch(value_counts, value) do
+      {:ok, count} ->
+        {Map.put(value_counts, value, count + 1), events}
+
+      :error ->
+        {Map.put(value_counts, value, 1), [{:move_in, value} | events]}
+    end
+  end
+
+  defp decrement_value({value_counts, events}, value) do
+    # If we're decrementing, it must have been added before
+    case Map.fetch!(value_counts, value) do
+      1 ->
+        {Map.delete(value_counts, value), [{:move_out, value} | events]}
+
+      count ->
+        {Map.put(value_counts, value, count - 1), events}
+    end
   end
 end

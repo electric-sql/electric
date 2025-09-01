@@ -1915,6 +1915,50 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 409} = Task.await(task)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL, other_value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, value INT NOT NULL, other_value INT NOT NULL)",
+           "INSERT INTO parent (id, value, other_value) VALUES (1, 10, 10), (2, 20, 5)",
+           "INSERT INTO child (id, value, other_value) VALUES (1, 10, 10)"
+         ]
+    test "allows subquery in where clauses that reference non-PK columns", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      req =
+        make_shape_req("child",
+          where: "value in (SELECT value FROM parent WHERE other_value >= 10)"
+        )
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "value" => "10"}}]} = shape_req(req, opts)
+
+      # Updating the parent in a way that doesn't change the condition doesn't drop the shape
+      task = live_shape_req(req, opts)
+      Postgrex.query!(db_conn, "UPDATE parent SET other_value = 13 WHERE id = 1")
+      # This change should thus be visible
+      Postgrex.query!(db_conn, "UPDATE child SET other_value = 2 WHERE id = 1")
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "other_value" => "2"}}, _]} =
+               Task.await(task)
+
+      # Adding another parent row in a way that's not changing the target value set doesn't drop the shape
+      task = live_shape_req(req, opts)
+      Postgrex.query!(db_conn, "INSERT INTO parent (id, value, other_value) VALUES (3, 10, 30)")
+      # This change should thus be visible
+      Postgrex.query!(db_conn, "UPDATE child SET other_value = 3 WHERE id = 1")
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "other_value" => "3"}}, _]} =
+               Task.await(task)
+
+      # But adding a new value to the target set does
+      task = live_shape_req(req, opts)
+      Postgrex.query!(db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
+      # This should not be visible
+      Postgrex.query!(db_conn, "UPDATE child SET other_value = 4 WHERE id = 1")
+
+      assert {_, 409, _} = Task.await(task)
+    end
   end
 
   describe "404" do
@@ -2040,5 +2084,41 @@ defmodule Electric.Plug.RouterTest do
     conn
     |> get_resp_header("electric-schema")
     |> Jason.decode!()
+  end
+
+  defp make_shape_req(table, opts) do
+    opts
+    |> Map.new()
+    |> Map.put(:table, table)
+  end
+
+  defp shape_req(base, router_opts, opts \\ []) do
+    if Keyword.has_key?(opts, :offset), do: Map.put(base, :offset, opts[:offset]), else: base
+
+    base =
+      base
+      |> Map.put_new(:offset, "-1")
+      |> Map.put_new(:live, false)
+
+    result =
+      conn("GET", "/v1/shape", base)
+      |> Router.call(router_opts)
+
+    case result.status do
+      200 ->
+        base
+        |> Map.put(:handle, get_resp_shape_handle(result))
+        |> Map.put(:offset, get_resp_last_offset(result))
+        |> then(&{&1, result.status, Jason.decode!(result.resp_body)})
+
+      409 ->
+        {base, result.status, Jason.decode!(result.resp_body)}
+    end
+  end
+
+  defp live_shape_req(base, router_opts, opts \\ []) do
+    Task.async(fn ->
+      shape_req(base |> Map.put(:live, true), router_opts, opts)
+    end)
   end
 end
