@@ -107,4 +107,27 @@ defmodule Electric.Client.ValueMapperTest do
              ] = stream(ctx, 2)
     end
   end
+
+  test "passes through values not in server schema" do
+    schema = %{
+      id: %{type: "uuid", pk_index: 0, not_null: true},
+      f4_1: %{type: "float4"},
+      i4_1: %{type: "int4"}
+    }
+
+    assert value_mapper = Client.ValueMapper.for_schema(schema, [])
+
+    assert %{
+             "id" => "4bba0b72-1c69-445c-a8f6-ef2da4f8e8b3",
+             "f4_1" => 4.1,
+             "i4_1" => 4,
+             "not_in_schema" => "some value"
+           } =
+             value_mapper.(%{
+               "id" => "4bba0b72-1c69-445c-a8f6-ef2da4f8e8b3",
+               "f4_1" => "4.1",
+               "i4_1" => "4",
+               "not_in_schema" => "some value"
+             })
+  end
 end
