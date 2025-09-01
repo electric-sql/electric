@@ -8,6 +8,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.PureFileStorage
+  import Electric.ShapeCache.PureFileStorage, only: [storage_meta: 2]
   alias Electric.Shapes.Shape
 
   @moduletag :tmp_dir
@@ -453,6 +454,25 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [times_flushed]}}
       assert times_flushed > 0
       refute_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [_]}}
+    end
+  end
+
+  describe "restore cached state" do
+    test "should use new table on every restore", %{opts: opts} do
+      %{writer: writer} = with_started_writer(%{opts: opts})
+      [meta] = :ets.lookup(opts.stack_ets, opts.shape_handle)
+      old_ets_table = storage_meta(meta, :ets_table)
+      assert old_ets_table != nil
+
+      recovery_state = PureFileStorage.terminate(writer)
+      assert {_ver, _writer_acc, meta} = recovery_state
+      assert storage_meta(meta, :ets_table) == nil
+
+      PureFileStorage.init_writer!(opts, @shape, recovery_state)
+      [meta] = :ets.lookup(opts.stack_ets, opts.shape_handle)
+      new_ets_table = storage_meta(meta, :ets_table)
+      assert new_ets_table != nil
+      assert new_ets_table != old_ets_table
     end
   end
 
