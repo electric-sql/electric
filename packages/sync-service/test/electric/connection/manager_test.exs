@@ -212,6 +212,46 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
   end
 
+  describe "cleanup procedure" do
+    setup [:start_connection_manager]
+
+    test "handles dropping slot on termination", ctx do
+      %{
+        db_conn: db_conn,
+        stack_id: stack_id,
+        connection_opts: connection_opts,
+        replication_opts: replication_opts
+      } = ctx
+
+      wait_until_active(stack_id)
+
+      manager_pid = GenServer.whereis(Electric.Connection.Manager.name(stack_id))
+      :ok = Electric.Connection.Manager.drop_replication_slot_on_stop(manager_pid)
+
+      :ok =
+        Supervisor.terminate_child(
+          Connection.Manager.Supervisor.name(stack_id: stack_id),
+          Connection.Manager
+        )
+
+      # Ensure the replication slot has been dropped
+      assert %{rows: []} =
+               Postgrex.query!(
+                 db_conn,
+                 "SELECT slot_name FROM pg_replication_slots where database = $1",
+                 [connection_opts[:database]]
+               )
+
+      # Ensure the publication has been dropped
+      assert %{rows: []} =
+               Postgrex.query!(
+                 db_conn,
+                 "SELECT pubname FROM pg_publication WHERE pubname = $1",
+                 [replication_opts[:publication_name]]
+               )
+    end
+  end
+
   defp wait_until_active(stack_id) do
     assert_receive {:stack_status, _, :waiting_for_connection_lock}
     assert_receive {:stack_status, _, :connection_lock_acquired}
