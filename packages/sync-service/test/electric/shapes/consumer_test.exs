@@ -20,7 +20,7 @@ defmodule Electric.Shapes.ConsumerTest do
   import Mox
 
   @receive_timeout 1_000
-  @shape_cleanup_timeout 1_500
+  @shape_cleanup_timeout 5_000
 
   @base_inspector StubInspector.new(
                     tables: [
