@@ -171,7 +171,7 @@ In one terminal, start the backend running:
 ```shell
 cd ../sync-service
 mix deps.get
-mix stop_dev && mix compile && mix start_dev && ies -S mix
+mix stop_dev && mix compile && mix start_dev && iex -S mix
 ```
 
 Then in this folder:
