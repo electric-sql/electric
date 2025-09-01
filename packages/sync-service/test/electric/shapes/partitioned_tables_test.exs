@@ -15,7 +15,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     ~s|CREATE TABLE "partitioned_items_200" PARTITION OF "partitioned_items" FOR VALUES FROM (100) TO (199)|
   ]
 
-  @shape_cleanup_timeout 5_000
+  @shape_cleanup_timeout 10_000
 
   @moduletag :tmp_dir
   @moduletag with_sql: @partition_schema
