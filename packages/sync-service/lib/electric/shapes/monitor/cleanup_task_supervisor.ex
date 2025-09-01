@@ -8,7 +8,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   # set a high timeout for the shape cleanup to terminate
   # we don't want to see errors due to e.g. a slow filesystem.
   # any actual errors in the processes will be caught and reported
-  @cleanup_timeout 60_000
+  @cleanup_timeout if @env != :test, do: 60_000, else: 3_000
 
   def child_spec(opts) do
     {:ok, stack_id} = Keyword.fetch(opts, :stack_id)
@@ -63,6 +63,8 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
             |> Task.await_many(@cleanup_timeout)
           catch
             :exit, {:timeout, _} ->
+              dbg("TIMED OUT SHAPE CLEANUP")
+
               Logger.warning(
                 "Shape cleanup tasks for shape #{shape_handle} timed out after #{@cleanup_timeout}ms"
               )
