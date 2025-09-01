@@ -180,6 +180,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
       Enum.reduce(changes, {state.index, {state.value_counts, []}}, fn
         %Changes.NewRecord{key: key, record: record}, {index, counts_and_events} ->
           value = cast!(record, state)
+          if is_map_key(index, key), do: raise("Key #{key} already exists")
           index = Map.put(index, key, value)
 
           {index, increment_value(counts_and_events, value)}
