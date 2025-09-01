@@ -60,33 +60,42 @@ defmodule Electric.ShapeCache.PureFileStorage do
     cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []}
   ]
 
+  defrecord :open_files,
+    json_file: nil,
+    chunk_file: nil,
+    key_file: nil
+
   # Record that controls the writer's progress & flush logic
   defrecord :writer_acc,
-    buffer: [],
     ets_line_buffer: [],
+    buffer: [],
     buffer_size: 0,
     key_buffer: [],
     key_buffer_size: 0,
-    key_file_write_pos: 0,
     last_seen_offset: LogOffset.last_before_real_offsets(),
     last_seen_txn_offset: LogOffset.last_before_real_offsets(),
     last_persisted_offset: LogOffset.last_before_real_offsets(),
     last_persisted_txn_offset: LogOffset.last_before_real_offsets(),
     write_position: 0,
+    key_file_write_pos: 0,
     bytes_in_chunk: 0,
     times_flushed: 0,
     chunk_started?: false,
-    cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []}
+    cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []},
+    open_files: {:open_files, nil, nil, nil}
 
   # Record that controls the writer's state including parts that shouldn't change in reduction
   defrecord :writer_state, [
     :writer_acc,
     :write_timer,
-    :open_files,
     :ets,
     :latest_name,
     :opts
   ]
+
+  defguardp is_json_file_open(acc)
+            when elem(acc, 0) == :writer_acc and
+                   elem(elem(acc, writer_acc(:open_files)), open_files(:json_file)) != nil
 
   # Struct that can be used to create a writer_state record or a reader
   @version 1
@@ -427,7 +436,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end)
 
     writer_state(state,
-      open_files: nil,
       latest_name: new_latest_suffix,
       writer_acc: adjust_write_positions(writer_acc, -log_file_pos, -key_file_pos)
     )
@@ -562,7 +570,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     writer_state(
       writer_acc: initial_acc,
-      open_files: nil,
       latest_name: suffix,
       opts: opts,
       ets: table
@@ -613,17 +620,25 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp close_all_files(writer_state(open_files: nil) = state) do
-    state
+  defp close_all_files(writer_state(writer_acc: writer_acc(open_files: nil)) = state), do: state
+
+  defp close_all_files(writer_state(writer_acc: acc) = state) do
+    writer_state(writer_acc: acc) =
+      state =
+      if is_json_file_open(acc), do: flush_buffer(state), else: state
+
+    acc = close_all_files_in_acc(acc)
+
+    writer_state(state, writer_acc: acc)
   end
 
-  defp close_all_files(writer_state() = state) do
-    writer_state(open_files: {f1, f2, f3}) = state = flush_buffer(state)
-    File.close(f1)
-    File.close(f2)
-    File.close(f3)
+  defp close_all_files_in_acc(writer_acc(open_files: nil) = acc), do: acc
 
-    writer_state(state, open_files: nil)
+  defp close_all_files_in_acc(writer_acc(open_files: open_files) = acc) do
+    Tuple.to_list(open_files)
+    |> Enum.each(&File.close/1)
+
+    writer_acc(acc, open_files: open_files())
   end
 
   defp initialise_filesystem!(%__MODULE__{} = opts, shape_definition) do
@@ -888,21 +903,33 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  # We're opening the chunk file in sync mode because writes there are rare but we prefer for them
-  # to be atomic
-  defp open_files(%__MODULE__{} = opts, suffix) do
-    {
-      File.open!(json_file(opts, suffix), [:append, :raw]),
-      File.open!(chunk_file(opts, suffix), [:append, :raw, :sync]),
-      File.open!(key_file(opts, suffix), [:append, :raw])
-    }
+  defp open_file(writer_state(opts: opts, latest_name: latest_name), type) do
+    open_file(opts, latest_name, type)
   end
 
-  defp maybe_open_files(writer_state(open_files: x) = state) when not is_nil(x), do: state
+  defp open_file(opts, suffix, :json_file),
+    do: File.open!(json_file(opts, suffix), [:append, :raw])
 
-  defp maybe_open_files(writer_state(opts: opts, latest_name: latest_name) = state) do
-    {f1, f2, f3} = open_files(opts, latest_name)
-    writer_state(state, open_files: {f1, f2, f3})
+  defp open_file(opts, suffix, :chunk_file),
+    do: File.open!(chunk_file(opts, suffix), [:append, :raw, :sync])
+
+  defp open_file(opts, suffix, :key_file), do: File.open!(key_file(opts, suffix), [:append, :raw])
+
+  defp maybe_open_json(writer_state(writer_acc: acc) = state) do
+    writer_state(state, writer_acc: maybe_open_json(acc, state))
+  end
+
+  defp maybe_open_json(writer_acc(open_files: open_files(json_file: x, key_file: y)) = acc, _)
+       when not is_nil(x) and not is_nil(y),
+       do: acc
+
+  defp maybe_open_json(
+         writer_acc(open_files: open_files(json_file: json, key_file: key) = open_files) = acc,
+         state
+       ) do
+    json = json || open_file(state, :json_file)
+    key = key || open_file(state, :key_file)
+    writer_acc(acc, open_files: open_files(open_files, json_file: json, key_file: key))
   end
 
   def get_chunk_end_log_offset(offset, %__MODULE__{}) when is_min_offset(offset),
@@ -1136,9 +1163,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp get_suffix(_, {latest_name, _, _}), do: latest_name
 
-  def append_to_log!(txn_lines, writer_state(writer_acc: acc) = state) do
+  def append_to_log!(txn_lines, writer_state() = state) do
+    writer_state(writer_acc: acc) = state = maybe_open_json(state)
     times_flushed = writer_acc(acc, :times_flushed)
-    state = maybe_open_files(state)
 
     txn_lines
     |> normalize_log_stream()
@@ -1161,26 +1188,57 @@ defmodule Electric.ShapeCache.PureFileStorage do
         timer_ref = writer_state(state, :write_timer)
         if not is_nil(timer_ref), do: Process.cancel_timer(timer_ref)
 
-        acc
-        |> writer_acc(last_seen_txn_offset: offset)
-        # Flushing the buffer again just to update metadata on last persisted transaction, and bring keyfile up to date
-        |> flush_buffer(state, true)
-        |> then(&writer_state(state, writer_acc: &1, write_timer: nil))
+        acc =
+          acc
+          |> writer_acc(last_seen_txn_offset: offset)
+          # Flushing the buffer again just to update metadata on last persisted transaction, and bring keyfile up to date
+          |> flush_buffer(state, true)
+          |> close_chunk_file()
+
+        writer_state(state, writer_acc: acc, write_timer: nil)
 
       writer_acc(last_seen_offset: offset) = acc ->
-        acc
-        |> writer_acc(last_seen_txn_offset: offset)
-        |> store_lines_in_ets(state)
-        |> then(&writer_state(state, writer_acc: &1))
+        acc =
+          acc
+          |> writer_acc(last_seen_txn_offset: offset)
+          |> store_lines_in_ets(state)
+          |> close_chunk_file()
+
+        writer_state(state, writer_acc: acc)
         |> schedule_flush(times_flushed)
     end
+  end
+
+  defp close_chunk_file(writer_acc(open_files: open_files(chunk_file: nil)) = acc), do: acc
+
+  defp close_chunk_file(
+         writer_acc(open_files: open_files(chunk_file: chunk_file) = open_files) = acc
+       ) do
+    File.close(chunk_file)
+    writer_acc(acc, open_files: open_files(open_files, chunk_file: nil))
   end
 
   defp maybe_write_opening_chunk_boundary(writer_acc(chunk_started?: true) = acc, _, _), do: acc
 
   defp maybe_write_opening_chunk_boundary(
-         writer_acc(write_position: pos, key_file_write_pos: key_pos) = acc,
-         writer_state(open_files: {_, chunk_file, _}, opts: opts),
+         writer_acc(open_files: open_files(chunk_file: nil) = open_files) = acc,
+         state,
+         offset
+       ) do
+    files = open_files(open_files, chunk_file: open_file(state, :chunk_file))
+
+    acc
+    |> writer_acc(open_files: files)
+    |> maybe_write_opening_chunk_boundary(state, offset)
+  end
+
+  defp maybe_write_opening_chunk_boundary(
+         writer_acc(
+           write_position: pos,
+           key_file_write_pos: key_pos,
+           open_files: open_files(chunk_file: chunk_file)
+         ) = acc,
+         writer_state(opts: opts),
          offset
        ) do
     IO.binwrite(chunk_file, [LogOffset.to_int128(offset), <<pos::64, key_pos::64>>])
@@ -1315,12 +1373,24 @@ defmodule Electric.ShapeCache.PureFileStorage do
        do: acc
 
   defp write_chunk_boundary(
+         writer_acc(open_files: open_files(chunk_file: nil) = open_files) = acc,
+         state
+       ) do
+    files = open_files(open_files, chunk_file: open_file(state, :chunk_file))
+
+    acc
+    |> writer_acc(open_files: files)
+    |> write_chunk_boundary(state)
+  end
+
+  defp write_chunk_boundary(
          writer_acc(
+           open_files: open_files(chunk_file: chunk_file),
            last_seen_offset: offset,
            write_position: position,
            key_file_write_pos: key_file_write_pos
          ) = acc,
-         writer_state(open_files: {_, chunk_file, _}, opts: opts) = state
+         writer_state(opts: opts) = state
        ) do
     IO.binwrite(chunk_file, [
       LogOffset.to_int128(offset),
@@ -1377,9 +1447,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
            last_seen_offset: last_seen_offset,
            last_seen_txn_offset: last_seen_txn,
            last_persisted_txn_offset: last_persisted_txn,
-           times_flushed: times_flushed
+           times_flushed: times_flushed,
+           open_files: open_files(json_file: json_file, key_file: key_file)
          ) = acc,
-         writer_state(open_files: {json_file, _, key_file}, opts: storage, ets: ets) = _state,
+         writer_state(opts: storage, ets: ets) = _state,
          force_key_flush?
        ) do
     if buffer_size > 0 do
