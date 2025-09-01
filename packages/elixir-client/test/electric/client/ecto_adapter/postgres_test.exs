@@ -3,6 +3,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
 
   alias Electric.Client.EctoAdapter
   alias Support.Money
+  alias Support.ULID
 
   import Ecto.Query
 
@@ -19,6 +20,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
       field(:dd, :date)
       field(:aa, {:array, :integer})
       field(:mm, Money)
+      field(:ul, ULID, prefix: "ul")
     end
   end
 
@@ -38,6 +40,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     ud = ~U[2024-10-23 14:36:39Z]
     dd = ~D[2024-10-23]
     mm = Decimal.new("199.99")
+    ul = "ul_5aa36ce4-18ee-4334-a8e2-c04613652809"
 
     assert_where(where(TestTable, ii: ^ii), ~s[("ii" = 1234)])
     assert_where(where(TestTable, ff: ^ff), ~s[("ff" = 3.14::float)])
@@ -49,6 +52,11 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     assert_where(where(TestTable, dd: ^dd), ~s[("dd" = '2024-10-23'::date)])
 
     assert_where(where(TestTable, mm: ^mm), ~s[("mm" = 199990000)])
+
+    assert_where(
+      from(t in TestTable, where: t.ul == ^ul),
+      ~s[("ul" = '5aa36ce4-18ee-4334-a8e2-c04613652809')]
+    )
   end
 
   test "where IN (...)" do
