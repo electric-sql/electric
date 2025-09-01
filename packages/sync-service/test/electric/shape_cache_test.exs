@@ -752,7 +752,7 @@ defmodule Electric.ShapeCacheTest do
                            )
                            |> Stream.run()
                          end,
-                         _000
+                         5_000
           end)
         end
 
