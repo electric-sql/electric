@@ -119,6 +119,11 @@ defmodule Electric.ShapeCache.Storage do
   @callback terminate(writer_state()) :: term()
 
   @doc """
+  Commit any pending writes to disk and close open resources that can be safely reopened later.
+  """
+  @callback hibernate(writer_state()) :: writer_state()
+
+  @doc """
   Clean up snapshots/logs for a shape handle by deleting whole directory.
 
   Is expected to be only called once the storage has been stopped.
@@ -252,6 +257,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def terminate({mod, writer_state}) do
     mod.terminate(writer_state)
+  end
+
+  @impl __MODULE__
+  def hibernate({mod, writer_state}) do
+    {mod, mod.hibernate(writer_state)}
   end
 
   @impl __MODULE__

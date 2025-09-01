@@ -349,4 +349,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def terminate(_opts), do: :ok
+
+  @impl Electric.ShapeCache.Storage
+  def hibernate(_opts), do: :ok
 end

@@ -84,6 +84,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :write_timer,
     :open_files,
     :ets,
+    :latest_name,
     :opts
   ]
 
@@ -414,7 +415,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end)
 
     writer_state(state,
-      open_files: open_files(opts, new_latest_suffix),
+      open_files: nil,
+      latest_name: new_latest_suffix,
       writer_acc: adjust_write_positions(writer_acc, -log_file_pos, -key_file_pos)
     )
   end
@@ -548,7 +550,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     writer_state(
       writer_acc: initial_acc,
-      open_files: open_files(opts, suffix),
+      open_files: nil,
+      latest_name: suffix,
       opts: opts,
       ets: table
     )
@@ -567,6 +570,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp maybe_use_cached_writer(_opts, _), do: :cache_not_found
 
+  def hibernate(writer_state() = state) do
+    close_all_files(state)
+  end
+
   def terminate(writer_state(opts: opts) = state) do
     writer_state(writer_acc: writer_acc) = close_all_files(state)
 
@@ -584,13 +591,17 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
+  defp close_all_files(writer_state(open_files: nil) = state) do
+    state
+  end
+
   defp close_all_files(writer_state() = state) do
     writer_state(open_files: {f1, f2, f3}) = state = flush_buffer(state)
     File.close(f1)
     File.close(f2)
     File.close(f3)
 
-    state
+    writer_state(state, open_files: nil)
   end
 
   defp initialise_filesystem!(%__MODULE__{} = opts, shape_definition) do
@@ -865,6 +876,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
     }
   end
 
+  defp maybe_open_files(writer_state(open_files: x) = state) when not is_nil(x), do: state
+
+  defp maybe_open_files(writer_state(opts: opts, latest_name: latest_name) = state) do
+    {f1, f2, f3} = open_files(opts, latest_name)
+    writer_state(state, open_files: {f1, f2, f3})
+  end
+
   def get_chunk_end_log_offset(offset, %__MODULE__{}) when is_min_offset(offset),
     do: LogOffset.new(0, 0)
 
@@ -891,6 +909,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp fetch_chunk(offset, %__MODULE__{} = opts, boundary_info \\ nil) do
     {latest_name, {compaction_boundary, compacted_name}, {cached_min, chunks}} =
       boundary_info || get_read_source_info(opts)
+
+    # Any virtual offsets are handled elsewhere - normalize them to the last before real offsets for main log
+    offset = if is_virtual_offset(offset), do: LogOffset.last_before_real_offsets(), else: offset
 
     cond do
       LogOffset.is_log_offset_lt(offset, compaction_boundary) ->
@@ -1095,6 +1116,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def append_to_log!(txn_lines, writer_state(writer_acc: acc) = state) do
     times_flushed = writer_acc(acc, :times_flushed)
+    state = maybe_open_files(state)
 
     txn_lines
     |> normalize_log_stream()

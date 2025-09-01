@@ -813,6 +813,9 @@ defmodule Electric.ShapeCache.FileStorage do
   def terminate(%FS{} = _opts), do: :ok
 
   @impl Electric.ShapeCache.Storage
+  def hibernate(%FS{} = _opts), do: :ok
+
+  @impl Electric.ShapeCache.Storage
   def cleanup!(%FS{} = opts) do
     # do a quick touch operation to exclude this directory from `get_all_stored_shapes`
     marker_file = deletion_marker_path(opts.base_path, opts.shape_handle)
