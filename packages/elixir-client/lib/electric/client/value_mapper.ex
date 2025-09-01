@@ -73,8 +73,11 @@ defmodule Electric.Client.ValueMapper do
   end
 
   defp map_values(values, mapping) do
-    Map.new(mapping, fn {k, fun} ->
-      {k, fun.(Map.get(values, k))}
+    Map.new(values, fn {k, v} ->
+      case mapping do
+        %{^k => fun} -> {k, fun.(v)}
+        _ -> {k, v}
+      end
     end)
   end
 
