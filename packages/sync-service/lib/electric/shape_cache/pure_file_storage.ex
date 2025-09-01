@@ -525,7 +525,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
     {initial_acc, suffix} =
-      case maybe_use_cached_writer(opts, storage_recovery_state) do
+      case maybe_use_cached_writer(opts, table, storage_recovery_state) do
         {:ok, {acc, latest_name}} ->
           {acc, latest_name}
 
@@ -557,8 +557,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
   end
 
-  defp maybe_use_cached_writer(opts, {version, writer_acc() = acc, storage_meta() = meta})
+  defp maybe_use_cached_writer(opts, table, {version, writer_acc() = acc, storage_meta() = meta})
        when version == opts.version do
+    meta =
+      meta
+      |> storage_meta(ets_table: table)
+      |> storage_meta(compaction_started?: false)
+
     :ets.insert(opts.stack_ets, meta)
 
     if not snapshot_complete?(opts) or is_nil(read_cached_metadata(opts, :pg_snapshot)) do
@@ -568,7 +573,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp maybe_use_cached_writer(_opts, _), do: :cache_not_found
+  defp maybe_use_cached_writer(_opts, _table, _), do: :cache_not_found
 
   def hibernate(writer_state() = state) do
     close_all_files(state)
@@ -580,6 +585,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
     try do
       case :ets.lookup(opts.stack_ets, opts.shape_handle) do
         [storage_meta] ->
+          storage_meta =
+            storage_meta
+            |> storage_meta(ets_table: nil)
+            |> storage_meta(compaction_started?: false)
+
           :ets.delete(opts.stack_ets, opts.shape_handle)
           {opts.version, writer_acc, storage_meta}
 
