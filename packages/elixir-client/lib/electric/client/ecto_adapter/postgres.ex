@@ -544,10 +544,24 @@ if Code.ensure_loaded?(Ecto) do
       |> Enum.unzip()
     end
 
-    defp dump_binding({:parameterized, _} = type, {value, _cast}) do
+    defp dump_binding({:parameterized, {mod, params}} = type, {value, _cast}) do
       case Ecto.Type.dump(type, value) do
         {:ok, dumped} ->
-          {dumped, dumped}
+          # Look at the underlying type for special handling.
+          #
+          # Columns backed by :uuid are dumped to a raw binary format, which postgrex
+          # expects. But we want the string representation in the query.
+          #
+          # Don't want to hand-roll each type here, but I don't see a better way since
+          # we're taking postgrex's role of converting the result of dump to the
+          # expected format.
+          case mod.type(params) do
+            :uuid ->
+              {Ecto.UUID.cast!(dumped), dumped}
+
+            _other ->
+              {dumped, dumped}
+          end
 
         :error ->
           raise ArgumentError,
