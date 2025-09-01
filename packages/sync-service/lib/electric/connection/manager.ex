@@ -924,6 +924,10 @@ defmodule Electric.Connection.Manager do
       lock_connection_pid: lock_connection_pid
     } = state
 
+    if state.drop_slot_requested do
+      drop_slot(state)
+    end
+
     if is_pid(pool_pid), do: shutdown_child(pool_pid, :shutdown)
     if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
 
