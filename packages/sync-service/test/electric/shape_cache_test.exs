@@ -739,20 +739,18 @@ defmodule Electric.ShapeCacheTest do
 
             Electric.Shapes.Monitor.register_reader(ctx.stack_id, shape_handle)
 
-            assert_raise Storage.Error,
-                         fn ->
-                           send(test_pid, {:read_start, n})
-                           receive(do: (:continue -> n))
+            assert_raise Storage.Error, fn ->
+              send(test_pid, {:read_start, n})
+              receive(do: (:continue -> n))
 
-                           stream
-                           |> Stream.transform(
-                             fn -> n end,
-                             fn elem, acc -> {[elem], acc} end,
-                             fn _ -> :ok end
-                           )
-                           |> Stream.run()
-                         end,
-                         5_000
+              stream
+              |> Stream.transform(
+                fn -> n end,
+                fn elem, acc -> {[elem], acc} end,
+                fn _ -> :ok end
+              )
+              |> Stream.run()
+            end
           end)
         end
 
