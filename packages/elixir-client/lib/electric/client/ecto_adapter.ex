@@ -193,21 +193,35 @@ if Code.ensure_loaded?(Ecto) do
     end
 
     def cast_to({:parameterized, {module, params}} = type) do
-      fn
-        nil ->
-          nil
+      cast_fun =
+        fn
+          nil ->
+            nil
 
-        value ->
-          decoded_value =
-            case Jason.decode(value) do
-              {:ok, decoded} -> decoded
-              {:error, _} -> value
+          value ->
+            decoded_value =
+              case Jason.decode(value) do
+                {:ok, decoded} -> decoded
+                {:error, _} -> value
+              end
+
+            case module.load(decoded_value, &Ecto.Type.embedded_load(&1, &2, :json), params) do
+              {:ok, loaded} -> loaded
+              :error -> raise Ecto.CastError, type: type, value: value
             end
+        end
 
-          case module.load(decoded_value, &Ecto.Type.embedded_load(&1, &2, :json), params) do
-            {:ok, loaded} -> loaded
-            :error -> raise Ecto.CastError, type: type, value: value
+      case module.type(params) do
+        :uuid ->
+          fn
+            nil -> nil
+            # uuid backed fields will expect the raw binary value, as if from postgrex
+            # this adds overhead but I think it will solve a lot of issues
+            value -> value |> Ecto.UUID.dump!() |> cast_fun.()
           end
+
+        _other ->
+          cast_fun
       end
     end
 

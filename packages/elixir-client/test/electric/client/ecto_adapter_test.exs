@@ -8,6 +8,7 @@ defmodule Electric.Client.EctoAdapterTest do
   alias Electric.Client.EctoAdapter
   alias Electric.Client.Message
   alias Support.Money
+  alias Support.ULID
 
   defp stream(ctx, query) do
     Client.stream(ctx.client, query)
@@ -31,6 +32,7 @@ defmodule Electric.Client.EctoAdapterTest do
       field(:bits, :bitstring)
       field(:blob, :binary)
       field(:rejected_at, :utc_datetime)
+      field(:external_id, ULID, prefix: "external")
 
       embeds_one :mushroom, Mushroom do
         field(:name, :string)
@@ -163,6 +165,7 @@ defmodule Electric.Client.EctoAdapterTest do
       {"bits", "varbit"},
       {"blob", "bytea"},
       {"rejected_at", "timestamp with time zone"},
+      {"external_id", "uuid"},
       {"inserted_at", "timestamp without time zone"},
       {"updated_at", "timestamp without time zone"}
     ]
@@ -535,6 +538,7 @@ defmodule Electric.Client.EctoAdapterTest do
                "int_list" => "{1}",
                "map_list" => ~s[{"{\\"a\\":1}"}],
                "rejected_at" => "2016-03-24 17:53:17+00",
+               "external_id" => "1381a900-bc16-42b9-9f66-ea4eb2079dff",
                "inserted_at" => "2016-03-24 17:53:17+00",
                "updated_at" => "2017-04-28 18:54:18+00"
              }) == %TestTable{
@@ -561,6 +565,7 @@ defmodule Electric.Client.EctoAdapterTest do
                string_list: ["a", "b", ["c", "d"]],
                int_list: [1],
                map_list: [%{"a" => 1}],
+               external_id: "external_coa2saf4czblth3g5jhleb4574",
                rejected_at: ~U[2016-03-24 17:53:17Z],
                updated_at: ~N[2017-04-28 18:54:18]
              }
