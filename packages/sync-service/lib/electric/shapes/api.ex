@@ -28,6 +28,7 @@ defmodule Electric.Shapes.Api do
       required: true
     ],
     allow_shape_deletion: [type: :boolean],
+    feature_flags: [type: {:list, :string}, default: []],
     keepalive_interval: [type: :integer],
     long_poll_timeout: [type: :integer],
     sse_timeout: [type: :integer],
@@ -52,6 +53,7 @@ defmodule Electric.Shapes.Api do
     :stack_events_registry,
     :stack_id,
     :storage,
+    :feature_flags,
     allow_shape_deletion: false,
     keepalive_interval: 21_000,
     long_poll_timeout: 20_000,
@@ -144,7 +146,7 @@ defmodule Electric.Shapes.Api do
   def predefined_shape(%Api{} = api, shape_params) do
     with :ok <- hold_until_stack_ready(api),
          {:ok, params} <- normalise_shape_params(shape_params),
-         opts = Keyword.merge(params, inspector: api.inspector),
+         opts = Keyword.merge(params, inspector: api.inspector, feature_flags: api.feature_flags),
          {:ok, shape} <- Shapes.Shape.new(opts) do
       {:ok, %{api | shape: shape}}
     end

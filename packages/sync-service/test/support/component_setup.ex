@@ -418,6 +418,7 @@ defmodule Support.ComponentSetup do
       storage: storage,
       inspector:
         {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)},
+      feature_flags: Electric.Config.get_env(:feature_flags),
       publication_name: publication_name
     }
   end
@@ -439,7 +440,8 @@ defmodule Support.ComponentSetup do
         stack_id: ctx.stack_id,
         stack_events_registry: ctx.stack_events_registry,
         storage: ctx.storage,
-        persistent_kv: ctx.persistent_kv
+        persistent_kv: ctx.persistent_kv,
+        feature_flags: ctx.feature_flags
       )
     )
     |> Keyword.merge(overrides)
