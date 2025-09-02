@@ -1,5 +1,13 @@
 # @core/elixir-client
 
+## 0.7.2
+
+### Patch Changes
+
+- bb37ebb: Fix representation in query of parameterized types backed by uuid column
+- d0100fe: Ensure that UUID fields are passed to parameterized types' load function in the expected binary form
+- 7a48fc1: Pass through column values not in schema rather than dropping them, which is consistent with the behaviour of the typescript implementation
+
 ## 0.7.1
 
 ### Patch Changes

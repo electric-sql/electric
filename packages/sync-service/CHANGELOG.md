@@ -1,5 +1,18 @@
 # @core/sync-service
 
+## 1.1.8
+
+### Patch Changes
+
+- 324d1b8: Improve connection manager's handling of shape process crashes and remove shape log collector monitoring.
+- f4d54ef: Ensure replication slot is dropped if requested upon termination
+- 33e3d43: feat: close file handles on inactive shapes and don't open on startup
+- f888d0a: Lower log level of request logs from `info` to `debug` - too verbose.
+- b6b9a77: feat: support non-PK selects in subqueries
+- 02faf7c: Parse DB error about remaining slots being reserved as insufficient resources.
+- cc65a88: feat: support 3+ layers of subqueries
+- b92909a: Add controlled shutdown backing up of storage and shape metadata for significantly faster recovery on restart.
+
 ## 1.1.7
 
 ### Patch Changes
