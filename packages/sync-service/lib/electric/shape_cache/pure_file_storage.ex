@@ -27,6 +27,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   - In case the writer is offline and in-memory ETS/buffer is not present, reads still succeed using on-disk information (i.e. last persisted full txn offset).
   """
 
+  alias Electric.ShapeCache.PureFileStorage.WriteLoop
   alias Electric.ProcessRegistry
   alias Electric.ShapeCache.PureFileStorage.ActionFile
   alias Electric.ShapeCache.PureFileStorage.KeyIndex
@@ -39,63 +40,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
   import LogOffset
-  import Record
+  import Electric.ShapeCache.PureFileStorage.SharedRecords
+  import Electric.ShapeCache.PureFileStorage.WriteLoop, only: [writer_acc: 0]
   require Logger
 
   @behaviour Electric.ShapeCache.Storage
-
-  # Record that's stored in the stack-wide ETS table for reader reference
-  defrecord :storage_meta, [
-    :shape_handle,
-    :ets_table,
-    :persisted_full_txn_offset,
-    :last_persisted_offset,
-    :last_seen_txn_offset,
-    :compaction_boundary,
-    :latest_name,
-    :pg_snapshot,
-    snapshot_started?: false,
-    compaction_started?: false,
-    last_snapshot_chunk: nil,
-    cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []}
-  ]
-
-  defrecord :open_files,
-    json_file: nil,
-    chunk_file: nil,
-    key_file: nil
-
-  # Record that controls the writer's progress & flush logic
-  defrecord :writer_acc,
-    ets_line_buffer: [],
-    buffer: [],
-    buffer_size: 0,
-    key_buffer: [],
-    key_buffer_size: 0,
-    last_seen_offset: LogOffset.last_before_real_offsets(),
-    last_seen_txn_offset: LogOffset.last_before_real_offsets(),
-    last_persisted_offset: LogOffset.last_before_real_offsets(),
-    last_persisted_txn_offset: LogOffset.last_before_real_offsets(),
-    write_position: 0,
-    key_file_write_pos: 0,
-    bytes_in_chunk: 0,
-    times_flushed: 0,
-    chunk_started?: false,
-    cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []},
-    open_files: {:open_files, nil, nil, nil}
-
-  # Record that controls the writer's state including parts that shouldn't change in reduction
-  defrecord :writer_state, [
-    :writer_acc,
-    :write_timer,
-    :ets,
-    :latest_name,
-    :opts
-  ]
-
-  defguardp is_json_file_open(acc)
-            when elem(acc, 0) == :writer_acc and
-                   elem(elem(acc, writer_acc(:open_files)), open_files(:json_file)) != nil
 
   # Struct that can be used to create a writer_state record or a reader
   @version 1
@@ -437,18 +386,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     writer_state(state,
       latest_name: new_latest_suffix,
-      writer_acc: adjust_write_positions(writer_acc, -log_file_pos, -key_file_pos)
-    )
-  end
-
-  defp adjust_write_positions(
-         writer_acc(write_position: write_position, key_file_write_pos: key_file_write_pos),
-         log_file_pos,
-         key_file_pos
-       ) do
-    writer_acc(
-      write_position: write_position + log_file_pos,
-      key_file_write_pos: key_file_write_pos + key_file_pos
+      writer_acc: WriteLoop.adjust_write_positions(writer_acc, -log_file_pos, -key_file_pos)
     )
   end
 
@@ -555,10 +493,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
           register_with_stack(
             opts,
             table,
-            writer_acc(initial_acc, :last_persisted_txn_offset),
+            WriteLoop.last_persisted_txn_offset(initial_acc),
             compaction_boundary(opts),
             suffix,
-            writer_acc(initial_acc, :cached_chunk_boundaries)
+            WriteLoop.cached_chunk_boundaries(initial_acc)
           )
 
           {initial_acc, suffix}
@@ -620,25 +558,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp close_all_files(writer_state(writer_acc: writer_acc(open_files: nil)) = state), do: state
-
   defp close_all_files(writer_state(writer_acc: acc) = state) do
-    writer_state(writer_acc: acc) =
-      state =
-      if is_json_file_open(acc), do: flush_buffer(state), else: state
-
-    acc = close_all_files_in_acc(acc)
-
-    writer_state(state, writer_acc: acc)
-  end
-
-  defp close_all_files_in_acc(writer_acc(open_files: nil) = acc), do: acc
-
-  defp close_all_files_in_acc(writer_acc(open_files: open_files) = acc) do
-    Tuple.to_list(open_files)
-    |> Enum.each(&File.close/1)
-
-    writer_acc(acc, open_files: open_files())
+    writer_state(state, writer_acc: WriteLoop.flush_and_close_all(acc, state))
   end
 
   defp initialise_filesystem!(%__MODULE__{} = opts, shape_definition) do
@@ -672,16 +593,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
     # If the last chunk is complete, we take the end as position to calculate chunk size
     position = end_pos || start_pos
 
-    {writer_acc(
-       last_persisted_offset: last_persisted_txn_offset,
+    {WriteLoop.init_from_disk(
        last_persisted_txn_offset: last_persisted_txn_offset,
-       last_seen_offset: last_persisted_txn_offset,
-       last_seen_txn_offset: last_persisted_txn_offset,
        write_position: json_file_size,
        key_file_write_pos: key_file_size,
        bytes_in_chunk: json_file_size - position,
        chunk_started?: is_nil(chunk_end_offset),
-       cached_chunk_boundaries: reformat_chunks_for_cache(chunks)
+       chunks: reformat_chunks_for_cache(chunks)
      ), suffix}
   end
 
@@ -903,7 +821,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp open_file(writer_state(opts: opts, latest_name: latest_name), type) do
+  def open_file(writer_state(opts: opts, latest_name: latest_name), type) do
     open_file(opts, latest_name, type)
   end
 
@@ -914,23 +832,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     do: File.open!(chunk_file(opts, suffix), [:append, :raw, :sync])
 
   defp open_file(opts, suffix, :key_file), do: File.open!(key_file(opts, suffix), [:append, :raw])
-
-  defp maybe_open_json(writer_state(writer_acc: acc) = state) do
-    writer_state(state, writer_acc: maybe_open_json(acc, state))
-  end
-
-  defp maybe_open_json(writer_acc(open_files: open_files(json_file: x, key_file: y)) = acc, _)
-       when not is_nil(x) and not is_nil(y),
-       do: acc
-
-  defp maybe_open_json(
-         writer_acc(open_files: open_files(json_file: json, key_file: key) = open_files) = acc,
-         state
-       ) do
-    json = json || open_file(state, :json_file)
-    key = key || open_file(state, :key_file)
-    writer_acc(acc, open_files: open_files(open_files, json_file: json, key_file: key))
-  end
 
   def get_chunk_end_log_offset(offset, %__MODULE__{}) when is_min_offset(offset),
     do: LogOffset.new(0, 0)
@@ -1163,148 +1064,40 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp get_suffix(_, {latest_name, _, _}), do: latest_name
 
-  def append_to_log!(txn_lines, writer_state() = state) do
-    writer_state(writer_acc: acc) = state = maybe_open_json(state)
-    times_flushed = writer_acc(acc, :times_flushed)
-
+  def append_to_log!(txn_lines, writer_state(writer_acc: acc) = state) do
     txn_lines
     |> normalize_log_stream()
-    |> Enum.reduce(acc, fn
-      {offset, _, _, _, _, _, _}, writer_acc(last_seen_txn_offset: min_offset) = acc
-      when is_log_offset_lte(offset, min_offset) ->
-        # Line already persisted, no-op
-        acc
-
-      {offset, _, _, _, _, _, _} = line, acc ->
-        acc
-        |> maybe_write_opening_chunk_boundary(state, offset)
-        |> add_to_buffer(line)
-        |> write_chunk_boundary(state)
-        |> maybe_flush_buffer(state)
-    end)
+    |> WriteLoop.append_to_log!(acc, state)
     |> case do
-      # If the buffer has been fully flushed, no need to schedule more flushes
-      writer_acc(buffer_size: 0, last_seen_offset: offset) = acc ->
+      {acc, cancel_flush_timer: true} ->
         timer_ref = writer_state(state, :write_timer)
         if not is_nil(timer_ref), do: Process.cancel_timer(timer_ref)
-
-        acc =
-          acc
-          |> writer_acc(last_seen_txn_offset: offset)
-          # Flushing the buffer again just to update metadata on last persisted transaction, and bring keyfile up to date
-          |> flush_buffer(state, true)
-          |> close_chunk_file()
-
         writer_state(state, writer_acc: acc, write_timer: nil)
 
-      writer_acc(last_seen_offset: offset) = acc ->
-        acc =
-          acc
-          |> writer_acc(last_seen_txn_offset: offset)
-          |> store_lines_in_ets(state)
-          |> close_chunk_file()
-
+      {acc, schedule_flush: times_flushed} ->
         writer_state(state, writer_acc: acc)
         |> schedule_flush(times_flushed)
     end
   end
 
-  defp close_chunk_file(writer_acc(open_files: open_files(chunk_file: nil)) = acc), do: acc
-
-  defp close_chunk_file(
-         writer_acc(open_files: open_files(chunk_file: chunk_file) = open_files) = acc
-       ) do
-    File.close(chunk_file)
-    writer_acc(acc, open_files: open_files(open_files, chunk_file: nil))
-  end
-
-  defp maybe_write_opening_chunk_boundary(writer_acc(chunk_started?: true) = acc, _, _), do: acc
-
-  defp maybe_write_opening_chunk_boundary(
-         writer_acc(open_files: open_files(chunk_file: nil) = open_files) = acc,
-         state,
-         offset
-       ) do
-    files = open_files(open_files, chunk_file: open_file(state, :chunk_file))
-
-    acc
-    |> writer_acc(open_files: files)
-    |> maybe_write_opening_chunk_boundary(state, offset)
-  end
-
-  defp maybe_write_opening_chunk_boundary(
-         writer_acc(
-           write_position: pos,
-           key_file_write_pos: key_pos,
-           open_files: open_files(chunk_file: chunk_file)
-         ) = acc,
-         writer_state(opts: opts),
-         offset
-       ) do
-    IO.binwrite(chunk_file, [LogOffset.to_int128(offset), <<pos::64, key_pos::64>>])
-
-    writer_acc(acc, chunk_started?: true)
-    |> add_opening_chunk_boundary_to_cache(offset, pos)
-    |> update_chunk_boundaries_cache(opts)
-  end
-
-  defp add_opening_chunk_boundary_to_cache(
-         writer_acc(cached_chunk_boundaries: {boundary, cached_chunks}) = acc,
-         offset,
-         pos
-       )
-       when length(cached_chunks) < 3 do
-    writer_acc(acc,
-      cached_chunk_boundaries: {boundary, cached_chunks ++ [{{offset, nil}, {pos, nil}}]}
-    )
-  end
-
-  defp add_opening_chunk_boundary_to_cache(
-         writer_acc(cached_chunk_boundaries: {_, [{{_, max}, _} | cached_chunks]}) = acc,
-         offset,
-         pos
-       ) do
-    writer_acc(acc,
-      cached_chunk_boundaries: {max, cached_chunks ++ [{{offset, nil}, {pos, nil}}]}
-    )
-  end
-
-  defp add_closing_chunk_boundary_to_cache(
-         writer_acc(cached_chunk_boundaries: {boundary, cached_chunks}) = acc,
-         max,
-         end_pos
-       ) do
-    [{{min, nil}, {start_pos, nil}} | rest] = Enum.reverse(cached_chunks)
-
-    writer_acc(acc,
-      cached_chunk_boundaries:
-        {boundary, Enum.reverse([{{min, max}, {start_pos, end_pos}} | rest])}
-    )
-  end
-
-  defp update_chunk_boundaries_cache(writer_acc(cached_chunk_boundaries: cached) = acc, opts) do
+  def update_chunk_boundaries_cache(opts, boundaries) do
     :ets.update_element(
       opts.stack_ets,
       opts.shape_handle,
-      {storage_meta(:cached_chunk_boundaries) + 1, cached}
+      {storage_meta(:cached_chunk_boundaries) + 1, boundaries}
     )
-
-    acc
   end
 
   # Contract for this behaviour is that for any messages with behaviour as the tag, the MFA will
   # be called with current writer state prepended, and the return value will be used as the new state
-  defp schedule_flush(
-         writer_state(writer_acc: writer_acc(times_flushed: new), write_timer: timer, opts: opts) =
-           state,
-         old
-       )
-       when new == old do
-    if is_nil(timer) do
+  defp schedule_flush(writer_state(writer_acc: acc, write_timer: timer, opts: opts) = state, old) do
+    if WriteLoop.has_flushed_since?(acc, old) or is_nil(timer) do
+      if not is_nil(timer), do: Process.cancel_timer(timer)
+
       ref =
         Process.send_after(
           self(),
-          {Storage, {__MODULE__, :perform_scheduled_flush, [new]}},
+          {Storage, {__MODULE__, :perform_scheduled_flush, [WriteLoop.times_flushed(acc)]}},
           opts.flush_period
         )
 
@@ -1314,212 +1107,42 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp schedule_flush(
-         writer_state(writer_acc: writer_acc(times_flushed: new), write_timer: timer, opts: opts) =
-           state,
-         _
-       ) do
-    if not is_nil(timer), do: Process.cancel_timer(timer)
-
-    ref =
-      Process.send_after(
-        self(),
-        {Storage, {__MODULE__, :perform_scheduled_flush, [new]}},
-        opts.flush_period
-      )
-
-    writer_state(state, write_timer: ref)
+  def perform_scheduled_flush(writer_state(writer_acc: acc) = state, requested) do
+    if not WriteLoop.has_flushed_since?(acc, requested) do
+      # No flushes happened between the scheduling of the flush and now, so we can just do a normal flush
+      writer_state(state, writer_acc: WriteLoop.flush_buffer(acc, state), write_timer: nil)
+    else
+      state
+    end
   end
 
-  # This is a function call for the old flush, no reason to do anything
-  def perform_scheduled_flush(
-        writer_state(writer_acc: writer_acc(times_flushed: new)) = state,
-        old
-      )
-      when new != old,
-      do: state
-
-  # No flushes happened between the last scheduled flush and now, so we can just do a normal flush
-  def perform_scheduled_flush(writer_state(writer_acc: acc) = state, _) do
-    writer_state(state, writer_acc: flush_buffer(acc, state, true), write_timer: nil)
-  end
-
-  defp store_lines_in_ets(
-         writer_acc(ets_line_buffer: buffer) = acc,
-         writer_state(ets: ets, opts: opts)
-       ) do
-    :ets.insert(ets, buffer)
-
-    acc
-    |> writer_acc(ets_line_buffer: [])
-    |> update_global_persistence_information(opts)
-  end
-
-  @delayed_write 64 * 1024
-  defp maybe_flush_buffer(writer_acc(key_buffer_size: size) = acc, state)
-       when size >= @delayed_write,
-       do: flush_buffer(acc, state, true)
-
-  defp maybe_flush_buffer(writer_acc(buffer_size: size) = acc, state) when size >= @delayed_write,
-    do: flush_buffer(acc, state, false)
-
-  defp maybe_flush_buffer(acc, _), do: acc
-
-  defp write_chunk_boundary(
-         writer_acc(bytes_in_chunk: total) = acc,
-         writer_state(opts: %{chunk_bytes_threshold: maximum})
-       )
-       when total < maximum,
-       do: acc
-
-  defp write_chunk_boundary(
-         writer_acc(open_files: open_files(chunk_file: nil) = open_files) = acc,
-         state
-       ) do
-    files = open_files(open_files, chunk_file: open_file(state, :chunk_file))
-
-    acc
-    |> writer_acc(open_files: files)
-    |> write_chunk_boundary(state)
-  end
-
-  defp write_chunk_boundary(
-         writer_acc(
-           open_files: open_files(chunk_file: chunk_file),
-           last_seen_offset: offset,
-           write_position: position,
-           key_file_write_pos: key_file_write_pos
-         ) = acc,
-         writer_state(opts: opts) = state
-       ) do
-    IO.binwrite(chunk_file, [
-      LogOffset.to_int128(offset),
-      <<position::64, key_file_write_pos::64>>
-    ])
-
-    acc
-    |> writer_acc(chunk_started?: false, bytes_in_chunk: 0)
-    |> add_closing_chunk_boundary_to_cache(offset, position)
-    |> update_chunk_boundaries_cache(opts)
-    |> flush_buffer(state, true)
-  end
-
-  defp add_to_buffer(
-         writer_acc(
-           buffer: buffer,
-           key_buffer: key_buffer,
-           key_buffer_size: key_buffer_size,
-           key_file_write_pos: key_file_write_pos,
-           buffer_size: buffer_size,
-           write_position: write_position,
-           ets_line_buffer: ets_line_buffer,
-           bytes_in_chunk: bytes_in_chunk
-         ) =
-           acc,
-         {offset, _, _, _, _, json_size, json} = line
-       ) do
-    {iodata, iodata_size} = LogFile.make_entry(line)
-    {key_iodata, key_iodata_size} = KeyIndex.make_entry(line, write_position)
-
-    writer_acc(acc,
-      buffer: [buffer | iodata],
-      ets_line_buffer: [{LogOffset.to_tuple(offset), json} | ets_line_buffer],
-      key_buffer: [key_buffer | key_iodata],
-      key_buffer_size: key_buffer_size + key_iodata_size,
-      key_file_write_pos: key_file_write_pos + key_iodata_size,
-      buffer_size: buffer_size + iodata_size,
-      write_position: write_position + iodata_size,
-      bytes_in_chunk: bytes_in_chunk + json_size,
-      last_seen_offset: offset
-    )
-  end
-
-  defp flush_buffer(writer_state(writer_acc: acc) = state) do
-    writer_state(state, writer_acc: flush_buffer(acc, state, true))
-  end
-
-  defp flush_buffer(
-         writer_acc(
-           buffer: buffer,
-           buffer_size: buffer_size,
-           key_buffer: key_buffer,
-           key_buffer_size: key_buffer_size,
-           last_seen_offset: last_seen_offset,
-           last_seen_txn_offset: last_seen_txn,
-           last_persisted_txn_offset: last_persisted_txn,
-           times_flushed: times_flushed,
-           open_files: open_files(json_file: json_file, key_file: key_file)
-         ) = acc,
-         writer_state(opts: storage, ets: ets) = _state,
-         force_key_flush?
-       ) do
-    if buffer_size > 0 do
-      IO.binwrite(json_file, buffer)
-      :file.datasync(json_file)
+  def update_global_persistence_information(
+        %__MODULE__{stack_ets: ets, shape_handle: handle} = opts,
+        last_persisted_txn_offset,
+        last_persisted_offset,
+        last_seen_txn_offset,
+        old_last_persisted_txn_offset
+      ) do
+    if not is_nil(old_last_persisted_txn_offset) and
+         old_last_persisted_txn_offset != last_persisted_txn_offset do
+      write_metadata!(opts, :last_persisted_txn_offset, last_persisted_txn_offset)
     end
 
-    # We're flushing keys on a different schedule from the main log because it fills up way slower
-    # (because it doesn't store JSONs) but if we're flushing key index, we need to flush the main log too.
-    # Essentially, write order is main log, then keys, then persistence pointer.
-    {key_buffer, key_buffer_size} =
-      if force_key_flush? and key_buffer_size > 0 do
-        IO.binwrite(key_file, key_buffer)
-        :file.datasync(key_file)
-        {[], 0}
-      else
-        {key_buffer, key_buffer_size}
-      end
-
-    if last_seen_txn != last_persisted_txn do
-      write_metadata!(storage, :last_persisted_txn_offset, last_seen_txn)
+    try do
+      true =
+        :ets.update_element(
+          ets,
+          handle,
+          [
+            {storage_meta(:persisted_full_txn_offset) + 1, last_persisted_txn_offset},
+            {storage_meta(:last_persisted_offset) + 1, last_persisted_offset},
+            {storage_meta(:last_seen_txn_offset) + 1, last_seen_txn_offset}
+          ]
+        )
+    rescue
+      ArgumentError ->
+        true
     end
-
-    # Tell the parent process that we've flushed up to this point
-    send(self(), {Storage, :flushed, last_seen_offset})
-
-    # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
-    writer_acc(acc,
-      buffer: [],
-      buffer_size: 0,
-      ets_line_buffer: [],
-      key_buffer: key_buffer,
-      key_buffer_size: key_buffer_size,
-      last_persisted_offset: last_seen_offset,
-      last_persisted_txn_offset: last_seen_txn,
-      times_flushed: times_flushed + 1
-    )
-    |> update_global_persistence_information(storage)
-    |> trim_ets(ets)
-  end
-
-  defp update_global_persistence_information(
-         writer_acc(
-           last_persisted_txn_offset: last_txn,
-           last_persisted_offset: last_persisted,
-           last_seen_txn_offset: last_seen_txn
-         ) = acc,
-         %__MODULE__{stack_ets: ets, shape_handle: handle}
-       ) do
-    true =
-      :ets.update_element(
-        ets,
-        handle,
-        [
-          {storage_meta(:persisted_full_txn_offset) + 1, last_txn},
-          {storage_meta(:last_persisted_offset) + 1, last_persisted},
-          {storage_meta(:last_seen_txn_offset) + 1, last_seen_txn}
-        ]
-      )
-
-    acc
-  rescue
-    ArgumentError ->
-      acc
-  end
-
-  defp trim_ets(acc, ets) do
-    :ets.delete_all_objects(ets)
-    acc
   end
 
   defp normalize_log_stream(stream) do
