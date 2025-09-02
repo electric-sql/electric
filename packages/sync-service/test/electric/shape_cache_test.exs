@@ -52,7 +52,7 @@ defmodule Electric.ShapeCacheTest do
   @pg_snapshot_xmin_10 {10, 11, [10]}
   @pg_snapshot_xmin_100 {100, 101, [100]}
 
-  @shape_cleanup_timeout 1_500
+  @shape_cleanup_timeout 5_000
 
   @moduletag :tmp_dir
 

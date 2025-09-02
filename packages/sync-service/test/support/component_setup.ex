@@ -248,10 +248,20 @@ defmodule Support.ComponentSetup do
     %{shape_log_collector: name}
   end
 
-  def with_slot_name_and_stream_id(_ctx) do
-    # Use a random slot name to avoid conflicts
+  def with_slot_name_and_stream_id(ctx) do
+    # Derive a deterministic (per test) replication slot name from the full test name.
+    # We hash the test name to (a) stay within Postgres identifier length limits (<= 63 bytes)
+    # and (b) restrict characters to [a-z0-9_]. Using a stable hash also prevents collisions
+    # across concurrently running test databases referencing different DB OIDs.
+    base = full_test_name(ctx)
+
+    hash =
+      :crypto.hash(:sha256, base)
+      |> Base.encode16(case: :lower)
+      |> binary_part(0, 12)
+
     %{
-      slot_name: "electric_test_slot_#{:rand.uniform(10_000)}",
+      slot_name: "electric_test_slot_" <> hash,
       stream_id: "default"
     }
   end
