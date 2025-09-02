@@ -40,7 +40,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     ud = ~U[2024-10-23 14:36:39Z]
     dd = ~D[2024-10-23]
     mm = Decimal.new("199.99")
-    ul = "ul_5aa36ce4-18ee-4334-a8e2-c04613652809"
+    ul = "ul_coa2saf4czblth3g5jhleb4574"
 
     assert_where(where(TestTable, ii: ^ii), ~s[("ii" = 1234)])
     assert_where(where(TestTable, ff: ^ff), ~s[("ff" = 3.14::float)])
@@ -55,7 +55,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
 
     assert_where(
       from(t in TestTable, where: t.ul == ^ul),
-      ~s[("ul" = '5aa36ce4-18ee-4334-a8e2-c04613652809')]
+      ~s[("ul" = '1381a900-bc16-42b9-9f66-ea4eb2079dff')]
     )
   end
 

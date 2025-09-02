@@ -24,9 +24,9 @@ defmodule Support.ULID do
   @impl Ecto.ParameterizedType
   def load(nil, _, _), do: {:ok, nil}
 
-  def load(data, _loader, %{prefix: prefix}) when is_binary(data) do
-    with {:ok, uuid} = Ecto.UUID.load(data) do
-      {:ok, prefix <> "_" <> uuid}
+  def load(data, _loader, %{prefix: prefix}) when is_binary(data) and byte_size(data) == 16 do
+    with {:ok, _uuid} = Ecto.UUID.load(data) do
+      {:ok, prefix <> "_" <> Base.encode32(data, case: :lower, padding: false)}
     end
   end
 
@@ -37,7 +37,7 @@ defmodule Support.ULID do
 
   def dump(ulid, _, %{prefix: prefix}) do
     with [^prefix, uuid] <- String.split(ulid, "_", parts: 2) do
-      Ecto.UUID.dump(uuid)
+      Base.decode32(uuid, case: :lower, padding: false)
     else
       _ -> :error
     end
