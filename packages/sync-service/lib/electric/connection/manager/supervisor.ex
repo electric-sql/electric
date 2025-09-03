@@ -105,4 +105,8 @@ defmodule Electric.Connection.Manager.Supervisor do
 
     Supervisor.start_child(name(opts), child_spec)
   end
+
+  def stop_connection_manager(opts) do
+    Supervisor.terminate_child(name(opts), Electric.Connection.Manager)
+  end
 end
