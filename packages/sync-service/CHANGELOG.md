@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.1.9
+
+### Patch Changes
+
+- 3325b9a: Turn `feature_flags` into an explicit API+StackSupervisor configuration.
+- 437ef17: Wait for stack to be ready before doing API.predefined_shape/2
+
 ## 1.1.8
 
 ### Patch Changes
