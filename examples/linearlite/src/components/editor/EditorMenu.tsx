@@ -17,10 +17,11 @@ export interface EditorMenuProps {
 const EditorMenu = ({ editor }: EditorMenuProps) => {
   return (
     <div className="bg-white flex shadow-md rounded border p-1">
+      {/* eslint-disable @typescript-eslint/no-explicit-any */}
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        disabled={!editor.can().chain().focus().toggleBold().run()}
+        onClick={() => (editor.chain().focus() as any).toggleBold().run()}
+        disabled={!(editor.can().chain().focus() as any).toggleBold().run()}
         className={classNames(
           `me-1 px-1 rounded color text-gray-500 hover:text-black`,
           {
@@ -32,8 +33,8 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       </button>
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        disabled={!editor.can().chain().focus().toggleItalic().run()}
+        onClick={() => (editor.chain().focus() as any).toggleItalic().run()}
+        disabled={!(editor.can().chain().focus() as any).toggleItalic().run()}
         className={classNames(
           `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
@@ -45,8 +46,8 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       </button>
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        disabled={!editor.can().chain().focus().toggleStrike().run()}
+        onClick={() => (editor.chain().focus() as any).toggleStrike().run()}
+        disabled={!(editor.can().chain().focus() as any).toggleStrike().run()}
         className={classNames(
           `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
@@ -58,8 +59,8 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       </button>
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleCode().run()}
-        disabled={!editor.can().chain().focus().toggleCode().run()}
+        onClick={() => (editor.chain().focus() as any).toggleCode().run()}
+        disabled={!(editor.can().chain().focus() as any).toggleCode().run()}
         className={classNames(
           `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
@@ -72,7 +73,7 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       <div className="border-r me-1 border-gray-200"></div>
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        onClick={() => (editor.chain().focus() as any).toggleBulletList().run()}
         className={classNames(
           `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
@@ -84,7 +85,7 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       </button>
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        onClick={() => (editor.chain().focus() as any).toggleOrderedList().run()}
         className={classNames(
           `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
@@ -96,7 +97,7 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       </button>
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        onClick={() => (editor.chain().focus() as any).toggleCodeBlock().run()}
         className={classNames(
           `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
@@ -108,7 +109,7 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       </button>
       <button
         type="button"
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        onClick={() => (editor.chain().focus() as any).toggleBlockquote().run()}
         className={classNames(
           `px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {
