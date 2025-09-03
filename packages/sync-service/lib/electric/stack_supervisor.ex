@@ -90,6 +90,7 @@ defmodule Electric.StackSupervisor do
                    type: :pos_integer,
                    default: LogChunker.default_chunk_size_threshold()
                  ],
+                 feature_flags: [type: {:list, :string}, default: []],
                  tweaks: [
                    type: :keyword_list,
                    required: false,
@@ -242,7 +243,8 @@ defmodule Electric.StackSupervisor do
       storage: storage_mod_arg(opts),
       inspector: inspector,
       stack_id: stack_id,
-      persistent_kv: persistent_kv
+      persistent_kv: persistent_kv,
+      feature_flags: Map.get(opts, :feature_flags, [])
     ]
   end
 

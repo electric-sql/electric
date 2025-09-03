@@ -34,6 +34,8 @@ end
 defmodule Electric.Config do
   require Logger
 
+  @type instance_id :: String.t()
+
   @build_env Mix.env()
 
   @known_feature_flags ~w[allow_subqueries]
@@ -102,7 +104,7 @@ defmodule Electric.Config do
   end
 
   @doc false
-  @spec ensure_instance_id() :: :ok
+  @spec ensure_instance_id() :: instance_id()
   # the instance id needs to be consistent across calls, so we do need to have
   # a value in the config, even if it's not configured by the user.
   def ensure_instance_id do
@@ -125,7 +127,7 @@ defmodule Electric.Config do
   end
 
   # the installation id is persisted to disk to remain the same between restarts of the sync service
-  @spec persist_installation_id(term, binary) :: :ok
+  @spec persist_installation_id(term, binary) :: instance_id()
   def persist_installation_id(persistent_kv, instance_id) when is_binary(instance_id) do
     case Electric.PersistentKV.get(persistent_kv, @installation_id_key) do
       {:ok, id} when is_binary(id) ->
