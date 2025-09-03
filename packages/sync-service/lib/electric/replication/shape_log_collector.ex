@@ -84,12 +84,14 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def init(opts) do
-    Process.set_label({:shape_log_collector, opts.stack_id})
-    Logger.metadata(stack_id: opts.stack_id)
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
+    stack_id = opts.stack_id
+
+    Process.set_label({:shape_log_collector, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     persistent_replication_data_opts = [
-      stack_id: opts.stack_id,
+      stack_id: stack_id,
       persistent_kv: opts.persistent_kv
     ]
 
@@ -108,13 +110,13 @@ defmodule Electric.Replication.ShapeLogCollector do
         pids_by_shape_handle: %{},
         filter:
           opts
-          |> Map.put(:refs_fun, &Materializer.get_all_as_refs(&1, opts.stack_id))
+          |> Map.put(:refs_fun, &Materializer.get_all_as_refs(&1, stack_id))
           |> Keyword.new()
           |> Filter.new(),
         flush_tracker:
           FlushTracker.new(
             notify_fn: fn lsn ->
-              case GenServer.whereis(ReplicationClient.name(opts.stack_id)) do
+              case GenServer.whereis(ReplicationClient.name(stack_id)) do
                 nil -> :ok
                 pid -> send(pid, {:flush_boundary_updated, lsn})
               end
@@ -165,7 +167,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
-    LsnTracker.init(lsn, state.stack_id)
+    LsnTracker.set_last_processed_lsn(lsn, state.stack_id)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
   end
@@ -290,10 +292,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
 
-    LsnTracker.set_last_processed_lsn(
-      state.last_processed_lsn,
-      state.stack_id
-    )
+    LsnTracker.set_last_processed_lsn(state.last_processed_lsn, state.stack_id)
 
     flush_tracker =
       if is_struct(event, Transaction) do

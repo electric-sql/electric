@@ -25,30 +25,31 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      stack_id = Keyword.fetch!(opts, :stack_id)
-      GenServer.start_link(__MODULE__, opts, name: name(stack_id))
+      opts = Map.new(opts)
+      GenServer.start_link(__MODULE__, opts, name: name(opts.stack_id))
     end
   end
 
   @impl true
-  def init(opts) do
+  def init(config) do
     Process.flag(:trap_exit, true)
 
-    stack_id = Keyword.fetch!(opts, :stack_id)
+    stack_id = config.stack_id
 
     Process.set_label({:shape_status_owner, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    storage = Keyword.fetch!(opts, :storage)
-    :ok = ShapeStatus.initialise(stack_id, storage)
+    :ok = ShapeStatus.initialise(stack_id, config.storage)
+
+    Electric.LsnTracker.create_table(stack_id)
 
     # Empirical evidence shows that after recovering 50K shapes ShapeStatusOwner and ShapeCache
     # each take up 200+MB of memory. Explicitly running garbage collection for both immediately
     # takes that down to 4-5MB.
     :erlang.garbage_collect()
 
-    {:ok, %{stack_id: stack_id, backup_dir: ShapeStatus.backup_dir(storage)}}
+    {:ok, %{stack_id: stack_id, backup_dir: ShapeStatus.backup_dir(config.storage)}}
   end
 
   @impl true

@@ -63,7 +63,8 @@ defmodule Electric.Shapes.ApiTest do
     {:via, _, {registry_name, registry_key}} = Electric.Replication.Supervisor.name(ctx)
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
-    Electric.LsnTracker.init(Lsn.from_integer(0), ctx.stack_id)
+    Electric.LsnTracker.create_table(ctx.stack_id)
+    Electric.LsnTracker.set_last_processed_lsn(Lsn.from_integer(0), ctx.stack_id)
     set_status_to_active(ctx)
   end
 
