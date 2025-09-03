@@ -386,6 +386,7 @@ defmodule Electric.StackSupervisor do
   end
 
   def shutdown_database_connections(stack_id) do
+    Electric.StatusMonitor.database_connections_scaled_down(stack_id)
     Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: stack_id)
   end
 end

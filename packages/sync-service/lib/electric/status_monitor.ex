@@ -15,6 +15,8 @@ defmodule Electric.StatusMonitor do
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
 
+  @db_scaled_down_key :db_scaled_down?
+
   def start_link(stack_id) do
     GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
   end
@@ -30,22 +32,33 @@ defmodule Electric.StatusMonitor do
 
   @spec status(String.t()) :: status()
   def status(stack_id) do
-    case results(stack_id) do
-      %{pg_lock_acquired: {false, _}} ->
-        :waiting
-
-      %{
-        replication_client_ready: {true, _},
-        admin_connection_pool_ready: {true, _},
-        snapshot_connection_pool_ready: {true, _},
-        shape_log_collector_ready: {true, _},
-        supervisor_processes_ready: {true, _}
-      } ->
-        :active
-
-      _ ->
-        :starting
+    if db_scaled_down?(stack_id) do
+      # Basically a hack to keep the system from shutting down when DB connections are deliberately closed.
+      # TODO(alco): Think about returning `:scaled_down` or similar and handling it by
+      # different callers to make the scaled-down state of the application more legitimate.
+      :active
+    else
+      stack_id
+      |> results()
+      |> status_from_results()
     end
+  end
+
+  defp status_from_results(%{pg_lock_acquired: {false, _}}), do: :waiting
+
+  defp status_from_results(%{
+         replication_client_ready: {true, _},
+         admin_connection_pool_ready: {true, _},
+         snapshot_connection_pool_ready: {true, _},
+         shape_log_collector_ready: {true, _},
+         supervisor_processes_ready: {true, _}
+       }),
+       do: :active
+
+  defp status_from_results(_), do: :starting
+
+  def database_connections_scaled_down(stack_id) do
+    GenServer.cast(name(stack_id), :db_scale_down)
   end
 
   def mark_pg_lock_acquired(stack_id, lock_pid) do
@@ -164,6 +177,11 @@ defmodule Electric.StatusMonitor do
     {:noreply, state}
   end
 
+  def handle_cast(:db_scale_down, state) do
+    :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, true})
+    {:noreply, maybe_reply_to_waiters(state)}
+  end
+
   def handle_call({:wait_until_active, timeout}, from, %{waiters: waiters} = state) do
     if status(state.stack_id) == :active do
       {:reply, :ok, state}
@@ -206,6 +224,15 @@ defmodule Electric.StatusMonitor do
       _ ->
         state
     end
+  end
+
+  defp db_scaled_down?(stack_id) do
+    :ets.lookup_element(ets_table(stack_id), @db_scaled_down_key, 2, false)
+  rescue
+    ArgumentError ->
+      # This happens when the table is not found, which means the
+      # process has not been started yet
+      false
   end
 
   defp results(stack_id) do
