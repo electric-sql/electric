@@ -14,7 +14,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
     :with_persistent_kv,
     :with_inspector,
     :with_slot_name_and_stream_id,
-    :with_in_memory_storage
+    :with_in_memory_storage,
+    :with_shape_status
   ]
 
   defp start_connection_manager(%{stack_id: stack_id} = ctx) do
