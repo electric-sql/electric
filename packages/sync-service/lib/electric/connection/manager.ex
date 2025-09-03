@@ -688,6 +688,26 @@ defmodule Electric.Connection.Manager do
   # ignore it.
   def handle_info({:EXIT, _pid, :shutdown}, state), do: {:noreply, state}
 
+  # The replication client exited because it hasn't streamed any new transactions for a while.
+  # This is a signal for all database connections to close and transition Electric into a
+  # scaled down mode.
+  def handle_info(
+        {:EXIT, pid, {:shutdown, {:connection_idle, time}}},
+        %State{replication_client_pid: pid, current_phase: :running} = state
+      ) do
+    time_s = System.convert_time_unit(time, :millisecond, :second)
+
+    Logger.warning(
+      "Closing all database connections after the replication stream has been idle for #{time_s} seconds"
+    )
+
+    # Perform shutdown in a task so that connection manager doesn't end up blocking the
+    # supervisor trying to shut it down.
+    Task.start(Electric.StackSupervisor, :shutdown_database_connections, [state.stack_id])
+
+    {:noreply, state}
+  end
+
   # A process exited as it was trying to open a database connection or while it was connected.
   def handle_info({:EXIT, pid, reason}, state) do
     {pid_type, state} = nillify_pid(state, pid)

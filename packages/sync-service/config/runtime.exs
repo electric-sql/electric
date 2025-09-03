@@ -264,6 +264,12 @@ config :electric,
       "ELECTRIC_TWEAKS_SCHEMA_RECONCILER_PERIOD",
       &Electric.Config.parse_human_readable_time!/1,
       nil
+    ),
+  scale_down_on_idle_timeout:
+    env!(
+      "ELECTRIC_DATABASE_SCALE_DOWN_ON_IDLE_TIMEOUT",
+      &Electric.Config.parse_human_readable_time!/1,
+      nil
     )
 
 if Electric.telemetry_enabled?() do

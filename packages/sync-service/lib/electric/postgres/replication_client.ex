@@ -44,6 +44,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :display_settings,
       :txn_collector,
       :publication_owner?,
+      :max_idle_time,
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
@@ -56,6 +57,7 @@ defmodule Electric.Postgres.ReplicationClient do
       received_wal: 0,
       flushed_wal: 0,
       last_seen_txn_lsn: Lsn.from_integer(0),
+      last_seen_txn_timestamp: nil,
       flush_up_to_date?: true
     ]
 
@@ -70,12 +72,15 @@ defmodule Electric.Postgres.ReplicationClient do
             start_streaming?: boolean(),
             slot_name: String.t(),
             slot_temporary?: boolean(),
-            txn_collector: Collector.t(),
-            step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
+            txn_collector: Collector.t(),
+            publication_owner?: boolean(),
+            max_idle_time: non_neg_integer(),
+            step: Electric.Postgres.ReplicationClient.step(),
             received_wal: non_neg_integer(),
             flushed_wal: non_neg_integer(),
             last_seen_txn_lsn: Lsn.t(),
+            last_seen_txn_timestamp: integer(),
             flush_up_to_date?: boolean()
           }
 
@@ -89,6 +94,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
                    slot_temporary?: [type: :boolean, default: false],
+                   max_idle_time: [type: :non_neg_integer, default: 0],
                    # Set a reasonable limit for the maximum size of a transaction that
                    # we can handle, above which we would exit as we run the risk of running
                    # out of memmory.
@@ -116,6 +122,8 @@ defmodule Electric.Postgres.ReplicationClient do
   @repl_msg_x_log_data ?w
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
+
+  @idle_check_interval 60_000
 
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
   def start_link(opts) do
@@ -254,6 +262,16 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply, state}
   end
 
+  def handle_info(:check_if_idle, %State{last_seen_txn_timestamp: txn_ts} = state) do
+    time_diff = System.convert_time_unit(System.monotonic_time() - txn_ts, :native, :millisecond)
+
+    if time_diff >= state.max_idle_time do
+      {:disconnect, {:shutdown, {:connection_idle, time_diff}}}
+    else
+      {:noreply, state}
+    end
+  end
+
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
     Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
@@ -280,7 +298,14 @@ defmodule Electric.Postgres.ReplicationClient do
   @spec handle_data(binary(), State.t()) ::
           {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
   def handle_data(data, %State{step: :start_streaming} = state) do
-    state = %{state | step: :streaming}
+    # Modify the state as if we've just seen a transaction so that in the future we have a
+    # starting point to check how long the stream has been idle for.
+    state = %{state | step: :streaming, last_seen_txn_timestamp: System.monotonic_time()}
+
+    if state.max_idle_time > 0 do
+      :timer.send_interval(@idle_check_interval, :check_if_idle)
+    end
+
     notify_seen_first_message(state)
     handle_data(data, state)
   end
@@ -352,7 +377,14 @@ defmodule Electric.Postgres.ReplicationClient do
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {%Transaction{} = txn, txn_meta, %Collector{} = txn_collector} ->
-        state = %{state | txn_collector: txn_collector, last_seen_txn_lsn: txn.lsn}
+        timestamp = System.monotonic_time()
+
+        state = %{
+          state
+          | txn_collector: txn_collector,
+            last_seen_txn_lsn: txn.lsn,
+            last_seen_txn_timestamp: timestamp
+        }
 
         {m, f, args} = state.transaction_received
 
@@ -403,7 +435,10 @@ defmodule Electric.Postgres.ReplicationClient do
                 # new transaction into the shape log store. So, when the applied function
                 # returns, we can safely advance the replication slot past the transaction's commit
                 # LSN.
-                state = update_received_wal(state, Electric.Postgres.Lsn.to_integer(txn.lsn))
+                state =
+                  state
+                  |> update_received_wal(Electric.Postgres.Lsn.to_integer(txn.lsn))
+
                 response = [encode_standby_status_update(state)]
 
                 OpenTelemetry.stop_and_save_intervals(
