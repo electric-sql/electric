@@ -1,3 +1,5 @@
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+
 /**
  * Prepares the Electric SQL proxy URL from a request URL
  * Copies over Electric-specific query params and adds auth if configured
@@ -14,7 +16,7 @@ export function prepareElectricUrl(requestUrl: string): URL {
 
   // Copy Electric-specific query params
   url.searchParams.forEach((value, key) => {
-    if ([`live`, `table`, `handle`, `offset`, `cursor`].includes(key)) {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
       originUrl.searchParams.set(key, value)
     }
   })
