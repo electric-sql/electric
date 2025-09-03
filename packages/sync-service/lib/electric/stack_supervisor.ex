@@ -369,6 +369,7 @@ defmodule Electric.StackSupervisor do
              Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},
+          {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
           {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 
