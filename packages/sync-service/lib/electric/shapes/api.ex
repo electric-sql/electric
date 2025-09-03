@@ -142,7 +142,8 @@ defmodule Electric.Shapes.Api do
   """
   @spec predefined_shape(t(), shape_opts()) :: {:ok, t()} | {:error, term()}
   def predefined_shape(%Api{} = api, shape_params) do
-    with {:ok, params} <- normalise_shape_params(shape_params),
+    with :ok <- hold_until_stack_ready(api),
+         {:ok, params} <- normalise_shape_params(shape_params),
          opts = Keyword.merge(params, inspector: api.inspector),
          {:ok, shape} <- Shapes.Shape.new(opts) do
       {:ok, %{api | shape: shape}}
