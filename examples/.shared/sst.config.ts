@@ -18,7 +18,7 @@ export default $config({
     }
   },
   async run() {
-    const { default: camelcase } = await import('camelcase')
+    const { default: camelcase } = await import(`camelcase`)
     const provider = new aws.Provider(
       camelcase(`examples-infra-provider-${$app.stage}`),
       {
