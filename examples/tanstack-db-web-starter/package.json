@@ -34,7 +34,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss": "^4.1.12",
-    "vite": "^7.1.4",
+    "vite": "^6.1.4",
     "vite-tsconfig-paths": "^5.1.4",
     "zod": "^3.25.76"
   },
