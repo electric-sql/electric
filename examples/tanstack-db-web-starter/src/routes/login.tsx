@@ -32,7 +32,7 @@ function Layout() {
         }
       )
 
-      if (error?.code === `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`) {
+      if (error?.code === `USER_ALREADY_EXISTS`) {
         const result = await authClient.signIn.email(
           {
             email,
