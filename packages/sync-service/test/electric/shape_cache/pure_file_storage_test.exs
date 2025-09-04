@@ -104,7 +104,14 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       PureFileStorage.terminate(writer)
 
-      assert File.exists?(PureFileStorage.key_file(opts, suffix))
+      key_file = PureFileStorage.key_file(opts, suffix)
+
+      PureFileStorage.KeyIndex.create_from_log(
+        PureFileStorage.json_file(opts, suffix),
+        key_file
+      )
+
+      assert File.exists?(key_file)
 
       assert PureFileStorage.KeyIndex.read_key_file(PureFileStorage.key_file(opts, suffix)) == [
                {"test_key", LogOffset.new(10, 0), ?i, 0, byte_size(~S|{"test":1}|)},
@@ -136,6 +143,11 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       PureFileStorage.terminate(writer)
 
       key_file = PureFileStorage.key_file(opts, PureFileStorage.latest_name(opts))
+
+      PureFileStorage.KeyIndex.create_from_log(
+        PureFileStorage.json_file(opts, PureFileStorage.latest_name(opts)),
+        key_file
+      )
 
       assert File.exists?(key_file)
 
@@ -176,9 +188,9 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert PureFileStorage.ChunkIndex.read_chunk_file(
                PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
              ) == [
-               {{LogOffset.new(10, 0), LogOffset.new(10, 0)}, {0, 150}, {0, 46}},
-               {{LogOffset.new(11, 0), LogOffset.new(11, 0)}, {150, 300}, {46, 92}},
-               {{LogOffset.new(12, 0), LogOffset.new(12, 0)}, {300, 450}, {92, 138}}
+               {{LogOffset.new(10, 0), LogOffset.new(10, 0)}, {0, 150}, {0, 0}},
+               {{LogOffset.new(11, 0), LogOffset.new(11, 0)}, {150, 300}, {0, 0}},
+               {{LogOffset.new(12, 0), LogOffset.new(12, 0)}, {300, 450}, {0, 0}}
              ]
 
       assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(10, 0), opts)
