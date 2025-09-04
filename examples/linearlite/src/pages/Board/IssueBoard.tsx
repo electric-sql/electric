@@ -1,5 +1,5 @@
 import { DragDropContext, DropResult } from 'react-beautiful-dnd'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, createElement } from 'react'
 import { generateKeyBetween } from 'fractional-indexing'
 import { Issue, Status, StatusDisplay, StatusValue } from '../../types/types'
 import { useLiveQuery, usePGlite } from '@electric-sql/pglite-react'
@@ -210,7 +210,8 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
   }
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createElement(DragDropContext as any, { onDragEnd },
       <div className="flex flex-1 pt-6 pl-8 overflow-scroll bg-gray-100">
         <IssueCol
           title={StatusDisplay[Status.BACKLOG]}
@@ -243,6 +244,6 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
           liveQuery={columnsLiveIssues[Status.CANCELED]}
         />
       </div>
-    </DragDropContext>
+    )
   )
 }

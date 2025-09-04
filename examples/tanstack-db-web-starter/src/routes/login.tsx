@@ -51,11 +51,12 @@ function Layout() {
       }
 
       if (error) {
-        console.log(`error logging in`, error)
-        setError(JSON.stringify(error, null, 4))
+        console.error(`Authentication error:`, error)
+        setError(error.message || `Authentication failed`)
       }
-    } catch (_) {
-      setError("An unexpected error occurred")
+    } catch (err) {
+      console.error(`Unexpected error:`, err)
+      setError(`An unexpected error occurred`)
     } finally {
       setIsLoading(false)
     }

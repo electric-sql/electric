@@ -447,7 +447,7 @@ async function send(
       headers: {
         'Content-Type': `application/octet-stream`,
       },
-      body: op,
+      body: op as BodyInit,
     })
 
     if (!response.ok) {

@@ -20,7 +20,7 @@ const API_URL = import.meta.env.API_URL || 'http://localhost:3001'
 // In a real app, you would implement a key management strategy. Electric is great
 // at syncing keys between users :)
 const rawKey = new Uint8Array(16)
-const key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', true, [
+const key = await crypto.subtle.importKey('raw', rawKey as BufferSource, 'AES-GCM', true, [
   'encrypt',
   'decrypt',
 ])
@@ -37,11 +37,11 @@ async function encrypt(item: Item): Promise<EncryptedItem> {
 
   const encrypted = await crypto.subtle.encrypt(
     {
-      iv,
+      iv: iv as BufferSource,
       name: 'AES-GCM',
     },
     key,
-    encoded
+    encoded as BufferSource
   )
 
   const ciphertext = base64.fromByteArray(new Uint8Array(encrypted))
@@ -65,11 +65,11 @@ async function decrypt(item: EncryptedItem): Promise<Item> {
 
   const decrypted = await crypto.subtle.decrypt(
     {
-      iv,
+      iv: iv as BufferSource,
       name: 'AES-GCM',
     },
     key,
-    encrypted
+    encrypted as BufferSource
   )
 
   const dec = new TextDecoder()

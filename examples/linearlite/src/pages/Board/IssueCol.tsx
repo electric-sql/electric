@@ -12,8 +12,17 @@ import { FixedSizeList as List, ListOnItemsRenderedProps } from 'react-window'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import IssueItem, { itemHeight } from './IssueItem'
 import { Issue } from '../../types/types'
+
 import { LiveQuery } from '@electric-sql/pglite/live'
 import { useLiveQuery } from '@electric-sql/pglite-react'
+
+// Type-fixed components to work around React 18/19 JSX strictness
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DroppableFixed = Droppable as any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DraggableFixed = Draggable as any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ListFixed = List as any
 
 const CHUNK_SIZE = 25
 
@@ -69,12 +78,13 @@ function IssueCol({ title, status, issues, liveQuery }: Props) {
           </span>
         </div>
       </div>
-      <Droppable
+      <DroppableFixed
         droppableId={status}
         key={status}
         type="category"
         mode="virtual"
-        renderClone={(provided, snapshot, rubric) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        renderClone={(provided: any, snapshot: any, rubric: any) => {
           const issue = issues[rubric.source.index]
           return (
             <IssueItem
@@ -102,7 +112,7 @@ function IssueCol({ title, status, issues, liveQuery }: Props) {
             <div className="grow">
               <AutoSizer>
                 {({ height, width }) => (
-                  <List
+                  <ListFixed
                     height={height}
                     itemCount={itemCount}
                     itemSize={itemHeight + itemSpacing}
@@ -115,13 +125,13 @@ function IssueCol({ title, status, issues, liveQuery }: Props) {
                     // {...provided.droppableProps}
                   >
                     {Row}
-                  </List>
+                  </ListFixed>
                 )}
               </AutoSizer>
             </div>
           )
         }}
-      </Droppable>
+      </DroppableFixed>
     </div>
   )
 }
@@ -138,7 +148,7 @@ const Row = ({
   const issue = issues[index]
   if (!issue) return null
   return (
-    <Draggable draggableId={issue.id} index={index} key={issue.id}>
+    <DraggableFixed draggableId={issue.id} index={index} key={issue.id}>
       {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
         <IssueItem
           provided={provided}
@@ -148,7 +158,7 @@ const Row = ({
           style={style}
         />
       )}
-    </Draggable>
+    </DraggableFixed>
   )
 }
 

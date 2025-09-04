@@ -9,6 +9,7 @@ import "./styles.css"
 export const createRouter = () => {
   const router = createTanstackRouter({
     routeTree,
+    defaultPreload: `viewport`,
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
   })

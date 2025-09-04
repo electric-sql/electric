@@ -1,8 +1,15 @@
 import { DragDropContext, DropResult } from 'react-beautiful-dnd'
 import { useMemo, useState, useEffect } from 'react'
+
 import { generateKeyBetween } from 'fractional-indexing'
+
 import { Issue, Status, StatusDisplay } from '../../types/types'
+
 import IssueCol from './IssueCol'
+
+// Type-fixed component to work around React 18/19 JSX strictness
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DragDropContextFixed = DragDropContext as any
 
 export interface IssueBoardProps {
   issues: Issue[]
@@ -200,7 +207,7 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
   }
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
+    <DragDropContextFixed onDragEnd={onDragEnd}>
       <div className="flex flex-1 pt-6 pl-8 overflow-scroll bg-gray-100">
         <IssueCol
           title={StatusDisplay[Status.BACKLOG]}
@@ -228,6 +235,6 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
           issues={issuesByStatus[Status.CANCELED]}
         />
       </div>
-    </DragDropContext>
+    </DragDropContextFixed>
   )
 }

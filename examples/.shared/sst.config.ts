@@ -1,8 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import camelcase from 'camelcase'
-
 export default $config({
   app() {
     return {
@@ -20,6 +18,7 @@ export default $config({
     }
   },
   async run() {
+    const { default: camelcase } = await import(`camelcase`)
     const provider = new aws.Provider(
       camelcase(`examples-infra-provider-${$app.stage}`),
       {
