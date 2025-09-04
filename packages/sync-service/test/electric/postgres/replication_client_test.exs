@@ -45,32 +45,37 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   defmodule MockTransactionProcessor do
-    use GenServer
+    use GenServer, restart: :temporary
 
     def start_link(test_pid) do
       GenServer.start_link(__MODULE__, test_pid, name: __MODULE__)
     end
 
+    @impl true
     def init(test_pid) do
-      {:ok, test_pid}
+      {:ok, %{test_pid: test_pid, should_crash?: false}}
     end
 
     def process_transaction(txn) do
       GenServer.call(__MODULE__, {:process_transaction, txn})
     end
 
-    def process_relation(rel) do
-      GenServer.call(__MODULE__, {:process_relation, rel})
+    def toggle_crash(should_crash?) do
+      GenServer.call(__MODULE__, {:toggle_crash, should_crash?})
     end
 
-    def handle_call({:process_transaction, txn}, _from, test_pid) do
-      send(test_pid, {:from_replication, txn})
-      {:reply, :ok, test_pid}
+    @impl true
+    def handle_call({:process_transaction, txn}, _from, state) do
+      if state.should_crash? do
+        raise "Interrupting transaction processing abnormally"
+      end
+
+      send(state.test_pid, {:from_replication, txn})
+      {:reply, :ok, state}
     end
 
-    def handle_call({:process_relation, rel}, _from, test_pid) do
-      send(test_pid, {:from_replication, rel})
-      {:reply, :ok, test_pid}
+    def handle_call({:toggle_crash, should_crash?}, _from, state) do
+      {:reply, :ok, %{state | should_crash?: should_crash?}}
     end
   end
 
@@ -235,9 +240,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "test value 1"}} = receive_tx_change()
 
       # should have same behaviour mid-processing
+      MockTransactionProcessor.toggle_crash(true)
       insert_item(conn, "test value 2")
-      stop_supervised(MockTransactionProcessor)
       refute_receive {:from_replication, _}, 50
+      assert Process.alive?(client_pid)
       start_supervised({MockTransactionProcessor, self()})
       ReplicationClient.start_streaming(client_pid)
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()

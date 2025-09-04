@@ -457,9 +457,9 @@ defmodule Electric.Postgres.ReplicationClient do
     {m, f, args} = mfa
     apply(m, f, args)
   catch
-    :exit, {reason, _} = err when reason in [:noproc, :shutdown] ->
+    :exit, {reason, _} ->
       Logger.debug(
-        "Call #{inspect(mfa)} failed with #{inspect(err)}, waiting for :start_streaming message before retrying"
+        "Call #{inspect(mfa)} failed with #{inspect(reason)}, waiting for :start_streaming message before retrying"
       )
 
       receive do
