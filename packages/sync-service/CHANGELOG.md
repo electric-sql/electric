@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.1.10
+
+### Patch Changes
+
+- a955063: feat: allow composite keys everywhere in subqueries
+- 1c55d2a: feat: allow $n param usage in subqueries
+
 ## 1.1.9
 
 ### Patch Changes
