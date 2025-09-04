@@ -65,6 +65,10 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  defmodule RowExpr do
+    defstruct [:elements, :type, :location]
+  end
+
   defmodule Func do
     defstruct [
       :args,
@@ -731,15 +735,22 @@ defmodule Electric.Replication.Eval.Parser do
          %{encountered_sublinks: nth_sublink},
          %{refs: refs}
        ) do
-    cond do
-      not is_struct(testexpr, Ref) ->
-        {:error,
-         {location, "currently, left side of `IN (SELECT ...)` can only be a column reference"}}
+    testexpr_valid? =
+      is_struct(testexpr, Ref) or
+        (is_struct(testexpr, RowExpr) and Enum.all?(testexpr.elements, &is_struct(&1, Ref)))
 
-      {:array, testexpr.type} != Map.fetch!(refs, ["$sublink", "#{nth_sublink}"]) ->
+    sublink_key = ["$sublink", "#{nth_sublink}"]
+
+    cond do
+      not testexpr_valid? ->
         {:error,
          {location,
-          "left side of `IN (SELECT ...)` has type #{readable(testexpr.type)} but subquery returns #{readable(Map.fetch!(refs, ["$sublink", nth_sublink]))}"}}
+          "currently, left side of `IN (SELECT ...)` can only be a column reference or a list of column references"}}
+
+      {:array, testexpr.type} != Map.fetch!(refs, sublink_key) ->
+        {:error,
+         {location,
+          "left side of `IN (SELECT ...)` has type #{readable(testexpr.type)} but subquery returns #{readable(Map.fetch!(refs, sublink_key))}"}}
 
       true ->
         {:ok,
@@ -799,6 +810,10 @@ defmodule Electric.Replication.Eval.Parser do
 
   defp node_to_ast(%PgQuery.List{}, %{items: items}, _, _) do
     {:ok, items}
+  end
+
+  defp node_to_ast(%PgQuery.RowExpr{location: location}, %{args: args}, _, _) do
+    {:ok, %RowExpr{elements: args, type: {:row, Enum.map(args, & &1.type)}, location: location}}
   end
 
   # If nothing matched, fail
@@ -1069,6 +1084,7 @@ defmodule Electric.Replication.Eval.Parser do
   defp readable({:array, type}), do: "#{readable(type)}[]"
   defp readable({:enum, type}), do: "enum #{type}"
   defp readable({:internal, type}), do: "internal type #{readable(type)}"
+  defp readable({:row, types}), do: "row of (#{Enum.map_join(types, ", ", &readable/1)})"
   defp readable(type), do: to_string(type)
 
   defp try_cast_implicit(processed_args, arg_list, env) do
@@ -1224,6 +1240,19 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  defp do_maybe_reduce(%RowExpr{elements: elements} = row_expr) do
+    if Enum.all?(elements, &is_struct(&1, Const)) do
+      {:ok,
+       %Const{
+         type: row_expr.type,
+         value: List.to_tuple(Enum.map(elements, & &1.value)),
+         location: row_expr.location
+       }}
+    else
+      {:ok, row_expr}
+    end
+  end
+
   defp do_maybe_reduce(list) when is_list(list), do: Utils.map_while_ok(list, &do_maybe_reduce/1)
 
   # Try reducing the function if all it's arguments are constants
@@ -1345,6 +1374,9 @@ defmodule Electric.Replication.Eval.Parser do
     do: Enum.reduce(args, acc, &find_refs/2)
 
   def find_refs(%Array{elements: elements}, acc),
+    do: Enum.reduce(elements, acc, &find_refs/2)
+
+  def find_refs(%RowExpr{elements: elements}, acc),
     do: Enum.reduce(elements, acc, &find_refs/2)
 
   defp unsnake(string) when is_binary(string), do: :binary.replace(string, "_", " ", [:global])

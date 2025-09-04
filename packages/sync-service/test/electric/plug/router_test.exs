@@ -1783,6 +1783,17 @@ defmodule Electric.Plug.RouterTest do
                })
                |> Router.call(opts)
     end
+  end
+
+  describe "/v1/shapes - subqueries" do
+    setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
+
+    setup :with_complete_stack
+
+    setup(ctx) do
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      %{opts: Router.init(build_router_opts(ctx))}
+    end
 
     @tag with_sql: [
            "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
@@ -2005,6 +2016,99 @@ defmodule Electric.Plug.RouterTest do
                %{"value" => %{"id" => "1", "value" => "2"}},
                %{"value" => %{"id" => "2", "value" => "20"}}
              ] = Enum.sort_by(results, & &1["value"]["id"])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+           "CREATE TABLE teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+           "CREATE TABLE members (user_id INTEGER REFERENCES users(id), team_id INTEGER REFERENCES teams(id), PRIMARY KEY (user_id, team_id))",
+           "INSERT INTO users (id, name) VALUES (1, 'John'), (2, 'Jane')",
+           "INSERT INTO teams (id, name) VALUES (1, 'Team A'), (2, 'Team B')",
+           "INSERT INTO members (user_id, team_id) VALUES (1, 1), (2, 2)"
+         ]
+    test "table with a composite PK can be used in a subquery", ctx do
+      orig_req =
+        make_shape_req("teams",
+          where: "id IN (SELECT team_id FROM members WHERE user_id = 1)"
+        )
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "name" => "Team A"}}]} =
+               shape_req(orig_req, ctx.opts)
+
+      # Basic update should be visible
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE teams SET name = 'Team C' WHERE id = 1")
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "name" => "Team C"}}, _]} =
+               Task.await(task)
+
+      # Move-in should cause a 409
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
+
+      assert {_, 409, _} = Task.await(task)
+
+      # And new shape should have the correct data
+      assert {_, 200, data} =
+               shape_req(orig_req, ctx.opts)
+
+      assert [
+               %{"value" => %{"id" => "1", "name" => "Team C"}},
+               %{"value" => %{"id" => "2", "name" => "Team B"}}
+             ] =
+               Enum.sort_by(data, & &1["value"]["id"])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE members (user_id INTEGER, team_id INTEGER, flag BOOLEAN, PRIMARY KEY (user_id, team_id))",
+           """
+           CREATE TABLE member_details (
+             id SERIAL PRIMARY KEY,
+             user_id INTEGER,
+             team_id INTEGER,
+             role TEXT NOT NULL,
+             FOREIGN KEY (user_id, team_id) REFERENCES members(user_id, team_id)
+           )
+           """,
+           "INSERT INTO members (user_id, team_id, flag) VALUES (1, 1, TRUE), (2, 2, FALSE)",
+           "INSERT INTO member_details (user_id, team_id, role) VALUES (1, 1, 'Member'), (2, 2, 'Member')"
+         ]
+    test "subqueries can reference composite PKs", ctx do
+      orig_req =
+        make_shape_req("member_details",
+          where: "(user_id, team_id) IN (SELECT user_id, team_id FROM members WHERE flag = TRUE)"
+        )
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "role" => "Member"}}]} =
+               shape_req(orig_req, ctx.opts)
+
+      # Basic update should be visible
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE member_details SET role = 'Admin' WHERE id = 1")
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "role" => "Admin"}}, _]} =
+               Task.await(task)
+
+      # And a move should be visible
+      task = live_shape_req(req, ctx.opts)
+
+      Postgrex.query!(
+        ctx.db_conn,
+        "UPDATE members SET flag = TRUE WHERE (user_id, team_id) = (2, 2)"
+      )
+
+      assert {_, 409, _} =
+               Task.await(task)
+
+      # And new shape should have the correct data
+      assert {_, 200, data} =
+               shape_req(orig_req, ctx.opts)
+
+      assert [
+               %{"value" => %{"id" => "1", "role" => "Admin"}},
+               %{"value" => %{"id" => "2", "role" => "Member"}}
+             ] =
+               Enum.sort_by(data, & &1["value"]["id"])
     end
   end
 

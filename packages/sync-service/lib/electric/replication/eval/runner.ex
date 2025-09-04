@@ -1,11 +1,10 @@
 defmodule Electric.Replication.Eval.Runner do
   require Logger
-  alias Electric.Replication.Eval.Parser.Array
   alias Electric.Replication.Eval.Walker
   alias Electric.Utils
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Env
-  alias Electric.Replication.Eval.Parser.{Const, Func, Ref}
+  alias Electric.Replication.Eval.Parser.{Const, Func, Ref, RowExpr, Array}
 
   @doc """
   Generate a ref values object based on the record and a given table name
@@ -54,6 +53,7 @@ defmodule Electric.Replication.Eval.Runner do
   defp do_execute(%Const{value: value}, _, _), do: {:ok, value}
   defp do_execute(%Ref{path: path}, _, refs), do: {:ok, Map.fetch!(refs, path)}
   defp do_execute(%Array{}, %{elements: elements}, _), do: {:ok, elements}
+  defp do_execute(%RowExpr{}, %{elements: elements}, _), do: {:ok, List.to_tuple(elements)}
 
   defp do_execute(%Func{strict?: false} = func, %{args: args}, _) do
     # For a non-strict function, we don't care about nil values in the arguments

@@ -270,11 +270,10 @@ defmodule Electric.Shapes.Shape do
         {:ok,
          %__MODULE__{explicitly_selected_columns: explicitly_selected_columns} =
              shape} ->
-          if length(explicitly_selected_columns) == 1 do
+          if length(explicitly_selected_columns) > 0 do
             {:cont, {:ok, [shape | acc]}}
           else
-            {:halt,
-             {:error, {:where, "Subquery has multiple columns, which is not supported right now"}}}
+            {:halt, {:error, {:where, "Subquery must explicitly select at least one column"}}}
           end
 
         {:error, reason} ->
@@ -290,17 +289,20 @@ defmodule Electric.Shapes.Shape do
       relation = {shape.root_table_id, shape.root_table}
 
       with {:ok, column_info, _} <- load_column_info(relation, inspector) do
-        column_info
-        |> Enum.filter(&(&1.name in shape.explicitly_selected_columns))
-        |> Inspector.columns_to_expr()
-        |> Map.to_list()
-        |> case do
-          [{_, type}] ->
-            {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
+        type =
+          column_info
+          |> Enum.filter(&(&1.name in shape.explicitly_selected_columns))
+          |> Inspector.columns_to_expr()
+          |> Map.to_list()
+          |> case do
+            [{_, type}] ->
+              type
 
-          _ ->
-            {:error, {:where, "Subquery has multiple columns, which is not supported right now"}}
-        end
+            multiple ->
+              {:row, Enum.map(multiple, &elem(&1, 1))}
+          end
+
+        {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
       end
     end)
   end
