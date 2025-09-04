@@ -232,8 +232,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
            -(keep_complete_chunks + 1),
            only_complete?: true
          ) do
-      {:complete, {_, end_offset}, {_, file_pos}, {_, key_pos}} ->
-        prepare_compaction(%__MODULE__{} = opts, end_offset, file_pos, key_pos)
+      {:complete, {_, end_offset}, {_, file_pos}, _} ->
+        prepare_compaction(%__MODULE__{} = opts, end_offset, file_pos)
 
       :error ->
         # Not enough chunks to warrant compaction
@@ -241,7 +241,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp prepare_compaction(%__MODULE__{} = opts, end_offset, file_pos, key_pos) do
+  defp prepare_compaction(%__MODULE__{} = opts, end_offset, file_pos) do
     # Just-in-case file-existence-based lock
     if !read_cached_metadata(opts, :compaction_started?) do
       write_cached_metadata!(opts, :compaction_started?, true)
@@ -250,7 +250,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         opts.stack_task_supervisor,
         __MODULE__,
         :make_compacted_files,
-        [self(), opts, end_offset, file_pos, key_pos]
+        [self(), opts, end_offset, file_pos]
       )
 
       :ok
@@ -259,7 +259,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def make_compacted_files(parent, %__MODULE__{} = opts, offset, log_file_pos, key_file_pos)
+  def make_compacted_files(parent, %__MODULE__{} = opts, offset, log_file_pos)
       when is_pid(parent) do
     mkdir_p!(opts.tmp_dir)
 
@@ -267,17 +267,17 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {_, compacted_suffix} = compaction_boundary(opts)
 
     # We're copying parts of the file & keyfile to the tmp dir, because we expect tmp dir to be on a faster FS
-    File.copy!(
-      key_file(opts, current_suffix),
-      tmp_file(opts, "latest_part.keyfile"),
-      key_file_pos
-    )
-
     if compacted_suffix do
       File.copy!(key_file(opts, compacted_suffix), tmp_file(opts, "compacted.keyfile"))
     else
       File.touch!(tmp_file(opts, "compacted.keyfile"))
     end
+
+    KeyIndex.create_from_log(
+      json_file(opts, current_suffix),
+      tmp_file(opts, "latest_part.keyfile"),
+      log_file_pos
+    )
 
     KeyIndex.sort(
       [tmp_file(opts, "latest_part.keyfile"), tmp_file(opts, "compacted.keyfile")],
@@ -327,8 +327,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     send(
       parent,
       {Storage,
-       {__MODULE__, :handle_compaction_finished,
-        [offset, new_compacted_suffix, {log_file_pos, key_file_pos}]}}
+       {__MODULE__, :handle_compaction_finished, [offset, new_compacted_suffix, log_file_pos]}}
     )
   end
 
@@ -337,7 +336,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         writer_state(opts: opts, writer_acc: writer_acc) = state,
         offset,
         new_suffix,
-        {log_file_pos, key_file_pos}
+        log_file_pos
       ) do
     # This work is being done while the writer is stopped, so that the copy & trim doesn't miss anything,
     # but work here should be fast because writer is blocked.
@@ -357,19 +356,12 @@ defmodule Electric.ShapeCache.PureFileStorage do
       end)
     end)
 
-    KeyIndex.copy_adjusting_positions(
-      key_file(opts, current_latest_suffix),
-      key_file(opts, new_latest_suffix),
-      key_file_pos,
-      -log_file_pos
-    )
-
     ChunkIndex.copy_adjusting_positions(
       chunk_file(opts, current_latest_suffix),
       chunk_file(opts, new_latest_suffix),
       offset,
       -log_file_pos,
-      -key_file_pos
+      0
     )
 
     set_latest_name(opts, new_latest_suffix)
@@ -386,7 +378,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     writer_state(state,
       latest_name: new_latest_suffix,
-      writer_acc: WriteLoop.adjust_write_positions(writer_acc, -log_file_pos, -key_file_pos)
+      writer_acc: WriteLoop.adjust_write_positions(writer_acc, -log_file_pos)
     )
   end
 
@@ -583,8 +575,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     json_file_size = FileInfo.get_file_size!(json_file(opts, suffix)) || 0
 
-    key_file_size = FileInfo.get_file_size!(key_file(opts, suffix)) || 0
-
     chunks = ChunkIndex.read_last_n_chunks(chunk_file(opts, suffix), 4)
 
     {{_, chunk_end_offset}, {start_pos, end_pos}, _} =
@@ -596,7 +586,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {WriteLoop.init_from_disk(
        last_persisted_txn_offset: last_persisted_txn_offset,
        write_position: json_file_size,
-       key_file_write_pos: key_file_size,
        bytes_in_chunk: json_file_size - position,
        chunk_started?: is_nil(chunk_end_offset),
        chunks: reformat_chunks_for_cache(chunks)
@@ -608,12 +597,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     # First, we need to make sure that chunk file is fine: it should be aligned, and last chunk shoudn't overshoot the
     # new end of log.
-    {log_search_start_pos, key_search_start_pos} =
+    {log_search_start_pos, _} =
       ChunkIndex.realign_and_trim(chunk_file(opts, suffix), last_persisted_offset)
 
     # Now, we'll search for the first line that's greater than the last persisted offset and truncate the log there
     LogFile.trim(json_file(opts, suffix), log_search_start_pos, last_persisted_offset)
-    KeyIndex.trim(key_file(opts, suffix), json_file(opts, suffix), key_search_start_pos)
   end
 
   defp read_metadata!(%__MODULE__{metadata_dir: metadata_dir}, key) do
@@ -1123,8 +1111,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         last_seen_txn_offset,
         old_last_persisted_txn_offset
       ) do
-    if not is_nil(old_last_persisted_txn_offset) and
-         old_last_persisted_txn_offset != last_persisted_txn_offset do
+    if old_last_persisted_txn_offset != last_persisted_txn_offset do
       write_metadata!(opts, :last_persisted_txn_offset, last_persisted_txn_offset)
     end
 
