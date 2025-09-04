@@ -249,6 +249,18 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
+    @tag transaction_received: {MockTransactionProcessor, :process_transaction, []}
+    @tag relation_received: {MockTransactionProcessor, :process_transaction, []}
+    test "aborts held processing of transaction on exit", %{db_conn: conn} = ctx do
+      client_pid = start_client(ctx)
+      insert_item(conn, "test value 1")
+      refute_receive {:from_replication, _}, 50
+      ref = Process.monitor(client_pid)
+      Process.unlink(client_pid)
+      Process.exit(client_pid, :shutdown)
+      assert_receive {:DOWN, ^ref, :process, ^client_pid, :shutdown}, 500
+    end
+
     # Regression test for https://github.com/electric-sql/electric/issues/1548
     test "fares well when multiple concurrent transactions are writing to WAL",
          %{db_conn: conn} = ctx do

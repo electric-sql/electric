@@ -464,6 +464,8 @@ defmodule Electric.Postgres.ReplicationClient do
 
       receive do
         :start_streaming -> call_until_ready_for_processing(mfa)
+        # on receiving an exit while holding processing, we should respect the exit
+        {:EXIT, _from, reason} -> exit(reason)
       end
   end
 
