@@ -421,13 +421,28 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: nil, type: :bool} = result
     end
 
-    test "should not allow subqueries in IN clauses" do
+    test "should allow subqueries in IN clauses" do
       env = Env.new()
 
       assert {:ok, %Expr{eval: _result}} =
                Parser.parse_and_validate_expression(
                  ~S|test IN (SELECT val FROM tester)|,
                  refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}},
+                 env: env
+               )
+    end
+
+    test "should allow subqueries in IN clauses with composite PKs" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: _result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|(test1, test2) IN (SELECT val1, val2 FROM tester)|,
+                 refs: %{
+                   ["test1"] => :int4,
+                   ["test2"] => :int4,
+                   ["$sublink", "0"] => {:array, {:row, [:int4, :int4]}}
+                 },
                  env: env
                )
     end

@@ -240,6 +240,11 @@ defimpl Electric.Walkable, for: Electric.Replication.Eval.Parser.Array do
     do: [elements: elements]
 end
 
+defimpl Electric.Walkable, for: Electric.Replication.Eval.Parser.RowExpr do
+  def children(%Electric.Replication.Eval.Parser.RowExpr{elements: elements}),
+    do: [elements: elements]
+end
+
 defimpl Electric.Walkable,
   for: [
     Electric.Replication.Eval.Parser.Const,
