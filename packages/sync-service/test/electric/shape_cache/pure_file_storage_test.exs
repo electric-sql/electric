@@ -8,7 +8,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.PureFileStorage
-  import Electric.ShapeCache.PureFileStorage, only: [storage_meta: 2]
+  import Electric.ShapeCache.PureFileStorage.SharedRecords, only: [storage_meta: 2]
   alias Electric.Shapes.Shape
 
   @moduletag :tmp_dir
