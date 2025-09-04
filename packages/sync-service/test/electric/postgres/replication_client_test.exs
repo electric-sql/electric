@@ -12,6 +12,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   alias Electric.Postgres.ReplicationClient
 
   alias Electric.Replication.Changes.{
+    Relation,
     DeletedRecord,
     NewRecord,
     Transaction,
@@ -41,6 +42,36 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     defp process_message({:"$gen_cast", :replication_client_streamed_first_message}),
       do: {self(), :streaming_started}
+  end
+
+  defmodule MockTransactionProcessor do
+    use GenServer
+
+    def start_link(test_pid) do
+      GenServer.start_link(__MODULE__, test_pid, name: __MODULE__)
+    end
+
+    def init(test_pid) do
+      {:ok, test_pid}
+    end
+
+    def process_transaction(txn) do
+      GenServer.call(__MODULE__, {:process_transaction, txn})
+    end
+
+    def process_relation(rel) do
+      GenServer.call(__MODULE__, {:process_relation, rel})
+    end
+
+    def handle_call({:process_transaction, txn}, _from, test_pid) do
+      send(test_pid, {:from_replication, txn})
+      {:reply, :ok, test_pid}
+    end
+
+    def handle_call({:process_relation, rel}, _from, test_pid) do
+      send(test_pid, {:from_replication, rel})
+      {:reply, :ok, test_pid}
+    end
   end
 
   setup do
@@ -181,6 +212,35 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => ^interrupt_val}} = receive_tx_change()
 
       refute_receive _
+    end
+
+    @tag transaction_received: {MockTransactionProcessor, :process_transaction, []}
+    @tag relation_received: {MockTransactionProcessor, :process_transaction, []}
+    test "holds processing of transaction until ready", %{db_conn: conn} = ctx do
+      client_pid = start_client(ctx)
+
+      # should not process the transaction but also should not die
+      insert_item(conn, "test value 1")
+      refute_receive {:from_replication, _}, 50
+      assert Process.alive?(client_pid)
+
+      start_supervised({MockTransactionProcessor, self()})
+
+      # should still not process the transaction until it is explicitly ready
+      refute_receive {:from_replication, _}, 50
+
+      # once we start streaming we should see it processed
+      ReplicationClient.start_streaming(client_pid)
+      assert %Relation{table: "items", columns: [_, _]} = receive_rel_change()
+      assert %NewRecord{record: %{"value" => "test value 1"}} = receive_tx_change()
+
+      # should have same behaviour mid-processing
+      insert_item(conn, "test value 2")
+      stop_supervised(MockTransactionProcessor)
+      refute_receive {:from_replication, _}, 50
+      start_supervised({MockTransactionProcessor, self()})
+      ReplicationClient.start_streaming(client_pid)
+      assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
     # Regression test for https://github.com/electric-sql/electric/issues/1548
@@ -557,8 +617,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: ctx.slot_name,
         try_creating_publication?: false,
         slot_name: ctx.slot_name,
-        transaction_received: {__MODULE__, :test_transaction_received, [self()]},
-        relation_received: {__MODULE__, :test_relation_received, [self()]},
+        transaction_received:
+          Map.get(ctx, :transaction_received, {__MODULE__, :test_transaction_received, [self()]}),
+        relation_received:
+          Map.get(ctx, :relation_received, {__MODULE__, :test_relation_received, [self()]}),
         connection_manager: ctx.connection_manager
       ]
     }
@@ -628,6 +690,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
     id = Ecto.UUID.generate()
     {:ok, bin_uuid} = Ecto.UUID.dump(id)
     {id, bin_uuid}
+  end
+
+  defp receive_rel_change do
+    assert_receive {:from_replication, %Relation{} = change},
+                   @assert_receive_db_timeout
+
+    change
   end
 
   defp receive_tx_change do

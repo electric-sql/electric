@@ -52,8 +52,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     opts = [
       stack_id: ctx.stack_id,
       inspector: {Mock.Inspector, elem(@inspector, 1)},
-      persistent_kv: ctx.persistent_kv,
-      on_ready_targets: [self()]
+      persistent_kv: ctx.persistent_kv
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
@@ -79,12 +78,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
 
-    %{
-      server: pid,
-      registry: registry_name,
-      shape_cache: shape_cache_pid,
-      log_collector_opts: opts
-    }
+    %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
   end
 
   describe "store_transaction/2" do
@@ -386,32 +380,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert_receive {:flush_boundary_updated, 20}, 50
     end
-
-    test "waits until collector is able to respond", ctx do
-      lsn = Lsn.from_string("0/10")
-
-      txn =
-        %Transaction{xid: 100, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
-
-      task = Task.async(fn -> ShapeLogCollector.store_transaction(txn, ctx.server) end)
-      :ok = stop_supervised(ShapeLogCollector)
-
-      # will not process anything without a collector
-      assert nil == Task.yield(task, 100)
-
-      {:ok, new_log_collector_pid} =
-        start_supervised(
-          {ShapeLogCollector,
-           ctx.log_collector_opts |> Keyword.put(:on_ready_targets, [task.pid])}
-        )
-
-      # will still not process anything until collector is ready
-      assert nil == Task.yield(task, 0)
-
-      ShapeLogCollector.set_last_processed_lsn(new_log_collector_pid, lsn)
-
-      assert :ok = Task.await(task)
-    end
   end
 
   describe "handle_relation_msg/2" do
@@ -484,45 +452,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_relation_msg(relation2, ctx.server)
 
       Support.TransactionConsumer.assert_consume(ctx.consumers, [relation1, relation2])
-    end
-
-    test "waits until collector is able to respond", ctx do
-      id = @shape.root_table_id
-      relation = %Relation{id: id, table: "test_table", schema: "public", columns: []}
-
-      task = Task.async(fn -> ShapeLogCollector.handle_relation_msg(relation, ctx.server) end)
-      :ok = stop_supervised(ShapeLogCollector)
-
-      # will not process anything without a collector
-      assert nil == Task.yield(task, 100)
-
-      {:ok, new_log_collector_pid} =
-        start_supervised(
-          {ShapeLogCollector,
-           ctx.log_collector_opts |> Keyword.put(:on_ready_targets, [task.pid])}
-        )
-
-      # will still not process anything until collector is ready
-      assert nil == Task.yield(task, 0)
-
-      Mock.Inspector
-      |> stub(:load_relation_oid, fn
-        {"public", "test_table"}, _ -> {:ok, {id, {"public", "test_table"}}}
-        {"public", "bar"}, _ -> {:ok, {1235, {"public", "bar"}}}
-      end)
-      |> stub(:load_relation_info, fn
-        ^id, _ ->
-          {:ok, %{id: id, schema: "public", name: "test_table", parent: nil, children: nil}}
-
-        1235, _ ->
-          {:ok, %{id: 1235, schema: "public", name: "bar", parent: nil, children: nil}}
-      end)
-      |> expect(:clean, 1, fn ^id, _ -> :ok end)
-      |> allow(self(), new_log_collector_pid)
-
-      ShapeLogCollector.set_last_processed_lsn(new_log_collector_pid, Lsn.from_integer(0))
-
-      assert :ok = Task.await(task)
     end
   end
 

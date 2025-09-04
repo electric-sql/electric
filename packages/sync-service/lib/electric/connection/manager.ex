@@ -457,10 +457,7 @@ defmodule Electric.Connection.Manager do
              tweaks: state.tweaks,
              can_alter_publication?: state.can_alter_publication?,
              manual_table_publishing?: state.manual_table_publishing?,
-             persistent_kv: state.persistent_kv,
-             shape_log_collector_ready_targets: [
-               Electric.Postgres.ReplicationClient.name(state.stack_id)
-             ]
+             persistent_kv: state.persistent_kv
            ) do
       Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
       exit(reason)
@@ -851,6 +848,16 @@ defmodule Electric.Connection.Manager do
 
     state = %{state | current_step: {:start_replication_client, :start_streaming}}
     {:noreply, state, {:continue, :start_streaming}}
+  end
+
+  def handle_cast(
+        {:consumers_ready, _recovered, _failed},
+        %{replication_client_pid: replication_client_pid} = state
+      )
+      when is_pid(replication_client_pid) do
+    Logger.info("Consumers ready - resuming replication processing.")
+    Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
+    {:noreply, state}
   end
 
   def handle_cast({:consumers_ready, _recovered, _failed} = msg, state) do

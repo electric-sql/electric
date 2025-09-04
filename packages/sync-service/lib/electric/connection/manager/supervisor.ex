@@ -66,10 +66,7 @@ defmodule Electric.Connection.Manager.Supervisor do
 
     shape_log_collector_spec =
       {Electric.Replication.ShapeLogCollector,
-       stack_id: stack_id,
-       inspector: inspector,
-       persistent_kv: persistent_kv,
-       on_ready_targets: Keyword.fetch!(opts, :shape_log_collector_ready_targets)}
+       stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv}
 
     schema_reconciler_spec =
       {Electric.Replication.SchemaReconciler,

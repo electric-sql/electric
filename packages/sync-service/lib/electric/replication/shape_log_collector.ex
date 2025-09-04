@@ -25,15 +25,10 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   require Logger
 
-  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
-            persistent_kv: [type: :any, required: true],
-            on_ready_targets: [
-              type: {:list, {:or, [:atom, :pid, @name_schema_tuple]}},
-              default: []
-            ]
+            persistent_kv: [type: :any, required: true]
           )
 
   def start_link(opts) do
@@ -65,7 +60,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     trace_context = OpenTelemetry.get_current_context()
 
-    timer = call_until_ready(server, {:new_txn, txn, trace_context, timer})
+    timer = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
     OpenTelemetry.set_interval_timer(timer)
 
@@ -74,7 +69,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
     trace_context = OpenTelemetry.get_current_context()
-    call_until_ready(server, {:relation_msg, rel, trace_context})
+    GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
   def subscribe(server, shape_handle, shape) do
@@ -162,12 +157,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
     LsnTracker.init(lsn, state.stack_id)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
-
-    for target <- state.on_ready_targets do
-      target_pid = if is_pid(target), do: target, else: GenServer.whereis(target)
-      if not is_nil(target_pid), do: send(target_pid, {:shape_log_collector_ready, self()})
-    end
-
     {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
   end
 
@@ -372,19 +361,4 @@ defmodule Electric.Replication.ShapeLogCollector do
        do: %{state | last_processed_lsn: lsn}
 
   defp put_last_processed_lsn(state, _lsn), do: state
-
-  # Call into the server with an infinite timeout, and if the server is
-  # not available or shutting down, assume that we are listening for it to
-  # come back up and call again.
-  defp call_until_ready(server, call_arg) do
-    GenServer.call(server, call_arg, :infinity)
-  catch
-    :exit, {reason, _} = err when reason in [:noproc, :shutdown] ->
-      receive do
-        {:shape_log_collector_ready, new_server} -> call_until_ready(new_server, call_arg)
-      after
-        # safety timeout in case readiness check is not present
-        60_000 -> exit(err)
-      end
-  end
 end

@@ -261,11 +261,6 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply, state}
   end
 
-  # Message sent by shape log collector to indicate it's ready to process transactions
-  def handle_info({:shape_log_collector_ready, _pid}, state) do
-    {:noreply, state}
-  end
-
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
     Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
@@ -357,7 +352,7 @@ defmodule Electric.Postgres.ReplicationClient do
           "pg_txn.replication_client.relation_received",
           ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
           stack_id,
-          fn -> apply(m, f, [rel | args]) end
+          fn -> call_until_ready_for_processing({m, f, [rel | args]}) end
         )
 
         OpenTelemetry.start_interval("replication_client.await_more_data")
@@ -408,7 +403,7 @@ defmodule Electric.Postgres.ReplicationClient do
           fn ->
             OpenTelemetry.start_interval("replication_client.telemetry_span")
 
-            case apply(m, f, [txn | args]) do
+            case call_until_ready_for_processing({m, f, [txn | args]}) do
               :ok ->
                 OpenTelemetry.start_interval("replication_client.update_received_wal")
                 # We currently process incoming replication messages sequentially, persisting each
@@ -456,6 +451,20 @@ defmodule Electric.Postgres.ReplicationClient do
       current_time()::64,
       0
     >>
+  end
+
+  defp call_until_ready_for_processing(mfa) do
+    {m, f, args} = mfa
+    apply(m, f, args)
+  catch
+    :exit, {reason, _} = err when reason in [:noproc, :shutdown] ->
+      Logger.debug(
+        "Call #{inspect(mfa)} failed with #{inspect(err)}, waiting for :start_streaming message before retrying"
+      )
+
+      receive do
+        :start_streaming -> call_until_ready_for_processing(mfa)
+      end
   end
 
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
