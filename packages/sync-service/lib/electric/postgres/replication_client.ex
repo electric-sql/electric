@@ -352,7 +352,7 @@ defmodule Electric.Postgres.ReplicationClient do
           "pg_txn.replication_client.relation_received",
           ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
           stack_id,
-          fn -> apply(m, f, [rel | args]) end
+          fn -> call_until_ready_for_processing({m, f, [rel | args]}) end
         )
 
         OpenTelemetry.start_interval("replication_client.await_more_data")
@@ -403,7 +403,7 @@ defmodule Electric.Postgres.ReplicationClient do
           fn ->
             OpenTelemetry.start_interval("replication_client.telemetry_span")
 
-            case apply(m, f, [txn | args]) do
+            case call_until_ready_for_processing({m, f, [txn | args]}) do
               :ok ->
                 OpenTelemetry.start_interval("replication_client.update_received_wal")
                 # We currently process incoming replication messages sequentially, persisting each
@@ -451,6 +451,22 @@ defmodule Electric.Postgres.ReplicationClient do
       current_time()::64,
       0
     >>
+  end
+
+  defp call_until_ready_for_processing(mfa) do
+    {m, f, args} = mfa
+    apply(m, f, args)
+  catch
+    :exit, {reason, _} ->
+      Logger.debug(
+        "Call #{inspect(mfa)} failed with #{inspect(reason)}, waiting for :start_streaming message before retrying"
+      )
+
+      receive do
+        :start_streaming -> call_until_ready_for_processing(mfa)
+        # on receiving an exit while holding processing, we should respect the exit
+        {:EXIT, _from, reason} -> exit(reason)
+      end
   end
 
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)

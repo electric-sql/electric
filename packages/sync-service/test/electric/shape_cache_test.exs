@@ -1274,7 +1274,7 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  defp await_for_storage_to_raise(storage, num_attempts \\ 3)
+  defp await_for_storage_to_raise(storage, num_attempts \\ 10)
 
   defp await_for_storage_to_raise(_storage, 0) do
     raise "Storage did not raise Storage.Error in time"
