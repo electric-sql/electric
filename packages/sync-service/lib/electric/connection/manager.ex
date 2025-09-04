@@ -457,7 +457,10 @@ defmodule Electric.Connection.Manager do
              tweaks: state.tweaks,
              can_alter_publication?: state.can_alter_publication?,
              manual_table_publishing?: state.manual_table_publishing?,
-             persistent_kv: state.persistent_kv
+             persistent_kv: state.persistent_kv,
+             shape_log_collector_ready_targets: [
+               Electric.Postgres.ReplicationClient.name(state.stack_id)
+             ]
            ) do
       Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
       exit(reason)

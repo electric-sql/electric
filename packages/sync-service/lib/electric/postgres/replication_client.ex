@@ -261,6 +261,11 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply, state}
   end
 
+  # Message sent by shape log collector to indicate it's ready to process transactions
+  def handle_info({:shape_log_collector_ready, _pid}, state) do
+    {:noreply, state}
+  end
+
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
     Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
