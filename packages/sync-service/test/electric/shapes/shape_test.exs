@@ -400,7 +400,7 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:ok,
               %Shape{
                 root_table: {"public", "child"},
-                where: %{query: "par_id IN (SELECT id FROM parent WHERE id > 5)"},
+                where: %{query: "par_id IN (SELECT id FROM public.parent WHERE id > 5)"},
                 shape_dependencies: [
                   %Shape{
                     root_table: {"public", "parent"},
@@ -444,7 +444,7 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:ok,
               %Shape{
                 root_table: {"public", "item"},
-                where: %{query: "value IN (SELECT value FROM project WHERE value > 5)"},
+                where: %{query: "value IN (SELECT value FROM public.project WHERE value > 5)"},
                 shape_dependencies: [
                   %Shape{
                     root_table: {"public", "project"},
@@ -456,7 +456,7 @@ defmodule Electric.Shapes.ShapeTest do
               } = outer_shape} =
                Shape.new("item",
                  inspector: inspector,
-                 where: "value IN (SELECT value FROM project where value > 5)"
+                 where: "value IN (select value FROM project where value > 5)"
                )
 
       assert [_] =
@@ -477,6 +477,55 @@ defmodule Electric.Shapes.ShapeTest do
                    record: %{"id" => "1", "value" => "10"}
                  },
                  %{["$sublink", "0"] => MapSet.new([20])}
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS project (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
+         ]
+    test "subquery with parameters is correctly interpolated", %{inspector: inspector} do
+      assert {:ok,
+              %Shape{
+                where: %{
+                  query:
+                    "value IN (SELECT value FROM public.project WHERE value > '10'::int4) AND value > '5'::int4"
+                },
+                shape_dependencies: [
+                  %Shape{where: %{query: "value > '10'::int4"}, shape_dependencies: []}
+                ]
+              }} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: "value IN (SELECT value FROM project WHERE value > $2) AND value > $1",
+                 params: %{"1" => "5", "2" => "10"}
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS project (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
+         ]
+    test "skipped parameter positions show an error", %{inspector: inspector} do
+      assert {:error, {:params, "Parameters must be numbered sequentially, starting from 1"}} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: "value IN (SELECT value FROM project WHERE value > $1) AND value > $4",
+                 params: %{"1" => "10", "4" => "5"}
+               )
+
+      assert {:error, {:params, "Parameters must be numbered sequentially, starting from 1"}} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: "value IN (SELECT value FROM project WHERE value > $3) AND value > $4",
+                 params: %{"3" => "10", "4" => "5"}
+               )
+
+      assert {:error, {:params, "Parameters must be numbered sequentially, starting from 1"}} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: "value IN (SELECT value FROM project WHERE value > $0) AND value > $4",
+                 params: %{"0" => "10", "4" => "5"}
                )
     end
   end
