@@ -47,16 +47,10 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   # use `GenServer.call/2` here to make the event processing synchronous.
   #
-  # Because `Electric.Shapes.Dispatcher` only sends demand to this producer
-  # when all consumers have processed the last event, we can save the `from`
-  # clause in the matching `handle_call/3` function and then use
-  # `GenServer.reply/2` in the `demand/2` callback to inform the replication
-  # client that the replication message has been processed.
-  #
   # This `call/3` has a timeout of `:infinity` because timeouts are
   # handled at the storage layer, that is this function doesn't
   # assume any aggregate max time for the shape consumers to actually commit
-  # the new tx to disk, instead the storage backend is responsible for
+  # the new txn to disk, instead the storage backend is responsible for
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   def store_transaction(%Transaction{} = txn, server) do
