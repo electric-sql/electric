@@ -188,7 +188,8 @@ defmodule Electric.Replication.Eval.RunnerTest do
       assert {:ok, true} =
                ~S|test IN (SELECT val FROM tester)|
                |> Parser.parse_and_validate_expression!(
-                 refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}}
+                 refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}},
+                 sublink_queries: %{0 => "SELECT val FROM tester"}
                )
                |> Runner.execute(%{["test"] => 4, ["$sublink", "0"] => MapSet.new([2, 3, 4])})
     end
@@ -201,7 +202,8 @@ defmodule Electric.Replication.Eval.RunnerTest do
                    ["test1"] => :int4,
                    ["test2"] => :int4,
                    ["$sublink", "0"] => {:array, {:row, [:int4, :int4]}}
-                 }
+                 },
+                 sublink_queries: %{0 => "SELECT val1, val2 FROM tester"}
                )
                |> Runner.execute(%{
                  ["test1"] => 4,

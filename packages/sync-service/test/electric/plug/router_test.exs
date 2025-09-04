@@ -2110,6 +2110,47 @@ defmodule Electric.Plug.RouterTest do
              ] =
                Enum.sort_by(data, & &1["value"]["id"])
     end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL, other_value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, value INT NOT NULL, other_value INT NOT NULL)",
+           "INSERT INTO parent (id, value, other_value) VALUES (1, 10, 10), (2, 20, 5)",
+           "INSERT INTO child (id, value, other_value) VALUES (1, 10, 10), (2, 10, 5), (3, 20, 20)"
+         ]
+    test "subqueries work with params", ctx do
+      base_req =
+        make_shape_req("child",
+          where:
+            "value in (SELECT value FROM parent WHERE other_value >= $2) AND other_value >= $1",
+          params: %{"1" => "10", "2" => "6"}
+        )
+
+      assert {req, 200, [%{"value" => %{"id" => "1", "value" => "10"}}]} =
+               shape_req(base_req, ctx.opts)
+
+      # Basic update should be visible
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE child SET other_value = 20 WHERE id = 2")
+
+      assert {req, 200, [%{"value" => %{"id" => "2", "other_value" => "20"}}, _]} =
+               Task.await(task)
+
+      # Move should be visible
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
+
+      assert {_, 409, _} = Task.await(task)
+
+      # And new shape should have the correct data
+      assert {_, 200, data} =
+               shape_req(base_req, ctx.opts)
+
+      assert [
+               %{"value" => %{"id" => "1", "value" => "10"}},
+               %{"value" => %{"id" => "2", "value" => "10"}},
+               %{"value" => %{"id" => "3", "value" => "20"}}
+             ] = Enum.sort_by(data, & &1["value"]["id"])
+    end
   end
 
   describe "404" do

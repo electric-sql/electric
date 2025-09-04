@@ -225,7 +225,10 @@ defmodule Electric.Replication.Eval.Parser do
 
     case parse_where_stmt(ast, params, refs, env) do
       {:ok, value, computed_params} ->
-        updated_query = rebuild_query_with_substituted_params(ast, {params, computed_params})
+        sublink_queries = Keyword.get(opts, :sublink_queries, %{})
+
+        updated_query =
+          rebuild_query_with_substituted_parts(ast, {params, computed_params, sublink_queries})
 
         {:ok,
          %Expr{
@@ -301,12 +304,11 @@ defmodule Electric.Replication.Eval.Parser do
   defp parse_where_stmt(stmt, params, refs, env) do
     context = %{params: params, refs: refs, env: env}
 
-    with {:ok, {ast, stats}} <- query_to_ast(stmt, context),
-         {:ok, computed_params} <- extract_computed_params(stats, params),
+    with {:ok, {ast, %{resolved_params: resolved_params}}} <- query_to_ast(stmt, context),
          {:ok, result} <- reduce_ast(ast) do
       case result do
-        %UnknownConst{} = unknown -> {:ok, infer_unknown(unknown), computed_params}
-        value -> {:ok, value, computed_params}
+        %UnknownConst{} = unknown -> {:ok, infer_unknown(unknown), resolved_params}
+        value -> {:ok, value, resolved_params}
       end
     end
   end
@@ -370,26 +372,6 @@ defmodule Electric.Replication.Eval.Parser do
       end,
       acc
     )
-  end
-
-  defp extract_computed_params(%{used_params: used, resolved_params: resolved}, provided_params) do
-    case Map.keys(provided_params) |> Enum.reject(&MapSet.member?(used, &1)) do
-      [] ->
-        Enum.reduce_while(map_size(resolved)..1//-1, {:ok, []}, fn i, {:ok, acc} ->
-          case Map.fetch(resolved, i) do
-            {:ok, %Const{} = const} ->
-              {:cont, {:ok, [const | acc]}}
-
-            :error ->
-              {:halt,
-               {:error,
-                {0, "expression is missing $#{i} - parameters should be numbered sequentially"}}}
-          end
-        end)
-
-      [unused | _] ->
-        {:error, {0, "parameter value for $#{unused} was not used"}}
-    end
   end
 
   defp reduce_ast(ast) do
@@ -1436,9 +1418,21 @@ defmodule Electric.Replication.Eval.Parser do
     %{func | args: [arg, to_binary_operators(%{func | args: args})]}
   end
 
-  defp rebuild_query_with_substituted_params(query, {original_params, resolved_params}) do
-    with {:ok, rebuilt_protobuf} <-
-           Walker.fold(query, &replace_refs/3, {original_params, resolved_params}) do
+  defp rebuild_query_with_substituted_parts(query, ctx) do
+    with {:ok, {rebuilt_protobuf, _}} <-
+           Walker.accumulating_fold(
+             query,
+             &replace_query_parts/4,
+             fn
+               preimage, _, _, acc, _ when is_struct(preimage, PgQuery.SubLink) ->
+                 {:ok, %{acc | encountered_sublinks: acc.encountered_sublinks + 1}}
+
+               _, _, _, acc, _ ->
+                 {:ok, acc}
+             end,
+             %{encountered_sublinks: 0},
+             ctx
+           ) do
       %PgQuery.ParseResult{
         version: 150_001,
         stmts: [
@@ -1458,12 +1452,13 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp replace_refs(
+  defp replace_query_parts(
          %PgQuery.ParamRef{number: number, location: location},
          _,
-         {original_params, resolved_params}
+         _,
+         {original_params, resolved_params, _}
        ) do
-    %Const{type: type} = Enum.at(resolved_params, number - 1)
+    %Const{type: type} = Map.fetch!(resolved_params, number)
 
     {:ok,
      %PgQuery.TypeCast{
@@ -1500,17 +1495,29 @@ defmodule Electric.Replication.Eval.Parser do
      }}
   end
 
-  defp replace_refs(%PgQuery.Node{node: {:param_ref, _}}, %{node: new_typecast}, _) do
+  defp replace_query_parts(%PgQuery.Node{node: {:param_ref, _}}, %{node: new_typecast}, _, _) do
     {:ok, %PgQuery.Node{node: {:type_cast, new_typecast}}}
   end
 
-  defp replace_refs(%PgQuery.Node{node: {type, _}}, %{node: child}, _) do
+  defp replace_query_parts(%PgQuery.Node{node: {type, _}}, %{node: child}, _, _) do
     {:ok, %PgQuery.Node{node: {type, child}}}
   end
 
-  defp replace_refs(node, children, _) when map_size(children) == 0, do: {:ok, node}
+  defp replace_query_parts(
+         %PgQuery.SubLink{} = sublink,
+         %{testexpr: testexpr},
+         %{encountered_sublinks: nth_sublink},
+         {_, _, sublink_queries}
+       ) do
+    %{stmts: [%{stmt: select_node}]} =
+      Map.fetch!(sublink_queries, nth_sublink) |> PgQuery.parse!()
 
-  defp replace_refs(anything_with_children, children, _) do
+    {:ok, %PgQuery.SubLink{sublink | testexpr: testexpr, subselect: select_node}}
+  end
+
+  defp replace_query_parts(node, children, _, _) when map_size(children) == 0, do: {:ok, node}
+
+  defp replace_query_parts(anything_with_children, children, _, _) do
     {:ok, Map.merge(anything_with_children, children)}
   end
 end
