@@ -295,11 +295,11 @@ If provided must be one of `MEMORY` or `FILE`.
 
 <EnvVarConfig
     name="ELECTRIC_STORAGE"
-    defaultValue="FILE"
+    defaultValue="FAST_FILE"
     example="MEMORY">
 
 Where to store shape logs. Defaults to storing on the filesystem.
-If provided must be one of `MEMORY` or `FILE`.
+If provided must be one of `MEMORY` or `FAST_FILE`.
 
 </EnvVarConfig>
 
