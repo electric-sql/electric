@@ -28,6 +28,7 @@ import {
   CHUNK_LAST_OFFSET_HEADER,
   LIVE_CACHE_BUSTER_HEADER,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
+  SHAPE_CACHE_BUSTER_QUERY_PARAM,
   COLUMNS_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
@@ -517,6 +518,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // with the newly provided shape handle, or a fallback
         // pseudo-handle based on the current one to act as a
         // consistent cache buster
+        
+        // Store the current shape handle as expired to avoid future 409s
+        if (this.#shapeHandle) {
+          this.#markShapeExpired(this.#shapeHandle)
+        }
+        
         const newShapeHandle =
           e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
         this.#reset(newShapeHandle)
@@ -600,6 +607,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#shapeHandle) {
       // This should probably be a header for better cache breaking?
       fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
+      
+      // Add cacheBuster for shapes known to be expired to prevent 409s
+      if (this.#isShapeExpired(this.#shapeHandle)) {
+        fetchUrl.searchParams.set(
+          SHAPE_CACHE_BUSTER_QUERY_PARAM,
+          `expired_${Date.now()}`
+        )
+      }
     }
 
     // sort query params in-place for stable URLs and improved cache hits
@@ -940,6 +955,37 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
+  }
+
+  /**
+   * Get the localStorage key for a specific shape handle
+   */
+  #getShapeStorageKey(shapeHandle: string): string {
+    return `electric_expired_shape_${shapeHandle}`
+  }
+
+  /**
+   * Check if a shape is marked as expired in localStorage
+   */
+  #isShapeExpired(shapeHandle: string): boolean {
+    if (typeof localStorage === `undefined`) return false
+    try {
+      return localStorage.getItem(this.#getShapeStorageKey(shapeHandle)) === `true`
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Mark a shape as expired in localStorage
+   */
+  #markShapeExpired(shapeHandle: string): void {
+    if (typeof localStorage === `undefined`) return
+    try {
+      localStorage.setItem(this.#getShapeStorageKey(shapeHandle), `true`)
+    } catch {
+      // Ignore localStorage errors
+    }
   }
 }
 
