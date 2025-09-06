@@ -11,6 +11,10 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
 
 type ShapeStatus = `syncing` | `up-to-date`
 
+export type TransformRowFunction<T extends Row<unknown> = Row> = (
+  message: T
+) => T
+
 /**
  * A Shape is an object that subscribes to a shape log,
  * keeps a materialised shape `.rows` in memory and
@@ -54,9 +58,14 @@ export class Shape<T extends Row<unknown> = Row> {
   readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
   #status: ShapeStatus = `syncing`
   #error: FetchError | false = false
+  #transformRow?: TransformRowFunction<T> = undefined
 
-  constructor(stream: ShapeStreamInterface<T>) {
+  constructor(
+    stream: ShapeStreamInterface<T>,
+    transformRow?: TransformRowFunction<T>
+  ) {
     this.stream = stream
+    this.#transformRow = transformRow
     this.stream.subscribe(
       this.#process.bind(this),
       this.#handleError.bind(this)
@@ -149,14 +158,17 @@ export class Shape<T extends Row<unknown> = Row> {
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
         shouldNotify = this.#updateShapeStatus(`syncing`)
+        const value = this.#transformRow
+          ? this.#transformRow(message.value)
+          : message.value
         switch (message.headers.operation) {
           case `insert`:
-            this.#data.set(message.key, message.value)
+            this.#data.set(message.key, value)
             break
           case `update`:
             this.#data.set(message.key, {
               ...this.#data.get(message.key)!,
-              ...message.value,
+              ...value,
             })
             break
           case `delete`:

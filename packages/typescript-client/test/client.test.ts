@@ -8,6 +8,7 @@ import {
   FetchError,
   isChangeMessage,
   isControlMessage,
+  TransformRowFunction,
 } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
@@ -114,6 +115,41 @@ describe.for(fetchAndSse)(
       })
 
       expect(rows).toEqual([{ id: id, title: `test title`, priority: 10 }])
+      expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
+      expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
+      expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
+    })
+
+    it(`should transform row with transformRow function`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `test title` })
+
+      const start = Date.now()
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        experimentalLiveSse,
+      })
+
+      // transformRow example: uppercase keys
+      const uppercaseKeys: TransformRowFunction = (row) =>
+        Object.fromEntries(
+          Object.entries(row).map(([k, v]) => [k.toUpperCase(), v])
+        )
+
+      const shape = new Shape(shapeStream, uppercaseKeys)
+
+      const rows = await new Promise((resolve) => {
+        shape.subscribe(({ rows }) => resolve(rows))
+      })
+
+      expect(rows).toEqual([{ ID: id, TITLE: `test title`, PRIORITY: 10 }])
       expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
       expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
       expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
