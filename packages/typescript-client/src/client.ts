@@ -5,9 +5,11 @@ import {
   Row,
   MaybePromise,
   GetExtensions,
+  ChangeMessage,
+  SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
-import { getOffset, isUpToDateMessage } from './helpers'
+import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -43,12 +45,19 @@ import {
   PAUSE_STREAM,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
   ELECTRIC_PROTOCOL_QUERY_PARAMS,
+  LOG_MODE_QUERY_PARAM,
+  SUBSET_PARAM_WHERE,
+  SUBSET_PARAM_WHERE_PARAMS,
+  SUBSET_PARAM_LIMIT,
+  SUBSET_PARAM_OFFSET,
+  SUBSET_PARAM_ORDER_BY,
 } from './constants'
 import {
   EventSourceMessage,
   fetchEventSource,
 } from '@microsoft/fetch-event-source'
 import { expiredShapesCache } from './expired-shapes-cache'
+import { SnapshotTracker } from './snapshot-tracker'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -58,6 +67,7 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
 ])
 
 type Replica = `full` | `default`
+export type LogMode = `changes_only` | `full`
 
 /**
  * PostgreSQL-specific shape parameters that can be provided externally
@@ -114,11 +124,20 @@ export type ExternalParamsRecord<T extends Row<unknown> = Row> = {
   [K in string]: ParamValue | undefined
 } & Partial<PostgresParams<T>> & { [K in ReservedParamKeys]?: never }
 
+export type SubsetParams = {
+  where?: string
+  params?: Record<string, string>
+  limit?: number
+  offset?: number
+  orderBy?: string
+}
+
 type ReservedParamKeys =
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
   | typeof SHAPE_HANDLE_QUERY_PARAM
   | typeof LIVE_QUERY_PARAM
   | typeof OFFSET_QUERY_PARAM
+  | `subset__${string}`
 
 /**
  * External headers type - what users provide.
@@ -258,6 +277,11 @@ export interface ShapeStreamOptions<T = never> {
    */
   experimentalLiveSse?: boolean
 
+  /**
+   * Initial data loading mode
+   */
+  mode?: LogMode
+
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
@@ -293,8 +317,20 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastOffset: Offset
   shapeHandle?: string
   error?: unknown
+  mode: LogMode
 
   forceDisconnectAndRefresh(): Promise<void>
+
+  requestSnapshot(params: {
+    where?: string
+    params?: Record<string, string>
+    limit: number
+    offset?: number
+    orderBy: string
+  }): Promise<{
+    metadata: SnapshotMetadata
+    data: Array<Message<T>>
+  }>
 }
 
 /**
@@ -385,6 +421,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #isUpToDate: boolean = false
   #connected: boolean = false
   #shapeHandle?: string
+  #mode: LogMode
   #schema?: Schema
   #onError?: ShapeStreamErrorHandler
   #requestAbortController?: AbortController
@@ -393,6 +430,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
+  #snapshotTracker = new SnapshotTracker()
+  #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -405,6 +444,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       options.transformer
     )
     this.#onError = this.options.onError
+    this.#mode = this.options.mode ?? `full`
 
     const baseFetchClient =
       options.fetchClient ??
@@ -445,6 +485,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   get lastOffset() {
     return this.#lastOffset
+  }
+
+  get mode() {
+    return this.#mode
   }
 
   async #start(): Promise<void> {
@@ -573,7 +617,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#requestShape()
   }
 
-  async #constructUrl(url: string, resumingFromPause: boolean) {
+  async #constructUrl(
+    url: string,
+    resumingFromPause: boolean,
+    subsetParams?: SubsetParams
+  ) {
     // Resolve headers and params in parallel
     const [requestHeaders, params] = await Promise.all([
       resolveHeaders(this.options.headers),
@@ -583,9 +631,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ])
 
     // Validate params after resolution
-    if (params) {
-      validateParams(params)
-    }
+    if (params) validateParams(params)
 
     const fetchUrl = new URL(url)
 
@@ -612,8 +658,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     }
 
+    if (subsetParams) {
+      if (subsetParams.where)
+        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, subsetParams.where)
+      if (subsetParams.params)
+        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE_PARAMS, subsetParams.params)
+      if (subsetParams.limit)
+        setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
+      if (subsetParams.offset)
+        setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
+      if (subsetParams.orderBy)
+        setQueryParam(fetchUrl, SUBSET_PARAM_ORDER_BY, subsetParams.orderBy)
+    }
+
     // Add Electric's internal parameters
     fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+    fetchUrl.searchParams.set(LOG_MODE_QUERY_PARAM, this.#mode)
 
     if (this.#isUpToDate) {
       // If we are resuming from a paused state, we don't want to perform a live request
@@ -720,7 +780,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#isUpToDate = true
       }
 
-      await this.#publish(batch)
+      // Filter messages using snapshot tracker
+      const messagesToProcess = batch.filter((message) => {
+        if (isChangeMessage(message)) {
+          return !this.#snapshotTracker.shouldRejectMessage(message)
+        }
+        return true // Always process control messages
+      })
+
+      await this.#publish(messagesToProcess)
     }
   }
 
@@ -978,6 +1046,101 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
+    this.#activeSnapshotRequests = 0
+  }
+
+  /**
+   * Request a snapshot for subset of data.
+   *
+   * Only available when mode is `changes_only`.
+   * Returns the insertion point & the data, but more importantly injects the data
+   * into the subscribed data stream. Returned value is unlikely to be useful for the caller,
+   * unless the caller has complicated additional logic.
+   *
+   * Data will be injected in a way that's also tracking further incoming changes, and it'll
+   * skip the ones that are already in the snapshot.
+   *
+   * @param opts - The options for the snapshot request.
+   * @returns The metadata and the data for the snapshot.
+   */
+  async requestSnapshot(opts: SubsetParams): Promise<{
+    metadata: SnapshotMetadata
+    data: Array<ChangeMessage<T>>
+  }> {
+    if (this.#mode === `full`) {
+      throw new Error(
+        `Snapshot requests are not supported in ${this.#mode} mode, as the consumer is guaranteed to observe all data`
+      )
+    }
+    // We shouldn't be getting a snapshot on a shape that's not started
+    if (!this.#started) await this.#start()
+
+    // Pause the stream if this is the first snapshot request
+    this.#activeSnapshotRequests++
+
+    try {
+      if (this.#activeSnapshotRequests === 1) {
+        // Currently this cannot throw, but in case it can later it's in this try block to not have a stuck counter
+        this.#pause()
+      }
+
+      const { fetchUrl, requestHeaders } = await this.#constructUrl(
+        this.options.url,
+        true,
+        opts
+      )
+
+      const { metadata, data } = await this.#fetchSnapshot(
+        fetchUrl,
+        requestHeaders
+      )
+
+      const dataWithEndBoundary = (data as Array<Message<T>>).concat([
+        { headers: { control: `snapshot-end`, ...metadata } },
+      ])
+
+      this.#snapshotTracker.addSnapshot(
+        metadata,
+        new Set(data.map((message) => message.key))
+      )
+      this.#onMessages(dataWithEndBoundary, false)
+
+      return {
+        metadata,
+        data,
+      }
+    } finally {
+      // Resume the stream if this was the last snapshot request
+      this.#activeSnapshotRequests--
+      if (this.#activeSnapshotRequests === 0) {
+        this.#resume()
+      }
+    }
+  }
+
+  async #fetchSnapshot(url: URL, headers: Record<string, string>) {
+    const response = await this.#fetchClient(url.toString(), { headers })
+
+    if (!response.ok) {
+      throw new FetchError(
+        response.status,
+        undefined,
+        undefined,
+        Object.fromEntries([...response.headers.entries()]),
+        url.toString()
+      )
+    }
+
+    const { metadata, data } = await response.json()
+    const batch = this.#messageParser.parse<Array<ChangeMessage<T>>>(
+      JSON.stringify(data),
+      this.#schema!
+    )
+
+    return {
+      metadata,
+      data: batch,
+    }
   }
 }
 

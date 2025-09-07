@@ -87,11 +87,13 @@ export function isVisibleInSnapshot(
   const xid = BigInt(txid)
   const xmin = BigInt(snapshot.xmin)
   const xmax = BigInt(snapshot.xmax)
-  const xip = snapshot.xip.map(BigInt)
+  const xip = snapshot.xip_list.map(BigInt)
 
-  if (xid < xmin) return true
-  if (xid < xmax && !xip.includes(xid)) return true
-  if (xid < xmax) return false
+  // If the transaction id is less than the minimum transaction id, it is visible in the snapshot.
+  // If the transaction id is less than the maximum transaction id and not in the list of active
+  //   transactions at the time of the snapshot, it has been committed before the snapshot was taken
+  //   and is therefore visible in the snapshot.
+  // Otherwise, it is not visible in the snapshot.
 
-  return false
+  return xid < xmin || (xid < xmax && !xip.includes(xid))
 }
