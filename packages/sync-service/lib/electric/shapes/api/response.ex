@@ -52,7 +52,8 @@ defmodule Electric.Shapes.Api.Response do
           no_changes: boolean(),
           status: pos_integer(),
           trace_attrs: %{optional(atom()) => term()},
-          body: Enum.t()
+          body: Enum.t(),
+          finalized?: boolean()
         }
 
   @shape_definition_mismatch %{
