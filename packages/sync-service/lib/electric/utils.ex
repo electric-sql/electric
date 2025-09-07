@@ -748,4 +748,30 @@ defmodule Electric.Utils do
       Keyword.merge(merged, k)
     end)
   end
+
+  @doc """
+  Extract keys from a map that start with a given prefix into a nested map.
+
+  ## Examples
+
+      iex> extract_prefixed_keys_into_map(%{"foo_bar" => "baz", "foo_moo" => "qux", "other" => "value"}, "foo")
+      %{"foo" => %{"bar" => "baz", "moo" => "qux"}, "other" => "value"}
+
+      iex> extract_prefixed_keys_into_map(%{"other" => "value"}, "foo")
+      %{"other" => "value"}
+  """
+  @spec extract_prefixed_keys_into_map(map(), String.t(), String.t()) :: map()
+  def extract_prefixed_keys_into_map(map, prefix, joiner \\ "_") do
+    {prefixed, rest} =
+      Enum.split_with(map, fn {k, _} -> String.starts_with?(k, prefix <> joiner) end)
+
+    if prefixed == [] do
+      map
+    else
+      nested =
+        Map.new(prefixed, fn {k, v} -> {String.replace_prefix(k, prefix <> joiner, ""), v} end)
+
+      Map.new([{prefix, nested} | rest])
+    end
+  end
 end

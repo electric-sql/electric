@@ -429,6 +429,60 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  def serve_shape_response(%Request{} = request) do
+    if request.params.subset do
+      serve_subset_response(request)
+    else
+      serve_shape_log(request)
+    end
+  end
+
+  def serve_shape_response(%Plug.Conn{} = conn, %Request{} = request) do
+    response =
+      case if_not_modified(conn, request) do
+        {:halt, response} ->
+          Response.ensure_cleanup(response)
+
+        {:cont, request} ->
+          serve_shape_response(request)
+      end
+
+    conn
+    |> Plug.Conn.assign(:response, response)
+    |> Response.send(response)
+  end
+
+  def serve_subset_response(%Request{} = request) do
+    if request.params.experimental_live_sse do
+      Response.error(
+        request,
+        "Subset snapshots are a stable view of data, so SSE is not applicable"
+      )
+    end
+
+    with_span(request, "shape_get.plug.serve_subset_response", fn ->
+      do_serve_subset_response(request)
+    end)
+  end
+
+  defp do_serve_subset_response(%Request{} = request) do
+    %{response: response, params: %{subset: subset, shape_definition: shape_definition}} = request
+
+    case Shapes.query_subset(shape_definition, subset, request.api) do
+      {:ok, {metadata, data_stream}} ->
+        %{
+          response
+          | chunked: true,
+            body: encode(request.api, :subset, {metadata, data_stream}),
+            response_type: :subset
+        }
+        |> Response.final()
+
+      {:error, reason} ->
+        Response.error(request, inspect(reason), status: 500)
+    end
+  end
+
   @doc """
   Return shape log data.
   """
@@ -461,7 +515,7 @@ defmodule Electric.Shapes.Api do
   def if_not_modified(conn, request) do
     etag = Response.etag(request.response, quote: false)
 
-    if etag in if_none_match(conn) do
+    if is_nil(request.params.subset) and etag in if_none_match(conn) do
       %{response: response} =
         Request.update_response(
           request,
@@ -871,7 +925,7 @@ defmodule Electric.Shapes.Api do
     OpenTelemetry.with_span(name, attributes, stack_id(request), fun)
   end
 
-  @spec stack_id(Api.t() | Request.t()) :: String.t()
+  @spec stack_id(Api.t() | Request.t() | Response.t()) :: String.t()
   def stack_id(%Api{stack_id: stack_id}), do: stack_id
   def stack_id(%{api: %{stack_id: stack_id}}), do: stack_id
 
@@ -908,7 +962,7 @@ defmodule Electric.Shapes.Api do
   end
 
   defp encode(%Api{encoder: encoder}, type, message)
-       when type in [:message, :log] do
+       when type in [:message, :log, :subset] do
     apply(encoder, type, [message])
   end
 

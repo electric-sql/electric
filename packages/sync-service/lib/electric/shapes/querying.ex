@@ -6,6 +6,42 @@ defmodule Electric.Shapes.Querying do
 
   require Logger
 
+  def query_subset(conn, shape, subset, mark) do
+    # When querying a subset, we select same columns as the base shape
+    table = Utils.relation_to_sql(shape.root_table)
+
+    where =
+      case {shape.where, subset.where} do
+        {nil, nil} ->
+          ""
+
+        {nil, %{query: where}} ->
+          " WHERE " <> where
+
+        {%{query: where}, nil} ->
+          " WHERE " <> where
+
+        {%{query: base_where}, %{query: where}} ->
+          " WHERE " <> base_where <> " AND (" <> where <> ")"
+      end
+
+    order_by = if order_by = subset.order_by, do: " ORDER BY " <> order_by, else: ""
+    limit = if limit = subset.limit, do: " LIMIT #{limit}", else: ""
+    offset = if offset = subset.offset, do: " OFFSET #{offset}", else: ""
+
+    {json_like_select, params} = json_like_select(shape, snapshot_mark: mark)
+
+    query =
+      Postgrex.prepare!(
+        conn,
+        table,
+        ~s|SELECT #{json_like_select} FROM #{table} #{where} #{order_by} #{limit} #{offset}|
+      )
+
+    Postgrex.stream(conn, query, params)
+    |> Stream.flat_map(& &1.rows)
+  end
+
   @doc """
   Streams the initial data for a shape. Query results are returned as a stream of JSON strings, as prepared on PostgreSQL.
   """
@@ -18,8 +54,19 @@ defmodule Electric.Shapes.Querying do
   def stream_initial_data(
         conn,
         stack_id,
-        %Shape{root_table: root_table} = shape,
+        shape,
         chunk_bytes_threshold \\ LogChunker.default_chunk_size_threshold()
+      )
+
+  def stream_initial_data(_, _, %Shape{log_mode: :changes_only}, _chunk_bytes_threshold) do
+    []
+  end
+
+  def stream_initial_data(
+        conn,
+        stack_id,
+        %Shape{root_table: root_table} = shape,
+        chunk_bytes_threshold
       ) do
     OpenTelemetry.with_span("shape_read.stream_initial_data", [], stack_id, fn ->
       table = Utils.relation_to_sql(root_table)
@@ -51,14 +98,17 @@ defmodule Electric.Shapes.Querying do
     end)
   end
 
-  defp json_like_select(%Shape{
-         root_table: root_table,
-         selected_columns: columns,
-         root_pk: pk_cols
-       }) do
+  defp json_like_select(
+         %Shape{
+           root_table: root_table,
+           selected_columns: columns,
+           root_pk: pk_cols
+         },
+         opts \\ []
+       ) do
     key_part = build_key_part(root_table, pk_cols)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table)
+    headers_part = build_headers_part(root_table, opts)
 
     # We're building a JSON string that looks like this:
     #
@@ -78,12 +128,18 @@ defmodule Electric.Shapes.Querying do
     {query, []}
   end
 
-  defp build_headers_part(root_table) do
-    ~s['"headers":{"operation":"insert","relation":#{build_relation_header(root_table)}}']
-  end
+  defp build_headers_part({relation, table}, opts) do
+    headers = %{operation: "insert", relation: [relation, table]}
 
-  defp build_relation_header({schema, table}) do
-    ~s'["#{escape_sql_json_interpolation(schema)}","#{escape_sql_json_interpolation(table)}"]'
+    headers =
+      case Keyword.get(opts, :snapshot_mark) do
+        nil -> headers
+        mark -> Map.put(headers, :snapshot_mark, mark)
+      end
+      |> Jason.encode!()
+      |> Utils.escape_quotes(?')
+
+    ~s['"headers":#{headers}']
   end
 
   defp build_key_part(root_table, pk_cols) do

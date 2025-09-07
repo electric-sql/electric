@@ -37,6 +37,12 @@ defmodule Electric.Shapes do
     shape_cache.get_shape(shape_def, opts)
   end
 
+  @spec get_shape_by_handle(Access.t(), shape_handle()) :: Shape.t() | nil
+  def get_shape_by_handle(config, shape_handle) do
+    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
+    shape_cache.get_shape_by_handle(shape_handle, opts)
+  end
+
   @doc """
   Get or create a shape handle and return it along with the latest offset of the shape
   """
@@ -96,5 +102,9 @@ defmodule Electric.Shapes do
 
   defp shape_storage(config, shape_handle) do
     Storage.for_shape(shape_handle, Access.fetch!(config, :storage))
+  end
+
+  def query_subset(shape, subset, opts) do
+    Electric.Shapes.PartialModes.query_subset(shape, subset, opts)
   end
 end
