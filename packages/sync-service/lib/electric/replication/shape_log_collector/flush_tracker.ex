@@ -53,8 +53,12 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   2. Determine affected shapes
   3. For each shape,
     1. If Mapping already has the shape, update `last_sent` to the max offset of the transaction
-    2. If Mapping doesn’t have the shape, add it with `{last_sent, prev_log_offset}` where `prev_log_offset` is the offset just before this transaction
-  4. If Mapping is empty after this update, then we’re up-to-date and should consider this transaction immediately flushed. Update `last_global_flushed_offset` and `maxFlushedOffset` to be the max offset of the transaction
+    2. If Mapping doesn’t have the shape, add it with `{last_sent, prev_log_offset}` where `prev_log_offset` is an
+       artificial offset with its `tx_offset` set to one less than the incoming transaction. This is a safe upper bound
+       to use, as the shape must have flushed all relevant data before this transaction, and thus even if the previous
+       transaction did not affect this shape we can consider it "flushed" by the shape.
+  4. If Mapping is empty after this update, then we’re up-to-date and should consider this transaction immediately flushed.
+     Set `last_global_flushed_offset` to equal `last_seen_offset` and notify appropriately. See step 2 of writer flush process.
   5. Wait for the writers to send the flushed offset
 
   On writer flush (i.e. when writer notifies the central process of a flushed write) notifying with `newlast_flushed` expressed via `handle_flush_notification/3`
@@ -66,7 +70,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     1. Determine the new global flushed offset:
        `last_global_flushed_offset = max(last_global_flushed_offset, min(for {_, {_, last_flushed}} <- Mapping, do: last_flushed))`
        We take the maximum between the already last flushed offset, and the lowest flushed offset across shapes that
-       had not caught up. Because this `min` is expected to be called very often, there should exist a lookup structure to get this `min` in a fast manner
+       had not caught up. Because this `min` is expected to be called very often, we use a lookup structure to get this `min` in a fast manner
   4. On last_global_flushed_offset update - notify the replication client with actual transaction LSN:
     1. If flushes are caught up (i.e. Mapping is empty), then notify with LSN = tx_offset of the last flushed offset
     2. Otherwise, it’s complicated to determine which transactions have been flushed completely without keeping track of
@@ -101,25 +105,26 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
         %Transaction{lsn: _lsn, last_log_offset: last_log_offset},
         affected_shapes
       ) do
-    # for affected shapes that are not already tracked, assume their last flushed offset
+    # for affected shapes that are not currently tracked, assume their last flushed offset
     # is the transaction before this one, which is a safe upper bound
-    prev_log_offset = %LogOffset{last_log_offset | tx_offset: last_log_offset.tx_offset - 1}
+    prev_log_offset = %LogOffset{tx_offset: last_log_offset.tx_offset - 1}
 
-    {last_flushed, mapset} =
-      Enum.reduce(affected_shapes, {last_flushed, MapSet.new()}, fn shape, {acc, mapset} ->
+    {last_flushed, new_shape_ids} =
+      Enum.reduce(affected_shapes, {last_flushed, MapSet.new()}, fn shape, {acc, new_shape_ids} ->
         case Map.fetch(acc, shape) do
           {:ok, {_, last_flushed_offset}} ->
-            {Map.put(acc, shape, {last_log_offset, last_flushed_offset}), mapset}
+            {Map.put(acc, shape, {last_log_offset, last_flushed_offset}), new_shape_ids}
 
           :error ->
-            {Map.put(acc, shape, {last_log_offset, prev_log_offset}), MapSet.put(mapset, shape)}
+            {Map.put(acc, shape, {last_log_offset, prev_log_offset}),
+             MapSet.put(new_shape_ids, shape)}
         end
       end)
 
     min_incomplete_flush_tree =
-      if MapSet.size(mapset) == 0,
+      if MapSet.size(new_shape_ids) == 0,
         do: min_incomplete_flush_tree,
-        else: add_to_tree(min_incomplete_flush_tree, prev_log_offset, mapset)
+        else: add_to_tree(min_incomplete_flush_tree, prev_log_offset, new_shape_ids)
 
     state =
       %__MODULE__{
@@ -131,8 +136,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
 
     if last_flushed == %{} do
       # We're caught up
-      %__MODULE__{state | last_global_flushed_offset: last_log_offset}
-      |> notify_global_offset_updated()
+      update_global_offset(state)
     else
       state
     end
@@ -195,7 +199,11 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
          %__MODULE__{last_flushed: last_flushed, last_seen_offset: last_seen} = state
        )
        when last_flushed == %{} do
-    %__MODULE__{state | last_global_flushed_offset: last_seen}
+    %__MODULE__{
+      state
+      | last_global_flushed_offset: last_seen,
+        min_incomplete_flush_tree: :gb_trees.empty()
+    }
     |> notify_global_offset_updated()
   end
 
