@@ -105,8 +105,8 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     {last_flushed, mapset} =
       Enum.reduce(affected_shapes, {last_flushed, mapset}, fn shape, {acc, mapset} ->
         case Map.fetch(acc, shape) do
-          {:ok, {_, last_flushed}} ->
-            {Map.put(acc, shape, {last_log_offset, last_flushed}), mapset}
+          {:ok, {_, last_flushed_offset}} ->
+            {Map.put(acc, shape, {last_log_offset, last_flushed_offset}), mapset}
 
           :error ->
             {Map.put(acc, shape, {last_log_offset, last_global_flushed_offset}),
