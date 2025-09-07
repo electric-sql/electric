@@ -11,6 +11,7 @@ export type Value<Extensions = never> =
   | Extensions
   | Value<Extensions>[]
   | { [key: string]: Value<Extensions> }
+  | number[]
 
 export type Row<Extensions = never> = Record<string, Value<Extensions>>
 
@@ -42,7 +43,7 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
   old_value?: Partial<T> // Only provided for updates if `replica` is `full`
-  headers: Header & { operation: Operation }
+  headers: Header & { operation: Operation; txids?: number[] }
 }
 
 // Define the type for a record
@@ -131,3 +132,21 @@ export type TypedMessages<T extends Row<unknown> = Row> = {
 }
 
 export type MaybePromise<T> = T | Promise<T>
+
+/**
+ * Metadata that allows the consumer to know which changes have been incorporated into this snapshot.
+ *
+ * For any data that has a known transaction ID `xid` (and e.g. a key that's part of the snapshot):
+ * - if `xid` < `xmin` - included, change can be skipped
+ * - if `xid` < `xmax` AND `xid` not in `xip` - included, change can be skipped
+ * - if `xid` < `xmax` AND `xid` in `xip` - parallel, not included, change must be processed
+ * - if `xid` >= `xmax` - not included, change must be processed, and we can stop filtering after we see this
+ */
+export type SnapshotMetadata = {
+  xmin: number
+  xmax: number
+  xip: number[]
+  /** Random number that's reflected in the `snapshot_mark` header on the snapshot items. */
+  snapshot_mark: number
+  database_lsn: string
+}
