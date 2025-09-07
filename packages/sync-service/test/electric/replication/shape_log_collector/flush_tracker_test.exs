@@ -1,5 +1,5 @@
 defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector.FlushTracker

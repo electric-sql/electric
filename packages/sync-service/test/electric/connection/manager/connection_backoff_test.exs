@@ -1,5 +1,5 @@
 defmodule Electric.Connection.Manager.ConnectionBackoffTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   alias Electric.Connection.Manager.ConnectionBackoff
 
   describe "total_retry_time/1" do

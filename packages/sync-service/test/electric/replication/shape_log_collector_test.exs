@@ -252,6 +252,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     test "correctly handles flush notifications", ctx do
       lsn = Lsn.from_string("0/10")
+      prev_lsn = Lsn.increment(lsn, -1)
 
       Mock.Inspector
       |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
@@ -268,6 +269,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
 
       Registry.register(name, key, nil)
+
+      irrelevant_txn = %Transaction{xid: 99, lsn: prev_lsn} |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(irrelevant_txn, ctx.server)
+      expected_lsn = Lsn.to_integer(prev_lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}, 50
 
       txn =
         %Transaction{xid: 100, lsn: lsn}
