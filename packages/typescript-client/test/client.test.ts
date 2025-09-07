@@ -127,7 +127,7 @@ describe.for(fetchAndSse)(
     }) => {
       const [id] = await insertIssues({ title: `test title` })
 
-      // transformRow example: uppercase keys
+      // transformer example: uppercase keys
       const uppercaseKeys: TransformFunction = (row) =>
         Object.fromEntries(
           Object.entries(row).map(([k, v]) => [k.toUpperCase(), v])
