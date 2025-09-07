@@ -15,6 +15,8 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback list_shapes(ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
   @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
+  @callback get_existing_shape_definition(ShapeStatus.t(), shape_handle()) ::
+              Shape.t() | nil
   @callback add_shape(ShapeStatus.t(), Shape.t()) ::
               {:ok, shape_handle()} | {:error, term()}
   @callback initialise_shape(ShapeStatus.t(), shape_handle(), xmin(), LogOffset.t()) ::
@@ -219,6 +221,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
     case :ets.lookup(meta_table, {@shape_meta_data, shape_handle}) do
       [] -> nil
       [{_, _shape, _xmin, offset, _}] -> {shape_handle, offset}
+    end
+  end
+
+  @impl true
+  def get_existing_shape_definition(meta_table, shape_handle) do
+    case :ets.lookup(meta_table, {@shape_meta_data, shape_handle}) do
+      [] -> nil
+      [{_, shape, _xmin, _offset, _}] -> shape
     end
   end
 

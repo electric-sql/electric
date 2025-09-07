@@ -6,6 +6,35 @@ defmodule Electric.Shapes.Querying do
 
   require Logger
 
+  def query_subset(conn, shape, opts) do
+    # When querying a subset, we select same columns as the base shape
+    table = Utils.relation_to_sql(shape.root_table)
+
+    where =
+      case {shape.where, opts[:where]} do
+        {nil, nil} -> ""
+        {nil, where} -> " WHERE " <> where
+        {%{query: where}, nil} -> " WHERE " <> where
+        {%{query: base_where}, where} -> " WHERE " <> base_where <> " AND (" <> where <> ")"
+      end
+
+    offset = if offset = opts[:offset], do: " OFFSET " <> offset, else: ""
+
+    {json_like_select, params} = json_like_select(shape, false)
+
+    query =
+      Postgrex.prepare!(
+        conn,
+        table,
+        ~s|SELECT #{json_like_select} FROM #{table} #{where} ORDER BY #{opts[:order_by]} LIMIT #{opts[:limit]} #{offset}|
+      )
+
+    dbg(query)
+
+    Postgrex.stream(conn, query, params)
+    |> Stream.flat_map(& &1.rows)
+  end
+
   @doc """
   Streams the initial data for a shape. Query results are returned as a stream of JSON strings, as prepared on PostgreSQL.
   """
@@ -18,8 +47,19 @@ defmodule Electric.Shapes.Querying do
   def stream_initial_data(
         conn,
         stack_id,
-        %Shape{root_table: root_table} = shape,
+        shape,
         chunk_bytes_threshold \\ LogChunker.default_chunk_size_threshold()
+      )
+
+  def stream_initial_data(_, _, %Shape{log_mode: :changes_only}, _chunk_bytes_threshold) do
+    []
+  end
+
+  def stream_initial_data(
+        conn,
+        stack_id,
+        %Shape{root_table: root_table} = shape,
+        chunk_bytes_threshold
       ) do
     OpenTelemetry.with_span("shape_read.stream_initial_data", [], stack_id, fn ->
       table = Utils.relation_to_sql(root_table)
@@ -51,14 +91,17 @@ defmodule Electric.Shapes.Querying do
     end)
   end
 
-  defp json_like_select(%Shape{
-         root_table: root_table,
-         selected_columns: columns,
-         root_pk: pk_cols
-       }) do
+  defp json_like_select(
+         %Shape{
+           root_table: root_table,
+           selected_columns: columns,
+           root_pk: pk_cols
+         },
+         with_headers? \\ true
+       ) do
     key_part = build_key_part(root_table, pk_cols)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table)
+    headers_part = if with_headers?, do: "|| ',' || " <> build_headers_part(root_table), else: ""
 
     # We're building a JSON string that looks like this:
     #
@@ -73,7 +116,7 @@ defmodule Electric.Shapes.Querying do
     #   "headers": {"operation": "insert", "relation": ["public", "test_table"]}
     # }
     query =
-      ~s['{' || #{key_part} || ',' || #{value_part} || ',' || #{headers_part} || '}']
+      ~s['{' || #{key_part} || ',' || #{value_part} #{headers_part} || '}']
 
     {query, []}
   end

@@ -52,6 +52,7 @@ defmodule Electric.Shapes.Api.Params do
     field(:params, {:map, :string}, default: %{})
     field(@tmp_compaction_flag, :boolean, default: false)
     field(@tmp_sse_flag, :boolean, default: false)
+    field(:log, Ecto.Enum, values: [:changes_only, :full], default: :full)
   end
 
   @type t() :: %__MODULE__{}
@@ -199,7 +200,8 @@ defmodule Electric.Shapes.Api.Params do
            replica: replica,
            inspector: api.inspector,
            feature_flags: api.feature_flags,
-           storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)}
+           storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)},
+           log_mode: fetch_field!(changeset, :log)
          ) do
       {:ok, shape} ->
         put_change(changeset, :shape_definition, shape)

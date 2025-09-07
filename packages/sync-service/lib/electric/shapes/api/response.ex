@@ -52,7 +52,8 @@ defmodule Electric.Shapes.Api.Response do
           no_changes: boolean(),
           status: pos_integer(),
           trace_attrs: %{optional(atom()) => term()},
-          body: Enum.t()
+          body: Enum.t(),
+          finalized?: boolean()
         }
 
   @shape_definition_mismatch %{
@@ -137,6 +138,14 @@ defmodule Electric.Shapes.Api.Response do
 
     conn
     |> put_resp_headers(response)
+    |> send_stream(response)
+  end
+
+  def send_subset(%Plug.Conn{} = conn, %__MODULE__{} = response) do
+    validate_response_finalized!(response)
+
+    conn
+    |> put_shape_handle_header(response)
     |> send_stream(response)
   end
 

@@ -34,6 +34,7 @@ defmodule Electric.Shapes.Shape do
     :explicitly_selected_columns,
     shape_dependencies: [],
     shape_dependencies_handles: [],
+    log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
     replica: @default_replica
@@ -47,6 +48,7 @@ defmodule Electric.Shapes.Shape do
   @type storage_config :: %{
           compaction: :enabled | :disabled
         }
+  @type log_mode() :: :changes_only | :full
   @type flag() :: :selects_all_columns | :non_primitive_columns_in_where
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
@@ -59,7 +61,8 @@ defmodule Electric.Shapes.Shape do
           explicitly_selected_columns: [String.t(), ...],
           replica: replica(),
           storage: storage_config() | nil,
-          shape_dependencies: [t(), ...]
+          shape_dependencies: [t(), ...],
+          log_mode: log_mode()
         }
 
   @type json_relation() :: [String.t(), ...]
@@ -76,7 +79,8 @@ defmodule Electric.Shapes.Shape do
           flags: %{optional(flag()) => boolean()},
           replica: String.t(),
           storage: storage_config() | nil,
-          shape_dependencies: [json_safe(), ...]
+          shape_dependencies: [json_safe(), ...],
+          log_mode: log_mode()
         }
 
   @doc """
@@ -149,7 +153,8 @@ defmodule Electric.Shapes.Shape do
       },
       default: nil,
       type_spec: quote(do: nil | Electric.Shapes.Shape.storage_config())
-    ]
+    ],
+    log_mode: [type: {:in, [:changes_only, :full]}, default: :full]
   ]
   @shape_schema NimbleOptions.new!(@schema_options)
 
@@ -220,7 +225,8 @@ defmodule Electric.Shapes.Shape do
          explicitly_selected_columns: explicitly_selected_columns,
          replica: Map.get(opts, :replica, :default),
          storage: Map.get(opts, :storage) || %{compaction: :disabled},
-         shape_dependencies: shape_dependencies
+         shape_dependencies: shape_dependencies,
+         log_mode: Map.fetch!(opts, :log_mode)
        }}
     end
   end
@@ -272,6 +278,7 @@ defmodule Electric.Shapes.Shape do
       shared_opts
       |> Map.put(:select, subquery)
       |> Map.put(:autofill_pk_select?, true)
+      |> Map.put(:log_mode, :full)
       |> new()
     end)
   end
@@ -609,7 +616,8 @@ defmodule Electric.Shapes.Shape do
       explicitly_selected_columns: shape.explicitly_selected_columns,
       storage: shape.storage,
       replica: shape.replica,
-      shape_dependencies: Enum.map(shape.shape_dependencies, &to_json_safe/1)
+      shape_dependencies: Enum.map(shape.shape_dependencies, &to_json_safe/1),
+      log_mode: shape.log_mode
     }
   end
 
@@ -644,7 +652,8 @@ defmodule Electric.Shapes.Shape do
            Map.get(data, "explicitly_selected_columns", selected_columns),
          storage: storage_config_from_json(storage),
          replica: String.to_existing_atom(replica),
-         shape_dependencies: shape_dependencies
+         shape_dependencies: shape_dependencies,
+         log_mode: String.to_existing_atom(Map.get(data, "log_mode", "full"))
        }}
     end
   end

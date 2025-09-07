@@ -5,6 +5,8 @@ import {
   Row,
   MaybePromise,
   GetExtensions,
+  ChangeMessage,
+  SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
 import { getOffset, isUpToDateMessage } from './helpers'
@@ -43,6 +45,12 @@ import {
   PAUSE_STREAM,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
   ELECTRIC_PROTOCOL_QUERY_PARAMS,
+  LOG_MODE_QUERY_PARAM,
+  SUBSET_PARAM_WHERE,
+  SUBSET_PARAM_WHERE_PARAMS,
+  SUBSET_PARAM_LIMIT,
+  SUBSET_PARAM_OFFSET,
+  SUBSET_PARAM_ORDER_BY,
 } from './constants'
 import {
   EventSourceMessage,
@@ -58,6 +66,7 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
 ])
 
 type Replica = `full` | `default`
+type LogMode = `eager` | `lazy`
 
 /**
  * PostgreSQL-specific shape parameters that can be provided externally
@@ -114,11 +123,20 @@ export type ExternalParamsRecord<T extends Row<unknown> = Row> = {
   [K in string]: ParamValue | undefined
 } & Partial<PostgresParams<T>> & { [K in ReservedParamKeys]?: never }
 
+export type ExternalSubsetParamsRecord = {
+  where?: string
+  params?: Record<string, string>
+  limit: number
+  offset?: number
+  orderBy: string
+}
+
 type ReservedParamKeys =
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
   | typeof SHAPE_HANDLE_QUERY_PARAM
   | typeof LIVE_QUERY_PARAM
   | typeof OFFSET_QUERY_PARAM
+  | `subset[${string}]`
 
 /**
  * External headers type - what users provide.
@@ -258,6 +276,11 @@ export interface ShapeStreamOptions<T = never> {
    */
   experimentalLiveSse?: boolean
 
+  /**
+   * Initial data loading mode
+   */
+  mode?: LogMode
+
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
@@ -295,6 +318,17 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   error?: unknown
 
   forceDisconnectAndRefresh(): Promise<void>
+
+  requestSnapshot(params: {
+    where?: string
+    params?: Record<string, string>
+    limit: number
+    offset?: number
+    orderBy: string
+  }): Promise<{
+    metadata: SnapshotMetadata
+    data: Array<{ key: string; value: T }>
+  }>
 }
 
 /**
@@ -393,6 +427,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
+  #observedKeys = new Set<string>()
+  #waitingForTxns = new Map<SnapshotMetadata, Set<string>>()
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -573,7 +609,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#requestShape()
   }
 
-  async #constructUrl(url: string, resumingFromPause: boolean) {
+  async #constructUrl(
+    url: string,
+    resumingFromPause: boolean,
+    subsetParams?: ExternalSubsetParamsRecord
+  ) {
     // Resolve headers and params in parallel
     const [requestHeaders, params] = await Promise.all([
       resolveHeaders(this.options.headers),
@@ -583,9 +623,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ])
 
     // Validate params after resolution
-    if (params) {
-      validateParams(params)
-    }
+    if (params) validateParams(params)
 
     const fetchUrl = new URL(url)
 
@@ -612,8 +650,25 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     }
 
+    if (subsetParams) {
+      if (subsetParams.where)
+        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, subsetParams.where)
+      if (subsetParams.params)
+        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE_PARAMS, subsetParams.params)
+      if (subsetParams.limit)
+        setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
+      if (subsetParams.offset)
+        setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
+      if (subsetParams.orderBy)
+        setQueryParam(fetchUrl, SUBSET_PARAM_ORDER_BY, subsetParams.orderBy)
+    }
+
     // Add Electric's internal parameters
     fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+    fetchUrl.searchParams.set(
+      LOG_MODE_QUERY_PARAM,
+      this.options.mode ?? `eager`
+    )
 
     if (this.#isUpToDate) {
       // If we are resuming from a paused state, we don't want to perform a live request
@@ -978,6 +1033,64 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#isUpToDate = false
     this.#connected = false
     this.#schema = undefined
+  }
+
+  async requestSnapshot(opts: ExternalSubsetParamsRecord): Promise<{
+    metadata: SnapshotMetadata
+    data: Array<{ key: string; value: T }>
+  }> {
+    if ((this.options.mode ?? `eager`) === `eager`) {
+      throw new Error(
+        `Snapshot requests are not supported in eager mode, as the consumer is guaranteed to observe all data`
+      )
+    }
+    // We shouldn't be getting a snapshot on a shape that's not started
+    if (!this.#started) await this.#start()
+
+    const { fetchUrl, requestHeaders } = await this.#constructUrl(
+      this.options.url,
+      true,
+      opts
+    )
+
+    const { metadata, data } = await this.#fetchSnapshot(
+      fetchUrl,
+      requestHeaders
+    )
+    this.#waitingForTxns.set(
+      metadata,
+      new Set(data.map((message) => message.key))
+    )
+
+    return {
+      metadata,
+      data,
+    }
+  }
+
+  async #fetchSnapshot(url: URL, headers: Record<string, string>) {
+    const response = await this.#fetchClient(url.toString(), { headers })
+
+    if (!response.ok) {
+      throw new FetchError(
+        response.status,
+        undefined,
+        undefined,
+        Object.fromEntries([...response.headers.entries()]),
+        url.toString()
+      )
+    }
+
+    const { metadata, data } = await response.json()
+    const batch = this.#messageParser.parse<Array<{ key: string; value: T }>>(
+      JSON.stringify(data),
+      this.#schema!
+    )
+
+    return {
+      metadata,
+      data: batch,
+    }
   }
 }
 

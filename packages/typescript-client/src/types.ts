@@ -131,3 +131,18 @@ export type TypedMessages<T extends Row<unknown> = Row> = {
 }
 
 export type MaybePromise<T> = T | Promise<T>
+
+/**
+ * Metadata that allows the consumer to know which changes have been incorporated into this snapshot.
+ *
+ * For any data that has a known transaction ID `xid` (and e.g. a key that's part of the snapshot):
+ * - if `xid` < `xmin` - included, change can be skipped
+ * - if `xid` < `xmax` AND `xid` not in `xip` - included, change can be skipped
+ * - if `xid` < `xmax` AND `xid` in `xip` - parallel, not included, change must be processed
+ * - if `xid` >= `xmax` - not included, change must be processed, and we can stop filtering after we see this
+ */
+export type SnapshotMetadata = {
+  xmin: string
+  xmax: string
+  xip: string[]
+}
