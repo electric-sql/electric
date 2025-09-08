@@ -453,7 +453,12 @@ defmodule Electric.Postgres.ReplicationClient do
     >>
   end
 
-  defp apply_with_retries(mfa, time_remaining \\ 1_000) do
+  # Retry applying the given MFA for up to @max_retry_time milliseconds, used for
+  # processing transactions without crashing if the processor is down. The max retry
+  # time is only there to avoid a worst case scenario, as the processor being unable
+  # to process things for this long should lead to the replication client being killed.
+  @max_retry_time 10 * 60_000
+  defp apply_with_retries(mfa, time_remaining \\ @max_retry_time) do
     start_time = System.monotonic_time(:millisecond)
     {m, f, args} = mfa
 
