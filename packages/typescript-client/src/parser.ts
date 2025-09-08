@@ -19,9 +19,9 @@ export type Parser<Extensions = never> = {
   [key: string]: ParseFunction<Extensions>
 }
 
-export type TransformFunction = (
-  message: Record<string, unknown>
-) => Record<string, unknown>
+export type TransformFunction<Extensions = never> = (
+  message: Row<Extensions>
+) => Row<Extensions>
 
 const parseNumber = (value: string) => Number(value)
 const parseBool = (value: string) => value === `true` || value === `t`
@@ -98,10 +98,10 @@ export function pgArrayParser<Extensions>(
 
 export class MessageParser<T extends Row<unknown>> {
   private parser: Parser<GetExtensions<T>>
-  private transformer?: TransformFunction
+  private transformer?: TransformFunction<GetExtensions<T>>
   constructor(
     parser?: Parser<GetExtensions<T>>,
-    transformer?: TransformFunction
+    transformer?: TransformFunction<GetExtensions<T>>
   ) {
     // Merge the provided parser with the default parser
     // to use the provided parser whenever defined

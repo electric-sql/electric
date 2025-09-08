@@ -259,7 +259,7 @@ export interface ShapeStreamOptions<T = never> {
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
-  transformer?: TransformFunction
+  transformer?: TransformFunction<T>
 
   /**
    * A function for handling shapestream errors.
