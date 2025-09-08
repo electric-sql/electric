@@ -38,7 +38,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
          stack_id: stack_id,
          connection_opts: connection_opts,
          replication_opts: replication_opts,
-         pool_opts: [name: Electric.Connection.Manager.pool_name(stack_id), pool_size: 2],
+         pool_opts: [pool_size: 2],
          timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
          shape_cache_opts: [
            stack_id: stack_id,
@@ -249,6 +249,37 @@ defmodule Electric.Connection.ConnectionManagerTest do
                  "SELECT pubname FROM pg_publication WHERE pubname = $1",
                  [replication_opts[:publication_name]]
                )
+    end
+  end
+
+  describe "pool_sizes/1" do
+    test "uses the given pool size for both if size is small" do
+      # we need a pool size of at least 2
+      assert %{admin: 1, snapshot: 1} =
+               Electric.Connection.Manager.pool_sizes(1)
+
+      assert %{admin: 1, snapshot: 1} =
+               Electric.Connection.Manager.pool_sizes(2)
+
+      assert %{admin: 1, snapshot: 3} =
+               Electric.Connection.Manager.pool_sizes(4)
+
+      assert %{admin: 1, snapshot: 5} =
+               Electric.Connection.Manager.pool_sizes(6)
+
+      assert %{admin: 2, snapshot: 8} =
+               Electric.Connection.Manager.pool_sizes(10)
+    end
+
+    test "splits the pool between both roles for large enough sizes" do
+      assert %{admin: 4, snapshot: 16} =
+               Electric.Connection.Manager.pool_sizes(20)
+
+      assert %{admin: 4, snapshot: 36} =
+               Electric.Connection.Manager.pool_sizes(40)
+
+      assert %{admin: 4, snapshot: 96} =
+               Electric.Connection.Manager.pool_sizes(100)
     end
   end
 

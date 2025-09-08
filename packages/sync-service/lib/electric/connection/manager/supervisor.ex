@@ -41,7 +41,6 @@ defmodule Electric.Connection.Manager.Supervisor do
   def start_replication_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
-    db_pool_opts = Keyword.fetch!(opts, :pool_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
     persistent_kv = Keyword.fetch!(opts, :persistent_kv)
@@ -61,7 +60,7 @@ defmodule Electric.Connection.Manager.Supervisor do
        publication_name: Keyword.fetch!(replication_opts, :publication_name),
        can_alter_publication?: Keyword.fetch!(opts, :can_alter_publication?),
        manual_table_publishing?: Keyword.fetch!(opts, :manual_table_publishing?),
-       db_pool: Keyword.fetch!(db_pool_opts, :name),
+       db_pool: Electric.Connection.Manager.admin_pool(stack_id),
        update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0)}
 
     shape_log_collector_spec =
