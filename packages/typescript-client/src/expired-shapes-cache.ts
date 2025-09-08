@@ -11,12 +11,12 @@ export class ExpiredShapesCache {
   private max: number = 250
   private readonly storageKey = `electric_expired_shapes`
 
-  isExpired(shapeHandle: string): boolean {
-    return this.data[shapeHandle]?.expired || false
+  isExpired(shapeUrl: string): boolean {
+    return this.data[shapeUrl]?.expired || false
   }
 
-  markExpired(shapeHandle: string): void {
-    this.data[shapeHandle] = { expired: true, time: Date.now() }
+  markExpired(shapeUrl: string): void {
+    this.data[shapeUrl] = { expired: true, time: Date.now() }
 
     const keys = Object.keys(this.data)
     if (keys.length > this.max) {

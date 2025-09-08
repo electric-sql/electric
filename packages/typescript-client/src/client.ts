@@ -520,10 +520,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // pseudo-handle based on the current one to act as a
         // consistent cache buster
 
-        // Store the current shape handle as expired to avoid future 409s
-        if (this.#shapeHandle) {
-          this.#markShapeExpired(this.#shapeHandle)
-        }
+        // Store the current shape URL as expired to avoid future 409s
+        this.#expiredShapesCache.markExpired(fetchUrl.toString())
 
         const newShapeHandle =
           e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
@@ -576,6 +574,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (params.params)
         setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
 
+      // Add cache buster for shapes known to be expired to prevent 409s
+      if (this.#expiredShapesCache.isExpired(fetchUrl.toString())) {
+        fetchUrl.searchParams.set(SHAPE_CACHE_BUSTER_QUERY_PARAM, `expired`)
+      }
+
       // Add any remaining custom parameters
       const customParams = { ...params }
       delete customParams.table
@@ -608,14 +611,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#shapeHandle) {
       // This should probably be a header for better cache breaking?
       fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
-
-      // Add cacheBuster for shapes known to be expired to prevent 409s
-      if (this.#isShapeExpired(this.#shapeHandle)) {
-        fetchUrl.searchParams.set(
-          SHAPE_CACHE_BUSTER_QUERY_PARAM,
-          `expired_${Date.now()}`
-        )
-      }
     }
 
     // sort query params in-place for stable URLs and improved cache hits
@@ -962,20 +957,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * LRU cache for tracking expired shapes with automatic cleanup
    */
   #expiredShapesCache = new ExpiredShapesCache()
-
-  /**
-   * Check if a shape is marked as expired
-   */
-  #isShapeExpired(shapeHandle: string): boolean {
-    return this.#expiredShapesCache.isExpired(shapeHandle)
-  }
-
-  /**
-   * Mark a shape as expired
-   */
-  #markShapeExpired(shapeHandle: string): void {
-    this.#expiredShapesCache.markExpired(shapeHandle)
-  }
 }
 
 /**
