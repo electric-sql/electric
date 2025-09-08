@@ -1,7 +1,10 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { ShapeStream } from '../src'
-import { ExpiredShapesCache, expiredShapesCache } from '../src/expired-shapes-cache'
-import { SHAPE_CACHE_BUSTER_QUERY_PARAM } from '../src/constants'
+import {
+  ExpiredShapesCache,
+  expiredShapesCache,
+} from '../src/expired-shapes-cache'
+import { EXPIRED_HANDLE_QUERY_PARAM } from '../src/constants'
 
 describe(`ExpiredShapesCache`, () => {
   let cache: ExpiredShapesCache
@@ -120,12 +123,10 @@ describe(`ExpiredShapesCache`, () => {
       expect(fetchMock).toHaveBeenCalled()
     })
 
-    // Verify cache buster parameter was added to the URL
+    // Verify expired handle parameter was added to the URL
     const parsedUrl = new URL(capturedUrl)
-    expect(parsedUrl.searchParams.has(SHAPE_CACHE_BUSTER_QUERY_PARAM)).toBe(
-      true
-    )
-    expect(parsedUrl.searchParams.get(SHAPE_CACHE_BUSTER_QUERY_PARAM)).toBe(
+    expect(parsedUrl.searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)).toBe(true)
+    expect(parsedUrl.searchParams.get(EXPIRED_HANDLE_QUERY_PARAM)).toBe(
       expiredHandle
     )
   })
@@ -229,6 +230,8 @@ describe(`ExpiredShapesCache`, () => {
     )
 
     // Also verify using the singleton cache (tests persistence)
-    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(`original-handle`)
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(
+      `original-handle`
+    )
   })
 })

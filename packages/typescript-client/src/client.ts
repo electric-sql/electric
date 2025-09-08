@@ -28,7 +28,7 @@ import {
   CHUNK_LAST_OFFSET_HEADER,
   LIVE_CACHE_BUSTER_HEADER,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
-  SHAPE_CACHE_BUSTER_QUERY_PARAM,
+  EXPIRED_HANDLE_QUERY_PARAM,
   COLUMNS_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
@@ -301,19 +301,19 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 function canonicalShapeKey(url: URL): string {
   const cleanUrl = new URL(url.origin + url.pathname)
   const params = url.searchParams
-  
+
   for (const param of [
-    TABLE_QUERY_PARAM, 
-    WHERE_QUERY_PARAM, 
-    COLUMNS_QUERY_PARAM, 
-    REPLICA_PARAM, 
-    WHERE_PARAMS_PARAM
+    TABLE_QUERY_PARAM,
+    WHERE_QUERY_PARAM,
+    COLUMNS_QUERY_PARAM,
+    REPLICA_PARAM,
+    WHERE_PARAMS_PARAM,
   ]) {
     if (params.has(param)) {
       cleanUrl.searchParams.set(param, params.get(param)!)
     }
   }
-  
+
   cleanUrl.searchParams.sort()
   return cleanUrl.toString()
 }
@@ -604,7 +604,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       const shapeKey = canonicalShapeKey(fetchUrl)
       const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
       if (expiredHandle) {
-        fetchUrl.searchParams.set(SHAPE_CACHE_BUSTER_QUERY_PARAM, expiredHandle)
+        fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
       }
 
       // Add any remaining custom parameters
@@ -980,7 +980,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#connected = false
     this.#schema = undefined
   }
-
 }
 
 /**
