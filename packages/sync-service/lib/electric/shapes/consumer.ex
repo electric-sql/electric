@@ -485,7 +485,7 @@ defmodule Electric.Shapes.Consumer do
         lag = calculate_replication_lag(txn)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
 
-        :telemetry.execute(
+        Electric.Telemetry.OpenTelemetry.execute(
           [:electric, :storage, :transaction_stored],
           %{
             duration: System.monotonic_time() - timestamp,

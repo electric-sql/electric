@@ -287,9 +287,13 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
           :ok
 
         shapes ->
-          :telemetry.execute([:electric, :shapes, :total_shapes], %{count: length(shapes)}, %{
-            stack_id: stack_id
-          })
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :shapes, :total_shapes],
+            %{count: length(shapes)},
+            %{
+              stack_id: stack_id
+            }
+          )
       end
     end
 
@@ -298,7 +302,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
 
       Electric.ShapeCache.Storage.get_total_disk_usage(storage)
       |> then(
-        &:telemetry.execute([:electric, :storage], %{used: &1}, %{
+        &Electric.Telemetry.OpenTelemetry.execute([:electric, :storage], %{used: &1}, %{
           stack_id: opts[:stack_id]
         })
       )
@@ -341,7 +345,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         # This is a confusing stat if we're measuring in bytes, so normalise to
         # [0, :infinity)
 
-        :telemetry.execute(
+        Electric.Telemetry.OpenTelemetry.execute(
           [:electric, :postgres, :replication],
           %{wal_size: max(0, wal_size)},
           %{stack_id: stack_id}

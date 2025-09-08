@@ -840,7 +840,7 @@ defmodule Electric.Connection.Manager do
       "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
     )
 
-    :telemetry.execute(
+    Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :connection, :consumers_ready],
       %{duration: duration, total: total_recovered, failed_to_recover: total_failed_to_recover},
       %{stack_id: state.stack_id}
@@ -892,7 +892,7 @@ defmodule Electric.Connection.Manager do
         "timeline_id = #{state.pg_timeline_id}"
     )
 
-    :telemetry.execute(
+    Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :postgres, :info_looked_up],
       %{
         pg_version: server_version,

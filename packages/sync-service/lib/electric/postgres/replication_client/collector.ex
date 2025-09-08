@@ -154,7 +154,11 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
 
   def handle_message(%LR.Commit{lsn: commit_lsn}, %__MODULE__{transaction: txn} = state)
       when not is_nil(txn) and commit_lsn == txn.lsn do
-    {Transaction.finalize(txn), %{state | transaction: nil, tx_op_index: nil, tx_size: 0}}
+    {
+      Transaction.finalize(txn),
+      txn_meta(state),
+      %{state | transaction: nil, tx_op_index: nil, tx_size: 0}
+    }
   end
 
   @spec data_tuple_to_map([LR.Relation.Column.t()], list(String.t())) :: %{
@@ -199,6 +203,10 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
         tx_op_index: tx_op_index + 2,
         tx_size: tx_size + bytes
     }
+  end
+
+  defp txn_meta(state) do
+    %{byte_size: state.tx_size}
   end
 
   defguard is_collecting(collector) when not is_nil(collector.transaction)
