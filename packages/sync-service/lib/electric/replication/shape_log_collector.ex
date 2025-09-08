@@ -31,6 +31,9 @@ defmodule Electric.Replication.ShapeLogCollector do
             persistent_kv: [type: :any, required: true]
           )
 
+  defguardp is_ready_to_process(state)
+            when is_map_key(state, :last_processed_lsn) and not is_nil(state.last_processed_lsn)
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       GenServer.start_link(__MODULE__, Map.new(opts), name: name(opts[:stack_id]))
@@ -60,7 +63,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     trace_context = OpenTelemetry.get_current_context()
 
-    timer = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
+    {:ok, timer} = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
     OpenTelemetry.set_interval_timer(timer)
 
@@ -69,7 +72,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
     trace_context = OpenTelemetry.get_current_context()
-    GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
+    :ok = GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
   def subscribe(server, shape_handle, shape) do
@@ -160,6 +163,10 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
   end
 
+  def handle_call({:new_txn, _, _, _}, _from, state) when not is_ready_to_process(state) do
+    {:reply, {:error, :not_ready}, state}
+  end
+
   def handle_call(
         {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, timer},
         _from,
@@ -187,7 +194,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.start_interval("shape_log_collector.transaction_message_response")
 
-    {:reply, OpenTelemetry.extract_interval_timer(), state}
+    {:reply, {:ok, OpenTelemetry.extract_interval_timer()}, state}
+  end
+
+  def handle_call({:relation_msg, _, _}, _from, state) when not is_ready_to_process(state) do
+    {:reply, {:error, :not_ready}, state}
   end
 
   def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do

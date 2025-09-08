@@ -850,16 +850,6 @@ defmodule Electric.Connection.Manager do
     {:noreply, state, {:continue, :start_streaming}}
   end
 
-  def handle_cast(
-        {:consumers_ready, _recovered, _failed},
-        %{replication_client_pid: replication_client_pid} = state
-      )
-      when is_pid(replication_client_pid) do
-    Logger.info("Consumers ready - resuming replication processing.")
-    Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
-    {:noreply, state}
-  end
-
   def handle_cast({:consumers_ready, _recovered, _failed} = msg, state) do
     Logger.debug("Received #{inspect(msg)} in phase #{state.current_phase}: ignoring")
     {:noreply, state}

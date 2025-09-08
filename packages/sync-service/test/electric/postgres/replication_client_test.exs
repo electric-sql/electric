@@ -231,11 +231,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       start_supervised({MockTransactionProcessor, self()})
 
-      # should still not process the transaction until it is explicitly ready
-      refute_receive {:from_replication, _}, 50
-
       # once we start streaming we should see it processed
-      ReplicationClient.start_streaming(client_pid)
       assert %Relation{table: "items", columns: [_, _]} = receive_rel_change()
       assert %NewRecord{record: %{"value" => "test value 1"}} = receive_tx_change()
 
@@ -245,7 +241,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
       refute_receive {:from_replication, _}, 50
       assert Process.alive?(client_pid)
       start_supervised({MockTransactionProcessor, self()})
-      ReplicationClient.start_streaming(client_pid)
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
