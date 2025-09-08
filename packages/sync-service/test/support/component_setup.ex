@@ -362,7 +362,9 @@ defmodule Support.ComponentSetup do
     stack_events_registry = Electric.stack_events_registry()
 
     ref = Electric.StackSupervisor.subscribe_to_stack_events(stack_id)
-    publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
+
+    publication_name =
+      Map.get(ctx, :publication_name, "electric_test_pub_#{:erlang.phash2(stack_id)}")
 
     connection_opts =
       Keyword.merge(ctx.pooled_db_config, List.wrap(ctx[:connection_opt_overrides]))
@@ -399,7 +401,8 @@ defmodule Support.ComponentSetup do
          tweaks: [
            registry_partitions: 1,
            monitor_opts: monitor_config(ctx)
-         ]},
+         ],
+         manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false)},
         restart: :temporary,
         significant: false
       )
