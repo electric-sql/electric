@@ -334,7 +334,7 @@ paths:
                             Operations with the same LSN were committed in the same transaction and
                             can be ordered by `op_position` within the same LSN.
                         op_position:
-                          type: string
+                          type: integer
                           description: |-
                             The position of the operation in the transaction.
 
