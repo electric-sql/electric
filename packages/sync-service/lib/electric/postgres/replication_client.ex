@@ -358,7 +358,7 @@ defmodule Electric.Postgres.ReplicationClient do
         OpenTelemetry.start_interval("replication_client.await_more_data")
         {:noreply, %{state | txn_collector: txn_collector}}
 
-      {%Transaction{} = txn, %Collector{} = txn_collector} ->
+      {%Transaction{} = txn, txn_meta, %Collector{} = txn_collector} ->
         state = %{state | txn_collector: txn_collector, last_seen_txn_lsn: txn.lsn}
 
         {m, f, args} = state.transaction_received
@@ -371,7 +371,7 @@ defmodule Electric.Postgres.ReplicationClient do
             %{
               monotonic_time: System.monotonic_time(),
               receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
-              bytes: byte_size(data),
+              bytes: txn_meta.byte_size,
               count: 1,
               operations: txn.num_changes
             },

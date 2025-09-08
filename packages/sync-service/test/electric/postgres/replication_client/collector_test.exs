@@ -216,7 +216,9 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
       end_lsn: @test_end_lsn
     }
 
-    {completed_txn, updated_collector} = Collector.handle_message(commit_msg, collector)
+    {completed_txn, txn_meta, updated_collector} = Collector.handle_message(commit_msg, collector)
+
+    assert %{byte_size: 0} == txn_meta
 
     assert %Transaction{xid: 456, lsn: @test_lsn, last_log_offset: @test_log_offset} =
              completed_txn
@@ -274,7 +276,12 @@ defmodule Electric.Postgres.ReplicationClient.CollectorTest do
 
     commit_msg = %LR.Commit{lsn: @test_lsn, end_lsn: @test_end_lsn}
 
-    {completed_txn, _updated_collector} = Collector.handle_message(commit_msg, collector)
+    {completed_txn, txn_meta, _updated_collector} =
+      Collector.handle_message(commit_msg, collector)
+
+    # inserts and operations have sizes of 3 each, but updates contains
+    # old and new values so 2 * 3 => 4 * 3
+    assert %{byte_size: 4 * 3} == txn_meta
 
     log_offset_1 = LogOffset.new(@test_lsn, 0)
     log_offset_2 = LogOffset.new(@test_lsn, 2)
