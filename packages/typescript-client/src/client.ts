@@ -521,7 +521,39 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // consistent cache buster
 
         // Store the current shape URL as expired to avoid future 409s
-        this.#expiredShapesCache.markExpired(fetchUrl.toString())
+        if (this.#shapeHandle) {
+          // Construct clean shape URL with only core parameters for consistent caching
+          const cleanUrl = new URL(fetchUrl.origin + fetchUrl.pathname)
+          const params = fetchUrl.searchParams
+          if (params.has(TABLE_QUERY_PARAM))
+            cleanUrl.searchParams.set(
+              TABLE_QUERY_PARAM,
+              params.get(TABLE_QUERY_PARAM)!
+            )
+          if (params.has(WHERE_QUERY_PARAM))
+            cleanUrl.searchParams.set(
+              WHERE_QUERY_PARAM,
+              params.get(WHERE_QUERY_PARAM)!
+            )
+          if (params.has(COLUMNS_QUERY_PARAM))
+            cleanUrl.searchParams.set(
+              COLUMNS_QUERY_PARAM,
+              params.get(COLUMNS_QUERY_PARAM)!
+            )
+          if (params.has(REPLICA_PARAM))
+            cleanUrl.searchParams.set(REPLICA_PARAM, params.get(REPLICA_PARAM)!)
+          if (params.has(WHERE_PARAMS_PARAM))
+            cleanUrl.searchParams.set(
+              WHERE_PARAMS_PARAM,
+              params.get(WHERE_PARAMS_PARAM)!
+            )
+          cleanUrl.searchParams.sort()
+
+          this.#expiredShapesCache.markExpired(
+            cleanUrl.toString(),
+            this.#shapeHandle
+          )
+        }
 
         const newShapeHandle =
           e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
@@ -575,8 +607,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
         setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
 
       // Add cache buster for shapes known to be expired to prevent 409s
-      if (this.#expiredShapesCache.isExpired(fetchUrl.toString())) {
-        fetchUrl.searchParams.set(SHAPE_CACHE_BUSTER_QUERY_PARAM, `expired`)
+      const expiredHandle = this.#expiredShapesCache.getExpiredHandle(
+        fetchUrl.toString()
+      )
+      if (expiredHandle) {
+        fetchUrl.searchParams.set(SHAPE_CACHE_BUSTER_QUERY_PARAM, expiredHandle)
       }
 
       // Add any remaining custom parameters

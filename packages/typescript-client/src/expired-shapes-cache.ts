@@ -1,6 +1,6 @@
 interface ExpiredShapeCacheEntry {
-  expired: boolean
-  time: number
+  expiredHandle: string
+  lastUsed: number
 }
 
 /**
@@ -11,17 +11,24 @@ export class ExpiredShapesCache {
   private max: number = 250
   private readonly storageKey = `electric_expired_shapes`
 
-  isExpired(shapeUrl: string): boolean {
-    return this.data[shapeUrl]?.expired || false
+  getExpiredHandle(shapeUrl: string): string | null {
+    const entry = this.data[shapeUrl]
+    if (entry) {
+      // Update last used time when accessed
+      entry.lastUsed = Date.now()
+      this.save()
+      return entry.expiredHandle
+    }
+    return null
   }
 
-  markExpired(shapeUrl: string): void {
-    this.data[shapeUrl] = { expired: true, time: Date.now() }
+  markExpired(shapeUrl: string, handle: string): void {
+    this.data[shapeUrl] = { expiredHandle: handle, lastUsed: Date.now() }
 
     const keys = Object.keys(this.data)
     if (keys.length > this.max) {
       const oldest = keys.reduce((min, k) =>
-        this.data[k].time < this.data[min].time ? k : min
+        this.data[k].lastUsed < this.data[min].lastUsed ? k : min
       )
       delete this.data[oldest]
     }
