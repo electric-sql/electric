@@ -25,6 +25,7 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sortObjectKeys(obj: any): any {
+  if (typeof obj === `function`) return Function.prototype.toString.call(obj)
   if (typeof obj !== `object` || obj === null) return obj
 
   if (Array.isArray(obj)) {
