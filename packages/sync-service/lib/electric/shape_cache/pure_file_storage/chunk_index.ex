@@ -254,7 +254,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     end
   end
 
-  def fetch_chunk_with_positions(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
+  defp fetch_chunk_with_positions(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
     file = File.open!(chunk_file_path, [:read, :raw])
 
     try do
@@ -276,10 +276,9 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
       File.close(file)
     end
   rescue
-    File.Error ->
-      reraise Storage.Error,
-              [message: "Could not open chunk index file #{chunk_file_path}"],
-              __STACKTRACE__
+    err in [File.Error] ->
+      message = "Could not open chunk index file #{chunk_file_path}: #{inspect(err.reason)}"
+      reraise Storage.Error, [message: message], __STACKTRACE__
   end
 
   defp read_last_partial_chunk(file, size) do
