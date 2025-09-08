@@ -56,7 +56,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     @moduletag storage: module_name
     @moduletag mod: module
 
-    # doctest module, import: true
+    doctest module, import: true
 
     describe "#{module_name}.snapshot_started?/2" do
       setup :start_storage
