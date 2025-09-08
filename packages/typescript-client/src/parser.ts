@@ -19,6 +19,10 @@ export type Parser<Extensions = never> = {
   [key: string]: ParseFunction<Extensions>
 }
 
+export type TransformFunction<Extensions = never> = (
+  message: Row<Extensions>
+) => Row<Extensions>
+
 const parseNumber = (value: string) => Number(value)
 const parseBool = (value: string) => value === `true` || value === `t`
 const parseBigInt = (value: string) => BigInt(value)
@@ -94,11 +98,16 @@ export function pgArrayParser<Extensions>(
 
 export class MessageParser<T extends Row<unknown>> {
   private parser: Parser<GetExtensions<T>>
-  constructor(parser?: Parser<GetExtensions<T>>) {
+  private transformer?: TransformFunction<GetExtensions<T>>
+  constructor(
+    parser?: Parser<GetExtensions<T>>,
+    transformer?: TransformFunction<GetExtensions<T>>
+  ) {
     // Merge the provided parser with the default parser
     // to use the provided parser whenever defined
     // and otherwise fall back to the default parser
     this.parser = { ...defaultParser, ...parser }
+    this.transformer = transformer
   }
 
   parse<Result>(messages: string, schema: Schema): Result {
@@ -118,6 +127,8 @@ export class MessageParser<T extends Row<unknown>> {
         Object.keys(row).forEach((key) => {
           row[key] = this.parseRow(key, row[key] as NullableToken, schema)
         })
+
+        if (this.transformer) value = this.transformer(value)
       }
       return value
     }) as Result

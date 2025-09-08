@@ -239,6 +239,12 @@ export interface ShapeStreamOptions<T = never> {
   parser?: Parser<T>
 
   /**
+   * A function to transform the Message value before emitting to subscribers.
+   * This can be used to camelCase keys or rename fields.
+   */
+  transformer?: TransformFunction<T>
+
+  /**
    * A function for handling errors.
    * This is optional, when it is not provided any shapestream errors will be thrown.
    * If the function returns an object containing parameters and/or headers
@@ -383,6 +389,40 @@ const stream = new ShapeStream<CustomRow>({
 const shape = new Shape(stream)
 shape.subscribe((data) => {
   console.log(data.created_at instanceof Date) // true
+})
+```
+
+**Transformer**
+
+While the parser operates on individual fields, the transformer allows you to modify the entire record after the parser has run.
+
+This can be used to convert field names to camelCase or rename fields.
+
+```ts
+type CustomRow = {
+  id: number
+  postTitle: string // post_title in database
+  createdAt: Date // created_at in database
+}
+
+// transformer example: camelCaseKeys
+const toCamelCase = (str: string) =>
+  str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+
+const camelCaseKeys: TransformFunction = (row) =>
+  Object.fromEntries(Object.entries(row).map(([k, v]) => [toCamelCase(k), v]))
+
+const stream = new ShapeStream<CustomRow>({
+  url: "http://localhost:3000/v1/shape",
+  params: {
+    table: "posts",
+  },
+  transformer: camelCaseKeys,
+})
+
+const shape = new Shape(stream)
+shape.subscribe((data) => {
+  console.log(Object.keys(data)) // [id, postTitle, createdAt]
 })
 ```
 

@@ -6,7 +6,7 @@ import {
   MaybePromise,
   GetExtensions,
 } from './types'
-import { MessageParser, Parser } from './parser'
+import { MessageParser, Parser, TransformFunction } from './parser'
 import { getOffset, isUpToDateMessage } from './helpers'
 import {
   FetchError,
@@ -259,6 +259,7 @@ export interface ShapeStreamOptions<T = never> {
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
+  transformer?: TransformFunction<T>
 
   /**
    * A function for handling shapestream errors.
@@ -379,7 +380,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
-    this.#messageParser = new MessageParser<T>(options.parser)
+    this.#messageParser = new MessageParser<T>(
+      options.parser,
+      options.transformer
+    )
     this.#onError = this.options.onError
 
     const baseFetchClient =
