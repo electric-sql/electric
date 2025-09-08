@@ -385,7 +385,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   defp record_telemetry(state) do
-    :telemetry.execute(
+    Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :shape_monitor],
       %{active_reader_count: reader_count!(state.stack_id)},
       %{stack_id: state.stack_id}
