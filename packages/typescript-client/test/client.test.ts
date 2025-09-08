@@ -120,7 +120,7 @@ describe.for(fetchAndSse)(
       expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
     })
 
-    it(`should transform row with transformRow function`, async ({
+    it(`should transform record with transformer function`, async ({
       issuesTableUrl,
       insertIssues,
       aborter,
@@ -133,7 +133,6 @@ describe.for(fetchAndSse)(
           Object.entries(row).map(([k, v]) => [k.toUpperCase(), v])
         )
 
-      const start = Date.now()
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: {
@@ -151,9 +150,6 @@ describe.for(fetchAndSse)(
       })
 
       expect(rows).toEqual([{ ID: id, TITLE: `test title`, PRIORITY: 10 }])
-      expect(shape.lastSyncedAt()).toBeGreaterThanOrEqual(start)
-      expect(shape.lastSyncedAt()).toBeLessThanOrEqual(Date.now())
-      expect(shape.lastSynced()).toBeLessThanOrEqual(Date.now() - start)
     })
 
     it(`should continually sync a shape/table`, async ({

@@ -399,27 +399,30 @@ While the parser operates on individual fields, the transformer allows you to mo
 This can be used to convert field names to camelCase or rename fields.
 
 ```ts
-// in postgres: id, title, created_at
 type CustomRow = {
-  ID: number
-  TITLE: string
-  CREATED_AT: Date
+  id: number
+  postTitle: string // post_title in database
+  createdAt: Date // created_at in database
 }
 
-const uppercaseKeys: TransformFunction = (row) =>
-  Object.fromEntries(Object.entries(row).map(([k, v]) => [k.toUpperCase(), v]))
+// transformer example: camelCaseKeys
+const toCamelCase = (str: string) =>
+  str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+
+const camelCaseKeys: TransformFunction = (row) =>
+  Object.fromEntries(Object.entries(row).map(([k, v]) => [toCamelCase(k), v]))
 
 const stream = new ShapeStream<CustomRow>({
   url: "http://localhost:3000/v1/shape",
   params: {
     table: "posts",
   },
-  transformer: uppercaseKeys,
+  transformer: camelCaseKeys,
 })
 
 const shape = new Shape(stream)
 shape.subscribe((data) => {
-  console.log(Object.keys(data)) // [ID, TITLE, CREATED_AT]
+  console.log(Object.keys(data)) // [id, postTitle, createdAt]
 })
 ```
 
