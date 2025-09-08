@@ -62,3 +62,6 @@ export class ExpiredShapesCache {
     this.load()
   }
 }
+
+// Module-level singleton instance
+export const expiredShapesCache = new ExpiredShapesCache()

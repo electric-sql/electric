@@ -47,7 +47,7 @@ import {
   EventSourceMessage,
   fetchEventSource,
 } from '@microsoft/fetch-event-source'
-import { ExpiredShapesCache } from './expired-shapes-cache'
+import { expiredShapesCache } from './expired-shapes-cache'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -296,6 +296,29 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 }
 
 /**
+ * Creates a canonical shape key from a URL containing only the core shape definition parameters
+ */
+function canonicalShapeKey(url: URL): string {
+  const cleanUrl = new URL(url.origin + url.pathname)
+  const params = url.searchParams
+  
+  for (const param of [
+    TABLE_QUERY_PARAM, 
+    WHERE_QUERY_PARAM, 
+    COLUMNS_QUERY_PARAM, 
+    REPLICA_PARAM, 
+    WHERE_PARAMS_PARAM
+  ]) {
+    if (params.has(param)) {
+      cleanUrl.searchParams.set(param, params.get(param)!)
+    }
+  }
+  
+  cleanUrl.searchParams.sort()
+  return cleanUrl.toString()
+}
+
+/**
  * Reads updates to a shape from Electric using HTTP requests and long polling or
  * Server-Sent Events (SSE).
  * Notifies subscribers when new messages come in. Doesn't maintain any history of the
@@ -522,37 +545,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         // Store the current shape URL as expired to avoid future 409s
         if (this.#shapeHandle) {
-          // Construct clean shape URL with only core parameters for consistent caching
-          const cleanUrl = new URL(fetchUrl.origin + fetchUrl.pathname)
-          const params = fetchUrl.searchParams
-          if (params.has(TABLE_QUERY_PARAM))
-            cleanUrl.searchParams.set(
-              TABLE_QUERY_PARAM,
-              params.get(TABLE_QUERY_PARAM)!
-            )
-          if (params.has(WHERE_QUERY_PARAM))
-            cleanUrl.searchParams.set(
-              WHERE_QUERY_PARAM,
-              params.get(WHERE_QUERY_PARAM)!
-            )
-          if (params.has(COLUMNS_QUERY_PARAM))
-            cleanUrl.searchParams.set(
-              COLUMNS_QUERY_PARAM,
-              params.get(COLUMNS_QUERY_PARAM)!
-            )
-          if (params.has(REPLICA_PARAM))
-            cleanUrl.searchParams.set(REPLICA_PARAM, params.get(REPLICA_PARAM)!)
-          if (params.has(WHERE_PARAMS_PARAM))
-            cleanUrl.searchParams.set(
-              WHERE_PARAMS_PARAM,
-              params.get(WHERE_PARAMS_PARAM)!
-            )
-          cleanUrl.searchParams.sort()
-
-          this.#expiredShapesCache.markExpired(
-            cleanUrl.toString(),
-            this.#shapeHandle
-          )
+          const shapeKey = canonicalShapeKey(fetchUrl)
+          expiredShapesCache.markExpired(shapeKey, this.#shapeHandle)
         }
 
         const newShapeHandle =
@@ -607,9 +601,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
 
       // Add cache buster for shapes known to be expired to prevent 409s
-      const expiredHandle = this.#expiredShapesCache.getExpiredHandle(
-        fetchUrl.toString()
-      )
+      const shapeKey = canonicalShapeKey(fetchUrl)
+      const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
       if (expiredHandle) {
         fetchUrl.searchParams.set(SHAPE_CACHE_BUSTER_QUERY_PARAM, expiredHandle)
       }
@@ -988,10 +981,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#schema = undefined
   }
 
-  /**
-   * LRU cache for tracking expired shapes with automatic cleanup
-   */
-  #expiredShapesCache = new ExpiredShapesCache()
 }
 
 /**

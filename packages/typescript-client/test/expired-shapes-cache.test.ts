@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { ShapeStream } from '../src'
-import { ExpiredShapesCache } from '../src/expired-shapes-cache'
+import { ExpiredShapesCache, expiredShapesCache } from '../src/expired-shapes-cache'
 import { SHAPE_CACHE_BUSTER_QUERY_PARAM } from '../src/constants'
 
 describe(`ExpiredShapesCache`, () => {
@@ -84,9 +84,9 @@ describe(`ExpiredShapesCache`, () => {
 
     const expectedShapeUrl = `${shapeUrl}?table=test`
 
-    // Pre-mark the shape URL as expired in localStorage
+    // Pre-mark the shape URL as expired using the singleton
     const expiredHandle = `expired-handle-123`
-    cache.markExpired(expectedShapeUrl, expiredHandle)
+    expiredShapesCache.markExpired(expectedShapeUrl, expiredHandle)
 
     fetchMock.mockImplementation((url: string) => {
       capturedUrl = url
@@ -228,8 +228,7 @@ describe(`ExpiredShapesCache`, () => {
       { timeout: 1000 }
     )
 
-    // Also verify using a new cache instance (tests persistence)
-    const newCache = new ExpiredShapesCache()
-    expect(newCache.getExpiredHandle(expectedShapeUrl)).toBe(`original-handle`)
+    // Also verify using the singleton cache (tests persistence)
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(`original-handle`)
   })
 })
