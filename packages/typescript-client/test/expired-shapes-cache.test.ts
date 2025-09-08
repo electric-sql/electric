@@ -133,18 +133,29 @@ describe(`ExpiredShapesCache`, () => {
   it(`should enforce LRU behavior with max cache size`, async () => {
     // Mark 252 shapes as expired (exceeds max of 250)
     for (let i = 1; i <= 252; i++) {
-      cache.markExpired(`https://example.com/shape?table=table${i}`, `handle-${i}`)
+      cache.markExpired(
+        `https://example.com/shape?table=table${i}`,
+        `handle-${i}`
+      )
       // Small delay to ensure different timestamps
       if (i % 50 === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     }
 
     // The first two handles should have been evicted due to LRU
-    expect(cache.getExpiredHandle(`https://example.com/shape?table=table1`)).toBe(null)
-    expect(cache.getExpiredHandle(`https://example.com/shape?table=table2`)).toBe(null)
+    expect(
+      cache.getExpiredHandle(`https://example.com/shape?table=table1`)
+    ).toBe(null)
+    expect(
+      cache.getExpiredHandle(`https://example.com/shape?table=table2`)
+    ).toBe(null)
 
     // Recent handles should still be expired
-    expect(cache.getExpiredHandle(`https://example.com/shape?table=table251`)).toBe(`handle-251`)
-    expect(cache.getExpiredHandle(`https://example.com/shape?table=table252`)).toBe(`handle-252`)
+    expect(
+      cache.getExpiredHandle(`https://example.com/shape?table=table251`)
+    ).toBe(`handle-251`)
+    expect(
+      cache.getExpiredHandle(`https://example.com/shape?table=table252`)
+    ).toBe(`handle-252`)
   })
 
   it(`should handle localStorage errors gracefully when localStorage is unavailable`, () => {
