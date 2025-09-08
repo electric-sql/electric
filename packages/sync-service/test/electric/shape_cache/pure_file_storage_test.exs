@@ -377,6 +377,14 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
            |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|, ~S|{"test":3}|, ~S|{"test":4}|]
   end
 
+  test "includes the underlying file open error when unable to open a chunk", %{opts: opts} do
+    chunk_index_path = Path.join([opts.base_path, @shape_handle, "log", "log.latest.0.chunk.bin"])
+
+    assert_raise Electric.ShapeCache.Storage.Error,
+                 "Could not open chunk index file #{chunk_index_path}: :enoent",
+                 fn -> PureFileStorage.get_chunk_end_log_offset(LogOffset.new(1, 0), opts) end
+  end
+
   describe "flush timer" do
     setup :with_started_writer
     @describetag flush_period: 100
