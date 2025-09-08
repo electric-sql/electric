@@ -294,6 +294,64 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   forceDisconnectAndRefresh(): Promise<void>
 }
 
+interface ExpiredShapeCacheEntry {
+  expired: boolean
+  time: number
+}
+
+/**
+ * LRU cache for tracking expired shapes with automatic cleanup
+ */
+class ExpiredShapesCache {
+  private data: Record<string, ExpiredShapeCacheEntry> = {}
+  private max: number = 250
+  private readonly storageKey = `electric_expired_shapes`
+
+  isExpired(shapeHandle: string): boolean {
+    return this.data[shapeHandle]?.expired || false
+  }
+
+  markExpired(shapeHandle: string): void {
+    this.data[shapeHandle] = { expired: true, time: Date.now() }
+    
+    const keys = Object.keys(this.data)
+    if (keys.length > this.max) {
+      const oldest = keys.reduce((min, k) => 
+        this.data[k].time < this.data[min].time ? k : min
+      )
+      delete this.data[oldest]
+    }
+    
+    this.save()
+  }
+
+  private save(): void {
+    if (typeof localStorage === `undefined`) return
+    try {
+      localStorage.setItem(this.storageKey, JSON.stringify(this.data))
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+
+  private load(): void {
+    if (typeof localStorage === `undefined`) return
+    try {
+      const stored = localStorage.getItem(this.storageKey)
+      if (stored) {
+        this.data = JSON.parse(stored)
+      }
+    } catch {
+      // Ignore localStorage errors, start fresh
+      this.data = {}
+    }
+  }
+
+  constructor() {
+    this.load()
+  }
+}
+
 /**
  * Reads updates to a shape from Electric using HTTP requests and long polling or
  * Server-Sent Events (SSE).
@@ -958,36 +1016,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   /**
-   * Get the localStorage key for a specific shape handle
+   * LRU cache for tracking expired shapes with automatic cleanup
    */
-  #getShapeStorageKey(shapeHandle: string): string {
-    return `electric_expired_shape_${shapeHandle}`
-  }
+  #expiredShapesCache = new ExpiredShapesCache()
 
   /**
-   * Check if a shape is marked as expired in localStorage
+   * Check if a shape is marked as expired
    */
   #isShapeExpired(shapeHandle: string): boolean {
-    if (typeof localStorage === `undefined`) return false
-    try {
-      return (
-        localStorage.getItem(this.#getShapeStorageKey(shapeHandle)) === `true`
-      )
-    } catch {
-      return false
-    }
+    return this.#expiredShapesCache.isExpired(shapeHandle)
   }
 
   /**
-   * Mark a shape as expired in localStorage
+   * Mark a shape as expired
    */
   #markShapeExpired(shapeHandle: string): void {
-    if (typeof localStorage === `undefined`) return
-    try {
-      localStorage.setItem(this.#getShapeStorageKey(shapeHandle), `true`)
-    } catch {
-      // Ignore localStorage errors
-    }
+    this.#expiredShapesCache.markExpired(shapeHandle)
   }
 }
 

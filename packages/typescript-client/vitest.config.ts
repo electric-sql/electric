@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     globalSetup: `test/support/global-setup.ts`,
+    setupFiles: ['vitest-localstorage-mock'],
     typecheck: { enabled: true },
     fileParallelism: false,
     coverage: {
@@ -12,5 +13,6 @@ export default defineConfig({
     },
     reporters: ['default', 'junit'],
     outputFile: './junit/test-report.junit.xml',
+    environment: 'jsdom',
   },
 })
