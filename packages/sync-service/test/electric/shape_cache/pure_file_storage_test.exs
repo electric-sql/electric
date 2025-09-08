@@ -1,5 +1,5 @@
 defmodule Electric.ShapeCache.PureFileStorageTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   import Support.ComponentSetup
   import Support.TestUtils

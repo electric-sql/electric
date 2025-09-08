@@ -1,5 +1,5 @@
 defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector.FlushTracker
@@ -84,6 +84,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
         |> FlushTracker.handle_flush_notification("shape1", LogOffset.new(5, 10))
         |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(5, 10))
 
+      assert_receive {:flush_confirmed, 3}
       assert_receive {:flush_confirmed, 4}
       refute_receive {:flush_confirmed, _}, 50
 
@@ -106,6 +107,21 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       assert_receive {:flush_confirmed, 12}
 
       assert FlushTracker.empty?(tracker)
+    end
+
+    test "should notify flushes under continuous updates", %{tracker: tracker} do
+      tracker
+      |> FlushTracker.handle_transaction(txn(lsn: 10, last_offset: 10), ["shape1"])
+      |> FlushTracker.handle_transaction(txn(lsn: 11, last_offset: 10), ["shape2"])
+      |> FlushTracker.handle_flush_notification("shape1", LogOffset.new(10, 10))
+      |> FlushTracker.handle_transaction(txn(lsn: 12, last_offset: 10), ["shape1"])
+      |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(11, 10))
+      |> FlushTracker.handle_transaction(txn(lsn: 13, last_offset: 10), ["shape2"])
+      |> FlushTracker.handle_flush_notification("shape1", LogOffset.new(12, 10))
+
+      assert_receive {:flush_confirmed, 9}
+      assert_receive {:flush_confirmed, 10}
+      assert_receive {:flush_confirmed, 11}
     end
   end
 

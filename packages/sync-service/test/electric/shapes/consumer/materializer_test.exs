@@ -1,5 +1,5 @@
 defmodule Electric.Shapes.Consumer.MaterializerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   import Support.ComponentSetup
   use Repatch.ExUnit
 
