@@ -128,13 +128,7 @@ export class MessageParser<T extends Row<unknown>> {
           row[key] = this.parseRow(key, row[key] as NullableToken, schema)
         })
 
-        if (this.transformer) {
-          try {
-            value = this.transformer(value)
-          } catch (e) {
-            console.log(`error calling transformer with value:`, value, e)
-          }
-        }
+        if (this.transformer) value = this.transformer(value)
       }
       return value
     }) as Result
