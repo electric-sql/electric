@@ -110,16 +110,21 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     prev_log_offset = %LogOffset{tx_offset: last_log_offset.tx_offset - 1}
 
     {last_flushed, new_shape_ids} =
-      Enum.reduce(affected_shapes, {last_flushed, MapSet.new()}, fn shape, {acc, new_shape_ids} ->
-        case Map.fetch(acc, shape) do
-          {:ok, {_, last_flushed_offset}} ->
-            {Map.put(acc, shape, {last_log_offset, last_flushed_offset}), new_shape_ids}
+      Enum.reduce(
+        affected_shapes,
+        {last_flushed, MapSet.new()},
+        fn shape, {new_last_flushed, new_shape_ids} ->
+          case Map.fetch(new_last_flushed, shape) do
+            {:ok, {_, last_flushed_offset}} ->
+              {Map.put(new_last_flushed, shape, {last_log_offset, last_flushed_offset}),
+               new_shape_ids}
 
-          :error ->
-            {Map.put(acc, shape, {last_log_offset, prev_log_offset}),
-             MapSet.put(new_shape_ids, shape)}
+            :error ->
+              {Map.put(new_last_flushed, shape, {last_log_offset, prev_log_offset}),
+               MapSet.put(new_shape_ids, shape)}
+          end
         end
-      end)
+      )
 
     min_incomplete_flush_tree =
       if MapSet.size(new_shape_ids) == 0,
