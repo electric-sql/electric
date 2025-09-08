@@ -194,9 +194,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       send(pid, {:flush_boundary_updated, tx_lsn})
 
-      Process.exit(pid, :some_error)
+      interrupt_val = "interrupt #{inspect(pid)}"
+      insert_item(conn, interrupt_val)
+      refute_received {:from_replication, _}, 50
+      Process.exit(pid, :some_reason)
 
-      assert_receive {:DOWN, ^monitor, :process, ^pid, :some_error}, @assert_receive_db_timeout
+      assert_receive {:DOWN, ^monitor, :process, ^pid, :some_reason}, @assert_receive_db_timeout
 
       refute_received _
 
@@ -205,6 +208,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       start_client(ctx)
 
       assert %NewRecord{record: %{"value" => "return: not ok"}} = receive_tx_change()
+      assert %NewRecord{record: %{"value" => ^interrupt_val}} = receive_tx_change()
 
       refute_receive _
     end
@@ -638,6 +642,16 @@ defmodule Electric.Postgres.ReplicationClientTest do
       "return: " <> val ->
         send(test_pid, {:from_replication, transaction})
         val
+
+      "interrupt #PID" <> pid_str ->
+        pid = pid_str |> String.to_charlist() |> :erlang.list_to_pid()
+
+        if pid == self() do
+          raise "Interrupting transaction processing abnormally"
+        else
+          send(test_pid, {:from_replication, transaction})
+          :ok
+        end
 
       _ ->
         send(test_pid, {:from_replication, transaction})
