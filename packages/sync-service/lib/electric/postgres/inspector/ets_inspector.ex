@@ -233,6 +233,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         :table_not_found -> :table_not_found
       end
     end)
+  catch
+    :exit, {_, {DBConnection.Holder, :checkout, _}} -> {:error, :connection_not_available}
   end
 
   @spec persist_data(map()) :: :ok

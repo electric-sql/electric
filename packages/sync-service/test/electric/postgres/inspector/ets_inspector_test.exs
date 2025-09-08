@@ -446,4 +446,17 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert :table_not_found = EtsInspector.load_relation_oid({"public", "items"}, opts)
     end
   end
+
+  test "handles complete lack of db pool", ctx do
+    stop_supervised!(EtsInspector)
+    %{inspector: {EtsInspector, opts}} = with_inspector(ctx |> Map.put(:db_conn, :no_pool))
+
+    assert {:error, :connection_not_available} =
+             EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+    assert {:error, :connection_not_available} =
+             EtsInspector.load_column_info(1234, opts)
+
+    assert :error = EtsInspector.list_relations_with_stale_cache(opts)
+  end
 end
