@@ -1,7 +1,7 @@
 ---
 title: Quickstart
 description: >-
-  Get up-and-running with Electric and TanStack DB. Install, develop and deploy a super-fast, reactive web app, reactive web app based real-time sync of your Postgres data.
+  Get up-and-running with Electric and TanStack DB. Install, develop and deploy a super-fast, reactive web app, based on real-time sync of your Postgres data.
 outline: 2
 ---
 
@@ -14,7 +14,7 @@ outline: 2
 
 # Quickstart
 
-Let's make a super-fast, reactive web app <span class="no-wrap-xs">using [Electric](/product/electric) with [TanStack&nbsp;DB](/product/tanstack-db)</span>.
+Let's make a super-fast, reactive web app <span class="no-wrap-xs">using [Electric](/product/electric) with [TanStack&nbsp;DB](#product/tanstack-db)</span>.
 
 <div style="max-width: 632px">
 
