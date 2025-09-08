@@ -242,7 +242,7 @@ export interface ShapeStreamOptions<T = never> {
    * A function to transform the Message value before emitting to subscribers.
    * This can be used to camelCase keys or rename fields.
    */
-  transformer?: TransformFunction
+  transformer?: TransformFunction<T>
 
   /**
    * A function for handling errors.
