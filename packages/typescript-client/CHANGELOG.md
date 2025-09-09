@@ -1,5 +1,14 @@
 # @electric-sql/client
 
+## 1.0.10
+
+### Patch Changes
+
+- 9be7751: Add `transformer` function to `ShapeStreamOptions` to support transforms like camelCase keys.
+- 64dcfec: Add client-side cache buster for expired shapes to prevent 409s
+
+  When a shape 409s, the client now stores this information in localStorage and adds a `expired_handle` parameter to future requests for that shape, preventing redundant 409 responses and reducing app loading latency.
+
 ## 1.0.9
 
 ### Patch Changes

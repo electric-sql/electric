@@ -1,5 +1,14 @@
 # @electric-sql/react
 
+## 1.0.10
+
+### Patch Changes
+
+- 9be7751: Add `transformer` function to `ShapeStreamOptions` to support transforms like camelCase keys.
+- Updated dependencies [9be7751]
+- Updated dependencies [64dcfec]
+  - @electric-sql/client@1.0.10
+
 ## 1.0.9
 
 ### Patch Changes
