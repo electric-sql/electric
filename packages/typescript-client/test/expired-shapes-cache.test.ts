@@ -131,15 +131,13 @@ describe(`ExpiredShapesCache`, () => {
     )
   })
 
-  it(`should enforce LRU behavior with max cache size`, async () => {
+  it(`should enforce LRU behavior with max cache size`, () => {
     // Mark 252 shapes as expired (exceeds max of 250)
     for (let i = 1; i <= 252; i++) {
       cache.markExpired(
         `https://example.com/shape?table=table${i}`,
         `handle-${i}`
       )
-      // Small delay to ensure different timestamps
-      if (i % 50 === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     }
 
     // The first two handles should have been evicted due to LRU
