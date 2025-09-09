@@ -3,7 +3,6 @@ defmodule Electric.Replication.PublicationManager do
   use GenServer
 
   alias Electric.Postgres.Configuration
-  alias Electric.Replication.Eval.Expr
   alias Electric.Shapes.Shape
   alias Electric.Utils
 
@@ -18,13 +17,17 @@ defmodule Electric.Replication.PublicationManager do
   @callback refresh_publication(Keyword.t()) :: :ok
 
   defstruct [
-    :relation_filter_counters,
+    # %{ {oid, relation} => count }
+    :relation_ref_counts,
+    # %{ {oid, relation} => %RelationFilter{} }
     :prepared_relation_filters,
+    # same shape as above (what DB/pub currently has)
     :committed_relation_filters,
     :update_debounce_timeout,
     :scheduled_updated_ref,
     :retries,
     :waiters,
+    # MapSet of shape handles we've seen
     :tracked_shape_handles,
     :publication_name,
     :db_pool,
@@ -36,7 +39,7 @@ defmodule Electric.Replication.PublicationManager do
   ]
 
   @typep state() :: %__MODULE__{
-           relation_filter_counters: %{Electric.oid_relation() => map()},
+           relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
            prepared_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
            committed_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
            update_debounce_timeout: timeout(),
@@ -52,16 +55,11 @@ defmodule Electric.Replication.PublicationManager do
   @typep filter_operation :: :add | :remove
 
   defmodule RelationFilter do
-    defstruct [:relation, :where_clauses, :selected_columns]
+    defstruct [:relation]
 
-    def relation_only(%__MODULE__{relation: relation} = _filter),
-      do: %__MODULE__{relation: relation}
+    def relation_only(%__MODULE__{relation: relation}), do: %__MODULE__{relation: relation}
 
-    @type t :: %__MODULE__{
-            relation: Electric.relation(),
-            where_clauses: [Electric.Replication.Eval.Expr.t()] | nil,
-            selected_columns: [String.t()] | nil
-          }
+    @type t :: %__MODULE__{relation: Electric.relation()}
   end
 
   @retry_timeout 300
@@ -72,10 +70,6 @@ defmodule Electric.Replication.PublicationManager do
   # mailbox, but we are leaving this configurable in case we want larger
   # windows to aggregate shape filter updates
   @default_debounce_timeout 0
-
-  @relation_counter :relation_counter
-  @relation_where :relation_where
-  @relation_column :relation_column
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
@@ -170,7 +164,7 @@ defmodule Electric.Replication.PublicationManager do
     Process.set_label({:publication_manager, opts.stack_id})
 
     state = %__MODULE__{
-      relation_filter_counters: %{},
+      relation_ref_counts: %{},
       prepared_relation_filters: %{},
       committed_relation_filters: %{},
       scheduled_updated_ref: nil,
@@ -479,128 +473,36 @@ defmodule Electric.Replication.PublicationManager do
 
   @spec update_relation_filters_for_shape(Shape.t(), filter_operation(), state()) :: state()
   defp update_relation_filters_for_shape(
-         %Shape{root_table: relation, root_table_id: oid} = shape,
+         %Shape{root_table: relation, root_table_id: oid},
          operation,
-         %__MODULE__{prepared_relation_filters: prepared_relation_filters} = state
+         %__MODULE__{prepared_relation_filters: prepared, relation_ref_counts: counts} = state
        ) do
-    state = update_relation_filter_counters(shape, operation, state)
-    new_relation_filter = get_relation_filter({oid, relation}, state)
+    key = {oid, relation}
+    current = Map.get(counts, key, 0)
 
-    new_relation_filters =
-      if new_relation_filter == nil,
-        do: Map.delete(prepared_relation_filters, {oid, relation}),
-        else: Map.put(prepared_relation_filters, {oid, relation}, new_relation_filter)
+    new_count =
+      case operation do
+        :add -> current + 1
+        :remove -> max(current - 1, 0)
+      end
 
-    %{state | prepared_relation_filters: new_relation_filters}
-  end
+    {prepared, counts} =
+      cond do
+        new_count == 0 and current > 0 ->
+          {Map.delete(prepared, key), Map.delete(counts, key)}
 
-  @spec get_relation_filter(Electric.relation(), state()) :: RelationFilter.t() | nil
-  defp get_relation_filter(
-         {_oid, relation} = oid_rel,
-         %__MODULE__{relation_filter_counters: relation_filter_counters} = _state
-       ) do
-    case Map.get(relation_filter_counters, oid_rel) do
-      nil ->
-        nil
+        current == 0 and new_count > 0 ->
+          {Map.put(prepared, key, %RelationFilter{relation: relation}),
+           Map.put(counts, key, new_count)}
 
-      filter_counters ->
-        Enum.reduce(
-          Map.keys(filter_counters),
-          %RelationFilter{relation: relation, where_clauses: [], selected_columns: []},
-          fn
-            @relation_counter, acc ->
-              acc
+        new_count > 0 ->
+          {prepared, Map.put(counts, key, new_count)}
 
-            {@relation_column, nil}, acc ->
-              %{acc | selected_columns: nil}
+        true ->
+          {prepared, counts}
+      end
 
-            {@relation_column, _col}, %{selected_columns: nil} = acc ->
-              acc
-
-            {@relation_column, col}, %{selected_columns: cols} = acc ->
-              %{acc | selected_columns: [col | cols]}
-
-            {@relation_where, nil}, acc ->
-              %{acc | where_clauses: nil}
-
-            {@relation_where, _where}, %{where_clauses: nil} = acc ->
-              acc
-
-            {@relation_where, where}, %{where_clauses: wheres} = acc ->
-              %{acc | where_clauses: [where | wheres]}
-          end
-        )
-    end
-  end
-
-  @spec update_relation_filter_counters(Shape.t(), filter_operation(), state()) :: state()
-  defp update_relation_filter_counters(
-         %Shape{root_table: table, root_table_id: oid} = shape,
-         operation,
-         %__MODULE__{relation_filter_counters: relation_filter_counters} = state
-       ) do
-    oid_rel_key = {oid, table}
-
-    increment = if operation == :add, do: 1, else: -1
-    filter_counters = Map.get(relation_filter_counters, oid_rel_key, %{})
-
-    {relation_ctr, filter_counters} =
-      update_map_counter(filter_counters, @relation_counter, increment)
-
-    if relation_ctr > 0 do
-      filter_counters =
-        Enum.concat(
-          get_selected_columns_for_shape(shape) |> Enum.map(&{@relation_column, &1}),
-          get_where_clauses_for_shape(shape) |> Enum.map(&{@relation_where, &1})
-        )
-        |> Enum.reduce(filter_counters, fn col, filter ->
-          {_, filter} = update_map_counter(filter, col, increment)
-          filter
-        end)
-
-      %{
-        state
-        | relation_filter_counters:
-            Map.put(relation_filter_counters, oid_rel_key, filter_counters)
-      }
-    else
-      %{state | relation_filter_counters: Map.delete(relation_filter_counters, oid_rel_key)}
-    end
-  end
-
-  @spec update_map_counter(map(), any(), integer()) :: {any(), map()}
-  defp update_map_counter(map, key, inc) do
-    Map.get_and_update(map, key, fn
-      nil when inc < 0 -> {nil, nil}
-      ctr when ctr + inc < 0 -> :pop
-      nil -> {inc, inc}
-      ctr -> {ctr + inc, ctr + inc}
-    end)
-  end
-
-  @spec get_selected_columns_for_shape(Shape.t()) :: MapSet.t(String.t() | nil)
-  defp get_selected_columns_for_shape(%Shape{where: _, flags: %{selects_all_columns: true}}),
-    do: MapSet.new([nil])
-
-  defp get_selected_columns_for_shape(%Shape{where: nil, selected_columns: columns}),
-    do: MapSet.new(columns)
-
-  defp get_selected_columns_for_shape(%Shape{where: where, selected_columns: columns}) do
-    # If columns are selected, include columns used in the where clause
-    where_cols = where |> Expr.unqualified_refs() |> MapSet.new()
-    MapSet.union(MapSet.new(columns), where_cols)
-  end
-
-  @spec get_where_clauses_for_shape(Shape.t()) ::
-          MapSet.t(Electric.Replication.Eval.Expr.t() | nil)
-  defp get_where_clauses_for_shape(%Shape{where: nil}), do: MapSet.new([nil])
-  # TODO: flatten where clauses by splitting top level ANDs
-  defp get_where_clauses_for_shape(%Shape{where: where, flags: flags}) do
-    if Map.get(flags, :non_primitive_columns_in_where, false) do
-      MapSet.new([nil])
-    else
-      MapSet.new([where])
-    end
+    %{state | prepared_relation_filters: prepared, relation_ref_counts: counts}
   end
 
   @spec add_waiter(GenServer.from(), state()) :: state()
@@ -634,11 +536,6 @@ defmodule Electric.Replication.PublicationManager do
     MapSet.member?(tracked_shape_handles, shape_handle)
   end
 
-  defp filters_are_equal?(old_filters, new_filters) do
-    Map.keys(old_filters) == Map.keys(new_filters) and
-      Enum.all?(old_filters, fn {key, old_filter} ->
-        new_filter = Map.fetch!(new_filters, key)
-        Map.delete(old_filter, :where_clauses) == Map.delete(new_filter, :where_clauses)
-      end)
-  end
+  defp filters_are_equal?(old_filters, new_filters),
+    do: Map.keys(old_filters) == Map.keys(new_filters)
 end
