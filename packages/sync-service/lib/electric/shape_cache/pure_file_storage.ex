@@ -816,6 +816,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp open_file(opts, suffix, :json_file),
     do: File.open!(json_file(opts, suffix), [:append, :raw])
 
+  # We're opening the chunk file in sync mode because writes there are rare but we prefer for them
+  # to be atomic
   defp open_file(opts, suffix, :chunk_file),
     do: File.open!(chunk_file(opts, suffix), [:append, :raw, :sync])
 
