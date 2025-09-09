@@ -1,5 +1,18 @@
 # @core/sync-service
 
+## 1.1.10
+
+### Patch Changes
+
+- 8623e73: Avoid crashing ETS inspector if unable to grab DB connection to not lose cache.
+- 705deee: Ensure all stack telemetry adds `telemetry_span_attrs` to its metadata.
+- 142cfd9: Do not crash `ReplicationClient` if `ShapeLogCollector` is missing - wait for it to get back up.
+- 705deee: Fix `electric.postgres.replication.transaction_received.bytes` metric to use actual transaction size.
+- 6078121: Fix the mismatch between implementation and reference docs for the ELECTRIC_STORAGE config option.
+- 6316827: Ensure flush tracker handles progressive flush acknowledgements under continuous use. Fixes issue where under heavy load acknowledgements would be delayed.
+- a955063: feat: allow composite keys everywhere in subqueries
+- 1c55d2a: feat: allow $n param usage in subqueries
+
 ## 1.1.9
 
 ### Patch Changes
