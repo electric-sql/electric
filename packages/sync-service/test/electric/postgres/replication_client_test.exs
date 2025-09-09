@@ -12,6 +12,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   alias Electric.Postgres.ReplicationClient
 
   alias Electric.Replication.Changes.{
+    Relation,
     DeletedRecord,
     NewRecord,
     Transaction,
@@ -41,6 +42,41 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     defp process_message({:"$gen_cast", :replication_client_streamed_first_message}),
       do: {self(), :streaming_started}
+  end
+
+  defmodule MockTransactionProcessor do
+    use GenServer, restart: :temporary
+
+    def start_link(test_pid) do
+      GenServer.start_link(__MODULE__, test_pid, name: __MODULE__)
+    end
+
+    @impl true
+    def init(test_pid) do
+      {:ok, %{test_pid: test_pid, should_crash?: false}}
+    end
+
+    def process_transaction(txn) do
+      GenServer.call(__MODULE__, {:process_transaction, txn})
+    end
+
+    def toggle_crash(should_crash?) do
+      GenServer.call(__MODULE__, {:toggle_crash, should_crash?})
+    end
+
+    @impl true
+    def handle_call({:process_transaction, txn}, _from, state) do
+      if state.should_crash? do
+        raise "Interrupting transaction processing abnormally"
+      end
+
+      send(state.test_pid, {:from_replication, txn})
+      {:reply, :ok, state}
+    end
+
+    def handle_call({:toggle_crash, should_crash?}, _from, state) do
+      {:reply, :ok, %{state | should_crash?: should_crash?}}
+    end
   end
 
   setup do
@@ -160,16 +196,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       interrupt_val = "interrupt #{inspect(pid)}"
       insert_item(conn, interrupt_val)
+      refute_received {:from_replication, _}, 50
+      Process.exit(pid, :some_reason)
 
-      assert_receive {
-                       :DOWN,
-                       ^monitor,
-                       :process,
-                       ^pid,
-                       {%RuntimeError{message: "Interrupting transaction processing abnormally"},
-                        _stacktrace}
-                     },
-                     @assert_receive_db_timeout
+      assert_receive {:DOWN, ^monitor, :process, ^pid, :some_reason}, @assert_receive_db_timeout
 
       refute_received _
 
@@ -181,6 +211,43 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => ^interrupt_val}} = receive_tx_change()
 
       refute_receive _
+    end
+
+    @tag transaction_received: {MockTransactionProcessor, :process_transaction, []}
+    @tag relation_received: {MockTransactionProcessor, :process_transaction, []}
+    test "holds processing of transaction until ready", %{db_conn: conn} = ctx do
+      client_pid = start_client(ctx)
+
+      # should not process the transaction but also should not die
+      insert_item(conn, "test value 1")
+      refute_receive {:from_replication, _}, 50
+      assert Process.alive?(client_pid)
+
+      start_supervised({MockTransactionProcessor, self()})
+
+      # once we start streaming we should see it processed
+      assert %Relation{table: "items", columns: [_, _]} = receive_rel_change()
+      assert %NewRecord{record: %{"value" => "test value 1"}} = receive_tx_change()
+
+      # should have same behaviour mid-processing
+      MockTransactionProcessor.toggle_crash(true)
+      insert_item(conn, "test value 2")
+      refute_receive {:from_replication, _}, 50
+      assert Process.alive?(client_pid)
+      start_supervised({MockTransactionProcessor, self()})
+      assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
+    end
+
+    @tag transaction_received: {MockTransactionProcessor, :process_transaction, []}
+    @tag relation_received: {MockTransactionProcessor, :process_transaction, []}
+    test "aborts held processing of transaction on exit", %{db_conn: conn} = ctx do
+      client_pid = start_client(ctx)
+      insert_item(conn, "test value 1")
+      refute_receive {:from_replication, _}, 50
+      ref = Process.monitor(client_pid)
+      Process.unlink(client_pid)
+      Process.exit(client_pid, :shutdown)
+      assert_receive {:DOWN, ^ref, :process, ^client_pid, :shutdown}, 500
     end
 
     # Regression test for https://github.com/electric-sql/electric/issues/1548
@@ -557,8 +624,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: ctx.slot_name,
         try_creating_publication?: false,
         slot_name: ctx.slot_name,
-        transaction_received: {__MODULE__, :test_transaction_received, [self()]},
-        relation_received: {__MODULE__, :test_relation_received, [self()]},
+        transaction_received:
+          Map.get(ctx, :transaction_received, {__MODULE__, :test_transaction_received, [self()]}),
+        relation_received:
+          Map.get(ctx, :relation_received, {__MODULE__, :test_relation_received, [self()]}),
         connection_manager: ctx.connection_manager
       ]
     }
@@ -628,6 +697,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
     id = Ecto.UUID.generate()
     {:ok, bin_uuid} = Ecto.UUID.dump(id)
     {id, bin_uuid}
+  end
+
+  defp receive_rel_change do
+    assert_receive {:from_replication, %Relation{} = change},
+                   @assert_receive_db_timeout
+
+    change
   end
 
   defp receive_tx_change do

@@ -462,6 +462,36 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  describe "collector not ready" do
+    setup ctx do
+      {:ok, pid} =
+        start_supervised(
+          {ShapeLogCollector,
+           stack_id: ctx.stack_id,
+           inspector: {Mock.Inspector, elem(@inspector, 1)},
+           persistent_kv: ctx.persistent_kv}
+        )
+
+      %{server: pid}
+    end
+
+    test "rejects new transactions", ctx do
+      lsn = Lsn.from_string("0/10")
+
+      txn = %Transaction{xid: 100, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+
+      assert_raise MatchError, fn -> ShapeLogCollector.store_transaction(txn, ctx.server) end
+    end
+
+    test "rejects relation messages", ctx do
+      relation = %Relation{id: 1234, table: "test_table", schema: "public", columns: []}
+
+      assert_raise MatchError, fn ->
+        ShapeLogCollector.handle_relation_msg(relation, ctx.server)
+      end
+    end
+  end
+
   test "closes the loop even with no active shapes", ctx do
     ctx = setup_log_collector(ctx)
     xmin = 100
