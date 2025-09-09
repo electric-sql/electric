@@ -57,12 +57,12 @@ defmodule Electric.Replication.SchemaReconciler do
   end
 
   def handle_continue(:reconcile, state) do
-    handle_reconcile(state)
+    _ = handle_reconcile(state)
     {:noreply, state, {:continue, :schedule_next_check}}
   end
 
   def handle_call(:reconcile_now, _from, state) do
-    handle_reconcile(state)
+    _ = handle_reconcile(state)
     {:reply, :ok, state}
   end
 
@@ -71,13 +71,24 @@ defmodule Electric.Replication.SchemaReconciler do
   end
 
   defp handle_reconcile(state) do
-    {shape_cache_mod, shape_cache_args} = state.shape_cache
-
+    state.inspector
+    |> Inspector.list_relations_with_stale_cache()
+    |> handle_diverged_relations(state)
+  catch
     # We essentially never want to fail here, as this is a periodic task.
     # If it fails, we'll just try again next time, so no additional retries are implemented
-    with {:ok, diverged_relations} <-
-           Inspector.list_relations_with_stale_cache(state.inspector),
-         :ok <-
+    type, reason ->
+      st = __STACKTRACE__
+      Logger.error("Schema reconciliation failed: #{Exception.format(type, reason, st)}")
+      :error
+  end
+
+  defp handle_diverged_relations({:ok, []}, _state), do: :ok
+
+  defp handle_diverged_relations({:ok, diverged_relations}, state) do
+    {shape_cache_mod, shape_cache_args} = state.shape_cache
+
+    with :ok <-
            shape_cache_mod.clean_all_shapes_for_relations(diverged_relations, shape_cache_args),
          :ok <-
            Enum.each(diverged_relations, fn {oid, _} ->
@@ -89,16 +100,9 @@ defmodule Electric.Replication.SchemaReconciler do
       {:error, reason} ->
         Logger.warning("Schema reconciliation failed: #{reason}")
         :error
-
-      :error ->
-        Logger.warning("Schema reconciliation failed while fetching fresh relations")
     end
-
-    :ok
-  catch
-    type, reason ->
-      st = __STACKTRACE__
-      Logger.error("Schema reconciliation failed: #{Exception.format(type, reason, st)}")
-      :error
   end
+
+  defp handle_diverged_relations(:error, _state),
+    do: Logger.warning("Schema reconciliation failed while fetching fresh relations")
 end
