@@ -127,13 +127,19 @@ describe.for(fetchAndSse)(
     }) => {
       const [id] = await insertIssues({ title: `test title` })
 
+      type CustomRow = {
+        ID: number
+        TITLE: string
+        PRIORITY: number
+      }
+
       // transformer example: uppercase keys
       const uppercaseKeys: TransformFunction = (row) =>
         Object.fromEntries(
           Object.entries(row).map(([k, v]) => [k.toUpperCase(), v])
-        ) as Row
+        )
 
-      const shapeStream = new ShapeStream({
+      const shapeStream = new ShapeStream<CustomRow>({
         url: `${BASE_URL}/v1/shape`,
         params: {
           table: issuesTableUrl,
