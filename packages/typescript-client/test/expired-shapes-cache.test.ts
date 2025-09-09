@@ -15,6 +15,7 @@ describe(`ExpiredShapesCache`, () => {
   beforeEach(() => {
     localStorage.clear()
     cache = new ExpiredShapesCache()
+    expiredShapesCache.clear()
     aborter = new AbortController()
     fetchMock = vi.fn()
     vi.clearAllMocks()

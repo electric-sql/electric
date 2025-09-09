@@ -61,6 +61,11 @@ export class ExpiredShapesCache {
   constructor() {
     this.load()
   }
+
+  clear(): void {
+    this.data = {}
+    this.save()
+  }
 }
 
 // Module-level singleton instance
