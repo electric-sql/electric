@@ -483,6 +483,9 @@ defmodule Electric.Replication.PublicationManager do
         :remove -> max(current - 1, 0)
       end
 
+    # we could rederive the prepared filters from the keys of the counts map
+    # but since we're keeping both arouond might as well not iterate over the
+    # whole map every time
     {prepared, counts} =
       cond do
         new_count == 0 and current > 0 ->
