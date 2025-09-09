@@ -131,7 +131,7 @@ describe.for(fetchAndSse)(
       const uppercaseKeys: TransformFunction = (row) =>
         Object.fromEntries(
           Object.entries(row).map(([k, v]) => [k.toUpperCase(), v])
-        )
+        ) as Row
 
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,

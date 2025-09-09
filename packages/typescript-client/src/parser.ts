@@ -20,7 +20,7 @@ export type Parser<Extensions = never> = {
 }
 
 export type TransformFunction<Extensions = never> = (
-  message: Row<Extensions>
+  record: Record<string, unknown>
 ) => Row<Extensions>
 
 const parseNumber = (value: string) => Number(value)
