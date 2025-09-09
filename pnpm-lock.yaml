@@ -1680,6 +1680,9 @@ importers:
       glob:
         specifier: ^10.3.10
         version: 10.4.5
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
       pg:
         specifier: ^8.12.0
         version: 8.13.1
@@ -1701,6 +1704,9 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.36.0)
+      vitest-localstorage-mock:
+        specifier: ^0.1.2
+        version: 0.1.2(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.36.0))
 
   packages/y-electric:
     dependencies:
@@ -14713,6 +14719,11 @@ packages:
         optional: true
       postcss:
         optional: true
+
+  vitest-localstorage-mock@0.1.2:
+    resolution: {integrity: sha512-1oee6iDWhhquzVogssbpwQi6a2F3L+nCKF2+qqyCs5tH0sOYRyTqnsfj2dtmEQiL4xtJkHLn42hEjHGESlsJHw==}
+    peerDependencies:
+      vitest: '*'
 
   vitest@2.1.4:
     resolution: {integrity: sha512-eDjxbVAJw1UJJCHr5xr/xM86Zx+YxIEXGAR+bmnEID7z9qWfoxpHw0zdobz+TQAFOLT+nEXz3+gx6nUJ7RgmlQ==}
@@ -30716,6 +30727,10 @@ snapshots:
       - terser
       - typescript
       - universal-cookie
+
+  vitest-localstorage-mock@0.1.2(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.36.0)):
+    dependencies:
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.36.0)
 
   vitest@2.1.4(@types/node@18.19.99)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.36.0):
     dependencies:
