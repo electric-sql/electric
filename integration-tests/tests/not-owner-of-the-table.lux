@@ -15,7 +15,7 @@
   "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
 
 ## Start the sync service
-[invoke setup_electric_with_env "ELECTRIC_TWEAKS_SCHEMA_RECONCILER_PERIOD=2s"]
+[invoke setup_electric_with_env "ELECTRIC_TWEAKS_PUBLICATION_REFRESH_PERIOD=2s"]
 
 ## Verify that the replication pipeline has initialized successfully
 [shell electric]
@@ -65,11 +65,14 @@
 	??[info] Altering identity of public.items to FULL
   ?\[error\] Failed to configure publication: %Postgrex.Error\{message: nil, postgres: %\{code: :insufficient_privilege,.*message: "must be owner of table items"
 
-## Wait for the schema reconciler to run and verify that the table is removed from the publication
+## Wait for the publication to be refreshed and verify that the table is removed from it
 [shell electric]
   ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, and add [] tables
-  ## Wait a bit for configuration to run
-  [sleep 3]
+
+  # Call refresh_publication() once more to ensure the previous update has completed. This is
+  # going to be a noop call since there are no changes pending for the publication.
+  !Electric.Replication.PublicationManager.refresh_publication(stack_id: "single_stack", forced?: true)
+  ??:ok
 
 [shell psql]
   !SELECT * FROM pg_publication_tables;

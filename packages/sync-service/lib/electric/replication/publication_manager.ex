@@ -35,6 +35,7 @@ defmodule Electric.Replication.PublicationManager do
     :can_alter_publication?,
     :manual_table_publishing?,
     :configure_tables_for_replication_fn,
+    :publication_refresh_period,
     :shape_cache,
     next_update_forced?: false
   ]
@@ -51,6 +52,7 @@ defmodule Electric.Replication.PublicationManager do
            publication_name: String.t(),
            db_pool: term(),
            configure_tables_for_replication_fn: fun(),
+           publication_refresh_period: non_neg_integer(),
            shape_cache: {module(), term()},
            next_update_forced?: boolean()
          }
@@ -80,7 +82,8 @@ defmodule Electric.Replication.PublicationManager do
               required: false,
               default: &Configuration.configure_publication!/4
             ],
-            server: [type: :any, required: false]
+            server: [type: :any, required: false],
+            refresh_period: [type: :pos_integer, required: false, default: 60_000]
           )
 
   @behaviour __MODULE__
@@ -174,10 +177,11 @@ defmodule Electric.Replication.PublicationManager do
       can_alter_publication?: opts.can_alter_publication?,
       manual_table_publishing?: opts.manual_table_publishing?,
       shape_cache: Map.get(opts, :shape_cache, {Electric.ShapeCache, [stack_id: opts.stack_id]}),
-      configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn
+      configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn,
+      publication_refresh_period: opts.refresh_period
     }
 
-    {:ok, state}
+    {:ok, state, state.publication_refresh_period}
   end
 
   @impl true
@@ -189,7 +193,7 @@ defmodule Electric.Replication.PublicationManager do
       state = schedule_update_publication(state.update_debounce_timeout, state)
       {:noreply, state}
     else
-      {:reply, :ok, state}
+      {:reply, :ok, state, state.publication_refresh_period}
     end
   end
 
@@ -201,13 +205,13 @@ defmodule Electric.Replication.PublicationManager do
       state = schedule_update_publication(state.update_debounce_timeout, state)
       {:noreply, state}
     else
-      {:reply, :ok, state}
+      {:reply, :ok, state, state.publication_refresh_period}
     end
   end
 
   def handle_call({:recover_shape, shape_handle, oid_rel}, _from, state) do
     state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
-    {:reply, :ok, state}
+    {:reply, :ok, state, state.publication_refresh_period}
   end
 
   def handle_call({:refresh_publication, forced?}, from, state) do
@@ -216,7 +220,7 @@ defmodule Electric.Replication.PublicationManager do
       state = schedule_update_publication(state.update_debounce_timeout, forced?, state)
       {:noreply, state}
     else
-      {:reply, :ok, state}
+      {:reply, :ok, state, state.publication_refresh_period}
     end
   end
 
@@ -227,15 +231,26 @@ defmodule Electric.Replication.PublicationManager do
   @impl true
   def handle_info(:update_publication, state) do
     # Clear out the timer ref
+    if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
     state = %{state | scheduled_updated_ref: nil}
 
     # Invoke the actual handler for the publication update
-    if not state.can_alter_publication? or state.manual_table_publishing? do
-      check_publication_relations(state)
-    else
-      update_publication_state(state)
+    updated_state =
+      if not state.can_alter_publication? or state.manual_table_publishing? do
+        check_publication_relations(state)
+      else
+        update_publication_state(state)
+      end
+
+    with {:ok, state} <- updated_state do
+      # Schedule a forced refresh to happen periodically unless there's an explicit call to
+      # update the publication that happens sooner.
+      {:noreply, state, state.publication_refresh_period}
     end
   end
+
+  def handle_info(:timeout, state),
+    do: handle_info(:update_publication, %{state | next_update_forced?: true})
 
   defp check_publication_relations(
          %__MODULE__{
@@ -246,7 +261,7 @@ defmodule Electric.Replication.PublicationManager do
        ) do
     if not forced? and filters_are_equal?(current_filters, committed_filters) do
       Logger.debug("No changes to publication, skipping checkup")
-      {:noreply, reply_to_waiters(:ok, state)}
+      {:ok, reply_to_waiters(:ok, state)}
     else
       # We cannot modify the publication, so we only check whether it is in the right state for
       # the set of currently active relation filters.
@@ -280,7 +295,7 @@ defmodule Electric.Replication.PublicationManager do
           error = %Electric.DbConfigurationError{type: reason, message: message}
 
           state = reply_to_waiters({:error, error}, state)
-          {:noreply, %{state | next_update_forced?: false}}
+          {:ok, %{state | next_update_forced?: false}}
       end
     end
   end
@@ -312,12 +327,12 @@ defmodule Electric.Replication.PublicationManager do
       {:error, err} when retries < @max_retries and not is_fatal(err) ->
         Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
         state = schedule_update_publication(@retry_timeout, %{state | retries: retries + 1})
-        {:noreply, state}
+        {:ok, state}
 
       {:error, err} ->
         Logger.error("Failed to configure publication: #{inspect(err)}")
         state = reply_to_waiters({:error, err}, state)
-        {:noreply, %{state | next_update_forced?: false}}
+        {:ok, %{state | next_update_forced?: false}}
     end
   end
 
@@ -338,7 +353,7 @@ defmodule Electric.Replication.PublicationManager do
     state = reply_to_waiters(:ok, state)
     committed_filters = MapSet.difference(state.prepared_relation_filters, invalidated_relations)
 
-    {:noreply,
+    {:ok,
      %{
        state
        | committed_relation_filters: committed_filters,
