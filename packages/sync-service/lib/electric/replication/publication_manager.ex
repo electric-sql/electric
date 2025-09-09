@@ -19,7 +19,7 @@ defmodule Electric.Replication.PublicationManager do
   defstruct [
     # %{ {oid, relation} => count }
     :relation_ref_counts,
-    # %{ {oid, relation} => %RelationFilter{} }
+    # %MapSet{{oid, relation}}
     :prepared_relation_filters,
     # same shape as above (what DB/pub currently has)
     :committed_relation_filters,
@@ -40,8 +40,8 @@ defmodule Electric.Replication.PublicationManager do
 
   @typep state() :: %__MODULE__{
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
-           prepared_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
-           committed_relation_filters: %{Electric.oid_relation() => __MODULE__.RelationFilter.t()},
+           prepared_relation_filters: MapSet.t(Electric.oid_relation()),
+           committed_relation_filters: MapSet.t(Electric.oid_relation()),
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
@@ -53,14 +53,6 @@ defmodule Electric.Replication.PublicationManager do
            next_update_forced?: boolean()
          }
   @typep filter_operation :: :add | :remove
-
-  defmodule RelationFilter do
-    defstruct [:relation]
-
-    def relation_only(%__MODULE__{relation: relation}), do: %__MODULE__{relation: relation}
-
-    @type t :: %__MODULE__{relation: Electric.relation()}
-  end
 
   @retry_timeout 300
   @max_retries 3
@@ -165,8 +157,8 @@ defmodule Electric.Replication.PublicationManager do
 
     state = %__MODULE__{
       relation_ref_counts: %{},
-      prepared_relation_filters: %{},
-      committed_relation_filters: %{},
+      prepared_relation_filters: MapSet.new(),
+      committed_relation_filters: MapSet.new(),
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
@@ -273,8 +265,8 @@ defmodule Electric.Replication.PublicationManager do
       # the set of currently active relation filters.
       case Configuration.check_publication_relations_and_identity(
              state.db_pool,
-             Map.keys(committed_filters),
-             Map.keys(current_filters),
+             committed_filters,
+             current_filters,
              state.publication_name
            ) do
         {:ok, modified_relations} ->
@@ -291,7 +283,10 @@ defmodule Electric.Replication.PublicationManager do
           )
 
           {mod, args} = state.shape_cache
-          mod.clean_all_shapes_for_relations(relations, args)
+
+          relations
+          |> MapSet.to_list()
+          |> mod.clean_all_shapes_for_relations(args)
 
           tables = Enum.map(relations, fn {_oid, relation} -> Utils.relation_to_sql(relation) end)
           message = publication_error_message(error_type, tables, state)
@@ -341,17 +336,20 @@ defmodule Electric.Replication.PublicationManager do
 
   # invalidated_relations are those that have been modified or dropped from the publication.
   defp update_relation_filters(state, invalidated_relations) do
-    if invalidated_relations != [] do
+    if MapSet.size(invalidated_relations) > 0 do
       Logger.info(
-        "Relations dropped/renamed since last publication update: #{inspect(invalidated_relations)}"
+        "Relations dropped/renamed since last publication update: #{inspect(MapSet.to_list(invalidated_relations))}"
       )
 
       {mod, args} = state.shape_cache
-      mod.clean_all_shapes_for_relations(invalidated_relations, args)
+
+      invalidated_relations
+      |> MapSet.to_list()
+      |> mod.clean_all_shapes_for_relations(args)
     end
 
     state = reply_to_waiters(:ok, state)
-    committed_filters = Map.drop(state.prepared_relation_filters, invalidated_relations)
+    committed_filters = MapSet.difference(state.prepared_relation_filters, invalidated_relations)
 
     {:noreply,
      %{
@@ -425,7 +423,7 @@ defmodule Electric.Replication.PublicationManager do
   # since the last update. Useful when we're not altering the publication often to catch changes
   # to the DB.
   @spec update_publication(state()) ::
-          {:ok, state(), [Electric.oid_relation()]} | {:error, term()}
+          {:ok, state(), MapSet.t(Electric.oid_relation())} | {:error, term()}
 
   defp update_publication(
          %__MODULE__{
@@ -436,7 +434,7 @@ defmodule Electric.Replication.PublicationManager do
        )
        when current_filters == committed_filters and not forced? do
     Logger.debug("No changes to publication, skipping update")
-    {:ok, state, []}
+    {:ok, state, MapSet.new()}
   end
 
   defp update_publication(
@@ -453,13 +451,13 @@ defmodule Electric.Replication.PublicationManager do
     # included in the publication
     if not forced? and filters_are_equal?(current_filters, committed_filters) do
       Logger.debug("No changes to publication, skipping update")
-      {:ok, state, []}
+      {:ok, state, MapSet.new()}
     else
       try do
         missing_relations =
           configure_tables_for_replication_fn.(
             db_pool,
-            Map.keys(committed_filters),
+            committed_filters,
             current_filters,
             publication_name
           )
@@ -489,11 +487,10 @@ defmodule Electric.Replication.PublicationManager do
     {prepared, counts} =
       cond do
         new_count == 0 and current > 0 ->
-          {Map.delete(prepared, key), Map.delete(counts, key)}
+          {MapSet.delete(prepared, key), Map.delete(counts, key)}
 
         current == 0 and new_count > 0 ->
-          {Map.put(prepared, key, %RelationFilter{relation: relation}),
-           Map.put(counts, key, new_count)}
+          {MapSet.put(prepared, key), Map.put(counts, key, new_count)}
 
         new_count > 0 ->
           {prepared, Map.put(counts, key, new_count)}
@@ -536,6 +533,5 @@ defmodule Electric.Replication.PublicationManager do
     MapSet.member?(tracked_shape_handles, shape_handle)
   end
 
-  defp filters_are_equal?(old_filters, new_filters),
-    do: Map.keys(old_filters) == Map.keys(new_filters)
+  defp filters_are_equal?(old_filters, new_filters), do: MapSet.equal?(old_filters, new_filters)
 end

@@ -3,8 +3,6 @@ defmodule Electric.Postgres.ConfigurationTest do
   import ExUnit.CaptureLog
   import Support.DbSetup
 
-  alias Electric.Replication.PublicationManager.RelationFilter
-  alias Electric.Replication.Eval
   alias Electric.Postgres.Configuration
 
   setup :with_unique_db
@@ -55,16 +53,11 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert list_tables_in_publication(conn, publication) == []
       oid = get_table_oid(conn, {"public", "items"})
 
-      assert [] ==
+      assert MapSet.new() ==
                Configuration.configure_publication!(
                  conn,
-                 [],
-                 %{
-                   {oid, {"public", "items"}} => %RelationFilter{
-                     relation: {"public", "items"},
-                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-                   }
-                 },
+                 MapSet.new(),
+                 MapSet.new([{oid, {"public", "items"}}]),
                  publication
                )
 
@@ -83,13 +76,8 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert capture_log(fn ->
                Configuration.configure_publication!(
                  conn,
-                 [],
-                 %{
-                   {oid, {"public", "items"}} => %RelationFilter{
-                     relation: {"public", "items"},
-                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-                   }
-                 },
+                 MapSet.new(),
+                 MapSet.new([{oid, {"public", "items"}}]),
                  publication
                )
              end) =~ ~r"#{:erlang.pid_to_list(self())}.*Altering identity"
@@ -99,13 +87,8 @@ defmodule Electric.Postgres.ConfigurationTest do
       refute capture_log(fn ->
                Configuration.configure_publication!(
                  conn,
-                 [{oid, {"public", "items"}}],
-                 %{
-                   {oid, {"public", "items"}} => %RelationFilter{
-                     relation: {"public", "items"},
-                     where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
-                   }
-                 },
+                 MapSet.new([{oid, {"public", "items"}}]),
+                 MapSet.new([{oid, {"public", "items"}}]),
                  publication
                )
              end) =~ ~r"#{:erlang.pid_to_list(self())}.*Altering identity"
@@ -123,17 +106,11 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       Configuration.configure_publication!(
         conn,
-        [],
-        %{
-          {oid1, {"public", "items"}} => %RelationFilter{
-            relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-          },
-          {oid2, {"public", "other_table"}} => %RelationFilter{
-            relation: {"public", "other_table"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'no%')"}]
-          }
-        },
+        MapSet.new(),
+        MapSet.new([
+          {oid1, {"public", "items"}},
+          {oid2, {"public", "other_table"}}
+        ]),
         publication
       )
 
@@ -151,16 +128,10 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       assert Configuration.configure_publication!(
                conn,
-               [],
-               %{
-                 {oid, {"public", "items"}} => %RelationFilter{
-                   relation: {"public", "items"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}],
-                   selected_columns: ["id"]
-                 }
-               },
+               MapSet.new(),
+               MapSet.new([{oid, {"public", "items"}}]),
                publication
-             ) == []
+             ) == MapSet.new()
 
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
 
@@ -170,18 +141,13 @@ defmodule Electric.Postgres.ConfigurationTest do
       # Configure `items` table again but with a different list of selected columns
       assert Configuration.configure_publication!(
                conn,
-               [{oid, {"public", "items"}}],
-               %{
-                 {oid, {"public", "items"}} => %RelationFilter{
-                   relation: {"public", "items"},
-                   selected_columns: ["id", "value"]
-                 },
-                 {oid2, {"public", "other_table"}} => %RelationFilter{
-                   relation: {"public", "other_table"}
-                 }
-               },
+               MapSet.new([{oid, {"public", "items"}}]),
+               MapSet.new([
+                 {oid, {"public", "items"}},
+                 {oid2, {"public", "other_table"}}
+               ]),
                publication
-             ) == []
+             ) == MapSet.new()
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
@@ -196,10 +162,8 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert_raise Postgrex.Error, ~r/undefined_object/, fn ->
         Configuration.configure_publication!(
           conn,
-          [{oid, {"public", "items"}}],
-          %{
-            {oid, {"public", "items"}} => %RelationFilter{relation: {"public", "items"}}
-          },
+          MapSet.new([{oid, {"public", "items"}}]),
+          MapSet.new([{oid, {"public", "items"}}]),
           "nonexistent"
         )
       end
@@ -216,45 +180,28 @@ defmodule Electric.Postgres.ConfigurationTest do
       # Create the publication first
       Configuration.configure_publication!(
         conn,
-        [],
-        %{
-          {oid1, {"public", "items"}} => %RelationFilter{
-            relation: {"public", "items"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-          },
-          {oid2, {"public", "other_table"}} => %RelationFilter{
-            relation: {"public", "other_table"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE '1%')"}]
-          },
-          {oid3, {"public", "other_other_table"}} => %RelationFilter{
-            relation: {"public", "other_other_table"},
-            where_clauses: [%Eval.Expr{query: "(value ILIKE '1%')"}]
-          }
-        },
+        MapSet.new(),
+        MapSet.new([
+          {oid1, {"public", "items"}},
+          {oid2, {"public", "other_table"}},
+          {oid3, {"public", "other_other_table"}}
+        ]),
         publication
       )
 
-      new_filters = %{
-        {oid1, {"public", "items"}} => %RelationFilter{
-          relation: {"public", "items"},
-          where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-        },
-        {oid2, {"public", "other_table"}} => %RelationFilter{
-          relation: {"public", "other_table"},
-          where_clauses: [%Eval.Expr{query: "(value ILIKE '2%')"}]
-        },
-        {oid3, {"public", "other_other_table"}} => %RelationFilter{
-          relation: {"public", "other_other_table"},
-          where_clauses: [%Eval.Expr{query: "(value ILIKE '2%')"}]
-        }
-      }
+      new_relations =
+        MapSet.new([
+          {oid1, {"public", "items"}},
+          {oid2, {"public", "other_table"}},
+          {oid3, {"public", "other_other_table"}}
+        ])
 
       task1 =
         Task.async(fn ->
           Configuration.configure_publication!(
             conn,
-            Map.keys(new_filters),
-            new_filters,
+            new_relations,
+            new_relations,
             publication
           )
         end)
@@ -263,14 +210,14 @@ defmodule Electric.Postgres.ConfigurationTest do
         Task.async(fn ->
           Configuration.configure_publication!(
             conn,
-            Map.keys(new_filters),
-            new_filters,
+            new_relations,
+            new_relations,
             publication
           )
         end)
 
       # First check: both tasks completed successfully, that means there were no deadlocks
-      assert [[], []] == Task.await_many([task1, task2])
+      assert [MapSet.new(), MapSet.new()] == Task.await_many([task1, task2])
 
       # Second check: the publication has the correct filters, that means one didn't override the other
       assert list_tables_in_publication(conn, publication) |> Enum.sort() ==
@@ -289,15 +236,10 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       assert Configuration.configure_publication!(
                conn,
-               [],
-               %{
-                 {oid1, {"public", "items"}} => %RelationFilter{
-                   relation: {"public", "items"},
-                   where_clauses: [%Eval.Expr{query: "(value ILIKE 'yes%')"}]
-                 }
-               },
+               MapSet.new(),
+               MapSet.new([{oid1, {"public", "items"}}]),
                publication
-             ) == []
+             ) == MapSet.new()
 
       assert list_tables_in_publication(conn, publication) ==
                expected_filters([{"public", "items"}])
@@ -314,18 +256,10 @@ defmodule Electric.Postgres.ConfigurationTest do
       # Adding a new where clause shoudn't re-add the table to the publication but should return that info
       assert Configuration.configure_publication!(
                conn,
-               [{oid1, {"public", "items"}}],
-               %{
-                 {oid1, {"public", "items"}} => %RelationFilter{
-                   relation: {"public", "items"},
-                   where_clauses: [
-                     %Eval.Expr{query: "(value ILIKE 'no%')"},
-                     %Eval.Expr{query: "(value ILIKE 'yes%')"}
-                   ]
-                 }
-               },
+               MapSet.new([{oid1, {"public", "items"}}]),
+               MapSet.new([{oid1, {"public", "items"}}]),
                publication
-             ) == [{oid1, {"public", "items"}}]
+             ) == MapSet.new([{oid1, {"public", "items"}}])
 
       assert list_tables_in_publication(conn, publication) == []
     end

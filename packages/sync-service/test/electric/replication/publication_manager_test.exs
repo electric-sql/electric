@@ -4,7 +4,6 @@ defmodule Electric.Replication.PublicationManagerTest do
   import Support.ComponentSetup
   import Support.TestUtils
 
-  alias Electric.Replication.PublicationManager.RelationFilter
   alias Electric.Replication.PublicationManager
 
   @shape_handle_1 "shape_handle_1"
@@ -22,8 +21,8 @@ defmodule Electric.Replication.PublicationManagerTest do
 
     configure_tables_fn = fn _, _, filters, _ ->
       # Only relations are relevant now
-      send(test_pid, {:filters, Map.values(filters)})
-      Map.get(ctx, :returned_relations, [])
+      send(test_pid, {:filters, MapSet.to_list(filters)})
+      Map.get(ctx, :returned_relations, MapSet.new())
     end
 
     %{publication_manager: {_, publication_manager_opts}} =
@@ -46,7 +45,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
 
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
     end
 
     test "ignores subsequent shapes for same handle", %{opts: opts} do
@@ -55,7 +54,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape2, opts)
 
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       refute_receive {:filters, _}, 200
     end
 
@@ -68,7 +67,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       collected =
         receive do
-          {:filters, filters} -> MapSet.new(Enum.map(filters, & &1.relation))
+          {:filters, filters} -> MapSet.new(filters)
         after
           500 -> flunk("Did not receive initial filters")
         end
@@ -79,12 +78,12 @@ defmodule Electric.Replication.PublicationManagerTest do
       collected =
         receive do
           {:filters, filters} ->
-            MapSet.union(collected, MapSet.new(Enum.map(filters, & &1.relation)))
+            MapSet.union(collected, MapSet.new(filters))
         after
           200 -> collected
         end
 
-      assert MapSet.equal?(collected, MapSet.new([{"public", "items"}, {"public", "other"}]))
+      assert [{_, {"public", "items"}}, {_, {"public", "other"}}] = MapSet.to_list(collected)
     end
 
     @tag update_debounce_timeout: 100
@@ -96,15 +95,15 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
       assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
 
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       refute_receive {:filters, _}, 500
     end
 
-    @tag returned_relations: [{10, {"public", "another_table"}}]
+    @tag returned_relations: MapSet.new([{10, {"public", "another_table"}}])
     test "broadcasts dropped relations to shape cache", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       assert_receive {:clean_all_shapes_for_relations, [{10, {"public", "another_table"}}]}
     end
   end
@@ -113,7 +112,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     test "removes single relation when last shape removed", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape, opts)
       assert_receive {:filters, []}
     end
@@ -128,7 +127,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       Task.await_many([task1, task2, task3, task4])
 
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       refute_receive {:filters, _}, 300
     end
 
@@ -141,7 +140,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
       task3 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_3, shape3, opts) end)
       Task.await_many([task1, task2, task3])
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
 
       # Remove one handle; relation should stay
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape1, opts)
@@ -162,7 +161,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape1, opts)
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape2, opts)
       :ok = PublicationManager.refresh_publication(opts)
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
     end
   end
 
@@ -172,7 +171,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape, opts)
       refute_receive {:filters, _}, 200
       assert :ok == PublicationManager.refresh_publication(opts)
-      assert_receive {:filters, [%RelationFilter{relation: {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
     end
   end
 
