@@ -5,8 +5,7 @@ defmodule Electric.Postgres.Configuration do
   """
   require Logger
   alias Electric.Utils
-
-  @type relation_filters :: MapSet.t(Electric.oid_relation())
+  alias Electric.Replication.PublicationManager
 
   @doc """
   Check whether the state of the publication relations in the database matches the sets of
@@ -21,14 +20,14 @@ defmodule Electric.Postgres.Configuration do
   """
   @spec check_publication_relations_and_identity(
           Postgrex.conn(),
-          relation_filters(),
-          relation_filters(),
+          PublicationManager.relation_filters(),
+          PublicationManager.relation_filters(),
           String.t()
         ) ::
-          :ok
+          {:ok, PublicationManager.relation_filters()}
           | {:error,
-             {:misconfigured_replica_identity, relation_filters()}
-             | {:table_missing_from_publication, relation_filters()}}
+             {:misconfigured_replica_identity, PublicationManager.relation_filters()}
+             | {:tables_missing_from_publication, PublicationManager.relation_filters()}}
   def check_publication_relations_and_identity(
         conn,
         previous_relations,
@@ -105,7 +104,9 @@ defmodule Electric.Postgres.Configuration do
     else
       {:error,
        {:misconfigured_replica_identity,
-        Enum.map(bad_relations, fn {oid, relation, _ident} -> {oid, relation} end) |> MapSet.new()}}
+        bad_relations
+        |> Enum.map(fn {oid, relation, _ident} -> {oid, relation} end)
+        |> MapSet.new()}}
     end
   end
 
@@ -125,12 +126,12 @@ defmodule Electric.Postgres.Configuration do
   """
   @spec configure_publication!(
           Postgrex.conn(),
-          prev_relations :: relation_filters(),
-          new_relations :: relation_filters(),
+          prev_relations :: PublicationManager.relation_filters(),
+          new_relations :: PublicationManager.relation_filters(),
           String.t()
         ) ::
           relations_failed_to_configure
-        when relations_failed_to_configure: relation_filters()
+        when relations_failed_to_configure: PublicationManager.relation_filters()
   def configure_publication!(conn, previous_relations, new_relations, publication_name) do
     Postgrex.transaction(conn, fn conn ->
       # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)

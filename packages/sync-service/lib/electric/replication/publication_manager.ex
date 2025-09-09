@@ -38,10 +38,11 @@ defmodule Electric.Replication.PublicationManager do
     next_update_forced?: false
   ]
 
+  @type relation_filters() :: MapSet.t(Electric.oid_relation())
   @typep state() :: %__MODULE__{
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
-           prepared_relation_filters: MapSet.t(Electric.oid_relation()),
-           committed_relation_filters: MapSet.t(Electric.oid_relation()),
+           prepared_relation_filters: relation_filters(),
+           committed_relation_filters: relation_filters(),
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
@@ -422,9 +423,7 @@ defmodule Electric.Replication.PublicationManager do
   # but we'll write them anyway because that'll verify that no tables have been dropped/renamed
   # since the last update. Useful when we're not altering the publication often to catch changes
   # to the DB.
-  @spec update_publication(state()) ::
-          {:ok, state(), MapSet.t(Electric.oid_relation())} | {:error, term()}
-
+  @spec update_publication(state()) :: {:ok, state(), relation_filters()} | {:error, term()}
   defp update_publication(
          %__MODULE__{
            committed_relation_filters: committed_filters,
