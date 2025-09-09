@@ -14,8 +14,14 @@ export type Value<Extensions = never> =
 
 export type Row<Extensions = never> = Record<string, Value<Extensions>>
 
-export type GetExtensions<T extends Row<unknown>> =
-  T extends Row<infer Extensions> ? Extensions : never
+// Check if `T` extends the base Row type without extensions
+// if yes, it has no extensions so we return `never`
+// otherwise, we infer the extensions from the Row type
+export type GetExtensions<T> = [T] extends [Row<never>]
+  ? never
+  : [T] extends [Row<infer E>]
+    ? E
+    : never
 
 export type Offset = `-1` | `${number}_${number}` | `${bigint}_${number}`
 
