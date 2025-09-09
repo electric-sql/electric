@@ -42,6 +42,7 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
+  ELECTRIC_PROTOCOL_QUERY_PARAMS,
 } from './constants'
 import {
   EventSourceMessage,
@@ -296,21 +297,15 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 }
 
 /**
- * Creates a canonical shape key from a URL containing only the core shape definition parameters
+ * Creates a canonical shape key from a URL excluding only Electric protocol parameters
  */
 function canonicalShapeKey(url: URL): string {
   const cleanUrl = new URL(url.origin + url.pathname)
-  const params = url.searchParams
 
-  for (const param of [
-    TABLE_QUERY_PARAM,
-    WHERE_QUERY_PARAM,
-    COLUMNS_QUERY_PARAM,
-    REPLICA_PARAM,
-    WHERE_PARAMS_PARAM,
-  ]) {
-    if (params.has(param)) {
-      cleanUrl.searchParams.set(param, params.get(param)!)
+  // Copy all params except Electric protocol ones that vary between requests
+  for (const [key, value] of url.searchParams) {
+    if (!ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
+      cleanUrl.searchParams.set(key, value)
     }
   }
 
@@ -600,13 +595,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (params.params)
         setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
 
-      // Add cache buster for shapes known to be expired to prevent 409s
-      const shapeKey = canonicalShapeKey(fetchUrl)
-      const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
-      if (expiredHandle) {
-        fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
-      }
-
       // Add any remaining custom parameters
       const customParams = { ...params }
       delete customParams.table
@@ -639,6 +627,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#shapeHandle) {
       // This should probably be a header for better cache breaking?
       fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
+    }
+
+    // Add cache buster for shapes known to be expired to prevent 409s
+    const shapeKey = canonicalShapeKey(fetchUrl)
+    const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
+    if (expiredHandle) {
+      fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
     }
 
     // sort query params in-place for stable URLs and improved cache hits
