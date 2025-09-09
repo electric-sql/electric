@@ -268,7 +268,7 @@ defmodule Electric.Connection.Manager.Pool do
       :error, :noproc -> exit({:shutdown, {:supervisor_not_alive, supervisor_pid}})
     end
 
-    opts
+    Electric.Utils.deobfuscate_password(opts)
   end
 
   @spec num_connected(t()) :: non_neg_integer()
