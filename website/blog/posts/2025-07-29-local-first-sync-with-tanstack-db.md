@@ -61,6 +61,9 @@ Type-safe, declarative, incrementally adoptable and insanely fast, it's the futu
 >
 > Docs are at [tanstack.com/db](https://tanstack.com/db) and there's an [example&nbsp;app](https://github.com/TanStack/db/tree/main/examples/react/todo) in&nbsp;the&nbsp;repo.
 
+> [!Info] ⚡&nbsp; Interactive guide to TanStack DB
+> [What TanStack DB is](https://frontendatscale.com/blog/tanstack-db) how it works and why it might change the way you build apps.
+
 ## The next frontier for front&#8209;end
 
 Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains<span class="inline-md">,</span> <span class="hidden-md">across UX, DX and AX</span> lies in [local-first<span class="hidden-md">,</span> sync<span class="hidden-md"> engine architecture</span>](/use-cases/local-first-software).
