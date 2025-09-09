@@ -6,6 +6,16 @@ import {
 } from '../src/expired-shapes-cache'
 import { EXPIRED_HANDLE_QUERY_PARAM } from '../src/constants'
 
+function waitForFetch(stream: ShapeStream): Promise<void> {
+  let unsub = () => {}
+  return new Promise<void>((resolve) => {
+    unsub = stream.subscribe(
+      () => resolve(),
+      () => resolve()
+    )
+  }).finally(() => unsub())
+}
+
 describe(`ExpiredShapesCache`, () => {
   let cache: ExpiredShapesCache
   const shapeUrl = `https://example.com/v1/shape`
@@ -94,6 +104,7 @@ describe(`ExpiredShapesCache`, () => {
 
     fetchMock.mockImplementation((url: string) => {
       capturedUrl = url
+      aborter.abort()
       return Promise.resolve(
         new Response(JSON.stringify([]), {
           status: 200,
@@ -116,13 +127,13 @@ describe(`ExpiredShapesCache`, () => {
       subscribe: false,
     })
 
-    // Trigger a request by subscribing
-    stream.subscribe(() => {})
+    const unsubscribe = stream.subscribe((update) => console.log(update))
 
-    // Wait for the fetch to be called
-    await vi.waitFor(() => {
-      expect(fetchMock).toHaveBeenCalled()
-    })
+    await new Promise((resolve) => setTimeout(resolve, 1))
+    unsubscribe()
+
+    // Wait for the initial fetch to complete
+    // await waitForFetch(stream)
 
     // Verify expired handle parameter was added to the URL
     const parsedUrl = new URL(capturedUrl)
@@ -210,23 +221,18 @@ describe(`ExpiredShapesCache`, () => {
       subscribe: false,
     })
 
-    // Subscribe to trigger the request
-    stream.subscribe(() => {})
+    // Wait for the initial fetch and 409 response to be processed
+    await waitForFetch(stream)
 
-    // Wait for the 409 to be processed and localStorage to be updated
+    // Verify localStorage was updated after 409
     const expectedShapeUrl = `${shapeUrl}?table=test`
-    await vi.waitFor(
-      () => {
-        const storedData = JSON.parse(
-          localStorage.getItem(`electric_expired_shapes`) || `{}`
-        )
-        expect(storedData[expectedShapeUrl]).toEqual({
-          expiredHandle: `original-handle`,
-          lastUsed: expect.any(Number),
-        })
-      },
-      { timeout: 1000 }
+    const storedData = JSON.parse(
+      localStorage.getItem(`electric_expired_shapes`) || `{}`
     )
+    expect(storedData[expectedShapeUrl]).toEqual({
+      expiredHandle: `original-handle`,
+      lastUsed: expect.any(Number),
+    })
 
     // Also verify using the singleton cache (tests persistence)
     expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(
