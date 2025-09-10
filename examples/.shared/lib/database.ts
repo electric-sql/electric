@@ -99,15 +99,45 @@ export function createDatabaseForCloudElectric({
     neonProjectId: `${neonProjectId.slice(0, 6)}...`,
   })
 
-  const project = neon.getProjectOutput({
-    id: neonProjectId,
-  })
-  project.id.apply((id) => {
-    console.log(`[db] Resolved Neon project`, { id })
-  })
+  // Preflight Neon API to surface clear errors in CI logs
+  try {
+    console.log(`[db] Preflight Neon API: GET project`)
+    const resp = execSync(
+      `curl -s -w "\\n%{http_code}" -H "Authorization: Bearer $NEON_API_KEY" ` +
+        `https://console.neon.tech/api/v2/projects/${neonProjectId}`,
+      { env: process.env }
+    )
+      .toString()
+      .trim()
+    const status = resp.slice(resp.lastIndexOf("\n") + 1)
+    const body = resp.slice(0, resp.lastIndexOf("\n"))
+    console.log(`[db] Neon API status`, { status })
+    if (status !== `200`) {
+      console.error(`[db] Neon API error body`, body)
+      throw new Error(`Neon API preflight failed with status ${status}`)
+    }
+  } catch (e) {
+    console.error(`[db] Neon API preflight failed`, (e as Error).message)
+    throw e
+  }
+
+  // Fetch default branch id using Neon HTTP API to avoid provider invoke here
+  const preflightJson = JSON.parse(
+    execSync(
+      `curl -s -H "Authorization: Bearer $NEON_API_KEY" https://console.neon.tech/api/v2/projects/${neonProjectId}`,
+      { env: process.env }
+    ).toString()
+  ) as any
+  const defaultBranchId: string | undefined =
+    preflightJson?.project?.default_branch_id || preflightJson?.default_branch_id
+  if (!defaultBranchId) {
+    throw new Error(`Could not resolve Neon default branch id`)
+  }
+  console.log(`[db] Resolved Neon default branch`, { defaultBranchId })
+
   const { ownerName, dbName: resultingDbName } = createNeonDb({
-    projectId: project.id,
-    branchId: project.defaultBranchId,
+    projectId: neonProjectId,
+    branchId: defaultBranchId,
     dbName,
   })
   resultingDbName.apply((name) =>
@@ -118,13 +148,15 @@ export function createDatabaseForCloudElectric({
   )
 
   const databaseUri = getNeonConnectionString({
-    project,
+    projectId: neonProjectId,
+    branchId: defaultBranchId,
     roleName: ownerName,
     databaseName: resultingDbName,
     pooled: false,
   })
   const pooledDatabaseUri = getNeonConnectionString({
-    project,
+    projectId: neonProjectId,
+    branchId: defaultBranchId,
     roleName: ownerName,
     databaseName: resultingDbName,
     pooled: true,
