@@ -46,7 +46,7 @@ Follow these steps in order for a smooth first-time setup:
 4. **Visit the application:**
    Open [https://tanstack-start-db-electric-starter.localhost](https://tanstack-start-db-electric-starter.localhost)
 
-If you run into issues, see the [troubleshooting section](#common-pitfalls) below.
+If you run into issues, see the [pre-reqs](#pre-requisites) and [troubleshooting](#common-pitfalls) sections below.
 
 ## Adding a New Table
 
@@ -346,7 +346,6 @@ DATABASE_URL=postgresql://user:pass@your-prod-db:5432/dbname
 
 #### Infrastructure Changes
 
-- **Remove development Electric container**: If using Electric Cloud, remove the `electric` service from `docker-compose.yaml` for production
 - **HTTPS & Secure Cookies**: Ensure your deployment platform handles HTTPS termination
 - **Database**: Use a managed PostgreSQL service (not the Docker container)
 - **Environment**: Set `NODE_ENV=production`
@@ -360,7 +359,7 @@ DATABASE_URL=postgresql://user:pass@your-prod-db:5432/dbname
 
 ## AI
 
-The starter includes an `AGENT.md`. Depending on which AI coding tool you use, you may need to copy/move it to the right file name e.g. `.cursor/rules`.
+The starter includes an `AGENTS.md`. Depending on which AI coding tool you use, you may need to copy/move it to the right file name e.g. `.cursor/rules`.
 
 ## Styling
 
@@ -636,5 +635,6 @@ Follow these patterns to get the most out of this starter:
 
 - [TanStack documentation](https://tanstack.com)
 - [TanStack DB documentation](https://tanstack.com/db/latest/docs/overview)
+- [An Interactive Guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db)
 - [Stop Re-Rendering — TanStack DB, the Embedded Client Database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
 - [Local-first sync with TanStack DB and Electric](https://electric-sql.com/blog/2025/07/29/local-first-sync-with-tanstack-db)
