@@ -313,15 +313,11 @@ defmodule Electric.Connection.Manager do
   end
 
   defp initialize_connection_opts(state, opts) do
-    in_connection_opts = Keyword.fetch!(opts, :connection_opts)
-    in_replication_opts = Keyword.fetch!(opts, :replication_opts)
-
-    replication_connection_opts = Keyword.fetch!(in_replication_opts, :connection_opts)
-
-    connection_opts = in_connection_opts || replication_connection_opts
+    connection_opts = Keyword.fetch!(opts, :connection_opts)
 
     replication_opts =
-      in_replication_opts
+      opts
+      |> Keyword.fetch!(:replication_opts)
       |> Keyword.put(:start_streaming?, false)
       |> Keyword.put(:connection_manager, self())
 
@@ -389,7 +385,7 @@ defmodule Electric.Connection.Manager do
       {:ok, replication_connection_opts, state} ->
         opts = [
           replication_opts:
-            put_in(replication_opts(state), [:connection_opts], replication_connection_opts),
+            Keyword.put(state.replication_opts, :connection_opts, replication_connection_opts),
           connection_manager: self(),
           stack_id: state.stack_id
         ]
@@ -1182,17 +1178,10 @@ defmodule Electric.Connection.Manager do
     %{state | connection_backoff: {conn_backoff, tref}}
   end
 
-  defp replication_connection_opts(state) do
-    state
-    |> replication_opts()
-    |> Keyword.fetch!(:connection_opts)
-  end
+  defp replication_connection_opts(state),
+    do: Keyword.fetch!(state.replication_opts, :connection_opts)
 
-  defp pooled_connection_opts(state) do
-    state.connection_opts
-  end
-
-  defp replication_opts(%State{} = state), do: state.replication_opts
+  defp pooled_connection_opts(state), do: state.connection_opts
 
   defp drop_slot(%State{pool_pids: %{admin: {pool_pid, _}}} = state) when is_pid(pool_pid) do
     pool = pool_name(state.stack_id, :admin)
