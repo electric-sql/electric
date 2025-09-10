@@ -295,8 +295,10 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       start_connection_manager(ctx)
 
-      assert_receive {:validate, ^pooled_conn_opts}, 1000
-      assert_receive {:validate, ^repl_opts}, 1000
+      StatusMonitor.wait_until_active(stack_id, 1000)
+
+      assert_receive {:validate, ^pooled_conn_opts}
+      assert_receive {:validate, ^repl_opts}
     end
   end
 
