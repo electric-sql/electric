@@ -82,11 +82,6 @@ defmodule Electric.Connection.Manager do
       :connection_opts,
       # Replication options specific to `Electric.Postgres.ReplicationClient`
       :replication_opts,
-      # Connection options that are shared between regular connections and the replication
-      # connection. If this is set to `nil` post-initialization, it means that regular
-      # connections and the replication connection have been configured using different
-      # connection URLs.
-      :shared_connection_opts,
       # Database connection pool options
       :pool_opts,
       # Options specific to `Electric.Timeline`
@@ -321,27 +316,16 @@ defmodule Electric.Connection.Manager do
     in_connection_opts = Keyword.fetch!(opts, :connection_opts)
     in_replication_opts = Keyword.fetch!(opts, :replication_opts)
 
-    # If we see that both top-level connection opts and replication connection opts have been
-    # initialized from the same kwlist, we'll skip the extra work and only perform the no-ssl
-    # and ipv4 fallbacks once.
-    shared_connection_opts = Keyword.fetch!(in_replication_opts, :connection_opts)
+    replication_connection_opts = Keyword.fetch!(in_replication_opts, :connection_opts)
 
-    connection_opts = if is_nil(shared_connection_opts), do: in_connection_opts
+    connection_opts = in_connection_opts || replication_connection_opts
 
     replication_opts =
       in_replication_opts
       |> Keyword.put(:start_streaming?, false)
       |> Keyword.put(:connection_manager, self())
-      |> Keyword.update!(:connection_opts, fn in_connection_opts ->
-        if is_nil(shared_connection_opts), do: in_connection_opts
-      end)
 
-    %{
-      state
-      | shared_connection_opts: shared_connection_opts,
-        connection_opts: connection_opts,
-        replication_opts: replication_opts
-    }
+    %{state | connection_opts: connection_opts, replication_opts: replication_opts}
   end
 
   defp validate_connection(conn_opts, type, state) do
@@ -1205,13 +1189,10 @@ defmodule Electric.Connection.Manager do
   end
 
   defp pooled_connection_opts(state) do
-    state.shared_connection_opts || state.connection_opts
+    state.connection_opts
   end
 
-  defp replication_opts(%State{shared_connection_opts: nil} = state), do: state.replication_opts
-
-  defp replication_opts(%State{shared_connection_opts: conn_opts} = state),
-    do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
+  defp replication_opts(%State{} = state), do: state.replication_opts
 
   defp drop_slot(%State{pool_pids: %{admin: {pool_pid, _}}} = state) when is_pid(pool_pid) do
     pool = pool_name(state.stack_id, :admin)

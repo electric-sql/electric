@@ -26,6 +26,7 @@ defmodule Electric.Connection.Manager.Pool do
   defstruct [
     :stack_id,
     :role,
+    :host,
     :pool_ref,
     :pool_pid,
     :pool_size,
@@ -79,6 +80,7 @@ defmodule Electric.Connection.Manager.Pool do
     pool_mod = Access.fetch!(opts, :pool_mod)
     pool_opts = Access.fetch!(opts, :pool_opts)
     conn_opts = Access.fetch!(opts, :conn_opts)
+    host = "#{conn_opts[:hostname]}:#{conn_opts[:port] || 5432}"
 
     pool_ref = make_ref()
 
@@ -111,6 +113,7 @@ defmodule Electric.Connection.Manager.Pool do
     state = %__MODULE__{
       stack_id: Access.fetch!(opts, :stack_id),
       role: role,
+      host: host,
       pool_ref: pool_ref,
       pool_pid: pool_pid,
       pool_size: pool_size,
@@ -127,18 +130,24 @@ defmodule Electric.Connection.Manager.Pool do
     case {state.status, pool_is_ready} do
       {:starting, true} ->
         Logger.info(
-          "Connection pool [#{state.role}] is ready with #{state.pool_size} connections"
+          "Connection pool [#{state.role}: #{state.host}] is ready with #{state.pool_size} connections"
         )
 
         notify_connection_pool_ready(state)
         {:noreply, %{state | status: :ready, last_connection_error: nil}}
 
       {:repopulating, true} ->
-        Logger.debug("Connection pool fully repopulated with #{state.pool_size} connections")
+        Logger.debug(
+          "Connection pool [#{state.role}] fully repopulated with #{state.pool_size} connections"
+        )
+
         {:noreply, %{state | status: :ready, last_connection_error: nil}}
 
       {:ready, false} ->
-        Logger.debug("Connection pool no longer fully populated, waiting for more connections")
+        Logger.debug(
+          "Connection pool [#{state.role}] no longer fully populated, waiting for more connections"
+        )
+
         {:noreply, %{state | status: :repopulating}}
 
       _ ->
@@ -149,7 +158,7 @@ defmodule Electric.Connection.Manager.Pool do
   @impl true
   def handle_info({:pool_conn_started, pid}, state) do
     # The connection pool has started a new connection, so we need to remember it.
-    Logger.debug("Pooled connection #{inspect(pid)} started")
+    Logger.debug("Pooled connection [#{state.role}] #{inspect(pid)} started")
 
     {
       :noreply,
@@ -160,7 +169,7 @@ defmodule Electric.Connection.Manager.Pool do
   # The following two messages are sent by the DBConnection library because we've configured
   # the connection manager process as connection listener for the DB connection pool.
   def handle_info({:connected, pid, ref}, %{pool_ref: ref} = state) do
-    Logger.debug("Pooled connection #{inspect(pid)} connected")
+    Logger.debug("Pooled connection [#{state.role}] #{inspect(pid)} connected")
 
     {
       :noreply,
@@ -170,7 +179,7 @@ defmodule Electric.Connection.Manager.Pool do
   end
 
   def handle_info({:disconnected, pid, ref}, %{pool_ref: ref} = state) do
-    Logger.debug("Pooled connection #{inspect(pid)} disconnected")
+    Logger.debug("Pooled connection [#{state.role}] #{inspect(pid)} disconnected")
 
     {
       :noreply,
@@ -190,7 +199,8 @@ defmodule Electric.Connection.Manager.Pool do
     error =
       if is_nil(state.last_connection_error) do
         %DbConnectionError{
-          message: "Connection pool was unable to fill up with healthy connections.",
+          message:
+            "Connection pool [#{state.role}] was unable to fill up with healthy connections.",
           type: :connection_pool_failed_to_populate,
           original_error: :killed,
           retry_may_fix?: true
@@ -207,7 +217,9 @@ defmodule Electric.Connection.Manager.Pool do
   end
 
   def handle_info({:EXIT, pid, reason}, state) when is_map_key(state.connection_pids, pid) do
-    Logger.debug("Pooled connection #{inspect(pid)} exited with reason: #{inspect(reason)}")
+    Logger.debug(
+      "Pooled connection [#{state.role}] #{inspect(pid)} exited with reason: #{inspect(reason)}"
+    )
 
     # Keep track of the most recent pooled connection error seen so we can use it as the
     # reason for the pool failing as a whole if it does not manage to recover.
@@ -221,7 +233,7 @@ defmodule Electric.Connection.Manager.Pool do
 
     if not is_nil(state.last_connection_error) do
       Logger.warning(
-        "Pooled database connection encountered an error: #{inspect(state.last_connection_error, pretty: true)}"
+        "Pooled database connection [#{state.role}] encountered an error: #{inspect(state.last_connection_error, pretty: true)}"
       )
     end
 
