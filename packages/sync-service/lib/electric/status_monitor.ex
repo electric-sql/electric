@@ -61,6 +61,10 @@ defmodule Electric.StatusMonitor do
     GenServer.cast(name(stack_id), :db_scale_down)
   end
 
+  def database_connections_scaled_up(stack_id) do
+    GenServer.cast(name(stack_id), :db_scale_up)
+  end
+
   def mark_pg_lock_acquired(stack_id, lock_pid) do
     mark_condition_met(stack_id, :pg_lock_acquired, lock_pid)
   end
@@ -179,6 +183,11 @@ defmodule Electric.StatusMonitor do
 
   def handle_cast(:db_scale_down, state) do
     :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, true})
+    {:noreply, maybe_reply_to_waiters(state)}
+  end
+
+  def handle_cast(:db_scale_up, state) do
+    :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, false})
     {:noreply, maybe_reply_to_waiters(state)}
   end
 

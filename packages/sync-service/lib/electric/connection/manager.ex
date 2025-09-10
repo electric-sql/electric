@@ -522,23 +522,33 @@ defmodule Electric.Connection.Manager do
       )
     end
 
+    repl_sup_opts = [
+      stack_id: state.stack_id,
+      shape_cache_opts: state.shape_cache_opts,
+      pool_opts: state.pool_opts,
+      replication_opts: state.replication_opts,
+      tweaks: state.tweaks,
+      can_alter_publication?: state.can_alter_publication?,
+      manual_table_publishing?: state.manual_table_publishing?,
+      persistent_kv: state.persistent_kv,
+      max_shapes: state.max_shapes,
+      expiry_batch_size: state.expiry_batch_size
+    ]
+
     start_time = System.monotonic_time()
 
-    with {:error, reason} <-
-           Electric.Connection.Manager.Supervisor.start_replication_supervisor(
-             stack_id: state.stack_id,
-             shape_cache_opts: state.shape_cache_opts,
-             pool_opts: state.pool_opts,
-             replication_opts: state.replication_opts,
-             tweaks: state.tweaks,
-             can_alter_publication?: state.can_alter_publication?,
-             manual_table_publishing?: state.manual_table_publishing?,
-             persistent_kv: state.persistent_kv,
-             max_shapes: state.max_shapes,
-             expiry_batch_size: state.expiry_batch_size
-           ) do
-      Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
-      exit(reason)
+    case Electric.Connection.Manager.Supervisor.start_replication_supervisor(repl_sup_opts) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        # Ask the existing shape cache to clean itself up and stuff.
+        # Update last processed lsn based on the the latest replication client state ???
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+        exit(reason)
     end
 
     state = %{
