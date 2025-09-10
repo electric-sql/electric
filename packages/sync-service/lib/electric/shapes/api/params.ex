@@ -296,6 +296,13 @@ defmodule Electric.Shapes.Api.Params do
 
           message, changeset when is_binary(message) ->
             add_error(changeset, field, message)
+
+          :connection_not_available, changeset ->
+            add_error(
+              changeset,
+              field,
+              "Cannot look up #{field} info while the database connection is down"
+            )
         end)
 
       {:error, %NimbleOptions.ValidationError{message: message, key: key}} ->
