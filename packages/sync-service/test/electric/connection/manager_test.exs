@@ -1,5 +1,6 @@
 defmodule Electric.Connection.ConnectionManagerTest do
   use ExUnit.Case
+  use Repatch.ExUnit
 
   import Support.ComponentSetup
   import Support.DbSetup
@@ -21,9 +22,11 @@ defmodule Electric.Connection.ConnectionManagerTest do
     publication_name = "electric_conn_mgr_test_pub_#{:erlang.phash2(stack_id)}"
     connection_opts = ctx.db_config
 
+    replication_connection_opts = Map.get(ctx, :replication_connection_opts, ctx.db_config)
+
     replication_opts = [
       stack_id: stack_id,
-      connection_opts: ctx.db_config,
+      connection_opts: replication_connection_opts,
       slot_name: ctx.slot_name,
       publication_name: publication_name,
       try_creating_publication?: true,
@@ -38,7 +41,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
          stack_id: stack_id,
          connection_opts: connection_opts,
          replication_opts: replication_opts,
-         pool_opts: [name: Electric.Connection.Manager.pool_name(stack_id), pool_size: 2],
+         pool_opts: [pool_size: 2],
          timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
          shape_cache_opts: [
            stack_id: stack_id,
@@ -249,6 +252,84 @@ defmodule Electric.Connection.ConnectionManagerTest do
                  "SELECT pubname FROM pg_publication WHERE pubname = $1",
                  [replication_opts[:publication_name]]
                )
+    end
+  end
+
+  describe "pooled connection opts" do
+    setup(ctx) do
+      [replication_connection_opts: Keyword.put(ctx.db_config, :host, "unpooled.localhost")]
+    end
+
+    test "are used correctly", %{stack_id: stack_id} = ctx do
+      %{replication_connection_opts: repl_opts, db_config: pooled_conn_opts} = ctx
+
+      parent = self()
+
+      refute repl_opts == pooled_conn_opts
+
+      Repatch.patch(
+        Connection.Manager.ConnectionResolver,
+        :validate,
+        [mode: :shared],
+        fn _stack_id, conn_opts ->
+          send(parent, {:validate, conn_opts})
+
+          {:ok, conn_opts}
+        end
+      )
+
+      # process allowance doesn't follow the supervision tree in this case
+      spawn_link(fn ->
+        Stream.repeatedly(fn -> 0 end)
+        |> Enum.reduce_while(0, fn _, _ ->
+          case GenServer.whereis(Electric.Connection.Manager.name(stack_id)) do
+            nil ->
+              {:cont, 0}
+
+            pid ->
+              Repatch.allow(parent, pid)
+              {:halt, 0}
+          end
+        end)
+      end)
+
+      start_connection_manager(ctx)
+
+      StatusMonitor.wait_until_active(stack_id, 1000)
+
+      assert_receive {:validate, ^pooled_conn_opts}
+      assert_receive {:validate, ^repl_opts}
+    end
+  end
+
+  describe "pool_sizes/1" do
+    test "uses the given pool size for both if size is small" do
+      # we need a pool size of at least 2
+      assert %{admin: 1, snapshot: 1} =
+               Electric.Connection.Manager.pool_sizes(1)
+
+      assert %{admin: 1, snapshot: 1} =
+               Electric.Connection.Manager.pool_sizes(2)
+
+      assert %{admin: 1, snapshot: 3} =
+               Electric.Connection.Manager.pool_sizes(4)
+
+      assert %{admin: 1, snapshot: 5} =
+               Electric.Connection.Manager.pool_sizes(6)
+
+      assert %{admin: 2, snapshot: 8} =
+               Electric.Connection.Manager.pool_sizes(10)
+    end
+
+    test "splits the pool between both roles for large enough sizes" do
+      assert %{admin: 4, snapshot: 16} =
+               Electric.Connection.Manager.pool_sizes(20)
+
+      assert %{admin: 4, snapshot: 36} =
+               Electric.Connection.Manager.pool_sizes(40)
+
+      assert %{admin: 4, snapshot: 96} =
+               Electric.Connection.Manager.pool_sizes(100)
     end
   end
 

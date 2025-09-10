@@ -26,7 +26,8 @@ defmodule Electric.StatusMonitorTest do
       start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
-      StatusMonitor.mark_connection_pool_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
@@ -35,7 +36,8 @@ defmodule Electric.StatusMonitorTest do
     test "when replication client not ready, returns :starting", %{stack_id: stack_id} do
       start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
-      StatusMonitor.mark_connection_pool_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
@@ -53,7 +55,8 @@ defmodule Electric.StatusMonitorTest do
     test "when shape log collector not ready, returns :starting", %{stack_id: stack_id} do
       start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
-      StatusMonitor.mark_connection_pool_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
@@ -67,7 +70,7 @@ defmodule Electric.StatusMonitorTest do
 
       process =
         Task.async(fn ->
-          StatusMonitor.mark_connection_pool_ready(stack_id, self())
+          StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
           send(test_process, :ready)
 
           receive do
@@ -82,6 +85,7 @@ defmodule Electric.StatusMonitorTest do
       end
 
       StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
@@ -91,7 +95,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
 
-      StatusMonitor.mark_connection_pool_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
     end
@@ -111,7 +115,8 @@ defmodule Electric.StatusMonitorTest do
       start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
-      StatusMonitor.mark_connection_pool_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
 
       refute_receive :active, 20
       assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
@@ -147,15 +152,28 @@ defmodule Electric.StatusMonitorTest do
                StatusMonitor.wait_until_active(stack_id, 1)
     end
 
-    test "returns error on timeout when mark_connection_pool_ready not received", %{
+    test "returns error on timeout when metadata mark_connection_pool_ready not received", %{
       stack_id: stack_id
     } do
       start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
 
       assert StatusMonitor.wait_until_active(stack_id, 1) ==
-               {:error, "Timeout waiting for database connection pool to be ready"}
+               {:error, "Timeout waiting for database connection pool (metadata) to be ready"}
+    end
+
+    test "returns error on timeout when snapshot mark_connection_pool_ready not received", %{
+      stack_id: stack_id
+    } do
+      start_link_supervised!({StatusMonitor, stack_id})
+      StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+      StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+
+      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+               {:error, "Timeout waiting for database connection pool (snapshot) to be ready"}
     end
 
     test "returns error on timeout when mark_shape_log_collector_ready not received", %{
@@ -164,7 +182,8 @@ defmodule Electric.StatusMonitorTest do
       start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
-      StatusMonitor.mark_connection_pool_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
 
       assert StatusMonitor.wait_until_active(stack_id, 1) ==
                {:error, "Timeout waiting for shape data to be loaded"}
@@ -178,12 +197,13 @@ defmodule Electric.StatusMonitorTest do
       start_link_supervised!({StatusMonitor, stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
-      StatusMonitor.mark_connection_pool_ready(stack_id, self())
-      StatusMonitor.mark_connection_pool_as_errored(stack_id, error_message)
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_connection_pool_as_errored(stack_id, :snapshot, error_message)
 
       assert StatusMonitor.wait_until_active(stack_id, 1) ==
                {:error,
-                "Timeout waiting for database connection pool to be ready: #{error_message}"}
+                "Timeout waiting for database connection pool (snapshot) to be ready: #{error_message}"}
     end
 
     test "returns error if stack is terminated before fully initialized", %{stack_id: stack_id} do

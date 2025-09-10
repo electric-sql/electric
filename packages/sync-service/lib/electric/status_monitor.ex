@@ -7,7 +7,8 @@ defmodule Electric.StatusMonitor do
   @conditions [
     :pg_lock_acquired,
     :replication_client_ready,
-    :connection_pool_ready,
+    :admin_connection_pool_ready,
+    :snapshot_connection_pool_ready,
     :shape_log_collector_ready
   ]
 
@@ -34,7 +35,8 @@ defmodule Electric.StatusMonitor do
 
       %{
         replication_client_ready: {true, _},
-        connection_pool_ready: {true, _},
+        admin_connection_pool_ready: {true, _},
+        snapshot_connection_pool_ready: {true, _},
         shape_log_collector_ready: {true, _}
       } ->
         :active
@@ -52,8 +54,12 @@ defmodule Electric.StatusMonitor do
     mark_condition_met(stack_id, :replication_client_ready, client_pid)
   end
 
-  def mark_connection_pool_ready(stack_id, pool_pid) do
-    mark_condition_met(stack_id, :connection_pool_ready, pool_pid)
+  def mark_connection_pool_ready(stack_id, :admin, pool_pid) do
+    mark_condition_met(stack_id, :admin_connection_pool_ready, pool_pid)
+  end
+
+  def mark_connection_pool_ready(stack_id, :snapshot, pool_pid) do
+    mark_condition_met(stack_id, :snapshot_connection_pool_ready, pool_pid)
   end
 
   def mark_shape_log_collector_ready(stack_id, collector_pid) do
@@ -68,8 +74,12 @@ defmodule Electric.StatusMonitor do
     mark_condition_as_errored(stack_id, :replication_client_ready, message)
   end
 
-  def mark_connection_pool_as_errored(stack_id, message) when is_binary(message) do
-    mark_condition_as_errored(stack_id, :connection_pool_ready, message)
+  def mark_connection_pool_as_errored(stack_id, :admin, message) when is_binary(message) do
+    mark_condition_as_errored(stack_id, :admin_connection_pool_ready, message)
+  end
+
+  def mark_connection_pool_as_errored(stack_id, :snapshot, message) when is_binary(message) do
+    mark_condition_as_errored(stack_id, :snapshot_connection_pool_ready, message)
   end
 
   defp mark_condition_as_errored(stack_id, condition, error) do
@@ -224,8 +234,13 @@ defmodule Electric.StatusMonitor do
       %{replication_client_ready: {false, details}} ->
         "Timeout waiting for replication client to be ready" <> format_details(details)
 
-      %{connection_pool_ready: {false, details}} ->
-        "Timeout waiting for database connection pool to be ready" <> format_details(details)
+      %{admin_connection_pool_ready: {false, details}} ->
+        "Timeout waiting for database connection pool (metadata) to be ready" <>
+          format_details(details)
+
+      %{snapshot_connection_pool_ready: {false, details}} ->
+        "Timeout waiting for database connection pool (snapshot) to be ready" <>
+          format_details(details)
 
       %{shape_log_collector_ready: {false, details}} ->
         "Timeout waiting for shape data to be loaded" <> format_details(details)

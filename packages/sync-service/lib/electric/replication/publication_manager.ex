@@ -154,7 +154,9 @@ defmodule Electric.Replication.PublicationManager do
       stack_id = Keyword.fetch!(opts, :stack_id)
 
       name = Keyword.get(opts, :name, name(stack_id))
-      db_pool = Keyword.get(opts, :db_pool, Electric.Connection.Manager.pool_name(stack_id))
+
+      db_pool =
+        Keyword.get(opts, :db_pool, Electric.Connection.Manager.admin_pool(stack_id))
 
       GenServer.start_link(__MODULE__, [name: name, db_pool: db_pool] ++ opts, name: name)
     end
