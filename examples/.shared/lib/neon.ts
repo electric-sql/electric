@@ -1,3 +1,13 @@
+import { execSync } from 'node:child_process'
+
+type NeonEndpointsResponse = {
+  endpoints?: Array<{ host: string; id: string }>
+}
+
+type NeonResetPasswordResponse = {
+  password?: string
+}
+
 export function getNeonConnectionString({
   projectId,
   branchId,
@@ -18,15 +28,12 @@ export function getNeonConnectionString({
 
   return $resolve([projectId, branchId, roleName, databaseName]).apply(
     ([pid, bid, role, db]) => {
-      const { execSync } =
-        require('node:child_process') as typeof import('node:child_process')
-
       const endpointsJson = JSON.parse(
         execSync(
           `curl -s -H "Authorization: Bearer $NEON_API_KEY" ` +
             `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/endpoints`
         ).toString()
-      ) as any
+      ) as unknown as NeonEndpointsResponse
       const endpoint = endpointsJson?.endpoints?.[0]
       if (!endpoint?.host || !endpoint?.id) {
         throw new Error(`Failed to resolve Neon branch endpoint`)
@@ -37,7 +44,7 @@ export function getNeonConnectionString({
             `${endpoint.id}-pooler`
           )
         : String(endpoint.host)
-      console.log(`[neon] Using ${pooled ? 'pooled' : 'direct'} endpoint`, {
+      console.log(`[neon] Using ${pooled ? `pooled` : `direct`} endpoint`, {
         host,
       })
 
@@ -46,7 +53,7 @@ export function getNeonConnectionString({
           `curl -s -X POST -H "Authorization: Bearer $NEON_API_KEY" ` +
             `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/roles/${role}/reset_password`
         ).toString()
-      ) as any
+      ) as unknown as NeonResetPasswordResponse
       const password = pwdJson?.password
       if (!password) {
         throw new Error(`Failed to obtain Neon role password`)
