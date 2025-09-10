@@ -19,7 +19,7 @@ function Layout() {
     setError("")
 
     try {
-      let { data, error } = await authClient.signUp.email(
+      let { data: _data, error } = await authClient.signUp.email(
         {
           email,
           password,
@@ -46,7 +46,7 @@ function Layout() {
           }
         )
 
-        data = result.data
+        _data = result.data
         error = result.error
       }
 

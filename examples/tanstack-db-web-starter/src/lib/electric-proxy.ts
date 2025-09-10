@@ -1,4 +1,4 @@
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 
 /**
  * Prepares the Electric SQL proxy URL from a request URL
