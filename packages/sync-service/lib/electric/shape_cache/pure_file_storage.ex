@@ -739,15 +739,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp write_metadata!(%__MODULE__{metadata_dir: metadata_dir}, key, value) do
-    File.write!(Path.join(metadata_dir, "#{key}.bin.tmp"), :erlang.term_to_binary(value), [
+    File.write!(Path.join(metadata_dir, "#{key}.bin"), :erlang.term_to_binary(value), [
       :write,
       :raw
     ])
 
-    rename!(
-      Path.join(metadata_dir, "#{key}.bin.tmp"),
-      Path.join(metadata_dir, "#{key}.bin")
-    )
+    # rename!(
+    #   Path.join(metadata_dir, "#{key}.bin.tmp"),
+    #   Path.join(metadata_dir, "#{key}.bin")
+    # )
 
     # {:ok, fd} = :prim_file.open(Path.join(metadata_dir, "#{key}.bin"), [:write, :raw])
     # :prim_file.write(fd, :erlang.term_to_binary(value))
