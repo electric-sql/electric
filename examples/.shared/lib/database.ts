@@ -56,6 +56,7 @@ function addDatabaseToElectric({
     }
   )
 
+  console.log(`[electric] Upserting Electric source via admin API`)
   return electricSourceCommand.stdout.apply((output) => {
     const parsedOutput = JSON.parse(output) as {
       id: string
@@ -73,6 +74,7 @@ export function applyMigrations(
   dbUri: string,
   migrationsDir: string = `./db/migrations`
 ) {
+  console.log(`[db] Applying migrations`, { directory: migrationsDir })
   execSync(`pnpm exec pg-migrations apply --directory ${migrationsDir}`, {
     env: {
       ...process.env,
@@ -88,19 +90,32 @@ export function createDatabaseForCloudElectric({
   dbName: string
   migrationsDirectory: string
 }) {
+  console.log(`[db] createDatabaseForCloudElectric start`, { dbName })
   const neonProjectId = process.env.NEON_PROJECT_ID
   if (!neonProjectId) {
     throw new Error(`NEON_PROJECT_ID is not set`)
   }
+  console.log(`[db] neon.getProjectOutput`, {
+    neonProjectId: `${neonProjectId.slice(0, 6)}...`,
+  })
 
   const project = neon.getProjectOutput({
     id: neonProjectId,
+  })
+  project.id.apply((id) => {
+    console.log(`[db] Resolved Neon project`, { id })
   })
   const { ownerName, dbName: resultingDbName } = createNeonDb({
     projectId: project.id,
     branchId: project.defaultBranchId,
     dbName,
   })
+  resultingDbName.apply((name) =>
+    console.log(`[db] createNeonDb returned`, { dbName: name })
+  )
+  ownerName.apply((name) =>
+    console.log(`[db] createNeonDb owner`, { ownerName: name })
+  )
 
   const databaseUri = getNeonConnectionString({
     project,
@@ -114,11 +129,18 @@ export function createDatabaseForCloudElectric({
     databaseName: resultingDbName,
     pooled: true,
   })
+  databaseUri.apply(() => console.log(`[db] Resolved direct connection string`))
+  pooledDatabaseUri.apply(() =>
+    console.log(`[db] Resolved pooled connection string`)
+  )
 
   const electricInfo = addDatabaseToElectric({
     dbUri: databaseUri,
     pooledDbUri: pooledDatabaseUri,
   })
+  electricInfo.apply(({ id }) =>
+    console.log(`[electric] Created/updated source`, { id })
+  )
 
   const res = {
     sourceId: electricInfo.id,

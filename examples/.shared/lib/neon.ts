@@ -27,6 +27,15 @@ export function getNeonConnectionString({
         )
       )
     : project.databaseHost
+  if (pooled) {
+    endpoint.endpoints?.apply((endpoints) =>
+      console.log(`[neon] Using pooled endpoint`, { host: endpoints?.[0]?.host })
+    )
+  } else {
+    project.databaseHost.apply((host) =>
+      console.log(`[neon] Using direct endpoint`, { host })
+    )
+  }
   return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${databaseName}?sslmode=require`
 }
 
