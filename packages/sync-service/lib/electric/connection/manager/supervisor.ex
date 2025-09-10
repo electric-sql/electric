@@ -18,7 +18,10 @@ defmodule Electric.Connection.Manager.Supervisor do
     Logger.metadata(stack_id: opts[:stack_id])
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
 
-    children = [{Electric.Connection.Manager, opts}]
+    children = [
+      {Electric.Connection.Manager.ConnectionResolver, stack_id: opts[:stack_id]},
+      {Electric.Connection.Manager, opts}
+    ]
 
     # Electric.Connection.Manager is a permanent child of the supervisor, so when it dies, the
     # :one_for_all strategy will kick in and restart the other children.

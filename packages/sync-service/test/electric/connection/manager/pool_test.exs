@@ -167,10 +167,10 @@ defmodule Electric.Connection.Manager.PoolTest do
 
   test "configure_pool_conn sends :pool_conn_started and returns opts", ctx do
     parent = self()
-    opts = [foo: :bar]
+    opts = Electric.Utils.obfuscate_password(foo: :bar, password: "password")
 
     returned = Pool.configure_pool_conn(opts, parent, ctx.stack_id)
-    assert returned == opts
+    assert returned == Electric.Utils.deobfuscate_password(opts)
 
     assert_receive {:pool_conn_started, pid} when is_pid(pid)
   end
