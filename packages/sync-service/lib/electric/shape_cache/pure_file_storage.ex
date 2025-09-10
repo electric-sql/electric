@@ -748,6 +748,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
       Path.join(metadata_dir, "#{key}.bin.tmp"),
       Path.join(metadata_dir, "#{key}.bin")
     )
+
+    # {:ok, fd} = :prim_file.open(Path.join(metadata_dir, "#{key}.bin"), [:write, :raw])
+    # :prim_file.write(fd, :erlang.term_to_binary(value))
+    # :prim_file.close(fd)
   end
 
   # Write metadata to both disk and ETS
