@@ -113,6 +113,23 @@ defmodule Electric.Connection.Manager.ConnectionResolverTest do
   end
 
   test "fallback to ipv4 works", ctx do
+    start_connection_resolver!(ctx)
+
+    db_config =
+      Keyword.merge(ctx.db_config, ipv6: true, hostname: "local-ipv4-only.electric-sql.dev")
+
+    assert {:ok, resolved_db_config} = ConnectionResolver.validate(ctx.stack_id, db_config)
+
+    expected = Keyword.merge(db_config, ipv6: false, hostname: "local-ipv4-only.electric-sql.dev")
+
+    for {k, v} <- expected do
+      assert Keyword.get(resolved_db_config, k) == v
+    end
+
+    assert_obfuscated_password(resolved_db_config)
+  end
+
+  test "fallback to ipv4 handles various error results", ctx do
     conn = spawn(fn -> Process.sleep(:infinity) end)
 
     start_connection_resolver!(
