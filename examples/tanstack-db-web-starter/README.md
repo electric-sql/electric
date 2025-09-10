@@ -24,17 +24,21 @@ _You can edit the values in the `.env` file, although the default values are fin
 Follow these steps in order for a smooth first-time setup:
 
 1. **Install dependencies:**
+
    ```sh
    pnpm install
    ```
 
 2. **Start Docker services:**
+
    ```sh
    pnpm run dev
    ```
+
    This starts the dev server, Docker Compose (Postgres + Electric), and Caddy automatically.
 
 3. **Run database migrations** (in a new terminal):
+
    ```sh
    pnpm run migrate
    ```
@@ -121,10 +125,10 @@ Create `src/lib/trpc/categories.ts`:
 import { router, authedProcedure, generateTxId } from "@/lib/trpc"
 import { z } from "zod"
 import { eq, and } from "drizzle-orm"
-import { 
-  categoriesTable, 
-  createCategorySchema, 
-  updateCategorySchema 
+import {
+  categoriesTable,
+  createCategorySchema,
+  updateCategorySchema,
 } from "@/db/schema"
 
 export const categoriesRouter = router({
@@ -141,7 +145,7 @@ export const categoriesRouter = router({
       })
       return result
     }),
-  
+
   // Add update and delete following the same pattern...
 })
 ```
@@ -194,7 +198,7 @@ Preload in route loaders and use with `useLiveQuery`:
 
 ```tsx
 // In route loader
-export const Route = createFileRoute('/my-route')({
+export const Route = createFileRoute("/my-route")({
   loader: async () => {
     await Promise.all([categoriesCollection.preload()])
   },
@@ -223,6 +227,7 @@ Make sure you have Docker running. Docker is used to run the Postgres and Electr
 Electric SQL's shape delivery benefits significantly from **HTTP/2 multiplexing**. Without HTTP/2, each shape subscription creates a new HTTP/1.1 connection, which browsers limit to 6 concurrent connections per domain. This creates a bottleneck that makes shapes appear slow.
 
 Caddy provides HTTP/2 support with automatic HTTPS, giving you:
+
 - **Faster shape loading** - Multiple shapes load concurrently over a single connection
 - **Better development experience** - No connection limits or artificial delays
 - **Production-like performance** - Your local dev mirrors production HTTP/2 behavior
@@ -251,11 +256,13 @@ This is necessary for HTTP/2 to work [without SSL warnings/errors in the browser
 If Caddy fails to start:
 
 1. **Test Caddy manually:**
+
    ```sh
    caddy start
    ```
 
 2. **Check certificate trust:**
+
    ```sh
    caddy trust
    # To remove later: caddy untrust
@@ -265,6 +272,7 @@ If Caddy fails to start:
    Look for a `Caddyfile` in your project root after running `pnpm dev`
 
 4. **Stop conflicting Caddy instances:**
+
    ```sh
    caddy stop
    ```
@@ -276,13 +284,13 @@ If Caddy fails to start:
 
 ### Common Pitfalls
 
-| Issue | Symptoms | Solution |
-|-------|----------|----------|
-| **Docker not running** | `docker compose ps` shows nothing | Start Docker Desktop/daemon |
-| **Caddy not trusted** | SSL warnings in browser | Run `caddy trust` (see Caddy section below) |
-| **Port conflicts** | Postgres (54321) or Electric (3000) in use | Stop conflicting services or change ports in `docker-compose.yaml` |
-| **Missing .env** | Database connection errors | Copy `.env.example` to `.env` |
-| **Caddy fails to start** | `Caddy exited with code 1` | Run `caddy start` manually to see the error |
+| Issue                    | Symptoms                                   | Solution                                                           |
+| ------------------------ | ------------------------------------------ | ------------------------------------------------------------------ |
+| **Docker not running**   | `docker compose ps` shows nothing          | Start Docker Desktop/daemon                                        |
+| **Caddy not trusted**    | SSL warnings in browser                    | Run `caddy trust` (see Caddy section below)                        |
+| **Port conflicts**       | Postgres (54321) or Electric (3000) in use | Stop conflicting services or change ports in `docker-compose.yaml` |
+| **Missing .env**         | Database connection errors                 | Copy `.env.example` to `.env`                                      |
+| **Caddy fails to start** | `Caddy exited with code 1`                 | Run `caddy start` manually to see the error                        |
 
 ### Debugging Commands
 
@@ -295,7 +303,7 @@ docker compose ps
 # View Electric and Postgres logs
 docker compose logs -f electric postgres
 
-# Test database connectivity  
+# Test database connectivity
 psql $DATABASE_URL -c "SELECT 1"
 
 # Check Caddy status
@@ -621,7 +629,7 @@ Follow these patterns to get the most out of this starter:
 #### Why These Rules Matter
 
 - **Electric handles reads** - Direct tRPC reads bypass real-time sync and optimistic updates
-- **Collection operations are optimistic** - They update the UI immediately while syncing in the background  
+- **Collection operations are optimistic** - They update the UI immediately while syncing in the background
 - **Preloading prevents flicker** - Collections load before components render, ensuring data is available
 
 # Learn More

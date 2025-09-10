@@ -23,7 +23,7 @@ const config = defineConfig({
     }),
   ],
   ssr: {
-    noExternal: ['zod'],
+    noExternal: ["zod"],
   },
 })
 

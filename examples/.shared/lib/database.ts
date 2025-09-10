@@ -109,8 +109,8 @@ export function createDatabaseForCloudElectric({
     )
       .toString()
       .trim()
-    const status = resp.slice(resp.lastIndexOf("\n") + 1)
-    const body = resp.slice(0, resp.lastIndexOf("\n"))
+    const status = resp.slice(resp.lastIndexOf('\n') + 1)
+    const body = resp.slice(0, resp.lastIndexOf('\n'))
     console.log(`[db] Neon API status`, { status })
     if (status !== `200`) {
       console.error(`[db] Neon API error body`, body)
@@ -129,7 +129,8 @@ export function createDatabaseForCloudElectric({
     ).toString()
   ) as any
   const defaultBranchId: string | undefined =
-    preflightJson?.project?.default_branch_id || preflightJson?.default_branch_id
+    preflightJson?.project?.default_branch_id ||
+    preflightJson?.default_branch_id
   if (!defaultBranchId) {
     throw new Error(`Could not resolve Neon default branch id`)
   }

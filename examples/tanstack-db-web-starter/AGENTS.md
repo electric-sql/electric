@@ -63,6 +63,7 @@ This command will also report linter errors that were not automatically fixable.
 ## Data Flow Architecture
 
 ### Reading Data (Electric SQL → TanStack DB)
+
 ```tsx
 // 1. Preload in route loader
 export const Route = createFileRoute('/todos/')({
@@ -82,6 +83,7 @@ const { data: todos } = useLiveQuery(
 ```
 
 ### Writing Data (TanStack DB → tRPC)
+
 ```tsx
 // Use collection operations for optimistic updates
 todosCollection.insert({ ... })  // NOT trpc.todos.create.mutate()
@@ -91,6 +93,7 @@ todosCollection.delete(id)
 ```
 
 ### Collection Definition Pattern
+
 ```tsx
 // src/lib/collections.ts
 export const todosCollection = createCollection(
@@ -99,7 +102,7 @@ export const todosCollection = createCollection(
     shapeOptions: { url: '/api/todos', ... },
     schema: selectTodosSchema,
     getKey: (item) => item.id,
-    
+
     // tRPC handlers (CRUD only, return { txid })
     onInsert: async ({ transaction }) => {
       const result = await trpc.todos.create.mutate(...)

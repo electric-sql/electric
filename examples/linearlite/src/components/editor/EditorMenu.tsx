@@ -85,7 +85,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
       </button>
       <button
         type="button"
-        onClick={() => (editor.chain().focus() as any).toggleOrderedList().run()}
+        onClick={() =>
+          (editor.chain().focus() as any).toggleOrderedList().run()
+        }
         className={classNames(
           `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
           {

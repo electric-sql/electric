@@ -1,4 +1,3 @@
-
 # 🔥 Burn
 
 Burn is a multi-user, multi-agent demo app built on [TanStack DB](https://tanstack.com/db) and [Phoenix.Sync](https://hexdocs.pm/phoenix_sync).
@@ -51,7 +50,7 @@ Create a thread and invite your friends to it. The agents will probe you for inf
 
 [![Example roast](priv/static/images/docs/roast.sm.jpg)](priv/static/images/docs/roast.jpg)
 
-As you play the game, you'll see facts and events build up in the "Computer" on the right hand side. This shows the *actual contents of the database*, synced in real-time, that's driving both the:
+As you play the game, you'll see facts and events build up in the "Computer" on the right hand side. This shows the _actual contents of the database_, synced in real-time, that's driving both the:
 
 - app UI
 - context engineering for the LLMs

@@ -211,7 +211,9 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
 
   return (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createElement(DragDropContext as any, { onDragEnd },
+    createElement(
+      DragDropContext as any,
+      { onDragEnd },
       <div className="flex flex-1 pt-6 pl-8 overflow-scroll bg-gray-100">
         <IssueCol
           title={StatusDisplay[Status.BACKLOG]}
