@@ -5,6 +5,10 @@ import AutoSizer from 'react-virtualized-auto-sizer'
 import IssueRow from './IssueRow'
 import { Issue } from '../../types/types'
 
+// Type-fixed component to work around React 18/19 JSX strictness
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ListFixed = List as any
+
 export interface IssueListProps {
   issues: Issue[]
 }
@@ -14,7 +18,7 @@ function IssueList({ issues }: IssueListProps) {
     <div className="grow">
       <AutoSizer>
         {({ height, width }) => (
-          <List
+          <ListFixed
             height={height}
             itemCount={issues.length}
             itemSize={36}
@@ -22,7 +26,7 @@ function IssueList({ issues }: IssueListProps) {
             width={width}
           >
             {VirtualIssueRow}
-          </List>
+          </ListFixed>
         )}
       </AutoSizer>
     </div>

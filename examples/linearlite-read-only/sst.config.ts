@@ -25,7 +25,13 @@ export default $config({
   },
   async run() {
     try {
-      const dbName = `linearlite-read-only${isProduction() ? `` : `-stage-${$app.stage}`}`
+      // Neon DB names must be valid identifiers (letters, digits, underscores)
+      const rawName = `linearlite_read_only${
+        isProduction() ? `` : `_stage_${$app.stage}`
+      }`
+      const dbName = rawName.replace(/[^a-zA-Z0-9_]/g, `_`).toLowerCase()
+
+      console.log(`Preparing Neon database`, { stage: $app.stage, dbName })
 
       const { pooledDatabaseUri, sourceId, sourceSecret } =
         createDatabaseForCloudElectric({
@@ -55,7 +61,11 @@ export default $config({
         website: website.url,
       }
     } catch (error) {
-      console.error(`Failed to deploy linearlite-read-only`, error)
+      console.error(`Failed to deploy linearlite-read-only`, {
+        stage: $app.stage,
+        message: (error as Error)?.message,
+      })
+      throw error
     }
   },
 })

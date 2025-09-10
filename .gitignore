@@ -25,3 +25,4 @@ wal
 **/junit
 **/coverage
 response.tmp
+.claude

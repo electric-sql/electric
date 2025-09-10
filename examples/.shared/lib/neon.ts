@@ -1,33 +1,67 @@
+import { execSync } from 'node:child_process'
+
+type NeonEndpointsResponse = {
+  endpoints?: Array<{ host: string; id: string }>
+}
+
+type NeonResetPasswordResponse = {
+  password?: string
+}
+
 export function getNeonConnectionString({
-  project,
+  projectId,
+  branchId,
   roleName,
   databaseName,
   pooled,
 }: {
-  project: $util.Output<neon.GetProjectResult>
+  projectId: $util.Input<string>
+  branchId: $util.Input<string>
   roleName: $util.Input<string>
   databaseName: $util.Input<string>
   pooled: boolean
 }): $util.Output<string> {
-  const passwordOutput = neon.getBranchRolePasswordOutput({
-    projectId: project.id,
-    branchId: project.defaultBranchId,
-    roleName: roleName,
-  })
+  // Compute synchronously via Neon HTTP API (avoids Pulumi provider invokes)
+  if (!process.env.NEON_API_KEY) {
+    throw new Error(`NEON_API_KEY is not set`)
+  }
 
-  const endpoint = neon.getBranchEndpointsOutput({
-    projectId: project.id,
-    branchId: project.defaultBranchId,
-  })
-  const databaseHost = pooled
-    ? endpoint.endpoints?.apply((endpoints) =>
-        endpoints![0].host.replace(
-          endpoints![0].id,
-          endpoints![0].id + `-pooler`
-        )
-      )
-    : project.databaseHost
-  return $interpolate`postgresql://${passwordOutput.roleName}:${passwordOutput.password}@${databaseHost}/${databaseName}?sslmode=require`
+  return $resolve([projectId, branchId, roleName, databaseName]).apply(
+    ([pid, bid, role, db]) => {
+      const endpointsJson = JSON.parse(
+        execSync(
+          `curl -s -H "Authorization: Bearer $NEON_API_KEY" ` +
+            `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/endpoints`
+        ).toString()
+      ) as unknown as NeonEndpointsResponse
+      const endpoint = endpointsJson?.endpoints?.[0]
+      if (!endpoint?.host || !endpoint?.id) {
+        throw new Error(`Failed to resolve Neon branch endpoint`)
+      }
+      const host = pooled
+        ? String(endpoint.host).replace(
+            String(endpoint.id),
+            `${endpoint.id}-pooler`
+          )
+        : String(endpoint.host)
+      console.log(`[neon] Using ${pooled ? `pooled` : `direct`} endpoint`, {
+        host,
+      })
+
+      const pwdJson = JSON.parse(
+        execSync(
+          `curl -s -X POST -H "Authorization: Bearer $NEON_API_KEY" ` +
+            `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/roles/${role}/reset_password`
+        ).toString()
+      ) as unknown as NeonResetPasswordResponse
+      const password = pwdJson?.password
+      if (!password) {
+        throw new Error(`Failed to obtain Neon role password`)
+      }
+
+      return `postgresql://${role}:${password}@${host}/${db}?sslmode=require`
+    }
+  )
 }
 
 /**

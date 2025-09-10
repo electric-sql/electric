@@ -13,8 +13,11 @@ export const Route = createFileRoute("/_authenticated/project/$projectId")({
   component: ProjectPage,
   ssr: false,
   loader: async () => {
-    await projectCollection.preload()
-    await todoCollection.preload()
+    await Promise.all([
+      projectCollection.preload(),
+      todoCollection.preload(),
+      usersCollection.preload(),
+    ])
     return null
   },
 })

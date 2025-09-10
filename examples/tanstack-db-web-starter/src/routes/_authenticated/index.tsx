@@ -22,8 +22,7 @@ export const Route = createFileRoute(`/_authenticated/`)({
     }
   },
   loader: async () => {
-    await projectCollection.preload()
-    await todoCollection.preload()
+    await Promise.all([projectCollection.preload(), todoCollection.preload()])
 
     return null
   },
@@ -31,9 +30,7 @@ export const Route = createFileRoute(`/_authenticated/`)({
 
 function IndexRedirect() {
   const navigate = useNavigate()
-  const { data: projects } = useLiveQuery((q) =>
-    q.from({ projectCollection })
-  )
+  const { data: projects } = useLiveQuery((q) => q.from({ projectCollection }))
 
   useEffect(() => {
     if (projects.length > 0) {

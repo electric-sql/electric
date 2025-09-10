@@ -19,6 +19,199 @@ cp .env.example .env
 
 _You can edit the values in the `.env` file, although the default values are fine for local development (with the `DATABASE_URL` defaulting to the development Postgres docker container and the `BETTER_AUTH_SECRET` not required)._
 
+## Quick Start
+
+Follow these steps in order for a smooth first-time setup:
+
+1. **Install dependencies:**
+
+   ```sh
+   pnpm install
+   ```
+
+2. **Start Docker services:**
+
+   ```sh
+   pnpm run dev
+   ```
+
+   This starts the dev server, Docker Compose (Postgres + Electric), and Caddy automatically.
+
+3. **Run database migrations** (in a new terminal):
+
+   ```sh
+   pnpm run migrate
+   ```
+
+4. **Visit the application:**
+   Open [https://tanstack-start-db-electric-starter.localhost](https://tanstack-start-db-electric-starter.localhost)
+
+If you run into issues, see the [pre-reqs](#pre-requisites) and [troubleshooting](#common-pitfalls) sections below.
+
+## Adding a New Table
+
+Here's how to add a new table to your app (using a "categories" table as an example):
+
+### 1. Define the Drizzle Schema
+
+Add your table to `src/db/schema.ts`:
+
+```tsx
+export const categoriesTable = pgTable("categories", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar({ length: 255 }).notNull(),
+  color: varchar({ length: 7 }), // hex color
+  created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  user_id: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+})
+
+// Add Zod schemas
+export const selectCategorySchema = createSelectSchema(categoriesTable)
+export const createCategorySchema = createInsertSchema(categoriesTable).omit({
+  created_at: true,
+})
+export const updateCategorySchema = createUpdateSchema(categoriesTable)
+```
+
+### 2. Generate & Run Migration
+
+```sh
+# Generate migration file
+pnpm migrate:generate
+
+# Apply migration to database
+pnpm migrate
+```
+
+### 3. Add Electric Shape Route
+
+Create `src/routes/api/categories.ts`:
+
+```tsx
+import { createServerFileRoute } from "@tanstack/react-start/server"
+import { auth } from "@/lib/auth"
+import { prepareElectricUrl, proxyElectricRequest } from "@/lib/electric-proxy"
+
+const serve = async ({ request }: { request: Request }) => {
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    })
+  }
+
+  const originUrl = prepareElectricUrl(request.url)
+  originUrl.searchParams.set("table", "categories")
+  // Filter to user's own categories
+  const filter = `user_id = '${session.user.id}'`
+  originUrl.searchParams.set("where", filter)
+
+  return proxyElectricRequest(originUrl)
+}
+
+export const ServerRoute = createServerFileRoute("/api/categories").methods({
+  GET: serve,
+})
+```
+
+### 4. Add tRPC Router
+
+Create `src/lib/trpc/categories.ts`:
+
+```tsx
+import { router, authedProcedure, generateTxId } from "@/lib/trpc"
+import { z } from "zod"
+import { eq, and } from "drizzle-orm"
+import {
+  categoriesTable,
+  createCategorySchema,
+  updateCategorySchema,
+} from "@/db/schema"
+
+export const categoriesRouter = router({
+  create: authedProcedure
+    .input(createCategorySchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.db.transaction(async (tx) => {
+        const txid = await generateTxId(tx)
+        const [newItem] = await tx
+          .insert(categoriesTable)
+          .values({ ...input, user_id: ctx.session.user.id })
+          .returning()
+        return { item: newItem, txid }
+      })
+      return result
+    }),
+
+  // Add update and delete following the same pattern...
+})
+```
+
+### 5. Wire Up tRPC Router
+
+Add to `src/routes/api/trpc/$.ts`:
+
+```tsx
+import { categoriesRouter } from "./trpc/categories"
+
+export const appRouter = router({
+  // ... existing routers
+  categories: categoriesRouter,
+})
+```
+
+### 6. Add Collection
+
+Add to `src/lib/collections.ts`:
+
+```tsx
+export const categoriesCollection = createCollection(
+  electricCollectionOptions({
+    id: "categories",
+    shapeOptions: {
+      url: "/api/categories",
+      parser: {
+        timestamptz: (date: string) => new Date(date),
+      },
+    },
+    schema: selectCategorySchema,
+    getKey: (item) => item.id,
+    onInsert: async ({ transaction }) => {
+      const { modified: newCategory } = transaction.mutations[0]
+      const result = await trpc.categories.create.mutate({
+        name: newCategory.name,
+        color: newCategory.color,
+      })
+      return { txid: result.txid }
+    },
+    // Add onUpdate, onDelete as needed
+  })
+)
+```
+
+### 7. Use in Routes
+
+Preload in route loaders and use with `useLiveQuery`:
+
+```tsx
+// In route loader
+export const Route = createFileRoute("/my-route")({
+  loader: async () => {
+    await Promise.all([categoriesCollection.preload()])
+  },
+})
+
+// In component
+const { data: categories } = useLiveQuery((q) =>
+  q.from({ categoriesCollection }).orderBy(/* ... */)
+)
+```
+
+That's it! Your new table is now fully integrated with Electric sync, tRPC mutations, and TanStack DB queries.
+
 ## Pre-requisites
 
 This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io) and [Caddy](https://caddyserver.com/). You can see compatible versions in the `.tool-versions` file.
@@ -29,42 +222,93 @@ Make sure you have Docker running. Docker is used to run the Postgres and Electr
 
 ### Caddy
 
-Caddy is used for http/2 support, which requires HTTPS. See the [docs here for context](https://electric-sql.com/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development).
+#### Why Caddy?
 
-One you've [installed Caddy](https://caddyserver.com/docs/install), install its root certificate using:
+Electric SQL's shape delivery benefits significantly from **HTTP/2 multiplexing**. Without HTTP/2, each shape subscription creates a new HTTP/1.1 connection, which browsers limit to 6 concurrent connections per domain. This creates a bottleneck that makes shapes appear slow.
+
+Caddy provides HTTP/2 support with automatic HTTPS, giving you:
+
+- **Faster shape loading** - Multiple shapes load concurrently over a single connection
+- **Better development experience** - No connection limits or artificial delays
+- **Production-like performance** - Your local dev mirrors production HTTP/2 behavior
+
+The Vite development server runs on HTTP/1.1 only, so Caddy acts as a reverse proxy to upgrade the connection.
+
+#### Setup
+
+Once you've [installed Caddy](https://caddyserver.com/docs/install), install its root certificate using:
 
 ```sh
 caddy trust
 ```
 
-This is necessary for http/2 to Just Work™ [without SSL warnings/errors in the browser](https://caddyserver.com/docs/command-line#caddy-trust).
+This is necessary for HTTP/2 to work [without SSL warnings/errors in the browser](https://caddyserver.com/docs/command-line#caddy-trust).
 
-## Running the application
+#### How It Works
 
-Install the dependencies:
+- Caddy auto-starts via a Vite plugin when you run `pnpm dev`
+- The `Caddyfile` is automatically generated with your project name
+- Your app is available at `https://<project-name>.localhost`
+- Direct access to `http://localhost:5173` still works but will be slower for Electric shapes
+
+#### Troubleshooting Caddy
+
+If Caddy fails to start:
+
+1. **Test Caddy manually:**
+
+   ```sh
+   caddy start
+   ```
+
+2. **Check certificate trust:**
+
+   ```sh
+   caddy trust
+   # To remove later: caddy untrust
+   ```
+
+3. **Verify Caddyfile was generated:**
+   Look for a `Caddyfile` in your project root after running `pnpm dev`
+
+4. **Stop conflicting Caddy instances:**
+
+   ```sh
+   caddy stop
+   ```
+
+5. **Check for port conflicts:**
+   Caddy needs ports 80 and 443 available
+
+## Troubleshooting
+
+### Common Pitfalls
+
+| Issue                    | Symptoms                                   | Solution                                                           |
+| ------------------------ | ------------------------------------------ | ------------------------------------------------------------------ |
+| **Docker not running**   | `docker compose ps` shows nothing          | Start Docker Desktop/daemon                                        |
+| **Caddy not trusted**    | SSL warnings in browser                    | Run `caddy trust` (see Caddy section below)                        |
+| **Port conflicts**       | Postgres (54321) or Electric (3000) in use | Stop conflicting services or change ports in `docker-compose.yaml` |
+| **Missing .env**         | Database connection errors                 | Copy `.env.example` to `.env`                                      |
+| **Caddy fails to start** | `Caddy exited with code 1`                 | Run `caddy start` manually to see the error                        |
+
+### Debugging Commands
+
+For troubleshooting, these commands are helpful:
 
 ```sh
-pnpm install
+# Check Docker services status
+docker compose ps
+
+# View Electric and Postgres logs
+docker compose logs -f electric postgres
+
+# Test database connectivity
+psql $DATABASE_URL -c "SELECT 1"
+
+# Check Caddy status
+caddy start
 ```
-
-Run the application:
-
-```sh
-pnpm run dev
-```
-
-The `dev` command starts both the dev server and a docker compose with Postgres and the [ElectricSQL sync engine](https://electric-sql.com).
-
-> [!Tip]
-> If you see errors like `Caddy exited with code 1` when you run the development server, then Caddy is not configured correctly. Try running `caddy start` manually to see what the error is.
-
-In another terminal, run the migrations.
-
-```sh
-pnpm run migrate
-```
-
-Visit [https://tanstack-start-db-electric-starter.localhost](https://tanstack-start-db-electric-starter.localhost) to see the application.
 
 ## Building For Production
 
@@ -74,9 +318,48 @@ To build this application for production:
 pnpm run build
 ```
 
+### Production Deployment Checklist
+
+Before deploying to production, ensure you have configured:
+
+#### Required Environment Variables
+
+```bash
+# Authentication - REQUIRED in production
+BETTER_AUTH_SECRET=your-secret-key-here
+
+# Electric Cloud (if using hosted Electric)
+ELECTRIC_SOURCE_ID=your-source-id
+ELECTRIC_SOURCE_SECRET=your-source-secret
+
+# Database (adjust for your production database)
+DATABASE_URL=postgresql://user:pass@your-prod-db:5432/dbname
+```
+
+#### Authentication Setup
+
+**⚠️ Important**: The current setup allows any email/password combination to work in development. This is **automatically disabled** in production, but you need to:
+
+1. **Configure proper auth providers** in `src/lib/auth.ts` (Google, GitHub, etc.)
+2. **Remove or secure the dev-only email/password auth** if you plan to use it
+3. **Review `trustedOrigins`** settings for your production domains
+
+#### Infrastructure Changes
+
+- **HTTPS & Secure Cookies**: Ensure your deployment platform handles HTTPS termination
+- **Database**: Use a managed PostgreSQL service (not the Docker container)
+- **Environment**: Set `NODE_ENV=production`
+
+#### Security Considerations
+
+- Generate a strong `BETTER_AUTH_SECRET` (minimum 32 characters)
+- Ensure database credentials are properly secured
+- Review CORS settings if serving from different domains
+- Verify that dev-mode authentication patterns are disabled
+
 ## AI
 
-The starter includes an `AGENT.md`. Depending on which AI coding tool you use, you may need to copy/move it to the right file name e.g. `.cursor/rules`.
+The starter includes an `AGENTS.md`. Depending on which AI coding tool you use, you may need to copy/move it to the right file name e.g. `.cursor/rules`.
 
 ## Styling
 
@@ -200,7 +483,7 @@ Built on a TypeScript implementation of differential dataflow, TanStack DB provi
 
 #### Usage with ElectricSQL
 
-This starter uses ElectricSQL for a fully local-first experience with real-time sync:
+This starter proxies ElectricSQL shapes through server routes for auth-aware filtering. Use the proxied endpoints in `shapeOptions.url`:
 
 ```tsx
 import { createCollection } from "@tanstack/react-db"
@@ -212,9 +495,9 @@ export const todoCollection = createCollection(
     schema: todoSchema,
     // Electric syncs data using "shapes" - filtered views on database tables
     shapeOptions: {
-      url: "http://localhost:3000/v1/shape",
-      params: {
-        table: "todos",
+      url: "/api/todos",
+      parser: {
+        timestamptz: (s: string) => new Date(s),
       },
     },
     getKey: (item) => item.id,
@@ -334,9 +617,24 @@ onUpdate: async ({ transaction }) => {
 - `/api/auth/*` - Authentication via better-auth
 - `/api/projects`, `/api/todos`, `/api/users` - Electric sync shapes for reads
 
+### Core Architecture Rules
+
+Follow these patterns to get the most out of this starter:
+
+- **Use Electric for reads** - `useLiveQuery` with collections, not tRPC queries
+- **Use collection operations for writes** - Call `collection.insert()`, not `trpc.create.mutate()` directly
+- **Preload collections in route loaders** - Prevents loading flicker and ensures data availability
+
+#### Why These Rules Matter
+
+- **Electric handles reads** - Direct tRPC reads bypass real-time sync and optimistic updates
+- **Collection operations are optimistic** - They update the UI immediately while syncing in the background
+- **Preloading prevents flicker** - Collections load before components render, ensuring data is available
+
 # Learn More
 
 - [TanStack documentation](https://tanstack.com)
 - [TanStack DB documentation](https://tanstack.com/db/latest/docs/overview)
+- [An Interactive Guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db)
 - [Stop Re-Rendering — TanStack DB, the Embedded Client Database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
 - [Local-first sync with TanStack DB and Electric](https://electric-sql.com/blog/2025/07/29/local-first-sync-with-tanstack-db)

@@ -56,6 +56,7 @@ function addDatabaseToElectric({
     }
   )
 
+  console.log(`[electric] Upserting Electric source via admin API`)
   return electricSourceCommand.stdout.apply((output) => {
     const parsedOutput = JSON.parse(output) as {
       id: string
@@ -73,6 +74,7 @@ export function applyMigrations(
   dbUri: string,
   migrationsDir: string = `./db/migrations`
 ) {
+  console.log(`[db] Applying migrations`, { directory: migrationsDir })
   execSync(`pnpm exec pg-migrations apply --directory ${migrationsDir}`, {
     env: {
       ...process.env,
@@ -88,37 +90,94 @@ export function createDatabaseForCloudElectric({
   dbName: string
   migrationsDirectory: string
 }) {
+  console.log(`[db] createDatabaseForCloudElectric start`, { dbName })
   const neonProjectId = process.env.NEON_PROJECT_ID
   if (!neonProjectId) {
     throw new Error(`NEON_PROJECT_ID is not set`)
   }
-
-  const project = neon.getProjectOutput({
-    id: neonProjectId,
+  console.log(`[db] neon.getProjectOutput`, {
+    neonProjectId: `${neonProjectId.slice(0, 6)}...`,
   })
+
+  // Preflight Neon API to surface clear errors in CI logs
+  try {
+    console.log(`[db] Preflight Neon API: GET project`)
+    const resp = execSync(
+      `curl -s -w "\\n%{http_code}" -H "Authorization: Bearer $NEON_API_KEY" ` +
+        `https://console.neon.tech/api/v2/projects/${neonProjectId}`,
+      { env: process.env }
+    )
+      .toString()
+      .trim()
+    const status = resp.slice(resp.lastIndexOf(`\n`) + 1)
+    const body = resp.slice(0, resp.lastIndexOf(`\n`))
+    console.log(`[db] Neon API status`, { status })
+    if (status !== `200`) {
+      console.error(`[db] Neon API error body`, body)
+      throw new Error(`Neon API preflight failed with status ${status}`)
+    }
+  } catch (e) {
+    console.error(`[db] Neon API preflight failed`, (e as Error).message)
+    throw e
+  }
+
+  // Fetch default branch id using Neon HTTP API to avoid provider invoke here
+  type NeonProjectResponse = {
+    project?: { default_branch_id?: string }
+    default_branch_id?: string
+  }
+  const preflightJson = JSON.parse(
+    execSync(
+      `curl -s -H "Authorization: Bearer $NEON_API_KEY" https://console.neon.tech/api/v2/projects/${neonProjectId}`,
+      { env: process.env }
+    ).toString()
+  ) as unknown as NeonProjectResponse
+  const defaultBranchId: string | undefined =
+    preflightJson?.project?.default_branch_id ||
+    preflightJson?.default_branch_id
+  if (!defaultBranchId) {
+    throw new Error(`Could not resolve Neon default branch id`)
+  }
+  console.log(`[db] Resolved Neon default branch`, { defaultBranchId })
+
   const { ownerName, dbName: resultingDbName } = createNeonDb({
-    projectId: project.id,
-    branchId: project.defaultBranchId,
+    projectId: neonProjectId,
+    branchId: defaultBranchId,
     dbName,
   })
+  resultingDbName.apply((name) =>
+    console.log(`[db] createNeonDb returned`, { dbName: name })
+  )
+  ownerName.apply((name) =>
+    console.log(`[db] createNeonDb owner`, { ownerName: name })
+  )
 
   const databaseUri = getNeonConnectionString({
-    project,
+    projectId: neonProjectId,
+    branchId: defaultBranchId,
     roleName: ownerName,
     databaseName: resultingDbName,
     pooled: false,
   })
   const pooledDatabaseUri = getNeonConnectionString({
-    project,
+    projectId: neonProjectId,
+    branchId: defaultBranchId,
     roleName: ownerName,
     databaseName: resultingDbName,
     pooled: true,
   })
+  databaseUri.apply(() => console.log(`[db] Resolved direct connection string`))
+  pooledDatabaseUri.apply(() =>
+    console.log(`[db] Resolved pooled connection string`)
+  )
 
   const electricInfo = addDatabaseToElectric({
     dbUri: databaseUri,
     pooledDbUri: pooledDatabaseUri,
   })
+  electricInfo.apply(({ id }) =>
+    console.log(`[electric] Created/updated source`, { id })
+  )
 
   const res = {
     sourceId: electricInfo.id,

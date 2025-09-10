@@ -2,6 +2,8 @@
 
 This is a TanStack Start project with tRPC v10 for mutations and Electric sync for reads, running on Start's server functions so it's easily deployable to many hosting platforms.
 
+**Core Pattern**: Electric SQL for reads, tRPC for writes, TanStack DB for optimistic updates.
+
 All reads from the Postgres database are done via the Electric sync engine. All mutations (create, update, delete) are done via tRPC with full end-to-end type safety.
 
 We sync normalized data from tables into TanStack DB collections in the client & then write client-side queries for displaying data in components.
@@ -57,3 +59,87 @@ This command will also report linter errors that were not automatically fixable.
 - Client is configured in `src/lib/trpc-client.ts`
 - Collection hooks use tRPC client for mutations in `src/lib/collections.ts`
 - Transaction IDs are generated using `pg_current_xact_id()::xid::text` for Electric sync compatibility
+
+## Data Flow Architecture
+
+### Reading Data (Electric SQL → TanStack DB)
+
+```tsx
+// 1. Preload in route loader
+export const Route = createFileRoute('/todos/')({
+  loader: async () => {
+    await Promise.all([
+      todosCollection.preload(),
+      projectsCollection.preload(), // Include if used by child components
+    ])
+  },
+})
+
+// 2. Query with useLiveQuery (ALWAYS destructure data)
+const { data: todos } = useLiveQuery(
+  (q) => q.from({ todosCollection }).where(...),
+  [dependencies] // Include reactive dependencies
+)
+```
+
+### Writing Data (TanStack DB → tRPC)
+
+```tsx
+// Use collection operations for optimistic updates
+todosCollection.insert({ ... })  // NOT trpc.todos.create.mutate()
+// Similar to Immer
+todosCollection.update(id, (draft) => { ... })
+todosCollection.delete(id)
+```
+
+### Collection Definition Pattern
+
+```tsx
+// src/lib/collections.ts
+export const todosCollection = createCollection(
+  electricCollectionOptions({
+    id: 'todos',
+    shapeOptions: { url: '/api/todos', ... },
+    schema: selectTodosSchema,
+    getKey: (item) => item.id,
+
+    // tRPC handlers (CRUD only, return { txid })
+    onInsert: async ({ transaction }) => {
+      const result = await trpc.todos.create.mutate(...)
+      return { txid: result.txid }
+    },
+    onUpdate: async ({ transaction }) => { ... },
+    onDelete: async ({ transaction }) => { ... },
+  })
+)
+```
+
+## Critical Rules
+
+1. **NEVER use tRPC for data reads** - Only Electric SQL + useLiveQuery
+2. **NEVER call tRPC directly from components** - Use collection operations
+3. **NEVER use TanStack Query** - This uses TanStack DB (different library)
+4. **ALWAYS preload collections** in route loaders
+5. **ALWAYS use snake_case** for database fields throughout the app
+6. **ONLY basic CRUD in tRPC** - No special mutations unless using `createOptimisticAction`
+
+## Naming Conventions
+
+- **Database**: snake_case (e.g., `user_id`, `created_at`)
+- **Files**: kebab-case (e.g., `todo-card.tsx`)
+- **Routes**: Use `_` prefix for pathless layouts (e.g., `_authenticated.tsx`)
+
+## Schema Management
+
+```tsx
+// src/db/zod-schemas.ts (centralized, never redefine)
+export const selectTodoSchema = createSelectSchema(todos)
+export const insertTodoSchema = createInsertSchema(todos)
+export const updateTodoSchema = createUpdateSchema(todos)
+```
+
+## Component Patterns
+
+- **Forms**: Use optimistic updates, no loading states needed
+- **Links**: Use TanStack Router's `Link` component
+- **Auth**: Access via `authClient.useSession()`

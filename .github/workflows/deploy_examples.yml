@@ -88,6 +88,8 @@ jobs:
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
+      PULUMI_LOG_LEVEL: debug
+      SST_DEBUG: "1"
       SHARED_INFRA_VPC_ID: ${{ vars.SHARED_INFRA_VPC_ID }}
       SHARED_INFRA_CLUSTER_ARN: ${{ vars.SHARED_INFRA_CLUSTER_ARN }}
       SHARED_EXAMPLES_DATABASE_URI: ${{ secrets.SHARED_EXAMPLES_DATABASE_URI }}

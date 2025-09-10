@@ -19,7 +19,7 @@ function Layout() {
     setError("")
 
     try {
-      let { data, error } = await authClient.signUp.email(
+      let { data: _data, error } = await authClient.signUp.email(
         {
           email,
           password,
@@ -46,16 +46,17 @@ function Layout() {
           }
         )
 
-        data = result.data
+        _data = result.data
         error = result.error
       }
 
       if (error) {
-        console.log(`error logging in`, error)
-        setError(JSON.stringify(error, null, 4))
+        console.error(`Authentication error:`, error)
+        setError(error.message || `Authentication failed`)
       }
-    } catch (_) {
-      setError("An unexpected error occurred")
+    } catch (err) {
+      console.error(`Unexpected error:`, err)
+      setError(`An unexpected error occurred`)
     } finally {
       setIsLoading(false)
     }

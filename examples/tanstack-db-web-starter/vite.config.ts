@@ -22,6 +22,9 @@ const config = defineConfig({
       },
     }),
   ],
+  ssr: {
+    noExternal: ["zod"],
+  },
 })
 
 export default config
