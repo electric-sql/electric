@@ -15,7 +15,6 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@electric-sql/client": "^1.0.10",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/electric-db-collection": "^0.1.6",
     "@tanstack/react-db": "^0.1.6",
