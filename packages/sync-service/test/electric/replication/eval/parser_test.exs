@@ -421,13 +421,30 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: nil, type: :bool} = result
     end
 
-    test "should not allow subqueries in IN clauses" do
+    test "should allow subqueries in IN clauses" do
       env = Env.new()
 
       assert {:ok, %Expr{eval: _result}} =
                Parser.parse_and_validate_expression(
                  ~S|test IN (SELECT val FROM tester)|,
                  refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}},
+                 sublink_queries: %{0 => "SELECT val FROM tester"},
+                 env: env
+               )
+    end
+
+    test "should allow subqueries in IN clauses with composite PKs" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: _result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|(test1, test2) IN (SELECT val1, val2 FROM tester)|,
+                 refs: %{
+                   ["test1"] => :int4,
+                   ["test2"] => :int4,
+                   ["$sublink", "0"] => {:array, {:row, [:int4, :int4]}}
+                 },
+                 sublink_queries: %{0 => "SELECT val1, val2 FROM tester"},
                  env: env
                )
     end
@@ -695,15 +712,18 @@ defmodule Electric.Replication.Eval.ParserTest do
                Parser.parse_and_validate_expression(~S"$1 > 5")
     end
 
-    test "fails if query misses a parameter position" do
-      assert {:error,
-              "At location 0: expression is missing $1 - parameters should be numbered sequentially"} =
-               Parser.parse_and_validate_expression(~S"$2 > 5", params: %{"2" => "2"})
-    end
-
-    test "fails if an unused parameter is provided" do
-      assert {:error, "At location 0: parameter value for $2 was not used"} =
-               Parser.parse_and_validate_expression(~S"$1 > 5", params: %{"1" => "1", "2" => "2"})
+    test "subquery with parameters is correctly interpolated" do
+      assert {:ok,
+              %Expr{
+                query:
+                  ~S|value IN (SELECT value FROM project WHERE value > '5'::int4) AND value > '10'::int4|
+              }} =
+               Parser.parse_and_validate_expression(
+                 ~S|value IN (SELECT value FROM project WHERE value > $1) AND value > $2|,
+                 refs: %{["$sublink", "0"] => {:array, :int4}, ["value"] => :int4},
+                 params: %{"1" => "5", "2" => "10"},
+                 sublink_queries: %{0 => ~S|SELECT value FROM project WHERE value > '5'::int4|}
+               )
     end
   end
 end

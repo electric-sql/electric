@@ -48,6 +48,47 @@ describe(`sortedOptionsHash`, () => {
       expect(hash1).not.toEqual(hash2)
     }
   )
+  bareIt(`should create same hash with identical transformer function`, () => {
+    const hash1 = sortedOptionsHash({
+      url: `http://whatever`,
+      params: {
+        table: `foo`,
+      },
+      offset: `-1`,
+      transformer: (r) => ({ ...r, test: 1 }),
+    })
+    const hash2 = sortedOptionsHash({
+      offset: `-1`,
+      params: {
+        table: `foo`,
+      },
+      transformer: (r) => ({ ...r, test: 1 }),
+      url: `http://whatever`,
+    })
+    expect(hash1).toEqual(hash2)
+  })
+  bareIt(
+    `should create different hash with different transformer functions`,
+    () => {
+      const hash1 = sortedOptionsHash({
+        url: `http://whatever`,
+        params: {
+          table: `foo`,
+        },
+        offset: `-1`,
+        transformer: (r) => ({ ...r, test: 1 }),
+      })
+      const hash2 = sortedOptionsHash({
+        offset: `-1`,
+        params: {
+          table: `foo`,
+        },
+        transformer: (r) => ({ ...r, test: 2 }),
+        url: `http://whatever`,
+      })
+      expect(hash1).not.toEqual(hash2)
+    }
+  )
 })
 
 describe(`useShape`, () => {

@@ -114,6 +114,21 @@ defmodule Electric.Telemetry.OpenTelemetry do
   end
 
   @doc """
+  A thin wrapper around `:telemetry.execute/3` that adds the span attributes for the current
+  stack to the metadata.
+  """
+  @spec execute(
+          :telemetry.event_name(),
+          :telemetry.event_measurements() | :telemetry.event_value(),
+          :telemetry.event_metadata()
+        ) :: :ok
+  def execute(event_name, measurements, metadata) do
+    stack_id = metadata[:stack_id] || get_from_baggage("stack_id")
+    metadata = Map.merge(metadata, get_stack_span_attrs(stack_id))
+    :telemetry.execute(event_name, measurements, metadata)
+  end
+
+  @doc """
   Executes the provided function and records its duration in microseconds.
   The duration is added to the current span as a span attribute named with the given `name`.
   """

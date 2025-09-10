@@ -138,6 +138,7 @@ defmodule Electric.Shapes.Shape do
       type: :mod_arg,
       default: {Electric.Postgres.Inspector, Electric.DbPool}
     ],
+    feature_flags: [type: {:list, :string}, default: Electric.Config.get_env(:feature_flags)],
     storage: [
       type: {
         :or,
@@ -229,11 +230,17 @@ defmodule Electric.Shapes.Shape do
   defp validate_where_clause(where, %{inspector: inspector} = opts, refs) do
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
-         :ok <- check_feature_flag(subqueries),
+         :ok <- check_feature_flag(subqueries, opts),
          {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
          all_refs = Map.merge(refs, dependency_refs),
-         {:ok, where} <- Parser.validate_where_ast(where, params: opts[:params], refs: all_refs),
+         :ok <- validate_parameters(opts),
+         {:ok, where} <-
+           Parser.validate_where_ast(where,
+             params: opts[:params],
+             refs: all_refs,
+             sublink_queries: extract_sublink_queries(shape_dependencies)
+           ),
          {:ok, where} <- validate_where_return_type(where) do
       {:ok, where, shape_dependencies}
     else
@@ -242,9 +249,9 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp check_feature_flag(subqueries) do
+  defp check_feature_flag(subqueries, opts) do
     if subqueries != [] and
-         not Enum.member?(Electric.Config.get_env(:feature_flags), "allow_subqueries") do
+         not Enum.member?(opts.feature_flags, "allow_subqueries") do
       {:error, {:where, "Subqueries are not supported"}}
     else
       :ok
@@ -261,25 +268,11 @@ defmodule Electric.Shapes.Shape do
   defp build_shape_dependencies(subqueries, opts) do
     shared_opts = Map.drop(opts, [:where, :columns, :relation])
 
-    Enum.reduce_while(subqueries, {:ok, []}, fn subquery, {:ok, acc} ->
+    Utils.map_while_ok(subqueries, fn subquery ->
       shared_opts
       |> Map.put(:select, subquery)
       |> Map.put(:autofill_pk_select?, true)
       |> new()
-      |> case do
-        {:ok,
-         %__MODULE__{explicitly_selected_columns: explicitly_selected_columns} =
-             shape} ->
-          if length(explicitly_selected_columns) == 1 do
-            {:cont, {:ok, [shape | acc]}}
-          else
-            {:halt,
-             {:error, {:where, "Subquery has multiple columns, which is not supported right now"}}}
-          end
-
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
     end)
   end
 
@@ -290,19 +283,36 @@ defmodule Electric.Shapes.Shape do
       relation = {shape.root_table_id, shape.root_table}
 
       with {:ok, column_info, _} <- load_column_info(relation, inspector) do
-        column_info
-        |> Enum.filter(&(&1.name in shape.explicitly_selected_columns))
-        |> Inspector.columns_to_expr()
-        |> Map.to_list()
-        |> case do
-          [{_, type}] ->
-            {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
+        type =
+          column_info
+          |> Enum.filter(&(&1.name in shape.explicitly_selected_columns))
+          |> Inspector.columns_to_expr()
+          |> Map.to_list()
+          |> case do
+            [{_, type}] ->
+              type
 
-          _ ->
-            {:error, {:where, "Subquery has multiple columns, which is not supported right now"}}
-        end
+            multiple ->
+              {:row, Enum.map(multiple, &elem(&1, 1))}
+          end
+
+        {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
       end
     end)
+  end
+
+  defp extract_sublink_queries(shapes) do
+    Enum.with_index(shapes, fn %__MODULE__{} = shape, i ->
+      base =
+        "SELECT " <>
+          Enum.join(shape.explicitly_selected_columns, ", ") <>
+          " FROM " <> Utils.relation_to_sql(shape.root_table)
+
+      where = if shape.where, do: " WHERE " <> shape.where.query, else: ""
+
+      {i, base <> where}
+    end)
+    |> Map.new()
   end
 
   defp validate_where_return_type(where) do
@@ -310,6 +320,33 @@ defmodule Electric.Shapes.Shape do
       :bool -> {:ok, where}
       _ -> {:error, {:where, "WHERE clause must return a boolean"}}
     end
+  end
+
+  defp validate_parameters(%{params: params}) when is_map(params) do
+    with {:ok, keys} <- all_keys_are_numbers(params),
+         :ok <- all_keys_are_sequential(keys) do
+      :ok
+    end
+  end
+
+  defp validate_parameters(_), do: :ok
+
+  defp all_keys_are_numbers(params) do
+    Utils.map_while_ok(params, fn {key, _} ->
+      case Integer.parse(key) do
+        {int, ""} -> {:ok, int}
+        _ -> {:error, {:params, "Parameters can only use numbers as keys"}}
+      end
+    end)
+  end
+
+  defp all_keys_are_sequential(keys) do
+    Enum.with_index(keys, fn key, index -> key == index + 1 end)
+    |> Enum.all?()
+    |> if(
+      do: :ok,
+      else: {:error, {:params, "Parameters must be numbered sequentially, starting from 1"}}
+    )
   end
 
   @spec validate_selected_columns(
@@ -342,6 +379,9 @@ defmodule Electric.Shapes.Shape do
         generated_cols != [] ->
           "The following columns are generated and cannot be included in the shape: " <>
             (generated_cols |> Enum.map(& &1.name) |> Enum.join(", "))
+
+        columns_to_select == [] ->
+          "The list of columns must not be empty"
 
         true ->
           nil
@@ -555,7 +595,7 @@ defmodule Electric.Shapes.Shape do
   end
 
   @doc false
-  @spec to_json_safe(t()) :: json_safe()
+  @spec to_json_safe(t()) :: map()
   def to_json_safe(%__MODULE__{} = shape) do
     %{
       version: 1,

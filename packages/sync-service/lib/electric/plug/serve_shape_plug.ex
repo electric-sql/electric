@@ -70,9 +70,7 @@ defmodule Electric.Plug.ServeShapePlug do
         do: conn.query_params["columns"],
         else: Enum.join(params[:columns], ",")
 
-    Electric.Telemetry.OpenTelemetry.get_stack_span_attrs(
-      get_in(conn.assigns, [:config, :stack_id])
-    )
+    OpenTelemetry.get_stack_span_attrs(get_in(conn.assigns, [:config, :stack_id]))
     |> Map.merge(Electric.Plug.Utils.common_open_telemetry_attrs(conn))
     |> Map.merge(%{
       "shape.handle" => conn.query_params["handle"] || params[:handle] || request[:handle],
@@ -123,7 +121,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # is the place to assign them because we keep this plug last in the "plug pipeline" defined
   # in this module.
   defp end_telemetry_span(%Conn{assigns: assigns} = conn, _ \\ nil) do
-    :telemetry.execute(
+    OpenTelemetry.execute(
       [:electric, :plug, :serve_shape],
       %{
         count: 1,

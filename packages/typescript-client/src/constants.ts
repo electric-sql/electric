@@ -5,6 +5,7 @@ export const SHAPE_SCHEMA_HEADER = `electric-schema`
 export const CHUNK_UP_TO_DATE_HEADER = `electric-up-to-date`
 export const COLUMNS_QUERY_PARAM = `columns`
 export const LIVE_CACHE_BUSTER_QUERY_PARAM = `cursor`
+export const EXPIRED_HANDLE_QUERY_PARAM = `expired_handle`
 export const SHAPE_HANDLE_QUERY_PARAM = `handle`
 export const LIVE_QUERY_PARAM = `live`
 export const OFFSET_QUERY_PARAM = `offset`
@@ -22,4 +23,5 @@ export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
   SHAPE_HANDLE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
+  EXPIRED_HANDLE_QUERY_PARAM,
 ]

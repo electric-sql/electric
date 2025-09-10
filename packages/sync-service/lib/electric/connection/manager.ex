@@ -14,7 +14,7 @@ defmodule Electric.Connection.Manager do
   Your OTP application should start a singleton connection manager under its main supervision tree:
 
       children = [
-        ...,
+        ...,metadata
         {Electric.Connection.Manager,
          stack_id: ...,
          connection_opts: [...],
@@ -82,11 +82,6 @@ defmodule Electric.Connection.Manager do
       :connection_opts,
       # Replication options specific to `Electric.Postgres.ReplicationClient`
       :replication_opts,
-      # Connection options that are shared between regular connections and the replication
-      # connection. If this is set to `nil` post-initialization, it means that regular
-      # connections and the replication connection have been configured using different
-      # connection URLs.
-      :shared_connection_opts,
       # Database connection pool options
       :pool_opts,
       # Options specific to `Electric.Timeline`
@@ -104,8 +99,8 @@ defmodule Electric.Connection.Manager do
       :lock_connection_pid,
       # Timer reference for the periodic lock status check
       :lock_connection_timer,
-      # PID of the database connection pool
-      :pool_pid,
+      # PIDs of the database connection pools
+      :pool_pids,
       # Backoff term used for reconnection with exponential back-off
       :connection_backoff,
       # PostgreSQL server version
@@ -127,12 +122,14 @@ defmodule Electric.Connection.Manager do
       :tweaks,
       :persistent_kv,
       :purge_all_shapes?,
+      validated_connection_opts: %{replication: nil, pool: nil},
       drop_slot_requested: false
     ]
   end
 
   use GenServer, shutdown: :infinity
   alias Electric.Connection.Manager.ConnectionBackoff
+  alias Electric.Connection.Manager.ConnectionResolver
   alias Electric.DbConnectionError
   alias Electric.StatusMonitor
 
@@ -181,12 +178,20 @@ defmodule Electric.Connection.Manager do
 
   @db_pool_ephemeral_module_name Electric.DbPool
 
-  def pool_name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, @db_pool_ephemeral_module_name)
+  def snapshot_pool(stack_id) do
+    pool_name(stack_id, :snapshot)
+  end
+
+  def admin_pool(stack_id) do
+    pool_name(stack_id, :admin)
+  end
+
+  def pool_name(stack_id, role) when is_binary(stack_id) and role in [:admin, :snapshot] do
+    Electric.ProcessRegistry.name(stack_id, @db_pool_ephemeral_module_name, role)
   end
 
   def pool_name(opts) do
-    pool_name(Access.fetch!(opts, :stack_id))
+    pool_name(Access.fetch!(opts, :stack_id), Access.fetch!(opts, :role))
   end
 
   def drop_replication_slot_on_stop(manager) do
@@ -237,8 +242,31 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, {:pg_info_obtained, pg_info})
   end
 
-  def connection_pool_ready(manager) do
-    GenServer.cast(manager, :connection_pool_ready)
+  def connection_pool_ready(manager, role, pid) do
+    GenServer.cast(manager, {:connection_pool_ready, role, pid})
+  end
+
+  def pool_sizes(total_pool_size) do
+    if total_pool_size < 2 do
+      Logger.warning(
+        "The configured connection pool size #{total_pool_size} is below the minimum of 2"
+      )
+    end
+
+    # use 1/4 of the available connections with a min of 1 and max of 4
+    max_admin_connections = 4
+    min_admin_connections = 1
+
+    metadata_pool_size =
+      min(max(div(total_pool_size, 4), min_admin_connections), max_admin_connections)
+
+    snapshot_pool_size =
+      if(total_pool_size >= metadata_pool_size,
+        do: max(total_pool_size - metadata_pool_size, metadata_pool_size),
+        else: metadata_pool_size
+      )
+
+    %{snapshot: snapshot_pool_size, admin: metadata_pool_size}
   end
 
   # Used for testing the responsiveness of the manager process
@@ -285,34 +313,26 @@ defmodule Electric.Connection.Manager do
   end
 
   defp initialize_connection_opts(state, opts) do
-    in_connection_opts = Keyword.fetch!(opts, :connection_opts)
-    in_replication_opts = Keyword.fetch!(opts, :replication_opts)
-
-    # If we see that both top-level connection opts and replication connection opts have been
-    # initialized from the same kwlist, we'll skip the extra work and only perform the no-ssl
-    # and ipv4 fallbacks once.
-    shared_connection_opts =
-      if in_connection_opts == Keyword.fetch!(in_replication_opts, :connection_opts) do
-        populate_connection_opts(in_connection_opts)
-      end
-
-    connection_opts =
-      if is_nil(shared_connection_opts), do: populate_connection_opts(in_connection_opts)
+    connection_opts = Keyword.fetch!(opts, :connection_opts)
 
     replication_opts =
-      in_replication_opts
+      opts
+      |> Keyword.fetch!(:replication_opts)
       |> Keyword.put(:start_streaming?, false)
       |> Keyword.put(:connection_manager, self())
-      |> Keyword.update!(:connection_opts, fn in_connection_opts ->
-        if is_nil(shared_connection_opts), do: populate_connection_opts(in_connection_opts)
-      end)
 
-    %{
-      state
-      | shared_connection_opts: shared_connection_opts,
-        connection_opts: connection_opts,
-        replication_opts: replication_opts
-    }
+    %{state | connection_opts: connection_opts, replication_opts: replication_opts}
+  end
+
+  defp validate_connection(conn_opts, type, state) do
+    if opts = state.validated_connection_opts[type] do
+      {:ok, opts, state}
+    else
+      with {:ok, validated_opts} <- ConnectionResolver.validate(state.stack_id, conn_opts) do
+        {:ok, validated_opts,
+         Map.update!(state, :validated_connection_opts, &Map.put(&1, type, validated_opts))}
+      end
+    end
   end
 
   @impl true
@@ -324,26 +344,32 @@ defmodule Electric.Connection.Manager do
           lock_connection_pid: nil
         } = state
       ) do
-    opts = [
-      # Lock connection must be direct-to-database, hence no pooled connection opts here.
-      connection_opts: replication_connection_opts(state),
-      connection_manager: self(),
-      lock_name: Keyword.fetch!(state.replication_opts, :slot_name),
-      stack_id: state.stack_id
-    ]
+    case validate_connection(replication_connection_opts(state), :replication, state) do
+      {:ok, replication_connection_opts, state} ->
+        opts = [
+          # Lock connection must be direct-to-database, hence no pooled connection opts here.
+          connection_opts: replication_connection_opts,
+          connection_manager: self(),
+          lock_name: Keyword.fetch!(state.replication_opts, :slot_name),
+          stack_id: state.stack_id
+        ]
 
-    # The lock connection process starts up quickly and then tries to open a database
-    # connection asynchronously. The manager will be notified about the lock connection's
-    # progress via the :lock_connection_started and :exclusive_connection_lock_acquired casts.
-    {:ok, pid} = Electric.Postgres.LockConnection.start_link(opts)
+        # The lock connection process starts up quickly and then tries to open a database
+        # connection asynchronously. The manager will be notified about the lock connection's
+        # progress via the :lock_connection_started and :exclusive_connection_lock_acquired casts.
+        {:ok, pid} = Electric.Postgres.LockConnection.start_link(opts)
 
-    state = %{
-      state
-      | lock_connection_pid: pid,
-        current_step: {:start_lock_connection, :connecting}
-    }
+        state = %{
+          state
+          | lock_connection_pid: pid,
+            current_step: {:start_lock_connection, :connecting}
+        }
 
-    {:noreply, state}
+        {:noreply, state}
+
+      {:error, reason} ->
+        shutdown_or_reconnect(reason, nil, state)
+    end
   end
 
   def handle_continue(
@@ -355,36 +381,43 @@ defmodule Electric.Connection.Manager do
         } = state
       )
       when phase in [:connection_setup, :restarting_replication_client] do
-    opts = [
-      replication_opts: replication_opts(state),
-      connection_manager: self(),
-      stack_id: state.stack_id
-    ]
+    case validate_connection(replication_connection_opts(state), :replication, state) do
+      {:ok, replication_connection_opts, state} ->
+        opts = [
+          replication_opts:
+            Keyword.put(state.replication_opts, :connection_opts, replication_connection_opts),
+          connection_manager: self(),
+          stack_id: state.stack_id
+        ]
 
-    action =
-      case phase do
-        :connection_setup -> "Starting"
-        :restarting_replication_client -> "Restarting"
-      end
+        action =
+          case phase do
+            :connection_setup -> "Starting"
+            :restarting_replication_client -> "Restarting"
+          end
 
-    Logger.debug("#{action} replication client for stack #{state.stack_id}")
+        Logger.debug("#{action} replication client for stack #{state.stack_id}")
 
-    # The replication client starts up quickly and then proceeds to asynchronously opening a
-    # replication connection to the database and configuring it.
-    # The manager will be notified about the replication client's progress via the
-    # :replication_client_started and :replication_client_ready_to_stream casts.
-    # If configured to start streaming immediately, the :replication_client_streamed_first_message
-    # cast would follow soon afterwards.
-    {:ok, pid} = Electric.Postgres.ReplicationClient.start_link(opts)
+        # The replication client starts up quickly and then proceeds to asynchronously opening a
+        # replication connection to the database and configuring it.
+        # The manager will be notified about the replication client's progress via the
+        # :replication_client_started and :replication_client_ready_to_stream casts.
+        # If configured to start streaming immediately, the :replication_client_streamed_first_message
+        # cast would follow soon afterwards.
+        {:ok, pid} = Electric.Postgres.ReplicationClient.start_link(opts)
 
-    state = %{
-      state
-      | replication_client_pid: pid,
-        replication_client_blocked_by_pending_transaction?: false,
-        current_step: {:start_replication_client, :connecting}
-    }
+        state = %{
+          state
+          | replication_client_pid: pid,
+            replication_client_blocked_by_pending_transaction?: false,
+            current_step: {:start_replication_client, :connecting}
+        }
 
-    {:noreply, state}
+        {:noreply, state}
+
+      {:error, reason} ->
+        shutdown_or_reconnect(reason, nil, state)
+    end
   end
 
   def handle_continue(
@@ -392,22 +425,44 @@ defmodule Electric.Connection.Manager do
         %State{
           current_phase: :connection_setup,
           current_step: {:start_connection_pool, _},
-          pool_pid: nil
+          pool_pids: nil
         } = state
       ) do
     Logger.debug("Starting connection pool for stack #{state.stack_id}")
-    conn_opts = pooled_connection_opts(state) |> Electric.Utils.deobfuscate_password()
 
-    {:ok, pool_pid} =
-      Electric.Connection.Manager.Pool.start_link(
-        stack_id: state.stack_id,
-        connection_manager: self(),
-        pool_opts: state.pool_opts,
-        conn_opts: conn_opts
-      )
+    case validate_connection(pooled_connection_opts(state), :pool, state) do
+      {:ok, conn_opts, state} ->
+        pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
 
-    state = %{state | pool_pid: pool_pid, current_step: {:start_connection_pool, :connecting}}
-    {:noreply, state}
+        {:ok, snapshot_pool_pid} =
+          Electric.Connection.Manager.Pool.start_link(
+            stack_id: state.stack_id,
+            role: :snapshot,
+            connection_manager: self(),
+            pool_opts: Keyword.put(state.pool_opts, :pool_size, pool_sizes.snapshot),
+            conn_opts: conn_opts
+          )
+
+        {:ok, admin_pool_pid} =
+          Electric.Connection.Manager.Pool.start_link(
+            stack_id: state.stack_id,
+            role: :admin,
+            connection_manager: self(),
+            pool_opts: Keyword.put(state.pool_opts, :pool_size, pool_sizes.admin),
+            conn_opts: conn_opts
+          )
+
+        state = %{
+          state
+          | pool_pids: %{admin: {admin_pool_pid, false}, snapshot: {snapshot_pool_pid, false}},
+            current_step: {:start_connection_pool, :connecting}
+        }
+
+        {:noreply, state}
+
+      {:error, reason} ->
+        shutdown_or_reconnect(reason, nil, state)
+    end
   end
 
   def handle_continue(
@@ -581,41 +636,9 @@ defmodule Electric.Connection.Manager do
 
   # A process exited as it was trying to open a database connection.
   def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
-    # Try repairing the connection opts and try connecting again. If we're already using noSSL
-    # and IPv4, the error will be propagated to a `shutdown_or_reconnect()` function call
-    # further down below.
-    state = nillify_pid(state, pid)
+    {pid_type, state} = nillify_pid(state, pid)
 
-    step =
-      case state.current_step do
-        {step, _} -> step
-        step when is_atom(step) -> step
-      end
-
-    conn_opts = connection_opts_for_step(step, state)
-
-    repaired_conn_opts =
-      case reason do
-        %Postgrex.Error{message: "ssl not available"} ->
-          maybe_fallback_to_no_ssl(conn_opts)
-
-        # Seen this when connecting to Fly Postgres
-        %DBConnection.ConnectionError{message: "ssl connect: closed"} ->
-          maybe_fallback_to_no_ssl(conn_opts)
-
-        %DBConnection.ConnectionError{message: message, severity: :error} ->
-          maybe_fallback_to_ipv4(message, conn_opts)
-
-        _ ->
-          nil
-      end
-
-    if repaired_conn_opts do
-      state = update_connection_opts(step, repaired_conn_opts, state)
-      {:noreply, state, {:continue, step}}
-    else
-      shutdown_or_reconnect(reason, state)
-    end
+    shutdown_or_reconnect(reason, pid_type, state)
   end
 
   # The replication client exited after the connection setup has completed, it can be restarted
@@ -626,7 +649,7 @@ defmodule Electric.Connection.Manager do
         {:EXIT, pid, reason},
         %State{replication_client_pid: pid, current_phase: :running} = state
       ) do
-    state = nillify_pid(state, pid)
+    {pid_type, state} = nillify_pid(state, pid)
 
     state = %{
       state
@@ -634,7 +657,7 @@ defmodule Electric.Connection.Manager do
         current_step: {:start_replication_client, nil}
     }
 
-    shutdown_or_reconnect(reason, state)
+    shutdown_or_reconnect(reason, pid_type, state)
   end
 
   # The most likely reason for any database connection to get closed after we've already opened a
@@ -813,18 +836,21 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast(
-        :connection_pool_ready,
+        {:connection_pool_ready, role, pid},
         %State{
-          pool_pid: pool_pid,
           current_phase: :connection_setup,
           current_step: {:start_connection_pool, :connecting}
         } = state
       ) do
-    Electric.StatusMonitor.mark_connection_pool_ready(state.stack_id, pool_pid)
-    state = mark_connection_succeeded(state)
+    Electric.StatusMonitor.mark_connection_pool_ready(
+      state.stack_id,
+      role,
+      pid
+    )
 
-    {:noreply, %{state | current_step: :start_replication_supervisor},
-     {:continue, :start_replication_supervisor}}
+    state = Map.update!(state, :pool_pids, &Map.put(&1, role, {pid, true}))
+
+    handle_connection_pool_ready(state)
   end
 
   def handle_cast(
@@ -840,7 +866,7 @@ defmodule Electric.Connection.Manager do
       "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
     )
 
-    :telemetry.execute(
+    Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :connection, :consumers_ready],
       %{duration: duration, total: total_recovered, failed_to_recover: total_failed_to_recover},
       %{stack_id: state.stack_id}
@@ -892,7 +918,7 @@ defmodule Electric.Connection.Manager do
         "timeline_id = #{state.pg_timeline_id}"
     )
 
-    :telemetry.execute(
+    Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :postgres, :info_looked_up],
       %{
         pg_version: server_version,
@@ -920,18 +946,22 @@ defmodule Electric.Connection.Manager do
 
     %{
       replication_client_pid: replication_client_pid,
-      pool_pid: pool_pid,
       lock_connection_pid: lock_connection_pid
     } = state
 
     if is_pid(replication_client_pid), do: shutdown_child(replication_client_pid, :shutdown)
 
-    if is_pid(pool_pid) do
-      if state.drop_slot_requested do
-        drop_slot(state)
-      end
+    case state.pool_pids do
+      %{admin: {metadata_pool_pid, _}, snapshot: {snapshot_pool_pid, _}} ->
+        if state.drop_slot_requested do
+          drop_slot(state)
+        end
 
-      shutdown_child(pool_pid, :shutdown)
+        if is_pid(metadata_pool_pid), do: shutdown_child(metadata_pool_pid, :shutdown)
+        if is_pid(snapshot_pool_pid), do: shutdown_child(snapshot_pool_pid, :shutdown)
+
+      _ ->
+        :ok
     end
 
     # We brutally kill the lock connection process as it might hang on waiting
@@ -939,6 +969,19 @@ defmodule Electric.Connection.Manager do
     if is_pid(lock_connection_pid), do: shutdown_child(lock_connection_pid, :kill)
 
     {:stop, reason, state}
+  end
+
+  defp handle_connection_pool_ready(state) do
+    case state.pool_pids do
+      %{admin: {pid1, true}, snapshot: {pid2, true}} when is_pid(pid1) and is_pid(pid2) ->
+        state = mark_connection_succeeded(state)
+
+        {:noreply, %{state | current_step: :start_replication_supervisor},
+         {:continue, :start_replication_supervisor}}
+
+      _ ->
+        {:noreply, state}
+    end
   end
 
   defp shutdown_child(pid, :shutdown) when is_pid(pid) do
@@ -961,40 +1004,7 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  defp maybe_fallback_to_ipv4(error_message, conn_opts) do
-    # If network is unreachable, IPv6 is not enabled on the machine
-    # If domain cannot be resolved, assume there is no AAAA record for it
-    # Fall back to IPv4 for these cases
-    if conn_opts[:ipv6] and
-         String.starts_with?(error_message, "tcp connect (") and
-         (String.ends_with?(error_message, "): non-existing domain - :nxdomain") or
-            String.ends_with?(error_message, "): host is unreachable - :ehostunreach") or
-            String.ends_with?(error_message, "): network is unreachable - :enetunreach")) do
-      Logger.warning(
-        "Database connection failed to find valid IPv6 address for #{conn_opts[:hostname]} - falling back to IPv4"
-      )
-
-      conn_opts |> Keyword.put(:ipv6, false) |> populate_tcp_opts()
-    end
-  end
-
-  defp maybe_fallback_to_no_ssl(conn_opts) do
-    sslmode = conn_opts[:sslmode]
-
-    if sslmode != :require and is_nil(conn_opts[:cacertfile]) do
-      if not is_nil(sslmode) do
-        # Only log a warning when there's an explicit sslmode parameter in the database
-        # config, meaning the user has requested a certain sslmode.
-        Logger.warning(
-          "Failed to connect to the database using SSL. Trying again, using an unencrypted connection."
-        )
-      end
-
-      Keyword.put(conn_opts, :ssl, false)
-    end
-  end
-
-  defp shutdown_or_reconnect(error, state) do
+  defp shutdown_or_reconnect(error, pid_type, state) do
     error =
       error
       |> strip_exit_signal_stacktrace()
@@ -1002,14 +1012,14 @@ defmodule Electric.Connection.Manager do
 
     with false <- drop_slot_and_restart(error, state),
          false <- stop_if_fatal_error(error, state) do
-      state = schedule_reconnection_after_error(error, state)
+      state = schedule_reconnection_after_error(error, pid_type, state)
       {:noreply, state}
     end
   end
 
-  defp schedule_reconnection_after_error(error, state) do
+  defp schedule_reconnection_after_error(error, pid_type, state) do
     message = error.message
-    connection_mode = set_connection_status_error(message, state)
+    connection_mode = set_connection_status_error(message, pid_type, state)
 
     extended_message = message <> pg_error_extra_info(error.original_error)
 
@@ -1034,6 +1044,7 @@ defmodule Electric.Connection.Manager do
 
   defp set_connection_status_error(
          error_message,
+         _pid_type,
          %State{
            current_phase: :connection_setup,
            current_step: {:start_lock_connection, _}
@@ -1045,6 +1056,7 @@ defmodule Electric.Connection.Manager do
 
   defp set_connection_status_error(
          error_message,
+         _pid_type,
          %State{
            current_phase: phase,
            current_step: {:start_replication_client, _}
@@ -1057,13 +1069,20 @@ defmodule Electric.Connection.Manager do
 
   defp set_connection_status_error(
          error_message,
+         pid_type,
          %State{current_phase: :connection_setup} = state
        ) do
-    StatusMonitor.mark_connection_pool_as_errored(state.stack_id, error_message)
+    role =
+      case pid_type do
+        :admin_pool -> :admin
+        :snapshot_pool -> :snapshot
+      end
+
+    StatusMonitor.mark_connection_pool_as_errored(state.stack_id, role, error_message)
     "connection_pool"
   end
 
-  defp set_connection_status_error(_error_message, _state) do
+  defp set_connection_status_error(_error_message, _pid_type, _state) do
     "regular"
   end
 
@@ -1159,126 +1178,13 @@ defmodule Electric.Connection.Manager do
     %{state | connection_backoff: {conn_backoff, tref}}
   end
 
-  defp populate_ssl_opts(connection_opts) do
-    ssl_opts =
-      case connection_opts[:sslmode] do
-        :disable ->
-          false
+  defp replication_connection_opts(state),
+    do: Keyword.fetch!(state.replication_opts, :connection_opts)
 
-        _ ->
-          ssl_verify_opts(connection_opts[:hostname], connection_opts[:cacertfile])
-      end
+  defp pooled_connection_opts(state), do: state.connection_opts
 
-    Keyword.put(connection_opts, :ssl, ssl_opts)
-  end
-
-  # Unless explicitly requested by the user, Electric doesn't perform server certificate
-  # verification even when the database connection is encrypted. This mimics the behaviour of
-  # psql with sslmode=prefer or sslmode=require.
-  #
-  # Here's an example of connecting to DigitalOcean's Managed PostgreSQL to illustrate the point.
-  # Specifying sslmode=require does not result in certificate verification, it only instructs
-  # psql to use SSL for encryption of the database connection:
-  #
-  #     $ psql 'postgresql://...?sslmode=require'
-  #     psql (16.1, server 16.3)
-  #     SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off)
-  #     Type "help" for help.
-  #
-  #     [db-postgresql-do-user-13160360-0] doadmin:defaultdb=> \q
-  #
-  # Now if we request certificate verification, we get a different result:
-  #
-  #     $ psql 'postgresql://...?sslmode=verify-full'
-  #     psql: error: connection to server at "***.db.ondigitalocean.com" (167.99.250.38), o
-  #     port 25060 failed: root certificate file "/home/alco/.postgresql/root.crt" does not exist
-  #     Either provide the file, use the system's trusted roots with sslrootcert=system, or change
-  #     sslmode to disable server certificate verification.
-  #
-  #     $ psql 'sslrootcert=system sslmode=verify-full host=***.db.ondigitalocean.com ...'
-  #     psql: error: connection to server at "***.db.ondigitalocean.com" (167.99.250.38), port 25060
-  #     failed: SSL error: certificate verify failed
-  #
-  # In Electric, specifying the path to a file containing trusted certificate(s) forces the
-  # full verification to take place, equivalent to psql's sslmode=verify-full.
-  defp ssl_verify_opts(hostname, nil) do
-    # Even with `verify: :verify_none` we still need to include `server_name_indication`
-    # since, for example, Neon relies on it being present in the client's TLS handshake.
-    [
-      verify: :verify_none,
-      server_name_indication: String.to_charlist(hostname)
-    ]
-  end
-
-  defp ssl_verify_opts(hostname, cacertfile_path) when is_binary(cacertfile_path) do
-    [
-      verify: :verify_peer,
-      cacertfile: cacertfile_path,
-      server_name_indication: String.to_charlist(hostname)
-    ]
-  end
-
-  defp populate_tcp_opts(connection_opts) do
-    tcp_opts =
-      if connection_opts[:ipv6] do
-        [:inet6]
-      else
-        []
-      end
-
-    Keyword.put(connection_opts, :socket_options, tcp_opts)
-  end
-
-  defp populate_connection_opts(conn_opts),
-    do: conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
-
-  defp connection_opts_for_step(step, state)
-       when step in [:start_lock_connection, :start_replication_client] do
-    replication_connection_opts(state)
-  end
-
-  defp connection_opts_for_step(_step, state) do
-    pooled_connection_opts(state)
-  end
-
-  defp replication_connection_opts(state) do
-    state
-    |> replication_opts()
-    |> Keyword.fetch!(:connection_opts)
-  end
-
-  defp pooled_connection_opts(state) do
-    state.shared_connection_opts || state.connection_opts
-  end
-
-  defp replication_opts(%State{shared_connection_opts: nil} = state), do: state.replication_opts
-
-  defp replication_opts(%State{shared_connection_opts: conn_opts} = state),
-    do: Keyword.put(state.replication_opts, :connection_opts, conn_opts)
-
-  defp update_connection_opts(
-         step,
-         conn_opts,
-         %State{shared_connection_opts: nil, replication_opts: replication_opts} = state
-       )
-       when step in [:start_lock_connection, :start_replication_client] do
-    %{state | replication_opts: put_in(replication_opts, [:connection_opts], conn_opts)}
-  end
-
-  defp update_connection_opts(_step, conn_opts, %State{shared_connection_opts: nil} = state) do
-    %{state | connection_opts: conn_opts}
-  end
-
-  defp update_connection_opts(_step, conn_opts, state) do
-    %{state | shared_connection_opts: conn_opts}
-  end
-
-  defp drop_slot(%State{pool_pid: nil} = _state) do
-    Logger.warning("Skipping slot drop, pool connection not available")
-  end
-
-  defp drop_slot(state) do
-    pool = pool_name(state.stack_id)
+  defp drop_slot(%State{pool_pids: %{admin: {pool_pid, _}}} = state) when is_pid(pool_pid) do
+    pool = pool_name(state.stack_id, :admin)
     publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
     slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
     slot_temporary? = Keyword.fetch!(state.replication_opts, :slot_temporary?)
@@ -1288,6 +1194,10 @@ defmodule Electric.Connection.Manager do
     end
 
     execute_and_log_errors(pool, "DROP PUBLICATION #{publication_name}")
+  end
+
+  defp drop_slot(_state) do
+    Logger.warning("Skipping slot drop, pool connection not available")
   end
 
   defp execute_and_log_errors(pool, query) do
@@ -1339,13 +1249,16 @@ defmodule Electric.Connection.Manager do
   end
 
   defp nillify_pid(%State{lock_connection_pid: pid} = state, pid),
-    do: %{state | lock_connection_pid: nil}
+    do: {:lock_connection, %{state | lock_connection_pid: nil}}
 
   defp nillify_pid(%State{replication_client_pid: pid} = state, pid),
-    do: %{state | replication_client_pid: nil}
+    do: {:replication_client, %{state | replication_client_pid: nil}}
 
-  defp nillify_pid(%State{pool_pid: pid} = state, pid),
-    do: %{state | pool_pid: nil}
+  defp nillify_pid(%State{pool_pids: %{admin: {pid, _}} = pool_pids} = state, pid),
+    do: {:admin_pool, %{state | pool_pids: %{pool_pids | admin: nil}}}
+
+  defp nillify_pid(%State{pool_pids: %{snapshot: {pid, _}} = pool_pids} = state, pid),
+    do: {:snapshot_pool, %{state | pool_pids: %{pool_pids | snapshot: nil}}}
 
   defp nillify_timer(%State{lock_connection_timer: tref} = state, tref),
     do: %{state | lock_connection_timer: nil}

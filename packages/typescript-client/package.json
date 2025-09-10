@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/client",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
@@ -21,13 +21,15 @@
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
     "glob": "^10.3.10",
+    "jsdom": "^26.1.0",
     "pg": "^8.12.0",
     "prettier": "^3.3.2",
     "shx": "^0.3.4",
     "tsup": "^8.0.1",
     "typescript": "^5.5.2",
     "uuid": "^10.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "vitest-localstorage-mock": "^0.1.2"
   },
   "type": "module",
   "exports": {

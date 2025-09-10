@@ -1,5 +1,5 @@
 defmodule Electric.LsnTrackerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
   alias Electric.LsnTracker

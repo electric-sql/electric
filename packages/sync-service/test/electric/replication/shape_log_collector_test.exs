@@ -252,6 +252,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     test "correctly handles flush notifications", ctx do
       lsn = Lsn.from_string("0/10")
+      prev_lsn = Lsn.increment(lsn, -1)
 
       Mock.Inspector
       |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
@@ -268,6 +269,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
 
       Registry.register(name, key, nil)
+
+      irrelevant_txn = %Transaction{xid: 99, lsn: prev_lsn} |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(irrelevant_txn, ctx.server)
+      expected_lsn = Lsn.to_integer(prev_lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}, 50
 
       txn =
         %Transaction{xid: 100, lsn: lsn}
@@ -452,6 +459,36 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_relation_msg(relation2, ctx.server)
 
       Support.TransactionConsumer.assert_consume(ctx.consumers, [relation1, relation2])
+    end
+  end
+
+  describe "collector not ready" do
+    setup ctx do
+      {:ok, pid} =
+        start_supervised(
+          {ShapeLogCollector,
+           stack_id: ctx.stack_id,
+           inspector: {Mock.Inspector, elem(@inspector, 1)},
+           persistent_kv: ctx.persistent_kv}
+        )
+
+      %{server: pid}
+    end
+
+    test "rejects new transactions", ctx do
+      lsn = Lsn.from_string("0/10")
+
+      txn = %Transaction{xid: 100, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+
+      assert_raise MatchError, fn -> ShapeLogCollector.store_transaction(txn, ctx.server) end
+    end
+
+    test "rejects relation messages", ctx do
+      relation = %Relation{id: 1234, table: "test_table", schema: "public", columns: []}
+
+      assert_raise MatchError, fn ->
+        ShapeLogCollector.handle_relation_msg(relation, ctx.server)
+      end
     end
   end
 

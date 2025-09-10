@@ -6,7 +6,7 @@ import {
   MaybePromise,
   GetExtensions,
 } from './types'
-import { MessageParser, Parser } from './parser'
+import { MessageParser, Parser, TransformFunction } from './parser'
 import { getOffset, isUpToDateMessage } from './helpers'
 import {
   FetchError,
@@ -28,6 +28,7 @@ import {
   CHUNK_LAST_OFFSET_HEADER,
   LIVE_CACHE_BUSTER_HEADER,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
+  EXPIRED_HANDLE_QUERY_PARAM,
   COLUMNS_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
@@ -41,11 +42,13 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
+  ELECTRIC_PROTOCOL_QUERY_PARAMS,
 } from './constants'
 import {
   EventSourceMessage,
   fetchEventSource,
 } from '@microsoft/fetch-event-source'
+import { expiredShapesCache } from './expired-shapes-cache'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -259,6 +262,7 @@ export interface ShapeStreamOptions<T = never> {
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
+  transformer?: TransformFunction<T>
 
   /**
    * A function for handling shapestream errors.
@@ -291,6 +295,23 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   error?: unknown
 
   forceDisconnectAndRefresh(): Promise<void>
+}
+
+/**
+ * Creates a canonical shape key from a URL excluding only Electric protocol parameters
+ */
+function canonicalShapeKey(url: URL): string {
+  const cleanUrl = new URL(url.origin + url.pathname)
+
+  // Copy all params except Electric protocol ones that vary between requests
+  for (const [key, value] of url.searchParams) {
+    if (!ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
+      cleanUrl.searchParams.set(key, value)
+    }
+  }
+
+  cleanUrl.searchParams.sort()
+  return cleanUrl.toString()
 }
 
 /**
@@ -379,7 +400,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
-    this.#messageParser = new MessageParser<T>(options.parser)
+    this.#messageParser = new MessageParser<T>(
+      options.parser,
+      options.transformer
+    )
     this.#onError = this.options.onError
 
     const baseFetchClient =
@@ -517,6 +541,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // with the newly provided shape handle, or a fallback
         // pseudo-handle based on the current one to act as a
         // consistent cache buster
+
+        // Store the current shape URL as expired to avoid future 409s
+        if (this.#shapeHandle) {
+          const shapeKey = canonicalShapeKey(fetchUrl)
+          expiredShapesCache.markExpired(shapeKey, this.#shapeHandle)
+        }
+
         const newShapeHandle =
           e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
         this.#reset(newShapeHandle)
@@ -600,6 +631,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#shapeHandle) {
       // This should probably be a header for better cache breaking?
       fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
+    }
+
+    // Add cache buster for shapes known to be expired to prevent 409s
+    const shapeKey = canonicalShapeKey(fetchUrl)
+    const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
+    if (expiredHandle) {
+      fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
     }
 
     // sort query params in-place for stable URLs and improved cache hits

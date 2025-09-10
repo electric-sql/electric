@@ -73,6 +73,17 @@ See the blog post for more details:
   />
 </div>
 
+[Maxi Ferreira](https://x.com/charca) also wrote an [awesome interactive guide](https://frontendatscale.com/blog/tanstack-db) to what TanStack DB is, how it works, and why it might change the way you build apps:
+
+<figure class="listing">
+  <a href="https://frontendatscale.com/blog/tanstack-db" class="no-visual">
+    <img alt="An Interactive Guide to TanStack DB"
+        src="/img/blog/local-first-sync-with-tanstack-db/interactive-guide-to-tanstack-db.jpg"
+        style="border-radius: 16px"
+    />
+  </a>
+</figure>
+
 ### Project links
 
 There's a [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for web and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for&nbsp;mobile.

@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   # - Consumer does txn buffering until pg snapshot is known
   use GenServer
 
+  alias Electric.Utils
   alias Electric.Replication.Changes
   alias Electric.Shapes.Consumer
   alias Electric.ShapeCache.Storage
@@ -173,6 +174,16 @@ defmodule Electric.Shapes.Consumer.Materializer do
   defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
     {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
     value
+  end
+
+  defp cast!(record, %{columns: columns, materialized_type: {:array, {:row, types}}}) do
+    {:ok, values} =
+      Enum.zip(columns, types)
+      |> Utils.map_while_ok(fn {column, type} ->
+        Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
+      end)
+
+    List.to_tuple(values)
   end
 
   defp apply_changes(changes, state) when is_list(changes) do

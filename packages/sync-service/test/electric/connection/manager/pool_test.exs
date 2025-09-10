@@ -7,6 +7,7 @@ defmodule Electric.Connection.Manager.PoolTest do
   alias Electric.Connection.Manager.Pool
   alias Electric.DbConnectionError
 
+  @pool_role :snapshot
   setup [:with_stack_id_from_test]
 
   defmodule TestPostgrex do
@@ -28,6 +29,7 @@ defmodule Electric.Connection.Manager.PoolTest do
          [
            [
              stack_id: stack_id,
+             role: @pool_role,
              pool_mod: TestPostgrex,
              pool_opts: [pool_size: pool_size],
              conn_opts: [],
@@ -43,7 +45,7 @@ defmodule Electric.Connection.Manager.PoolTest do
 
   defp pool_state(stack_id) do
     stack_id
-    |> Pool.name()
+    |> Pool.name(@pool_role)
     |> :sys.get_state()
   end
 
@@ -56,13 +58,13 @@ defmodule Electric.Connection.Manager.PoolTest do
       Electric.Connection.Manager,
       :connection_pool_ready,
       [mode: :shared],
-      fn mng_pid ->
-        send(mng_pid, {:pool_ready_notified, pool_pid})
+      fn mng_pid, role, _pid ->
+        send(mng_pid, {:pool_ready_notified, pool_pid, role})
         :ok
       end
     )
 
-    Repatch.allow(test_pid, Pool.name(stack_id))
+    Repatch.allow(test_pid, Pool.name(stack_id, @pool_role))
 
     state = pool_state(stack_id)
     assert state.status == :starting
@@ -84,7 +86,7 @@ defmodule Electric.Connection.Manager.PoolTest do
     send(pool_pid, {:connected, c2, ref})
 
     # Should transition to ready and notify
-    assert_receive {:pool_ready_notified, ^pool_pid}, 500
+    assert_receive {:pool_ready_notified, ^pool_pid, @pool_role}, 500
     assert pool_state(stack_id).status == :ready
   end
 
@@ -165,10 +167,10 @@ defmodule Electric.Connection.Manager.PoolTest do
 
   test "configure_pool_conn sends :pool_conn_started and returns opts", ctx do
     parent = self()
-    opts = [foo: :bar]
+    opts = Electric.Utils.obfuscate_password(foo: :bar, password: "password")
 
     returned = Pool.configure_pool_conn(opts, parent, ctx.stack_id)
-    assert returned == opts
+    assert returned == Electric.Utils.deobfuscate_password(opts)
 
     assert_receive {:pool_conn_started, pid} when is_pid(pid)
   end

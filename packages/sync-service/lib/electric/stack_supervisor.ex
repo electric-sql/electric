@@ -90,6 +90,7 @@ defmodule Electric.StackSupervisor do
                    type: :pos_integer,
                    default: LogChunker.default_chunk_size_threshold()
                  ],
+                 feature_flags: [type: {:list, :string}, default: []],
                  tweaks: [
                    type: :keyword_list,
                    required: false,
@@ -242,7 +243,8 @@ defmodule Electric.StackSupervisor do
       storage: storage_mod_arg(opts),
       inspector: inspector,
       stack_id: stack_id,
-      persistent_kv: persistent_kv
+      persistent_kv: persistent_kv,
+      feature_flags: Map.get(opts, :feature_flags, [])
     ]
   end
 
@@ -286,7 +288,7 @@ defmodule Electric.StackSupervisor do
     shape_log_collector =
       Electric.Replication.ShapeLogCollector.name(stack_id)
 
-    db_pool = Electric.Connection.Manager.pool_name(stack_id)
+    metadata_db_pool = Electric.Connection.Manager.admin_pool(stack_id)
 
     shape_changes_registry_name = registry_name(stack_id)
 
@@ -325,11 +327,7 @@ defmodule Electric.StackSupervisor do
           relation_received:
             {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]}
         ] ++ config.replication_opts,
-      pool_opts:
-        [
-          name: db_pool,
-          types: PgInterop.Postgrex.Types
-        ] ++ config.pool_opts,
+      pool_opts: [types: PgInterop.Postgrex.Types] ++ config.pool_opts,
       timeline_opts: [
         stack_id: stack_id,
         persistent_kv: config.persistent_kv
@@ -366,7 +364,7 @@ defmodule Electric.StackSupervisor do
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
           Electric.ShapeCache.Storage.stack_child_spec(storage),
           {Electric.Postgres.Inspector.EtsInspector,
-           stack_id: stack_id, pool: db_pool, persistent_kv: config.persistent_kv},
+           stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
           {Electric.Shapes.Monitor,
            Electric.Utils.merge_all([
              [stack_id: stack_id, storage: storage, shape_status: shape_status],
