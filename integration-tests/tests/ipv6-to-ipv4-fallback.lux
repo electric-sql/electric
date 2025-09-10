@@ -1,0 +1,32 @@
+[doc Verify fallback from IPv6 to IPv4 when connecting to a PostgreSQL server]
+
+[include _macros.luxinc]
+
+[global pg_container_name=ipv6-to-ipv4-fallback__pg]
+[global pg_host_name=local-ipv4-only.electric-sql.dev]
+[global database_url=postgresql://postgres:password@$pg_host_name:$pg_host_port/electric?sslmode=disable]
+[global pooled_database_url=postgresql://postgres:password@$pg_host_name:$pg_pooler_host_port/electric?sslmode=disable]
+
+###
+
+[invoke setup_pg]
+
+## Start the sync service and observe the fallback
+[invoke setup_electric_with_pooler_with_env "ELECTRIC_DATABASE_USE_IPV6=true"]
+
+[shell electric]
+  # Reset the failure pattern to make it possible to pattern-match on errors below
+  -
+
+  ??tcp connect (local-ipv4-only.electric-sql.dev:$pg_host_port): non-existing domain - :nxdomain
+  ??[warning] Database connection failed to find valid IPv6 address for local-ipv4-only.electric-sql.dev - falling back to IPv4
+  ??[info] Lock acquired
+  ??tcp connect (local-ipv4-only.electric-sql.dev:$pg_pooler_host_port): non-existing domain - :nxdomain
+  ??[warning] Database connection failed to find valid IPv6 address for local-ipv4-only.electric-sql.dev - falling back to IPv4
+  ??[info] Connection pool [admin] is ready
+  ??[info] Connection pool [snapshot] is ready
+  ??[info] Starting replication from postgres
+
+
+[cleanup]
+  [invoke teardown]

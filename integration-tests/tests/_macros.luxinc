@@ -163,6 +163,10 @@
   [invoke setup_electric_with_env "ELECTRIC_QUERY_DATABASE_URL=$pooled_database_url"]
 [endmacro]
 
+[macro setup_electric_with_pooler_with_env env]
+  [invoke setup_electric_with_env "ELECTRIC_QUERY_DATABASE_URL=$pooled_database_url $env"]
+[endmacro]
+
 [macro setup_electric_with_env env]
   [invoke setup_electric_shell "electric" "3000" "DATABASE_URL=$database_url ELECTRIC_INSECURE=true $env"]
 [endmacro]
