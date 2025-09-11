@@ -1,6 +1,9 @@
 import type { Plugin, ViteDevServer } from "vite"
 import { readFileSync, existsSync } from "fs"
-import { CertificateManager, type CertificateResult } from "./certificate-manager"
+import {
+  CertificateManager,
+  type CertificateResult,
+} from "./certificate-manager"
 import { TrustInstaller } from "./trust-installer"
 
 interface TrustedHttpsOptions {
@@ -53,8 +56,10 @@ export default function trustedHttps(
       state.certResult = await state.certificateManager.renewIfNeeded()
 
       // Log which certificate generation method was used
-      if (state.certResult.method === 'mkcert') {
-        console.log(`[trusted-https] Generated certificate using mkcert (automatically trusted)`)
+      if (state.certResult.method === `mkcert`) {
+        console.log(
+          `[trusted-https] Generated certificate using mkcert (automatically trusted)`
+        )
 
         state.trustStatus = { trusted: true }
         state.isSetup = true
@@ -66,7 +71,9 @@ export default function trustedHttps(
 
       // For basic-ssl certificates, attempt to trust them if autoTrust is enabled
       if (opts.autoTrust) {
-        const isTrusted = await state.trustInstaller.checkTrusted(state.certResult.cert)
+        const isTrusted = await state.trustInstaller.checkTrusted(
+          state.certResult.cert
+        )
 
         if (isTrusted) {
           console.log(`[trusted-https] Certificate already trusted`)
@@ -81,7 +88,9 @@ export default function trustedHttps(
           while (!trustInstalled && attempts < maxAttempts) {
             attempts++
 
-            console.log(`[trusted-https] Installing certificate to user trust store ...`)
+            console.log(
+              `[trusted-https] Installing certificate to user trust store ...`
+            )
 
             const trustResult = await state.trustInstaller.install(
               state.certResult.cert
@@ -101,8 +110,12 @@ export default function trustedHttps(
               )
 
               if (!shouldRetry) {
-                console.log(`[trusted-https] Falling back to self-signed certificate`)
-                console.log(`[trusted-https] You'll need to accept security warnings in your browser`)
+                console.log(
+                  `[trusted-https] Falling back to self-signed certificate`
+                )
+                console.log(
+                  `[trusted-https] You'll need to accept security warnings in your browser`
+                )
 
                 state.trustStatus = { trusted: false }
                 trustInstalled = true // Exit loop, user chose self-signed
@@ -119,7 +132,9 @@ export default function trustedHttps(
           }
 
           if (attempts >= maxAttempts) {
-            console.log(`[trusted-https] Max attempts reached, falling back to self-signed certificate`)
+            console.log(
+              `[trusted-https] Max attempts reached, falling back to self-signed certificate`
+            )
             state.trustStatus = { trusted: false }
           }
         }
@@ -140,9 +155,7 @@ export default function trustedHttps(
       console.error(`[trusted-https] Failed to setup certificates:`, error)
 
       if (opts.fallback) {
-        console.log(
-          `[trusted-https] Continuing without HTTPS`
-        )
+        console.log(`[trusted-https] Continuing without HTTPS`)
       } else {
         throw error
       }
@@ -169,15 +182,16 @@ export default function trustedHttps(
         try {
           // console.log(`[trusted-https] DEBUG: Reading cert from: ${state.certResult.cert}`)
           // console.log(`[trusted-https] DEBUG: Reading key from: ${state.certResult.key}`)
-          
+
           let httpsConfig
-          
-          if (state.certResult.method === 'basic-ssl') {
-            const combinedPath = state.certificateManager.getCombinedCertificatePath()
+
+          if (state.certResult.method === `basic-ssl`) {
+            const combinedPath =
+              state.certificateManager.getCombinedCertificatePath()
             if (existsSync(combinedPath)) {
               const combinedContent = readFileSync(combinedPath, `utf8`)
 
-              // Use the same approach as @vitejs/plugin-basic-ssl: 
+              // Use the same approach as @vitejs/plugin-basic-ssl:
               // Set both cert and key to the same combined PEM string
               httpsConfig = { cert: combinedContent, key: combinedContent }
             } else {
@@ -186,26 +200,36 @@ export default function trustedHttps(
               const key = readFileSync(state.certResult.key, `utf8`)
 
               // Certificate should come first, then key for proper certificate chain
-              const combinedContent = cert + '\n' + key
+              const combinedContent = cert + `\n` + key
               httpsConfig = { cert: combinedContent, key: combinedContent }
             }
           } else {
             // Mkcert certificates
             const cert = readFileSync(state.certResult.cert, `utf8`)
             const key = readFileSync(state.certResult.key, `utf8`)
-            const combinedContent = cert + '\n' + key
+            const combinedContent = cert + `\n` + key
             httpsConfig = { cert: combinedContent, key: combinedContent }
           }
 
           // Apply HTTPS configuration to config (like @vitejs/plugin-basic-ssl)
           if (config.server.https === undefined || !!config.server.https) {
-            config.server.https = Object.assign({}, config.server.https, httpsConfig)
+            config.server.https = Object.assign(
+              {},
+              config.server.https,
+              httpsConfig
+            )
           }
           if (config.preview.https === undefined || !!config.preview.https) {
-            config.preview.https = Object.assign({}, config.preview.https, httpsConfig)
+            config.preview.https = Object.assign(
+              {},
+              config.preview.https,
+              httpsConfig
+            )
           }
 
-          const trustStatus = state.trustStatus?.trusted ? 'trusted' : 'untrusted'
+          const trustStatus = state.trustStatus?.trusted
+            ? `trusted`
+            : `untrusted`
           console.log(
             `[trusted-https] HTTPS enabled with ${state.certResult.method} certificates (${trustStatus})`
           )
@@ -231,10 +255,12 @@ export default function trustedHttps(
             {
               plugin: `vite-plugin-trusted-https`,
               isSetup: state.isSetup,
-              certificatePaths: state.certResult ? {
-                cert: state.certResult.cert,
-                key: state.certResult.key
-              } : null,
+              certificatePaths: state.certResult
+                ? {
+                    cert: state.certResult.cert,
+                    key: state.certResult.key,
+                  }
+                : null,
               certificateMethod: state.certResult?.method || null,
               trustStatus: state.trustStatus,
               platform: process.platform,
@@ -245,7 +271,7 @@ export default function trustedHttps(
           )
         )
       })
-    }
+    },
   }
 }
 

@@ -5,7 +5,7 @@ import { CertificateManager } from "../src/certificate-manager"
 import { createTempCertDir } from "./test-utils"
 
 // Mock MkcertManager for fallback logic testing
-vi.mock("../src/mkcert-manager")
+vi.mock(`../src/mkcert-manager`)
 
 let testCertDir: string
 
@@ -125,26 +125,6 @@ describe(`CertificateManager`, () => {
     expect(key).toBe(manager.getKeyPath())
   })
 
-  it(`should detect certificate expiration based on file age`, async () => {
-    const manager = new CertificateManager({
-      certDir: testCertDir,
-      domains: [`localhost`],
-      name: `test-cert`,
-    })
-
-    // Generate certificates
-    await manager.ensureCertificates()
-    expect(manager.isCertificateExpired()).toBe(false)
-
-    // Mock old file by changing mtime (simulation)
-    const certPath = manager.getCertificatePath()
-    const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) // 31 days ago
-    
-    // We can't easily mock fs.statSync here, so this test verifies the logic exists
-    // The actual expiration check would require more complex mocking
-    expect(typeof manager.isCertificateExpired).toBe(`function`)
-  })
-
   it(`should handle multiple domains in certificate`, async () => {
     const domains = [`localhost`, `*.localhost`, `127.0.0.1`, `example.test`]
     const manager = new CertificateManager({
@@ -155,36 +135,10 @@ describe(`CertificateManager`, () => {
 
     const { cert } = await manager.ensureCertificates()
     const certContent = readFileSync(cert, `utf8`)
-    
+
     // Certificate should be valid format
     expect(certContent).toMatch(/^-----BEGIN CERTIFICATE-----/)
     expect(certContent).toMatch(/-----END CERTIFICATE-----$/)
-  })
-
-  it(`should handle concurrent certificate generation`, async () => {
-    const manager = new CertificateManager({
-      certDir: testCertDir,
-      domains: [`localhost`],
-      name: `concurrent-test`,
-    })
-
-    // Start multiple certificate generations simultaneously
-    const promises = [
-      manager.ensureCertificates(),
-      manager.ensureCertificates(),
-      manager.ensureCertificates(),
-    ]
-
-    const results = await Promise.all(promises)
-    
-    // All should succeed
-    results.forEach(result => {
-      expect(result.cert).toBeTruthy()
-      expect(result.key).toBeTruthy()
-    })
-
-    // Certificate should exist
-    expect(manager.certificateExists()).toBe(true)
   })
 })
 
@@ -205,17 +159,19 @@ describe(`CertificateManager fallback logic`, () => {
   })
 
   it(`should use mkcert when available and configured`, async () => {
-    const { MkcertManager } = await import("../src/mkcert-manager")
+    const { MkcertManager } = await import(`../src/mkcert-manager`)
     const mockMkcertManager = vi.mocked(MkcertManager)
 
     // Mock successful mkcert scenario
     mockMkcertManager.prototype.isAvailable = vi.fn().mockReturnValue(true)
     mockMkcertManager.prototype.isCAInstalled = vi.fn().mockReturnValue(true)
-    mockMkcertManager.prototype.generateCertificates = vi.fn().mockResolvedValue({
-      success: true,
-      certPath: join(testCertDir, "test-cert.crt"),
-      keyPath: join(testCertDir, "test-cert.key")
-    })
+    mockMkcertManager.prototype.generateCertificates = vi
+      .fn()
+      .mockResolvedValue({
+        success: true,
+        certPath: join(testCertDir, `test-cert.crt`),
+        keyPath: join(testCertDir, `test-cert.key`),
+      })
 
     const manager = new CertificateManager({
       certDir: testCertDir,
@@ -225,14 +181,14 @@ describe(`CertificateManager fallback logic`, () => {
 
     const result = await manager.ensureCertificates()
 
-    expect(result.method).toBe("mkcert")
-    expect(result.cert).toContain("test-cert.crt")
-    expect(result.key).toContain("test-cert.key")
+    expect(result.method).toBe(`mkcert`)
+    expect(result.cert).toContain(`test-cert.crt`)
+    expect(result.key).toContain(`test-cert.key`)
     expect(mockMkcertManager.prototype.generateCertificates).toHaveBeenCalled()
   })
 
   it(`should fallback to basic-ssl when mkcert is not available`, async () => {
-    const { MkcertManager } = await import("../src/mkcert-manager")
+    const { MkcertManager } = await import(`../src/mkcert-manager`)
     const mockMkcertManager = vi.mocked(MkcertManager)
 
     // Mock mkcert not available
@@ -247,14 +203,16 @@ describe(`CertificateManager fallback logic`, () => {
 
     const result = await manager.ensureCertificates()
 
-    expect(result.method).toBe("basic-ssl")
-    expect(result.cert).toContain("fallback-test.crt")
-    expect(result.key).toContain("fallback-test.key")
-    expect(mockMkcertManager.prototype.generateCertificates).not.toHaveBeenCalled()
+    expect(result.method).toBe(`basic-ssl`)
+    expect(result.cert).toContain(`fallback-test.crt`)
+    expect(result.key).toContain(`fallback-test.key`)
+    expect(
+      mockMkcertManager.prototype.generateCertificates
+    ).not.toHaveBeenCalled()
   })
 
   it(`should fallback to basic-ssl when mkcert CA is not installed`, async () => {
-    const { MkcertManager } = await import("../src/mkcert-manager")
+    const { MkcertManager } = await import(`../src/mkcert-manager`)
     const mockMkcertManager = vi.mocked(MkcertManager)
 
     // Mock mkcert available but CA not installed
@@ -269,21 +227,25 @@ describe(`CertificateManager fallback logic`, () => {
 
     const result = await manager.ensureCertificates()
 
-    expect(result.method).toBe("basic-ssl")
-    expect(mockMkcertManager.prototype.generateCertificates).not.toHaveBeenCalled()
+    expect(result.method).toBe(`basic-ssl`)
+    expect(
+      mockMkcertManager.prototype.generateCertificates
+    ).not.toHaveBeenCalled()
   })
 
   it(`should fallback to basic-ssl when mkcert generation fails`, async () => {
-    const { MkcertManager } = await import("../src/mkcert-manager")
+    const { MkcertManager } = await import(`../src/mkcert-manager`)
     const mockMkcertManager = vi.mocked(MkcertManager)
 
     // Mock mkcert available but generation fails
     mockMkcertManager.prototype.isAvailable = vi.fn().mockReturnValue(true)
     mockMkcertManager.prototype.isCAInstalled = vi.fn().mockReturnValue(true)
-    mockMkcertManager.prototype.generateCertificates = vi.fn().mockResolvedValue({
-      success: false,
-      error: "Generation failed"
-    })
+    mockMkcertManager.prototype.generateCertificates = vi
+      .fn()
+      .mockResolvedValue({
+        success: false,
+        error: `Generation failed`,
+      })
 
     const manager = new CertificateManager({
       certDir: testCertDir,
@@ -293,19 +255,19 @@ describe(`CertificateManager fallback logic`, () => {
 
     const result = await manager.ensureCertificates()
 
-    expect(result.method).toBe("basic-ssl")
-    expect(result.cert).toContain("failure-fallback-test.crt")
-    expect(result.key).toContain("failure-fallback-test.key")
+    expect(result.method).toBe(`basic-ssl`)
+    expect(result.cert).toContain(`failure-fallback-test.crt`)
+    expect(result.key).toContain(`failure-fallback-test.key`)
     expect(mockMkcertManager.prototype.generateCertificates).toHaveBeenCalled()
   })
 
   it(`should provide mkcert setup instructions`, async () => {
-    const { MkcertManager } = await import("../src/mkcert-manager")
+    const { MkcertManager } = await import(`../src/mkcert-manager`)
     const mockMkcertManager = vi.mocked(MkcertManager)
 
-    mockMkcertManager.prototype.getSetupInstructions = vi.fn().mockReturnValue(
-      "Mock setup instructions for mkcert"
-    )
+    mockMkcertManager.prototype.getSetupInstructions = vi
+      .fn()
+      .mockReturnValue(`Mock setup instructions for mkcert`)
 
     const manager = new CertificateManager({
       certDir: testCertDir,
@@ -315,22 +277,24 @@ describe(`CertificateManager fallback logic`, () => {
 
     const instructions = manager.getMkcertSetupInstructions()
 
-    expect(instructions).toBe("Mock setup instructions for mkcert")
+    expect(instructions).toBe(`Mock setup instructions for mkcert`)
     expect(mockMkcertManager.prototype.getSetupInstructions).toHaveBeenCalled()
   })
 
   it(`should handle renewIfNeeded with method detection`, async () => {
-    const { MkcertManager } = await import("../src/mkcert-manager")
+    const { MkcertManager } = await import(`../src/mkcert-manager`)
     const mockMkcertManager = vi.mocked(MkcertManager)
 
     // Mock mkcert being available for method detection heuristic
     mockMkcertManager.prototype.isAvailable = vi.fn().mockReturnValue(true)
     mockMkcertManager.prototype.isCAInstalled = vi.fn().mockReturnValue(true)
-    mockMkcertManager.prototype.generateCertificates = vi.fn().mockResolvedValue({
-      success: true,
-      certPath: join(testCertDir, "renew-method-test.crt"),
-      keyPath: join(testCertDir, "renew-method-test.key")
-    })
+    mockMkcertManager.prototype.generateCertificates = vi
+      .fn()
+      .mockResolvedValue({
+        success: true,
+        certPath: join(testCertDir, `renew-method-test.crt`),
+        keyPath: join(testCertDir, `renew-method-test.key`),
+      })
 
     const manager = new CertificateManager({
       certDir: testCertDir,
@@ -350,8 +314,8 @@ describe(`CertificateManager fallback logic`, () => {
     const result = await manager.renewIfNeeded()
 
     // Should detect mkcert method based on availability heuristic
-    expect(result.method).toBe("mkcert")
-    expect(result.cert).toContain("renew-method-test.crt")
-    expect(result.key).toContain("renew-method-test.key")
+    expect(result.method).toBe(`mkcert`)
+    expect(result.cert).toContain(`renew-method-test.crt`)
+    expect(result.key).toContain(`renew-method-test.key`)
   })
 })

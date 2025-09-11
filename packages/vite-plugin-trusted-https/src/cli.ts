@@ -88,10 +88,12 @@ program
           const shouldRetry = await trustInstaller.promptUser(
             `Retry certificate installation (Y)? Or fallback to self-signed certificate (n)?`
           )
-          
+
           if (!shouldRetry) {
             console.log(`Falling back to self-signed certificate`)
-            console.log(`You'll need to accept security warnings in your browser`)
+            console.log(
+              `You'll need to accept security warnings in your browser`
+            )
 
             trustInstalled = true
           }
@@ -103,7 +105,9 @@ program
       }
 
       if (attempts >= maxAttempts) {
-        console.log(`Max attempts reached, falling back to self-signed certificate`)
+        console.log(
+          `Max attempts reached, falling back to self-signed certificate`
+        )
       }
     } catch (error) {
       console.error(`❌ Error during installation:`, error)
@@ -168,7 +172,9 @@ program
 
       console.log(`Certificate Files:`)
       console.log(`- Certificate: ${certPath} ${certExists ? `✅` : `❌`}`)
-      console.log(`- Private key: ${keyPath} ${existsSync(keyPath) ? `✅` : `❌`}`)
+      console.log(
+        `- Private key: ${keyPath} ${existsSync(keyPath) ? `✅` : `❌`}`
+      )
 
       if (certExists) {
         const isExpired = certManager.isCertificateExpired()
@@ -176,13 +182,19 @@ program
 
         // Check if trusted
         const isTrusted = await trustInstaller.checkTrusted(certPath)
-        console.log(`- Trust status: ${isTrusted ? `✅ Trusted` : `❌ Not Trusted`}`)
+        console.log(
+          `- Trust status: ${isTrusted ? `✅ Trusted` : `❌ Not Trusted`}`
+        )
 
         if (!isTrusted) {
-          console.log(`To install trusted certificates run \`trust-certs install\``)
+          console.log(
+            `To install trusted certificates run \`trust-certs install\``
+          )
         }
       } else {
-        console.log(`To generate and install certificates run \`trust-certs install\``)
+        console.log(
+          `To generate and install certificates run \`trust-certs install\``
+        )
       }
     } catch (error) {
       console.error(`Error:`, error)

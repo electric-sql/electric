@@ -77,22 +77,25 @@ export class TrustInstaller {
       )
       return { success: true }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+
       // Check if user canceled the operation
-      if (errorMessage.includes('User interaction is not allowed') || 
-          errorMessage.includes('User canceled') ||
-          errorMessage.includes('errSecUserCanceled')) {
+      if (
+        errorMessage.includes(`User interaction is not allowed`) ||
+        errorMessage.includes(`User canceled`) ||
+        errorMessage.includes(`errSecUserCanceled`)
+      ) {
         return {
           success: false,
           userCanceled: true,
-          error: 'User canceled certificate installation'
+          error: `User canceled certificate installation`,
         }
       }
-      
+
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
       }
     }
   }
@@ -106,22 +109,25 @@ export class TrustInstaller {
       )
       return { success: true }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+
       // Check if user canceled or if NSS database doesn't exist
-      if (errorMessage.includes('canceled') || 
-          errorMessage.includes('permission denied') ||
-          errorMessage.includes('No such file or directory')) {
+      if (
+        errorMessage.includes(`canceled`) ||
+        errorMessage.includes(`permission denied`) ||
+        errorMessage.includes(`No such file or directory`)
+      ) {
         return {
           success: false,
           userCanceled: true,
-          error: 'User-level certificate installation failed or was canceled'
+          error: `User-level certificate installation failed or was canceled`,
         }
       }
-      
+
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
       }
     }
   }
@@ -135,23 +141,26 @@ export class TrustInstaller {
       })
       return { success: true }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+
       // Check if user canceled UAC or other user interaction
-      if (errorMessage.includes('canceled') || 
-          errorMessage.includes('User canceled') ||
-          errorMessage.includes('operation was cancelled') ||
-          errorMessage.includes('access denied')) {
+      if (
+        errorMessage.includes(`canceled`) ||
+        errorMessage.includes(`User canceled`) ||
+        errorMessage.includes(`operation was cancelled`) ||
+        errorMessage.includes(`access denied`)
+      ) {
         return {
           success: false,
           userCanceled: true,
-          error: 'User canceled certificate installation'
+          error: `User canceled certificate installation`,
         }
       }
-      
+
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
       }
     }
   }
@@ -182,10 +191,13 @@ export class TrustInstaller {
 
   private removeLinux(): TrustResult {
     try {
-      execSync(`sudo rm -f /usr/local/share/ca-certificates/vite-plugin-trusted-https.crt`, {
-        stdio: `pipe`,
-        timeout: 30000,
-      })
+      execSync(
+        `sudo rm -f /usr/local/share/ca-certificates/vite-plugin-trusted-https.crt`,
+        {
+          stdio: `pipe`,
+          timeout: 30000,
+        }
+      )
       execSync(`sudo update-ca-certificates`, { stdio: `pipe`, timeout: 30000 })
       return { success: true }
     } catch (error) {
@@ -248,7 +260,9 @@ export class TrustInstaller {
   private checkTrustedLinux(): boolean {
     try {
       // Check if our certificate exists in the trust store
-      return existsSync(`/usr/local/share/ca-certificates/vite-plugin-trusted-https.crt`)
+      return existsSync(
+        `/usr/local/share/ca-certificates/vite-plugin-trusted-https.crt`
+      )
     } catch {
       return false
     }
@@ -287,7 +301,7 @@ export class TrustInstaller {
   async promptUser(question: string): Promise<boolean> {
     const rl = readline.createInterface({
       input: process.stdin,
-      output: process.stdout
+      output: process.stdout,
     })
 
     return new Promise((resolve) => {
@@ -296,7 +310,7 @@ export class TrustInstaller {
 
         const response = answer.toLowerCase().trim()
 
-        resolve(!response.toLowerCase().startsWith('n'))
+        resolve(!response.toLowerCase().startsWith(`n`))
       })
     })
   }

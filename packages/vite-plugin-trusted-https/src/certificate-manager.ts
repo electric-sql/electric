@@ -12,7 +12,7 @@ export interface CertificateOptions {
 export interface CertificateResult {
   cert: string
   key: string
-  method: 'mkcert' | 'basic-ssl'
+  method: `mkcert` | `basic-ssl`
 }
 
 export class CertificateManager {
@@ -35,13 +35,20 @@ export class CertificateManager {
     }
 
     // Try mkcert first (best experience - automatically trusted)
-    if (this.mkcertManager.isAvailable() && this.mkcertManager.isCAInstalled()) {
+    if (
+      this.mkcertManager.isAvailable() &&
+      this.mkcertManager.isCAInstalled()
+    ) {
       const mkcertResult = await this.mkcertManager.generateCertificates()
-      if (mkcertResult.success && mkcertResult.certPath && mkcertResult.keyPath) {
+      if (
+        mkcertResult.success &&
+        mkcertResult.certPath &&
+        mkcertResult.keyPath
+      ) {
         return {
           cert: mkcertResult.certPath,
           key: mkcertResult.keyPath,
-          method: 'mkcert'
+          method: `mkcert`,
         }
       }
     }
@@ -70,7 +77,7 @@ export class CertificateManager {
     // Write the separated files for compatibility
     const certPath = this.getCertificatePath()
     const keyPath = this.getKeyPath()
-    
+
     // Also write the original combined file for direct use
     const combinedPath = this.getCombinedCertificatePath()
 
@@ -83,7 +90,7 @@ export class CertificateManager {
     console.log(`  - Key: ${keyPath} (${keyContent.length} bytes)`)
     console.log(`  - Combined: ${combinedPath} (${certContent.length} bytes)`)
 
-    return { cert: certPath, key: keyPath, method: 'basic-ssl' }
+    return { cert: certPath, key: keyPath, method: `basic-ssl` }
   }
 
   getCertificatePath(): string {
@@ -102,7 +109,9 @@ export class CertificateManager {
     const certPath = this.getCertificatePath()
     const keyPath = this.getKeyPath()
     const combinedPath = this.getCombinedCertificatePath()
-    return existsSync(certPath) && existsSync(keyPath) && existsSync(combinedPath)
+    return (
+      existsSync(certPath) && existsSync(keyPath) && existsSync(combinedPath)
+    )
   }
 
   isCertificateExpired(): boolean {
@@ -128,18 +137,21 @@ export class CertificateManager {
       console.log(`Certificate expired or missing, regenerating...`)
       return this.ensureCertificates()
     }
-    
+
     // Return existing certificates - try to detect method used
     const certPath = this.getCertificatePath()
     const keyPath = this.getKeyPath()
-    
+
     // Simple heuristic: mkcert certificates typically have different formatting
     // This is best-effort since we can't definitively know the method after the fact
-    let method: 'mkcert' | 'basic-ssl' = 'basic-ssl'
-    if (this.mkcertManager.isAvailable() && this.mkcertManager.isCAInstalled()) {
-      method = 'mkcert' // Assume mkcert if it's available and configured
+    let method: `mkcert` | `basic-ssl` = `basic-ssl`
+    if (
+      this.mkcertManager.isAvailable() &&
+      this.mkcertManager.isCAInstalled()
+    ) {
+      method = `mkcert` // Assume mkcert if it's available and configured
     }
-    
+
     return { cert: certPath, key: keyPath, method }
   }
 

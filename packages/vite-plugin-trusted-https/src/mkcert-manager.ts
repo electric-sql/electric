@@ -37,16 +37,16 @@ export class MkcertManager {
    */
   isCAInstalled(): boolean {
     try {
-      const caRoot = execSync(`mkcert -CAROOT`, { 
-        stdio: `pipe`, 
+      const caRoot = execSync(`mkcert -CAROOT`, {
+        stdio: `pipe`,
         encoding: `utf8`,
-        timeout: 5000 
+        timeout: 5000,
       }).trim()
-      
+
       // Check if CA files exist
       const rootCAPath = join(caRoot, `rootCA.pem`)
       const rootCAKeyPath = join(caRoot, `rootCA-key.pem`)
-      
+
       return existsSync(rootCAPath) && existsSync(rootCAKeyPath)
     } catch {
       return false
@@ -60,14 +60,14 @@ export class MkcertManager {
     if (!this.isAvailable()) {
       return {
         success: false,
-        error: `mkcert not available`
+        error: `mkcert not available`,
       }
     }
 
     if (!this.isCAInstalled()) {
       return {
         success: false,
-        error: `mkcert CA not installed (run 'mkcert -install' first)`
+        error: `mkcert CA not installed (run 'mkcert -install' first)`,
       }
     }
 
@@ -80,9 +80,9 @@ export class MkcertManager {
       const domainsArg = this.domains.join(` `)
       execSync(
         `cd "${this.certDir}" && mkcert -cert-file "${this.name}.crt" -key-file "${this.name}.key" ${domainsArg}`,
-        { 
-          stdio: `pipe`, 
-          timeout: 30000 
+        {
+          stdio: `pipe`,
+          timeout: 30000,
         }
       )
 
@@ -90,7 +90,7 @@ export class MkcertManager {
       if (!existsSync(certPath) || !existsSync(keyPath)) {
         return {
           success: false,
-          error: `mkcert did not generate expected certificate files`
+          error: `mkcert did not generate expected certificate files`,
         }
       }
 
@@ -101,19 +101,22 @@ export class MkcertManager {
       } catch {
         return {
           success: false,
-          error: `Generated certificate files are not readable`
+          error: `Generated certificate files are not readable`,
         }
       }
 
       return {
         success: true,
         certPath,
-        keyPath
+        keyPath,
       }
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : `Unknown error during mkcert generation`
+        error:
+          error instanceof Error
+            ? error.message
+            : `Unknown error during mkcert generation`,
       }
     }
   }
@@ -122,11 +125,12 @@ export class MkcertManager {
    * Get setup instructions for mkcert
    */
   getSetupInstructions(): string {
-    const installCmd = process.platform === `darwin` 
-      ? `brew install mkcert && mkcert -install`
-      : process.platform === `linux`
-      ? `# Install mkcert (varies by distro)\n# Ubuntu/Debian: apt install mkcert\n# Then: mkcert -install`
-      : `# Install mkcert from https://github.com/FiloSottile/mkcert\n# Then: mkcert -install`
+    const installCmd =
+      process.platform === `darwin`
+        ? `brew install mkcert && mkcert -install`
+        : process.platform === `linux`
+          ? `# Install mkcert (varies by distro)\n# Ubuntu/Debian: apt install mkcert\n# Then: mkcert -install`
+          : `# Install mkcert from https://github.com/FiloSottile/mkcert\n# Then: mkcert -install`
 
     return `For a better development experience, install mkcert for automatically trusted certificates:\n\n${installCmd}\n\nThis eliminates the need for manual certificate trust and sudo prompts.`
   }

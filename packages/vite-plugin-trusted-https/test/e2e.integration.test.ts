@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { existsSync, rmSync } from "fs"
 import { join } from "path"
+import { IncomingMessage, ServerResponse } from "http"
 import { CertificateManager } from "../src/certificate-manager"
 import { TrustInstaller } from "../src/trust-installer"
 import trustedHttps from "../src/index"
@@ -34,7 +35,7 @@ describe.skipIf(skipIfNoIntegration())(`E2E integration tests`, () => {
     expect(manager.certificateExists()).toBe(false)
 
     const { cert, key } = await manager.ensureCertificates()
-    
+
     // Verify certificates were created
     expect(existsSync(cert)).toBe(true)
     expect(existsSync(key)).toBe(true)
@@ -53,19 +54,18 @@ describe.skipIf(skipIfNoIntegration())(`E2E integration tests`, () => {
 
     // 3. Trust Installation (without actually modifying system)
     const installer = new TrustInstaller(certName)
-    
+
     // This should not throw, even if it can't install due to permissions
     const installResult = await installer.install(cert)
     expect(typeof installResult.success).toBe(`boolean`)
-    
+
     if (!installResult.success) {
-      expect(installResult.needsManualInstall).toBe(true)
-      expect(installResult.manualInstructions).toBeTruthy()
+      expect(installResult.error).toBeTruthy()
     }
 
     // 4. Certificate Renewal Logic
     expect(manager.isCertificateExpired()).toBe(false)
-    
+
     const renewResult = await manager.renewIfNeeded()
     expect(renewResult.cert).toBe(cert)
     expect(renewResult.key).toBe(key)
@@ -84,7 +84,11 @@ describe.skipIf(skipIfNoIntegration())(`E2E integration tests`, () => {
 
     // Execute plugin hooks
     if (plugin.buildStart) {
-      await plugin.buildStart.call({}, {})
+      if (typeof plugin.buildStart === `function`) {
+        await (plugin.buildStart as () => Promise<void>)()
+      } else {
+        await (plugin.buildStart.handler as () => Promise<void>)()
+      }
     }
 
     // Plugin should work without throwing
@@ -101,23 +105,23 @@ describe.skipIf(skipIfNoIntegration())(`E2E integration tests`, () => {
     // Generate initial certificates
     const { cert: cert1, key: key1 } = await manager.ensureCertificates()
     expect(existsSync(cert1)).toBe(true)
-    
-    const originalCertContent = await import(`fs`).then(fs => 
+
+    const originalCertContent = await import(`fs`).then((fs) =>
       fs.readFileSync(cert1, `utf8`)
     )
 
     // Force regeneration (simulate renewal)
     const { cert: cert2, key: key2 } = await manager.ensureCertificates()
-    
+
     // Paths should be the same
     expect(cert1).toBe(cert2)
     expect(key1).toBe(key2)
 
     // But content might be different (new certificate generated)
-    const newCertContent = await import(`fs`).then(fs => 
+    const newCertContent = await import(`fs`).then((fs) =>
       fs.readFileSync(cert2, `utf8`)
     )
-    
+
     // Both should be valid certificates
     expect(originalCertContent).toMatch(/^-----BEGIN CERTIFICATE-----/)
     expect(newCertContent).toMatch(/^-----BEGIN CERTIFICATE-----/)
@@ -139,8 +143,8 @@ describe.skipIf(skipIfNoIntegration())(`E2E integration tests`, () => {
 
     // All should complete without errors
     const results = await Promise.all(operations)
-    
-    results.forEach(result => {
+
+    results.forEach((result) => {
       expect(result.cert).toBeTruthy()
       expect(result.key).toBeTruthy()
       expect(existsSync(result.cert)).toBe(true)
@@ -163,24 +167,37 @@ describe.skipIf(skipIfNoIntegration())(`E2E integration tests`, () => {
 
     // Initialize plugin
     if (plugin.buildStart) {
-      await plugin.buildStart.call({}, {})
-    }
-
-    // Mock middleware capture
-    let statusHandler: Function | undefined
-    const mockServer = {
-      config: { server: { https: true } },
-      middlewares: {
-        use: (path: string, handler: Function) => {
-          if (path === `/.vite-trusted-https-status`) {
-            statusHandler = handler
-          }
-        }
+      if (typeof plugin.buildStart === `function`) {
+        await (plugin.buildStart as () => Promise<void>)()
+      } else {
+        await (plugin.buildStart.handler as () => Promise<void>)()
       }
     }
 
+    // Mock middleware capture
+    let statusHandler:
+      | ((req: IncomingMessage, res: ServerResponse) => void)
+      | undefined
+    const mockServer = {
+      config: { server: { https: true } },
+      middlewares: {
+        use: (
+          path: string,
+          handler: (req: IncomingMessage, res: ServerResponse) => void
+        ) => {
+          if (path === `/.vite-trusted-https-status`) {
+            statusHandler = handler
+          }
+        },
+      },
+    }
+
     if (plugin.configureServer) {
-      await plugin.configureServer(mockServer as any)
+      if (typeof plugin.configureServer === `function`) {
+        plugin.configureServer(mockServer as never)
+      } else {
+        plugin.configureServer.handler(mockServer as never)
+      }
     }
 
     expect(statusHandler).toBeDefined()
@@ -191,22 +208,29 @@ describe.skipIf(skipIfNoIntegration())(`E2E integration tests`, () => {
         setHeader: () => {},
         end: (data: string) => {
           const status = JSON.parse(data)
-          
+
           expect(status).toHaveProperty(`plugin`, `vite-plugin-trusted-https`)
           expect(status).toHaveProperty(`platform`)
           expect(status).toHaveProperty(`options`)
           expect(status).toHaveProperty(`certificatePaths`)
-          
-          expect(status.options).toEqual(expect.objectContaining({
-            certDir: testCertDir,
-            domains: options.domains,
-            autoTrust: false,
-            name: options.name,
-          }))
-        }
+
+          expect(status.options).toEqual(
+            expect.objectContaining({
+              certDir: testCertDir,
+              domains: options.domains,
+              autoTrust: false,
+              name: options.name,
+            })
+          )
+        },
       }
 
-      statusHandler({ url: `/.vite-trusted-https-status` }, mockRes)
+      statusHandler(
+        {
+          url: `/.vite-trusted-https-status`,
+        } as Partial<IncomingMessage> as IncomingMessage,
+        mockRes as unknown as ServerResponse
+      )
     }
   })
 })

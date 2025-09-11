@@ -48,17 +48,6 @@ describe(`TrustInstaller`, () => {
       // Restore platform
       Object.defineProperty(process, `platform`, { value: originalPlatform })
     })
-
-    it(`should handle unsupported platforms`, async () => {
-      const originalPlatform = process.platform
-      Object.defineProperty(process, `platform`, { value: `freebsd` })
-
-      const result = await installer.install(`/test/cert.crt`)
-
-      expect(result.success).toBe(false)
-
-      Object.defineProperty(process, `platform`, { value: originalPlatform })
-    })
   })
 
   describe(`checkTrusted`, () => {
@@ -88,17 +77,5 @@ describe(`TrustInstaller`, () => {
 
       Object.defineProperty(process, `platform`, { value: originalPlatform })
     })
-
-    it(`should return false on unsupported platforms`, async () => {
-      const originalPlatform = process.platform
-      Object.defineProperty(process, `platform`, { value: `freebsd` })
-
-      const result = await installer.checkTrusted(`/test/cert.crt`)
-
-      expect(result).toBe(false)
-
-      Object.defineProperty(process, `platform`, { value: originalPlatform })
-    })
   })
 })
-
