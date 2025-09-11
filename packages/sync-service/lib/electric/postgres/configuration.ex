@@ -104,9 +104,7 @@ defmodule Electric.Postgres.Configuration do
     else
       {:error,
        {:misconfigured_replica_identity,
-        bad_relations
-        |> Enum.map(fn {oid, relation, _ident} -> {oid, relation} end)
-        |> MapSet.new()}}
+        MapSet.new(bad_relations, fn {oid, relation, _ident} -> {oid, relation} end)}}
     end
   end
 
@@ -144,7 +142,7 @@ defmodule Electric.Postgres.Configuration do
 
       used_relations = MapSet.difference(new_relations, changed_relations)
 
-      if MapSet.size(changed_relations) == 0,
+      if MapSet.size(changed_relations) > 0,
         do:
           Logger.info(
             "Configuring publication #{publication_name} to include #{map_size(used_relations)} tables - " <>
@@ -223,11 +221,15 @@ defmodule Electric.Postgres.Configuration do
     to_drop = MapSet.difference(prev_published_tables, new_published_tables)
     to_add = MapSet.difference(new_published_tables, prev_published_tables)
 
-    Logger.info(
-      "Configuring publication #{publication_name} to drop #{inspect(Enum.to_list(to_drop))} tables, and add #{inspect(Enum.to_list(to_add))} tables",
-      publication_alter_drop_tables: Enum.to_list(to_drop),
-      publication_alter_add_tables: Enum.to_list(to_add)
-    )
+    if MapSet.size(to_drop) > 0 or MapSet.size(to_add) > 0 do
+      Logger.info(
+        "Configuring publication #{publication_name} to " <>
+          "drop #{inspect(MapSet.to_list(to_drop))} tables, and " <>
+          "add #{inspect(MapSet.to_list(to_add))} tables",
+        publication_alter_drop_tables: Enum.to_list(to_drop),
+        publication_alter_add_tables: Enum.to_list(to_add)
+      )
+    end
 
     alter_ops =
       Enum.concat(Enum.map(to_add, &{&1, "ADD"}), Enum.map(to_drop, &{&1, "DROP"}))
