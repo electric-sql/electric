@@ -882,7 +882,16 @@ defmodule Electric.Connection.Manager do
 
     state = Map.update!(state, :pool_pids, &Map.put(&1, role, {pid, true}))
 
-    handle_connection_pool_ready(state)
+    case state.pool_pids do
+      %{admin: {pid1, true}, snapshot: {pid2, true}} when is_pid(pid1) and is_pid(pid2) ->
+        state = mark_connection_succeeded(state)
+
+        {:noreply, %{state | current_step: :start_replication_supervisor},
+         {:continue, :start_replication_supervisor}}
+
+      _ ->
+        {:noreply, state}
+    end
   end
 
   def handle_cast(
@@ -1001,21 +1010,6 @@ defmodule Electric.Connection.Manager do
     if is_pid(lock_connection_pid), do: shutdown_child(lock_connection_pid, :kill)
 
     {:stop, reason, state}
-  end
-
-  defp handle_connection_pool_ready(state) do
-    case state.pool_pids do
-      %{admin: {pid1, true}, snapshot: {pid2, true}} when is_pid(pid1) and is_pid(pid2) ->
-        dispatch_stack_event(:connection_succeeded, state)
-
-        state = mark_connection_succeeded(state)
-
-        {:noreply, %{state | current_step: :start_replication_supervisor},
-         {:continue, :start_replication_supervisor}}
-
-      _ ->
-        {:noreply, state}
-    end
   end
 
   defp shutdown_child(pid, :shutdown) when is_pid(pid) do
