@@ -4,19 +4,11 @@ defmodule Electric.Replication.PublicationManagerTest do
   import Support.ComponentSetup
   import Support.TestUtils
 
-  alias Electric.Replication.Eval.Expr
-  alias Electric.Replication.PublicationManager.RelationFilter
   alias Electric.Replication.PublicationManager
 
   @shape_handle_1 "shape_handle_1"
   @shape_handle_2 "shape_handle_2"
   @shape_handle_3 "shape_handle_3"
-  @where_clause_1 %Expr{query: "id = '1'", used_refs: %{["id"] => :text}}
-  @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
-  @where_clause_enum %Expr{
-    query: "id = '1' AND foo_enum::text = 'bar'",
-    used_refs: %{["foo_enum"] => {:enum, "foo_enum"}}
-  }
 
   def clean_all_shapes_for_relations(relations, [parent_pid]) do
     send(parent_pid, {:clean_all_shapes_for_relations, relations})
@@ -28,8 +20,9 @@ defmodule Electric.Replication.PublicationManagerTest do
     test_pid = self()
 
     configure_tables_fn = fn _, _, filters, _ ->
-      send(test_pid, {:filters, Map.values(filters)})
-      Map.get(ctx, :returned_relations, [])
+      # Only relations are relevant now
+      send(test_pid, {:filters, MapSet.to_list(filters)})
+      Map.get(ctx, :returned_relations, MapSet.new())
     end
 
     %{publication_manager: {_, publication_manager_opts}} =
@@ -48,192 +41,85 @@ defmodule Electric.Replication.PublicationManagerTest do
   end
 
   describe "add_shape/2" do
-    test "should add filters for single shape", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, @where_clause_1)
+    test "adds a single relation", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
 
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        }
-                      ]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
     end
 
-    test "should ignore subsequent shapes for same shape handle", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+    test "ignores subsequent shapes for same handle", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      shape2 = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape2, opts)
 
-      # should respect first one only
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        }
-                      ]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      refute_receive {:filters, _}, 200
     end
 
-    test "should accept multiple shapes for different relations", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
+    @tag update_debounce_timeout: 10
+    test "accepts multiple relations", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
       shape2 = generate_shape({"public", "other"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
       assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
 
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        },
-                        %RelationFilter{relation: {"public", "other"}}
-                      ]}
-    end
+      collected =
+        receive do
+          {:filters, filters} -> MapSet.new(filters)
+        after
+          500 -> flunk("Did not receive initial filters")
+        end
 
-    test "should not update publication when only the where clause changes", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
-      shape3 = generate_shape({"public", "items"}, @where_clause_1)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
+      # Force refresh to ensure any pending prepared filters are committed
+      :ok = PublicationManager.refresh_publication(Keyword.merge(opts, forced?: true))
 
-      # Since only the first addition of the shape makes changes to the publication, we only expect to see the first where clause.
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        }
-                      ]}
+      collected =
+        receive do
+          {:filters, filters} ->
+            MapSet.union(collected, MapSet.new(filters))
+        after
+          200 -> collected
+        end
 
-      refute_receive {:filters, _}, 500
-    end
-
-    test "should ignore where clauses that use unsupported column types (enums)", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, @where_clause_enum)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: nil
-                        }
-                      ]}
-    end
-
-    test "should merge selected columns for same relation", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, nil, ["id", "value"])
-      shape2 = generate_shape({"public", "items"}, nil, ["id", "potato"])
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          selected_columns: ["value", "potato", "id"]
-                        }
-                      ]}
-    end
-
-    test "should remove selected columns when all selected by shape", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, nil, ["id", "value"])
-      shape2 = generate_shape({"public", "items"}, nil, nil)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          selected_columns: nil
-                        }
-                      ]}
-    end
-
-    test "should include selected columns referenced in where clauses", %{opts: opts} do
-      where_clause = %Expr{
-        query: "id = '1'",
-        used_refs: %{["id"] => :int8, ["created_at"] => :timestamp}
-      }
-
-      shape =
-        generate_shape(
-          {"public", "items"},
-          where_clause,
-          ["id", "value"]
-        )
-
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [^where_clause],
-                          selected_columns: ["value", "id", "created_at"]
-                        }
-                      ]}
+      assert [{_, {"public", "items"}}, {_, {"public", "other"}}] = MapSet.to_list(collected)
     end
 
     @tag update_debounce_timeout: 100
-    test "should not update publication if new shape adds nothing", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
-      shape3 = generate_shape({"public", "items"}, @where_clause_1)
-
-      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
-      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
-
-      Task.await_many([task1, task2])
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_2, @where_clause_1]
-                        }
-                      ]}
-
+    test "doesn't update when adding same relation again", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      shape2 = generate_shape({"public", "items"})
+      shape3 = generate_shape({"public", "items"})
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
       assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
 
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       refute_receive {:filters, _}, 500
     end
 
-    @tag returned_relations: [{10, {"public", "another_table"}}]
-    test "should broadcast clean_all_shapes_for_relations/2 to shape cache", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, @where_clause_1)
+    @tag returned_relations: MapSet.new([{10, {"public", "another_table"}}])
+    test "broadcasts dropped relations to shape cache", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        }
-                      ]}
-
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       assert_receive {:clean_all_shapes_for_relations, [{10, {"public", "another_table"}}]}
     end
   end
 
   describe "remove_shape/2" do
-    test "should remove single shape", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, @where_clause_1)
+    test "removes single relation when last shape removed", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape, opts)
-
       assert_receive {:filters, []}
     end
 
     @tag update_debounce_timeout: 50
-    test "should deduplicate calls with the same shape handle", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, @where_clause_1)
+    test "deduplicates shape handle operations", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
       task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape, opts) end)
       task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape, opts) end)
       task3 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, shape, opts) end)
@@ -241,83 +127,51 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       Task.await_many([task1, task2, task3, task4])
 
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        }
-                      ]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      refute_receive {:filters, _}, 300
     end
 
     @tag update_debounce_timeout: 50
-    test "should reference count to avoid removing needed filters", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
-      shape3 = generate_shape({"public", "items"}, @where_clause_1)
+    test "reference counts relations to avoid premature removal", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      shape2 = generate_shape({"public", "items"})
+      shape3 = generate_shape({"public", "items"})
       task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
       task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
       task3 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_3, shape3, opts) end)
-
       Task.await_many([task1, task2, task3])
+      assert_receive {:filters, [{_, {"public", "items"}}]}
 
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_2, @where_clause_1]
-                        }
-                      ]}
-
+      # Remove one handle; relation should stay
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape1, opts)
-
       refute_receive {:filters, _}, 500
     end
   end
 
   describe "recover_shape/2" do
-    test "should add filters for single shape without updating anything", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, @where_clause_1)
+    test "tracks relation without updating immediately", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape, opts)
-
-      refute_receive {:filters, _}, 500
+      refute_receive {:filters, _}, 300
     end
 
-    test "should ignore subsequent shapes for same shape handle", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"}, @where_clause_1)
-      shape2 = generate_shape({"public", "items"}, @where_clause_2)
+    test "ignores subsequent recover for same handle", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      shape2 = generate_shape({"public", "items"})
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape1, opts)
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape2, opts)
-
       :ok = PublicationManager.refresh_publication(opts)
-
-      # should respect first one only
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        }
-                      ]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
     end
   end
 
   describe "refresh_publication/2" do
-    test "should update publication if there are changes to add", %{opts: opts} do
-      shape = generate_shape({"public", "items"}, @where_clause_1)
+    test "forces update when recovered relation present", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape, opts)
-
-      refute_receive {:filters, _}, 500
-
+      refute_receive {:filters, _}, 200
       assert :ok == PublicationManager.refresh_publication(opts)
-
-      assert_receive {:filters,
-                      [
-                        %RelationFilter{
-                          relation: {"public", "items"},
-                          where_clauses: [@where_clause_1]
-                        }
-                      ]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}
     end
   end
 
@@ -325,7 +179,6 @@ defmodule Electric.Replication.PublicationManagerTest do
     test "add_shape raises and server stops when publication is missing", ctx do
       stop_supervised!(ctx.opts[:server])
 
-      # Simulate the PublicationManager detecting a missing publication (undefined_object 42704)
       missing_pub_error = %Postgrex.Error{
         postgres: %{
           code: :undefined_object,
@@ -339,7 +192,6 @@ defmodule Electric.Replication.PublicationManagerTest do
         raise missing_pub_error
       end
 
-      # Start a fresh publication manager with the failing configure function
       %{publication_manager: {_, publication_manager_opts}} =
         with_publication_manager(%{
           module: ctx.module,
@@ -356,7 +208,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       mref = Process.monitor(pid)
       Process.unlink(pid)
 
-      shape = generate_shape({"public", "items"}, @where_clause_1)
+      shape = generate_shape({"public", "items"})
 
       raised =
         assert_raise(Postgrex.Error, fn ->
@@ -365,7 +217,6 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert raised.postgres.code == :undefined_object
 
-      # Ensure the GenServer terminates with the expected shutdown reason containing the error
       assert_receive {:DOWN, ^mref, :process, ^pid,
                       {:shutdown, %Postgrex.Error{postgres: %{code: :undefined_object}}}}
     end

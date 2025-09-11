@@ -62,15 +62,14 @@
   ??{"message":"Unable to create initial snapshot: must be owner of table items"}
 
 [shell electric]
-  ??[info] Configuring publication electric_publication_integration to drop [] tables, and add [] tables
 	??[info] Altering identity of public.items to FULL
   ?\[error\] Failed to configure publication: %Postgrex.Error\{message: nil, postgres: %\{code: :insufficient_privilege,.*message: "must be owner of table items"
 
 ## Wait for the schema reconciler to run and verify that the table is removed from the publication
 [shell electric]
   ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, and add [] tables
-  ## Wait for one more run of the schema reconciler to make sure the previous publication update has completed
-  ??[info] Configuring publication electric_publication_integration to drop [] tables, and add [] tables
+  ## Wait a bit for configuration to run
+  [sleep 3]
 
 [shell psql]
   !SELECT * FROM pg_publication_tables;

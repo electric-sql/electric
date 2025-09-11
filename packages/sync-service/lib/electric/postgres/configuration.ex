@@ -4,10 +4,8 @@ defmodule Electric.Postgres.Configuration do
   a provided connection.
   """
   require Logger
-  alias Electric.Replication.PublicationManager.RelationFilter
   alias Electric.Utils
-
-  @type filters() :: %{Electric.oid_relation() => RelationFilter.t()}
+  alias Electric.Replication.PublicationManager
 
   @doc """
   Check whether the state of the publication relations in the database matches the sets of
@@ -22,14 +20,14 @@ defmodule Electric.Postgres.Configuration do
   """
   @spec check_publication_relations_and_identity(
           Postgrex.conn(),
-          [Electric.oid_relation()],
-          [Electric.oid_relation()],
+          PublicationManager.relation_filters(),
+          PublicationManager.relation_filters(),
           String.t()
         ) ::
-          :ok
+          {:ok, PublicationManager.relation_filters()}
           | {:error,
-             {:misconfigured_replica_identity, [Electric.oid_relation()]}
-             | {:table_missing_from_publication, [Electric.oid_relation()]}}
+             {:misconfigured_replica_identity, PublicationManager.relation_filters()}
+             | {:tables_missing_from_publication, PublicationManager.relation_filters()}}
   def check_publication_relations_and_identity(
         conn,
         previous_relations,
@@ -43,7 +41,7 @@ defmodule Electric.Postgres.Configuration do
     with :ok <-
            check_relations_in_publication(
              published_relations,
-             Enum.uniq(previous_relations ++ new_relations),
+             MapSet.union(previous_relations, new_relations),
              changed_relations
            ),
          :ok <- check_replica_identity(published_relations) do
@@ -53,17 +51,15 @@ defmodule Electric.Postgres.Configuration do
         "Verified publication #{publication_name} to include #{inspect(tables)} tables with REPLICA IDENTITY FULL"
       )
 
-      {:ok, Enum.map(changed_relations, &trim_changed_relation/1)}
+      {:ok, Enum.map(changed_relations, &trim_changed_relation/1) |> MapSet.new()}
     end
   end
 
   defp check_relations_in_publication(published_relations, known_relations, changed_relations) do
-    known_relations_set = MapSet.new(known_relations)
-
     published_relations_set =
       MapSet.new(published_relations, fn {oid, relation, _replica_identity} -> {oid, relation} end)
 
-    diff_set = MapSet.difference(known_relations_set, published_relations_set)
+    diff_set = MapSet.difference(known_relations, published_relations_set)
 
     if MapSet.size(diff_set) == 0 do
       :ok
@@ -89,8 +85,9 @@ defmodule Electric.Postgres.Configuration do
               true
           end
         end)
+        |> MapSet.new()
 
-      if missing_relations == [] do
+      if MapSet.size(missing_relations) == 0 do
         :ok
       else
         {:error, {:tables_missing_from_publication, missing_relations}}
@@ -107,7 +104,7 @@ defmodule Electric.Postgres.Configuration do
     else
       {:error,
        {:misconfigured_replica_identity,
-        Enum.map(bad_relations, fn {oid, relation, _ident} -> {oid, relation} end)}}
+        MapSet.new(bad_relations, fn {oid, relation, _ident} -> {oid, relation} end)}}
     end
   end
 
@@ -125,32 +122,39 @@ defmodule Electric.Postgres.Configuration do
 
   Raises if it fails to configure all the tables in the expected way.
   """
-  @spec configure_publication!(Postgrex.conn(), [Electric.oid_relation()], filters(), String.t()) ::
+  @spec configure_publication!(
+          Postgrex.conn(),
+          prev_relations :: PublicationManager.relation_filters(),
+          new_relations :: PublicationManager.relation_filters(),
+          String.t()
+        ) ::
           relations_failed_to_configure
-        when relations_failed_to_configure: [Electric.oid_relation()]
-  def configure_publication!(conn, previous_relations, new_filters, publication_name) do
+        when relations_failed_to_configure: PublicationManager.relation_filters()
+  def configure_publication!(conn, previous_relations, new_relations, publication_name) do
     Postgrex.transaction(conn, fn conn ->
       # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)
       # so we need to check if any of the relations were dropped/renamed since then
       changed_relations =
         conn
-        |> list_changed_relations(known_relations(previous_relations, Map.keys(new_filters)))
+        |> list_changed_relations(known_relations(previous_relations, new_relations))
         |> Enum.map(&trim_changed_relation/1)
+        |> MapSet.new()
 
-      used_filters = Map.drop(new_filters, changed_relations)
+      used_relations = MapSet.difference(new_relations, changed_relations)
 
-      if changed_relations != [],
+      if MapSet.size(changed_relations) > 0,
         do:
           Logger.info(
-            "Configuring publication #{publication_name} to include #{map_size(used_filters)} tables - skipping altered tables #{inspect(changed_relations)}"
+            "Configuring publication #{publication_name} to include #{map_size(used_relations)} tables - " <>
+              "skipping altered tables #{inspect(MapSet.to_list(changed_relations))}"
           )
 
-      alter_publication!(conn, publication_name, used_filters)
+      alter_publication!(conn, publication_name, used_relations)
 
       # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
       # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
       # deadlock if the order is reversed.
-      set_replica_identity!(conn, used_filters)
+      set_replica_identity!(conn, used_relations)
 
       changed_relations
     end)
@@ -164,7 +168,7 @@ defmodule Electric.Postgres.Configuration do
   end
 
   defp known_relations(previous_relations, new_relations) do
-    known_relations = Enum.uniq(previous_relations ++ new_relations)
+    known_relations = MapSet.union(previous_relations, new_relations)
     {oids, relations} = Enum.unzip(known_relations)
     {schemas, tables} = Enum.unzip(relations)
     {oids, schemas, tables}
@@ -210,7 +214,6 @@ defmodule Electric.Postgres.Configuration do
 
     new_published_tables =
       relation_filters
-      |> Map.keys()
       |> Enum.map(&elem(&1, 1))
       |> Enum.map(&Utils.relation_to_sql/1)
       |> MapSet.new()
@@ -218,11 +221,15 @@ defmodule Electric.Postgres.Configuration do
     to_drop = MapSet.difference(prev_published_tables, new_published_tables)
     to_add = MapSet.difference(new_published_tables, prev_published_tables)
 
-    Logger.info(
-      "Configuring publication #{publication_name} to drop #{inspect(Enum.to_list(to_drop))} tables, and add #{inspect(Enum.to_list(to_add))} tables",
-      publication_alter_drop_tables: Enum.to_list(to_drop),
-      publication_alter_add_tables: Enum.to_list(to_add)
-    )
+    if MapSet.size(to_drop) > 0 or MapSet.size(to_add) > 0 do
+      Logger.info(
+        "Configuring publication #{publication_name} to " <>
+          "drop #{inspect(MapSet.to_list(to_drop))} tables, and " <>
+          "add #{inspect(MapSet.to_list(to_add))} tables",
+        publication_alter_drop_tables: Enum.to_list(to_drop),
+        publication_alter_add_tables: Enum.to_list(to_add)
+      )
+    end
 
     alter_ops =
       Enum.concat(Enum.map(to_add, &{&1, "ADD"}), Enum.map(to_drop, &{&1, "DROP"}))
@@ -256,10 +263,7 @@ defmodule Electric.Postgres.Configuration do
     WHERE relreplident != 'f' AND pc.oid = ANY($1)
     """
 
-    oids =
-      relation_filters
-      |> Map.keys()
-      |> Enum.map(&elem(&1, 0))
+    oids = Enum.map(relation_filters, &elem(&1, 0))
 
     %Postgrex.Result{rows: rows} =
       Postgrex.query!(conn, query_for_relations_without_full_identity, [oids])
