@@ -1717,7 +1717,7 @@ importers:
         specifier: ^11.0.0
         version: 11.1.0
       vite:
-        specifier: ^4.0.0 || ^5.0.0 || ^6.0.0
+        specifier: ^5.0.0 || ^6.0.1
         version: 5.4.10(@types/node@20.17.6)(lightningcss@1.30.1)(terser@5.36.0)
     devDependencies:
       '@typescript-eslint/eslint-plugin':
