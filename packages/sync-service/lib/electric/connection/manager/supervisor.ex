@@ -19,8 +19,8 @@ defmodule Electric.Connection.Manager.Supervisor do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
 
     children = [
-      {Electric.Connection.Manager.ConnectionResolver, stack_id: opts[:stack_id]},
-      {Electric.Connection.Manager, opts}
+      {Electric.Connection.Manager, opts},
+      {Electric.Connection.Manager.ConnectionResolver, stack_id: opts[:stack_id]}
     ]
 
     # Electric.Connection.Manager is a permanent child of the supervisor, so when it dies, the

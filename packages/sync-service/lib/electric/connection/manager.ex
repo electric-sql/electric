@@ -246,6 +246,12 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, {:connection_pool_ready, role, pid})
   end
 
+  def connection_resolver_ready(stack_id) do
+    stack_id
+    |> name()
+    |> GenServer.cast(:connection_resolver_ready)
+  end
+
   def pool_sizes(total_pool_size) do
     if total_pool_size < 2 do
       Logger.warning(
@@ -306,10 +312,9 @@ defmodule Electric.Connection.Manager do
       }
       |> initialize_connection_opts(opts)
 
-    # Try to acquire the connection lock on the replication slot
-    # before starting shape and replication processes, to ensure
-    # a single active sync service is connected to Postgres per slot.
-    {:ok, state, {:continue, :start_lock_connection}}
+    # Wait for the connection resolver to start before continuing with
+    # connection setup.
+    {:ok, state}
   end
 
   defp initialize_connection_opts(state, opts) do
@@ -328,9 +333,13 @@ defmodule Electric.Connection.Manager do
     if opts = state.validated_connection_opts[type] do
       {:ok, opts, state}
     else
-      with {:ok, validated_opts} <- ConnectionResolver.validate(state.stack_id, conn_opts) do
-        {:ok, validated_opts,
-         Map.update!(state, :validated_connection_opts, &Map.put(&1, type, validated_opts))}
+      try do
+        with {:ok, validated_opts} <- ConnectionResolver.validate(state.stack_id, conn_opts) do
+          {:ok, validated_opts,
+           Map.update!(state, :validated_connection_opts, &Map.put(&1, type, validated_opts))}
+        end
+      catch
+        :exit, {:killed, _} -> {:error, :killed}
       end
     end
   end
@@ -367,7 +376,13 @@ defmodule Electric.Connection.Manager do
 
         {:noreply, state}
 
+      # the ConnectionResolver process was killed, as part of the application
+      # shutdown in which case we'll be killed next so just return here
+      {:error, :killed} ->
+        {:noreply, state}
+
       {:error, reason} ->
+        dbg(reason)
         shutdown_or_reconnect(reason, nil, state)
     end
   end
@@ -689,6 +704,13 @@ defmodule Electric.Connection.Manager do
   end
 
   @impl true
+  def handle_cast(:connection_resolver_ready, state) do
+    # Try to acquire the connection lock on the replication slot
+    # before starting shape and replication processes, to ensure
+    # a single active sync service is connected to Postgres per slot.
+    {:noreply, state, {:continue, :start_lock_connection}}
+  end
+
   def handle_cast(:drop_replication_slot_on_stop, state) do
     {:noreply, %{state | drop_slot_requested: true}}
   end

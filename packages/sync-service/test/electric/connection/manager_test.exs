@@ -255,6 +255,35 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
   end
 
+  describe "shutdown" do
+    defp unresponsive_port do
+      {:ok, socket} = :gen_tcp.listen(0, [])
+      :inet.port(socket)
+    end
+
+    setup(ctx) do
+      {:ok, port} = unresponsive_port()
+      [db_config: Keyword.merge(ctx.db_config, port: port)]
+    end
+
+    setup [:start_connection_manager]
+
+    test "shutdown when blocked resolving a connection terminates cleanly", ctx do
+      {time, log} =
+        :timer.tc(
+          fn ->
+            ExUnit.CaptureLog.capture_log(fn ->
+              :ok = Supervisor.stop(Connection.Manager.Supervisor.name(stack_id: ctx.stack_id))
+            end)
+          end,
+          :millisecond
+        )
+
+      assert time < 1000
+      refute log =~ "Electric.DBConnection unknown error"
+    end
+  end
+
   describe "pooled connection opts" do
     setup(ctx) do
       [replication_connection_opts: Keyword.put(ctx.db_config, :host, "unpooled.localhost")]
