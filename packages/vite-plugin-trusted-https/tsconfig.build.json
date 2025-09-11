@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "./dist/types"
+  },
+  "exclude": ["test/**/*", "**/*.test.ts", "vitest.config.ts", "tsup.config.ts"]
+}

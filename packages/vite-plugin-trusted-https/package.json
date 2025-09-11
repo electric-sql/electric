@@ -1,0 +1,93 @@
+{
+  "name": "@electric-sql/vite-plugin-trusted-https",
+  "version": "0.1.0",
+  "description": "Vite plugin for trusted HTTPS with HTTP/2 support",
+  "author": "ElectricSQL team and contributors.",
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric/issues"
+  },
+  "dependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.0.0",
+    "commander": "^11.0.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
+    "@vitest/coverage-istanbul": "2.1.4",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "jsdom": "^26.1.0",
+    "prettier": "^3.3.2",
+    "shx": "^0.3.4",
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.2",
+    "vitest": "^3.0.0"
+  },
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "src"
+  ],
+  "homepage": "https://electric-sql.com",
+  "license": "Apache-2.0",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/index.legacy-esm.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "trust-certs": "./bin/trust-certs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git"
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsup && tsc -p tsconfig.build.json",
+    "format": "eslint . --fix",
+    "prepack": "pnpm build",
+    "stylecheck": "eslint . --quiet",
+    "test": "pnpm exec vitest run",
+    "test:unit": "pnpm exec vitest run --testNamePattern='(?!.*integration)'",
+    "test:integration": "VITEST_INTEGRATION=true pnpm exec vitest run --testNamePattern='integration'",
+    "test:integration:full": "VITEST_FULL_INTEGRATION=true pnpm exec vitest run --testNamePattern='integration'",
+    "test:watch": "pnpm exec vitest",
+    "coverage": "pnpm exec vitest --coverage",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "sideEffects": false,
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/index.d.ts"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "vite": "^4.0.0 || ^5.0.0 || ^6.0.0"
+  },
+  "keywords": [
+    "certificates",
+    "electric-sql",
+    "http2",
+    "https",
+    "ssl",
+    "trust",
+    "trusted",
+    "vite",
+    "vite-plugin"
+  ]
+}

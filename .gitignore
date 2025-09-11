@@ -24,5 +24,6 @@ wal
 **/deps/*
 **/junit
 **/coverage
+**/test-certs-*
 response.tmp
 .claude
