@@ -20,7 +20,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
   defp start_connection_manager(%{stack_id: stack_id} = ctx) do
     stack_events_registry = Electric.stack_events_registry()
     publication_name = "electric_conn_mgr_test_pub_#{:erlang.phash2(stack_id)}"
-    connection_opts = ctx.db_config
+    connection_opts = Map.get(ctx, :pooled_connection_opts, ctx.db_config)
 
     replication_connection_opts = Map.get(ctx, :replication_connection_opts, ctx.db_config)
 
@@ -42,6 +42,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
          connection_opts: connection_opts,
          replication_opts: replication_opts,
          pool_opts: [pool_size: 2],
+         connection_backoff: Connection.Manager.ConnectionBackoff.init(50, 50),
          timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
          shape_cache_opts: [
            stack_id: stack_id,
@@ -74,6 +75,12 @@ defmodule Electric.Connection.ConnectionManagerTest do
     Registry.register(stack_events_registry, {:stack_status, stack_id}, nil)
 
     %{conn_sup: conn_sup, connection_opts: connection_opts, replication_opts: replication_opts}
+  end
+
+  defp unresponsive_port(_ctx) do
+    {:ok, socket} = :gen_tcp.listen(0, [])
+    {:ok, port} = :inet.port(socket)
+    [unresponsive_port: port]
   end
 
   describe "status monitor" do
@@ -215,6 +222,30 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
   end
 
+  describe "invalid pool configuration" do
+    setup [:unresponsive_port]
+
+    setup(ctx) do
+      [
+        pooled_connection_opts:
+          Keyword.merge(ctx.db_config, port: ctx.unresponsive_port, timeout: 100)
+      ]
+    end
+
+    setup [:start_connection_manager]
+
+    test "failure to get pooled connection results in retries", ctx do
+      %{stack_id: stack_id} = ctx
+
+      # make sure we've reached the connection pool stage
+      assert_receive {:stack_status, _, :replication_client_ready}, 1000
+
+      ref = Process.monitor(GenServer.whereis(Electric.Connection.Manager.name(stack_id)))
+
+      refute_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
+    end
+  end
+
   describe "cleanup procedure" do
     setup [:start_connection_manager]
 
@@ -256,19 +287,39 @@ defmodule Electric.Connection.ConnectionManagerTest do
   end
 
   describe "shutdown" do
-    defp unresponsive_port do
-      {:ok, socket} = :gen_tcp.listen(0, [])
-      :inet.port(socket)
+    setup [:unresponsive_port]
+
+    test "manager blocked resolving a replication connection terminates cleanly", ctx do
+      start_connection_manager(
+        Map.merge(ctx, %{
+          replication_connection_opts: Keyword.put(ctx.db_config, :port, ctx.unresponsive_port)
+        })
+      )
+
+      {time, log} =
+        :timer.tc(
+          fn ->
+            ExUnit.CaptureLog.capture_log(fn ->
+              :ok = Supervisor.stop(Connection.Manager.Supervisor.name(stack_id: ctx.stack_id))
+            end)
+          end,
+          :millisecond
+        )
+
+      assert time < 1000
+      refute log =~ "Electric.DBConnection unknown error"
     end
 
-    setup(ctx) do
-      {:ok, port} = unresponsive_port()
-      [db_config: Keyword.merge(ctx.db_config, port: port)]
-    end
+    test "manager blocked resolving a pool connection terminates cleanly", ctx do
+      start_connection_manager(
+        Map.merge(ctx, %{
+          pooled_connection_opts: Keyword.put(ctx.db_config, :port, ctx.unresponsive_port)
+        })
+      )
 
-    setup [:start_connection_manager]
+      assert_receive {:stack_status, _, :connection_lock_acquired}, 1000
+      assert_receive {:stack_status, _, :replication_client_ready}, 1000
 
-    test "shutdown when blocked resolving a connection terminates cleanly", ctx do
       {time, log} =
         :timer.tc(
           fn ->

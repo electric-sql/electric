@@ -295,6 +295,9 @@ defmodule Electric.Connection.Manager do
     timeline_opts = Keyword.fetch!(opts, :timeline_opts)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
 
+    connection_backoff =
+      Keyword.get(opts, :connection_backoff, ConnectionBackoff.init(1000, 10_000))
+
     state =
       %State{
         current_phase: :connection_setup,
@@ -302,7 +305,7 @@ defmodule Electric.Connection.Manager do
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
-        connection_backoff: {ConnectionBackoff.init(1000, 10_000), nil},
+        connection_backoff: {connection_backoff, nil},
         stack_id: Keyword.fetch!(opts, :stack_id),
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
@@ -383,7 +386,7 @@ defmodule Electric.Connection.Manager do
 
       {:error, reason} ->
         dbg(reason)
-        shutdown_or_reconnect(reason, nil, state)
+        shutdown_or_reconnect(reason, :lock_connection, state)
     end
   end
 
@@ -431,7 +434,7 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        shutdown_or_reconnect(reason, nil, state)
+        shutdown_or_reconnect(reason, :replication_client, state)
     end
   end
 
@@ -475,8 +478,13 @@ defmodule Electric.Connection.Manager do
 
         {:noreply, state}
 
+      # the ConnectionResolver process was killed, as part of the application
+      # shutdown in which case we'll be killed next so just return here
+      {:error, :killed} ->
+        {:noreply, state}
+
       {:error, reason} ->
-        shutdown_or_reconnect(reason, nil, state)
+        shutdown_or_reconnect(reason, :pools, state)
     end
   end
 
@@ -837,6 +845,8 @@ defmodule Electric.Connection.Manager do
       state.replication_client_pid
     )
 
+    dispatch_stack_event(:replication_client_ready, state)
+
     state = %{state | replication_client_blocked_by_pending_transaction?: false}
 
     case phase do
@@ -996,6 +1006,8 @@ defmodule Electric.Connection.Manager do
   defp handle_connection_pool_ready(state) do
     case state.pool_pids do
       %{admin: {pid1, true}, snapshot: {pid2, true}} when is_pid(pid1) and is_pid(pid2) ->
+        dispatch_stack_event(:connection_succeeded, state)
+
         state = mark_connection_succeeded(state)
 
         {:noreply, %{state | current_step: :start_replication_supervisor},
@@ -1094,13 +1106,17 @@ defmodule Electric.Connection.Manager do
          pid_type,
          %State{current_phase: :connection_setup} = state
        ) do
-    role =
+    roles =
       case pid_type do
-        :admin_pool -> :admin
-        :snapshot_pool -> :snapshot
+        :admin_pool -> [:admin]
+        :snapshot_pool -> [:snapshot]
+        :pools -> [:admin, :snapshot]
       end
 
-    StatusMonitor.mark_connection_pool_as_errored(state.stack_id, role, error_message)
+    for role <- roles do
+      StatusMonitor.mark_connection_pool_as_errored(state.stack_id, role, error_message)
+    end
+
     "connection_pool"
   end
 
