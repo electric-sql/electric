@@ -8,6 +8,8 @@
     "build": "vite build",
     "migrate": "drizzle-kit migrate",
     "migrate:generate": "drizzle-kit generate",
+    "trust": "trust-certs install",
+    "trust:status": "trust-certs status",
     "serve": "vite preview",
     "test": "echo 'No tests yet'",
     "lint:check": "eslint .",
@@ -17,6 +19,7 @@
   },
   "dependencies": {
     "@electric-sql/client": "^1.0.10",
+    "@electric-sql/vite-plugin-trusted-https": "workspace:*",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/electric-db-collection": "^0.1.6",
     "@tanstack/react-db": "^0.1.6",

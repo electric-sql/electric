@@ -29,22 +29,31 @@ Follow these steps in order for a smooth first-time setup:
    pnpm install
    ```
 
-2. **Start Docker services:**
+1. **Setup HTTPS:**
+
+   ```sh
+   pnpm trust
+   ```
+
+   This generates and installs a certificate into your local user trust store,
+   so you can access the app over HTTPS in development.
+
+1. **Start Docker services:**
 
    ```sh
    pnpm run dev
    ```
 
-   This starts the dev server, Docker Compose (Postgres + Electric), and Caddy automatically.
+   This starts the Vite dev server and Docker Compose (Postgres + Electric).
 
-3. **Run database migrations** (in a new terminal):
+1. **Run database migrations** (in a new terminal):
 
    ```sh
    pnpm run migrate
    ```
 
-4. **Visit the application:**
-   Open [https://tanstack-start-db-electric-starter.localhost](https://tanstack-start-db-electric-starter.localhost)
+1. **Visit the application:**
+   Open [https://localhost:5173](https://localhost:5173)
 
 If you run into issues, see the [pre-reqs](#pre-requisites) and [troubleshooting](#common-pitfalls) sections below.
 
@@ -214,83 +223,53 @@ That's it! Your new table is now fully integrated with Electric sync, tRPC mutat
 
 ## Pre-requisites
 
-This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io) and [Caddy](https://caddyserver.com/). You can see compatible versions in the `.tool-versions` file.
+This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io). You can see compatible versions in the `.tool-versions` file.
 
 ### Docker
 
 Make sure you have Docker running. Docker is used to run the Postgres and Electric services defined in `docker-compose.yaml`.
 
-### Caddy
+### HTTPS Development Setup
 
-#### Why Caddy?
+#### Why HTTPS?
 
 Electric SQL's shape delivery benefits significantly from **HTTP/2 multiplexing**. Without HTTP/2, each shape subscription creates a new HTTP/1.1 connection, which browsers limit to 6 concurrent connections per domain. This creates a bottleneck that makes shapes appear slow.
 
-Caddy provides HTTP/2 support with automatic HTTPS, giving you:
+HTTPS with HTTP/2 support provides:
 
 - **Faster shape loading** - Multiple shapes load concurrently over a single connection
 - **Better development experience** - No connection limits or artificial delays
 - **Production-like performance** - Your local dev mirrors production HTTP/2 behavior
 
-The Vite development server runs on HTTP/1.1 only, so Caddy acts as a reverse proxy to upgrade the connection.
-
-#### Setup
-
-Once you've [installed Caddy](https://caddyserver.com/docs/install), install its root certificate using:
-
-```sh
-caddy trust
-```
-
-This is necessary for HTTP/2 to work [without SSL warnings/errors in the browser](https://caddyserver.com/docs/command-line#caddy-trust).
-
 #### How It Works
 
-- Caddy auto-starts via a Vite plugin when you run `pnpm dev`
-- The `Caddyfile` is automatically generated with your project name
-- Your app is available at `https://<project-name>.localhost`
-- Direct access to `http://localhost:5173` still works but will be slower for Electric shapes
+This starter uses the `@electric-sql/vite-plugin-trusted-https` plugin which:
 
-#### Troubleshooting Caddy
+- automatically generates and manages SSL certificates for development
+- installs certificates to your local user trust store
+- provides HTTPS with HTTP/2 support out of the box
 
-If Caddy fails to start:
+#### Troubleshooting HTTPS
 
-1. **Test Caddy manually:**
+If you encounter SSL certificate problems:
 
-   ```sh
-   caddy start
-   ```
+1. try wiping the `.certs` folder with `rm -rf .certs`
+2. try installing `mkcert`, e.g.: with `brew install mkcert`
+3. re-run `pnpm trust`
+4. restart your browser
 
-2. **Check certificate trust:**
-
-   ```sh
-   caddy trust
-   # To remove later: caddy untrust
-   ```
-
-3. **Verify Caddyfile was generated:**
-   Look for a `Caddyfile` in your project root after running `pnpm dev`
-
-4. **Stop conflicting Caddy instances:**
-
-   ```sh
-   caddy stop
-   ```
-
-5. **Check for port conflicts:**
-   Caddy needs ports 80 and 443 available
+Alternatively, you can fallback on a self-signed certificate and click through the warnings in the browser.
 
 ## Troubleshooting
 
 ### Common Pitfalls
 
-| Issue                    | Symptoms                                   | Solution                                                           |
-| ------------------------ | ------------------------------------------ | ------------------------------------------------------------------ |
-| **Docker not running**   | `docker compose ps` shows nothing          | Start Docker Desktop/daemon                                        |
-| **Caddy not trusted**    | SSL warnings in browser                    | Run `caddy trust` (see Caddy section below)                        |
-| **Port conflicts**       | Postgres (54321) or Electric (3000) in use | Stop conflicting services or change ports in `docker-compose.yaml` |
-| **Missing .env**         | Database connection errors                 | Copy `.env.example` to `.env`                                      |
-| **Caddy fails to start** | `Caddy exited with code 1`                 | Run `caddy start` manually to see the error                        |
+| Issue                        | Symptoms                                   | Solution                                                           |
+| ---------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| **Docker not running**       | `docker compose ps` shows nothing          | Start Docker Desktop/daemon                                        |
+| **Port conflicts**           | Postgres (54321) or Electric (3000) in use | Stop conflicting services or change ports in `docker-compose.yaml` |
+| **Missing .env**             | Database connection errors                 | Copy `.env.example` to `.env`                                      |
+| **Certificates not trusted** | SSL warnings in browser                    | Run `pnpm trust` and authorize the certificate install             |
 
 ### Debugging Commands
 
@@ -306,8 +285,8 @@ docker compose logs -f electric postgres
 # Test database connectivity
 psql $DATABASE_URL -c "SELECT 1"
 
-# Check Caddy status
-caddy start
+# Check HTTPS certificate status
+pnpm trust:status
 ```
 
 ## Building For Production
