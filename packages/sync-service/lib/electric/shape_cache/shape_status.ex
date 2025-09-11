@@ -13,6 +13,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback initialise(ShapeStatus.t()) :: :ok | {:error, term()}
   @callback terminate(ShapeStatus.t()) :: :ok | {:error, term()}
   @callback list_shapes(ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
+  @callback count_shapes(ShapeStatus.t()) :: non_neg_integer()
   @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
   @callback add_shape(ShapeStatus.t(), Shape.t()) ::
@@ -143,10 +144,27 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def list_shapes(table) do
     :ets.select(table, [
+      # Make sure this match spec is in sync with the one in count_shapes()
       {
         {{@shape_meta_data, :"$1"}, :"$2", :_, :_, :_},
         [true],
         [{{:"$1", :"$2"}}]
+      }
+    ])
+  end
+
+  @impl true
+  def count_shapes(%__MODULE__{shape_meta_table: table}) do
+    count_shapes(table)
+  end
+
+  def count_shapes(table) do
+    :ets.select_count(table, [
+      # Make sure this match spec is in sync with the one in list_shapes()
+      {
+        {{@shape_meta_data, :_}, :_, :_, :_, :_},
+        [],
+        [true]
       }
     ])
   end
