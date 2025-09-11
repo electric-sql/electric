@@ -845,8 +845,6 @@ defmodule Electric.Connection.Manager do
       state.replication_client_pid
     )
 
-    dispatch_stack_event(:replication_client_ready, state)
-
     state = %{state | replication_client_blocked_by_pending_transaction?: false}
 
     case phase do

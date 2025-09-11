@@ -237,9 +237,6 @@ defmodule Electric.Connection.ConnectionManagerTest do
     test "failure to get pooled connection results in retries", ctx do
       %{stack_id: stack_id} = ctx
 
-      # make sure we've reached the connection pool stage
-      assert_receive {:stack_status, _, :replication_client_ready}, 1000
-
       ref = Process.monitor(GenServer.whereis(Electric.Connection.Manager.name(stack_id)))
 
       refute_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
@@ -318,7 +315,6 @@ defmodule Electric.Connection.ConnectionManagerTest do
       )
 
       assert_receive {:stack_status, _, :connection_lock_acquired}, 1000
-      assert_receive {:stack_status, _, :replication_client_ready}, 1000
 
       {time, log} =
         :timer.tc(
