@@ -7,12 +7,9 @@ import trustedHttps from "@electric-sql/vite-plugin-trusted-https"
 const config = defineConfig(({ command }) => {
   const isDev = command === "serve"
   const isPreview = process.argv.includes("preview")
-  const enableTrustedHttps = isDev || isPreview
+  const enableHttps = isDev || isPreview
 
   return {
-    server: {
-      host: "localhost",
-    },
     plugins: [
       viteTsConfigPaths({
         projects: ["./tsconfig.json"],
@@ -23,7 +20,7 @@ const config = defineConfig(({ command }) => {
           enabled: true,
         },
       }),
-      ...(enableTrustedHttps ? [trustedHttps()] : []),
+      ...(enableHttps ? [trustedHttps()] : []),
     ],
     ssr: {
       noExternal: ["zod"],
