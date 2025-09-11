@@ -19,7 +19,7 @@ cp .env.example .env
 
 _You can edit the values in the `.env` file, although the default values are fine for local development (with the `DATABASE_URL` defaulting to the development Postgres docker container and the `BETTER_AUTH_SECRET` not required)._
 
-## Quick Start
+## Quickstart
 
 Follow these steps in order for a smooth first-time setup:
 
@@ -35,8 +35,7 @@ Follow these steps in order for a smooth first-time setup:
    pnpm trust
    ```
 
-   This generates and installs a certificate into your local user trust store,
-   so you can access the app over HTTPS in development.
+   This installs a certificate so you can [use HTTPS in development](#https-in-development).
 
 1. **Start Docker services:**
 
@@ -53,17 +52,18 @@ Follow these steps in order for a smooth first-time setup:
    ```
 
 1. **Visit the application:**
-   Open [https://localhost:5173](https://localhost:5173)
+
+   Open [https://localhost:5173](https://localhost:5173) in your web browser.
 
 If you run into issues, see the [pre-reqs](#pre-requisites) and [troubleshooting](#common-pitfalls) sections below.
 
-## Adding a New Table
+## Extending the app
 
-Here's how to add a new table to your app (using a "categories" table as an example):
+Here's how to add a new table to your app (using a "categories" table as an example) and wire it up:
 
-### 1. Define the Drizzle Schema
+### 1. Define Drizzle schema
 
-Add your table to `src/db/schema.ts`:
+Define a [Drizzle table schema](https://orm.drizzle.team/docs/sql-schema-declaration#shape-your-data-schema) in `src/db/schema.ts`:
 
 ```tsx
 export const categoriesTable = pgTable("categories", {
@@ -84,19 +84,23 @@ export const createCategorySchema = createInsertSchema(categoriesTable).omit({
 export const updateCategorySchema = createUpdateSchema(categoriesTable)
 ```
 
-### 2. Generate & Run Migration
+### 2. Migrate database
+
+Generate a migration file:
 
 ```sh
-# Generate migration file
 pnpm migrate:generate
+```
 
-# Apply migration to database
+Apply the migration to the database:
+
+```sh
 pnpm migrate
 ```
 
-### 3. Add Electric Shape Route
+### 3. Expose read-path sync
 
-Create `src/routes/api/categories.ts`:
+Create `src/routes/api/categories.ts` to expose read-path sync access to the categories table via a TanStack Start [server route](https://tanstack.com/start/latest/docs/framework/react/server-routes) that proxies to [an Electric shape](https://electric-sql.com/docs/guides/shapes):
 
 ```tsx
 import { createServerFileRoute } from "@tanstack/react-start/server"
@@ -126,9 +130,9 @@ export const ServerRoute = createServerFileRoute("/api/categories").methods({
 })
 ```
 
-### 4. Add tRPC Router
+### 4. Handle writes using a tRPC mutation proceedure
 
-Create `src/lib/trpc/categories.ts`:
+Create `src/lib/trpc/categories.ts` to expose a type-safe [tRPC](https://trpc.io) [mutation proceedure](https://trpc.io/docs/server/procedures) to handle writes:
 
 ```tsx
 import { router, authedProcedure, generateTxId } from "@/lib/trpc"
@@ -159,7 +163,7 @@ export const categoriesRouter = router({
 })
 ```
 
-### 5. Wire Up tRPC Router
+### 5. Wire up the tRPC router
 
 Add to `src/routes/api/trpc/$.ts`:
 
@@ -172,9 +176,12 @@ export const appRouter = router({
 })
 ```
 
-### 6. Add Collection
+### 6. Add a TanStack DB collection
 
-Add to `src/lib/collections.ts`:
+Add an  `categoriesCollection` to the TanStack DB `src/lib/collections.ts`, using:
+
+- [`electricCollectionOptions`](https://tanstack.com/db/latest/docs/collections/electric-collection) to sync the data into the collection from the Electric shape route
+- [`onInsert`, etc. operation handlers](https://tanstack.com/db/latest/docs/overview#making-optimistic-mutations) to handle local optimistic writes using the tRPC mutation proceedure
 
 ```tsx
 export const categoriesCollection = createCollection(
@@ -201,9 +208,9 @@ export const categoriesCollection = createCollection(
 )
 ```
 
-### 7. Use in Routes
+### 7. Preload in your routes
 
-Preload in route loaders and use with `useLiveQuery`:
+You can preload collections in your [route loaders](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading):
 
 ```tsx
 // In route loader
@@ -212,14 +219,32 @@ export const Route = createFileRoute("/my-route")({
     await Promise.all([categoriesCollection.preload()])
   },
 })
-
-// In component
-const { data: categories } = useLiveQuery((q) =>
-  q.from({ categoriesCollection }).orderBy(/* ... */)
-)
 ```
 
-That's it! Your new table is now fully integrated with Electric sync, tRPC mutations, and TanStack DB queries.
+### 8. Use in your components
+
+And use with [TanStack DB live queries](https://tanstack.com/db/latest/docs/guides/live-queries) and [optimistic mutations](https://tanstack.com/db/latest/docs/overview#making-optimistic-mutations) in your components for instant local reads and writes:
+
+```tsx
+function Component() {
+  const { data: categories } = useLiveQuery((q) =>
+    q
+      .from({ categoriesCollection })
+      .orderBy(/* ... */)
+  )
+
+  const addCategory = (name, color) =>
+    categoriesCollection.insert({
+      name,
+      color,
+      // ...
+    })
+
+  return <List items={categories} add={addCategory} />
+}
+```
+
+That's it! Your new table is now fully integrated with end-to-end, reactive, real-time sync using Electric, tRPC and TanStack DB.
 
 ## Pre-requisites
 
@@ -229,21 +254,13 @@ This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en
 
 Make sure you have Docker running. Docker is used to run the Postgres and Electric services defined in `docker-compose.yaml`.
 
-### HTTPS Development Setup
+### HTTPS in development
 
-#### Why HTTPS?
+Electric's shape delivery [benefits significantly from HTTP/2 multiplexing](https://electric-sql.com/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development).
 
-Electric SQL's shape delivery benefits significantly from **HTTP/2 multiplexing**. Without HTTP/2, each shape subscription creates a new HTTP/1.1 connection, which browsers limit to 6 concurrent connections per domain. This creates a bottleneck that makes shapes appear slow.
+Without HTTP/2, each shape subscription creates a new HTTP/1.1 connection, which browsers limit to 6 concurrent connections per domain. This creates a bottleneck that makes shapes appear slow.
 
-HTTPS with HTTP/2 support provides:
-
-- **Faster shape loading** - Multiple shapes load concurrently over a single connection
-- **Better development experience** - No connection limits or artificial delays
-- **Production-like performance** - Your local dev mirrors production HTTP/2 behavior
-
-#### How It Works
-
-This starter uses the `@electric-sql/vite-plugin-trusted-https` plugin which:
+This starter uses the `@electric-sql/vite-plugin-trusted-https` plugin to:
 
 - automatically generates and manages SSL certificates for development
 - installs certificates to your local user trust store
@@ -254,7 +271,7 @@ This starter uses the `@electric-sql/vite-plugin-trusted-https` plugin which:
 If you encounter SSL certificate problems:
 
 1. try wiping the `.certs` folder with `rm -rf .certs`
-2. try installing `mkcert`, e.g.: with `brew install mkcert`
+2. try installing `mkcert`, e.g.: with `brew install mkcert` and `mkcert -install`
 3. re-run `pnpm trust`
 4. restart your browser
 
@@ -262,7 +279,7 @@ Alternatively, you can fallback on a self-signed certificate and click through t
 
 ## Troubleshooting
 
-### Common Pitfalls
+### Common pitfalls
 
 | Issue                        | Symptoms                                   | Solution                                                           |
 | ---------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
@@ -271,7 +288,7 @@ Alternatively, you can fallback on a self-signed certificate and click through t
 | **Missing .env**             | Database connection errors                 | Copy `.env.example` to `.env`                                      |
 | **Certificates not trusted** | SSL warnings in browser                    | Run `pnpm trust` and authorize the certificate install             |
 
-### Debugging Commands
+### Debugging commands
 
 For troubleshooting, these commands are helpful:
 
@@ -289,7 +306,7 @@ psql $DATABASE_URL -c "SELECT 1"
 pnpm trust:status
 ```
 
-## Building For Production
+## Building For production
 
 To build this application for production:
 
@@ -297,11 +314,11 @@ To build this application for production:
 pnpm run build
 ```
 
-### Production Deployment Checklist
+### Production deployment checklist
 
 Before deploying to production, ensure you have configured:
 
-#### Required Environment Variables
+#### Required environment variables
 
 ```bash
 # Authentication - REQUIRED in production
@@ -315,7 +332,7 @@ ELECTRIC_SOURCE_SECRET=your-source-secret
 DATABASE_URL=postgresql://user:pass@your-prod-db:5432/dbname
 ```
 
-#### Authentication Setup
+#### Authentication setup
 
 **⚠️ Important**: The current setup allows any email/password combination to work in development. This is **automatically disabled** in production, but you need to:
 
@@ -323,13 +340,13 @@ DATABASE_URL=postgresql://user:pass@your-prod-db:5432/dbname
 2. **Remove or secure the dev-only email/password auth** if you plan to use it
 3. **Review `trustedOrigins`** settings for your production domains
 
-#### Infrastructure Changes
+#### Infrastructure changes
 
 - **HTTPS & Secure Cookies**: Ensure your deployment platform handles HTTPS termination
 - **Database**: Use a managed PostgreSQL service (not the Docker container)
 - **Environment**: Set `NODE_ENV=production`
 
-#### Security Considerations
+#### Security considerations
 
 - Generate a strong `BETTER_AUTH_SECRET` (minimum 32 characters)
 - Ensure database credentials are properly secured
@@ -348,7 +365,7 @@ This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 
 This project uses [TanStack Router](https://tanstack.com/router). The initial setup is a file based router. Which means that the routes are managed as files in `src/routes`.
 
-### Adding A Route
+### Adding a route
 
 To add a new route to your application just add another a new file in the `./src/routes` directory.
 
@@ -356,7 +373,7 @@ TanStack will automatically generate the content of the route file for you.
 
 Now that you have two routes you can use a `Link` component to navigate between them.
 
-### Adding Links
+### Adding links
 
 To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
 
@@ -374,7 +391,7 @@ This will create a link that will navigate to the `/about` route.
 
 More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
 
-### Using A Layout
+### Using a layout
 
 In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you use the `<Outlet />` component.
 
@@ -406,7 +423,7 @@ The `<TanStackRouterDevtools />` component is not required so you can remove it 
 
 More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
 
-## Data Fetching
+## Data fetching
 
 There are multiple ways to fetch data in your application. You can use TanStack DB to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
 
@@ -452,7 +469,7 @@ Built on a TypeScript implementation of differential dataflow, TanStack DB provi
 - 💪 **Robust transaction primitives** - easy optimistic mutations with sync and lifecycle support
 - 🌟 **Normalized data** - keep your backend simple
 
-#### Core Concepts
+#### Core concepts
 
 **Collections** - Typed sets of objects that can mirror a backend table or be populated with filtered views like `pendingTodos` or `decemberNewTodos`. Collections are just JavaScript data that you can load on demand.
 
@@ -512,7 +529,7 @@ const AddTodo = () => {
 }
 ```
 
-#### Live Queries with Cross-Collection Joins
+#### Live queries with cross-collection joins
 
 Use live queries to read data reactively across collections:
 
@@ -550,7 +567,7 @@ const Todos = () => {
 
 This pattern provides blazing fast, cross-collection live queries and local optimistic mutations with automatically managed optimistic state, all synced in real-time with ElectricSQL.
 
-#### tRPC Integration for Mutations
+#### tRPC integration for mutations
 
 This starter uses [tRPC v10](https://trpc.io/) for type-safe mutations while Electric handles real-time reads:
 
@@ -590,13 +607,13 @@ onUpdate: async ({ transaction }) => {
 },
 ```
 
-**API Routes:**
+**API routes:**
 
 - `/api/trpc/*` - tRPC mutations with full type safety
 - `/api/auth/*` - Authentication via better-auth
 - `/api/projects`, `/api/todos`, `/api/users` - Electric sync shapes for reads
 
-### Core Architecture Rules
+### Core architecture rules
 
 Follow these patterns to get the most out of this starter:
 
@@ -604,13 +621,13 @@ Follow these patterns to get the most out of this starter:
 - **Use collection operations for writes** - Call `collection.insert()`, not `trpc.create.mutate()` directly
 - **Preload collections in route loaders** - Prevents loading flicker and ensures data availability
 
-#### Why These Rules Matter
+#### Why these rules matter
 
 - **Electric handles reads** - Direct tRPC reads bypass real-time sync and optimistic updates
 - **Collection operations are optimistic** - They update the UI immediately while syncing in the background
 - **Preloading prevents flicker** - Collections load before components render, ensuring data is available
 
-# Learn More
+# Learn more
 
 - [TanStack documentation](https://tanstack.com)
 - [TanStack DB documentation](https://tanstack.com/db/latest/docs/overview)
