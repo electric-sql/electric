@@ -13,6 +13,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback get_or_create_shape_handle(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
   @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}] | :error
+  @callback count_shapes(keyword() | map()) :: non_neg_integer() | :error
   @callback await_snapshot_start(shape_handle(), opts :: Access.t()) ::
               :started | {:error, term()}
   @callback clean_shape(shape_handle(), Access.t()) :: :ok
@@ -135,6 +136,17 @@ defmodule Electric.ShapeCache do
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     shape_status.list_shapes(table)
+  rescue
+    ArgumentError -> :error
+  end
+
+  @impl Electric.ShapeCacheBehaviour
+  @spec count_shapes(Access.t()) :: non_neg_integer() | :error
+  def count_shapes(opts) do
+    table = ShapeStatus.shape_meta_table(opts)
+    shape_status = Access.get(opts, :shape_status, ShapeStatus)
+
+    shape_status.count_shapes(table)
   rescue
     ArgumentError -> :error
   end
