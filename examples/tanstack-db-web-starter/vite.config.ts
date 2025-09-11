@@ -5,9 +5,7 @@ import tailwindcss from "@tailwindcss/vite"
 import trustedHttps from "@electric-sql/vite-plugin-trusted-https"
 
 const config = defineConfig(({ command }) => {
-  const isDev = command === "serve"
-  const isPreview = process.argv.includes("preview")
-  const enableHttps = isDev || isPreview
+  const isDevServer = command === "serve"
 
   return {
     plugins: [
@@ -20,7 +18,7 @@ const config = defineConfig(({ command }) => {
           enabled: true,
         },
       }),
-      ...(enableHttps ? [trustedHttps()] : []),
+      ...(isDevServer ? [trustedHttps()] : []),
     ],
     ssr: {
       noExternal: ["zod"],
