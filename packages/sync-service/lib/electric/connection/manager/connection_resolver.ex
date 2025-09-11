@@ -1,5 +1,6 @@
 defmodule Electric.Connection.Manager.ConnectionResolver do
-  use GenServer
+  @doc false
+  use GenServer, shutdown: :brutal_kill
 
   require Logger
 
@@ -48,7 +49,14 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
       connection_mod =
       Keyword.get(opts, :connection_mod, {Postgrex.SimpleConnection, :start_link, []})
 
-    {:ok, %{connection_mod: connection_mod, stack_id: stack_id}}
+    {:ok, %{connection_mod: connection_mod, stack_id: stack_id}, {:continue, :notify_ready}}
+  end
+
+  @impl GenServer
+  def handle_continue(:notify_ready, state) do
+    :ok = Electric.Connection.Manager.connection_resolver_ready(state.stack_id)
+
+    {:noreply, state}
   end
 
   @impl GenServer
