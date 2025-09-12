@@ -9,7 +9,7 @@ outline: deep
 import { data as demosData } from '../data/demos.data.ts'
 const { demos } = demosData
 
-const aiChat = demos.find(x => x.link === '/demos/ai-chat')
+const burn = demos.find(x => x.link === '/demos/burn')
 const linearlite = demos.find(x => x.link === '/demos/linearlite')
 </script>
 
@@ -31,21 +31,23 @@ ElectricSQL is a Postgres sync engine. Use it to sync [subsets](/docs/guides/sha
 
 ## New to ElectricSQL?
 
-Start with the [Quickstart](/docs/quickstart) to get up-and-running. The guides on [Auth](/docs/guides/auth), [Shapes](/docs/guides/shapes) and [Writes](/docs/guides/writes) are also good entrypoints and helpful to understand how Electric works.
+Start with the [Quickstart](/docs/quickstart) to get up-and-running.
 
-The [HTTP API](/docs/api/http) and [TypeScript Client](/docs/api/clients/typescript) docs show how to sync data. The [React](/docs/integrations/react) page illustrates how to bind these into a reactivity framework.
+The [HTTP API](/docs/api/http) and [TypeScript Client](/docs/api/clients/typescript) docs and the guides on [Auth](/docs/guides/auth) and [Shapes](/docs/guides/shapes) are good entrypoints and helpful to understand how Electric works.
+
+The [TanStack integration page](/docs/integrations/tanstack) then links to resources showing how to build super fast apps with Electric and TanStack DB.
 
 The easiest way to use Electric in production is the [Electric Cloud](/product/cloud). Alternatively, the [Deployment](/docs/guides/deployment) guide covers how to self host.
 
-> [!warning] Looking for PGlite docs?
-> If you're interested in using [PGlite](/product/pglite), it has it's own docs site at [pglite.dev/docs](https://pglite.dev/docs)
+> [!warning] Looking for TanStack DB or PGlite?
+> TanStack DB docs are at [tanstack.com/db](https://tanstack.com/db) and PGlite docs are at [pglite.dev/docs](https://pglite.dev/docs).
 
 ## Examples
 
-See the [Demos](/demos) section and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demo apps and examples, e.g.:
+See the [Demos](/demos) section and [`examples`](https://github.com/electric-sql/electric/tree/main/examples) folder on GitHub for demos and examples, e.g.:
 
 <div class="demos-grid">
-  <DemoListing :demo="aiChat"/>
+  <DemoListing :demo="burn"/>
   <DemoListing :demo="linearlite"/>
 </div>
 

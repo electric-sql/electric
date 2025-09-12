@@ -162,6 +162,9 @@
 .vpi-social-pglite {
   --icon: url('/img/icons/pglite-social.svg') !important;
 }
+.vpi-social-tanstack {
+  --icon: url('/img/icons/tanstack-social.svg') !important;
+}
 
 .feature-cta a .count {
   margin-left: 0.25rem;
@@ -390,7 +393,7 @@ span.no-visual {
 }
 @media (min-width: 1200px) {
   .VPNavBarMenuLink {
-    padding: 0 12px 0 14px !important;
+    padding: 0 11px !important;
   }
   .VPNavBarSocialLinks::before,
   .VPNavBarSocialLinks::after {
@@ -403,12 +406,28 @@ span.no-visual {
     padding: 0 10px 0 12px;
   }
 }
-@media (min-width: 960px) and (max-width: 1040px) {
+@media (min-width: 1121px) and (max-width: 1199px) {
   .VPNavBarMenuLink {
     padding: 0 10px !important;
   }
   .VPSocialLink {
     width: 30px !important;
+  }
+}
+@media (min-width: 1060px) and (max-width: 1120px) {
+  .VPNavBarMenuLink {
+    padding: 0 8px !important;
+  }
+  .VPSocialLink {
+    width: 30px !important;
+  }
+}
+@media (min-width: 960px) and (max-width: 1059px) {
+  .VPNavBarMenuLink {
+    padding: 0 6px !important;
+  }
+  .VPSocialLink {
+    width: 27px !important;
   }
 }
 @media (min-width: 768px) and (max-width: 959px) {
