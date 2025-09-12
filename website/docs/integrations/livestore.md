@@ -10,22 +10,16 @@ image: /img/integrations/electric-livestore.jpg
 
 # LiveStore
 
-[LiveStore](https://github.com/livestorejs) is a reactive SQLite-based state management library focused on high-performance client-side reactivity, originally based on [Riffle](https://riffle.systems).
+[LiveStore](https://livestore.dev) is a next-generation state management framework based on reactive SQLite and git-inspired syncing (via event-sourcing).
 
 ## Electric and LiveStore
 
-LiveStore is under active development by [Johannes Schickling](https://www.schickling.dev). ElectricSQL are sponsoring LiveStore development and building a sync integration.
+LiveStore supports syncing via Electric through the [Electric sync provider](https://docs.livestore.dev/reference/syncing/sync-provider/electricsql/). There's an example of using Electric with LiveStore at [web-todomvc-sync-electric](https://github.com/livestorejs/livestore/tree/main/examples/src/web-todomvc-sync-electric).
 
-Some early docs are published at [livestore.dev](https://livestore.dev/getting-started/react-web). You can also see the [Expo](./expo) launch day [blog post](https://expo.dev/blog/local-first-application-development-with-livestore) and video:
+See Johannes' Local-first Conf 2025 talk for more details:
 
 <div style="max-width: 512px; margin: 12px 0">
   <div class="embed-container">
-    <YoutubeEmbed video-id="zQIhJqYU1Qw" />
+    <YoutubeEmbed video-id="nyPl84BopKc" />
   </div>
 </div>
-
-## Early access
-
-LiveStore is now open access for GitHub Sponsors.
-
-You can get access by [sponsoring Johannes here](https://github.com/sponsors/schickling) for $20 per month.
