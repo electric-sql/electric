@@ -331,7 +331,15 @@ defmodule Electric.Replication.PublicationManager do
         {:noreply, state}
 
       {:error, err} ->
-        Logger.error("Failed to configure publication: #{inspect(err)}")
+        severity =
+          if match?(%Postgrex.Error{postgres: %{code: :insufficient_privilege}}, err) do
+            :warning
+          else
+            :error
+          end
+
+        Logger.log(severity, "Failed to configure publication: #{inspect(err)}")
+
         state = reply_to_waiters({:error, err}, state)
         {:noreply, %{state | next_update_forced?: false}}
     end

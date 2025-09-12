@@ -125,7 +125,19 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
       fun.()
     catch
       kind, reason when kind in [:exit, :error] ->
-        log_error(kind, [message, ": ", Exception.format(kind, reason, __STACKTRACE__)])
+        severity =
+          cond do
+            kind == :exit ->
+              :warning
+
+            match?(%Postgrex.Error{postgres: %{code: :insufficient_privilege}}, reason) ->
+              :warning
+
+            true ->
+              :error
+          end
+
+        Logger.log(severity, [message, ": ", Exception.format(kind, reason, __STACKTRACE__)])
 
         {:error, reason}
     end
@@ -133,22 +145,5 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
 
   defp consumer_alive?(stack_id, shape_handle) do
     !is_nil(Electric.Shapes.Consumer.whereis(stack_id, shape_handle))
-  end
-
-  if @env == :test do
-    # don't spam test logs with failures due to process shutdown
-    defp log_error(:exit, _message) do
-      :ok
-    end
-  else
-    # don't spam sentry with errors caused by shutdown order (i.e. when the
-    # publication manager has been shutdown)
-    defp log_error(:exit, message) do
-      Logger.log(:warning, message)
-    end
-  end
-
-  defp log_error(:error, message) do
-    Logger.log(:error, message)
   end
 end
