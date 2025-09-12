@@ -1,0 +1,249 @@
+---
+title: Sync stacks
+description: >-
+  Electric provides composable sync primitives you can use to add real-time sync to your existing stack. Here we pick four different sync stacks to illustrate four different ways of integrating Electric into your stack of choice.
+outline: [2,3]
+image: /img/tutorials/sync-busters.jpg
+---
+
+<script setup>
+  import Card from '../src/components/home/Card.vue'
+
+  import ComponentsJPG from '/static/img/docs/guides/deployment/components.jpg?url'
+  import ComponentsPNG from '/static/img/docs/guides/deployment/components.png?url'
+  import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.png?url'
+</script>
+
+<style scoped>
+  .stack-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin: 24px 0 32px;
+  }
+  .stack-cards :deep(.card) {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    padding: 0 !important;
+  }
+
+  .stack-cards :deep(.card .icon) {
+    flex-shrink: 0;
+    padding-right: 6px !important;
+    align-self: flex-start;
+  }
+
+  .stack-cards :deep(.card .icon img) {
+    width: calc(33px + 1.5vw);
+    height: calc(33px + 1.5vw);
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .stack-cards :deep(.card .body) {
+    flex: 1;
+    /*padding: 0 0 0 8px !important;*/
+  }
+
+  .stack-cards :deep(.card .body h3) {
+    margin: 0 0 0.5rem 0 !important;
+  }
+
+  .stack-cards :deep(.card .body p) {
+    max-width: none !important;
+    margin-bottom: 0.25rem;
+  }
+
+  @media (max-width: 559px) {
+    .stack-cards :deep(.card .body h3) {
+      margin-top: 0.25rem !important;
+    }
+
+    .stack-cards :deep(.card .body p) {
+      margin-bottom: 0.5rem;
+    }
+  }
+
+  .heading-icon {
+    width: 72px;
+    margin: 5px 0 9px;
+  }
+</style>
+
+<img src="/img/icons/stack.svg" class="product-icon"
+    style="width: 72px"
+/>
+
+# Sync with your stack
+
+Electric provides [composable](/#works-with-section) sync primitives.
+
+This allows you to add real-time sync to [your existing stack](/blog/2024/11/21/local-first-with-your-existing-api), without imposing technology choices, code changes or data silos.
+
+## Sync stacks
+
+We've picked four different sync stacks to illustrate four different ways of integrating Electric into your stack of choice.
+
+<div class="stack-cards">
+
+<Card title="TanStack" icon="/img/integrations/tanstack.svg" href="#tanstack">
+  <p>
+    End-to-end Typescript, syncing through server functions into TanStack DB.
+    <span class="hidden-sm"><span class="no-wrap-sm">Great for super fast</span> web, mobile and AI app development.</span>
+  </p>
+  <p class="hidden-xs block-sm">
+    Great for super fast web, mobile and
+    <span class="no-wrap">AI app development</span>.
+  </p>
+</Card>
+
+<Card title="Phoenix" icon="/img/integrations/phoenix.svg" href="#phoenix">
+  <p>
+    Sync through a batteries-included backend framework using Phoenix.Sync.
+    <span class="hidden-sm">Great for <span class="no-wrap-sm">agentic systems</span> and full-stack development.</span>
+  </p>
+  <p class="hidden-xs block-sm">
+    Great for agentic systems and
+    <span class="no-wrap">full-stack development</span>.
+  </p>
+</Card>
+
+<Card title="PGlite" icon="/img/integrations/pglite.svg" href="#pglite">
+  <p>
+    Syncing data into an embedded Postgres database using PGlite.
+    <span class="hidden-sm"><span class="no-wrap-sm">Great for dev,</span> test and sandbox environments.</span>
+  </p>
+  <p class="hidden-xs block-sm">
+    Great for dev, test and sandbox environments.
+  </p>
+</Card>
+
+<Card title="Yjs" icon="/img/integrations/yjs.svg" href="#yjs">
+  <p>
+    Crafting conflict-free, multi-user applications with Electric and Yjs.
+    <span class="hidden-sm"><span class="no-wrap-sm">Great for fine-tuned</span> realtime collaboration.</span>
+  </p>
+  <p class="hidden-xs block-sm">
+    Great for fine-tuned realtime collaboration.
+  </p>
+</Card>
+
+</div>
+
+### Core architecture
+
+All of these sync stacks are based on the same core architecture.
+
+[Electric](/docs/guides/deployment#_2-running-electric) always runs as a service in front of [Postgres](/docs/guides/deployment#_1-running-postgres), syncing into a [Client](/docs/guides/shapes#subscribing-to-shapes) process or store, via a [Proxy](/docs/guides/auth#requests-can-be-proxied) or backend API.
+
+<figure>
+  <a :href="ComponentsJPG">
+    <img :src="ComponentsPNG" class="hidden-sm"
+        alt="Illustration of the main components of a successfull deployment"
+    />
+    <img :src="ComponentsSmPNG" class="block-sm"
+        style="max-width: 360px"
+        alt="Illustration of the main components of a successfull deployment"
+    />
+  </a>
+</figure>
+
+You can learn more about these by following the [Tutorial](/docs/tutorial) and [Deployment](/docs/guides/deployment) guide.
+
+### Choosing a stack
+
+We recommend using [TanStack DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](http://localhost:5173/blog/2025/07/29/local-first-sync-with-tanstack-db).
+
+You can also combine [TanStack DB](#tanstack-db) with [Phoenix.Sync](#phoenix-sync) if you're building agentic systems with Elixir or looking for a batteries-included backend framework.
+
+[PGlite](#pglite) and [Yjs](#yjs) are more for specialist use-cases where you're syncing into a dev, test or CI environment or crafting a multi-user collaboration system, respectively.
+
+### Other stacks
+
+The stacks on this page are just some options and recommendations. You can use Electric with any&nbsp;technology you like &mdash; as long as it speaks [HTTP&nbsp;and&nbsp;JSON](/docs/guides/client-development).
+
+For example, sync into [LiveStore](https://docs.livestore.dev/reference/syncing/sync-provider/electricsql/) for a principled, event-sourcing based development model. Or [distributed SQlite](https://github.com/electric-sql/postgres-to-sqlite-sync-example) or [native iOS apps](https://github.com/paulharter/ElectricSync).
+
+## <img class="heading-icon" src="/img/integrations/tanstack.svg" /> TanStack
+
+<blockquote class="block-xs">
+  Great for super fast web, mobile and AI app development.
+</blockquote>
+
+[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
+
+Paired with [Electric](/) and [TanStack Start](https://tanstack.com/start), it gives you an end-to-end sync stack that's type-safe, declarative, incrementally adoptable and insanely fast.
+
+#### End-to-end Typescript
+
+See the [tanstack-db-web-starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for an example of an end-to-end Typescript stack for web app development:
+
+- based on Postgres, using [Drizzle](https://orm.drizzle.team/) for data schemas and migrations
+- syncing data out of Electric through [TanStack Start server functions](https://tanstack.com/start/latest/docs/framework/react/server-functions)
+- into [TanStack DB collections](https://tanstack.com/db/latest/docs/overview#defining-collections) for reactive, local-first client-side development
+- using [tRPC mutation proceedures](https://trpc.io/docs/server/procedures) for type-safe write handling on the server
+
+See also the [tanstack-db-expo-starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for a similar stack for mobile app development.
+
+#### Incremental adoption
+
+TanStack DB is designed to be incrementally adoptable into existing applications.
+
+It's tiny &mdash; a few Kbs &mdash; so doesn't introduce a big dependency. It works with all major front-end reactivity frameworks. It works with API-based data loading and sync. So you can progressively adopt by first migrating API-based apps using TanStack Query and then migrate to sync without affecting the component code.
+
+#### Super fast 🔥
+
+When you combine Electric with TanStack DB, you get blazing fast <span class="no-wrap-sm">end-to-end reactivity</span>.
+
+Components use [live queries](https://tanstack.com/db/latest/docs/guides/live-queries) to react and when data changes. These are based on a [Typescript implementation of differential dataflow](https://github.com/electric-sql/d2ts). This means you can build complex client apps where everything reacts instantly, within a single animation frame.
+
+#### More information
+
+- [Local-first sync with TanStack DB and Electric](/blog/2025/07/29/local-first-sync-with-tanstack-db)
+- [TanStack DB, the embedded client database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
+- [An interactive guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db)
+
+## <img class="heading-icon" src="/img/integrations/phoenix.svg" /> Phoenix
+
+<blockquote class="block-xs">
+  Great for agentic systems and full-stack development.
+</blockquote>
+
+[Phoenix](https://www.phoenixframework.org) is a full-stack web development framework for [Elixir](https://elixir-lang.org).
+
+Electric is [developed in Elixir](/product/electric#how-does-it-work), has a first-class [Elixir client](/docs/api/clients/elixir) and a deep Phoenix framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) library.
+
+### Phoenix.Sync
+
+Phoenix.Sync enables real-time sync for Postgres-backed [Phoenix](https://www.phoenixframework.org/) applications. You can use it to sync data into Elixir, `LiveView` and frontend web and mobile applications.
+
+Read-path sync works naturally with TanStack DB. Plus it provides:
+
+- a [`Writer`](https://hexdocs.pm/phoenix_sync/readme.html#write-path-sync) module for ingesting TanStack DB mutations
+- [`Igniter` and `Mix` commands](https://github.com/electric-sql/phoenix_sync/pull/102) to integrate TanStack DB with Phoenix
+
+### Building agentic systems
+
+Phoenix is built in [Elixir](https://elixir-lang.org), which runs on the [BEAM](https://blog.stenmans.org/theBeamBook/). The BEAM provides a robust agentic runtime environment with built-in primitives for [process supervision and messaging](https://hexdocs.pm/elixir/processes.html).
+
+This makes Elixir and Phoenix a perfect match for agentic system development [without needing a seperate agent framework](https://goto-code.com/blog/elixir-otp-for-llms/).
+
+### More information
+
+- [Burn](/demos/burn) agentic demo app
+- [Bringing agents back down to earth](/blog/2025/08/12/bringing-agents-back-down-to-earth) blog post
+- [Phoenix integration page](/docs/integrations/phoenix)
+- [Phoenix.Sync documentation](https://hexdocs.pm/phoenix_sync)
+
+## <img class="heading-icon" src="/img/integrations/pglite.svg" /> PGlite
+
+<blockquote class="block-xs">
+  Great for dev, test and sandbox environments.
+</blockquote>
+
+...
+
+## Yjs
+
+...
