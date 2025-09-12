@@ -149,7 +149,7 @@ All of these sync stacks are based on the same core architecture.
   </a>
 </figure>
 
-You can learn more about these by following the [Tutorial](/docs/tutorial) and [Deployment](/docs/guides/deployment) guide.
+You can learn more about these by following <!-- the Tutorial and -->[Deployment](/docs/guides/deployment) guide.
 
 ### Choosing a stack
 
