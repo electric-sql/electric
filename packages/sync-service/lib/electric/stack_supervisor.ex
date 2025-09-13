@@ -371,6 +371,8 @@ defmodule Electric.StackSupervisor do
              Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},
+          {Electric.ShapeCache.ShapeStatusOwner,
+           [stack_id: stack_id, shape_status: shape_status]},
           {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 
@@ -385,5 +387,19 @@ defmodule Electric.StackSupervisor do
         )
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
+  end
+
+  def shutdown_database_connections(stack_id) do
+    Electric.StatusMonitor.database_connections_scaled_down(stack_id)
+    Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: stack_id)
+  end
+
+  def restore_database_connections(stack_id) do
+    # Stopping the Connection.Manager.Supervisor causes the Connection.Supervisor to restart it
+    # from a clean state. The end result is the Connection.Manager is back up and the
+    # Replication.Supervisor has the opportunity to purge shapes if the need for this is
+    # communicated by Connection.Manager.
+    Supervisor.stop(Electric.Connection.Manager.Supervisor.name(stack_id: stack_id))
+    Electric.StatusMonitor.database_connections_scaled_up(stack_id)
   end
 end
