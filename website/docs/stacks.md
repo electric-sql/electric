@@ -155,7 +155,7 @@ You can learn more about these by following <!-- the Tutorial and -->[Deployment
 
 We recommend using [TanStack DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](http://localhost:5173/blog/2025/07/29/local-first-sync-with-tanstack-db).
 
-You can also combine [TanStack DB](#tanstack-db) with [Phoenix.Sync](#phoenix-sync) if you're building agentic systems with Elixir or looking for a batteries-included backend framework.
+You can also combine TanStack DB with [Phoenix.Sync](#phoenix-sync) if you're building agentic systems with Elixir or looking for a batteries-included backend framework.
 
 [PGlite](#pglite) and [Yjs](#yjs) are more for specialist use-cases where you're syncing into a dev, test or CI environment or crafting a multi-user collaboration system, respectively.
 
