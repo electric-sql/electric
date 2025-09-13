@@ -345,7 +345,6 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
   value: T
   old_value?: Partial<T> // Only provided for updates if `replica` is `full`
   headers: Header & { operation: `insert` | `update` | `delete` }
-  offset: Offset
 }
 ```
 
