@@ -175,7 +175,7 @@ For example, sync into [LiveStore](https://docs.livestore.dev/reference/syncing/
 
 Paired with [Electric](/) and [TanStack Start](https://tanstack.com/start), it gives you an end-to-end sync stack that's type-safe, declarative, incrementally adoptable and insanely fast.
 
-#### End-to-end Typescript
+### End-to-end Typescript
 
 See the [tanstack-db-web-starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for an example of an end-to-end Typescript stack for web app development:
 
@@ -186,13 +186,13 @@ See the [tanstack-db-web-starter](https://github.com/electric-sql/electric/tree/
 
 See also the [tanstack-db-expo-starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for a similar stack for mobile app development.
 
-#### Incremental adoption
+### Incremental adoption
 
 TanStack DB is designed to be incrementally adoptable into existing applications.
 
 It's tiny &mdash; a few Kbs &mdash; so doesn't introduce a big dependency. It works with all major front-end reactivity frameworks. It works with API-based data loading and sync. So you can progressively adopt by first migrating API-based apps using TanStack Query and then migrate to sync without affecting the component code.
 
-#### Super fast 🔥
+### Super fast 🔥
 
 When you combine Electric with TanStack DB, you get blazing fast <span class="no-wrap-sm">end-to-end reactivity</span>.
 
@@ -218,6 +218,8 @@ Electric is [developed in Elixir](/product/electric#how-does-it-work), has a fir
 
 Phoenix.Sync enables real-time sync for Postgres-backed [Phoenix](https://www.phoenixframework.org/) applications. You can use it to sync data into Elixir, `LiveView` and frontend web and mobile applications.
 
+### Using with TanStack DB
+
 Read-path sync works naturally with TanStack DB. Plus it provides:
 
 - a [`Writer`](https://hexdocs.pm/phoenix_sync/readme.html#write-path-sync) module for ingesting TanStack DB mutations
@@ -229,7 +231,7 @@ Phoenix is built in [Elixir](https://elixir-lang.org), which runs on the [BEAM](
 
 This makes Elixir and Phoenix a perfect match for agentic system development [without needing a seperate agent framework](https://goto-code.com/blog/elixir-otp-for-llms/).
 
-### More information
+#### More information
 
 - [Burn](/demos/burn) agentic demo app
 - [Bringing agents back down to earth](/blog/2025/08/12/bringing-agents-back-down-to-earth) blog post
@@ -242,8 +244,73 @@ This makes Elixir and Phoenix a perfect match for agentic system development [wi
   Great for dev, test and sandbox environments.
 </blockquote>
 
-...
+PGlite is an embeddable Postgres database.
 
-## Yjs
+Electric can sync data into PGlite to hydrate lightweight database instances for dev, test and sandboxed environments
 
-...
+### Lightweight developer database
+
+Platforms including Google Firebase, Supabase and Prisma all use PGlite as a development database. It's proper Postgres that can run embedded, in-process. So you don't need any external processes or system packages to use it.
+
+Having a Postgres database is as simple as:
+
+```shell
+npm install @electric-sql/pglite
+```
+
+```ts
+import { PGlite } from '@electric-sql/pglite'
+
+const db = new PGlite()
+````
+
+### Database in the sandbox
+
+AI app builders like Bolt, Lovable and Replit can generate database-driven apps and run them in a sandboxed dev environment. However, to actually work, these apps need to connect to a database.
+
+PGlite is a Postgres database that runs inside your dev environment. With it, you can one-shot database-driven apps that run without leaving the sandbox.
+
+### Hydrating PGlite
+
+Electric can be used to hydrate data into a PGlite instance using the [sync plugin](https://pglite.dev/docs/sync):
+
+```ts
+import { electricSync } from '@electric-sql/pglite-sync'
+
+const pg = await PGlite.create({
+  extensions: {
+    electric: electricSync(),
+  },
+})
+```
+
+This supports individual tables and transactionally [syncing multiple tables](https://pglite.dev/docs/sync#syncshapestotables-api).
+
+#### More information
+
+- [PGlite website](https://pglite.dev) and [docs](https://pglite.dev/docs)
+- [LinearLite demo](/demos/linearlite) using PGlite with Electric
+- [Database.build](https://database.build/) by Supabase (running on PGlite)
+- [Vibe coding with a database in the sandbox](/blog/2025/06/05/database-in-the-sandbox)
+
+## <img class="heading-icon" src="/img/integrations/yjs.svg" /> Yjs
+
+<blockquote class="block-xs">
+  Great for fine-tuned realtime collaboration.
+</blockquote>
+
+[Yjs](https://docs.yjs.dev) is a library for building collaborative applications.
+
+### Conflict-free updates
+
+Electric can be used as a transport layer with Yjs to create collaborative, multi-user applications on top of Postgres.
+
+### Multi-user collaboration
+
+This works by exposing a [Shape](/docs/guides/shapes) to sync changes for a [Y.Doc](https://docs.yjs.dev/api/y.doc). The `y-electric` package then automatically shares updates across all connected clients.
+
+#### More information
+
+- [Integration docs](/docs/integrations/yjs)
+- [Notes demo](/demos/notes)
+- [`y-electric` package](https://github.com/electric-sql/electric/tree/main/packages/y-electric)
