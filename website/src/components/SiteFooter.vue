@@ -65,35 +65,47 @@
   .VPFooter p.footer-nav a {
     margin: 0.3rem 0.5rem 0.5rem 0.5rem;
   }
-  .VPFooter p.footer-nav .vpi-social-github,
-  .VPFooter p.footer-nav .vpi-social-discord,
+  .VPFooter p.footer-nav .vpi-social-tanstack,
   .VPFooter p.footer-nav .vpi-social-pglite,
-  .VPFooter p.footer-nav .vpi-social-bluesky {
+  .VPFooter p.footer-nav .vpi-social-x,
+  .VPFooter p.footer-nav .vpi-social-bluesky,
+  .VPFooter p.footer-nav .vpi-social-discord,
+  .VPFooter p.footer-nav .vpi-social-github {
     display: inline-block;
     width: 1.24rem;
     height: 1.24rem;
     position: relative;
   }
-  @media (max-width: 438px) {
-    .VPFooter p.footer-nav .vpi-social-github,
-    .VPFooter p.footer-nav .vpi-social-discord,
+  @media (max-width: 599px) {
+    .VPFooter p.footer-nav .vpi-social-tanstack,
     .VPFooter p.footer-nav .vpi-social-pglite,
-    .VPFooter p.footer-nav .vpi-social-bluesky {
+    .VPFooter p.footer-nav .vpi-social-x,
+    .VPFooter p.footer-nav .vpi-social-bluesky,
+    .VPFooter p.footer-nav .vpi-social-discord,
+    .VPFooter p.footer-nav .vpi-social-github {
       color: var(--vp-c-text-1);
     }
   }
-  .VPFooter p.footer-nav .vpi-social-github,
-  .VPFooter p.footer-nav .vpi-social-discord,
+  .VPFooter p.footer-nav .vpi-social-tanstack,
   .VPFooter p.footer-nav .vpi-social-pglite,
-  .VPFooter p.footer-nav .vpi-social-bluesky {
+  .VPFooter p.footer-nav .vpi-social-x,
+  .VPFooter p.footer-nav .vpi-social-bluesky,
+  .VPFooter p.footer-nav .vpi-social-discord,
+  .VPFooter p.footer-nav .vpi-social-github {
     margin: 2px 4px -5px 0;
   }
 
+  .vpi-social-x {
+    --icon: url('https://api.iconify.design/simple-icons/x.svg');
+  }
   .vpi-social-bluesky {
     --icon: url('https://api.iconify.design/simple-icons/bluesky.svg');
   }
   .vpi-social-discord {
     --icon: url('https://api.iconify.design/simple-icons/discord.svg');
+  }
+  .vpi-social-tanstack {
+    --icon: url('https://api.iconify.design/simple-icons/tanstack.svg');
   }
 
   .VPFooter .footer-logo {
@@ -113,7 +125,7 @@
     color: var(--vp-c-text-1);
     margin-left: 0.2rem;
   }
-  @media (max-width: 438px) {
+  @media (max-width: 599px) {
     .footer-nav-inner a .social-name {
       display: none;
     }
@@ -149,12 +161,15 @@
         </span>
         <span class="footer-nav-inner">
           <span class="no-wrap">
+            <a href="https://tanstack.com/db">
+              <span class="vpi-social-tanstack"></span>
+              <span class="social-name">TanStack DB</span></a>
             <a href="https://pglite.dev">
               <span class="vpi-social-pglite"></span>
               <span class="social-name">PGlite</span></a>
-            <a href="https://github.com/electric-sql">
-              <span class="vpi-social-github"></span>
-              <span class="social-name">GitHub</span></a>
+            <a href="https://x.com/ElectricSQL">
+              <span class="vpi-social-x"></span>
+              <span class="social-name">X</span></a>
           </span>
           <span class="no-wrap">
             <a href="https://bsky.app/profile/electric-sql.com">
@@ -163,6 +178,9 @@
             <a href="https://discord.electric-sql.com">
               <span class="vpi-social-discord"></span>
               <span class="social-name">Discord</span></a>
+            <a href="https://github.com/electric-sql">
+              <span class="vpi-social-github"></span>
+              <span class="social-name">GitHub</span></a>
           </span>
         </span>
       </p>

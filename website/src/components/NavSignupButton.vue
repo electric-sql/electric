@@ -46,7 +46,7 @@
       display: block;
     }
   }
-  @media (min-width: 1150px) {
+  @media (min-width: 1270px) {
     .cta-md {
       display: none;
     }

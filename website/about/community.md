@@ -48,9 +48,9 @@ If you have feature requests or want to post ideas for discussion, please post o
 You can also find us on:
 
 - Bluesky as [@electric-sql.com](https://bsky.app/profile/@electric-sql.com) and [@pglite.dev](https://bsky.app/profile/@pglite.dev)
-- Twitter as [@ElectricSQL](https://twitter.com/ElectricSQL)
+- X as [@ElectricSQL](https://x.com/ElectricSQL)
 - LinkedIn as [company/ElectricSQL](https://www.linkedin.com/company/electric-sql)
 
 ## Wider community
 
-See the [Lo-fi community](https://lofi.software), [localfirst.fm](https://www.localfirst.fm) podcast and [Local-first Conf](https://www.localfirstconf.com).
+See the [SyncX meetups](https://luma.com/syncX), [Sync Conf](https://syncconf.dev), [Lo-fi community](https://lofi.software), [localfirst.fm](https://www.localfirst.fm) and [Local-first Conf](https://www.localfirstconf.com).

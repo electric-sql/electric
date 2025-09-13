@@ -292,10 +292,11 @@ export default defineConfig({
     },
     siteTitle: false,
     socialLinks: [
+      { icon: 'tanstack', link: 'https://tanstack.com/db' },
       { icon: 'pglite', link: 'https://pglite.dev' },
-      { icon: 'github', link: 'https://github.com/electric-sql/electric' },
-      { icon: 'bluesky', link: 'https://bsky.app/profile/electric-sql.com' },
-      { icon: 'discord', link: 'https://discord.electric-sql.com' }
+      { icon: 'x', link: 'https://x.com/ElectricSQL' },
+      { icon: 'discord', link: 'https://discord.electric-sql.com' },
+      { icon: 'github', link: 'https://github.com/electric-sql/electric' }
     ]
   },
   transformHead: ({ pageData, siteData }) => {
