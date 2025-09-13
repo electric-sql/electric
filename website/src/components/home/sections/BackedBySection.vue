@@ -102,7 +102,7 @@
 </style>
 
 <template>
-  <Section :actions="actions">
+  <Section :actions="actions" id="backed-by-section">
     <template #title>
       Backed by industry insiders
     </template>

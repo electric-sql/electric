@@ -165,6 +165,17 @@ export default defineConfig({
           items: [
             { text: 'Intro', link: '/docs/intro' },
             { text: 'Quickstart', link: '/docs/quickstart' },
+            {
+              text: 'Walkthroughs',
+              link: '/docs/walkthroughs',
+              collapsed: false,
+              items: [
+                { text: 'Kyle (Typescript)', link: '/docs/tutorials/kyle' },
+                { text: 'James (Phoenix)', link: '/docs/tutorials/james' },
+                { text: 'Sam (PGlite)', link: '/docs/tutorials/sam' },
+                { text: 'Valter (Yjs)', link: '/docs/tutorials/valter' }
+              ]
+            }
           ]
         },
         {
