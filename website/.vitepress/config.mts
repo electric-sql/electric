@@ -165,6 +165,7 @@ export default defineConfig({
           items: [
             { text: 'Intro', link: '/docs/intro' },
             { text: 'Quickstart', link: '/docs/quickstart' },
+            { text: 'Stacks', link: '/docs/stacks' },
           ]
         },
         {
