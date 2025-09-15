@@ -44,7 +44,6 @@ defmodule Electric.Postgres.ReplicationClient do
       :display_settings,
       :txn_collector,
       :publication_owner?,
-      origin: "postgres",
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
@@ -71,7 +70,6 @@ defmodule Electric.Postgres.ReplicationClient do
             start_streaming?: boolean(),
             slot_name: String.t(),
             slot_temporary?: boolean(),
-            origin: String.t(),
             txn_collector: Collector.t(),
             step: Electric.Postgres.ReplicationClient.step(),
             display_settings: [String.t()],
