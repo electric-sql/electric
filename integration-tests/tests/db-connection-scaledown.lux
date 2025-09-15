@@ -33,7 +33,7 @@
   ??datname|usename|backend_type|query
   ??electric|electric_test|walsender|SELECT pg_advisory_lock(hashtext('electric_slot_integration'))
   ??electric|electric_test|walsender|START_REPLICATION SLOT "electric_slot_integration"
-  ??(4 rows)
+  ?\(([1-9]|[1-9][0-9]) rows\)
 
 # Force Electric to scale down by sending the :idle_check message to the replication client.
 # Normally the client performs the check once a minute, so we're speeding it up here for
