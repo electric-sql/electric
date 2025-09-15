@@ -14,6 +14,10 @@ defmodule Electric.StatusMonitor do
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
 
+  @db_scaled_down_key :db_scaled_down?
+
+  @wake_up_if_scaled_down_opt :wake_up_if_scaled_down
+
   def start_link(stack_id) do
     GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
   end
@@ -27,23 +31,42 @@ defmodule Electric.StatusMonitor do
     {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
   end
 
-  @spec status(String.t()) :: status()
-  def status(stack_id) do
-    case results(stack_id) do
-      %{pg_lock_acquired: {false, _}} ->
-        :waiting
-
-      %{
-        replication_client_ready: {true, _},
-        admin_connection_pool_ready: {true, _},
-        snapshot_connection_pool_ready: {true, _},
-        shape_log_collector_ready: {true, _}
-      } ->
-        :active
-
-      _ ->
+  @spec status(String.t(), [Atom.t()]) :: status()
+  def status(stack_id, opts \\ []) do
+    if db_scaled_down?(stack_id) do
+      if @wake_up_if_scaled_down_opt in opts do
+        Electric.StackSupervisor.restore_database_connections(stack_id)
         :starting
+      else
+        # If there's no explicit request to wake the DB connections up, we assume this call is
+        # coming from the health check endpoint and report the servicec as active.
+        :active
+      end
+    else
+      stack_id
+      |> results()
+      |> status_from_results()
     end
+  end
+
+  defp status_from_results(%{pg_lock_acquired: {false, _}}), do: :waiting
+
+  defp status_from_results(%{
+         replication_client_ready: {true, _},
+         admin_connection_pool_ready: {true, _},
+         snapshot_connection_pool_ready: {true, _},
+         shape_log_collector_ready: {true, _}
+       }),
+       do: :active
+
+  defp status_from_results(_), do: :starting
+
+  def database_connections_scaling_down(stack_id) do
+    GenServer.cast(name(stack_id), :db_scaling_down)
+  end
+
+  def database_connections_scaling_up(stack_id) do
+    GenServer.cast(name(stack_id), :db_scaling_up)
   end
 
   def mark_pg_lock_acquired(stack_id, lock_pid) do
@@ -91,7 +114,7 @@ defmodule Electric.StatusMonitor do
   end
 
   def wait_until_active(stack_id, timeout) do
-    if status(stack_id) == :active do
+    if status(stack_id, [@wake_up_if_scaled_down_opt]) == :active do
       :ok
     else
       try do
@@ -158,6 +181,16 @@ defmodule Electric.StatusMonitor do
     {:noreply, state}
   end
 
+  def handle_cast(:db_scaling_down, state) do
+    :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, true})
+    {:noreply, maybe_reply_to_waiters(state)}
+  end
+
+  def handle_cast(:db_scaling_up, state) do
+    :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, false})
+    {:noreply, maybe_reply_to_waiters(state)}
+  end
+
   def handle_call({:wait_until_active, timeout}, from, %{waiters: waiters} = state) do
     if status(state.stack_id) == :active do
       {:reply, :ok, state}
@@ -200,6 +233,15 @@ defmodule Electric.StatusMonitor do
       _ ->
         state
     end
+  end
+
+  defp db_scaled_down?(stack_id) do
+    :ets.lookup_element(ets_table(stack_id), @db_scaled_down_key, 2, false)
+  rescue
+    ArgumentError ->
+      # This happens when the table is not found, which means the
+      # process has not been started yet
+      false
   end
 
   defp results(stack_id) do

@@ -122,7 +122,8 @@ defmodule Electric.Application do
         publication_name: publication_name,
         slot_name: slot_name,
         slot_temporary?: get_env(opts, :replication_slot_temporary?),
-        max_txn_size: get_env(opts, :max_txn_size)
+        max_txn_size: get_env(opts, :max_txn_size),
+        max_idle_time: get_env(opts, :scale_down_on_idle_timeout)
       ],
       pool_opts:
         get_env_lazy(opts, :pool_opts, fn -> [pool_size: get_env(opts, :db_pool_size)] end),

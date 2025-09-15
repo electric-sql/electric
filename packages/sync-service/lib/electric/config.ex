@@ -48,6 +48,7 @@ defmodule Electric.Config do
     replication_slot_temporary?: false,
     replication_slot_temporary_random_name?: false,
     max_txn_size: 250 * 1024 * 1024,
+    scale_down_on_idle_timeout: 0,
     manual_table_publishing?: false,
     ## HTTP API
     # set enable_http_api: false to turn off the HTTP server totally
