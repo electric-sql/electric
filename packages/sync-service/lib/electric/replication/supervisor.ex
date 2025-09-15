@@ -47,7 +47,8 @@ defmodule Electric.Replication.Supervisor do
       publication_manager,
       consumer_supervisor,
       shape_cache,
-      schema_reconciler
+      schema_reconciler,
+      {Electric.ShapeCache.ExpiryManager, stack_id: opts[:stack_id]}
     ]
 
     Supervisor.init(children, strategy: :one_for_all)
