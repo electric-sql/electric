@@ -1,0 +1,55 @@
+[doc Verify Electric can scale down database connections after a lull in stream transactions]
+
+[include _macros.luxinc]
+
+[global pg_container_name=db-connection-scaledown__pg]
+[global database_url=postgresql://electric_test:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+###
+
+# Start Postgres and create an additional role that will be used by Electric in this test
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "" \
+  "" \
+  "-v $(realpath ../scripts/test_user_db.sh):/docker-entrypoint-initdb.d/initdb-test_user_db.sh"]
+
+# Start Electric and wait for it to finish initialization
+[invoke setup_electric_with_env "ELECTRIC_DATABASE_SCALE_DOWN_ON_IDLE_TIMEOUT=1s"]
+[shell electric]
+  [timeout 10]
+  ??[debug] Replication client started streaming
+
+# Verify that Electric has multiple database connections open
+[invoke start_psql]
+
+[shell psql]
+  !\a
+  !\pset pager_min_lines 1000
+
+  !select datname, usename, backend_type, query from pg_stat_activity where usename = 'electric_test' order by query;
+  ??datname|usename|backend_type|query
+  ??electric|electric_test|walsender|SELECT pg_advisory_lock(hashtext('electric_slot_integration'))
+  ??electric|electric_test|walsender|START_REPLICATION SLOT "electric_slot_integration"
+  ??(4 rows)
+
+# Force Electric to scale down by sending the :idle_check message to the replication client.
+# Normally the client performs the check once a minute, so we're speeding it up here for
+# testing purposes.
+[shell electric]
+  [sleep 2]
+
+  !Electric.Postgres.ReplicationClient.name("single_stack") |> GenServer.whereis() |> send(:check_if_idle)
+  ??[warning] Closing all database connections after the replication stream has been idle for
+
+  ??[debug] Terminating connection manager with reason :shutdown.
+
+# Confirm that Postgres no longer sees any open connections for the electric user
+[shell psql]
+  [sleep 2]
+
+  !select datname, usename, backend_type, query from pg_stat_activity where usename = 'electric_test';
+  ??(0 rows)
+
+[cleanup]
+  [invoke teardown]
