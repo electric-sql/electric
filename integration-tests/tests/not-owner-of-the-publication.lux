@@ -10,9 +10,9 @@
 ## Start a Postgres cluster with no publication and an unprivileged role
 [invoke setup_pg_with_shell_name \
   "pg" \
+  "-e INIT_DB_SQL=\"CREATE ROLE low_privilege LOGIN PASSWORD 'password' REPLICATION\"" \
   "" \
-  "" \
-  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
 ## Start the sync service
 [invoke setup_electric]
@@ -33,9 +33,11 @@
 ## Start a Postgres cluster with incorrectly configured publication and an unprivileged role
 [invoke setup_pg_with_shell_name \
   "pg" \
-  "-e LOW_PRIVILEGE_TEST_INIT_SQL='CREATE PUBLICATION electric_publication_integration WITH (publish = 'insert')'" \
+  "-e INIT_DB_SQL=\"\
+    CREATE ROLE low_privilege LOGIN PASSWORD 'password' REPLICATION;\
+    CREATE PUBLICATION electric_publication_integration WITH (publish = 'insert')\"" \
   "" \
-  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
 ## Start the sync service
 [invoke setup_electric]
@@ -56,9 +58,11 @@
 ## Start a Postgres cluster with precreated publication and an unprivileged role
 [invoke setup_pg_with_shell_name \
   "pg" \
-  "-e LOW_PRIVILEGE_TEST_INIT_SQL='CREATE PUBLICATION electric_publication_integration'" \
+  "-e INIT_DB_SQL=\"\
+    CREATE ROLE low_privilege LOGIN PASSWORD 'password' REPLICATION;\
+    CREATE PUBLICATION electric_publication_integration\"" \
   "" \
-  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
 ## Start the sync service
 [invoke setup_electric]
