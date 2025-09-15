@@ -179,7 +179,9 @@
 
     ??[info] Starting ElectricSQL
 
-    !{:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack"))
+    !if is_nil(System.get_env("DO_NOT_START_CONN_MAN_PING")) do \
+      {:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack")) \
+     end
 [endmacro]
 
 [macro start_electric_script shell_name port env]
