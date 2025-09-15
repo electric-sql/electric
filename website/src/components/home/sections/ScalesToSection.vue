@@ -27,7 +27,7 @@
 </style>
 
 <template>
-  <Section :actions="actions" :wideSectionHead="true">
+  <Section :actions="actions" :wideSectionHead="true" id="scales-to-section">
     <template #title>
       Scales to
       <span class="no-wrap">

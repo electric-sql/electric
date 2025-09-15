@@ -62,7 +62,7 @@
     <img :src="LogoStripXxs" class="block-md hidden-sm logo-strap-md" />
     <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" />
   </figure>
-  <Section :actions="actions" id="dashboard-examples">
+  <Section :actions="actions" id="used-by-section">
     <template #title>
       Used by world leading&nbsp;companies
     </template>

@@ -48,7 +48,7 @@
           real-time</span>
         dashboards&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       `,
-      href: '#dashboard-examples'
+      href: '#used-by-section'
     },
     {
       slug: 'worker',
@@ -67,7 +67,7 @@
 </script>
 
 <template>
-  <Section :actions="actions">
+  <Section :actions="actions" id="sync-awesome-section">
     <template #title>
       Sync makes apps awesome
     </template>
