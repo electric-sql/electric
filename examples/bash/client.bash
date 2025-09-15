@@ -9,7 +9,7 @@ fi
 # Extract base URL (everything before the query string)
 BASE_URL=$(echo "$1" | sed -E 's/\?.*//')
 # Extract and clean query parameters
-QUERY_STRING=$(echo "$1" | sed -n 's/.*\?\(.*\)/\1/p')
+QUERY_STRING=$(echo "$1" | sed -E -n 's/.*\?(.*)/\1/p')
 
 # Build cleaned query string, removing electric-specific params but keeping others
 if [ -n "$QUERY_STRING" ]; then
