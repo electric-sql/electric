@@ -14,8 +14,10 @@
   "" \
   "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
-# Start Electric and wait for it to finish initialization
-[invoke setup_electric_with_env "ELECTRIC_DATABASE_SCALE_DOWN_ON_IDLE_TIMEOUT=1s"]
+# Start Electric and wait for it to finish initialization.
+# Have to disable the ConnectionManagerPing process, otherwise it will error when
+# Connection.Manager itself goes down as part of the test scenario.
+[invoke setup_electric_with_env "ELECTRIC_DATABASE_SCALE_DOWN_ON_IDLE_TIMEOUT=1s DO_NOT_START_CONN_MAN_PING=true"]
 [shell electric]
   [timeout 10]
   ??[debug] Replication client started streaming
