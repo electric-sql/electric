@@ -10,7 +10,9 @@
 # Start Postgres and create an additional role that will be used by Electric in this test
 [invoke setup_pg_with_shell_name \
   "pg" \
-  "-e INIT_DB_SQL=\"CREATE ROLE electric_test LOGIN PASSWORD 'password' REPLICATION; GRANT CREATE ON DATABASE electric TO electric_test;\"" \
+  "-e INIT_DB_SQL=\"\
+    CREATE ROLE electric_test LOGIN PASSWORD 'password' REPLICATION;\
+    GRANT CREATE ON DATABASE electric TO electric_test\"" \
   "" \
   "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
@@ -52,6 +54,29 @@
 
   !select datname, usename, backend_type, query from pg_stat_activity where usename = 'electric_test';
   ??(0 rows)
+
+# Create a table for a subsequent shape request
+[shell psql]
+  !create table items(val text);
+  ??CREATE
+
+  !insert into items values ('1'), ('2');
+  ??INSERT
+
+  !alter table items owner to electric_test;
+  ??ALTER TABLE
+
+# Scaling back up is just one shape request away
+[shell client]
+  [invoke shape_get_snapshot items]
+
+  ??HTTP/1.1 200
+  ??transfer-encoding: chunked
+  ??electric-schema: {"val":{"type":"text"}}
+  ??electric-offset: 0_0
+
+  ??[{"key":"\"public\".\"items\"/\"1\"","value":{"val":"1"},"headers":{"operation":"insert","relation":["public","items"]}},\
+     {"key":"\"public\".\"items\"/\"2\"","value":{"val":"2"},"headers":{"operation":"insert","relation":["public","items"]}}]
 
 [cleanup]
   [invoke teardown]
