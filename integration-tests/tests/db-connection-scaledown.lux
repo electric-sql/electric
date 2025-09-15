@@ -10,9 +10,9 @@
 # Start Postgres and create an additional role that will be used by Electric in this test
 [invoke setup_pg_with_shell_name \
   "pg" \
+  "-e INIT_DB_SQL=\"CREATE ROLE electric_test LOGIN PASSWORD 'password' REPLICATION; GRANT CREATE ON DATABASE electric TO electric_test;\"" \
   "" \
-  "" \
-  "-v $(realpath ../scripts/test_user_db.sh):/docker-entrypoint-initdb.d/initdb-test_user_db.sh"]
+  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
 # Start Electric and wait for it to finish initialization
 [invoke setup_electric_with_env "ELECTRIC_DATABASE_SCALE_DOWN_ON_IDLE_TIMEOUT=1s"]
