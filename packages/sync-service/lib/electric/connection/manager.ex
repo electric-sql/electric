@@ -914,6 +914,8 @@ defmodule Electric.Connection.Manager do
       {:replication_liveness_check, state.replication_client_pid}
     )
 
+    Logger.debug("Replication client started streaming")
+
     state = %{state | current_step: :streaming}
     {:noreply, state}
   end
