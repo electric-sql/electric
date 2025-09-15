@@ -1,7 +1,7 @@
 ---
 title: Sync stacks
 description: >-
-  Electric provides composable sync primitives you can use to add real-time sync to your existing stack. Here we pick four different sync stacks to illustrate four different ways of integrating Electric into your stack of choice.
+  Electric provides composable sync primitives that allow you to add real-time sync to your existing stack, without imposing technology choices, code changes or data silos.
 outline: [2,3]
 image: /img/tutorials/sync-busters.jpg
 ---
@@ -30,7 +30,7 @@ image: /img/tutorials/sync-busters.jpg
 
   .stack-cards :deep(.card .icon) {
     flex-shrink: 0;
-    padding-right: 6px !important;
+    padding-right: 3px !important;
     align-self: flex-start;
   }
 
@@ -69,6 +69,64 @@ image: /img/tutorials/sync-busters.jpg
     width: 72px;
     margin: 5px 0 9px;
   }
+
+  ul.stack {
+    list-style: none;
+    margin: 14px 0;
+    padding: 0;
+    display: flex;
+  }
+  ul.stack li {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    margin: 0px !important;
+  }
+  ul.stack img {
+    width: 21px;
+    margin: 3.5px 5px 3.5px 0;
+    height: 21px;
+  }
+  ul.stack span.name {
+    margin-right: 1rem;
+    height: 30px;
+    line-height: 30px;
+    color: var(--vp-c-text-3);
+    font-size: 14px;
+    font-weight: 400;
+  }
+  @media (max-width: 518px) {
+    .avatar img {
+      margin-top: 12px;
+      width: 128px;
+    }
+  }
+  @media (max-width: 689px) {
+    ul.stack li:first-child {
+      display: none;
+    }
+  }
+  @media (max-width: 599px) {
+    ul.stack img {
+      width: 18px;
+      margin: 2.5px 3px 2.5px 0;
+      height: 18px;
+    }
+    ul.stack span.name {
+      font-size: 13px;
+    }
+  }
+  @media (max-width: 599px) {
+    ul.stack li:first-child {
+      display: flex;
+    }
+    ul.stack img {
+      margin-right: 9px;
+    }
+    ul.stack span.name {
+      display: none;
+    }
+  }
 </style>
 
 <img src="/img/icons/stack.svg" class="product-icon"
@@ -96,6 +154,12 @@ We've picked four different sync stacks to illustrate four different ways of int
     Great for super fast web, mobile and
     <span class="no-wrap">AI app development</span>.
   </p>
+  <ul class="stack">
+    <li v-for="item in ['Postgres', 'Electric', 'TypeScript', 'Cloudflare', 'TanStack']" :key="item">
+      <img :src="`/img/integrations/${item.toLowerCase()}.svg`" />
+      <span class="name">{{ item }}</span>
+    </li>
+  </ul>
 </Card>
 
 <Card title="Phoenix" icon="/img/integrations/phoenix.svg" href="#phoenix">
@@ -107,6 +171,12 @@ We've picked four different sync stacks to illustrate four different ways of int
     Great for agentic systems and
     <span class="no-wrap">full-stack development</span>.
   </p>
+  <ul class="stack">
+    <li v-for="item in ['Postgres', 'Electric', 'Phoenix', 'TanStack']" :key="item">
+      <img :src="`/img/integrations/${item.toLowerCase()}.svg`" />
+      <span class="name">{{ item }}</span>
+    </li>
+  </ul>
 </Card>
 
 <Card title="PGlite" icon="/img/integrations/pglite.svg" href="#pglite">
@@ -117,6 +187,12 @@ We've picked four different sync stacks to illustrate four different ways of int
   <p class="hidden-xs block-sm">
     Great for dev, test and sandbox environments.
   </p>
+  <ul class="stack">
+    <li v-for="item in ['Postgres', 'Electric', 'PGlite']" :key="item">
+      <img :src="`/img/integrations/${item.toLowerCase()}.svg`" />
+      <span class="name">{{ item }}</span>
+    </li>
+  </ul>
 </Card>
 
 <Card title="Yjs" icon="/img/integrations/yjs.svg" href="#yjs">
@@ -127,6 +203,12 @@ We've picked four different sync stacks to illustrate four different ways of int
   <p class="hidden-xs block-sm">
     Great for fine-tuned realtime collaboration.
   </p>
+  <ul class="stack">
+    <li v-for="item in ['Postgres', 'Electric', 'Yjs']" :key="item">
+      <img :src="`/img/integrations/${item.toLowerCase()}.svg`" />
+      <span class="name">{{ item }}</span>
+    </li>
+  </ul>
 </Card>
 
 </div>
@@ -159,6 +241,14 @@ You can also combine TanStack DB with [Phoenix.Sync](#phoenix-sync) if you're bu
 
 [PGlite](#pglite) and [Yjs](#yjs) are more for specialist use-cases where you're syncing into a dev, test or CI environment or crafting a multi-user collaboration system, respectively.
 
+### Choosing a Postgres host
+
+Electric works with [any Postgres with logical replication](/docs/guides/deployment#_1-running-postgres) enabled. [Neon](/docs/integrations/neon), [Supabase](/docs/integrations/supabase) and [Crunchy](/docs/integrations/crunchy) are all great choices for a Postgres host.
+
+### Hosting your proxy
+
+You can proxy requests to Electric either [through your backend API](http://localhost:5173/docs/guides/auth#it-s-all-http), or through a cloud worker. [Cloudflare](/docs/integrations/cloudflare) is a great choice for hosting workers because it only charges for actual processing time (not for wall clock time holding [sync connections](/docs/api/http#live-mode) open).
+
 ### Other stacks
 
 The stacks on this page are just some options and recommendations. You can use Electric with any&nbsp;technology you like &mdash; as long as it speaks [HTTP&nbsp;and&nbsp;JSON](/docs/guides/client-development).
@@ -170,6 +260,10 @@ For example, sync into [LiveStore](https://docs.livestore.dev/reference/syncing/
 <blockquote class="block-xs">
   Great for super fast web, mobile and AI app development.
 </blockquote>
+
+| Database | Backend             | Schema  | Proxy      | Client           | Writes |
+| -------- | ------------------- | ------- | ---------- | ---------------- | ------ |
+| Postgres | TanStack&nbsp;Start | Drizzle | Cloudflare | TanStack&nbsp;DB | tRPC   |
 
 [Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
@@ -210,6 +304,10 @@ Components use [live queries](https://tanstack.com/db/latest/docs/guides/live-qu
   Great for agentic systems and full-stack development.
 </blockquote>
 
+| Database | Backend | Schema | Proxy   | Client           | Writes  |
+| -------- | ------- | ------ | ------- | ---------------- | ------- |
+| Postgres | Phoenix | Ecto   | Phoenix | TanStack&nbsp;DB | Phoenix |
+
 [Phoenix](https://www.phoenixframework.org) is a full-stack web development framework for [Elixir](https://elixir-lang.org).
 
 Electric is [developed in Elixir](/product/electric#how-does-it-work), has a first-class [Elixir client](/docs/api/clients/elixir) and a deep Phoenix framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) library.
@@ -243,6 +341,10 @@ This makes Elixir and Phoenix a perfect match for agentic system development [wi
 <blockquote class="block-xs">
   Great for dev, test and sandbox environments.
 </blockquote>
+
+| Database | Client | Writes |
+| -------- | ------ | ------ |
+| Postgres | PGlite | Custom |
 
 PGlite is an embeddable Postgres database.
 
@@ -298,6 +400,10 @@ This supports individual tables and transactionally [syncing multiple tables](ht
 <blockquote class="block-xs">
   Great for fine-tuned realtime collaboration.
 </blockquote>
+
+| Database | Client | Writes |
+| -------- | ------ | ------ |
+| Postgres | Yjs    | Yjs    |
 
 [Yjs](https://docs.yjs.dev) is a library for building collaborative applications.
 
