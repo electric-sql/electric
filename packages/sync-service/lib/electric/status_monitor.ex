@@ -17,6 +17,8 @@ defmodule Electric.StatusMonitor do
 
   @db_scaled_down_key :db_scaled_down?
 
+  @wake_up_if_scaled_down_opt :wake_up_if_scaled_down
+
   def start_link(stack_id) do
     GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
   end
@@ -30,13 +32,20 @@ defmodule Electric.StatusMonitor do
     {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
   end
 
-  @spec status(String.t()) :: status()
-  def status(stack_id) do
+  @spec status(String.t(), [Atom.t()]) :: status()
+  def status(stack_id, opts \\ []) do
     if db_scaled_down?(stack_id) do
-      # Basically a hack to keep the system from shutting down when DB connections are deliberately closed.
-      # TODO(alco): Think about returning `:scaled_down` or similar and handling it by
-      # different callers to make the scaled-down state of the application more legitimate.
-      :active
+      # If there's an explicit request to wake up the DB connections, do so. Otherwise, we
+      # assume this call is coming from the health check endpoint and report the service as active.
+      if @wake_up_if_scaled_down_opt in opts do
+        Electric.StackSupervisor.restore_database_connections(stack_id)
+        :starting
+      else
+        # Basically a hack to keep the system from shutting down when DB connections are deliberately closed.
+        # TODO(alco): Think about returning `:scaled_down` or similar and handling it by
+        # different callers to make the scaled-down state of the application more legitimate.
+        :active
+      end
     else
       stack_id
       |> results()
@@ -57,12 +66,12 @@ defmodule Electric.StatusMonitor do
 
   defp status_from_results(_), do: :starting
 
-  def database_connections_scaled_down(stack_id) do
-    GenServer.cast(name(stack_id), :db_scale_down)
+  def database_connections_scaling_down(stack_id) do
+    GenServer.cast(name(stack_id), :db_scaling_down)
   end
 
-  def database_connections_scaled_up(stack_id) do
-    GenServer.cast(name(stack_id), :db_scale_up)
+  def database_connections_scaling_up(stack_id) do
+    GenServer.cast(name(stack_id), :db_scaling_up)
   end
 
   def mark_pg_lock_acquired(stack_id, lock_pid) do
@@ -114,7 +123,7 @@ defmodule Electric.StatusMonitor do
   end
 
   def wait_until_active(stack_id, timeout) do
-    if status(stack_id) == :active do
+    if status(stack_id, [@wake_up_if_scaled_down_opt]) == :active do
       :ok
     else
       try do
@@ -181,12 +190,12 @@ defmodule Electric.StatusMonitor do
     {:noreply, state}
   end
 
-  def handle_cast(:db_scale_down, state) do
+  def handle_cast(:db_scaling_down, state) do
     :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, true})
     {:noreply, maybe_reply_to_waiters(state)}
   end
 
-  def handle_cast(:db_scale_up, state) do
+  def handle_cast(:db_scaling_up, state) do
     :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, false})
     {:noreply, maybe_reply_to_waiters(state)}
   end
