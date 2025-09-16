@@ -75,6 +75,7 @@ defmodule Electric.ExpiryManagerTest do
     start_supervised!(
       {ExpiryManager,
        max_shapes: 1,
+       expiry_ratio: 0.0,
        stack_id: ctx.stack_id,
        shape_status: ctx.shape_status,
        consumer_supervisor: consumer_supervisor}
