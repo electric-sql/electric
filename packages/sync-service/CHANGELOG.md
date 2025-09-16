@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 1.1.11
+
+### Patch Changes
+
+- 0c60056: Enable clean shutdown of connection manager while waiting for connection resolution to complete
+- c978ee6: Split pg connections across two pools so that high demand for snapshots doesn't interfere with the ability to introspect tables, configure the publication or monitor the WAL size
+- 662e55a: Improve performance of LRU shape expiry
+- 107a18d: Simplify `PublicationManager` to only track relations.
+- c978ee6: Move connection opts resolution out of connection manager into a separate synchronous function call
+
 ## 1.1.10
 
 ### Patch Changes
