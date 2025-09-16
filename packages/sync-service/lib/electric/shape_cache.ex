@@ -66,7 +66,6 @@ defmodule Electric.ShapeCache do
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
             ],
             purge_all_shapes?: [type: :boolean, required: false],
-            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             recover_shape_timeout: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: 5_000
@@ -239,8 +238,7 @@ defmodule Electric.ShapeCache do
       log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
-      subscription: nil,
-      max_shapes: opts.max_shapes
+      subscription: nil
     }
 
     {last_processed_lsn, total_recovered, total_failed_to_recover} =

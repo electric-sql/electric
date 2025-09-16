@@ -1,6 +1,11 @@
 defmodule Electric.ShapeCache.ExpiryManager do
   use GenServer
 
+  @schema NimbleOptions.new!(
+            stack_id: [type: :string, required: true],
+            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil]
+          )
+
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -11,7 +16,9 @@ defmodule Electric.ShapeCache.ExpiryManager do
   end
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: name(opts))
+    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
+      GenServer.start_link(__MODULE__, opts, name: name(opts))
+    end
   end
 
   def init(opts) do
@@ -20,6 +27,6 @@ defmodule Electric.ShapeCache.ExpiryManager do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    {:ok, opts}
+    {:ok, %{max_shapes: Keyword.fetch!(opts, :max_shapes)}}
   end
 end

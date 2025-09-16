@@ -308,8 +308,7 @@ defmodule Electric.StackSupervisor do
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-      registry: shape_changes_registry_name,
-      max_shapes: config.max_shapes
+      registry: shape_changes_registry_name
     ]
 
     {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])
@@ -334,6 +333,7 @@ defmodule Electric.StackSupervisor do
       ],
       persistent_kv: config.persistent_kv,
       shape_cache_opts: shape_cache_opts,
+      max_shapes: config.max_shapes,
       tweaks: tweaks,
       manual_table_publishing?: config.manual_table_publishing?
     ]

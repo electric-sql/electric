@@ -61,6 +61,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
            registry: Electric.StackSupervisor.registry_name(stack_id)
          ],
          tweaks: [],
+         max_shapes: nil,
          persistent_kv: ctx.persistent_kv,
          stack_events_registry: stack_events_registry},
         # The test supervisor under which this one is started has `auto_shutdown` set to

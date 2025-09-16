@@ -120,6 +120,7 @@ defmodule Electric.Connection.Manager do
       # Registry used for stack events
       :stack_events_registry,
       :tweaks,
+      :max_shapes,
       :persistent_kv,
       :purge_all_shapes?,
       validated_connection_opts: %{replication: nil, pool: nil},
@@ -311,7 +312,8 @@ defmodule Electric.Connection.Manager do
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
         can_alter_publication?: true,
-        manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false)
+        manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
+        max_shapes: Keyword.fetch!(opts, :max_shapes)
       }
       |> initialize_connection_opts(opts)
 
@@ -535,7 +537,8 @@ defmodule Electric.Connection.Manager do
              tweaks: state.tweaks,
              can_alter_publication?: state.can_alter_publication?,
              manual_table_publishing?: state.manual_table_publishing?,
-             persistent_kv: state.persistent_kv
+             persistent_kv: state.persistent_kv,
+             max_shapes: state.max_shapes
            ) do
       Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
       exit(reason)
