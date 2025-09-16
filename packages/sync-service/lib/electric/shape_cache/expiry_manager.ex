@@ -5,10 +5,13 @@ defmodule Electric.ShapeCache.ExpiryManager do
 
   require Logger
 
+  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
+  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
+            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true],
-            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil]
+            consumer_supervisor: [type: @genserver_name_schema, required: true]
           )
 
   @debounce_time_ms 50
@@ -41,8 +44,10 @@ defmodule Electric.ShapeCache.ExpiryManager do
 
     {:ok,
      %{
+       stack_id: stack_id,
        max_shapes: Keyword.fetch!(opts, :max_shapes),
-       shape_status: Keyword.fetch!(opts, :shape_status)
+       shape_status: Keyword.fetch!(opts, :shape_status),
+       consumer_supervisor: Keyword.fetch!(opts, :consumer_supervisor)
      }}
   end
 
