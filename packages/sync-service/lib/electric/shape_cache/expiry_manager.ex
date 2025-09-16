@@ -15,8 +15,12 @@ defmodule Electric.ShapeCache.ExpiryManager do
             consumer_supervisor: [type: @genserver_name_schema, required: true]
           )
 
-  @debounce_time_ms 50
+  # Debounce time set to 0 meaning that it will debouce while processing but no longer.
+  # It's best to keep this to 0 because if shapes are consistently being added in less
+  # than the @bebounce_time, the @debounce_finished will never fire.
+  @debounce_time 0
   @debounce_finished :timeout
+  @recheck_delay_ms 10
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
@@ -54,7 +58,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   end
 
   def handle_cast(:notify_new_shape_added, state) do
-    {:noreply, state, @debounce_time_ms}
+    {:noreply, state, @debounce_time}
   end
 
   def handle_info(@debounce_finished, state) do
@@ -82,6 +86,9 @@ defmodule Electric.ShapeCache.ExpiryManager do
           |> Enum.each(fn shape -> expire_shape(shape, state) end)
         end
       )
+    else
+      # We're under the max number of shapes, don't recheck again for at least @recheck_delay_ms
+      Process.sleep(@recheck_delay_ms)
     end
   end
 
