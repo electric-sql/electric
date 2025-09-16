@@ -3,6 +3,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
 
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
+            shape_status: [type: :mod_arg, required: true],
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil]
           )
 
@@ -27,6 +28,10 @@ defmodule Electric.ShapeCache.ExpiryManager do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    {:ok, %{max_shapes: Keyword.fetch!(opts, :max_shapes)}}
+    {:ok,
+     %{
+       max_shapes: Keyword.fetch!(opts, :max_shapes),
+       shape_status: Keyword.fetch!(opts, :shape_status)
+     }}
   end
 end

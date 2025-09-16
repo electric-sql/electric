@@ -79,7 +79,9 @@ defmodule Electric.Connection.Manager.Supervisor do
 
     expiry_manager_spec =
       {Electric.ShapeCache.ExpiryManager,
-       stack_id: stack_id, max_shapes: Keyword.fetch!(opts, :max_shapes)}
+       stack_id: stack_id,
+       max_shapes: Keyword.fetch!(opts, :max_shapes),
+       shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
 
     child_spec =
       Supervisor.child_spec(
