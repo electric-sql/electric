@@ -28,11 +28,11 @@ defmodule Electric.ShapeCache do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
+  alias Electric.ShapeCache.ExpiryManager
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.ConsumerSupervisor
   alias Electric.Shapes.Shape
-  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
@@ -66,7 +66,6 @@ defmodule Electric.ShapeCache do
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
             ],
             purge_all_shapes?: [type: :boolean, required: false],
-            max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             recover_shape_timeout: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: 5_000
@@ -239,8 +238,7 @@ defmodule Electric.ShapeCache do
       log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
-      subscription: nil,
-      max_shapes: opts.max_shapes
+      subscription: nil
     }
 
     {last_processed_lsn, total_recovered, total_failed_to_recover} =
@@ -286,12 +284,6 @@ defmodule Electric.ShapeCache do
       total_failed_to_recover
     )
 
-    {:noreply, state}
-  end
-
-  @impl GenServer
-  def handle_info(:maybe_expire_shapes, state) do
-    maybe_expire_shapes(state)
     {:noreply, state}
   end
 
@@ -348,44 +340,6 @@ defmodule Electric.ShapeCache do
     end)
 
     {:noreply, state}
-  end
-
-  defp maybe_expire_shapes(%{max_shapes: max_shapes} = state) when max_shapes != nil do
-    shape_count = shape_count(state)
-    {shape_status, shape_status_state} = state.shape_status
-
-    if shape_count > max_shapes do
-      number_to_expire = shape_count - max_shapes
-
-      shape_status.least_recently_used(shape_status_state, number_to_expire)
-      |> Enum.each(fn shape ->
-        OpenTelemetry.with_span(
-          "expiring_shape",
-          [
-            shape_handle: shape.shape_handle,
-            max_shapes: max_shapes,
-            shape_count: shape_count,
-            elapsed_minutes_since_use: shape.elapsed_minutes_since_use
-          ],
-          fn ->
-            Logger.info(
-              "Expiring shape #{shape.shape_handle} as as the number of shapes " <>
-                "has exceeded the limit (#{state.max_shapes})"
-            )
-
-            clean_up_shape(state, shape.shape_handle)
-          end
-        )
-      end)
-    end
-  end
-
-  defp maybe_expire_shapes(_), do: :ok
-
-  defp shape_count(%{shape_status: {shape_status, shape_status_state}}) do
-    shape_status_state
-    |> shape_status.list_shapes()
-    |> length()
   end
 
   defp clean_up_shape(state, shape_handle) do
@@ -532,7 +486,7 @@ defmodule Electric.ShapeCache do
 
       :ok = start_shape(shape_handle, shape, state, otel_ctx)
 
-      send(self(), :maybe_expire_shapes)
+      ExpiryManager.notify_new_shape_added(state.stack_id)
 
       # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
       # "latest offset" because it'll be in the snapshotting stage

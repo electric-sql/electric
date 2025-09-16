@@ -37,6 +37,7 @@ defmodule Electric.Replication.Supervisor do
     consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
+    expiry_manager = Keyword.fetch!(opts, :expiry_manager)
     stack_id = Keyword.fetch!(opts, :stack_id)
 
     children = [
@@ -46,6 +47,7 @@ defmodule Electric.Replication.Supervisor do
       log_collector,
       publication_manager,
       consumer_supervisor,
+      expiry_manager,
       shape_cache,
       schema_reconciler
     ]
