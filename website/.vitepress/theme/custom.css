@@ -1001,3 +1001,29 @@ ul.demo-actions li .VPButton {
     margin-bottom: 1rem;
   }
 }
+
+:root {
+  --vp-plugin-tabs-tab-text-color: var(--vp-c-text-1);
+  --vp-plugin-tabs-tab-active-text-color: var(--vp-c-brand-1);
+  --vp-plugin-tabs-tab-hover-text-color: var(--vp-c-brand-1);
+}
+.plugin-tabs {
+  background: none;
+}
+.plugin-tabs--tab-list {
+  padding: 0;
+}
+.plugin-tabs--tab {
+  padding: 0 16px;
+  font-weight: 550;
+  line-height: 56px;
+  border-bottom: 3px solid transparent;
+}
+.plugin-tabs--tab::after {
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.plugin-tabs--content {
+  padding: 16px 0 !important;
+}
