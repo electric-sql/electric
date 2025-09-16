@@ -47,9 +47,9 @@ defmodule Electric.Replication.Supervisor do
       log_collector,
       publication_manager,
       consumer_supervisor,
+      expiry_manager,
       shape_cache,
-      schema_reconciler,
-      expiry_manager
+      schema_reconciler
     ]
 
     Supervisor.init(children, strategy: :one_for_all)
