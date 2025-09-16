@@ -10,6 +10,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   @schema NimbleOptions.new!(
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             expiry_ratio: [type: :float],
+            recheck_delay_ms: [type: :non_neg_integer, default: 1_000],
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true]
@@ -20,7 +21,6 @@ defmodule Electric.ShapeCache.ExpiryManager do
   # than the @bebounce_time, the @debounce_finished will never fire.
   @debounce_time 0
   @debounce_finished :timeout
-  @recheck_delay_ms 10
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
@@ -52,6 +52,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
        stack_id: stack_id,
        max_shapes: Keyword.fetch!(opts, :max_shapes),
        expiry_ratio: Keyword.fetch!(opts, :expiry_ratio),
+       recheck_delay_ms: Keyword.fetch!(opts, :recheck_delay_ms),
        shape_status: Keyword.fetch!(opts, :shape_status),
        consumer_supervisor: Keyword.fetch!(opts, :consumer_supervisor)
      }}
@@ -87,8 +88,8 @@ defmodule Electric.ShapeCache.ExpiryManager do
         end
       )
     else
-      # We're under the max number of shapes, don't recheck again for at least @recheck_delay_ms
-      Process.sleep(@recheck_delay_ms)
+      # We're under the max number of shapes, don't recheck again for at least recheck_delay_ms
+      Process.sleep(state.recheck_delay_ms)
     end
   end
 
