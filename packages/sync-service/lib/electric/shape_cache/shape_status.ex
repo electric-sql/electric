@@ -103,7 +103,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
       _ ->
         Logger.debug("No shape status backup loaded, creating new table #{table}")
-        :ets.new(table, [:named_table, :public, :ordered_set])
+
+        :ets.new(table, [
+          :named_table,
+          :public,
+          :ordered_set,
+          write_concurrency: true,
+          read_concurrency: true
+        ])
+
         load(state)
     end
   end
@@ -211,6 +219,102 @@ defmodule Electric.ShapeCache.ShapeStatus do
       ArgumentError ->
         {:error, "No shape matching #{inspect(shape_handle)}"}
     end
+  end
+
+  def remove_shape_using_match(state, shape_handle) do
+    try do
+      shape =
+        :ets.lookup_element(
+          state.shape_meta_table,
+          {@shape_meta_data, shape_handle},
+          @shape_meta_shape_pos
+        )
+
+      :ets.match_delete(
+        state.shape_meta_table,
+        [
+          {{@shape_meta_data, shape_handle}, :_, :_, :_, :_},
+          {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
+          {{@shape_storage_state_backup, shape_handle}, :_},
+          {{@snapshot_started, shape_handle}, :_}
+          | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
+              {{@shape_relation_lookup, oid, shape_handle}, :_}
+            end)
+        ]
+      )
+
+      {:ok, shape}
+    rescue
+      # Sometimes we're calling cleanup when snapshot creation has failed for
+      # some reason. In those cases we're not sure about the state of the ETS
+      # keys, so we're doing our best to just delete everything without
+      # crashing
+      ArgumentError ->
+        {:error, "No shape matching #{inspect(shape_handle)}"}
+    end
+  end
+
+  def remove_shape_without_lookup(state, shape_handle) do
+    :ets.select_delete(
+      state.shape_meta_table,
+      [
+        {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
+        {{{@shape_hash_lookup, :_}, shape_handle}, [], [true]},
+        {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]},
+        {{{@snapshot_started, shape_handle}, :_}, [], [true]},
+        {{{@shape_relation_lookup, :_, shape_handle}, :_}, [], [true]}
+      ]
+    )
+  end
+
+  def remove_shapes(state, shape_handles) do
+    :ets.select_delete(
+      state.shape_meta_table,
+      for shape_handle <- shape_handles do
+        [
+          {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
+          {{{@shape_hash_lookup, :_}, shape_handle}, [], [true]},
+          {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]},
+          {{{@snapshot_started, shape_handle}, :_}, [], [true]},
+          {{{@shape_relation_lookup, :_, shape_handle}, :_}, [], [true]}
+        ]
+      end
+      |> Enum.concat()
+    )
+
+    :ok
+  end
+
+  def remove_shapes_with_lookup(state, shape_handles) do
+    shapes =
+      :ets.select(
+        state.shape_meta_table,
+        for shape_handle <- shape_handles do
+          {
+            {{@shape_meta_data, shape_handle}, :"$1", :_, :_, :_},
+            [],
+            [{{{:const, shape_handle}, :"$1"}}]
+          }
+        end
+      )
+
+    :ets.select_delete(
+      state.shape_meta_table,
+      for {shape_handle, shape} <- shapes do
+        [
+          {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
+          {{{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle}, [], [true]},
+          {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]},
+          {{{@snapshot_started, shape_handle}, :_}, [], [true]}
+          | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
+              {{{@shape_relation_lookup, oid, shape_handle}, :_}, [], [true]}
+            end)
+        ]
+      end
+      |> Enum.concat()
+    )
+
+    :ok
   end
 
   @impl true

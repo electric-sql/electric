@@ -24,6 +24,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     shape
   end
 
+  defp shape!(where) do
+    assert {:ok, %Shape{where: %{query: ^where}} = shape} =
+             Shape.new("other_table", inspector: {__MODULE__, []}, where: where)
+
+    shape
+  end
+
   defp table_name,
     do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
 
@@ -110,6 +117,91 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              ShapeStatus.list_shape_handles_for_relations(state, [
                {shape_1.root_table_id, {"public", "other_table"}}
              ])
+  end
+
+  test "delete lots of shapes", ctx do
+    methods = [
+      %{
+        name: "one by one",
+        fun: fn shape_handles, state ->
+          for shape_handle <- shape_handles do
+            assert {:ok, _shape} = ShapeStatus.remove_shape(state, shape_handle)
+          end
+        end
+      },
+      # %{
+      #   name: "one by one using match",
+      #   fun: fn shape_handles, state ->
+      #     for shape_handle <- shape_handles do
+      #       ShapeStatus.remove_shape_using_match(state, shape_handle)
+      #     end
+      #   end
+      # },
+      # %{
+      #   name: "one by one without lookup",
+      #   fun: fn shape_handles, state ->
+      #     for shape_handle <- shape_handles do
+      #       ShapeStatus.remove_shape_without_lookup(state, shape_handle)
+      #     end
+      #   end
+      # },
+      %{
+        name: "batch delete",
+        fun: fn shape_handles, state ->
+          assert :ok = ShapeStatus.remove_shapes(state, shape_handles)
+        end
+      },
+      %{
+        name: "batch delete with lookup",
+        fun: fn shape_handles, state ->
+          assert :ok = ShapeStatus.remove_shapes_with_lookup(state, shape_handles)
+        end
+      }
+    ]
+
+    for method <- methods do
+      {:ok, state, []} = new_state(ctx)
+      shape_count = 60_000
+      delete_count = 1000
+
+      shape_handles =
+        for i <- 1..shape_count do
+          shape = shape!("#{i} = #{i}")
+          assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+          shape_handle
+        end
+
+      read_tasks =
+        for _ <- 1..10 do
+          Task.async(fn ->
+            Enum.map(1..1000, fn _ ->
+              {μs, _} =
+                :timer.tc(fn ->
+                  ShapeStatus.get_existing_shape(state, Enum.random(shape_handles))
+                end)
+
+              μs
+            end)
+          end)
+        end
+
+      to_delete = shape_handles |> Enum.take_random(delete_count)
+
+      {μs, _} = :timer.tc(fn -> method.fun.(to_delete, state) end)
+
+      assert shape_count - delete_count == length(ShapeStatus.list_shapes(state))
+
+      max_read_time =
+        Task.await_many(read_tasks)
+        |> Enum.concat()
+        |> Enum.max()
+
+      IO.puts("""
+      #{method.name}: 
+        Deleted #{length(to_delete)} shapes in #{μs / 1_000} ms
+        Max read time during delete: #{max_read_time / 1_000} ms
+      """)
+    end
   end
 
   test "get_existing_shape/2 with %Shape{}", ctx do
