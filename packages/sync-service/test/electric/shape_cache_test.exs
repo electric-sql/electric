@@ -513,6 +513,29 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
+  describe "count_shapes/1" do
+    setup [
+      :with_log_chunking,
+      :with_registry,
+      :with_shape_log_collector,
+      :with_noop_publication_manager
+    ]
+
+    test "returns the correct count of shapes", ctx do
+      num_shapes = :rand.uniform(100)
+
+      %{shape_cache_opts: opts} =
+        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}))
+
+      Enum.each(1..num_shapes, fn i ->
+        Shape.new!("items", inspector: @stub_inspector, where: "id = #{i}")
+        |> ShapeCache.get_or_create_shape_handle(opts)
+      end)
+
+      assert num_shapes == ShapeCache.count_shapes(opts)
+    end
+  end
+
   describe "has_shape?/2" do
     setup [
       :with_log_chunking,

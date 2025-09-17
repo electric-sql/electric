@@ -144,9 +144,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
 
   defp shape_count(%{shape_status: {shape_status, shape_status_state}}) do
     OpenTelemetry.with_span("expiry_manager.get_shape_count", [], fn ->
-      shape_status_state
-      |> shape_status.list_shapes()
-      |> length()
+      shape_status.count_shapes(shape_status_state)
     end)
   end
 end

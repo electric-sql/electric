@@ -282,17 +282,15 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     def count_shapes(stack_id) do
       # Telemetry is started before everything else in the stack, so we need to handle
       # the case where the shape cache is not started yet.
-      case Electric.ShapeCache.list_shapes(stack_id: stack_id) do
+      case Electric.ShapeCache.count_shapes(stack_id: stack_id) do
         :error ->
           :ok
 
-        shapes ->
+        num_shapes ->
           Electric.Telemetry.OpenTelemetry.execute(
             [:electric, :shapes, :total_shapes],
-            %{count: length(shapes)},
-            %{
-              stack_id: stack_id
-            }
+            %{count: num_shapes},
+            %{stack_id: stack_id}
           )
       end
     end
