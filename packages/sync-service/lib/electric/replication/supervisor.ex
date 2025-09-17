@@ -18,6 +18,14 @@ defmodule Electric.Replication.Supervisor do
 
   def name(opts), do: name(opts[:stack_id])
 
+  def reset_storage(opts) do
+    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
+    storage = Keyword.fetch!(shape_cache_opts, :storage)
+
+    Logger.info("Cleaning up all shape storage data.")
+    Electric.ShapeCache.Storage.cleanup_all!(storage)
+  end
+
   def start_link(opts) do
     name = Access.get(opts, :name, name(opts))
     Supervisor.start_link(__MODULE__, opts, name: name)

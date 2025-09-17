@@ -66,7 +66,6 @@ defmodule Electric.ShapeCache do
               type: {:fun, 7},
               default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
             ],
-            purge_all_shapes?: [type: :boolean, required: false],
             recover_shape_timeout: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: 5_000
@@ -254,12 +253,7 @@ defmodule Electric.ShapeCache do
     }
 
     {last_processed_lsn, total_recovered, total_failed_to_recover} =
-      if opts[:purge_all_shapes?] do
-        purge_all_shapes(state)
-        {Lsn.from_integer(0), 0, 0}
-      else
-        recover_shapes(state, opts.recover_shape_timeout)
-      end
+      recover_shapes(state, opts.recover_shape_timeout)
 
     # ensure publication filters are in line with existing shapes,
     # and clean up cache if publication fails to update

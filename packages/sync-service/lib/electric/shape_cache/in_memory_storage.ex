@@ -320,7 +320,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def cleanup_all!(%MS{} = _opts) do
+  def cleanup_all!(_opts) do
     :ok
   end
 

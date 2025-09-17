@@ -507,9 +507,9 @@ defmodule Electric.Connection.Manager do
         state.timeline_opts
       ) == :timeline_changed
 
-    shape_cache_opts =
-      state.shape_cache_opts
-      |> Keyword.put(:purge_all_shapes?, state.purge_all_shapes? || timeline_changed?)
+    if timeline_changed? or state.purge_all_shapes? do
+      Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+    end
 
     if timeline_changed? do
       Electric.Replication.PersistentReplicationState.reset(
@@ -522,7 +522,8 @@ defmodule Electric.Connection.Manager do
          %{
            type: :database_id_or_timeline_changed,
            message:
-             "Database ID or timeline changed. Purging shape logs from disk. Clients will refetch shape data automatically."
+             "Database ID or timeline changed. Purging shape logs from disk. " <>
+               "Clients will refetch shape data automatically."
          }},
         state
       )
@@ -533,7 +534,7 @@ defmodule Electric.Connection.Manager do
     with {:error, reason} <-
            Electric.Connection.Manager.Supervisor.start_replication_supervisor(
              stack_id: state.stack_id,
-             shape_cache_opts: shape_cache_opts,
+             shape_cache_opts: state.shape_cache_opts,
              pool_opts: state.pool_opts,
              replication_opts: state.replication_opts,
              tweaks: state.tweaks,

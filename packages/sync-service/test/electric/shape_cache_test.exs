@@ -1152,37 +1152,6 @@ defmodule Electric.ShapeCacheTest do
       assert shape_handle1 != shape_handle2
     end
 
-    test "`purge_all_shapes?` cleans all known shapes and their handles", ctx do
-      %{shape_cache_opts: opts} = ctx
-
-      shape1 = @shape
-      shape2 = %{@shape | selected_columns: ["id"]}
-
-      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(shape1, opts)
-      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(shape2, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
-
-      assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(ctx.storage)
-      assert map_size(found) == 2
-
-      restart_shape_cache(ctx, purge_all_shapes?: true)
-
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, @shape_cleanup_timeout
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle2}, @shape_cleanup_timeout
-
-      assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(ctx.storage)
-      assert map_size(found) == 0
-
-      # and asking for a shape handle should now get us a new one
-      {shape_handle3, _} = ShapeCache.get_or_create_shape_handle(shape1, opts)
-      {shape_handle4, _} = ShapeCache.get_or_create_shape_handle(shape2, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle3, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle4, opts)
-      assert shape_handle1 != shape_handle3
-      assert shape_handle2 != shape_handle4
-    end
-
     defp restart_shape_cache(context, opts \\ []) do
       stop_shape_cache(context)
 
