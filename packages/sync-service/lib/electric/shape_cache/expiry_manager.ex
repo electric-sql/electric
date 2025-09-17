@@ -9,7 +9,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
-            expiry_batch_size: [type: :non_neg_integer],
+            expiry_batch_size: [type: :pos_integer],
             recheck_delay_ms: [type: :non_neg_integer, default: 1_000],
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true],
