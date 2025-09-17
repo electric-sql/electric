@@ -26,7 +26,7 @@ Let's make a super-fast, reactive web app using <span class="no-wrap-xs">[Electr
 ## Get started
 
 :::tabs
-== Electric Cloud (default)
+== Cloud (default)
 
 Run the starter script:
 
@@ -82,15 +82,11 @@ Deploy the app to [Netlify](https://tanstack.com/start/latest/docs/framework/rea
 pnpm deploy
 ```
 
-Congratulations! You've shipped a super-fast, reactive web app!
+Congratulations! You've shipped a super-fast, reactive web app based on real-time sync!
 
-== Docker Compose
+== Docker
 
 ... local docker content ...
-
-== Manual install
-
-... manual install flow ...
 
 :::
 
