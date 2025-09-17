@@ -260,8 +260,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
     timer
   end
 
+  @initial_interval_timer IntervalTimer.init()
   defp get_interval_timer do
-    Process.get(@interval_timer_key, [])
+    Process.get(@interval_timer_key, @initial_interval_timer)
   end
 
   @doc """
