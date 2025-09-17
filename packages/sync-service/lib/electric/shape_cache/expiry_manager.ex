@@ -9,7 +9,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
-            expiry_ratio: [type: :float],
+            expiry_batch_size: [type: :pos_integer],
             recheck_delay_ms: [type: :non_neg_integer, default: 1_000],
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true],
@@ -51,7 +51,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
      %{
        stack_id: stack_id,
        max_shapes: Keyword.fetch!(opts, :max_shapes),
-       expiry_ratio: Keyword.fetch!(opts, :expiry_ratio),
+       expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size),
        recheck_delay_ms: Keyword.fetch!(opts, :recheck_delay_ms),
        shape_status: Keyword.fetch!(opts, :shape_status),
        consumer_supervisor: Keyword.fetch!(opts, :consumer_supervisor)
@@ -71,16 +71,14 @@ defmodule Electric.ShapeCache.ExpiryManager do
     shape_count = shape_count(state)
 
     if shape_count > max_shapes do
-      number_to_expire = shape_count - max_shapes + trunc(max_shapes * state.expiry_ratio)
-
-      shapes_to_expire = least_recently_used(state, number_to_expire)
+      shapes_to_expire = least_recently_used(state, state.expiry_batch_size)
 
       OpenTelemetry.with_span(
         "expiry_manager.expire_shapes",
         [
           max_shapes: max_shapes,
           shape_count: shape_count,
-          number_to_expire: number_to_expire
+          number_to_expire: state.expiry_batch_size
         ],
         fn ->
           shapes_to_expire
