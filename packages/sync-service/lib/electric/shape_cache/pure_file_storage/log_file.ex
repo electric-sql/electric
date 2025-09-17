@@ -154,27 +154,35 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     end
   end
 
-  @spec stream_entries(log_file_path :: String.t(), start_position :: non_neg_integer()) ::
+  @spec stream_entries(
+          log_file_path :: String.t(),
+          start_position :: non_neg_integer(),
+          excl_end_pos :: non_neg_integer() | :eof
+        ) ::
           Enumerable.t({log_item_with_sizes(), non_neg_integer()})
-  def stream_entries(log_file_path, start_position) do
+  def stream_entries(log_file_path, start_position, end_position \\ :eof) do
     Stream.resource(
       fn ->
         file = File.open!(log_file_path, [:read, :raw, :read_ahead])
         :file.position(file, start_position)
         {file, start_position}
       end,
-      fn {file, position} ->
-        with <<tx_offset::64, op_offset::64, key_size::32>> <- IO.binread(file, 20),
-             <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
-             <<op_type::8, flag::8, json_size::64>> <- IO.binread(file, 10),
-             <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
-          entry =
-            {LogOffset.new(tx_offset, op_offset), key_size, key, op_type, flag, json_size, json}
+      fn
+        {file, position} when position >= end_position ->
+          {:halt, {file, position}}
 
-          {[{entry, position}], {file, expected_position(position, entry)}}
-        else
-          _ -> {:halt, {file, position}}
-        end
+        {file, position} ->
+          with <<tx_offset::64, op_offset::64, key_size::32>> <- IO.binread(file, 20),
+               <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
+               <<op_type::8, flag::8, json_size::64>> <- IO.binread(file, 10),
+               <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
+            entry =
+              {LogOffset.new(tx_offset, op_offset), key_size, key, op_type, flag, json_size, json}
+
+            {[{entry, position}], {file, expected_position(position, entry)}}
+          else
+            _ -> {:halt, {file, position}}
+          end
       end,
       &File.close(elem(&1, 0))
     )
