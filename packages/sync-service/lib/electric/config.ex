@@ -64,7 +64,7 @@ defmodule Electric.Config do
     stack_ready_timeout: 5_000,
     send_cache_headers?: true,
     max_shapes: nil,
-    expiry_batch_size: 0.2,
+    expiry_batch_size: 10,
     ## Storage
     storage_dir: "./persistent",
     storage: &Electric.Config.Defaults.storage/0,
