@@ -116,11 +116,8 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_cleaner(ctx) do
-    start_link_supervised!(
-      {Electric.ShapeCache.ShapeCleaner, stack_id: ctx.stack_id, shape_status: ctx.shape_status}
-    )
-
-    %{}
+    start_link_supervised!({Electric.ShapeCache.ShapeCleaner, stack_id: ctx.stack_id})
+    :ok
   end
 
   def with_publication_manager(ctx) do
@@ -160,14 +157,6 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_status(ctx) do
-    shape_status_opts =
-      Electric.ShapeCache.ShapeStatus.opts(
-        shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(ctx.stack_id),
-        shape_last_used_table:
-          Electric.ShapeCache.ShapeStatus.shape_last_used_table(ctx.stack_id),
-        storage: Map.get(ctx, :storage, {Mock.Storage, []})
-      )
-
     start_link_supervised!(%{
       id: "shape_status_owner",
       start:
@@ -175,17 +164,13 @@ defmodule Support.ComponentSetup do
          [
            [
              stack_id: ctx.stack_id,
-             shape_status: {Electric.ShapeCache.ShapeStatus, shape_status_opts}
+             storage: Map.get(ctx, :storage, {Mock.Storage, []})
            ]
          ]},
       restart: :temporary
     })
 
-    %{
-      shape_status_owner: "shape_status_owner",
-      shape_status_opts: shape_status_opts,
-      shape_status: {Electric.ShapeCache.ShapeStatus, shape_status_opts}
-    }
+    %{shape_status_owner: "shape_status_owner"}
   end
 
   def with_shape_cache(ctx, additional_opts \\ []) do
@@ -203,7 +188,6 @@ defmodule Support.ComponentSetup do
         name: server,
         stack_id: ctx.stack_id,
         inspector: ctx.inspector,
-        shape_status: ctx.shape_status,
         storage: ctx.storage,
         publication_manager: ctx.publication_manager,
         shape_hibernate_after: 1_000,
@@ -317,10 +301,10 @@ defmodule Support.ComponentSetup do
         storage
       end)
 
-    shape_status =
-      Map.get_lazy(ctx, :shape_status, fn ->
-        %{shape_status: shape_status} = with_shape_status(Map.merge(ctx, %{storage: storage}))
-        shape_status
+    # Initialize shape status
+    shape_status_owner =
+      Map.get_lazy(ctx, :shape_status_owner, fn ->
+        with_shape_status(Map.merge(ctx, %{storage: storage}))
       end)
 
     publication_manager =
@@ -334,12 +318,15 @@ defmodule Support.ComponentSetup do
        Keyword.merge(monitor_config(ctx),
          stack_id: ctx.stack_id,
          storage: storage,
-         publication_manager: publication_manager,
-         shape_status: shape_status
+         publication_manager: publication_manager
        )}
     )
 
-    %{storage: storage, publication_manager: publication_manager}
+    %{
+      storage: storage,
+      publication_manager: publication_manager,
+      shape_status_owner: shape_status_owner
+    }
   end
 
   defp monitor_config(ctx) do

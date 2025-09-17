@@ -11,7 +11,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
             inspector: [type: :mod_arg, required: true],
             registry: [type: :atom, required: true],
-            shape_status: [type: :mod_arg, required: true],
+            shape_status_mod: [type: :atom, required: false],
             storage: [type: :mod_arg, required: true],
             publication_manager: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],

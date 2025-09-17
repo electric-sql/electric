@@ -71,12 +71,7 @@ defmodule Electric.ExpiryManagerTest do
     %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
     start_supervised!(
-      {ExpiryManager,
-       max_shapes: 1,
-       expiry_batch_size: 1,
-       period: 10,
-       stack_id: ctx.stack_id,
-       shape_status: ctx.shape_status}
+      {ExpiryManager, max_shapes: 1, expiry_batch_size: 1, period: 10, stack_id: ctx.stack_id}
     )
 
     {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)

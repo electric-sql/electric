@@ -258,7 +258,7 @@ defmodule Electric.ShapeCacheTest do
       assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
 
       # should have cleaned up the shape
-      assert nil == ShapeStatus.get_existing_shape(ctx.shape_status_opts, shape_handle)
+      assert nil == ShapeStatus.get_existing_shape(ctx.stack_id, shape_handle)
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(storage)
       assert map_size(found) == 0
     end
@@ -496,7 +496,7 @@ defmodule Electric.ShapeCacheTest do
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
       assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
-      assert {:ok, 10} = ShapeStatus.snapshot_xmin(ctx.shape_status_opts, shape_handle)
+      assert {:ok, 10} = ShapeStatus.snapshot_xmin(ctx.stack_id, shape_handle)
     end
 
     test "lists the shape even if we don't know xmin", ctx do
@@ -836,14 +836,14 @@ defmodule Electric.ShapeCacheTest do
 
       assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
 
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.shape_status_opts, shape_handle)
+      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.stack_id, shape_handle)
       assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
 
       %{shape_cache_opts: opts} = restart_shape_cache(context)
       :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
       assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.shape_status_opts, shape_handle)
+      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.stack_id, shape_handle)
       assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
     end
 
