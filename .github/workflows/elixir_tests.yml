@@ -42,7 +42,7 @@ jobs:
           - 54321:5432
 
       pgbouncer:
-        image: bitnami/pgbouncer:latest
+        image: bitnamilegacy/pgbouncer:latest
         env:
           PGBOUNCER_AUTH_TYPE: trust
           PGBOUNCER_DATABASE: "*"

@@ -41,7 +41,7 @@ services:
       - -c
       - config_file=/etc/postgresql.conf
   pgbouncer:
-    image: bitnami/pgbouncer:latest
+    image: bitnamilegacy/pgbouncer:latest
     environment:
       PGBOUNCER_AUTH_TYPE: trust
       PGBOUNCER_DATABASE: "*"
