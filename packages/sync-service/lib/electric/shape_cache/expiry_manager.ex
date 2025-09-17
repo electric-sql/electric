@@ -78,7 +78,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
         [
           max_shapes: max_shapes,
           shape_count: shape_count,
-          number_to_expire: number_to_expire
+          number_to_expire: state.expiry_batch_size
         ],
         fn ->
           shapes_to_expire
