@@ -9,6 +9,7 @@ defmodule Electric.Plug.Router do
   alias Electric.Plug.Utils.CORSHeaderPlug
   alias Electric.Plug.Utils.PassAssignToOptsPlug
 
+  plug Electric.Plug.StartIntervalPlug, interval_name: "plug.initialization"
   plug Plug.RequestId, assign_as: :plug_request_id
   plug :server_header, Electric.version()
   plug :add_stack_id_to_metadata
