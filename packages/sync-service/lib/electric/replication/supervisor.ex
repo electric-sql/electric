@@ -22,7 +22,7 @@ defmodule Electric.Replication.Supervisor do
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     storage = Keyword.fetch!(shape_cache_opts, :storage)
 
-    Logger.info("Cleaning up all shape storage data.")
+    Logger.info("Purging all shapes.")
     Electric.ShapeCache.Storage.cleanup_all!(storage)
   end
 
