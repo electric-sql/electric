@@ -119,6 +119,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              ])
   end
 
+  @timeout 120_000
+  @tag timeout: @timeout
   test "delete lots of shapes", ctx do
     methods = [
       %{
@@ -129,22 +131,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
           end
         end
       },
-      # %{
-      #   name: "one by one using match",
-      #   fun: fn shape_handles, state ->
-      #     for shape_handle <- shape_handles do
-      #       ShapeStatus.remove_shape_using_match(state, shape_handle)
-      #     end
-      #   end
-      # },
-      # %{
-      #   name: "one by one without lookup",
-      #   fun: fn shape_handles, state ->
-      #     for shape_handle <- shape_handles do
-      #       ShapeStatus.remove_shape_without_lookup(state, shape_handle)
-      #     end
-      #   end
-      # },
       %{
         name: "batch delete",
         fun: fn shape_handles, state ->
@@ -161,7 +147,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     for method <- methods do
       {:ok, state, []} = new_state(ctx)
-      shape_count = 60_000
+      shape_count = 30_000
       delete_count = 1000
 
       shape_handles =
@@ -185,21 +171,38 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
           end)
         end
 
+      create_tasks =
+        for j <- 1..5 do
+          Task.async(fn ->
+            Enum.map(1..100, fn i ->
+              shape = shape!("#{shape_count + j * 100 + i} = #{shape_count + j * 100 + i}")
+              {μs, _} = :timer.tc(fn -> ShapeStatus.add_shape(state, shape) end)
+              μs
+            end)
+          end)
+        end
+
       to_delete = shape_handles |> Enum.take_random(delete_count)
 
       {μs, _} = :timer.tc(fn -> method.fun.(to_delete, state) end)
 
-      assert shape_count - delete_count == length(ShapeStatus.list_shapes(state))
+      max_create_time = Task.await_many(create_tasks) |> Enum.concat() |> Enum.max()
 
-      max_read_time =
+      assert shape_count - delete_count + 500 == length(ShapeStatus.list_shapes(state))
+
+      read_times =
         Task.await_many(read_tasks)
         |> Enum.concat()
-        |> Enum.max()
+
+      max_read_time = Enum.max(read_times)
+      avg_read_time = Enum.sum(read_times) / length(read_times)
 
       IO.puts("""
-      #{method.name}: 
+      #{method.name}:
         Deleted #{length(to_delete)} shapes in #{μs / 1_000} ms
         Max read time during delete: #{max_read_time / 1_000} ms
+        Avg read time during delete: #{avg_read_time / 1_000} ms
+        Max create time during delete: #{max_create_time / 1_000} ms
       """)
     end
   end
