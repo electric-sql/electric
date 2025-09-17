@@ -1,6 +1,8 @@
 defmodule Electric.Shapes.MonitorTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
 
+  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Monitor
   alias Electric.Shapes.Shape
 
@@ -13,28 +15,24 @@ defmodule Electric.Shapes.MonitorTest do
                columns: [%{name: "id", type: "int8", pk_position: 0}]
              )
   @shape Shape.new!("the_table", inspector: @inspector)
+  @shape_handle "some-handle"
 
   setup [:with_stack_id_from_test, :with_in_memory_storage, :with_test_publication_manager]
 
   def shape, do: @shape
 
-  defmodule TestStatus do
-    def remove_shape(%{parent: parent}, shape_handle) do
-      send(parent, {TestStatus, :remove_shape, shape_handle})
-      {:ok, nil}
-    end
-  end
-
   defp start_stack_status(ctx) do
-    %{stack_id: stack_id, storage: storage, publication_manager: publication_manager} = ctx
+    Repatch.patch(Electric.Shapes.Shape, :generate_id, fn _shape -> {"hash", @shape_handle} end)
+
+    :ok = Electric.ShapeCache.ShapeStatus.initialise(ctx.stack_id, ctx.storage)
+
     parent = self()
 
     start_link_supervised!(
       {Monitor,
-       stack_id: stack_id,
-       storage: storage,
-       publication_manager: publication_manager,
-       shape_status: {TestStatus, %{parent: self()}},
+       stack_id: ctx.stack_id,
+       storage: ctx.storage,
+       publication_manager: ctx.publication_manager,
        on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end,
        on_cleanup: fn shape_handle -> send(parent, {:on_cleanup, shape_handle}) end}
     )
@@ -320,27 +318,29 @@ defmodule Electric.Shapes.MonitorTest do
     end
 
     test "cleans up if consumer raises", ctx do
-      handle = "some-handle"
+      assert {:ok, @shape_handle} == ShapeStatus.add_shape(ctx.stack_id, @shape)
+      assert {@shape_handle, _} = ShapeStatus.get_existing_shape(ctx.stack_id, @shape_handle)
 
-      exit_consumer(ctx, handle, {:raise, "boom"})
+      exit_consumer(ctx, @shape_handle, {:raise, "boom"})
 
-      assert_receive {:on_cleanup, ^handle}
+      assert_receive {:on_cleanup, @shape_handle}
 
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, @shape_handle}
 
-      assert_receive {TestStatus, :remove_shape, ^handle}
+      refute ShapeStatus.get_existing_shape(ctx.stack_id, @shape_handle)
     end
 
     test "cleans up if consumer exits with {:shutdown, :cleanup}", ctx do
-      handle = "some-handle"
+      assert {:ok, @shape_handle} == ShapeStatus.add_shape(ctx.stack_id, @shape)
+      assert {@shape_handle, _} = ShapeStatus.get_existing_shape(ctx.stack_id, @shape_handle)
 
-      exit_consumer(ctx, handle, {:shutdown, :cleanup})
+      exit_consumer(ctx, @shape_handle, {:shutdown, :cleanup})
 
-      assert_receive {:on_cleanup, ^handle}
+      assert_receive {:on_cleanup, @shape_handle}
 
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, @shape_handle}
 
-      assert_receive {TestStatus, :remove_shape, ^handle}
+      refute ShapeStatus.get_existing_shape(ctx.stack_id, @shape_handle)
     end
 
     test "does not clean up if consumer exits with :normal", ctx do

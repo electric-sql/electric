@@ -28,7 +28,6 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
         stack_id,
         storage_impl,
         publication_manager_impl,
-        shape_status_impl,
         shape_handle,
         on_cleanup \\ fn _ -> :ok end
       ) do
@@ -42,7 +41,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
           task1 =
             Task.Supervisor.async(name(stack_id), fn ->
               set_task_metadata(stack_id, shape_handle)
-              cleanup_shape_status(shape_status_impl, shape_handle)
+              cleanup_shape_status(stack_id, shape_handle)
             end)
 
           task2 =
@@ -76,10 +75,8 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     end
   end
 
-  defp cleanup_shape_status(shape_status_impl, shape_handle) do
-    {shape_status, shape_status_state} = shape_status_impl
-
-    case shape_status.remove_shape(shape_status_state, shape_handle) do
+  defp cleanup_shape_status(stack_id, shape_handle) do
+    case Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle) do
       {:ok, _shape} ->
         Logger.debug("Deregistered shape #{shape_handle}")
 

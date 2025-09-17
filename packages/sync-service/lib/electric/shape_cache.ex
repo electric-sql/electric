@@ -51,7 +51,6 @@ defmodule Electric.ShapeCache do
             publication_manager: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],
-            shape_status: [type: :mod_arg, required: true],
             registry: [type: {:or, [:atom, :pid]}, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
             shape_hibernate_after: [
@@ -104,8 +103,7 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   def get_shape(shape, opts \\ []) do
     table = ShapeStatus.shape_meta_table(opts)
-    shape_status = Access.get(opts, :shape_status, ShapeStatus)
-    shape_status.get_existing_shape(table, shape)
+    ShapeStatus.get_existing_shape(table, shape)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -128,9 +126,7 @@ defmodule Electric.ShapeCache do
   @spec list_shapes(Access.t()) :: [{shape_handle(), Shape.t()}] | :error
   def list_shapes(opts) do
     table = ShapeStatus.shape_meta_table(opts)
-    shape_status = Access.get(opts, :shape_status, ShapeStatus)
-
-    shape_status.list_shapes(table)
+    ShapeStatus.list_shapes(table)
   rescue
     ArgumentError -> :error
   end
@@ -139,9 +135,7 @@ defmodule Electric.ShapeCache do
   @spec count_shapes(Access.t()) :: non_neg_integer() | :error
   def count_shapes(opts) do
     table = ShapeStatus.shape_last_used_table(opts)
-    shape_status = Access.get(opts, :shape_status, ShapeStatus)
-
-    shape_status.count_shapes(table)
+    ShapeStatus.count_shapes(table)
   rescue
     ArgumentError -> :error
   end
@@ -155,17 +149,15 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   @spec await_snapshot_start(shape_handle(), Access.t()) :: :started | {:error, term()}
   def await_snapshot_start(shape_handle, opts \\ []) when is_binary(shape_handle) do
-    table = ShapeStatus.shape_meta_table(opts)
-    shape_status = Access.get(opts, :shape_status, ShapeStatus)
     stack_id = Access.fetch!(opts, :stack_id)
-
-    shape_status.update_last_read_time_to_now(table, shape_handle)
+    meta_table = ShapeStatus.shape_meta_table(stack_id)
+    ShapeStatus.update_last_read_time_to_now(meta_table, shape_handle)
 
     cond do
-      shape_status.snapshot_started?(table, shape_handle) ->
+      ShapeStatus.snapshot_started?(meta_table, shape_handle) ->
         :started
 
-      !shape_status.get_existing_shape(table, shape_handle) ->
+      !ShapeStatus.get_existing_shape(meta_table, shape_handle) ->
         {:error, :unknown}
 
       true ->
@@ -194,9 +186,8 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   def has_shape?(shape_handle, opts \\ []) do
     table = ShapeStatus.shape_meta_table(opts)
-    shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
-    if shape_status.get_existing_shape(table, shape_handle) do
+    if ShapeStatus.get_existing_shape(table, shape_handle) do
       true
     else
       server = Access.get(opts, :server, name(opts))
@@ -221,7 +212,6 @@ defmodule Electric.ShapeCache do
       publication_manager: opts.publication_manager,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
-      shape_status: opts.shape_status,
       db_pool: opts.db_pool,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
@@ -262,16 +252,12 @@ defmodule Electric.ShapeCache do
     {:reply, {shape_handle, latest_offset}, state}
   end
 
-  def handle_call(
-        {:wait_shape_handle, shape_handle},
-        _from,
-        %{shape_status: {shape_status, shape_status_state}} = state
-      ) do
-    {:reply, !is_nil(shape_status.get_existing_shape(shape_status_state, shape_handle)), state}
+  def handle_call({:wait_shape_handle, shape_handle}, _from, state) do
+    {:reply, !is_nil(ShapeStatus.get_existing_shape(state.stack_id, shape_handle)), state}
   end
 
-  defp shape_handles(%{shape_status: {shape_status, shape_status_state}}) do
-    shape_status.list_shapes(shape_status_state)
+  defp shape_handles(state) do
+    ShapeStatus.list_shapes(state.stack_id)
   end
 
   # Timeout is per-shape, not for the entire function
@@ -336,9 +322,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp maybe_create_shape(shape, otel_ctx, state) do
-    {shape_status, shape_status_state} = state.shape_status
-
-    if shape_state = shape_status.get_existing_shape(shape_status_state, shape) do
+    if shape_state = ShapeStatus.get_existing_shape(state.stack_id, shape) do
       shape_state
     else
       shape_handles =
@@ -361,7 +345,7 @@ defmodule Electric.ShapeCache do
 
       shape = %{shape | shape_dependencies_handles: shape_handles}
 
-      {:ok, shape_handle} = shape_status.add_shape(shape_status_state, shape)
+      {:ok, shape_handle} = ShapeStatus.add_shape(state.stack_id, shape)
 
       Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
@@ -380,7 +364,6 @@ defmodule Electric.ShapeCache do
            inspector: state.inspector,
            shape_handle: shape_handle,
            shape: shape,
-           shape_status: state.shape_status,
            storage: state.storage,
            publication_manager: state.publication_manager,
            chunk_bytes_threshold: state.chunk_bytes_threshold,

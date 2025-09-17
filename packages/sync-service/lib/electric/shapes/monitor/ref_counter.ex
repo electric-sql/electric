@@ -127,7 +127,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
     storage = Map.fetch!(opts, :storage)
     publication_manager = Map.fetch!(opts, :publication_manager)
-    shape_status = Map.fetch!(opts, :shape_status)
     on_remove = Map.get(opts, :on_remove) || fn _, _ -> :ok end
     on_cleanup = Map.get(opts, :on_cleanup) || fn _ -> :ok end
 
@@ -142,7 +141,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       stack_id: stack_id,
       storage: storage,
       publication_manager: publication_manager,
-      shape_status: shape_status,
       readers: %{},
       writers: %{},
       reader_table: reader_table,
@@ -227,7 +225,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         state.stack_id,
         state.storage,
         state.publication_manager,
-        state.shape_status,
         shape_handle,
         state.on_cleanup
       )
@@ -273,7 +270,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         state.stack_id,
         state.storage,
         state.publication_manager,
-        state.shape_status,
         handle,
         state.on_cleanup
       )

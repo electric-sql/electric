@@ -46,18 +46,16 @@ defmodule Electric.Connection.Manager.Supervisor do
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
+    storage = Keyword.fetch!(shape_cache_opts, :storage)
     persistent_kv = Keyword.fetch!(opts, :persistent_kv)
     tweaks = Keyword.fetch!(opts, :tweaks)
 
     shape_status_owner_spec =
-      {Electric.ShapeCache.ShapeStatusOwner,
-       [stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)]}
+      {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]}
 
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
-    shape_cleaner_spec =
-      {Electric.ShapeCache.ShapeCleaner,
-       stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
+    shape_cleaner_spec = {Electric.ShapeCache.ShapeCleaner, stack_id: stack_id}
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
@@ -85,8 +83,7 @@ defmodule Electric.Connection.Manager.Supervisor do
       {Electric.ShapeCache.ExpiryManager,
        max_shapes: Keyword.fetch!(opts, :max_shapes),
        expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size),
-       stack_id: stack_id,
-       shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
+       stack_id: stack_id}
 
     child_spec =
       Supervisor.child_spec(

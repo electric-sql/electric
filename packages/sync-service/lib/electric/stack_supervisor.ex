@@ -47,7 +47,6 @@ defmodule Electric.StackSupervisor do
   use Supervisor, opts
 
   alias Electric.ShapeCache.LogChunker
-  alias Electric.ShapeCache.ShapeStatus
 
   require Logger
 
@@ -296,21 +295,12 @@ defmodule Electric.StackSupervisor do
 
     shape_changes_registry_name = registry_name(stack_id)
 
-    shape_status =
-      {ShapeStatus,
-       ShapeStatus.opts(
-         shape_meta_table: ShapeStatus.shape_meta_table(stack_id),
-         shape_last_used_table: ShapeStatus.shape_last_used_table(stack_id),
-         storage: storage
-       )}
-
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
 
     shape_cache_opts = [
       stack_id: stack_id,
       storage: storage,
       inspector: inspector,
-      shape_status: shape_status,
       publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
@@ -382,7 +372,7 @@ defmodule Electric.StackSupervisor do
            stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
           {Electric.Shapes.Monitor,
            Electric.Utils.merge_all([
-             [stack_id: stack_id, storage: storage, shape_status: shape_status],
+             [stack_id: stack_id, storage: storage],
              Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},

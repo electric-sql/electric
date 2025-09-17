@@ -162,7 +162,7 @@ defmodule Electric.Shapes.ConsumerTest do
                inspector: {Mock.Inspector, []},
                db_pool: Electric.Connection.Manager.snapshot_pool(ctx.stack_id),
                registry: registry_name,
-               shape_status: {Mock.ShapeStatus, []},
+               shape_status_mod: Mock.ShapeStatus,
                publication_manager: {Mock.PublicationManager, []},
                hibernate_after: 1_000,
                storage: storage,

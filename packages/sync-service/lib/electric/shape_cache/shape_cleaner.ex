@@ -5,15 +5,15 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   This process ensures removing of shapes does not block critical path of shape creation.
   """
   use GenServer
-  require Logger
 
   alias Electric.Shapes.ConsumerSupervisor
+  alias Electric.ShapeCache.ShapeStatus
+
+  require Logger
+
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
 
-  @schema NimbleOptions.new!(
-            stack_id: [type: :string, required: true],
-            shape_status: [type: :mod_arg, required: true]
-          )
+  @schema NimbleOptions.new!(stack_id: [type: :string, required: true])
 
   # Public API
   @spec remove_shape(shape_handle(), Keyword.t()) :: :ok | {:error, term()}
@@ -51,7 +51,6 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     {:ok,
      %{
        stack_id: opts[:stack_id],
-       shape_status: Keyword.fetch!(opts, :shape_status),
        queued_removals: []
      }}
   end
@@ -64,13 +63,8 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
   @impl true
   def handle_cast({:clean_all_shapes_for_relations, relations}, state) do
-    {shape_status, shape_status_state} = state.shape_status
-
     affected_shapes =
-      shape_status.list_shape_handles_for_relations(
-        shape_status_state,
-        relations
-      )
+      ShapeStatus.list_shape_handles_for_relations(state.stack_id, relations)
 
     if relations != [] do
       Logger.info(fn ->
@@ -119,8 +113,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously,
         # starting with an immediate shape status removal
-        {shape_status, shape_status_state} = state.shape_status
-        shape_status.remove_shape(shape_status_state, shape_handle)
+        ShapeStatus.remove_shape(state.stack_id, shape_handle)
 
         :ok = purge_shape(state.stack_id, shape_handle)
 
