@@ -85,7 +85,7 @@
       -e POSTGRESQL_USERNAME=postgres \
       -e POSTGRESQL_PASSWORD=password \
       -p $pg_pooler_host_port:6432 \
-      bitnami/pgbouncer:latest
+      bitnamilegacy/pgbouncer:latest
 
     ??LOG process up: PgBouncer
 [endmacro]
