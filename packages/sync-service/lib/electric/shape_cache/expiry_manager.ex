@@ -114,9 +114,6 @@ defmodule Electric.ShapeCache.ExpiryManager do
   end
 
   defp clean_up_shape(state, shape_handle) do
-    # remove the shape immediately so new clients are redirected elsewhere
-    deregister_shape(shape_handle, state)
-
     OpenTelemetry.with_span(
       "expiry_manager.stop_shape_consumer",
       [shape_handle: shape_handle],
@@ -130,10 +127,6 @@ defmodule Electric.ShapeCache.ExpiryManager do
     )
 
     :ok
-  end
-
-  defp deregister_shape(shape_handle, %{shape_status: {shape_status, shape_status_state}}) do
-    shape_status.remove_shape(shape_status_state, shape_handle)
   end
 
   defp least_recently_used(%{shape_status: {shape_status, shape_status_state}}, number_to_expire) do

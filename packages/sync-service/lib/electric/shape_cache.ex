@@ -263,11 +263,11 @@ defmodule Electric.ShapeCache do
       :ok = publication_manager.refresh_publication(publication_manager_opts)
     rescue
       error ->
-        purge_all_shapes(state)
+        clean_up_all_shapes(state)
         reraise error, __STACKTRACE__
     catch
       :exit, reason ->
-        purge_all_shapes(state)
+        clean_up_all_shapes(state)
         exit(reason)
     end
 
@@ -349,9 +349,6 @@ defmodule Electric.ShapeCache do
   end
 
   defp clean_up_shape(state, shape_handle) do
-    # remove the shape immediately so new clients are redirected elsewhere
-    deregister_shape(shape_handle, state)
-
     Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
       state.consumer_supervisor,
       state.stack_id,
@@ -359,17 +356,6 @@ defmodule Electric.ShapeCache do
     )
 
     :ok
-  end
-
-  # reset shape storage before any consumer have been started
-  defp purge_all_shapes(state) do
-    Logger.warning("Purging all shapes.")
-
-    for {shape_handle, shape} <- shape_handles(state) do
-      purge_shape(state, shape_handle, shape)
-    end
-
-    state
   end
 
   defp purge_shape(state, shape_handle, shape) do
@@ -527,9 +513,5 @@ defmodule Electric.ShapeCache do
         purge_shape(state, shape_handle, shape)
         :error
     end
-  end
-
-  defp deregister_shape(shape_handle, %{shape_status: {shape_status, shape_status_state}}) do
-    shape_status.remove_shape(shape_status_state, shape_handle)
   end
 end
