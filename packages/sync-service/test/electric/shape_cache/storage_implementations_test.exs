@@ -830,6 +830,41 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
+    describe "#{module_name}.cleanup_all!/1" do
+      setup :start_storage
+
+      test "should remove entire base directory without requiring process to run", %{
+        storage_base: storage_base,
+        writer: writer
+      } do
+        lsn = Lsn.from_integer(1000)
+
+        log_items =
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "123", "name" => "Test"},
+              log_offset: LogOffset.new(lsn, 0)
+            }
+          ]
+          |> changes_to_log_items()
+
+        Storage.append_to_log!(log_items, writer)
+        Storage.terminate(writer)
+        assert Storage.get_total_disk_usage(storage_base) > 0
+
+        Storage.cleanup_all!(storage_base)
+        assert Storage.get_total_disk_usage(storage_base) == 0
+        refute File.dir?(Storage.metadata_backup_dir(storage_base))
+      end
+
+      test "should handle entire base directory already missing", %{storage_base: storage_base} do
+        {_, storage_opts} = storage_base
+        File.rm_rf!(storage_opts.base_path)
+        Storage.cleanup_all!(storage_base)
+      end
+    end
+
     describe "#{module_name}.get_total_disk_usage/1" do
       test "returns 0 if no shapes exist", %{mod: module} = context do
         storage_base = Storage.shared_opts({module, opts(module, context)})

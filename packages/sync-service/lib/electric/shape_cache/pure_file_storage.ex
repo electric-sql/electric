@@ -220,7 +220,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     try do
       case File.touch(marker_file_path) do
-        :ok -> unsafe_cleanup_with_retries!(opts)
+        :ok -> unsafe_cleanup_with_retries!(opts.data_dir)
         # nothing to delete, no-op
         {:error, :enoent} -> :ok
         {:error, reason} -> raise File.Error, reason: reason, path: marker_file_path
@@ -228,6 +228,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
     after
       File.rm(marker_file_path)
     end
+  end
+
+  def cleanup_all!(%{base_path: base_path}) do
+    unsafe_cleanup_with_retries!(base_path)
   end
 
   def schedule_compaction(opts) do
@@ -437,8 +441,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
     Path.join([base_path, ".#{handle}-deleted"])
   end
 
-  defp unsafe_cleanup_with_retries!(%__MODULE__{} = opts, attempts_left \\ 5) do
-    with {:ok, _} <- rm_rf(opts.data_dir) do
+  defp unsafe_cleanup_with_retries!(directory, attempts_left \\ 5) do
+    with {:ok, _} <- rm_rf(directory) do
       :ok
     else
       # There is a very unlikely but observed scenario where the rm_rf call
@@ -446,7 +450,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       # due to some FS race the deletion fails with EEXIST. Very hard to test
       # and prevent so we mitigate it with arbitrary retries.
       {:error, :eexist, _} when attempts_left > 0 ->
-        unsafe_cleanup_with_retries!(opts, attempts_left - 1)
+        unsafe_cleanup_with_retries!(directory, attempts_left - 1)
 
       {:error, reason, path} ->
         raise File.Error,

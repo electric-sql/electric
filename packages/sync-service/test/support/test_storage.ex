@@ -149,6 +149,12 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def cleanup_all!({parent, _init, storage}) do
+    send(parent, {__MODULE__, :cleanup_all!})
+    Storage.cleanup_all!(storage)
+  end
+
+  @impl Electric.ShapeCache.Storage
   def compact({parent, shape_handle, _, storage}, keep_complete_chunks) do
     send(parent, {__MODULE__, :compact, shape_handle, keep_complete_chunks})
     Storage.compact(storage, keep_complete_chunks)

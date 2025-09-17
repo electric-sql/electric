@@ -319,6 +319,11 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
   end
 
+  @impl Electric.ShapeCache.Storage
+  def cleanup_all!(%MS{} = _opts) do
+    :ok
+  end
+
   defp ignoring_exceptions(fun, exception) do
     fun.()
   rescue
