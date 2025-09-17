@@ -62,7 +62,7 @@ defmodule Electric.StackSupervisor do
                    keys: Electric.connection_opts_schema()
                  ],
                  max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
-                 expiry_batch_size: [type: :non_neg_integer, default: 10],
+                 expiry_batch_size: [type: :non_neg_integer, default: 50],
                  replication_opts: [
                    type: :keyword_list,
                    required: true,
