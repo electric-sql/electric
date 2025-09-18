@@ -20,6 +20,7 @@ defmodule Electric.Plug.Router do
   plug Electric.Plug.LabelProcessPlug
   plug Electric.Plug.TraceContextPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
+  plug Electric.Plug.SaveIntervalsPlug, total_attribute: "plug.total_duration_µs"
   plug Plug.Logger, log: :debug
 
   with_telemetry Sentry.PlugCapture do
