@@ -320,7 +320,14 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def cleanup_all!(_opts) do
+  def cleanup_all!(%{table_base_name: table_base_name} = _opts) do
+    :ets.all()
+    |> Enum.filter(&is_atom/1)
+    |> Enum.filter(fn name ->
+      String.starts_with?(Atom.to_string(name), "#{table_base_name}.")
+    end)
+    |> Enum.each(&ignoring_exceptions(fn -> :ets.delete(&1) end, ArgumentError))
+
     :ok
   end
 
