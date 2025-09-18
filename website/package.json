@@ -7,9 +7,8 @@
     "api:generate": "npm run api:build_docs && npm run api:patch_version",
     "api:patch_version": "node ../scripts/patch_api_spec_version.js ./public/openapi.html",
     "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"electric-api.yaml\"",
-    "build": "npm run api:generate && vitepress build . && npm run llms:generate",
+    "build": "npm run api:generate && vitepress build . && cp ../AGENTS.md .vitepress/dist",
     "dev": "vitepress dev .",
-    "llms:generate": "node ../scripts/llms.js",
     "preview": "vitepress preview ."
   },
   "engineManager": "^pnpm@9.15.0",

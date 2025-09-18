@@ -86,6 +86,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/api/integrations/react          /docs/integrations/react
 /docs/guides/writing-your-own-client  /docs/guides/client-development
 /use-cases/state-transfer             /use-cases/data-sync
-/product/cloud/sign-up          https://dashboard.electric-sql.cloud
-/product/cloud/onboarding       https://dashboard.electric-sql.cloud
+/product/cloud/sign-up                https://dashboard.electric-sql.cloud
+/product/cloud/onboarding             https://dashboard.electric-sql.cloud
 /product/cloud/usage                  /product/cloud
+/docs/guides/llms                     /docs/agents

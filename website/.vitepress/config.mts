@@ -166,6 +166,7 @@ export default defineConfig({
             { text: 'Intro', link: '/docs/intro' },
             { text: 'Quickstart', link: '/docs/quickstart' },
             { text: 'Stacks', link: '/docs/stacks' },
+            { text: 'AGENTS.md', link: '/docs/agents' },
           ]
         },
         {
@@ -176,7 +177,6 @@ export default defineConfig({
             { text: 'Shapes', link: '/docs/guides/shapes' },
             { text: 'Writes', link: '/docs/guides/writes' },
             { text: 'Installation', link: '/docs/guides/installation' },
-            { text: 'LLMs', link: '/docs/guides/llms' },
             { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
