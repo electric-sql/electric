@@ -88,26 +88,21 @@ export const todoCollection = createCollection(
     schema: todoSchema,
     getKey: (row) => row.id,
     shapeOptions: {
-      url: '/api/todos',           // your proxy route
-      params: { table: 'todos' },  // server will overwrite anyway
+      url: '/api/todos'
     },
-    // Persistence handlers (write-path)
     onInsert: async ({ transaction }) => {
       const newTodo = transaction.mutations[0].modified
       const { txid } = await api.todos.create(newTodo)
-      await todoCollection.utils.awaitTxId(txid)  // Wait for Electric to stream this tx
       return { txid }
     },
     onUpdate: async ({ transaction }) => {
       const m = transaction.mutations[0]
       const { txid } = await api.todos.update(m.key, m.changes)
-      await todoCollection.utils.awaitTxId(txid)
       return { txid }
     },
     onDelete: async ({ transaction }) => {
       const id = transaction.mutations[0].key
       const { txid } = await api.todos.delete(id)
-      await todoCollection.utils.awaitTxId(txid)
       return { txid }
     },
   })
@@ -245,6 +240,9 @@ function TodoActions() {
 ```
 
 ### Custom optimistic actions
+
+Useful for performing multiple operations, potentially across collections, within a single transaction.
+
 ```typescript
 import { createOptimisticAction } from '@tanstack/react-db'
 
@@ -263,6 +261,8 @@ const addTodoAction = createOptimisticAction<string>({
   }
 })
 ```
+
+See also `createTransaction`.
 
 ## Testing
 
@@ -333,47 +333,6 @@ Must preserve Electric query params and protocol headers in proxy. See Define th
 * **Mixing Query vs Electric semantics:** Query collections treat `queryFn` results as **complete state**. Electric collections stream **diffs**; don't copy Query refetch patterns into Electric ([TanStack][12])
 * **Dropping tables:** delete any active shapes for that table first; Postgres logical replication doesn't stream DDL ([Electric][6])
 
-## Error Handling & Observability
-
-```typescript
-import {
-  SchemaValidationError,
-  DuplicateKeyError,
-  TransactionError
-} from '@tanstack/db'
-
-function TodoApp() {
-  const { data, isLoading, isError, status } = useLiveQuery((q) =>
-    q.from({ todo: todoCollection })
-  )
-
-  if (isLoading) return <div>Loading todos...</div>
-  if (isError) return <div>Error: {status}</div>
-
-  const handleAdd = async (text: string) => {
-    try {
-      const tx = await todoCollection.insert({
-        id: crypto.randomUUID(),
-        text,
-        completed: false
-      })
-      await tx.isPersisted.promise
-    } catch (error) {
-      if (error instanceof SchemaValidationError) {
-        console.log('Validation errors:', error.issues)
-      } else if (error instanceof DuplicateKeyError) {
-        console.log('Duplicate key conflict')
-      }
-      // Optimistic state automatically rolled back
-    }
-  }
-
-  return <div>{/* Render todos */}</div>
-}
-```
-
-Use DB's built-in errors: `SchemaValidationError`, `DuplicateKeyError`, `MissingHandlerError`, etc. ([TanStack][13])
-
 ## Advanced Patterns
 
 ### Incremental adoption
@@ -418,75 +377,18 @@ const handleDeleteAccount = () => {
 }
 ```
 
-## Framework Integration
-
-### React setup
-
-```sh
-npm install @tanstack/react-db
-```
-
-```typescript
-import { createCollection, eq, useLiveQuery } from '@tanstack/react-db'
-import { queryCollectionOptions } from '@tanstack/query-db-collection'
-
-// Define a collection that loads data using TanStack Query
-const todoCollection = createCollection(
-  queryCollectionOptions({
-    queryKey: ['todos'],
-    queryFn: async () => {
-      const response = await fetch('/api/todos')
-      return response.json()
-    },
-    getKey: (item) => item.id,
-    onUpdate: async ({ transaction }) => {
-      const { original, modified } = transaction.mutations[0]
-      await fetch(`/api/todos/${original.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(modified),
-      })
-    },
-  })
-)
-
-function Todos() {
-  // Live query that updates automatically when data changes
-  const { data: todos } = useLiveQuery((q) =>
-    q.from({ todo: todoCollection })
-     .where(({ todo }) => eq(todo.completed, false))
-     .orderBy(({ todo }) => todo.createdAt, 'desc')
-  )
-
-  const toggleTodo = (todo) => {
-    // Instantly applies optimistic state, then syncs to server
-    todoCollection.update(todo.id, (draft) => {
-      draft.completed = !draft.completed
-    })
-  }
-
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <li key={todo.id} onClick={() => toggleTodo(todo)}>
-          {todo.text}
-        </li>
-      ))}
-    </ul>
-  )
-}
-```
-
-### Other frameworks setup
+## Framework integrations
 
 ```sh
 npm install @tanstack/angular-db
+npm install @tanstack/react-db
 npm install @tanstack/solid-db
 npm install @tanstack/svelte-db
 npm install @tanstack/vue-db
 ```
 
 ```typescript
-import { useLiveQuery } from '@tanstack/vue-db' // or solid-db, svelte-db, angular-db
+import { useLiveQuery } from '...'
 
 const { data, isLoading } = useLiveQuery((q) =>
   q.from({ todos: todosCollection })
@@ -620,24 +522,7 @@ This gives you full control over auth/business logic while maintaining instant l
 
 ### Prefer TanStack DB over lower-level Shape APIs
 
-The Electric TypeScript Client provides `Shape`/`ShapeStream` classes:
-
-```ts
-import { ShapeStream, Shape } from '@electric-sql/client'
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  params: {
-    table: 'todos',
-    where: 'user_id = $1',
-    params: ['abc']
-  },
-})
-const shape = new Shape(stream)
-await shape.rows
-shape.subscribe(({ rows }) => console.log(rows))
-```
-
-And `useShape` hook ([Electric][9]):
+The Electric TypeScript Client provides lower-level `Shape` / `ShapeStream` classes and `useShape` hook ([Electric][9]):
 
 ```ts
 import { useShape } from '@electric-sql/react'
