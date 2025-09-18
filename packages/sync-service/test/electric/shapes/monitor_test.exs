@@ -197,7 +197,7 @@ defmodule Electric.Shapes.MonitorTest do
 
       @impl GenServer
       def init({stack_id, handle, parent}) do
-        :ok = Monitor.register_writer(stack_id, handle, Electric.Shapes.MonitorTest.shape())
+        :ok = Monitor.register_writer(stack_id, handle)
         send(parent, {:ready, :consumer, 1})
         {:ok, {stack_id, handle, parent}}
       end

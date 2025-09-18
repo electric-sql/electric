@@ -41,7 +41,7 @@ defmodule Electric.Shapes.Monitor do
   Register the current process as a writer (consumer) of the given shape.
   """
   @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
-  defdelegate register_writer(stack_id, shape_handle, shape, pid \\ self()), to: RefCounter
+  defdelegate register_writer(stack_id, shape_handle, pid \\ self()), to: RefCounter
 
   @doc """
   The number of active readers of the given shape.
@@ -74,8 +74,8 @@ defmodule Electric.Shapes.Monitor do
   @doc """
   clean up the state of a non-running consumer.
   """
-  @spec purge_shape(stack_id(), shape_handle(), Electric.Shapes.Shape.t()) :: :ok
-  defdelegate purge_shape(stack_id, shape_handle, shape), to: RefCounter
+  @spec purge_shape(stack_id(), shape_handle()) :: :ok
+  defdelegate purge_shape(stack_id, shape_handle), to: RefCounter
 
   # used in tests to validate internal state
   @doc false

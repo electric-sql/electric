@@ -49,8 +49,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   @doc false
   @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
-  def register_writer(stack_id, shape_handle, shape, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_writer, shape_handle, shape, pid})
+  def register_writer(stack_id, shape_handle, pid \\ self()) do
+    GenServer.call(name(stack_id), {:register_writer, shape_handle, pid})
   end
 
   @doc false
@@ -89,8 +89,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     end
   end
 
-  def purge_shape(stack_id, shape_handle, shape) do
-    GenServer.call(name(stack_id), {:purge_shape, shape_handle, shape})
+  def purge_shape(stack_id, shape_handle) do
+    GenServer.call(name(stack_id), {:purge_shape, shape_handle})
   end
 
   @doc false
@@ -188,7 +188,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     {:reply, :ok, state}
   end
 
-  def handle_call({:register_writer, handle, shape, pid}, _from, state) do
+  def handle_call({:register_writer, handle, pid}, _from, state) do
     if supervisor = ConsumerSupervisor.whereis(state.stack_id, handle) do
       case state.writers do
         %{^pid => _handle} ->
@@ -197,7 +197,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         writers ->
           writers = Map.put(writers, pid, handle)
           Process.monitor(pid, tag: {:down, :writer, handle})
-          Process.monitor(supervisor, tag: {:down, :writer_supervisor, handle, shape})
+          Process.monitor(supervisor, tag: {:down, :writer_supervisor, handle})
 
           {:reply, :ok, %{state | writers: writers}}
       end
@@ -226,7 +226,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     {:reply, {:ok, Map.get(state.termination_watchers, shape_handle, [])}, state}
   end
 
-  def handle_call({:purge_shape, shape_handle, shape}, _from, state) do
+  def handle_call({:purge_shape, shape_handle}, _from, state) do
     :ok =
       Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
         state.stack_id,
@@ -234,7 +234,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         state.publication_manager,
         state.shape_status,
         shape_handle,
-        shape,
         state.on_cleanup
       )
 
@@ -259,7 +258,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   def handle_info(
-        {{:down, :writer_supervisor, handle, shape}, _ref, :process, _pid, _reason},
+        {{:down, :writer_supervisor, handle}, _ref, :process, _pid, _reason},
         state
       ) do
     if MapSet.member?(state.cleanup_handles, handle) do
@@ -269,7 +268,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
         state.publication_manager,
         state.shape_status,
         handle,
-        shape,
         state.on_cleanup
       )
 
