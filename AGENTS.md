@@ -302,6 +302,9 @@ See [TanStack DB tests](https://github.com/TanStack/db/tree/main/packages/electr
 
 ### Critical Gotchas
 
+#### 0. Use the latest package versions
+Search npm and use the latest versions for `@electric-sql/*` and `@tanstack/*-db` packages.
+
 #### 1. The txid handshake (prevents flickering)
 Both backend and client must handle txid for smooth optimistic updates:
 
@@ -322,8 +325,19 @@ Local dev uses HTTP/1.1 (6 connection limit). Each shape = 1 long-poll connectio
 **Fix:** Use HTTP/2 proxy (Caddy/nginx) or Electric Cloud. See [troubleshooting guide](https://electric-sql.com/docs/guides/troubleshooting#slow-shapes)
 
 #### 3. Proxy must forward headers & protocol params
-
 Must preserve Electric query params and protocol headers in proxy. See Define the Electric proxy ☝️
+
+#### 4. Parsing custom Postgres types into Javascript objects
+Use a custom `parser` in the shapeOptions ([Electric][9]):
+
+```ts
+shapeOptions: {
+  // ...,
+  parser: { // E.g.: parse timestamp columns into Date objects
+    timestamptz: (date: string) => new Date(date),
+  }
+}
+```
 
 ### Common Pitfalls (and fixes)
 
