@@ -4,8 +4,6 @@
 > **Goal:** ship fast, reliable, local-first apps by pairing **Electric** (Postgres sync engine over HTTP) with **TanStack DB** (embedded client DB with live queries & optimistic mutations).
 > **Status:** current as of **2025-09-17**.
 
----
-
 ## TL;DR (what to internalize)
 
 * **Electric = read-path sync engine** that syncs data out of Postgres into clients via HTTP (shapes → change log → client). ([Electric][1])
@@ -15,8 +13,6 @@
 * **Live queries** re-compute incrementally (differential dataflow) → sub-ms UI updates and painless cross-collection joins. ([TanStack][2])
 * **Security & scale:** proxy auth, shape-scoped authorization, CDN caching & long-polling coalescing. Use **Electric Cloud** to skip ops. ([Electric][4])
 
----
-
 ## 🔒 Security Rules (ALWAYS FOLLOW)
 
 1. **Never expose `SOURCE_SECRET` to the browser** — inject it server-side via your proxy.
@@ -24,8 +20,6 @@
 3. **Put Electric behind your proxy** — never call it directly from production clients ([Electric][10]).
 4. **Proxy every Electric request** — Client → Your API → Electric (apply auth/filters).
 5. **Define shapes on the server/proxy** — avoid client-defined tables or WHERE clauses.
-
----
 
 ## Golden Path (minimal, end-to-end)
 
@@ -125,7 +119,7 @@ export const todoCollection = createCollection(
 - Include PK columns if using `columns`
 - Shapes are **immutable** per subscription ([Electric][6])
 
-### 3) Write-path strategy (client ⇄ API ⇄ Postgres)
+### 3) Write-path contract (client ⇄ API ⇄ Postgres)
 
 **Contract:**
 1. UI mutates a collection (instant optimistic)
@@ -159,8 +153,6 @@ export function TodoList() {
 }
 ```
 
----
-
 ## Mental Model (for agents)
 
 * **Electric is a read-path sync engine** - syncs data out of Postgres into clients. You implement writes via your API. ([Electric][8])
@@ -168,8 +160,6 @@ export function TodoList() {
 * **Two loops, one source of truth**
   * **Inner loop:** optimistic mutations in TanStack DB in the client (instant UX, rollback on error)
   * **Outer loop:** server persistence → Electric streams authoritative changes → collections merge & drop optimistic ([TanStack][2])
-
----
 
 ## Live Query Patterns
 
@@ -228,8 +218,6 @@ const { data: listStats } = useLiveQuery((q) =>
 
 **Performance:** Sub-millisecond queries with incremental updates via differential dataflow ([TanStack][7])
 
----
-
 ## Optimistic Mutations
 
 ### Direct collection mutations
@@ -276,8 +264,6 @@ const addTodoAction = createOptimisticAction<string>({
 })
 ```
 
----
-
 ## Testing
 
 Electric collections are just HTTP clients - can test with standard fetch mocks:
@@ -313,8 +299,6 @@ it('handles optimistic updates', async () => {
 
 See [TanStack DB tests](https://github.com/TanStack/db/tree/main/packages/electric-db-collection/tests) for more examples.
 
----
-
 ## ⚠️ Gotchas & Pitfalls
 
 ### Critical Gotchas
@@ -348,8 +332,6 @@ Must preserve Electric query params and protocol headers in proxy. See Define th
 * **Over-fetching sync:** avoid `replica=full` unless you need `old_value` (bandwidth trade-off) ([Electric][9])
 * **Mixing Query vs Electric semantics:** Query collections treat `queryFn` results as **complete state**. Electric collections stream **diffs**; don't copy Query refetch patterns into Electric ([TanStack][12])
 * **Dropping tables:** delete any active shapes for that table first; Postgres logical replication doesn't stream DDL ([Electric][6])
-
----
 
 ## Error Handling & Observability
 
@@ -391,8 +373,6 @@ function TodoApp() {
 ```
 
 Use DB's built-in errors: `SchemaValidationError`, `DuplicateKeyError`, `MissingHandlerError`, etc. ([TanStack][13])
-
----
 
 ## Advanced Patterns
 
@@ -437,8 +417,6 @@ const handleDeleteAccount = () => {
   userCollection.delete(userId, { optimistic: false })
 }
 ```
-
----
 
 ## Framework Integration
 
@@ -524,8 +502,6 @@ npm install react-native-random-uuid
 import 'react-native-random-uuid'
 ```
 
----
-
 ## Migration Playbook (existing TanStack Query apps)
 
 1. Wrap existing `useQuery` route into a **Query Collection** (`queryCollectionOptions`)
@@ -533,8 +509,6 @@ import 'react-native-random-uuid'
 3. Port mutations to **collection handlers** (optimistic by default)
 4. Switch the collection to **Electric Collection** (proxy in place)
    No component changes needed ([TanStack][2])
-
----
 
 ## Deployment
 
@@ -595,8 +569,6 @@ services:
   - Creates `electric_slot_default` replication slot
 - Requires `wal_level=logical` configuration
 
----
-
 ## Recommended Stack (web & mobile)
 
 * **DB:** Postgres (any host with logical replication: Neon, Supabase, Crunchy)
@@ -605,8 +577,6 @@ services:
 * **Client:** TanStack DB (React adapter for web; Expo starter for RN)
 
 This "End-to-End TypeScript" stack is what the official starters use. ([Electric][14])
-
----
 
 ## What Changed vs Older Mental Models (avoid stale assumptions)
 
@@ -685,8 +655,6 @@ function Component() {
 
 However, for web and mobile app development, **TanStack DB collections are preferred as much more ergonomic and powerful**.
 
----
-
 ## Further Reading / Starters
 
 * **TanStack DB overview & quick start** – docs & API reference ([TanStack][2])
@@ -696,8 +664,6 @@ However, for web and mobile app development, **TanStack DB collections are prefe
 * **TanStack DB Live Queries** (query builder, joins, aggregations) ([TanStack][7])
 * **Background & motivation** – TanStack blog on DB 0.1 (why differential dataflow & collections) ([TanStack][16])
 * **Interactive explainer** for teams adopting TanStack DB ([Frontend at Scale][17])
-
----
 
 ### That's it
 
