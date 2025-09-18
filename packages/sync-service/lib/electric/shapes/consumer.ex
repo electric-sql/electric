@@ -92,8 +92,7 @@ defmodule Electric.Shapes.Consumer do
         hibernate_timer: nil
       })
 
-    :ok =
-      Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle, config.shape)
+    :ok = Electric.Shapes.Monitor.register_writer(config.stack_id, config.shape_handle)
 
     {:ok, state, {:continue, :init_storage}}
   end

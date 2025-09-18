@@ -197,7 +197,7 @@ defmodule Electric.Shapes.MonitorTest do
 
       @impl GenServer
       def init({stack_id, handle, parent}) do
-        :ok = Monitor.register_writer(stack_id, handle, Electric.Shapes.MonitorTest.shape())
+        :ok = Monitor.register_writer(stack_id, handle)
         send(parent, {:ready, :consumer, 1})
         {:ok, {stack_id, handle, parent}}
       end
@@ -316,8 +316,7 @@ defmodule Electric.Shapes.MonitorTest do
 
       assert_receive {:on_cleanup, ^handle}
 
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle,
-                      @shape}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle}
 
       assert_receive {TestStatus, :remove_shape, ^handle}
     end
@@ -329,8 +328,7 @@ defmodule Electric.Shapes.MonitorTest do
 
       assert_receive {:on_cleanup, ^handle}
 
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle,
-                      @shape}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle}
 
       assert_receive {TestStatus, :remove_shape, ^handle}
     end

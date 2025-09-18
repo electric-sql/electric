@@ -30,7 +30,6 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
         publication_manager_impl,
         shape_status_impl,
         shape_handle,
-        shape,
         on_cleanup \\ fn _ -> :ok end
       ) do
     if consumer_alive?(stack_id, shape_handle) do
@@ -55,7 +54,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
           task3 =
             Task.Supervisor.async(name(stack_id), fn ->
               Logger.metadata(stack_id: stack_id, shape_handle: shape_handle)
-              cleanup_publication_manager(publication_manager_impl, shape_handle, shape)
+              cleanup_publication_manager(publication_manager_impl, shape_handle)
             end)
 
           try do
@@ -105,16 +104,12 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     )
   end
 
-  defp cleanup_publication_manager(
-         publication_manager_impl,
-         shape_handle,
-         shape
-       ) do
+  defp cleanup_publication_manager(publication_manager_impl, shape_handle) do
     {publication_manager, publication_manager_opts} = publication_manager_impl
 
     perform_reporting_errors(
       fn ->
-        publication_manager.remove_shape(shape_handle, shape, publication_manager_opts)
+        publication_manager.remove_shape(shape_handle, publication_manager_opts)
       end,
       "Failed to remove shape #{shape_handle} from publication"
     )

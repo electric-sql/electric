@@ -8,12 +8,13 @@ defmodule Electric.Replication.PublicationManager do
 
   require Logger
 
+  @typep shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
+
   @callback name(binary() | Keyword.t()) :: term()
-  @callback recover_shape(Electric.ShapeCacheBehaviour.shape_handle(), Shape.t(), Keyword.t()) ::
+  @callback recover_shape(shape_handle(), Shape.t(), Keyword.t()) ::
               :ok
-  @callback add_shape(Electric.ShapeCacheBehaviour.shape_handle(), Shape.t(), Keyword.t()) :: :ok
-  @callback remove_shape(Electric.ShapeCacheBehaviour.shape_handle(), Shape.t(), Keyword.t()) ::
-              :ok
+  @callback add_shape(shape_handle(), Shape.t(), Keyword.t()) :: :ok
+  @callback remove_shape(shape_handle(), Keyword.t()) :: :ok
   @callback refresh_publication(Keyword.t()) :: :ok
 
   defstruct [
@@ -46,7 +47,7 @@ defmodule Electric.Replication.PublicationManager do
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: list(GenServer.from()),
-           tracked_shape_handles: MapSet.t(),
+           tracked_shape_handles: %{shape_handle() => Electric.oid_relation()},
            publication_name: String.t(),
            db_pool: term(),
            configure_tables_for_replication_fn: fun(),
@@ -85,6 +86,9 @@ defmodule Electric.Replication.PublicationManager do
 
   @behaviour __MODULE__
 
+  defguardp is_tracking_shape_handle?(shape_handle, state)
+            when is_map_key(state.tracked_shape_handles, shape_handle)
+
   @impl __MODULE__
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
@@ -98,8 +102,9 @@ defmodule Electric.Replication.PublicationManager do
   @impl __MODULE__
   def add_shape(shape_id, shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
+    oid_relation = get_oid_relation_from_shape(shape)
 
-    case GenServer.call(server, {:add_shape, shape_id, shape}) do
+    case GenServer.call(server, {:add_shape, shape_id, oid_relation}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
@@ -108,14 +113,15 @@ defmodule Electric.Replication.PublicationManager do
   @impl __MODULE__
   def recover_shape(shape_id, shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:recover_shape, shape_id, shape})
+    oid_relation = get_oid_relation_from_shape(shape)
+    GenServer.call(server, {:recover_shape, shape_id, oid_relation})
   end
 
   @impl __MODULE__
-  def remove_shape(shape_id, shape, opts \\ []) do
+  def remove_shape(shape_id, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
-    case GenServer.call(server, {:remove_shape, shape_id, shape}) do
+    case GenServer.call(server, {:remove_shape, shape_id}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
@@ -165,7 +171,7 @@ defmodule Electric.Replication.PublicationManager do
       scheduled_updated_ref: nil,
       retries: 0,
       waiters: [],
-      tracked_shape_handles: MapSet.new(),
+      tracked_shape_handles: %{},
       update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
@@ -179,40 +185,52 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @impl true
-  def handle_call({:add_shape, shape_handle, shape}, from, state) do
-    if is_tracking_shape_handle?(shape_handle, state) do
-      Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
-      {:reply, :ok, state}
-    else
-      state = track_shape_handle(shape_handle, state)
-      state = update_relation_filters_for_shape(shape, :add, state)
+  def handle_call({:add_shape, shape_handle, _oid_rel}, _from, state)
+      when is_tracking_shape_handle?(shape_handle, state) do
+    Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
+    {:reply, :ok, state}
+  end
 
-      if update_needed?(state) do
-        state = add_waiter(from, state)
-        state = schedule_update_publication(state.update_debounce_timeout, state)
-        {:noreply, state}
-      else
-        {:reply, :ok, state}
-      end
+  def handle_call({:add_shape, shape_handle, oid_rel}, from, state) do
+    state = update_relation_filters(shape_handle, oid_rel, :add, state)
+
+    if update_needed?(state) do
+      state = add_waiter(from, state)
+      state = schedule_update_publication(state.update_debounce_timeout, state)
+      {:noreply, state}
+    else
+      {:reply, :ok, state}
     end
   end
 
-  def handle_call({:remove_shape, shape_handle, shape}, from, state) do
-    if not is_tracking_shape_handle?(shape_handle, state) do
-      Logger.debug("Shape already not tracked: #{inspect(shape_handle)}")
-      {:reply, :ok, state}
-    else
-      state = untrack_shape_handle(shape_handle, state)
-      state = update_relation_filters_for_shape(shape, :remove, state)
+  def handle_call({:remove_shape, shape_handle}, _from, state)
+      when not is_tracking_shape_handle?(shape_handle, state) do
+    Logger.debug("Shape already not tracked: #{inspect(shape_handle)}")
+    {:reply, :ok, state}
+  end
 
-      if update_needed?(state) do
-        state = add_waiter(from, state)
-        state = schedule_update_publication(state.update_debounce_timeout, state)
-        {:noreply, state}
-      else
-        {:reply, :ok, state}
-      end
+  def handle_call({:remove_shape, shape_handle}, from, state) do
+    oid_rel = fetch_tracked_shape_relation!(shape_handle, state)
+    state = update_relation_filters(shape_handle, oid_rel, :remove, state)
+
+    if update_needed?(state) do
+      state = add_waiter(from, state)
+      state = schedule_update_publication(state.update_debounce_timeout, state)
+      {:noreply, state}
+    else
+      {:reply, :ok, state}
     end
+  end
+
+  def handle_call({:recover_shape, shape_handle, _oid_rel}, _from, state)
+      when is_tracking_shape_handle?(shape_handle, state) do
+    Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:recover_shape, shape_handle, oid_rel}, _from, state) do
+    state = update_relation_filters(shape_handle, oid_rel, :add, state)
+    {:reply, :ok, state}
   end
 
   def handle_call({:refresh_publication, forced?}, from, state) do
@@ -221,17 +239,6 @@ defmodule Electric.Replication.PublicationManager do
       state = schedule_update_publication(state.update_debounce_timeout, forced?, state)
       {:noreply, state}
     else
-      {:reply, :ok, state}
-    end
-  end
-
-  def handle_call({:recover_shape, shape_handle, shape}, _from, state) do
-    if is_tracking_shape_handle?(shape_handle, state) do
-      Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
-      {:reply, :ok, state}
-    else
-      state = track_shape_handle(shape_handle, state)
-      state = update_relation_filters_for_shape(shape, :add, state)
       {:reply, :ok, state}
     end
   end
@@ -470,19 +477,27 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @spec update_relation_filters_for_shape(Shape.t(), filter_operation(), state()) :: state()
-  defp update_relation_filters_for_shape(
-         %Shape{root_table: relation, root_table_id: oid},
+  @spec update_relation_filters(
+          shape_handle(),
+          Electric.oid_relation(),
+          filter_operation(),
+          state()
+        ) :: state()
+  defp update_relation_filters(
+         shape_handle,
+         {_oid, _rel} = rel_key,
          operation,
          %__MODULE__{prepared_relation_filters: prepared, relation_ref_counts: counts} = state
        ) do
-    key = {oid, relation}
-    current = Map.get(counts, key, 0)
+    current = Map.get(counts, rel_key, 0)
 
-    new_count =
+    {new_count, state} =
       case operation do
-        :add -> current + 1
-        :remove -> max(current - 1, 0)
+        :add ->
+          {current + 1, track_shape_handle(shape_handle, rel_key, state)}
+
+        :remove ->
+          {max(current - 1, 0), untrack_shape_handle(shape_handle, state)}
       end
 
     # we could rederive the prepared filters from the keys of the counts map
@@ -491,13 +506,13 @@ defmodule Electric.Replication.PublicationManager do
     {prepared, counts} =
       cond do
         new_count == 0 and current > 0 ->
-          {MapSet.delete(prepared, key), Map.delete(counts, key)}
+          {MapSet.delete(prepared, rel_key), Map.delete(counts, rel_key)}
 
         current == 0 and new_count > 0 ->
-          {MapSet.put(prepared, key), Map.put(counts, key, new_count)}
+          {MapSet.put(prepared, rel_key), Map.put(counts, rel_key, new_count)}
 
         new_count > 0 ->
-          {prepared, Map.put(counts, key, new_count)}
+          {prepared, Map.put(counts, rel_key, new_count)}
 
         true ->
           {prepared, counts}
@@ -516,26 +531,35 @@ defmodule Electric.Replication.PublicationManager do
     %{state | waiters: []}
   end
 
+  defp fetch_tracked_shape_relation!(
+         shape_handle,
+         %__MODULE__{
+           tracked_shape_handles: tracked_shape_handles
+         } = state
+       )
+       when is_tracking_shape_handle?(shape_handle, state) do
+    Map.fetch!(tracked_shape_handles, shape_handle)
+  end
+
   defp track_shape_handle(
          shape_handle,
+         relation,
          %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
-       ) do
-    %{state | tracked_shape_handles: MapSet.put(tracked_shape_handles, shape_handle)}
+       )
+       when not is_tracking_shape_handle?(shape_handle, state) do
+    %{state | tracked_shape_handles: Map.put_new(tracked_shape_handles, shape_handle, relation)}
   end
 
   defp untrack_shape_handle(
          shape_handle,
          %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
-       ) do
-    %{state | tracked_shape_handles: MapSet.delete(tracked_shape_handles, shape_handle)}
+       )
+       when is_tracking_shape_handle?(shape_handle, state) do
+    %{state | tracked_shape_handles: Map.delete(tracked_shape_handles, shape_handle)}
   end
 
-  defp is_tracking_shape_handle?(
-         shape_handle,
-         %__MODULE__{tracked_shape_handles: tracked_shape_handles}
-       ) do
-    MapSet.member?(tracked_shape_handles, shape_handle)
-  end
+  defp get_oid_relation_from_shape(%Shape{root_table: relation, root_table_id: oid}),
+    do: {oid, relation}
 
   defp filters_are_equal?(old_filters, new_filters), do: MapSet.equal?(old_filters, new_filters)
 end

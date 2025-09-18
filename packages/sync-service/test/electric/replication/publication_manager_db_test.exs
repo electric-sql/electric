@@ -66,10 +66,10 @@ defmodule Electric.Replication.PublicationManagerDbTest do
       assert :ok == PublicationManager.add_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
-      assert :ok == PublicationManager.remove_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.remove_shape(@shape_handle_2, ctx.pub_mgr_opts)
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
       assert [] == fetch_pub_tables(ctx)
     end
   end

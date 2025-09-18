@@ -15,7 +15,7 @@ defmodule Support.ComponentSetup do
     def name(_), do: :pub_man
     def add_shape(_handle, _shape, _opts), do: :ok
     def recover_shape(_handle, _shape, _opts), do: :ok
-    def remove_shape(_handle, _shape, _opts), do: :ok
+    def remove_shape(_handle, _opts), do: :ok
     def refresh_publication(_opts), do: :ok
   end
 
@@ -38,8 +38,8 @@ defmodule Support.ComponentSetup do
       :ok
     end
 
-    def remove_shape(handle, shape, %{parent: parent}) do
-      send(parent, {TestPublicationManager, :remove_shape, handle, shape})
+    def remove_shape(handle, %{parent: parent}) do
+      send(parent, {TestPublicationManager, :remove_shape, handle})
       :ok
     end
 

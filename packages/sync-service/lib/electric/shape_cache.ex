@@ -358,11 +358,11 @@ defmodule Electric.ShapeCache do
     :ok
   end
 
-  defp purge_shape(state, shape_handle, shape) do
+  defp purge_shape(state, shape_handle) do
     case ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously
-        :ok = Electric.Shapes.Monitor.purge_shape(state.stack_id, shape_handle, shape)
+        :ok = Electric.Shapes.Monitor.purge_shape(state.stack_id, shape_handle)
 
       :ok ->
         # if it is running then the stop_and_clean process will cleanup properly
@@ -406,7 +406,7 @@ defmodule Electric.ShapeCache do
             "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
           )
 
-          purge_shape(state, shape_handle, shape)
+          purge_shape(state, shape_handle)
 
           []
       end)
@@ -442,7 +442,7 @@ defmodule Electric.ShapeCache do
       )
 
       # clean up corrupted data to avoid persisting bad state
-      purge_shape(state, shape_handle, shape)
+      purge_shape(state, shape_handle)
       []
   end
 
@@ -510,7 +510,7 @@ defmodule Electric.ShapeCache do
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
         # purge because we know the consumer isn't running
-        purge_shape(state, shape_handle, shape)
+        purge_shape(state, shape_handle)
         :error
     end
   end
