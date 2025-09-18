@@ -96,9 +96,18 @@ defmodule Electric.Replication.SchemaReconciler do
 
     :ok
   catch
+    type, %Postgrex.Error{postgres: %{code: :insufficient_privilege}} = reason ->
+      Logger.warning(
+        "Schema reconciliation failed: #{Exception.format(type, reason, __STACKTRACE__)}"
+      )
+
+      :error
+
     type, reason ->
-      st = __STACKTRACE__
-      Logger.error("Schema reconciliation failed: #{Exception.format(type, reason, st)}")
+      Logger.error(
+        "Schema reconciliation failed: #{Exception.format(type, reason, __STACKTRACE__)}"
+      )
+
       :error
   end
 end
