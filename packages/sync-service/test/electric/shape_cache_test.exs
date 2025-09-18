@@ -1097,7 +1097,7 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       Mock.PublicationManager
-      |> stub(:remove_shape, fn ^shape_handle1, _, _ -> :ok end)
+      |> stub(:remove_shape, fn ^shape_handle1, _ -> :ok end)
       |> expect(:recover_shape, 1, fn ^shape_handle1, _, _ -> :ok end)
       |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
       |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)

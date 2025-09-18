@@ -113,7 +113,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
       assert_receive {:filters, [{_, {"public", "items"}}]}
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape, opts)
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
       assert_receive {:filters, []}
     end
 
@@ -122,8 +122,8 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape = generate_shape({"public", "items"})
       task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape, opts) end)
       task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape, opts) end)
-      task3 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, shape, opts) end)
-      task4 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, shape, opts) end)
+      task3 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
+      task4 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
 
       Task.await_many([task1, task2, task3, task4])
 
@@ -143,7 +143,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:filters, [{_, {"public", "items"}}]}
 
       # Remove one handle; relation should stay
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, shape1, opts)
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
       refute_receive {:filters, _}, 500
     end
   end

@@ -108,13 +108,13 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   defp cleanup_publication_manager(
          publication_manager_impl,
          shape_handle,
-         shape
+         _shape
        ) do
     {publication_manager, publication_manager_opts} = publication_manager_impl
 
     perform_reporting_errors(
       fn ->
-        publication_manager.remove_shape(shape_handle, shape, publication_manager_opts)
+        publication_manager.remove_shape(shape_handle, publication_manager_opts)
       end,
       "Failed to remove shape #{shape_handle} from publication"
     )

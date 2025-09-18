@@ -316,8 +316,7 @@ defmodule Electric.Shapes.MonitorTest do
 
       assert_receive {:on_cleanup, ^handle}
 
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle,
-                      @shape}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle}
 
       assert_receive {TestStatus, :remove_shape, ^handle}
     end
@@ -329,8 +328,7 @@ defmodule Electric.Shapes.MonitorTest do
 
       assert_receive {:on_cleanup, ^handle}
 
-      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle,
-                      @shape}
+      assert_receive {Support.ComponentSetup.TestPublicationManager, :remove_shape, ^handle}
 
       assert_receive {TestStatus, :remove_shape, ^handle}
     end
