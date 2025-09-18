@@ -199,8 +199,16 @@ defmodule Electric.ShapeCache.PureFileStorage do
         |> Enum.map(&for_shape(&1, opts))
         |> Enum.reduce(%{}, fn opts, acc ->
           case read_shape_definition(opts) do
-            {:ok, shape} -> Map.put(acc, opts.shape_handle, shape)
-            _ -> acc
+            {:ok, shape} ->
+              Map.put(acc, opts.shape_handle, shape)
+
+            _ ->
+              Logger.warning(
+                "Failed to read shape definition for shape #{opts.shape_handle}, removing it from disk"
+              )
+
+              cleanup!(opts)
+              acc
           end
         end)
         |> then(&{:ok, &1})
