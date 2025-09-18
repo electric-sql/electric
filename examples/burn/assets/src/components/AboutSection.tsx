@@ -27,7 +27,7 @@ function AboutSection() {
         {` `}
         See the
         {` `}
-        <a href="#not-yet-published">blog post</a>
+        <a href="https://electric-sql.com/blog/2025/08/12/bringing-agents-back-down-to-earth">blog post</a>
         {` `}
         for more&nbsp;info.
       </Text>
