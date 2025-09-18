@@ -22,7 +22,7 @@ AGENTS.md is a [simple open format](https://agents.md) for guiding coding agents
 Your coding agent or AI code editor may automatically read AGENTS.md. Or you can tell it to do so in your prompt, for example:
 
 ```sh
-claude "Read AGENTS.md. <rest your your prompt>."
+claude "Read AGENTS.md. Build an app with Electric and TanStack DB."
 ```
 
 ## File contents
