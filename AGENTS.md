@@ -256,8 +256,9 @@ const addTodoAction = createOptimisticAction<string>({
     })
   },
   mutationFn: async (text) => {
-    const response = await api.todos.create({ text, completed: false })
-    return response.json()
+    const { txid } = await api.todos.create({ text, completed: false })
+    // explicitly await for the transaction ID using utils.awaitTxId()
+    await todoCollection.utils.awaitTxId(txid)
   }
 })
 ```
@@ -281,9 +282,7 @@ const todoCollection = createCollection(
       onError: (error) => console.error('Shape error:', error)
     },
     onInsert: async ({ transaction }) => {
-      const { txid } = await api.todos.create(transaction.mutations[0].modified)
-      await todoCollection.utils.awaitTxId(txid)
-      return { txid }
+      return await api.todos.create(transaction.mutations[0].modified)
     }
   })
 )
@@ -310,11 +309,12 @@ Both backend and client must handle txid for smooth optimistic updates:
 onInsert: async ({ transaction }) => {
   // Backend: Return txid from the same Postgres transaction
   const { txid } = await api.todos.create(transaction.mutations[0].modified)
-  // Client: Wait for Electric to stream back this exact transaction
-  await todoCollection.utils.awaitTxId(txid)
+  // Client: Returning the `txid` (or using utils.awaitTxId in an explicit transaction)
+  // waits for Electric to sync the transaction back before discarding the optimistic state.
   return { txid }
 }
 ```
+
 **Without this pattern:** UI flickers as optimistic state drops before synced state arrives.
 
 #### 2. Slow shapes in local development
@@ -355,26 +355,6 @@ const todoCollection = createCollection(
     // ... same mutation handlers
   })
 )
-```
-
-### Performance optimization with derived collections
-```typescript
-import { createLiveQueryCollection } from '@tanstack/db'
-
-const activeTodos = createLiveQueryCollection({
-  startSync: true,
-  query: (q) =>
-    q.from({ todo: todoCollection })
-     .where(({ todo }) => eq(todo.completed, false))
-})
-```
-
-### Conditional optimistic updates
-```typescript
-// Disable optimistic updates for critical operations
-const handleDeleteAccount = () => {
-  userCollection.delete(userId, { optimistic: false })
-}
 ```
 
 ## Framework integrations
@@ -525,16 +505,13 @@ This gives you full control over auth/business logic while maintaining instant l
 The Electric TypeScript Client provides lower-level `Shape` / `ShapeStream` classes and `useShape` hook ([Electric][9]):
 
 ```ts
+import { Shape, ShapeStream } from '@electric-sql/client'
+const stream = new ShapeStream({...})
+const shape = new Shape(stream)
+
 import { useShape } from '@electric-sql/react'
-
 function Component() {
-  const { data } = useShape({
-    table: 'todos',
-    where: 'user_id = $1',
-    params: ['abc']
-  })
-
-  // render data
+  const { data } = useShape({...})
 }
 ```
 
