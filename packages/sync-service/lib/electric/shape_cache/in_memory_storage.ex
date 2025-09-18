@@ -319,6 +319,18 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
   end
 
+  @impl Electric.ShapeCache.Storage
+  def cleanup_all!(%{table_base_name: table_base_name} = _opts) do
+    :ets.all()
+    |> Enum.filter(&is_atom/1)
+    |> Enum.filter(fn name ->
+      String.starts_with?(Atom.to_string(name), "#{table_base_name}.")
+    end)
+    |> Enum.each(&ignoring_exceptions(fn -> :ets.delete(&1) end, ArgumentError))
+
+    :ok
+  end
+
   defp ignoring_exceptions(fun, exception) do
     fun.()
   rescue

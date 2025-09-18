@@ -131,6 +131,11 @@ defmodule Electric.ShapeCache.Storage do
   @callback cleanup!(shape_opts()) :: any()
 
   @doc """
+  Cleanup all shape data and metadata from storage.
+  """
+  @callback cleanup_all!(shape_opts()) :: any()
+
+  @doc """
   Compact operations in the log keeping the last N complete chunks intact
   """
   @callback compact(shape_opts(), keep_complete_chunks :: pos_integer()) :: :ok
@@ -267,6 +272,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def cleanup!({mod, shape_opts}) do
     mod.cleanup!(shape_opts)
+  end
+
+  @impl __MODULE__
+  def cleanup_all!({mod, opts}) do
+    mod.cleanup_all!(opts)
   end
 
   @impl __MODULE__
