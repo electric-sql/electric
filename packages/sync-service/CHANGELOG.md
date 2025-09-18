@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.1.12
+
+### Patch Changes
+
+- e86543b: Simplify `PublicationManager` to not require a full shape to remove existing tracked shape.
+- 8b9aab4: Optimize shape counting by not copying all shapes from ETS into process memory.
+- bb34680: Expire shapes in batches of a fixed size
+- b89ac5a: Faster purging of all shape data in case of timeline or replication slot change.
+
 ## 1.1.11
 
 ### Patch Changes
