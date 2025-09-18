@@ -15,7 +15,7 @@ Load our [`AGENTS.md`](/AGENTS.md){target="_self"} file to use Electric with AI 
 
 ## Using Electric with coding agents
 
-Electric provides an AGENTS.md at [https://electric-sql.com/AGENTS.md](/AGENTS.md).
+Electric provides an AGENTS.md at [https://electric-sql.com/AGENTS.md](/AGENTS.md){target="_self"}.
 
 AGENTS.md is a [simple open format](https://agents.md) for guiding coding agents. It contains instructions for AI coding agents, formatted in a way they can easily digest.
 
@@ -27,7 +27,7 @@ claude "Read AGENTS.md. <rest your your prompt>."
 
 ## File contents
 
-Copy our [`AGENTS.md`](/AGENTS.md) file to the root of your repo or package. Edit it and / or combine with your other project-specific instructions, as you see fit.
+Copy our [`AGENTS.md`](/AGENTS.md){target="_self"} file to the root of your repo or package. Edit it and / or combine with your other project-specific instructions, as you see fit.
 
 <<< @/../AGENTS.md
 
