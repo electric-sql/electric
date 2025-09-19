@@ -73,6 +73,11 @@ defmodule Electric.ShapeCache.ExpiryManager do
     if shape_count > max_shapes do
       shapes_to_expire = least_recently_used(state, state.expiry_batch_size)
 
+      Logger.info(
+        "Expiring #{length(shapes_to_expire)} shapes as the number of shapes " <>
+          "has exceeded the limit (#{state.max_shapes})"
+      )
+
       OpenTelemetry.with_span(
         "expiry_manager.expire_shapes",
         [
@@ -80,10 +85,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
           shape_count: shape_count,
           number_to_expire: state.expiry_batch_size
         ],
-        fn ->
-          shapes_to_expire
-          |> Enum.each(fn shape -> expire_shape(shape, state) end)
-        end
+        fn -> Enum.each(shapes_to_expire, &expire_shape(&1, state)) end
       )
     else
       # We're under the max number of shapes, don't recheck again for at least recheck_delay_ms
@@ -100,14 +102,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
         shape_handle: shape.shape_handle,
         elapsed_minutes_since_use: shape.elapsed_minutes_since_use
       ],
-      fn ->
-        Logger.info(
-          "Expiring shape #{shape.shape_handle} as as the number of shapes " <>
-            "has exceeded the limit (#{state.max_shapes})"
-        )
-
-        clean_up_shape(state, shape.shape_handle)
-      end
+      fn -> clean_up_shape(state, shape.shape_handle) end
     )
   end
 
