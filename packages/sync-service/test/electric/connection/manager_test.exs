@@ -51,7 +51,9 @@ defmodule Electric.Connection.ConnectionManagerTest do
              {Electric.ShapeCache.ShapeStatus,
               Electric.ShapeCache.ShapeStatus.opts(
                 storage: ctx.storage,
-                shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id)
+                shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id),
+                shape_last_used_table:
+                  Electric.ShapeCache.ShapeStatus.shape_last_used_table(stack_id)
               )},
            log_producer: Electric.Replication.ShapeLogCollector.name(stack_id),
            consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),

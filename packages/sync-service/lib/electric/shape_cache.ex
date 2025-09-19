@@ -142,7 +142,7 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   @spec count_shapes(Access.t()) :: non_neg_integer() | :error
   def count_shapes(opts) do
-    table = ShapeStatus.shape_meta_table(opts)
+    table = ShapeStatus.shape_last_used_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     shape_status.count_shapes(table)
