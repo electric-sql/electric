@@ -76,7 +76,7 @@ defmodule Electric.ExpiryManagerTest do
       {ExpiryManager,
        max_shapes: 1,
        expiry_batch_size: 1,
-       recheck_delay_ms: 1,
+       period: 10,
        stack_id: ctx.stack_id,
        shape_status: ctx.shape_status,
        consumer_supervisor: consumer_supervisor}

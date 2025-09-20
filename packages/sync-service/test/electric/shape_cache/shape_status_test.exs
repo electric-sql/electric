@@ -27,18 +27,30 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   defp table_name,
     do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
 
-  defp new_state(_ctx, opts \\ []) do
-    table = Keyword.get(opts, :table, table_name())
+  defp last_used_table_name(meta_table),
+    do: String.to_atom(Atom.to_string(meta_table) <> ":last_used")
 
+  defp shape_status_opts(opts) do
+    meta_table = Keyword.get_lazy(opts, :table, fn -> table_name() end)
+
+    ShapeStatus.opts(
+      storage: {Mock.Storage, []},
+      shape_meta_table: meta_table,
+      shape_last_used_table: last_used_table_name(meta_table)
+    )
+  end
+
+  defp delete_tables(meta_table) do
+    :ets.delete(meta_table)
+    :ets.delete(last_used_table_name(meta_table))
+  end
+
+  defp new_state(_ctx, opts \\ []) do
     Mock.Storage
     |> stub(:metadata_backup_dir, fn _ -> nil end)
     |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end)
 
-    shape_status_opts =
-      ShapeStatus.opts(
-        storage: {Mock.Storage, []},
-        shape_meta_table: table
-      )
+    shape_status_opts = shape_status_opts(opts)
 
     :ok = ShapeStatus.initialise(shape_status_opts)
 
@@ -227,7 +239,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   describe "least_recently_used/2" do
-    test "returns last shape update_last_read_time_to_now was called on", ctx do
+    test "returns the shape that was least recently updated", ctx do
       {:ok, state, []} = new_state(ctx)
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
@@ -296,11 +308,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, %{}} end)
       |> stub(:get_all_stored_shape_handles, fn _ -> {:ok, MapSet.new()} end)
 
-      state =
-        ShapeStatus.opts(
-          storage: {Mock.Storage, []},
-          shape_meta_table: table
-        )
+      state = shape_status_opts(table: table)
 
       assert :ok = ShapeStatus.initialise(state)
       shape = shape!()
@@ -316,7 +324,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert File.exists?(backup_file)
 
       # Simulate restart: remove ETS table (would be removed with process exit in real system)
-      :ets.delete(table)
+      delete_tables(table)
 
       # Second lifecycle: should load from backup (so must NOT call get_all_stored_shapes)
       Mock.Storage
@@ -326,11 +334,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       end)
       |> expect(:get_all_stored_shape_handles, 1, fn _ -> {:ok, MapSet.new([shape_handle])} end)
 
-      state2 =
-        ShapeStatus.opts(
-          storage: {Mock.Storage, []},
-          shape_meta_table: table
-        )
+      state2 = shape_status_opts(table: table)
 
       assert :ok = ShapeStatus.initialise(state2)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state2)
@@ -350,11 +354,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, %{}} end)
       |> stub(:get_all_stored_shape_handles, fn _ -> {:ok, MapSet.new()} end)
 
-      state =
-        ShapeStatus.opts(
-          storage: {Mock.Storage, []},
-          shape_meta_table: table
-        )
+      state = shape_status_opts(table: table)
 
       assert :ok = ShapeStatus.initialise(state)
       shape = shape!()
@@ -367,7 +367,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       assert File.exists?(backup_file)
 
-      :ets.delete(table)
+      delete_tables(table)
 
       # Second lifecycle: integrity check fails because storage reports NO handles
       Mock.Storage
@@ -376,11 +376,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       # After integrity failure, initialise will call load/1 -> get_all_stored_shapes
       |> expect(:get_all_stored_shapes, 1, fn _ -> {:ok, %{}} end)
 
-      state2 =
-        ShapeStatus.opts(
-          storage: {Mock.Storage, []},
-          shape_meta_table: table
-        )
+      state2 = shape_status_opts(table: table)
 
       assert :ok = ShapeStatus.initialise(state2)
       # Shape from backup should NOT be present after failed integrity
