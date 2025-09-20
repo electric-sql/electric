@@ -10,7 +10,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   @schema NimbleOptions.new!(
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             expiry_batch_size: [type: :pos_integer],
-            period: [type: :non_neg_integer, default: 1_000],
+            period: [type: :non_neg_integer, default: 60_000],
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true]
