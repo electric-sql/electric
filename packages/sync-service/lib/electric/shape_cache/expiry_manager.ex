@@ -98,24 +98,14 @@ defmodule Electric.ShapeCache.ExpiryManager do
         shape_handle: shape.shape_handle,
         elapsed_minutes_since_use: shape.elapsed_minutes_since_use
       ],
-      fn -> clean_up_shape(state, shape.shape_handle) end
-    )
-  end
-
-  defp clean_up_shape(state, shape_handle) do
-    OpenTelemetry.with_span(
-      "expiry_manager.stop_shape_consumer",
-      [shape_handle: shape_handle],
       fn ->
         Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
           state.consumer_supervisor,
           state.stack_id,
-          shape_handle
+          shape.shape_handle
         )
       end
     )
-
-    :ok
   end
 
   defp least_recently_used(%{shape_status: {shape_status, shape_status_state}}, number_to_expire) do
