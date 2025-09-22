@@ -149,6 +149,10 @@ defmodule Electric.Shapes.ConsumerTest do
           |> expect(:mark_snapshot_started, 1, fn _, ^shape_handle -> :ok end)
           |> allow(self(), fn -> Consumer.whereis(ctx.stack_id, shape_handle) end)
 
+          Mock.PublicationManager
+          |> expect(:add_shape, 1, fn _, _, _ -> :ok end)
+          |> allow(self(), fn -> Consumer.whereis(ctx.stack_id, shape_handle) end)
+
           {:ok, consumer} =
             start_supervised(
               {Shapes.ConsumerSupervisor,
