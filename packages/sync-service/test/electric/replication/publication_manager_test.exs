@@ -91,27 +91,15 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape1 = generate_shape({"public", "items"})
       test_pid = self()
 
-      start_supervised!(
-        Supervisor.child_spec(
-          {Task,
-           fn ->
-             :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-             send(test_pid, :task1_done)
-           end},
-          id: :task1
-        )
-      )
+      run_async(fn ->
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+        send(test_pid, :task1_done)
+      end)
 
-      start_supervised!(
-        Supervisor.child_spec(
-          {Task,
-           fn ->
-             :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-             send(test_pid, :task2_done)
-           end},
-          id: :task2
-        )
-      )
+      run_async(fn ->
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+        send(test_pid, :task2_done)
+      end)
 
       refute_receive :task1_done, 50
       refute_received {:filters, _}
@@ -192,27 +180,15 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       test_pid = self()
 
-      start_supervised!(
-        Supervisor.child_spec(
-          {Task,
-           fn ->
-             :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
-             send(test_pid, :task1_done)
-           end},
-          id: :task1
-        )
-      )
+      run_async(fn ->
+        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        send(test_pid, :task1_done)
+      end)
 
-      start_supervised!(
-        Supervisor.child_spec(
-          {Task,
-           fn ->
-             :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
-             send(test_pid, :task2_done)
-           end},
-          id: :task2
-        )
-      )
+      run_async(fn ->
+        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        send(test_pid, :task2_done)
+      end)
 
       refute_receive :task1_done, 50
       refute_received {:filters, _}
@@ -297,5 +273,14 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:DOWN, ^mref, :process, ^pid,
                       {:shutdown, %Postgrex.Error{postgres: %{code: :undefined_object}}}}
     end
+  end
+
+  defp run_async(fun) do
+    start_supervised!(
+      Supervisor.child_spec(
+        {Task, fun},
+        id: make_ref()
+      )
+    )
   end
 end
