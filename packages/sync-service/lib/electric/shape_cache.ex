@@ -19,7 +19,6 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback clean_shape(shape_handle(), Access.t()) :: :ok
   @callback clean_all_shapes_for_relations(list(Electric.oid_relation()), opts :: Access.t()) ::
               :ok
-  @callback clean_all_shapes(Access.t()) :: :ok
   @callback has_shape?(shape_handle(), Access.t()) :: boolean()
 end
 
@@ -158,13 +157,6 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  @spec clean_all_shapes(Access.t()) :: :ok
-  def clean_all_shapes(opts) do
-    server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, :clean_all_shapes)
-  end
-
-  @impl Electric.ShapeCacheBehaviour
   @spec clean_all_shapes_for_relations(list(Electric.oid_relation()), Access.t()) :: :ok
   def clean_all_shapes_for_relations(relations, opts) do
     server = Access.get(opts, :server, name(opts))
@@ -297,14 +289,6 @@ defmodule Electric.ShapeCache do
     with :ok <- clean_up_shape(state, shape_handle) do
       Logger.info("Cleaning up shape #{shape_handle}")
     end
-
-    {:reply, :ok, state}
-  end
-
-  def handle_call(:clean_all_shapes, _from, state) do
-    Logger.warning("Purging all shapes.")
-
-    clean_up_all_shapes(state)
 
     {:reply, :ok, state}
   end
