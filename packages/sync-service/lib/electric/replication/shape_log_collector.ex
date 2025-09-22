@@ -127,10 +127,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_info({{:unsubscribe, shape_handle}, ref, :process, pid, _reason}, state) do
     OpenTelemetry.with_span("shape_log_collector.unsubscribe", [], state.stack_id, fn ->
-      {:noreply,
-       state
-       |> remove_subscription({pid, ref}, shape_handle)
-       |> Map.update!(:flush_tracker, &FlushTracker.handle_shape_removed(&1, shape_handle))}
+      {:noreply, remove_subscription(state, {pid, ref}, shape_handle)}
     end)
   end
 
@@ -336,6 +333,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp remove_subscription(%{subscriptions: {count, set}} = state, from, shape_handle) do
+    OpenTelemetry.start_interval("unsubscribe_shape.remove_subscription")
+
     subscriptions =
       if MapSet.member?(set, from) do
         {count - 1, MapSet.delete(set, from)}
@@ -347,14 +346,31 @@ defmodule Electric.Replication.ShapeLogCollector do
         {count, set}
       end
 
+    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_filter")
+    filter = Filter.remove_shape(state.filter, shape_handle)
+
+    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_partitions")
+    partitions = Partitions.remove_shape(state.partitions, shape_handle)
+
+    OpenTelemetry.start_interval("unsubscribe_shape.remove_pids_by_shape_handle")
+    pids_by_shape_handle = Map.delete(state.pids_by_shape_handle, shape_handle)
+
+    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_flush_tracker")
+    flush_tracker = FlushTracker.handle_shape_removed(state.flush_tracker, shape_handle)
+
+    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_dependency_layers")
+    dependency_layers = DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)
+
+    OpenTelemetry.stop_and_save_intervals(total_attribute: "unsubscribe_shape.total_duration_µs")
+
     %{
       state
       | subscriptions: subscriptions,
-        filter: Filter.remove_shape(state.filter, shape_handle),
-        partitions: Partitions.remove_shape(state.partitions, shape_handle),
-        pids_by_shape_handle: Map.delete(state.pids_by_shape_handle, shape_handle),
-        dependency_layers:
-          DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)
+        filter: filter,
+        partitions: partitions,
+        pids_by_shape_handle: pids_by_shape_handle,
+        dependency_layers: dependency_layers,
+        flush_tracker: flush_tracker
     }
     |> log_subscription_status()
   end
