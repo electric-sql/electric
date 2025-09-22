@@ -45,6 +45,7 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp serve_shape_log(%Conn{assigns: %{request: request}} = conn, _) do
+    OpenTelemetry.start_interval("plug.serve_shape_log")
     Api.serve_shape_log(conn, request)
   end
 
@@ -111,6 +112,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # sub-span.
   defp start_telemetry_span(conn, _) do
     OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "Plug_shape_get", %{}, %{})
+    OpenTelemetry.start_interval("plug.initialization")
     add_span_attrs_from_conn(conn)
     put_private(conn, :electric_telemetry_span, %{start_time: System.monotonic_time()})
   end
@@ -140,6 +142,7 @@ defmodule Electric.Plug.ServeShapePlug do
     )
 
     add_span_attrs_from_conn(conn)
+    OpenTelemetry.stop_and_save_intervals(total_attribute: "plug.total_duration_µs")
     OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
     conn
   end

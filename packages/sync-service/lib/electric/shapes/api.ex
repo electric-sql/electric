@@ -255,9 +255,16 @@ defmodule Electric.Shapes.Api do
 
   defp load_shape_info(%Request{} = request) do
     with_span(request, "shape_get.api.load_shape_info", fn ->
-      request
-      |> get_or_create_shape_handle()
-      |> handle_shape_info(request)
+      OpenTelemetry.start_interval("get_or_create_shape_handle")
+
+      response =
+        request
+        |> get_or_create_shape_handle()
+        |> handle_shape_info(request)
+
+      OpenTelemetry.stop_and_save_intervals(total_attribute: "load_shape_info.total_time_µs")
+
+      response
     end)
   end
 
