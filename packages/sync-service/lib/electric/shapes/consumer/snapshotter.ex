@@ -55,21 +55,31 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     result =
       case Shapes.Consumer.whereis(stack_id, shape_handle) do
         consumer when is_pid(consumer) ->
-          if not Storage.snapshot_started?(state.storage) do
-            %{
-              db_pool: pool,
-              storage: storage,
-              create_snapshot_fn: create_snapshot_fn,
-              stack_id: stack_id,
-              chunk_bytes_threshold: chunk_bytes_threshold
-            } = state
+          %{
+            db_pool: pool,
+            storage: storage,
+            create_snapshot_fn: create_snapshot_fn,
+            publication_manager: {publication_manager, publication_manager_opts},
+            stack_id: stack_id,
+            chunk_bytes_threshold: chunk_bytes_threshold
+          } = state
 
-            OpenTelemetry.with_span(
-              "shape_snapshot.create_snapshot_task",
-              shape_attrs(shape_handle, shape),
-              stack_id,
-              fn ->
-                try do
+          OpenTelemetry.with_span(
+            "shape_snapshot.create_snapshot_task",
+            shape_attrs(shape_handle, shape),
+            stack_id,
+            fn ->
+              try do
+                OpenTelemetry.with_span(
+                  "shape_snapshot.prepare_tables",
+                  shape_attrs(shape_handle, shape),
+                  stack_id,
+                  fn ->
+                    publication_manager.add_shape(shape_handle, shape, publication_manager_opts)
+                  end
+                )
+
+                if not Storage.snapshot_started?(state.storage) do
                   apply(create_snapshot_fn, [
                     consumer,
                     shape_handle,
@@ -79,30 +89,30 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                     stack_id,
                     chunk_bytes_threshold
                   ])
-                rescue
-                  error ->
-                    GenServer.cast(
-                      consumer,
-                      {:snapshot_failed, shape_handle, SnapshotError.from_error(error)}
-                    )
-                catch
-                  :exit, {:timeout, {GenServer, :call, _}} ->
-                    GenServer.cast(
-                      consumer,
-                      {:snapshot_failed, shape_handle, SnapshotError.table_lock_timeout()}
-                    )
+                else
+                  # Let the shape cache know that the snapshot is available. When the
+                  # shape cache starts and restores the shapes from disk, it doesn't
+                  # know about the snapshot status of each shape, and because the
+                  # storage does some clean up on start, e.g. in the case of a format
+                  # upgrade, we only know the actual on-disk state of the shape data
+                  # once things are running.
+                  GenServer.cast(consumer, {:snapshot_exists, shape_handle})
                 end
+              rescue
+                error ->
+                  GenServer.cast(
+                    consumer,
+                    {:snapshot_failed, shape_handle, SnapshotError.from_error(error)}
+                  )
+              catch
+                :exit, {:timeout, {GenServer, :call, _}} ->
+                  GenServer.cast(
+                    consumer,
+                    {:snapshot_failed, shape_handle, SnapshotError.table_lock_timeout()}
+                  )
               end
-            )
-          else
-            # Let the shape cache know that the snapshot is available. When the
-            # shape cache starts and restores the shapes from disk, it doesn't
-            # know about the snapshot status of each shape, and because the
-            # storage does some clean up on start, e.g. in the case of a format
-            # upgrade, we only know the actual on-disk state of the shape data
-            # once things are running.
-            GenServer.cast(consumer, {:snapshot_exists, shape_handle})
-          end
+            end
+          )
 
           {:stop, :normal, state}
 

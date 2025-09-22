@@ -151,7 +151,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
           Mock.PublicationManager
           |> expect(:add_shape, 1, fn _, _, _ -> :ok end)
-          |> allow(self(), fn -> Consumer.whereis(ctx.stack_id, shape_handle) end)
+          |> allow(self(), fn ->
+            GenServer.whereis(Consumer.Snapshotter.name(ctx.stack_id, shape_handle))
+          end)
 
           {:ok, consumer} =
             start_supervised(

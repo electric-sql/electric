@@ -1043,7 +1043,9 @@ defmodule Electric.ShapeCacheTest do
 
       Mock.PublicationManager
       |> expect(:add_shape, 1, fn ^shape_handle1, _, _ -> :ok end)
-      |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
+      |> allow(self(), fn ->
+        GenServer.whereis(Shapes.Consumer.Snapshotter.name(context.stack_id, shape_handle1))
+      end)
 
       restart_shape_cache(%{
         context
@@ -1091,11 +1093,20 @@ defmodule Electric.ShapeCacheTest do
     end
 
     defmodule SlowPublicationManager do
-      def remove_shape(_, _), do: :ok
+      use GenServer
 
-      def add_shape(_, _, _) do
+      def start_link(opts),
+        do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
+
+      def init(opts), do: {:ok, opts}
+
+      def remove_shape(_, opts), do: GenServer.call(opts[:server], :remove_shape, 0)
+
+      def add_shape(_, _, opts), do: GenServer.call(opts[:server], :add_shape, 0)
+
+      def handle_call(_request, _from, state) do
         Process.sleep(10)
-        :ok
+        {:reply, :ok, state}
       end
     end
 
@@ -1104,10 +1115,13 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
+      slow_pub_man_pid =
+        start_supervised!({SlowPublicationManager, [name: :"slow_pub_#{ctx.stack_id}"]})
+
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       restart_shape_cache(ctx,
-        publication_manager: {SlowPublicationManager, []},
+        publication_manager: {SlowPublicationManager, [server: slow_pub_man_pid]},
         storage: Support.TestStorage.wrap(ctx.storage, %{}),
         recover_shape_timeout: 1
       )
