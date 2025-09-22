@@ -84,10 +84,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                     consumer,
                     shape_handle,
                     shape,
-                    pool,
-                    storage,
-                    stack_id,
-                    chunk_bytes_threshold
+                    %{
+                      db_pool: pool,
+                      storage: storage,
+                      stack_id: stack_id,
+                      chunk_bytes_threshold: chunk_bytes_threshold,
+                      timeout_to_first_data: state.snapshot_timeout_to_first_data
+                    }
                   ])
                 else
                   # Let the shape cache know that the snapshot is available. When the
@@ -136,13 +139,103 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   @doc false
   def query_in_readonly_txn(
-        parent,
+        consumer,
         shape_handle,
         shape,
-        db_pool,
-        storage,
-        stack_id,
-        chunk_bytes_threshold
+        ctx
+      ) do
+    supervisor = Electric.ProcessRegistry.name(ctx.stack_id, Electric.StackTaskSupervisor)
+    self_pid = self()
+
+    # We're looking to avoid saturating the DB connection pool with queries that are "bad" - those that don't start
+    # returning any data (likely because they're not using an index). To acheive that, we're running the query in a task,
+    # and waiting for the task to (a) send us a message that it's ready to stream and (b) send us a message when it sees any data
+    # Two messages are needed because we can be queued for the connection pool or stuck in other places,
+    # and we don't want to count that time towards the "time to first data"
+    #
+    # Once we have the first message, we set a timeout to wait for the task to send us a message when it sees any data.
+    # If the task doesn't send us a message within the timeout, we consider the query "bad" and exit the task.
+
+    task =
+      Task.Supervisor.async_nolink(supervisor, fn ->
+        try do
+          result =
+            do_query_in_readonly_txn(
+              self_pid,
+              consumer,
+              shape_handle,
+              shape,
+              ctx
+            )
+
+          {:ok, result}
+          # We're doing a rescue here because we don't want "task exited" logs
+        rescue
+          error ->
+            {:error, error, __STACKTRACE__}
+        end
+      end)
+
+    ref = task.ref
+    timeout_to_first_data = Map.get(ctx, :timeout_to_first_data, :timer.seconds(30))
+
+    receive do
+      {:ready_to_stream, task_pid, start_time} ->
+        Process.send_after(
+          self_pid,
+          {:stream_timeout, task_pid},
+          start_time + timeout_to_first_data,
+          abs: true
+        )
+
+        receive do
+          {:stream_timeout, task_pid} ->
+            Process.demonitor(ref, [:flush])
+            Task.Supervisor.terminate_child(supervisor, task_pid)
+
+            raise SnapshotError.slow_snapshot_query(timeout_to_first_data)
+
+          :data_received ->
+            Task.await(task, :infinity) |> handle_task_exit()
+
+          {^ref, result} ->
+            Process.demonitor(ref, [:flush])
+            handle_task_exit(result)
+
+          {:DOWN, ^ref, :process, _, reason} ->
+            case reason do
+              {err, stacktrace} when is_exception(err) -> reraise err, stacktrace
+              reason -> exit(reason)
+            end
+        end
+
+      {^ref, result} ->
+        Process.demonitor(ref, [:flush])
+        handle_task_exit(result)
+
+      {:DOWN, ^ref, :process, _, reason} ->
+        case reason do
+          {err, stacktrace} when is_exception(err) -> reraise err, stacktrace
+          reason -> exit(reason)
+        end
+    end
+  end
+
+  defp handle_task_exit({:ok, result}), do: result
+  defp handle_task_exit({:error, error, stacktrace}), do: reraise(error, stacktrace)
+  defp handle_task_exit(reason), do: exit(reason)
+
+  def do_query_in_readonly_txn(
+        task_parent,
+        consumer,
+        shape_handle,
+        shape,
+        %{
+          db_pool: db_pool,
+          storage: storage,
+          stack_id: stack_id,
+          chunk_bytes_threshold: chunk_bytes_threshold
+        }
       ) do
     shape_attrs = shape_attrs(shape_handle, shape)
 
@@ -174,7 +267,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               )
 
             GenServer.cast(
-              parent,
+              consumer,
               {:pg_snapshot_known, shape_handle, pg_snapshot}
             )
 
@@ -189,21 +282,28 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               end
             )
 
+            send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
+
             stream =
               Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
               |> Stream.transform(
                 fn -> false end,
                 fn item, acc ->
-                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
+                  if not acc do
+                    send(task_parent, :data_received)
+                    GenServer.cast(consumer, {:snapshot_started, shape_handle})
+                  end
+
                   {[item], true}
                 end,
                 fn acc ->
                   if not acc do
                     # The stream has been read to the end but we haven't seen a single item in
-                    # it. Notify `parent` anyway since an empty file will have been created by
+                    # it. Notify `consumer` anyway since an empty file will have been created by
                     # the storage implementation for the API layer to read the snapshot data
                     # from.
-                    GenServer.cast(parent, {:snapshot_started, shape_handle})
+                    send(task_parent, :data_received)
+                    GenServer.cast(consumer, {:snapshot_started, shape_handle})
                   end
 
                   {[], acc}

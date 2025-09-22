@@ -194,6 +194,7 @@ defmodule Support.ComponentSetup do
         consumer_supervisor: consumer_supervisor
       ]
       |> Keyword.merge(additional_opts)
+      |> Keyword.merge(Map.get(ctx, :shape_cache_opts_overrides, []))
 
     start_link_supervised!(%{
       id: consumer_supervisor,

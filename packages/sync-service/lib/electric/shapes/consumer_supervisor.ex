@@ -20,8 +20,12 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             run_with_conn_fn: [type: {:fun, 2}, default: &DBConnection.run/2],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}, required: true],
             create_snapshot_fn: [
-              type: {:fun, 7},
-              default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
+              type: {:fun, 4},
+              default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/4
+            ],
+            snapshot_timeout_to_first_data: [
+              type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
+              default: :timer.seconds(30)
             ],
             otel_ctx: [type: :any, required: false]
           )

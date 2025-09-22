@@ -61,12 +61,16 @@ defmodule Electric.ShapeCache do
               default: &Shapes.Consumer.Snapshotter.run_with_conn/2
             ],
             create_snapshot_fn: [
-              type: {:fun, 7},
-              default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/7
+              type: {:fun, 4},
+              default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/4
             ],
             recover_shape_timeout: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: 5_000
+            ],
+            snapshot_timeout_to_first_data: [
+              type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
+              default: :timer.seconds(30)
             ]
           )
 
@@ -240,7 +244,8 @@ defmodule Electric.ShapeCache do
       log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
-      subscription: nil
+      subscription: nil,
+      snapshot_timeout_to_first_data: opts.snapshot_timeout_to_first_data
     }
 
     {last_processed_lsn, total_recovered, total_failed_to_recover} =
@@ -458,7 +463,8 @@ defmodule Electric.ShapeCache do
            db_pool: state.db_pool,
            run_with_conn_fn: state.run_with_conn_fn,
            create_snapshot_fn: state.create_snapshot_fn,
-           otel_ctx: otel_ctx
+           otel_ctx: otel_ctx,
+           snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data
          ) do
       {:ok, _supervisor_pid} ->
         :ok
