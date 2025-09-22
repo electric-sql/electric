@@ -414,18 +414,6 @@ defmodule Electric.Replication.PublicationManager do
          %__MODULE__{
            committed_relation_filters: committed_filters,
            prepared_relation_filters: current_filters,
-           next_update_forced?: forced?
-         } = state
-       )
-       when current_filters == committed_filters and not forced? do
-    Logger.debug("No changes to publication, skipping update")
-    {:ok, state, MapSet.new()}
-  end
-
-  defp update_publication(
-         %__MODULE__{
-           committed_relation_filters: committed_filters,
-           prepared_relation_filters: current_filters,
            publication_name: publication_name,
            db_pool: db_pool,
            configure_tables_for_replication_fn: configure_tables_for_replication_fn,
