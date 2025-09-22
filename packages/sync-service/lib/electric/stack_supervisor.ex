@@ -100,6 +100,7 @@ defmodule Electric.StackSupervisor do
                    default: [],
                    keys: [
                      publication_alter_debounce_ms: [type: :non_neg_integer, default: 0],
+                     cleanup_interval_ms: [type: :non_neg_integer, default: 10_000],
                      registry_partitions: [type: :non_neg_integer, required: false],
                      monitor_opts: [
                        type: :keyword_list,
@@ -364,6 +365,8 @@ defmodule Electric.StackSupervisor do
       telemetry_children ++
         [
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
+          {Electric.AsyncDeleter,
+           stack_id: stack_id, cleanup_interval_ms: config.tweaks[:cleanup_interval_ms]},
           {Registry,
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
           Electric.ShapeCache.Storage.stack_child_spec(storage),

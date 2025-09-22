@@ -228,7 +228,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     try do
       case File.touch(marker_file_path) do
-        :ok -> unsafe_cleanup_with_retries!(opts.data_dir)
+        :ok -> Electric.AsyncDeleter.delete(opts.base_path, stack_id: opts.stack_id)
         # nothing to delete, no-op
         {:error, :enoent} -> :ok
         {:error, reason} -> raise File.Error, reason: reason, path: marker_file_path
@@ -238,8 +238,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def cleanup_all!(%{base_path: base_path}) do
-    unsafe_cleanup_with_retries!(base_path)
+  def cleanup_all!(%{stack_id: stack_id, base_path: base_path}) do
+    Electric.AsyncDeleter.delete(base_path, stack_id: stack_id)
   end
 
   def schedule_compaction(opts) do
@@ -447,25 +447,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   @doc false
   def deletion_marker_path(%__MODULE__{base_path: base_path, shape_handle: handle}) do
     Path.join([base_path, ".#{handle}-deleted"])
-  end
-
-  defp unsafe_cleanup_with_retries!(directory, attempts_left \\ 5) do
-    with {:ok, _} <- rm_rf(directory) do
-      :ok
-    else
-      # There is a very unlikely but observed scenario where the rm_rf call
-      # tries to delete a directory after having deleted all its files, but
-      # due to some FS race the deletion fails with EEXIST. Very hard to test
-      # and prevent so we mitigate it with arbitrary retries.
-      {:error, :eexist, _} when attempts_left > 0 ->
-        unsafe_cleanup_with_retries!(directory, attempts_left - 1)
-
-      {:error, reason, path} ->
-        raise File.Error,
-          reason: reason,
-          path: path,
-          action: "remove files and directories recursively from"
-    end
   end
 
   def get_total_disk_usage(%{base_path: base_path}),

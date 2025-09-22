@@ -69,6 +69,7 @@ defmodule Electric.Config do
     storage_dir: "./persistent",
     storage: &Electric.Config.Defaults.storage/0,
     persistent_kv: &Electric.Config.Defaults.persistent_kv/0,
+    cleanup_interval_ms: 10_000,
     ## Telemetry
     instance_id: nil,
     prometheus_port: nil,
