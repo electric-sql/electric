@@ -205,8 +205,6 @@ defmodule Electric.Postgres.Configuration do
   end
 
   defp alter_publication!(conn, publication_name, relation_filters) do
-    publication = Utils.quote_name(publication_name)
-
     prev_published_tables =
       get_publication_tables(conn, publication_name)
       |> Enum.map(fn {_oid, relation, _replident} -> Utils.relation_to_sql(relation) end)
@@ -218,18 +216,20 @@ defmodule Electric.Postgres.Configuration do
       |> Enum.map(&Utils.relation_to_sql/1)
       |> MapSet.new()
 
-    to_drop = MapSet.difference(prev_published_tables, new_published_tables)
-    to_add = MapSet.difference(new_published_tables, prev_published_tables)
+    to_drop = MapSet.difference(prev_published_tables, new_published_tables) |> Enum.to_list()
+    to_add = MapSet.difference(new_published_tables, prev_published_tables) |> Enum.to_list()
+    execute_alter_publication_statements!(conn, publication_name, to_drop, to_add)
+  end
 
-    if MapSet.size(to_drop) > 0 or MapSet.size(to_add) > 0 do
-      Logger.info(
-        "Configuring publication #{publication_name} to " <>
-          "drop #{inspect(MapSet.to_list(to_drop))} tables, and " <>
-          "add #{inspect(MapSet.to_list(to_add))} tables",
-        publication_alter_drop_tables: Enum.to_list(to_drop),
-        publication_alter_add_tables: Enum.to_list(to_add)
-      )
-    end
+  defp execute_alter_publication_statements!(_, _, [], []), do: :ok
+
+  defp execute_alter_publication_statements!(conn, publication_name, to_drop, to_add) do
+    Logger.info(
+      "Configuring publication #{publication_name} to " <>
+        "drop #{inspect(to_drop)} tables, and " <> "add #{inspect(to_add)} tables",
+      publication_alter_drop_tables: to_drop,
+      publication_alter_add_tables: to_add
+    )
 
     alter_ops =
       Enum.concat(Enum.map(to_add, &{&1, "ADD"}), Enum.map(to_drop, &{&1, "DROP"}))
@@ -238,7 +238,11 @@ defmodule Electric.Postgres.Configuration do
       Postgrex.query!(conn, "SAVEPOINT before_publication", [])
 
       # PG 14 and below do not support filters on tables of publications
-      case Postgrex.query(conn, "ALTER PUBLICATION #{publication} #{op} TABLE #{table}", []) do
+      case Postgrex.query(
+             conn,
+             "ALTER PUBLICATION #{Utils.quote_name(publication_name)} #{op} TABLE #{table}",
+             []
+           ) do
         {:ok, _} ->
           Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
           :ok

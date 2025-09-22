@@ -109,6 +109,7 @@ defmodule Electric.StackSupervisor do
                          on_cleanup: [type: {:fun, 1}]
                        ]
                      ],
+                     publication_refresh_period: [type: :non_neg_integer, default: 60_000],
                      schema_reconciler_period: [type: :non_neg_integer, default: 60_000]
                    ]
                  ],
