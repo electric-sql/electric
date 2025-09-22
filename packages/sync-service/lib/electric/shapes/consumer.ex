@@ -102,7 +102,8 @@ defmodule Electric.Shapes.Consumer do
     %{
       log_producer: producer,
       storage: storage,
-      shape_status: {shape_status, shape_status_state}
+      shape_status: {shape_status, shape_status_state},
+      publication_manager: {publication_manager, publication_manager_opts}
     } = state
 
     writer =
@@ -142,6 +143,8 @@ defmodule Electric.Shapes.Consumer do
     ShapeLogCollector.subscribe(producer, state.shape_handle, state.shape)
 
     Logger.debug("Writer for #{state.shape_handle} initialized")
+
+    :ok = publication_manager.add_shape(state.shape_handle, state.shape, publication_manager_opts)
 
     Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
 

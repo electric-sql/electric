@@ -60,7 +60,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               db_pool: pool,
               storage: storage,
               create_snapshot_fn: create_snapshot_fn,
-              publication_manager: {publication_manager, publication_manager_opts},
               stack_id: stack_id,
               chunk_bytes_threshold: chunk_bytes_threshold
             } = state
@@ -71,15 +70,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               stack_id,
               fn ->
                 try do
-                  OpenTelemetry.with_span(
-                    "shape_snapshot.prepare_tables",
-                    shape_attrs(shape_handle, shape),
-                    stack_id,
-                    fn ->
-                      publication_manager.add_shape(shape_handle, shape, publication_manager_opts)
-                    end
-                  )
-
                   apply(create_snapshot_fn, [
                     consumer,
                     shape_handle,
