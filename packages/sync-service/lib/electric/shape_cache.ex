@@ -29,7 +29,6 @@ defmodule Electric.ShapeCache do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
-  alias Electric.ShapeCache.ExpiryManager
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.ConsumerSupervisor
@@ -142,7 +141,7 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   @spec count_shapes(Access.t()) :: non_neg_integer() | :error
   def count_shapes(opts) do
-    table = ShapeStatus.shape_meta_table(opts)
+    table = ShapeStatus.shape_last_used_table(opts)
     shape_status = Access.get(opts, :shape_status, ShapeStatus)
 
     shape_status.count_shapes(table)
@@ -458,8 +457,6 @@ defmodule Electric.ShapeCache do
       Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
       :ok = start_shape(shape_handle, shape, state, otel_ctx)
-
-      ExpiryManager.notify_new_shape_added(state.stack_id)
 
       # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
       # "latest offset" because it'll be in the snapshotting stage

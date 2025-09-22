@@ -32,6 +32,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
               term() | nil
 
   @callback shape_meta_table(Keyword.t() | binary()) :: atom()
+  @callback shape_last_used_table(Keyword.t() | binary()) :: atom()
 end
 
 defmodule Electric.ShapeCache.ShapeStatus do
@@ -60,10 +61,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @schema NimbleOptions.new!(
             shape_meta_table: [type: {:or, [:atom, :reference]}, required: true],
+            shape_last_used_table: [type: {:or, [:atom, :reference]}, required: true],
             storage: [type: :mod_arg, required: true]
           )
 
-  defstruct [:shape_meta_table, :storage]
+  defstruct [:shape_meta_table, :shape_last_used_table, :storage]
 
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type table() :: atom() | reference()
@@ -85,7 +87,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
-  @shape_meta_last_read_pos 5
   @snapshot_started :snapshot_started
 
   @impl true
@@ -95,15 +96,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def initialise(%__MODULE__{shape_meta_table: table} = state) do
+  def initialise(
+        %__MODULE__{shape_meta_table: meta_table, shape_last_used_table: last_used_table} = state
+      ) do
+    :ets.new(last_used_table, [:named_table, :public, :ordered_set])
+
     case load_table_backup(state) do
-      {:ok, ^table} ->
+      {:ok, ^meta_table} ->
         Logger.info("Loaded shape status from backup at #{backup_file_path(state)}")
         :ok
 
       _ ->
-        Logger.debug("No shape status backup loaded, creating new table #{table}")
-        :ets.new(table, [:named_table, :public, :ordered_set])
+        Logger.debug("No shape status backup loaded, creating new table #{meta_table}")
+        :ets.new(meta_table, [:named_table, :public, :ordered_set])
         load(state)
     end
   end
@@ -126,13 +131,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
         state.shape_meta_table,
         [
           {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
-          {{@shape_meta_data, shape_handle}, shape, nil, offset,
-           :erlang.monotonic_time(:microsecond)}
+          {{@shape_meta_data, shape_handle}, shape, nil, offset}
           | Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
               {{@shape_relation_lookup, oid, shape_handle}, true}
             end)
         ]
       )
+
+    true =
+      :ets.insert_new(state.shape_last_used_table, [
+        {shape_handle, System.monotonic_time()}
+      ])
 
     {:ok, shape_handle}
   end
@@ -144,29 +153,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def list_shapes(table) do
     :ets.select(table, [
-      # Make sure this match spec is in sync with the one in count_shapes()
       {
-        {{@shape_meta_data, :"$1"}, :"$2", :_, :_, :_},
-        [true],
+        {{@shape_meta_data, :"$1"}, :"$2", :_, :_},
+        [],
         [{{:"$1", :"$2"}}]
       }
     ])
   end
 
   @impl true
-  def count_shapes(%__MODULE__{shape_meta_table: table}) do
-    count_shapes(table)
+  def count_shapes(%__MODULE__{shape_last_used_table: last_used_table}) do
+    count_shapes(last_used_table)
   end
 
-  def count_shapes(table) do
-    :ets.select_count(table, [
-      # Make sure this match spec is in sync with the one in list_shapes()
-      {
-        {{@shape_meta_data, :_}, :_, :_, :_, :_},
-        [],
-        [true]
-      }
-    ])
+  def count_shapes(last_used_table) do
+    :ets.info(last_used_table, :size)
   end
 
   @spec list_shape_handles_for_relations(t(), list(Electric.oid_relation())) :: [
@@ -192,7 +193,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.select_delete(
         state.shape_meta_table,
         [
-          {{{@shape_meta_data, shape_handle}, :_, :_, :_, :_}, [], [true]},
+          {{{@shape_meta_data, shape_handle}, :_, :_, :_}, [], [true]},
           {{{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle}, [], [true]},
           {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]},
           {{{@snapshot_started, shape_handle}, :_}, [], [true]}
@@ -201,6 +202,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
             end)
         ]
       )
+
+      :ets.delete(state.shape_last_used_table, shape_handle)
 
       {:ok, shape}
     rescue
@@ -234,9 +237,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   def get_existing_shape(meta_table, shape_handle) when is_binary(shape_handle) do
-    case :ets.lookup(meta_table, {@shape_meta_data, shape_handle}) do
-      [] -> nil
-      [{_, _shape, _xmin, offset, _}] -> {shape_handle, offset}
+    case :ets.lookup_element(
+           meta_table,
+           {@shape_meta_data, shape_handle},
+           @shape_meta_latest_offset_pos,
+           nil
+         ) do
+      nil -> nil
+      offset -> {shape_handle, offset}
     end
   end
 
@@ -277,35 +285,29 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  def update_last_read_time_to_now(%__MODULE__{shape_meta_table: meta_table}, shape_handle) do
-    update_last_read_time_to_now(meta_table, shape_handle)
+  def update_last_read_time_to_now(
+        %__MODULE__{shape_last_used_table: last_used_table},
+        shape_handle
+      ) do
+    update_last_read_time_to_now(last_used_table, shape_handle)
   end
 
-  def update_last_read_time_to_now(meta_table, shape_handle) do
-    :ets.update_element(meta_table, {@shape_meta_data, shape_handle}, [
-      {@shape_meta_last_read_pos, :erlang.monotonic_time(:microsecond)}
-    ])
+  def update_last_read_time_to_now(last_used_table, shape_handle) do
+    :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
   end
 
-  def least_recently_used(%__MODULE__{shape_meta_table: meta_table}, shape_count) do
-    least_recently_used(meta_table, shape_count)
+  def least_recently_used(%__MODULE__{shape_last_used_table: last_used_table}, shape_count) do
+    least_recently_used(last_used_table, shape_count)
   end
 
-  @microseconds_in_a_minute 60 * 1000 * 1000
-  def least_recently_used(meta_table, shape_count) do
-    :ets.select(meta_table, [
-      {
-        {{@shape_meta_data, :"$1"}, :_, :_, :_, :"$2"},
-        [true],
-        [{{:"$1", :"$2"}}]
-      }
-    ])
-    |> Enum.sort_by(fn {_, last_read} -> last_read end)
+  def least_recently_used(last_used_table, shape_count) do
+    :ets.tab2list(last_used_table)
+    |> Enum.sort_by(fn {_handle, last_read} -> last_read end)
     |> Stream.map(fn {handle, last_read} ->
       %{
         shape_handle: handle,
         elapsed_minutes_since_use:
-          (:erlang.monotonic_time(:microsecond) - last_read) / @microseconds_in_a_minute
+          System.convert_time_unit(System.monotonic_time() - last_read, :native, :second) / 60
       }
     end)
     |> Enum.take(shape_count)
@@ -397,25 +399,36 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def shape_meta_table(opts) when is_list(opts), do: shape_meta_table(opts[:stack_id])
   def shape_meta_table(stack_id) when is_binary(stack_id), do: :"#{stack_id}:shape_meta_table"
 
+  @impl true
+  def shape_last_used_table(opts) when is_list(opts), do: shape_last_used_table(opts[:stack_id])
+
+  def shape_last_used_table(stack_id) when is_binary(stack_id),
+    do: :"#{stack_id}:shape_last_used_table"
+
   defp load(state) do
     with {:ok, shapes} <- Storage.get_all_stored_shapes(state.storage) do
-      :ets.insert(
-        state.shape_meta_table,
-        Enum.concat([
-          Enum.flat_map(shapes, fn {shape_handle, shape} ->
-            relations = Shape.list_relations(shape)
+      now = System.monotonic_time()
 
+      {meta_tuples, last_used_tuples} =
+        Enum.flat_map_reduce(shapes, [], fn {shape_handle, shape}, last_used_tuples ->
+          relations = Shape.list_relations(shape)
+
+          meta_tuples =
             [
               {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
-              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first(),
-               :erlang.monotonic_time(:microsecond)}
+              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()}
               | Enum.map(relations, fn {oid, _} ->
                   {{@shape_relation_lookup, oid, shape_handle}, true}
                 end)
             ]
-          end)
-        ])
-      )
+
+          last_used_tuples = [{shape_handle, now} | last_used_tuples]
+
+          {meta_tuples, last_used_tuples}
+        end)
+
+      :ets.insert(state.shape_meta_table, meta_tuples)
+      :ets.insert(state.shape_last_used_table, last_used_tuples)
 
       :ok
     end

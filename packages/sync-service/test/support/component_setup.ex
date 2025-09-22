@@ -144,6 +144,8 @@ defmodule Support.ComponentSetup do
     shape_status_opts =
       Electric.ShapeCache.ShapeStatus.opts(
         shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(ctx.stack_id),
+        shape_last_used_table:
+          Electric.ShapeCache.ShapeStatus.shape_last_used_table(ctx.stack_id),
         storage: Map.get(ctx, :storage, {Mock.Storage, []})
       )
 

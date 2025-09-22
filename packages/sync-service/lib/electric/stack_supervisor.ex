@@ -298,6 +298,7 @@ defmodule Electric.StackSupervisor do
       {ShapeStatus,
        ShapeStatus.opts(
          shape_meta_table: ShapeStatus.shape_meta_table(stack_id),
+         shape_last_used_table: ShapeStatus.shape_last_used_table(stack_id),
          storage: storage
        )}
 
