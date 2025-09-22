@@ -255,22 +255,6 @@ defmodule Electric.ShapeCache do
     {last_processed_lsn, total_recovered, total_failed_to_recover} =
       recover_shapes(state, opts.recover_shape_timeout)
 
-    # ensure publication filters are in line with existing shapes,
-    # and clean up cache if publication fails to update
-    {publication_manager, publication_manager_opts} = opts.publication_manager
-
-    try do
-      :ok = publication_manager.refresh_publication(publication_manager_opts)
-    rescue
-      error ->
-        clean_up_all_shapes(state)
-        reraise error, __STACKTRACE__
-    catch
-      :exit, reason ->
-        clean_up_all_shapes(state)
-        exit(reason)
-    end
-
     # Let ShapeLogCollector that it can start processing after finishing this function so that
     # we're subscribed to the producer before it starts forwarding its demand.
     {:ok, state,
@@ -419,14 +403,11 @@ defmodule Electric.ShapeCache do
   end
 
   defp start_and_recover_shape(shape_handle, shape, state) do
-    %{publication_manager: {publication_manager, publication_manager_opts}} = state
-
     case start_shape(shape_handle, shape, state) do
       :ok ->
         consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
         # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
         {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
-        publication_manager.recover_shape(shape_handle, shape, publication_manager_opts)
         [LogOffset.extract_lsn(latest_offset)]
 
       :error ->

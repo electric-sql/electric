@@ -59,9 +59,8 @@ defmodule Electric.ShapeCacheTest do
   defmodule TempPubManager do
     def add_shape(_handle, _, opts) do
       send(opts[:test_pid], {:called, :prepare_tables_fn})
+      :ok
     end
-
-    def refresh_publication(_), do: :ok
   end
 
   setup :verify_on_exit!
@@ -1043,9 +1042,10 @@ defmodule Electric.ShapeCacheTest do
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       Mock.PublicationManager
-      |> expect(:recover_shape, 1, fn ^shape_handle1, _, _ -> :ok end)
-      |> expect(:refresh_publication, 1, fn _ -> :ok end)
-      |> allow(self(), fn -> Process.whereis(opts[:server]) end)
+      |> expect(:add_shape, 1, fn ^shape_handle1, _, _ -> :ok end)
+      |> allow(self(), fn ->
+        GenServer.whereis(Shapes.Consumer.Snapshotter.name(context.stack_id, shape_handle1))
+      end)
 
       restart_shape_cache(%{
         context
@@ -1092,42 +1092,22 @@ defmodule Electric.ShapeCacheTest do
       assert {^shape_handle, ^offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
     end
 
-    test "invalidates shapes that we fail to restore", %{shape_cache_opts: opts} = context do
-      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
-
-      Mock.PublicationManager
-      |> stub(:remove_shape, fn ^shape_handle1, _ -> :ok end)
-      |> expect(:recover_shape, 1, fn ^shape_handle1, _, _ -> :ok end)
-      |> expect(:refresh_publication, 1, fn _ -> raise "failed recovery" end)
-      |> allow(self(), fn -> Shapes.Consumer.whereis(context[:stack_id], shape_handle1) end)
-      |> allow(self(), fn -> Process.whereis(opts[:server]) end)
-
-      # Should fail to start shape cache and clean up shapes
-      Process.flag(:trap_exit, true)
-
-      assert_raise RuntimeError, ~r/\*\* \(RuntimeError\) failed recovery/, fn ->
-        restart_shape_cache(%{
-          context
-          | publication_manager: {Mock.PublicationManager, []}
-        })
-      end
-
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle1}, @shape_cleanup_timeout
-      Process.flag(:trap_exit, false)
-
-      # Next restart should not recover shape
-      restart_shape_cache(context)
-      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
-      assert shape_handle1 != shape_handle2
-    end
-
     defmodule SlowPublicationManager do
-      def refresh_publication(_), do: :ok
-      def remove_shape(_, _), do: :ok
-      def recover_shape(_, _), do: Process.sleep(10)
-      def add_shape(_, _), do: :ok
+      use GenServer
+
+      def start_link(opts),
+        do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
+
+      def init(opts), do: {:ok, opts}
+
+      def remove_shape(_, opts), do: GenServer.call(opts[:server], :remove_shape, 0)
+
+      def add_shape(_, _, opts), do: GenServer.call(opts[:server], :add_shape, 0)
+
+      def handle_call(_request, _from, state) do
+        Process.sleep(10)
+        {:reply, :ok, state}
+      end
     end
 
     test "deletes shapes that fail to initialise within a timeout", ctx do
@@ -1135,10 +1115,13 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
+      slow_pub_man_pid =
+        start_supervised!({SlowPublicationManager, [name: :"slow_pub_#{ctx.stack_id}"]})
+
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
       restart_shape_cache(ctx,
-        publication_manager: {SlowPublicationManager, []},
+        publication_manager: {SlowPublicationManager, [server: slow_pub_man_pid]},
         storage: Support.TestStorage.wrap(ctx.storage, %{}),
         recover_shape_timeout: 1
       )

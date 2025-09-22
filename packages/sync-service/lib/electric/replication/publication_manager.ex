@@ -11,8 +11,6 @@ defmodule Electric.Replication.PublicationManager do
   @typep shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
 
   @callback name(binary() | Keyword.t()) :: term()
-  @callback recover_shape(shape_handle(), Shape.t(), Keyword.t()) ::
-              :ok
   @callback add_shape(shape_handle(), Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(shape_handle(), Keyword.t()) :: :ok
   @callback refresh_publication(Keyword.t()) :: :ok
@@ -110,13 +108,6 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @impl __MODULE__
-  def recover_shape(shape_id, shape, opts \\ []) do
-    server = Access.get(opts, :server, name(opts))
-    oid_relation = get_oid_relation_from_shape(shape)
-    GenServer.call(server, {:recover_shape, shape_id, oid_relation})
-  end
-
-  @impl __MODULE__
   def remove_shape(shape_id, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
@@ -207,11 +198,6 @@ defmodule Electric.Replication.PublicationManager do
     else
       {:reply, :ok, state, state.publication_refresh_period}
     end
-  end
-
-  def handle_call({:recover_shape, shape_handle, oid_rel}, _from, state) do
-    state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
-    {:reply, :ok, state, state.publication_refresh_period}
   end
 
   def handle_call({:refresh_publication, forced?}, from, state) do
