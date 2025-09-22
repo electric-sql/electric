@@ -69,7 +69,7 @@
 [shell client]
   [invoke shape_get_snapshot items]
   ??HTTP/1.1 503
-  ??{"message":"Lacking permission to read from the database table"}
+  ??{"message":"Unable to create initial snapshot: permission denied for table items"}
 
 ## Grant Electric read access to the table and try again
 [shell psql]

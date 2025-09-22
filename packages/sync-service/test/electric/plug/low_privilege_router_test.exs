@@ -62,8 +62,11 @@ defmodule Electric.Plug.LowPrivilegeRouterTest do
 
       Postgrex.query!(ctx.pool, "ALTER TABLE items REPLICA IDENTITY FULL")
 
-      assert {503, %{"message" => "Lacking permission to read from the database table"}} ==
-               get_shape(ctx)
+      assert {503,
+              %{
+                "message" =>
+                  "Unable to create initial snapshot: permission denied for table items"
+              }} == get_shape(ctx)
     end
   end
 
