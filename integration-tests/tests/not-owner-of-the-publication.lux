@@ -19,7 +19,6 @@
 
 ## Verify that the sync service fails to initialize because of missing publication in the database
 [shell electric]
-  # Reset the failure pattern to make it possible to pattern-match on errors below
   -
 
   ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" not found in the database
@@ -41,9 +40,8 @@
 ## Start the sync service
 [invoke setup_electric]
 
-# Verify that the sync service fails to initialize because the publication has incorrect parameters
+## Verify that the sync service fails to initialize because the publication has incorrect parameters
 [shell electric]
-  # Reset the failure pattern to make it possible to pattern-match on errors below
   -
 
   ??** (Electric.DbConfigurationError) Publication "electric_publication_integration" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE
@@ -65,7 +63,7 @@
 ## Start the sync service
 [invoke setup_electric]
 
-## Confirm that the replication pipeline has initialized successfully
+## Verify that the replication pipeline has initialized successfully
 [shell electric]
   -$fail_pattern
 
@@ -87,12 +85,6 @@
   ??HTTP/1.1 503
   ??{"message":"Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it"}
 
-[shell electric]
-  -
-
-  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it
-  ?\[debug\] Sent 503 in [\d]+ms
-
 ## Add the table to the publication and try again
 [shell psql]
   !ALTER PUBLICATION electric_publication_integration ADD TABLE items;
@@ -104,19 +96,19 @@
   ??HTTP/1.1 503
   ??{"message":"Database table \"public.items\" does not have its replica identity set to FULL"}
 
-[shell electric]
-  -
-
-  ?\[warning\] Failed to create snapshot for [\d]+-[\d]+: Database table \"public.items\" does not have its replica identity set to FULL
-  ?\[debug\] Sent 503 in [\d]+ms
-
-## Set table's replica identity to FULL
-
+## Set table's replica identity to FULL and try again
 [shell psql]
   !ALTER TABLE items REPLICA IDENTITY FULL;
   ??ALTER TABLE
   ??ALTER TABLE
 
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Unable to create initial snapshot: permission denied for table items"}
+
+## Grant Electric read access to the table and try again
+[shell psql]
   !GRANT SELECT ON items TO low_privilege;
   ??GRANT
   ??GRANT
@@ -129,14 +121,6 @@
   ??electric-offset: 0_0
 
   ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"operation":"insert","relation":["public","items"]}}]
-
-[shell electric]
-  -$fail_pattern
-
-  ??GET /v1/shape
-  ??Starting a wait on the snapshot
-  ??Snapshot started
-  ?\[debug\] Chunked 200 in [\d]+ms
 
 [cleanup]
   [invoke teardown]

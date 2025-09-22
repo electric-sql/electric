@@ -60,12 +60,19 @@
 [shell electric]
   ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" does not have its replica identity set to FULL
 
-## Set table's replica identity to FULL and grant Electric read access to it
+## Set table's replica identity to FULL and try again
 [shell psql]
   !ALTER TABLE items REPLICA IDENTITY FULL;
   ??ALTER TABLE
   ??ALTER TABLE
 
+[shell client]
+  [invoke shape_get_snapshot items]
+  ??HTTP/1.1 503
+  ??{"message":"Unable to create initial snapshot: permission denied for table items"}
+
+## Grant Electric read access to the table and try again
+[shell psql]
   !GRANT SELECT ON items TO low_privilege;
   ??GRANT
   ??GRANT
