@@ -28,7 +28,7 @@ defmodule Electric.Connection.Manager do
   """
 
   # We model the connection manager as a state machine with 2 levels of state. On the 1st
-  # level, it can be in one two several phases:
+  # level, it can be in one of two phases:
   #
   #   - :connection_setup
   #   - :running
