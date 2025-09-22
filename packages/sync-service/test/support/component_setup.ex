@@ -14,7 +14,6 @@ defmodule Support.ComponentSetup do
     @behaviour Electric.Replication.PublicationManager
     def name(_), do: :pub_man
     def add_shape(_handle, _shape, _opts), do: :ok
-    def recover_shape(_handle, _shape, _opts), do: :ok
     def remove_shape(_handle, _opts), do: :ok
     def refresh_publication(_opts), do: :ok
   end
@@ -30,11 +29,6 @@ defmodule Support.ComponentSetup do
 
     def add_shape(handle, shape, %{parent: parent}) do
       send(parent, {TestPublicationManager, :add_shape, handle, shape})
-      :ok
-    end
-
-    def recover_shape(handle, shape, %{parent: parent}) do
-      send(parent, {TestPublicationManager, :recover_shape, handle, shape})
       :ok
     end
 

@@ -201,33 +201,6 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
   end
 
-  describe "recover_shape/2" do
-    test "tracks relation without updating immediately", %{opts: opts} do
-      shape = generate_shape({"public", "items"})
-      assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape, opts)
-      refute_receive {:filters, _}, 300
-    end
-
-    test "ignores subsequent recover for same handle", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"})
-      shape2 = generate_shape({"public", "items"})
-      assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape1, opts)
-      assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape2, opts)
-      :ok = PublicationManager.refresh_publication(opts)
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-    end
-  end
-
-  describe "refresh_publication/2" do
-    test "forces update when recovered relation present", %{opts: opts} do
-      shape = generate_shape({"public", "items"})
-      assert :ok == PublicationManager.recover_shape(@shape_handle_1, shape, opts)
-      refute_receive {:filters, _}, 200
-      assert :ok == PublicationManager.refresh_publication(opts)
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-    end
-  end
-
   describe "missing publication handling" do
     test "add_shape raises and server stops when publication is missing", ctx do
       stop_supervised!(ctx.opts[:server])
