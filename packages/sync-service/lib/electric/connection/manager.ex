@@ -649,39 +649,10 @@ defmodule Electric.Connection.Manager do
   # ignore it.
   def handle_info({:EXIT, _pid, :shutdown}, state), do: {:noreply, state}
 
-  # A process exited as it was trying to open a database connection.
-  def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
-    {pid_type, state} = nillify_pid(state, pid)
-
-    shutdown_or_reconnect(reason, pid_type, state)
-  end
-
-  # The most likely reason for any database connection to get closed after we've already opened a
-  # bunch of them is the database server going offline or shutting down. Stop
-  # Connection.Manager to allow its supervisor to restart it in the initial state.
+  # A process exited as it was trying to open a database connection or while it was connected.
   def handle_info({:EXIT, pid, reason}, state) do
-    error =
-      reason
-      |> strip_exit_signal_stacktrace()
-      |> DbConnectionError.from_error()
-
-    Logger.warning(
-      "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
-        error.message <> "\n\n" <> inspect(state, pretty: true)
-    )
-
-    dispatch_stack_event(
-      {:connection_error,
-       %{
-         error: DbConnectionError.format_original_error(error),
-         type: error.type,
-         message: error.message,
-         total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
-       }},
-      state
-    )
-
-    {:stop, {:shutdown, reason}, state}
+    {pid_type, state} = nillify_pid(state, pid)
+    shutdown_or_reconnect(reason, pid_type, state)
   end
 
   @impl true
@@ -985,9 +956,37 @@ defmodule Electric.Connection.Manager do
 
     with false <- drop_slot_and_restart(error, state),
          false <- stop_if_fatal_error(error, state) do
-      state = schedule_reconnection_after_error(error, pid_type, state)
-      {:noreply, state}
+      if state.current_phase == :connection_setup do
+        state = schedule_reconnection_after_error(error, pid_type, state)
+        {:noreply, state}
+      else
+        notify_restart_after_error(error, pid_type, state)
+        {:stop, {:shutdown, error.type}, state}
+      end
     end
+  end
+
+  defp notify_restart_after_error(error, pid_type, state) do
+    message = error.message
+    connection_mode = set_connection_status_error(message, pid_type, state)
+
+    extended_message = message <> pg_error_extra_info(error.original_error)
+
+    Logger.warning(
+      "#{inspect(__MODULE__)} is restarting after it has encountered an error in #{connection_mode} mode: #{extended_message}\n" <>
+        message <> "\n\n" <> inspect(state, pretty: true)
+    )
+
+    dispatch_stack_event(
+      {:connection_error,
+       %{
+         error: DbConnectionError.format_original_error(error),
+         type: error.type,
+         message: error.message,
+         total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
+       }},
+      state
+    )
   end
 
   defp schedule_reconnection_after_error(error, pid_type, state) do
