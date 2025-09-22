@@ -198,7 +198,19 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   {[item], true}
                 end,
                 fn acc ->
-                  if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
+                  if not acc do
+                    # The stream has been read to the end but we haven't seen a single item in
+                    # it. Notify `parent` anyway since an empty file will have been created by
+                    # the storage implementation for the API layer to read the snapshot data
+                    # from.
+                    GenServer.cast(parent, {:snapshot_started, shape_handle})
+                  end
+
+                  {[], acc}
+                end,
+                fn acc ->
+                  # noop after fun just to be able to specify the last fun which is only
+                  # available in `Stream.transoform/5`.
                   acc
                 end
               )
