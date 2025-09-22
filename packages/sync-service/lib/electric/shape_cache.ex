@@ -340,12 +340,6 @@ defmodule Electric.ShapeCache do
     state
   end
 
-  defp clean_up_all_shapes(state) do
-    for {shape_handle, _shape} <- shape_handles(state) do
-      clean_up_shape(state, shape_handle)
-    end
-  end
-
   defp shape_handles(%{shape_status: {shape_status, shape_status_state}}) do
     shape_status.list_shapes(shape_status_state)
   end
