@@ -54,7 +54,6 @@ defmodule Electric.Replication.PublicationManager do
            shape_cache: {module(), term()},
            next_update_forced?: boolean()
          }
-  @typep filter_operation :: :add | :remove
 
   @retry_timeout 300
   @max_retries 3
@@ -85,9 +84,6 @@ defmodule Electric.Replication.PublicationManager do
           )
 
   @behaviour __MODULE__
-
-  defguardp is_tracking_shape_handle?(shape_handle, state)
-            when is_map_key(state.tracked_shape_handles, shape_handle)
 
   @impl __MODULE__
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
@@ -185,14 +181,8 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @impl true
-  def handle_call({:add_shape, shape_handle, _oid_rel}, _from, state)
-      when is_tracking_shape_handle?(shape_handle, state) do
-    Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
-    {:reply, :ok, state}
-  end
-
   def handle_call({:add_shape, shape_handle, oid_rel}, from, state) do
-    state = update_relation_filters(shape_handle, oid_rel, :add, state)
+    state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
 
     if update_needed?(state) do
       state = add_waiter(from, state)
@@ -201,17 +191,10 @@ defmodule Electric.Replication.PublicationManager do
     else
       {:reply, :ok, state}
     end
-  end
-
-  def handle_call({:remove_shape, shape_handle}, _from, state)
-      when not is_tracking_shape_handle?(shape_handle, state) do
-    Logger.debug("Shape already not tracked: #{inspect(shape_handle)}")
-    {:reply, :ok, state}
   end
 
   def handle_call({:remove_shape, shape_handle}, from, state) do
-    oid_rel = fetch_tracked_shape_relation!(shape_handle, state)
-    state = update_relation_filters(shape_handle, oid_rel, :remove, state)
+    state = remove_shape_from_relation_filters(shape_handle, state)
 
     if update_needed?(state) do
       state = add_waiter(from, state)
@@ -222,14 +205,8 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  def handle_call({:recover_shape, shape_handle, _oid_rel}, _from, state)
-      when is_tracking_shape_handle?(shape_handle, state) do
-    Logger.debug("Shape already tracked: #{inspect(shape_handle)}")
-    {:reply, :ok, state}
-  end
-
   def handle_call({:recover_shape, shape_handle, oid_rel}, _from, state) do
-    state = update_relation_filters(shape_handle, oid_rel, :add, state)
+    state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
     {:reply, :ok, state}
   end
 
@@ -437,18 +414,6 @@ defmodule Electric.Replication.PublicationManager do
          %__MODULE__{
            committed_relation_filters: committed_filters,
            prepared_relation_filters: current_filters,
-           next_update_forced?: forced?
-         } = state
-       )
-       when current_filters == committed_filters and not forced? do
-    Logger.debug("No changes to publication, skipping update")
-    {:ok, state, MapSet.new()}
-  end
-
-  defp update_publication(
-         %__MODULE__{
-           committed_relation_filters: committed_filters,
-           prepared_relation_filters: current_filters,
            publication_name: publication_name,
            db_pool: db_pool,
            configure_tables_for_replication_fn: configure_tables_for_replication_fn,
@@ -477,13 +442,39 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @spec update_relation_filters(
+  defguardp is_tracking_shape_handle?(shape_handle, state)
+            when is_map_key(state.tracked_shape_handles, shape_handle)
+
+  @spec add_shape_to_relation_filters(shape_handle(), Electric.oid_relation(), state()) :: state()
+  defp add_shape_to_relation_filters(shape_handle, _rel_key, state)
+       when is_tracking_shape_handle?(shape_handle, state) do
+    Logger.debug("Shape handle already tracked: #{inspect(shape_handle)}")
+    state
+  end
+
+  defp add_shape_to_relation_filters(shape_handle, rel_key, state) do
+    do_update_relation_filters_with_shape(shape_handle, rel_key, :add, state)
+  end
+
+  @spec remove_shape_from_relation_filters(shape_handle(), state()) :: state()
+  defp remove_shape_from_relation_filters(shape_handle, state)
+       when not is_tracking_shape_handle?(shape_handle, state) do
+    Logger.debug("Shape handle already not tracked: #{inspect(shape_handle)}")
+    state
+  end
+
+  defp remove_shape_from_relation_filters(shape_handle, state) do
+    rel_key = fetch_tracked_shape_relation!(shape_handle, state)
+    do_update_relation_filters_with_shape(shape_handle, rel_key, :remove, state)
+  end
+
+  @spec do_update_relation_filters_with_shape(
           shape_handle(),
           Electric.oid_relation(),
-          filter_operation(),
+          :add | :remove,
           state()
         ) :: state()
-  defp update_relation_filters(
+  defp do_update_relation_filters_with_shape(
          shape_handle,
          {_oid, _rel} = rel_key,
          operation,

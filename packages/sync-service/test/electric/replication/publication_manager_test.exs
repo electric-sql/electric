@@ -87,6 +87,31 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     @tag update_debounce_timeout: 100
+    test "queues up requests for same shape handle", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      test_pid = self()
+
+      run_async(fn ->
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+        send(test_pid, :task1_done)
+      end)
+
+      run_async(fn ->
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+        send(test_pid, :task2_done)
+      end)
+
+      refute_receive :task1_done, 50
+      refute_received {:filters, _}
+      refute_received :task2_done
+
+      assert_receive :task1_done
+      assert_received :task2_done
+      assert_received {:filters, [{_, {"public", "items"}}]}
+      refute_receive {:filters, _}, 200
+    end
+
+    @tag update_debounce_timeout: 100
     test "doesn't update when adding same relation again", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
       shape2 = generate_shape({"public", "items"})
@@ -145,6 +170,34 @@ defmodule Electric.Replication.PublicationManagerTest do
       # Remove one handle; relation should stay
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
       refute_receive {:filters, _}, 500
+    end
+
+    @tag update_debounce_timeout: 100
+    test "queues up requests for same shape handle", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+
+      test_pid = self()
+
+      run_async(fn ->
+        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        send(test_pid, :task1_done)
+      end)
+
+      run_async(fn ->
+        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        send(test_pid, :task2_done)
+      end)
+
+      refute_receive :task1_done, 50
+      refute_received {:filters, _}
+      refute_received :task2_done
+
+      assert_receive :task1_done
+      assert_received :task2_done
+      assert_received {:filters, []}
+      refute_receive {:filters, _}, 200
     end
   end
 
@@ -220,5 +273,14 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:DOWN, ^mref, :process, ^pid,
                       {:shutdown, %Postgrex.Error{postgres: %{code: :undefined_object}}}}
     end
+  end
+
+  defp run_async(fun) do
+    start_supervised!(
+      Supervisor.child_spec(
+        {Task, fun},
+        id: make_ref()
+      )
+    )
   end
 end
