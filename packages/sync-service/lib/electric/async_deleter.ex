@@ -117,7 +117,7 @@ defmodule Electric.AsyncDeleter do
     {:noreply, do_cleanup(state)}
   end
 
-  def trash_dir(stack_id), do: Path.join(System.tmp_dir!(), "#{@trash_dir_base}_#{stack_id}")
+  def trash_dir(stack_id), do: Path.join([System.tmp_dir!(), @trash_dir_base, stack_id])
 
   defp do_rename(path, stack_id) do
     trash_dir = trash_dir(stack_id)
