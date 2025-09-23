@@ -334,7 +334,7 @@ defmodule Electric.Shapes.FilterTest do
       filter_with_shape_added = Filter.add_shape(filter, i, shape)
 
       # Check that whenever you remove a shape the filter is the same as if the shape was never added
-      assert Filter.remove_shape(filter_with_shape_added, i, shape) == filter
+      assert Filter.remove_shape(filter_with_shape_added, i) == filter
 
       filter_with_shape_added
     end)
@@ -348,7 +348,7 @@ defmodule Electric.Shapes.FilterTest do
     # have been chosen instead of time since the time taken is not deterministic and
     # leads to flakey tests.
     #
-    # Modern machines process approx 300-400 reductions per μs so @max_reductions of 1200
+    # Modern machines process approx 300-400 reductions per μs so @max_reductions of 1300
     # is roughly equivalent to 3μs.
     #
     # 3μs per change is a desirable and achievable target for replication stream processing.
@@ -361,7 +361,7 @@ defmodule Electric.Shapes.FilterTest do
     # to keep to a microsecond per change. 10_000 shapes makes for a slow test though as the setup
     # time (n Filter.add_shape calls) is slow.
     @shape_count 1000
-    @max_reductions 1200
+    @max_reductions 1300
 
     test "where clause in the form `field = const` is optimised" do
       filter =

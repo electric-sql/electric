@@ -125,13 +125,13 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:ok, state}
   end
 
-  def handle_info({{:unsubscribe, shape_handle, shape}, ref, :process, pid, _reason}, state) do
+  def handle_info({{:unsubscribe, shape_handle}, ref, :process, pid, _reason}, state) do
     OpenTelemetry.with_span(
       "shape_log_collector.unsubscribe",
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
-        {:noreply, remove_subscription(state, {pid, ref}, shape_handle, shape)}
+        {:noreply, remove_subscription(state, {pid, ref}, shape_handle)}
       end
     )
   end
@@ -142,7 +142,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
-        ref = Process.monitor(pid, tag: {:unsubscribe, shape_handle, shape})
+        ref = Process.monitor(pid, tag: {:unsubscribe, shape_handle})
         from = {pid, ref}
 
         state =
@@ -342,7 +342,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
-  defp remove_subscription(%{subscriptions: {count, set}} = state, from, shape_handle, shape) do
+  defp remove_subscription(%{subscriptions: {count, set}} = state, from, shape_handle) do
     OpenTelemetry.start_interval("unsubscribe_shape.remove_subscription")
 
     subscriptions =
@@ -357,7 +357,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       end
 
     OpenTelemetry.start_interval("unsubscribe_shape.remove_from_filter")
-    filter = Filter.remove_shape(state.filter, shape_handle, shape)
+    filter = Filter.remove_shape(state.filter, shape_handle)
 
     OpenTelemetry.start_interval("unsubscribe_shape.remove_from_partitions")
     partitions = Partitions.remove_shape(state.partitions, shape_handle)

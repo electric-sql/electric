@@ -23,7 +23,7 @@ defmodule Electric.Shapes.Filter do
 
   require Logger
 
-  defstruct tables: %{}, refs_fun: nil
+  defstruct tables: %{}, refs_fun: nil, shapes: %{}
 
   @type t :: %Filter{}
   @type shape_id :: any()
@@ -47,22 +47,25 @@ defmodule Electric.Shapes.Filter do
           Map.update(
             filter.tables,
             shape.root_table,
-            WhereCondition.add_shape(WhereCondition.new(), {shape_id, shape}, shape.where),
+            WhereCondition.add_shape(WhereCondition.new(), shape_id, shape.where),
             fn condition ->
-              WhereCondition.add_shape(condition, {shape_id, shape}, shape.where)
+              WhereCondition.add_shape(condition, shape_id, shape.where)
             end
-          )
+          ),
+        shapes: Map.put(filter.shapes, shape_id, shape)
     }
   end
 
   @doc """
   Remove a shape from the filter.
   """
-  @spec remove_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
-  def remove_shape(%Filter{} = filter, shape_id, shape) do
+  @spec remove_shape(Filter.t(), shape_id()) :: Filter.t()
+  def remove_shape(%Filter{} = filter, shape_id) do
+    shape = Map.fetch!(filter.shapes, shape_id)
+
     condition =
       Map.fetch!(filter.tables, shape.root_table)
-      |> WhereCondition.remove_shape({shape_id, shape}, shape.where)
+      |> WhereCondition.remove_shape(shape_id, shape.where)
 
     tables =
       if WhereCondition.empty?(condition) do
@@ -71,7 +74,7 @@ defmodule Electric.Shapes.Filter do
         Map.put(filter.tables, shape.root_table, condition)
       end
 
-    %Filter{filter | tables: tables}
+    %Filter{filter | tables: tables, shapes: Map.delete(filter.shapes, shape_id)}
   end
 
   @doc """
@@ -93,16 +96,15 @@ defmodule Electric.Shapes.Filter do
           OpenTelemetry.record_exception(:error, error, __STACKTRACE__)
 
           # We can't tell which shapes are affected, the safest thing to do is return all shapes
-          filter
-          |> all_shapes()
-          |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
+          all_shape_ids(filter)
       end
     end)
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables because the table may have been renamed
-    for {shape_id, shape} <- all_shapes(filter),
+    for shape_id <- all_shape_ids(filter),
+        shape = Map.fetch!(filter.shapes, shape_id),
         Shape.is_affected_by_relation_change?(shape, relation),
         into: MapSet.new() do
       shape_id
@@ -137,10 +139,7 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %TruncatedRelation{relation: table_name}) do
-    for {shape_id, _shape} <- all_shapes_for_table(filter, table_name),
-        into: MapSet.new() do
-      shape_id
-    end
+    shape_ids_for_table(filter, table_name)
   end
 
   defp shapes_affected_by_record(filter, table_name, record) do
@@ -149,22 +148,20 @@ defmodule Electric.Shapes.Filter do
         MapSet.new()
 
       condition ->
-        WhereCondition.affected_shapes(condition, record, filter.refs_fun)
+        WhereCondition.affected_shapes(condition, record, filter.shapes, filter.refs_fun)
     end
   end
 
-  defp all_shapes(%Filter{} = filter) do
-    for {_table, condition} <- filter.tables,
-        {shape_id, shape} <- WhereCondition.all_shapes(condition),
-        into: %{} do
-      {shape_id, shape}
-    end
+  defp all_shape_ids(%Filter{} = filter) do
+    Enum.reduce(filter.tables, MapSet.new(), fn {_table, condition}, ids ->
+      MapSet.union(ids, WhereCondition.all_shape_ids(condition))
+    end)
   end
 
-  defp all_shapes_for_table(%Filter{} = filter, table_name) do
+  defp shape_ids_for_table(%Filter{} = filter, table_name) do
     case Map.get(filter.tables, table_name) do
-      nil -> %{}
-      condition -> WhereCondition.all_shapes(condition)
+      nil -> MapSet.new()
+      condition -> WhereCondition.all_shape_ids(condition)
     end
   end
 end

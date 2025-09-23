@@ -11,16 +11,16 @@ defmodule Electric.Shapes.Filter.Index do
   def new("@>", type), do: Indexes.InclusionIndex.new(type)
 
   defdelegate empty?(index), to: Protocol
-  defdelegate add_shape(index, value, shape_instance, and_where), to: Protocol
-  defdelegate remove_shape(index, value, shape_instance, and_where), to: Protocol
-  defdelegate affected_shapes(index, field, record), to: Protocol
-  defdelegate all_shapes(index), to: Protocol
+  defdelegate add_shape(index, value, shape_id, and_where), to: Protocol
+  defdelegate remove_shape(index, value, shape_id, and_where), to: Protocol
+  defdelegate affected_shapes(index, field, record, shapes), to: Protocol
+  defdelegate all_shape_ids(index), to: Protocol
 end
 
 defprotocol Electric.Shapes.Filter.Index.Protocol do
   def empty?(index)
-  def add_shape(index, value, shape_instance, and_where)
-  def remove_shape(index, value, shape_instance, and_where)
-  def affected_shapes(index, field, record)
-  def all_shapes(index)
+  def add_shape(index, value, shape_id, and_where)
+  def remove_shape(index, value, shape_id, and_where)
+  def affected_shapes(index, field, record, shapes)
+  def all_shape_ids(index)
 end
