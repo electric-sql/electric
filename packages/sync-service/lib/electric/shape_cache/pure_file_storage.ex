@@ -612,7 +612,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     if on_disk_version != opts.version or not snapshot_complete?(opts) or
          is_nil(read_metadata!(opts, :pg_snapshot)),
-       do: rm_rf!(opts.data_dir)
+       do: cleanup!(opts)
 
     create_directories!(opts)
     write_metadata!(opts, :version, @version)
