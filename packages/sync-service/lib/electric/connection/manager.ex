@@ -383,7 +383,6 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:error, reason} ->
-        dbg(reason)
         shutdown_or_reconnect(reason, :lock_connection, state)
     end
   end

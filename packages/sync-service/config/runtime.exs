@@ -227,6 +227,8 @@ config :electric,
   shape_hibernate_after: shape_hibernate_after,
   storage_dir: storage_dir,
   storage: storage_spec,
+  cleanup_interval_ms:
+    env!("ELECTRIC_CLEANUP_INTERVAL_MS", &Electric.Config.parse_human_readable_time!/1, nil),
   profile_where_clauses?: env!("ELECTRIC_PROFILE_WHERE_CLAUSES", :boolean, false),
   persistent_kv: persistent_kv_spec,
   listen_on_ipv6?: env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, nil),

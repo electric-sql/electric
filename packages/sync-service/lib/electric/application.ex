@@ -134,7 +134,8 @@ defmodule Electric.Application do
         publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms),
         registry_partitions: get_env(opts, :process_registry_partitions),
         publication_refresh_period: get_env(opts, :publication_refresh_period),
-        schema_reconciler_period: get_env(opts, :schema_reconciler_period)
+        schema_reconciler_period: get_env(opts, :schema_reconciler_period),
+        cleanup_interval_ms: get_env(opts, :cleanup_interval_ms)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )

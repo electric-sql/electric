@@ -48,7 +48,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ]
                |> Enum.map(&Jason.encode_to_iodata!/1)
 
-  setup :with_stack_id_from_test
+  setup [:with_stack_id_from_test, :with_async_deleter]
 
   for module <- [InMemoryStorage, FileStorage, PureFileStorage] do
     module_name = module |> Module.split() |> List.last()
