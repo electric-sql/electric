@@ -56,6 +56,14 @@ defmodule Support.ComponentSetup do
     %{registry: registry_name}
   end
 
+  def with_async_deleter(ctx) do
+    start_link_supervised!(
+      {Electric.AsyncDeleter, stack_id: ctx.stack_id, cleanup_interval_ms: 0}
+    )
+
+    %{}
+  end
+
   def with_in_memory_storage(ctx) do
     storage_opts =
       InMemoryStorage.shared_opts(

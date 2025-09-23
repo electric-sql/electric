@@ -51,6 +51,7 @@ defmodule Electric.ExpiryManagerTest do
   setup [
     :with_persistent_kv,
     :with_stack_id_from_test,
+    :with_async_deleter,
     :with_pure_file_storage,
     :with_shape_status,
     :with_status_monitor,

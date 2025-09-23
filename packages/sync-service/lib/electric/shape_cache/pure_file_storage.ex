@@ -228,7 +228,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     try do
       case File.touch(marker_file_path) do
-        :ok -> Electric.AsyncDeleter.delete(opts.base_path, stack_id: opts.stack_id)
+        :ok -> Electric.AsyncDeleter.delete(opts.data_dir, stack_id: opts.stack_id)
         # nothing to delete, no-op
         {:error, :enoent} -> :ok
         {:error, reason} -> raise File.Error, reason: reason, path: marker_file_path
@@ -1455,10 +1455,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp rm_rf!(path) do
     File.rm_rf!(path)
-  end
-
-  defp rm_rf(path) do
-    File.rm_rf(path)
   end
 
   defp ls(path) do
