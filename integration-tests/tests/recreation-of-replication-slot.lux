@@ -46,16 +46,16 @@
 
   ??[error] :gen_statem {:"Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
   ??** (Postgrex.Error) ERROR 42704 (undefined_object) publication "electric_publication_integration" does not exist
-  ??[warning] Reconnecting in 2000ms
+  ??[warning] Electric.Connection.Manager is restarting after it has encountered an error
+  ??[debug] Starting replication client for stack single_stack
 
   -$fail_pattern
 
-  ??[debug] Restarting replication client for stack single_stack
   ??[debug] ReplicationClient step: create_publication_query
   ??[debug] ReplicationClient step: drop_slot
   ??[debug] ReplicationClient step: create_slot
   ??[debug] Created new slot at lsn=
-  ??[warning] Purging all shapes.
+  ??[info] Purging all shapes.
   ??[info] Starting replication from postgres
 
 ## Verify that the old shape is no longer accessible

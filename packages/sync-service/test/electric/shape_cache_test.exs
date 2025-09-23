@@ -956,40 +956,6 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  describe "clean_all_shapes/1" do
-    setup [
-      :with_tracing_storage,
-      :with_log_chunking,
-      :with_registry,
-      :with_shape_log_collector,
-      :with_noop_publication_manager
-    ]
-
-    test "calls unsafe_cleanup! on storage", ctx do
-      %{shape_cache_opts: opts} =
-        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          run_with_conn_fn: &run_with_conn_noop/2,
-          create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
-            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-            Storage.make_new_snapshot!([["test"]], storage)
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-          end
-        )
-
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-
-      ref =
-        Process.monitor(Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle))
-
-      :ok = ShapeCache.clean_all_shapes(opts)
-
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
-
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
-    end
-  end
-
   describe "after restart" do
     setup [
       :with_log_chunking,

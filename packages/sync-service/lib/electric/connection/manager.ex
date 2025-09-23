@@ -28,20 +28,16 @@ defmodule Electric.Connection.Manager do
   """
 
   # We model the connection manager as a state machine with 2 levels of state. On the 1st
-  # level, it can be in one of several phases:
+  # level, it can be in one of two phases:
   #
   #   - :connection_setup
   #   - :running
-  #   - :restarting_replication_client
   #
   # Connection manager starts in the :connection_setup phase and moves into the :running phase
   # after all processes have been started and the replication client is given the command to
   # start streaming.
   #
-  # If at any point after that the replication client process exits, connection manager
-  # transitions into the :restarting_replication_client phase and tries to restart the client.
-  #
-  # If any other connection process exits, connection manager itself will shut down to start
+  # If any connection process exits, connection manager itself will shut down to start
   # from scratch, as there could be too many failure states to address each one individually.
   #
   # The 2nd level of the state machine splits the current phase into a series of steps which
@@ -52,13 +48,11 @@ defmodule Electric.Connection.Manager do
   # state as well as make the code more self-documenting.
 
   defmodule State do
-    @type phase :: :connection_setup | :running | :restarting_replication_client
+    @type phase :: :connection_setup | :running
     @type step ::
             {:start_lock_connection, nil}
             | {:start_lock_connection, :connecting}
             | {:start_lock_connection, :acquiring_lock}
-            # Steps that start with {:start_replication_client, ...} are pertinent to both the
-            # :connection_setup phase and the :restarting_replication_client phase
             | {:start_replication_client, nil}
             | {:start_replication_client, :connecting}
             | {:start_replication_client, :configuring_connection}
@@ -397,12 +391,11 @@ defmodule Electric.Connection.Manager do
   def handle_continue(
         :start_replication_client,
         %State{
-          current_phase: phase,
+          current_phase: :connection_setup,
           current_step: {:start_replication_client, _},
           replication_client_pid: nil
         } = state
-      )
-      when phase in [:connection_setup, :restarting_replication_client] do
+      ) do
     case validate_connection(replication_connection_opts(state), :replication, state) do
       {:ok, replication_connection_opts, state} ->
         opts = [
@@ -412,13 +405,7 @@ defmodule Electric.Connection.Manager do
           stack_id: state.stack_id
         ]
 
-        action =
-          case phase do
-            :connection_setup -> "Starting"
-            :restarting_replication_client -> "Restarting"
-          end
-
-        Logger.debug("#{action} replication client for stack #{state.stack_id}")
+        Logger.debug("Starting replication client for stack #{state.stack_id}")
 
         # The replication client starts up quickly and then proceeds to asynchronously opening a
         # replication connection to the database and configuring it.
@@ -560,11 +547,10 @@ defmodule Electric.Connection.Manager do
   def handle_continue(
         :start_streaming,
         %State{
-          current_phase: phase,
+          current_phase: :connection_setup,
           current_step: {:start_replication_client, :start_streaming}
         } = state
-      )
-      when phase in [:connection_setup, :restarting_replication_client] do
+      ) do
     # Everything is ready to start accepting and processing logical messages from Postgres.
     Logger.info("Starting replication from postgres")
     Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
@@ -598,11 +584,10 @@ defmodule Electric.Connection.Manager do
         {:timeout, tref, {:check_status, :replication_client}},
         %State{
           replication_client_timer: tref,
-          current_phase: phase,
+          current_phase: :connection_setup,
           current_step: {:start_replication_client, :configuring_connection}
         } = state
-      )
-      when phase in [:connection_setup, :restarting_replication_client] do
+      ) do
     Logger.warning(fn ->
       "Waiting for the replication connection setup to complete... " <>
         "Check that you don't have pending transactions in the database. " <>
@@ -664,58 +649,10 @@ defmodule Electric.Connection.Manager do
   # ignore it.
   def handle_info({:EXIT, _pid, :shutdown}, state), do: {:noreply, state}
 
-  # A process exited as it was trying to open a database connection.
-  def handle_info({:EXIT, pid, reason}, %State{current_phase: :connection_setup} = state) do
-    {pid_type, state} = nillify_pid(state, pid)
-
-    shutdown_or_reconnect(reason, pid_type, state)
-  end
-
-  # The replication client exited after the connection setup has completed, it can be restarted
-  # independently of the lock connection and the DB pool. On the other hand, if any of the
-  # latter two shut down, Connection.Manager will itself terminate to be restarted by its
-  # supervisor in a clean state.
-  def handle_info(
-        {:EXIT, pid, reason},
-        %State{replication_client_pid: pid, current_phase: :running} = state
-      ) do
-    {pid_type, state} = nillify_pid(state, pid)
-
-    state = %{
-      state
-      | current_phase: :restarting_replication_client,
-        current_step: {:start_replication_client, nil}
-    }
-
-    shutdown_or_reconnect(reason, pid_type, state)
-  end
-
-  # The most likely reason for any database connection to get closed after we've already opened a
-  # bunch of them is the database server going offline or shutting down. Stop
-  # Connection.Manager to allow its supervisor to restart it in the initial state.
+  # A process exited as it was trying to open a database connection or while it was connected.
   def handle_info({:EXIT, pid, reason}, state) do
-    error =
-      reason
-      |> strip_exit_signal_stacktrace()
-      |> DbConnectionError.from_error()
-
-    Logger.warning(
-      "#{inspect(__MODULE__)} is restarting after it has encountered an error in process #{inspect(pid)}:\n" <>
-        error.message <> "\n\n" <> inspect(state, pretty: true)
-    )
-
-    dispatch_stack_event(
-      {:connection_error,
-       %{
-         error: DbConnectionError.format_original_error(error),
-         type: error.type,
-         message: error.message,
-         total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
-       }},
-      state
-    )
-
-    {:stop, {:shutdown, reason}, state}
+    {pid_type, state} = nillify_pid(state, pid)
+    shutdown_or_reconnect(reason, pid_type, state)
   end
 
   @impl true
@@ -788,11 +725,10 @@ defmodule Electric.Connection.Manager do
   def handle_cast(
         :replication_client_started,
         %State{
-          current_phase: phase,
+          current_phase: :connection_setup,
           current_step: {:start_replication_client, :connecting}
         } = state
-      )
-      when phase in [:connection_setup, :restarting_replication_client] do
+      ) do
     tref = schedule_periodic_connection_status_check(:replication_client)
 
     state = %{
@@ -827,49 +763,24 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast(
-        :replication_client_created_new_slot,
+        :replication_client_ready_to_stream,
         %State{
-          current_phase: :restarting_replication_client,
+          current_phase: :connection_setup,
           current_step: {:start_replication_client, :configuring_connection}
         } = state
       ) do
-    # In the :restarting_replication_client phase the shape streaming pipeline is already
-    # running, so we need to notify it about the need to purge existing shapes.
-    :ok = Electric.ShapeCache.clean_all_shapes(stack_id: state.stack_id)
-    {:noreply, state}
-  end
-
-  def handle_cast(
-        :replication_client_ready_to_stream,
-        %State{
-          current_phase: phase,
-          current_step: {:start_replication_client, :configuring_connection}
-        } = state
-      )
-      when phase in [:connection_setup, :restarting_replication_client] do
     Electric.StatusMonitor.mark_replication_client_ready(
       state.stack_id,
       state.replication_client_pid
     )
 
-    state = %{state | replication_client_blocked_by_pending_transaction?: false}
+    state = %{
+      state
+      | replication_client_blocked_by_pending_transaction?: false,
+        current_step: {:start_connection_pool, nil}
+    }
 
-    case phase do
-      :connection_setup ->
-        # This is the case where Connection.Manager starts connections from the initial state.
-        # Replication connection is opened after the lock connection has acquired the
-        # exclusive lock. Now it's time to start the connection pool.
-        state = %{state | current_step: {:start_connection_pool, nil}}
-        {:noreply, state, {:continue, :start_connection_pool}}
-
-      :restarting_replication_client ->
-        # The replication client process exited while the other connection processes were
-        # already running. Now that it's been restarted, we can transition it into the
-        # logical replication mode immediately since all the other connection process and the
-        # shapes supervisor are already up.
-        state = %{state | current_step: {:start_replication_client, :start_streaming}}
-        {:noreply, state, {:continue, :start_streaming}}
-    end
+    {:noreply, state, {:continue, :start_connection_pool}}
   end
 
   def handle_cast(
@@ -1045,9 +956,37 @@ defmodule Electric.Connection.Manager do
 
     with false <- drop_slot_and_restart(error, state),
          false <- stop_if_fatal_error(error, state) do
-      state = schedule_reconnection_after_error(error, pid_type, state)
-      {:noreply, state}
+      if state.current_phase == :connection_setup do
+        state = schedule_reconnection_after_error(error, pid_type, state)
+        {:noreply, state}
+      else
+        notify_restart_after_error(error, pid_type, state)
+        {:stop, {:shutdown, error.type}, state}
+      end
     end
+  end
+
+  defp notify_restart_after_error(error, pid_type, state) do
+    message = error.message
+    connection_mode = set_connection_status_error(message, pid_type, state)
+
+    extended_message = message <> pg_error_extra_info(error.original_error)
+
+    Logger.warning(
+      "#{inspect(__MODULE__)} is restarting after it has encountered an error in #{connection_mode} mode: #{extended_message}\n" <>
+        message <> "\n\n" <> inspect(state, pretty: true)
+    )
+
+    dispatch_stack_event(
+      {:connection_error,
+       %{
+         error: DbConnectionError.format_original_error(error),
+         type: error.type,
+         message: error.message,
+         total_retry_time: ConnectionBackoff.total_retry_time(elem(state.connection_backoff, 0))
+       }},
+      state
+    )
   end
 
   defp schedule_reconnection_after_error(error, pid_type, state) do
@@ -1091,11 +1030,10 @@ defmodule Electric.Connection.Manager do
          error_message,
          _pid_type,
          %State{
-           current_phase: phase,
+           current_phase: :connection_setup,
            current_step: {:start_replication_client, _}
          } = state
-       )
-       when phase in [:connection_setup, :restarting_replication_client] do
+       ) do
     StatusMonitor.mark_replication_client_as_errored(state.stack_id, error_message)
     "replication"
   end
