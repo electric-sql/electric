@@ -74,6 +74,7 @@ defmodule Electric.ShapeCacheTest do
     :with_async_deleter,
     :with_pure_file_storage,
     :with_shape_status,
+    :with_shape_cleaner,
     :with_status_monitor,
     :with_shape_monitor
   ]
@@ -287,6 +288,23 @@ defmodule Electric.ShapeCacheTest do
       :with_shape_cache,
       :with_sql_execute
     ]
+
+    setup ctx do
+      # Stub out the shape relation cleaning as we are using a stub inspector
+      # and thus our shapes are always using "missing" relations
+      Repatch.patch(
+        Electric.ShapeCache.ShapeCleaner,
+        :remove_shapes_for_relations,
+        [mode: :shared],
+        fn _, _ -> :ok end
+      )
+
+      {_, pub_man_opts} = ctx.publication_manager
+
+      Repatch.allow(self(), pub_man_opts[:server])
+
+      :ok
+    end
 
     setup %{pool: pool} do
       Postgrex.query!(pool, "INSERT INTO items (id, value) VALUES ($1, $2), ($3, $4)", [

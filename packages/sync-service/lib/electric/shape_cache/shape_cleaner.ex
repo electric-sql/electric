@@ -19,18 +19,16 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @spec remove_shape(shape_handle(), Keyword.t()) :: :ok | {:error, term()}
   def remove_shape(shape_handle, opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    server = Keyword.get(opts, :server, name(stack_id))
     timeout = Keyword.get(opts, :timeout, 15_000)
-    GenServer.call(server, {:remove_shape, shape_handle}, timeout)
+    GenServer.call(name(stack_id), {:remove_shape, shape_handle}, timeout)
   end
 
   @spec remove_shapes_for_relations(list(Electric.oid_relation()), Keyword.t()) :: :ok
   def remove_shapes_for_relations(relations, opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    server = Keyword.get(opts, :server, name(stack_id))
     # We don't want for this call to be blocking because it will be called in `PublicationManager`
     # if it notices a discrepancy in the schema
-    GenServer.cast(server, {:clean_all_shapes_for_relations, relations})
+    GenServer.cast(name(stack_id), {:clean_all_shapes_for_relations, relations})
   end
 
   def name(stack_id), do: Electric.ProcessRegistry.name(stack_id, __MODULE__)

@@ -145,7 +145,7 @@ defmodule Electric.Postgres.Configuration do
       if MapSet.size(changed_relations) > 0,
         do:
           Logger.info(
-            "Configuring publication #{publication_name} to include #{map_size(used_relations)} tables - " <>
+            "Configuring publication #{publication_name} to include #{MapSet.size(used_relations)} tables - " <>
               "skipping altered tables #{inspect(MapSet.to_list(changed_relations))}"
           )
 

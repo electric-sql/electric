@@ -17,6 +17,7 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback await_snapshot_start(shape_handle(), opts :: Access.t()) ::
               :started | {:error, term()}
   @callback has_shape?(shape_handle(), Access.t()) :: boolean()
+  @callback clean_shape(shape_handle(), Access.t()) :: :ok
 end
 
 defmodule Electric.ShapeCache do
@@ -200,6 +201,11 @@ defmodule Electric.ShapeCache do
       server = Access.get(opts, :server, name(opts))
       GenServer.call(server, {:wait_shape_handle, shape_handle}, @call_timeout)
     end
+  end
+
+  @impl Electric.ShapeCacheBehaviour
+  def clean_shape(shape_handle, opts \\ []) do
+    ShapeCleaner.remove_shape(shape_handle, opts)
   end
 
   @impl GenServer
