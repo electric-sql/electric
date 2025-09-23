@@ -126,4 +126,22 @@ defmodule Support.TestUtils do
 
     for [schema_name, table_name] <- rows, do: {schema_name, table_name}
   end
+
+  def patch_snapshotter(fun) do
+    Repatch.patch(
+      Electric.Shapes.Consumer.Snapshotter,
+      :start_streaming_snapshot_from_db,
+      [mode: :shared],
+      fun
+    )
+
+    self_pid = self()
+    mod = Electric.Shapes.Consumer.Snapshotter
+    callback_fun = fn pid -> Repatch.allow(self_pid, pid) end
+
+    # The snapshotter process will look up this callback in its root ancestor and execute it.
+    Process.put(:callback_for_descendant_proc, {mod, callback_fun})
+
+    :ok
+  end
 end

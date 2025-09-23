@@ -22,13 +22,15 @@ defmodule Electric.ShapeCleanerTest do
 
   @shape Electric.Shapes.Shape.new!("items", inspector: @stub_inspector)
   @zero_offset LogOffset.last_before_real_offsets()
+  @pg_snapshot_xmin_10 {10, 11, [10]}
+
   @moduletag :tmp_dir
 
   setup :verify_on_exit!
 
   # Provide an inspector for downstream setup helpers (shape log collector, etc.)
   setup do
-    %{inspector: @stub_inspector}
+    %{inspector: @stub_inspector, pool: nil}
   end
 
   setup [
@@ -51,14 +53,13 @@ defmodule Electric.ShapeCleanerTest do
     ]
 
     test "cleans up shape data and rotates the shape handle", ctx do
-      %{shape_cache_opts: opts} =
-        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
-            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {10, 11, [10]}})
-            Storage.make_new_snapshot!([["test"]], storage)
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-          end
-        )
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+        Storage.make_new_snapshot!([["test"]], storage)
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
@@ -98,14 +99,13 @@ defmodule Electric.ShapeCleanerTest do
     test "remove_shape swallows error if no shape to clean up", ctx do
       shape_handle = "foo"
 
-      %{shape_cache_opts: _opts} =
-        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
-            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {10, 11, [10]}})
-            Storage.make_new_snapshot!([["test"]], storage)
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-          end
-        )
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+        Storage.make_new_snapshot!([["test"]], storage)
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      %{shape_cache_opts: _opts} = with_shape_cache(ctx)
 
       {:ok, _} =
         with_log(fn -> ShapeCleaner.remove_shape(shape_handle, stack_id: ctx.stack_id) end)
@@ -121,14 +121,13 @@ defmodule Electric.ShapeCleanerTest do
     ]
 
     setup ctx do
-      %{shape_cache_opts: opts} =
-        with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
-            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {10, 11, [10]}})
-            Storage.make_new_snapshot!([["test"]], storage)
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-          end
-        )
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+        Storage.make_new_snapshot!([["test"]], storage)
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
       {:ok, %{shape_cache_opts: opts}}
     end

@@ -167,6 +167,7 @@ defmodule Electric.Shapes.ConsumerTest do
                publication_manager: {Mock.PublicationManager, []},
                hibernate_after: 1_000,
                storage: storage,
+               otel_ctx: nil,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold()},
               id: {Shapes.ConsumerSupervisor, shape_handle}
@@ -670,7 +671,7 @@ defmodule Electric.Shapes.ConsumerTest do
   describe "transaction handling with real storage" do
     @describetag :tmp_dir
     setup do
-      %{inspector: @base_inspector}
+      %{inspector: @base_inspector, pool: nil}
     end
 
     setup [
@@ -690,21 +691,18 @@ defmodule Electric.Shapes.ConsumerTest do
     setup(ctx) do
       snapshot_delay = Map.get(ctx, :snapshot_delay, nil)
 
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+        if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
+        pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+        Storage.make_new_snapshot!([], storage)
+      end)
+
       %{shape_cache_opts: shape_cache_opts, consumer_supervisor: consumer_supervisor} =
-        Support.ComponentSetup.with_shape_cache(
-          Map.merge(ctx, %{
-            pool: nil,
-            inspector: @base_inspector
-          }),
+        Support.ComponentSetup.with_shape_cache(ctx,
           shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000),
-          log_producer: ctx.shape_log_collector,
-          create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
-            if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
-            pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
-            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-            Storage.make_new_snapshot!([], storage)
-          end
+          log_producer: ctx.shape_log_collector
         )
 
       [

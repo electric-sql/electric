@@ -18,10 +18,6 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             publication_manager: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}, required: true],
-            create_snapshot_fn: [
-              type: {:fun, 4},
-              default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/4
-            ],
             snapshot_timeout_to_first_data: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: :timer.seconds(30)
@@ -96,7 +92,18 @@ defmodule Electric.Shapes.ConsumerSupervisor do
 
     children = [
       {Electric.ShapeCache.Storage, shape_storage},
-      {Electric.Shapes.Consumer.Snapshotter, shape_config},
+      {Electric.Shapes.Consumer.Snapshotter,
+       %{
+         chunk_bytes_threshold: config.chunk_bytes_threshold,
+         db_pool: config.db_pool,
+         otel_ctx: Map.get(config, :otel_ctx),
+         publication_manager: config.publication_manager,
+         shape: config.shape,
+         shape_handle: shape_handle,
+         snapshot_timeout_to_first_data: config.snapshot_timeout_to_first_data,
+         stack_id: config.stack_id,
+         storage: shape_storage
+       }},
       {Electric.Shapes.Consumer, shape_config}
     ]
 
