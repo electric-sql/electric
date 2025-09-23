@@ -59,10 +59,6 @@ defmodule Electric.ShapeCache do
               type: :integer,
               default: Electric.Config.default(:shape_hibernate_after)
             ],
-            create_snapshot_fn: [
-              type: {:fun, 4},
-              default: &Shapes.Consumer.Snapshotter.query_in_readonly_txn/4
-            ],
             recover_shape_timeout: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: 5_000
@@ -221,14 +217,13 @@ defmodule Electric.ShapeCache do
 
     state = %{
       name: opts.name,
-      stack_id: opts.stack_id,
+      stack_id: stack_id,
       storage: opts.storage,
       publication_manager: opts.publication_manager,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
       shape_status: opts.shape_status,
       db_pool: opts.db_pool,
-      create_snapshot_fn: opts.create_snapshot_fn,
       log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
@@ -394,7 +389,6 @@ defmodule Electric.ShapeCache do
            log_producer: state.log_producer,
            registry: state.registry,
            db_pool: state.db_pool,
-           create_snapshot_fn: state.create_snapshot_fn,
            hibernate_after: state.shape_hibernate_after,
            otel_ctx: otel_ctx,
            snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data
