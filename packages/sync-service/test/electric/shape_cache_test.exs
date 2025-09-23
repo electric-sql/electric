@@ -892,8 +892,15 @@ defmodule Electric.ShapeCacheTest do
       })
 
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
       assert shape_handle1 == shape_handle2
+      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
+
+      ref =
+        Shapes.Consumer.Snapshotter.name(context.stack_id, shape_handle2)
+        |> GenServer.whereis()
+        |> Process.monitor()
+
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
     end
 
     test "restores latest offset", %{shape_cache_opts: opts} = context do

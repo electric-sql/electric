@@ -56,7 +56,7 @@ defmodule Electric.Connection.Manager.Supervisor do
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
     shape_cleaner_spec =
-      {Electric.Shapes.Cleaner,
+      {Electric.ShapeCache.ShapeCleaner,
        stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
@@ -86,8 +86,7 @@ defmodule Electric.Connection.Manager.Supervisor do
        max_shapes: Keyword.fetch!(opts, :max_shapes),
        expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size),
        stack_id: stack_id,
-       shape_status: Keyword.fetch!(shape_cache_opts, :shape_status),
-       consumer_supervisor: Keyword.fetch!(shape_cache_opts, :consumer_supervisor)}
+       shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
 
     child_spec =
       Supervisor.child_spec(
