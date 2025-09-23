@@ -106,7 +106,7 @@ defmodule Support.ComponentSetup do
 
   def with_shape_cleaner(ctx) do
     start_link_supervised!(
-      {Electric.Shapes.ShapeCleaner, stack_id: ctx.stack_id, shape_status: ctx.shape_status}
+      {Electric.ShapeCache.ShapeCleaner, stack_id: ctx.stack_id, shape_status: ctx.shape_status}
     )
 
     %{}

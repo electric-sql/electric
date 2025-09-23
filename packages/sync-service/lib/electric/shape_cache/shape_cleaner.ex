@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.ShapeCleaner do
+defmodule Electric.ShapeCache.ShapeCleaner do
   @moduledoc """
   Removes a shape (consumer, status entry, on-disk data and publication entry) on demand.
 

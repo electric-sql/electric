@@ -34,7 +34,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       })
 
     Repatch.patch(
-      Electric.Shapes.ShapeCleaner,
+      Electric.ShapeCache.ShapeCleaner,
       :remove_shapes_for_relations,
       [mode: :shared],
       fn relations, _ ->

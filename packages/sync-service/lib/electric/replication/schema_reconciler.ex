@@ -14,7 +14,7 @@ defmodule Electric.Replication.SchemaReconciler do
 
   alias Electric.Postgres.Inspector
   alias Electric.Replication.PublicationManager
-  alias Electric.Shapes.ShapeCleaner
+  alias Electric.ShapeCache.ShapeCleaner
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}

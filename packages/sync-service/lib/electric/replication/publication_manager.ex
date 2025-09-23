@@ -3,7 +3,7 @@ defmodule Electric.Replication.PublicationManager do
   use GenServer
 
   alias Electric.Postgres.Configuration
-  alias Electric.Shapes.ShapeCleaner
+  alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
   alias Electric.Utils
 

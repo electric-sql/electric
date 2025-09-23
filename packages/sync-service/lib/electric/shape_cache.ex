@@ -28,7 +28,7 @@ defmodule Electric.ShapeCache do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.ConsumerSupervisor
-  alias Electric.Shapes.ShapeCleaner
+  alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
 
   require Logger

@@ -95,7 +95,9 @@ defmodule Electric.ShapeCache.ExpiryManager do
         elapsed_minutes_since_use: shape.elapsed_minutes_since_use
       ],
       fn ->
-        Electric.Shapes.ShapeCleaner.remove_shape(shape.shape_handle, stack_id: state.stack_id)
+        Electric.ShapeCache.ShapeCleaner.remove_shape(shape.shape_handle,
+          stack_id: state.stack_id
+        )
       end
     )
   end
