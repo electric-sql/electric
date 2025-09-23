@@ -115,19 +115,30 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
 
-  def remove_shape(%WhereCondition{} = condition, shape_id) do
-    %{
-      condition
-      | indexes: remove_shape_from_indexes(condition.indexes, shape_id),
-        other_shapes: Map.delete(condition.other_shapes, shape_id)
-    }
+  def remove_shape(%WhereCondition{} = condition, {shape_id, _} = shape_instance, where_clause) do
+    case optimise_where(where_clause) do
+      :not_optimised ->
+        %{condition | other_shapes: Map.delete(condition.other_shapes, shape_id)}
+
+      optimisation ->
+        %{
+          condition
+          | indexes: remove_shape_from_indexes(condition.indexes, shape_instance, optimisation)
+        }
+    end
   end
 
-  defp remove_shape_from_indexes(indexes, shape_id) do
-    indexes
-    |> Map.new(fn {key, index} -> {key, Index.remove_shape(index, shape_id)} end)
-    |> Enum.reject(fn {_key, index} -> Index.empty?(index) end)
-    |> Map.new()
+  defp remove_shape_from_indexes(indexes, shape_instance, optimisation) do
+    index =
+      indexes
+      |> Map.fetch!({optimisation.field, optimisation.operation})
+      |> Index.remove_shape(optimisation.value, shape_instance, optimisation.and_where)
+
+    if Index.empty?(index) do
+      Map.delete(indexes, {optimisation.field, optimisation.operation})
+    else
+      Map.put(indexes, {optimisation.field, optimisation.operation}, index)
+    end
   end
 
   def affected_shapes(%WhereCondition{} = condition, record, refs_fun \\ fn _ -> %{} end) do

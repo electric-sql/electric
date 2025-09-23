@@ -322,7 +322,9 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "an_array @> '{}'", inspector: @inspector),
       Shape.new!("table", where: "an_array @> '{1}'", inspector: @inspector),
       Shape.new!("table", where: "an_array @> '{1,2}'", inspector: @inspector),
-      Shape.new!("table", where: "an_array @> '{1,3}'", inspector: @inspector)
+      Shape.new!("table", where: "an_array @> '{1,3}'", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 AND an_array @> '{1}'", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
     ]
 
     shapes
@@ -332,7 +334,7 @@ defmodule Electric.Shapes.FilterTest do
       filter_with_shape_added = Filter.add_shape(filter, i, shape)
 
       # Check that whenever you remove a shape the filter is the same as if the shape was never added
-      assert Filter.remove_shape(filter_with_shape_added, i) == filter
+      assert Filter.remove_shape(filter_with_shape_added, i, shape) == filter
 
       filter_with_shape_added
     end)

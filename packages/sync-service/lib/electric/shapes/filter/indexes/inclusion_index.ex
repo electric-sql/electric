@@ -83,40 +83,50 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       )
     end
 
-    def remove_shape(%InclusionIndex{} = index, shape_id) do
-      %{index | value_tree: remove_shape_from_tree(index.value_tree, shape_id)}
+    def remove_shape(%InclusionIndex{} = index, array, {shape_id, shape}, and_where) do
+      ordered = array |> Enum.sort() |> Enum.dedup()
+
+      %{
+        index
+        | value_tree:
+            remove_shape_from_node(index.value_tree, ordered, %{
+              shape_id: shape_id,
+              shape: shape,
+              and_where: and_where
+            })
+      }
     end
 
-    defp remove_shape_from_tree(node, shape_id) do
-      node
-      |> remove_shape_from_node(shape_id)
-      |> remove_shape_from_children(shape_id)
-    end
+    defp remove_shape_from_node(node, [value | values], shape_info) do
+      # There are still array values left so don't remove the shape from this node, remove it from a child or descendent node instead
+      child =
+        node
+        |> Map.fetch!(value)
+        |> remove_shape_from_node(values, shape_info)
 
-    defp remove_shape_from_node(%{condition: condition} = node, shape_id) do
-      condition = WhereCondition.remove_shape(condition, shape_id)
-
-      if condition == WhereCondition.new() do
-        Map.delete(node, :condition)
+      if node_empty?(child) do
+        node
+        |> Map.delete(value)
+        |> Map.put(:keys, List.delete(node.keys, value))
       else
-        %{node | condition: condition}
+        Map.put(node, value, child)
       end
     end
 
-    defp remove_shape_from_node(node, _shape_id), do: node
+    defp remove_shape_from_node(node, [] = _values, shape_info) do
+      # There are no more arry values left so remove the shape from the node
+      condition =
+        node.condition
+        |> WhereCondition.remove_shape(
+          {shape_info.shape_id, shape_info.shape},
+          shape_info.and_where
+        )
 
-    defp remove_shape_from_children(node, shape_id) do
-      Enum.reduce(node.keys, node, fn key, node ->
-        child = remove_shape_from_tree(node[key], shape_id)
-
-        if node_empty?(child) do
-          node
-          |> Map.delete(key)
-          |> Map.put(:keys, List.delete(node.keys, key))
-        else
-          Map.put(node, key, child)
-        end
-      end)
+      if WhereCondition.empty?(condition) do
+        Map.delete(node, :condition)
+      else
+        Map.put(node, :condition, condition)
+      end
     end
 
     defp node_empty?(%{condition: _}), do: false

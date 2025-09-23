@@ -12,7 +12,7 @@ defmodule Electric.Shapes.Filter.Index do
 
   defdelegate empty?(index), to: Protocol
   defdelegate add_shape(index, value, shape_instance, and_where), to: Protocol
-  defdelegate remove_shape(index, shape_id), to: Protocol
+  defdelegate remove_shape(index, value, shape_instance, and_where), to: Protocol
   defdelegate affected_shapes(index, field, record), to: Protocol
   defdelegate all_shapes(index), to: Protocol
 end
@@ -20,7 +20,7 @@ end
 defprotocol Electric.Shapes.Filter.Index.Protocol do
   def empty?(index)
   def add_shape(index, value, shape_instance, and_where)
-  def remove_shape(index, shape_id)
+  def remove_shape(index, value, shape_instance, and_where)
   def affected_shapes(index, field, record)
   def all_shapes(index)
 end

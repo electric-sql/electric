@@ -58,18 +58,20 @@ defmodule Electric.Shapes.Filter do
   @doc """
   Remove a shape from the filter.
   """
-  @spec remove_shape(Filter.t(), shape_id()) :: Filter.t()
-  def remove_shape(%Filter{} = filter, shape_id) do
-    %Filter{
-      filter
-      | tables:
-          filter.tables
-          |> Enum.map(fn {table_name, condition} ->
-            {table_name, WhereCondition.remove_shape(condition, shape_id)}
-          end)
-          |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
-          |> Map.new()
-    }
+  @spec remove_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
+  def remove_shape(%Filter{} = filter, shape_id, shape) do
+    condition =
+      Map.fetch!(filter.tables, shape.root_table)
+      |> WhereCondition.remove_shape({shape_id, shape}, shape.where)
+
+    tables =
+      if WhereCondition.empty?(condition) do
+        Map.delete(filter.tables, shape.root_table)
+      else
+        Map.put(filter.tables, shape.root_table, condition)
+      end
+
+    %Filter{filter | tables: tables}
   end
 
   @doc """
