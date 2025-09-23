@@ -144,6 +144,13 @@ defmodule Electric.ShapeCache.PureFileStorage.KeyIndex do
     )
   end
 
+  def create_from_log(log_file_path, key_index_path, end_pos \\ :eof) do
+    LogFile.stream_entries(log_file_path, 0, end_pos)
+    |> Stream.map(fn {entry, pos} -> elem(make_entry(entry, pos), 0) end)
+    |> Stream.into(File.stream!(key_index_path, [:delayed_write]))
+    |> Stream.run()
+  end
+
   def sort(inputs, output) do
     :ok =
       :file_sorter.sort(inputs |> Enum.map(&to_charlist/1), to_charlist(output),
