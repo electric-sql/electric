@@ -105,4 +105,27 @@ defmodule Electric.AsyncDeleterTest do
     Process.sleep(@interval + 30)
     assert File.ls!(trash_dir) == []
   end
+
+  test "can manage concurrent deletes while cleaning up", %{
+    stack_id: stack_id,
+    trash_dir: trash_dir,
+    tmp_dir: base
+  } do
+    d1 = create_temp_dir(%{tmp_dir: base}, "d1")
+
+    stream =
+      Task.async_stream(1..1000, fn i ->
+        f = create_temp_file(d1, "tmp_#{i}")
+        sleep_time = round(Enum.random(1..10) * 0.1 * (2 * @interval))
+        Process.sleep(sleep_time)
+        assert :ok = AsyncDeleter.delete(f, stack_id: stack_id)
+      end)
+
+    Enum.to_list(stream)
+
+    # ensure all files are deleted
+    Process.sleep(@interval + 30)
+    assert File.ls!(d1) == []
+    assert File.ls!(trash_dir) == []
+  end
 end

@@ -75,6 +75,8 @@ defmodule Electric.AsyncDeleter do
       pending: []
     }
 
+    File.mkdir_p!(state.trash_dir)
+
     {:ok, state, {:continue, :initial_cleanup}}
   end
 
@@ -121,9 +123,9 @@ defmodule Electric.AsyncDeleter do
     trash_dir = trash_dir(stack_id)
     dest = unique_destination(trash_dir, Path.basename(path))
 
-    case File.rename(path, dest) do
-      :ok -> {:ok, dest}
-      {:error, reason} -> {:error, reason}
+    with :ok <- File.mkdir_p!(trash_dir),
+         :ok <- File.rename(path, dest) do
+      {:ok, dest}
     end
   end
 
@@ -132,11 +134,9 @@ defmodule Electric.AsyncDeleter do
     start_time = System.monotonic_time(:millisecond)
 
     try do
-      File.rm_rf!(state.trash_dir)
+      clean_dir!(state.trash_dir)
     rescue
       e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
-    after
-      File.mkdir_p!(state.trash_dir)
     end
 
     if state.pending != [] do
@@ -149,5 +149,33 @@ defmodule Electric.AsyncDeleter do
     end
 
     %{state | pending: [], timer_ref: nil}
+  end
+
+  def clean_dir!(path) do
+    path
+    |> File.ls!()
+    |> Enum.each(fn entry ->
+      full_path = Path.join(path, entry)
+      unsafe_cleanup_with_retries!(full_path)
+    end)
+  end
+
+  defp unsafe_cleanup_with_retries!(directory, attempts_left \\ 5) do
+    with {:ok, _} <- File.rm_rf(directory) do
+      :ok
+    else
+      # There is a very unlikely but observed scenario where the rm_rf call
+      # tries to delete a directory after having deleted all its files, but
+      # due to some FS race the deletion fails with EEXIST. Very hard to test
+      # and prevent so we mitigate it with arbitrary retries.
+      {:error, :eexist, _} when attempts_left > 0 ->
+        unsafe_cleanup_with_retries!(directory, attempts_left - 1)
+
+      {:error, reason, path} ->
+        raise File.Error,
+          reason: reason,
+          path: path,
+          action: "remove files and directories recursively from"
+    end
   end
 end
