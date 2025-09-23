@@ -152,6 +152,12 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
+  @spec clean_shape(shape_handle(), Access.t()) :: :ok
+  def clean_shape(shape_handle, opts) do
+    ShapeCleaner.remove_shape(shape_handle, opts)
+  end
+
+  @impl Electric.ShapeCacheBehaviour
   @spec await_snapshot_start(shape_handle(), Access.t()) :: :started | {:error, term()}
   def await_snapshot_start(shape_handle, opts \\ []) when is_binary(shape_handle) do
     table = ShapeStatus.shape_meta_table(opts)
@@ -201,11 +207,6 @@ defmodule Electric.ShapeCache do
       server = Access.get(opts, :server, name(opts))
       GenServer.call(server, {:wait_shape_handle, shape_handle}, @call_timeout)
     end
-  end
-
-  @impl Electric.ShapeCacheBehaviour
-  def clean_shape(shape_handle, opts \\ []) do
-    ShapeCleaner.remove_shape(shape_handle, opts)
   end
 
   @impl GenServer
