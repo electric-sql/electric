@@ -66,7 +66,7 @@ defmodule Electric.ExpiryManagerTest do
     %{shape_cache_opts: opts, consumer_supervisor: consumer_supervisor} =
       with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
         run_with_conn_fn: &run_with_conn_noop/2,
-        create_snapshot_fn: fn parent, shape_handle, _shape, _, storage, _, _ ->
+        create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
           GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
           Storage.make_new_snapshot!([["test"]], storage)
           GenServer.cast(parent, {:snapshot_started, shape_handle})
