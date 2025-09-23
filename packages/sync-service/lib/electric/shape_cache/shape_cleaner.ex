@@ -83,7 +83,14 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     # schedule these shape removals one by one to avoid blocking the GenServer
     # for too long to allow interleaved sync removals
 
-    {:noreply, %{state | queued_removals: state.queued_removals ++ affected_shapes}}
+    new_queue = state.queued_removals ++ affected_shapes
+
+    # kick off processing if we just enqueued new shapes and weren't already processing
+    if affected_shapes != [] and state.queued_removals == [] do
+      GenServer.cast(self(), :remove_queued_shapes)
+    end
+
+    {:noreply, %{state | queued_removals: new_queue}}
   end
 
   def handle_cast(:remove_queued_shapes, %{queued_removals: []} = state) do
@@ -92,8 +99,11 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
   def handle_cast(:remove_queued_shapes, %{queued_removals: [next_shape | rest]} = state) do
     :ok = stop_and_clean_shape(next_shape, state)
-    # schedule the next removal immediately
-    send(self(), :remove_queued_shapes)
+    # schedule the next removal immediately via another cast to keep mailbox ordering
+    if rest != [] do
+      GenServer.cast(self(), :remove_queued_shapes)
+    end
+
     {:noreply, %{state | queued_removals: rest}}
   end
 

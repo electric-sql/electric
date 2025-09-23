@@ -20,10 +20,6 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   @where_clause_1 %Expr{query: "id = '1'", used_refs: %{["id"] => :text}}
   @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
 
-  def clean_all_shapes_for_relations(relations, [parent_pid]) do
-    send(parent_pid, {:clean_all_shapes_for_relations, relations})
-  end
-
   setup [
     :with_stack_id_from_test,
     :with_unique_db,
@@ -42,6 +38,19 @@ defmodule Electric.Replication.PublicationManagerDbTest do
         publication_name: ctx.publication_name,
         pool: ctx.pool
       })
+
+    test_pid = self()
+
+    Repatch.patch(
+      Electric.ShapeCache.ShapeCleaner,
+      :remove_shapes_for_relations,
+      [mode: :shared],
+      fn relations, _ ->
+        send(test_pid, {:remove_shapes_for_relations, relations})
+      end
+    )
+
+    Repatch.allow(test_pid, pub_mgr_opts[:server])
 
     relation = {"public", "items"}
     relation_oid = lookup_relation_oid(ctx.pool, relation)
@@ -86,7 +95,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
       assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
       assert [] == fetch_pub_tables(ctx)
 
-      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
+      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
 
     test "updates the publication if a published table is renamed", ctx do
@@ -95,7 +104,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
       assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
       assert [] == fetch_pub_tables(ctx)
 
-      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
+      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
   end
 

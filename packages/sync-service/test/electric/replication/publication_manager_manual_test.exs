@@ -6,6 +6,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
   # are cleaned up.
 
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
 
   import Support.ComponentSetup
   import Support.DbSetup
@@ -15,10 +16,6 @@ defmodule Electric.Replication.PublicationManagerManualTest do
   alias Electric.Replication.PublicationManager
 
   @shape_handle "pub_mgr_manual_test_shape_handle"
-
-  def clean_all_shapes_for_relations(relations, [parent_pid]) do
-    send(parent_pid, {:clean_all_shapes_for_relations, relations})
-  end
 
   setup [
     :with_stack_id_from_test,
@@ -40,6 +37,19 @@ defmodule Electric.Replication.PublicationManagerManualTest do
         manual_table_publishing?: true
       })
 
+    test_pid = self()
+
+    Repatch.patch(
+      Electric.ShapeCache.ShapeCleaner,
+      :remove_shapes_for_relations,
+      [mode: :shared],
+      fn relations, _ ->
+        send(test_pid, {:remove_shapes_for_relations, relations})
+      end
+    )
+
+    Repatch.allow(test_pid, pub_mgr_opts[:server])
+
     relation = {"public", "items"}
     relation_oid = lookup_relation_oid(ctx.pool, relation)
 
@@ -57,7 +67,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
                      PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
                    end
 
-      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
+      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
 
     test "raises if the table's replica identity is not full", ctx do
@@ -71,7 +81,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
                      PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
                    end
 
-      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
+      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
   end
 
@@ -90,7 +100,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
 
       assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
 
-      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
+      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
 
     test "verifies publication state when a table is renamed and cleans up the corresponding shape",
@@ -99,7 +109,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
 
       assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
 
-      assert_receive {:clean_all_shapes_for_relations, [{_oid, {"public", "items"}}]}
+      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
   end
 end
