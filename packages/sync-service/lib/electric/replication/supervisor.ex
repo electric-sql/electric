@@ -41,10 +41,10 @@ defmodule Electric.Replication.Supervisor do
     Logger.info("Starting shape replication pipeline")
 
     shape_status_owner = Keyword.fetch!(opts, :shape_status_owner)
+    shape_cleaner = Keyword.fetch!(opts, :shape_cleaner)
     log_collector = Keyword.fetch!(opts, :log_collector)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
-    shape_cleaner = Keyword.fetch!(opts, :shape_cleaner)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     expiry_manager = Keyword.fetch!(opts, :expiry_manager)
     schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
@@ -53,10 +53,10 @@ defmodule Electric.Replication.Supervisor do
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
       shape_status_owner,
+      shape_cleaner,
       log_collector,
       publication_manager,
       consumer_supervisor,
-      shape_cleaner,
       shape_cache,
       expiry_manager,
       schema_reconciler
