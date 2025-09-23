@@ -55,6 +55,10 @@ defmodule Electric.Connection.Manager.Supervisor do
 
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
+    shape_cleaner_spec =
+      {Electric.Shapes.Cleaner,
+       stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
+
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     publication_manager_spec =
@@ -75,7 +79,6 @@ defmodule Electric.Connection.Manager.Supervisor do
       {Electric.Replication.SchemaReconciler,
        stack_id: stack_id,
        inspector: inspector,
-       shape_cache: {Electric.ShapeCache, stack_id: stack_id},
        period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)}
 
     expiry_manager_spec =
@@ -93,6 +96,7 @@ defmodule Electric.Connection.Manager.Supervisor do
           stack_id: stack_id,
           shape_status_owner: shape_status_owner_spec,
           consumer_supervisor: consumer_supervisor_spec,
+          shape_cleaner: shape_cleaner_spec,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,
           log_collector: shape_log_collector_spec,

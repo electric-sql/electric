@@ -16,9 +16,6 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback count_shapes(keyword() | map()) :: non_neg_integer() | :error
   @callback await_snapshot_start(shape_handle(), opts :: Access.t()) ::
               :started | {:error, term()}
-  @callback clean_shape(shape_handle(), Access.t()) :: :ok
-  @callback clean_all_shapes_for_relations(list(Electric.oid_relation()), opts :: Access.t()) ::
-              :ok
   @callback has_shape?(shape_handle(), Access.t()) :: boolean()
 end
 
@@ -31,6 +28,7 @@ defmodule Electric.ShapeCache do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
   alias Electric.Shapes.ConsumerSupervisor
+  alias Electric.Shapes.ShapeCleaner
   alias Electric.Shapes.Shape
 
   require Logger
@@ -153,22 +151,6 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  @spec clean_shape(shape_handle(), Access.t()) :: :ok
-  def clean_shape(shape_handle, opts) do
-    server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, {:clean, shape_handle}, @call_timeout)
-  end
-
-  @impl Electric.ShapeCacheBehaviour
-  @spec clean_all_shapes_for_relations(list(Electric.oid_relation()), Access.t()) :: :ok
-  def clean_all_shapes_for_relations(relations, opts) do
-    server = Access.get(opts, :server, name(opts))
-    # We don't want for this call to be blocking because it will be called in `PublicationManager`
-    # if it notices a discrepancy in the schema
-    GenServer.cast(server, {:clean_all_shapes_for_relations, relations})
-  end
-
-  @impl Electric.ShapeCacheBehaviour
   @spec await_snapshot_start(shape_handle(), Access.t()) :: :started | {:error, term()}
   def await_snapshot_start(shape_handle, opts \\ []) when is_binary(shape_handle) do
     table = ShapeStatus.shape_meta_table(opts)
@@ -288,62 +270,6 @@ defmodule Electric.ShapeCache do
     {:reply, !is_nil(shape_status.get_existing_shape(shape_status_state, shape_handle)), state}
   end
 
-  def handle_call({:clean, shape_handle}, _from, state) do
-    # ignore errors when cleaning up non-existant shape id
-    with :ok <- clean_up_shape(state, shape_handle) do
-      Logger.info("Cleaning up shape #{shape_handle}")
-    end
-
-    {:reply, :ok, state}
-  end
-
-  @impl GenServer
-  def handle_cast({:clean_all_shapes_for_relations, relations}, state) do
-    {shape_status, shape_status_state} = state.shape_status
-
-    affected_shapes =
-      shape_status.list_shape_handles_for_relations(
-        shape_status_state,
-        relations
-      )
-
-    if relations != [] do
-      Logger.info(fn ->
-        "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
-      end)
-    end
-
-    Enum.each(affected_shapes, fn shape_handle ->
-      clean_up_shape(state, shape_handle)
-    end)
-
-    {:noreply, state}
-  end
-
-  defp clean_up_shape(state, shape_handle) do
-    Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-      state.consumer_supervisor,
-      state.stack_id,
-      shape_handle
-    )
-
-    :ok
-  end
-
-  defp purge_shape(state, shape_handle) do
-    case ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
-      :noproc ->
-        # if the consumer isn't running then we can just delete things gratuitously
-        :ok = Electric.Shapes.Monitor.purge_shape(state.stack_id, shape_handle)
-
-      :ok ->
-        # if it is running then the stop_and_clean process will cleanup properly
-        :ok
-    end
-
-    state
-  end
-
   defp shape_handles(%{shape_status: {shape_status, shape_status_state}}) do
     shape_status.list_shapes(shape_status_state)
   end
@@ -372,7 +298,7 @@ defmodule Electric.ShapeCache do
             "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
           )
 
-          purge_shape(state, shape_handle)
+          ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
 
           []
       end)
@@ -405,7 +331,7 @@ defmodule Electric.ShapeCache do
       )
 
       # clean up corrupted data to avoid persisting bad state
-      purge_shape(state, shape_handle)
+      ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
       []
   end
 
@@ -472,7 +398,7 @@ defmodule Electric.ShapeCache do
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
         # purge because we know the consumer isn't running
-        purge_shape(state, shape_handle)
+        ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
         :error
     end
   end

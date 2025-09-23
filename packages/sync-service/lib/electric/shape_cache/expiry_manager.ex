@@ -99,11 +99,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
         elapsed_minutes_since_use: shape.elapsed_minutes_since_use
       ],
       fn ->
-        Electric.Shapes.DynamicConsumerSupervisor.stop_shape_consumer(
-          state.consumer_supervisor,
-          state.stack_id,
-          shape.shape_handle
-        )
+        Electric.Shapes.ShapeCleaner.remove_shape(shape.shape_handle, stack_id: state.stack_id)
       end
     )
   end

@@ -14,6 +14,8 @@ defmodule Electric.Replication.SchemaReconciler do
 
   alias Electric.Postgres.Inspector
   alias Electric.Replication.PublicationManager
+  alias Electric.Shapes.ShapeCleaner
+
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @addressable_process {:or, [:atom, :pid, @name_schema_tuple]}
@@ -21,7 +23,6 @@ defmodule Electric.Replication.SchemaReconciler do
             name: [type: @genserver_name_schema, required: false],
             period: [type: :pos_integer, required: false, default: 60_000],
             inspector: [type: :any, required: true],
-            shape_cache: [type: :any, required: true],
             stack_id: [type: :string, required: true],
             publication_manager: [type: @addressable_process, required: false]
           )
@@ -86,10 +87,8 @@ defmodule Electric.Replication.SchemaReconciler do
   defp handle_diverged_relations({:ok, []}, _state), do: :ok
 
   defp handle_diverged_relations({:ok, diverged_relations}, state) do
-    {shape_cache_mod, shape_cache_args} = state.shape_cache
-
     with :ok <-
-           shape_cache_mod.clean_all_shapes_for_relations(diverged_relations, shape_cache_args),
+           ShapeCleaner.remove_shapes_for_relations(diverged_relations, stack_id: state.stack_id),
          :ok <-
            Enum.each(diverged_relations, fn {oid, _} ->
              Inspector.clean(oid, state.inspector)
