@@ -104,6 +104,14 @@ defmodule Support.ComponentSetup do
     %{chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold()}
   end
 
+  def with_shape_cleaner(ctx) do
+    start_link_supervised!(
+      {Electric.Shapes.ShapeCleaner, stack_id: ctx.stack_id, shape_status: ctx.shape_status}
+    )
+
+    %{}
+  end
+
   def with_publication_manager(ctx) do
     server = :"publication_manager_#{full_test_name(ctx)}"
 
@@ -125,9 +133,7 @@ defmodule Support.ComponentSetup do
                 ctx,
                 :configure_tables_for_replication_fn,
                 &Electric.Postgres.Configuration.configure_publication!/4
-              ),
-            shape_cache:
-              Access.get(ctx, :shape_cache, {Electric.ShapeCache, [stack_id: ctx.stack_id]})
+              )
           ]
         ]
       },

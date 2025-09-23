@@ -5,15 +5,12 @@ defmodule Electric.ShapeCache.ExpiryManager do
 
   require Logger
 
-  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
-  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             expiry_batch_size: [type: :pos_integer],
             period: [type: :non_neg_integer, default: 60_000],
             stack_id: [type: :string, required: true],
-            shape_status: [type: :mod_arg, required: true],
-            consumer_supervisor: [type: @genserver_name_schema, required: true]
+            shape_status: [type: :mod_arg, required: true]
           )
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
@@ -43,8 +40,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
         max_shapes: Keyword.fetch!(opts, :max_shapes),
         expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size),
         period: Keyword.fetch!(opts, :period),
-        shape_status: Keyword.fetch!(opts, :shape_status),
-        consumer_supervisor: Keyword.fetch!(opts, :consumer_supervisor)
+        shape_status: Keyword.fetch!(opts, :shape_status)
       }
 
     if not is_nil(state.max_shapes), do: schedule_next_check(state)
