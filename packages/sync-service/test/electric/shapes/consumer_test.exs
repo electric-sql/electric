@@ -96,8 +96,6 @@ defmodule Electric.Shapes.ConsumerTest do
     |> allow(self(), Consumer.whereis(ctx.stack_id, shape_handle))
   end
 
-  defp run_with_conn_noop(conn, cb), do: cb.(conn)
-
   describe "event handling" do
     setup [
       :with_in_memory_storage,
@@ -170,8 +168,7 @@ defmodule Electric.Shapes.ConsumerTest do
                hibernate_after: 1_000,
                storage: storage,
                chunk_bytes_threshold:
-                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-               run_with_conn_fn: &run_with_conn_noop/2},
+                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold()},
               id: {Shapes.ConsumerSupervisor, shape_handle}
             )
 
@@ -701,7 +698,6 @@ defmodule Electric.Shapes.ConsumerTest do
           }),
           shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000),
           log_producer: ctx.shape_log_collector,
-          run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
             if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
             pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
@@ -877,8 +873,7 @@ defmodule Electric.Shapes.ConsumerTest do
           pool: nil,
           inspector: @base_inspector
         }),
-        log_producer: ctx.shape_log_collector,
-        run_with_conn_fn: &run_with_conn_noop/2
+        log_producer: ctx.shape_log_collector
       )
 
       :started = ShapeCache.await_snapshot_start(shape_handle, shape_cache_opts)

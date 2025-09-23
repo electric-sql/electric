@@ -43,7 +43,7 @@ defmodule Electric.ExpiryManagerTest do
   setup :verify_on_exit!
 
   setup do
-    %{inspector: @stub_inspector, run_with_conn_fn: fn _, cb -> cb.(:connection) end}
+    %{inspector: @stub_inspector}
   end
 
   setup [
@@ -64,7 +64,6 @@ defmodule Electric.ExpiryManagerTest do
   test "expires shapes if shape count has gone over max_shapes", ctx do
     %{shape_cache_opts: opts} =
       with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-        run_with_conn_fn: &run_with_conn_noop/2,
         create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
           GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
           Storage.make_new_snapshot!([["test"]], storage)
@@ -120,8 +119,6 @@ defmodule Electric.ExpiryManagerTest do
     assert shape_handle != shape_handle2
     assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
   end
-
-  def run_with_conn_noop(conn, cb), do: cb.(conn)
 
   defp await_for_storage_to_raise(storage, timeout \\ 5_000)
 
