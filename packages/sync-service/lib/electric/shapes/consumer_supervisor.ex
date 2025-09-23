@@ -17,7 +17,6 @@ defmodule Electric.Shapes.ConsumerSupervisor do
             storage: [type: :mod_arg, required: true],
             publication_manager: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
-            run_with_conn_fn: [type: {:fun, 2}, default: &DBConnection.run/2],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}, required: true],
             create_snapshot_fn: [
               type: {:fun, 4},

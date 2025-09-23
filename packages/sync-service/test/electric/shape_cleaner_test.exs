@@ -53,7 +53,6 @@ defmodule Electric.ShapeCleanerTest do
     test "cleans up shape data and rotates the shape handle", ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
             GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {10, 11, [10]}})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -101,7 +100,6 @@ defmodule Electric.ShapeCleanerTest do
 
       %{shape_cache_opts: _opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
             GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {10, 11, [10]}})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -125,7 +123,6 @@ defmodule Electric.ShapeCleanerTest do
     setup ctx do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),
-          run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
             GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {10, 11, [10]}})
             Storage.make_new_snapshot!([["test"]], storage)
@@ -189,6 +186,4 @@ defmodule Electric.ShapeCleanerTest do
       assert shape_handle != shape_handle2
     end
   end
-
-  def run_with_conn_noop(conn, cb), do: cb.(conn)
 end
