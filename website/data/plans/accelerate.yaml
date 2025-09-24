@@ -1,0 +1,16 @@
+name: Accelerate
+price: 5000
+period: month
+order: 4
+type: service
+proposition: "Get to production faster"
+description: |
+  Hands-on technical support for faster time to market
+features:
+  - "Avoid common mistakes"
+  - "Dedicated engineering resource"
+  - "Help with design, architecture, integration and rollout"
+  - "Direct access"
+ctaText: "Contact sales"
+ctaHref: "#"
+ctaTheme: "alt"
