@@ -1341,3 +1341,314 @@ function createSSEFilterStream(filterFn: (event: string) => boolean) {
     },
   })
 }
+
+describe.for(fetchAndSse)(
+  `Shape - changes_only mode (liveSSE=$experimentalLiveSse)`,
+  ({ experimentalLiveSse }) => {
+    it(`should start empty even when data exists`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `pre-existing` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+
+      const shape = new Shape(shapeStream)
+
+      expect(await shape.rows).toEqual([])
+    })
+
+    it(`should propagate updates immediately as update messages`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `before` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+
+      const messages: Message<Row>[] = []
+      const unsubscribe = shapeStream.subscribe((msgs) => {
+        messages.push(...msgs)
+      })
+
+      await waitForFetch(shapeStream)
+
+      await updateIssue({ id, title: `after` })
+
+      await vi.waitFor(() => {
+        const updateMsg = messages.find(
+          (m) => isChangeMessage(m) && m.headers.operation === `update`
+        ) as ChangeMessage<Row> | undefined
+        expect(updateMsg?.value?.title).toBe(`after`)
+      })
+
+      unsubscribe()
+    })
+
+    it(`requestSnapshot should populate stream and match returned data`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `A` }, { title: `B` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+
+      const shape = new Shape(shapeStream)
+
+      // Initial state should be empty
+      expect(await shape.rows).toEqual([])
+
+      // Capture messages published to the stream during snapshot
+      const seenKeys = new Set<string>()
+      const unsub = shapeStream.subscribe((msgs) => {
+        for (const m of msgs) {
+          if (isChangeMessage(m)) seenKeys.add(m.key)
+        }
+      })
+
+      const { data } = await shapeStream.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+
+      // Wait until shape reflects the snapshot
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(data.length)
+      })
+
+      // Compare keys in stream vs returned snapshot data
+      const returnedKeys = new Set(data.map((m) => m.key))
+      expect(seenKeys).toEqual(returnedKeys)
+
+      // Compare values (ignoring order)
+      const rowsById = new Map(shape.currentRows.map((r) => [r.id, r]))
+      for (const msg of data) {
+        const row = rowsById.get(msg.value.id)
+        expect(row).toBeTruthy()
+        Object.entries(msg.value).forEach(([k, v]) => {
+          expect(row![k]).toEqual(v)
+        })
+      }
+
+      unsub()
+    })
+
+    it(`requestSnapshot supports orderBy`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `B` }, { title: `C` }, { title: `A` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      const titles = data.map((m) => m.value.title)
+      expect(titles).toEqual([`A`, `B`, `C`])
+    })
+
+    it(`requestSnapshot supports where clause`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `foo` }, { title: `bar` }, { title: `baz` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        where: `title = 'bar'`,
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      const titles = data.map((m) => m.value.title)
+      expect(titles).toEqual([`bar`])
+    })
+
+    it(`requestSnapshot supports parametrised where clause`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `one` }, { title: `two` }, { title: `three` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        where: `title = $1 OR title = $2`,
+        params: { '1': `two`, '2': `three` },
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      const titles = data.map((m) => m.value.title).sort()
+      expect(titles).toEqual([`three`, `two`])
+    })
+
+    it(`requestSnapshot supports orderBy + limit`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `a` }, { title: `b` }, { title: `c` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        orderBy: `title DESC`,
+        limit: 2,
+      })
+      const titles = data.map((m) => m.value.title)
+      expect(titles).toEqual([`c`, `b`])
+    })
+
+    it(`should stream updates after snapshot completes`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `before` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      // Perform a snapshot to populate data and ensure pause/resume flow
+      await shapeStream.requestSnapshot({ orderBy: `title ASC`, limit: 100 })
+
+      // Now perform an update and ensure it is streamed after snapshot finishes
+      const messages: Message<Row>[] = []
+      const unsub = shapeStream.subscribe((msgs) => {
+        messages.push(...msgs)
+      })
+      await updateIssue({ id, title: `after` })
+
+      await vi.waitFor(() => {
+        const updateMsg = messages.find(
+          (m) => isChangeMessage(m) && m.headers.operation === `update`
+        ) as ChangeMessage<Row> | undefined
+        expect(updateMsg?.value?.title).toBe(`after`)
+      })
+      unsub()
+    })
+
+    it(`should observe update committed after snapshot taken in parallel transaction`, async ({
+      issuesTableUrl,
+      issuesTableSql,
+      insertIssues,
+      dbClient,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `base` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      // Begin a transaction and update the row, but do not commit yet
+      await dbClient.query(`BEGIN`)
+      await dbClient.query(
+        `UPDATE ${issuesTableSql} SET title = $2 WHERE id = $1`,
+        [id, `updated-in-tx`]
+      )
+
+      // Take a snapshot that includes this row by id
+      await shapeStream.requestSnapshot({
+        where: `id = $1`,
+        params: { '1': id },
+        orderBy: `id ASC`,
+        limit: 100,
+      })
+
+      // Now commit the transaction so the update becomes visible and is replicated
+      await dbClient.query(`COMMIT`)
+
+      // Expect to observe the update via the replication stream
+      const seen: Array<ChangeMessage<Row>> = []
+      const unsub = shapeStream.subscribe((msgs) => {
+        for (const m of msgs)
+          if (isChangeMessage(m)) seen.push(m as ChangeMessage<Row>)
+      })
+
+      await vi.waitFor(() => {
+        const upd = seen.find(
+          (m) =>
+            m.key &&
+            (m.value as any).id === id &&
+            m.headers.operation === `update`
+        )
+        expect(upd?.value?.title).toBe(`updated-in-tx`)
+      })
+      unsub()
+    })
+  }
+)
