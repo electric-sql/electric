@@ -48,6 +48,8 @@ defmodule Electric.Replication.SchemaReconciler do
   def init(opts) do
     Process.set_label({:schema_reconciler, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
+
     Logger.debug("SchemaReconciler started with state #{inspect(opts)}")
     {:ok, opts, {:continue, :reconcile}}
   end

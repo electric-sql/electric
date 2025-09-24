@@ -267,11 +267,8 @@ defmodule Electric.Connection.Manager.Pool do
   def configure_pool_conn(opts, supervisor_pid, stack_id) do
     send(supervisor_pid, {:pool_conn_started, self()})
 
-    Logger.metadata(
-      # flag used for error filtering
-      is_connection_process?: true,
-      stack_id: stack_id
-    )
+    Logger.metadata(stack_id: stack_id, is_connection_process?: true)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     # If supervisor process not alive when initializing connection, abort it
     try do

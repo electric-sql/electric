@@ -173,12 +173,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
     Process.set_label({:replication_client, state.stack_id})
 
-    Logger.metadata(
-      # flag used for error filtering
-      is_connection_process?: true,
-      stack_id: state.stack_id
-    )
-
+    Logger.metadata(stack_id: state.stack_id, is_connection_process?: true)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: state.stack_id)
 
     {:ok, state}

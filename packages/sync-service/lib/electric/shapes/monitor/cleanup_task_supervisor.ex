@@ -41,19 +41,19 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
 
           task1 =
             Task.Supervisor.async(name(stack_id), fn ->
-              Logger.metadata(stack_id: stack_id, shape_handle: shape_handle)
+              set_task_metadata(stack_id, shape_handle)
               cleanup_shape_status(shape_status_impl, shape_handle)
             end)
 
           task2 =
             Task.Supervisor.async(name(stack_id), fn ->
-              Logger.metadata(stack_id: stack_id, shape_handle: shape_handle)
+              set_task_metadata(stack_id, shape_handle)
               cleanup_storage(storage_impl, shape_handle)
             end)
 
           task3 =
             Task.Supervisor.async(name(stack_id), fn ->
-              Logger.metadata(stack_id: stack_id, shape_handle: shape_handle)
+              set_task_metadata(stack_id, shape_handle)
               cleanup_publication_manager(publication_manager_impl, shape_handle)
             end)
 
@@ -113,6 +113,12 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
       end,
       "Failed to remove shape #{shape_handle} from publication"
     )
+  end
+
+  defp set_task_metadata(stack_id, shape_handle) do
+    metadata = [stack_id: stack_id, shape_handle: shape_handle]
+    Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
   end
 
   defp perform_reporting_errors(fun, message) do
