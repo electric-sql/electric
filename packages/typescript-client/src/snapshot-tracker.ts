@@ -45,7 +45,7 @@ export class SnapshotTracker {
   }
 
   /**
-   * Check if a change message should be filtered based on active snapshots
+   * Check if a change message should be filtered because its already in an active snapshot
    * Returns true if the message should be filtered out (not processed)
    */
   shouldRejectMessage(message: ChangeMessage<Row<unknown>>): boolean {

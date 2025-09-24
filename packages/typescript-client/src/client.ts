@@ -317,6 +317,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
   lastOffset: Offset
   shapeHandle?: string
   error?: unknown
+  mode: `changes_only` | `full`
 
   forceDisconnectAndRefresh(): Promise<void>
 
@@ -328,7 +329,7 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
     orderBy: string
   }): Promise<{
     metadata: SnapshotMetadata
-    data: Array<{ key: string; value: T }>
+    data: Array<ChangeMessage<T>>
   }>
 }
 
@@ -484,6 +485,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   get lastOffset() {
     return this.#lastOffset
+  }
+
+  get mode() {
+    return this.#mode
   }
 
   async #start(): Promise<void> {

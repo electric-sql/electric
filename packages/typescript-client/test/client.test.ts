@@ -1345,6 +1345,19 @@ function createSSEFilterStream(filterFn: (event: string) => boolean) {
 describe.for(fetchAndSse)(
   `Shape - changes_only mode (liveSSE=$experimentalLiveSse)`,
   ({ experimentalLiveSse }) => {
+    it(`should expose mode on Shape`, async ({ issuesTableUrl, aborter }) => {
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+      expect(shape.mode).toBe(`changes_only`)
+    })
+
     it(`should start empty even when data exists`, async ({
       issuesTableUrl,
       insertIssues,
@@ -1641,14 +1654,180 @@ describe.for(fetchAndSse)(
 
       await vi.waitFor(() => {
         const upd = seen.find(
-          (m) =>
-            m.key &&
-            (m.value as any).id === id &&
-            m.headers.operation === `update`
+          (m) => m.key && m.value.id === id && m.headers.operation === `update`
         )
         expect(upd?.value?.title).toBe(`updated-in-tx`)
       })
       unsub()
+    })
+
+    it(`should ignore updates/deletes for unseen keys until insert observed`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      deleteIssue,
+      waitForIssues,
+      aborter,
+    }) => {
+      // Create a row before starting the stream
+      const [preId] = await insertIssues({ title: `pre` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Subscribe to capture raw messages to know when updates arrive
+      const seen: Message<Row>[] = []
+      const unsub = shape.stream.subscribe((msgs) => {
+        seen.push(...msgs)
+      })
+
+      // Initial state should be empty
+      expect(await shape.rows).toEqual([])
+
+      // Update pre-existing row; Shape should ignore
+      await updateIssue({ id: preId, title: `pre-updated` })
+      await waitForIssues({ numChangesExpected: 1 })
+      await vi.waitFor(() => {
+        expect(
+          seen.some(
+            (m) =>
+              isChangeMessage(m) &&
+              m.headers.operation === `update` &&
+              (m as ChangeMessage<Row>).value.id === preId
+          )
+        ).toBe(true)
+      })
+      expect(shape.currentRows).toEqual([])
+
+      // Delete pre-existing row; still ignored
+      await deleteIssue({ id: preId, title: `pre-updated` })
+      await waitForIssues({ numChangesExpected: 1 })
+      await vi.waitFor(() => {
+        expect(
+          seen.some(
+            (m) => isChangeMessage(m) && m.headers.operation === `delete`
+          )
+        ).toBe(true)
+      })
+      expect(shape.currentRows).toEqual([])
+
+      // Insert a new row after the stream starts; Shape should include it
+      const [id2] = await insertIssues({ title: `live` })
+      await vi.waitFor(() => {
+        const rows = shape.currentRows
+        expect(rows.length).toBe(1)
+        expect(rows[0].id).toBe(id2)
+        expect(rows[0].title).toBe(`live`)
+      })
+
+      // Update the inserted row; Shape should apply update
+      await updateIssue({ id: id2, title: `live-updated` })
+      await waitForIssues({ numChangesExpected: 1 })
+      await vi.waitFor(() => {
+        const rows = shape.currentRows
+        expect(rows.length).toBe(1)
+        expect(rows[0].title).toBe(`live-updated`)
+      })
+
+      // Delete the inserted row; Shape should remove it
+      await deleteIssue({ id: id2, title: `live-updated` })
+      await waitForIssues({ numChangesExpected: 1 })
+      await vi.waitFor(() => {
+        expect(shape.currentRows).toEqual([])
+      })
+
+      unsub()
+    })
+
+    it(`Shape.requestSnapshot should populate data and return void`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `A` }, { title: `B` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Initially empty
+      expect(await shape.rows).toEqual([])
+
+      const result = await shape.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      expect(result).toBeUndefined()
+
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(2)
+      })
+      const titles = shape.currentRows.map((r) => r.title).sort()
+      expect(titles).toEqual([`A`, `B`])
+    })
+
+    it(`should re-execute requested sub-snapshots on must-refetch`, async ({
+      issuesTableUrl,
+      insertIssues,
+      deleteIssue,
+      waitForIssues,
+      clearIssuesShape,
+      aborter,
+    }) => {
+      const [_, id2] = await insertIssues(
+        { title: `snap1` },
+        { title: `snap2` }
+      )
+
+      let fetchPausePromise: Promise<void> = Promise.resolve()
+      const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+        await fetchPausePromise
+        return await fetch(...args)
+      }
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Request a snapshot to populate data (and to be re-executed later)
+      await shape.requestSnapshot({ orderBy: `title ASC`, limit: 100 })
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(2)
+      })
+
+      // Prepare rotation: before next fetch, delete id2 and insert a new row, then clear shape
+      fetchPausePromise = Promise.resolve().then(async () => {
+        await deleteIssue({ id: id2, title: `snap2` })
+        await insertIssues({ title: `snap3` })
+        await waitForIssues({ numChangesExpected: 2 })
+        await clearIssuesShape(shapeStream.shapeHandle)
+      })
+
+      // Wait until shape reflects re-executed snapshot on the new shape
+      await vi.waitFor(
+        () => {
+          const titles = shape.currentRows.map((r) => r.title).sort()
+          expect(titles).toEqual([`snap1`, `snap3`])
+        },
+        { timeout: 4000 }
+      )
     })
   }
 )
