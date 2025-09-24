@@ -500,7 +500,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "with pool timeout" do
-    setup do: %{connection_opt_overrides: [pool_size: 1, queue_interval: 1, queue_target: 10]}
+    setup do: %{connection_opt_overrides: [pool_size: 1, queue_interval: 1, queue_target: 50]}
     setup {Support.DbSetup, :with_unique_db}
     setup :with_stack_id_from_test
     setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
