@@ -1,0 +1,20 @@
+name: Free
+price: 0
+period: month
+order: 1
+
+# Primary headlines
+operations: 100000
+shapes: 10000
+sources: 10
+
+# Secondary limits
+gbProcessed: 10
+
+features:
+  - "Shared resources"
+
+# CTA
+ctaText: "Get started"
+ctaHref: "https://dashboard.electric-sql.cloud/"
+ctaTheme: "brand"

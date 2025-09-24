@@ -1,0 +1,24 @@
+name: Growth
+price: 349
+period: month
+order: 3
+
+# Primary headlines
+operations: 20000000
+shapes: 2000000
+sources: 100
+
+# Secondary limits
+gbProcessed: 2000
+
+# Value-add features
+#featuresLabel: "Includes"
+features:
+  - "Role-based access control"
+  - "Network security controls"
+  - "Priority support"
+
+# CTA
+ctaText: "Get started"
+ctaHref: "https://dashboard.electric-sql.cloud/"
+ctaTheme: "brand"
