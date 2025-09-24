@@ -16,5 +16,5 @@ features:
 
 # CTA
 ctaText: "Get started"
-ctaHref: "https://dashboard.electric-sql.cloud/"
+ctaHref: "https://dashboard.electric-sql.cloud"
 ctaTheme: "brand"
