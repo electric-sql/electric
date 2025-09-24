@@ -1,0 +1,22 @@
+name: Pro
+price: 29
+period: month
+order: 2
+
+# Primary headlines
+operations: 1000000
+shapes: 100000
+sources: 20
+
+# Secondary limits
+gbProcessed: 100
+
+#featuresLabel: "Includes"
+features:
+  - "Dedicated resources"
+  - "Unlimited clients"
+
+# CTA
+ctaText: "Get started"
+ctaHref: "https://dashboard.electric-sql.cloud/"
+ctaTheme: "brand"
