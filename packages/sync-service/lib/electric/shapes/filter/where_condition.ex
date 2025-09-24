@@ -31,35 +31,34 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     indexes == %{} && other_shapes == %{}
   end
 
-  def add_shape(%WhereCondition{} = condition, {shape_id, shape} = shape_instance, where_clause) do
+  def add_shape(%WhereCondition{} = condition, shape_id, where_clause) do
     case optimise_where(where_clause) do
       :not_optimised ->
         %{
           condition
-          | other_shapes:
-              Map.put(condition.other_shapes, shape_id, %{shape: shape, where: where_clause})
+          | other_shapes: Map.put(condition.other_shapes, shape_id, where_clause)
         }
 
       optimisation ->
         %{
           condition
-          | indexes: add_shape_to_indexes(condition.indexes, shape_instance, optimisation)
+          | indexes: add_shape_to_indexes(condition.indexes, shape_id, optimisation)
         }
     end
   end
 
-  defp add_shape_to_indexes(indexes, shape_instance, optimisation) do
+  defp add_shape_to_indexes(indexes, shape_id, optimisation) do
     Map.update(
       indexes,
       {optimisation.field, optimisation.operation},
       Index.add_shape(
         Index.new(optimisation.operation, optimisation.type),
         optimisation.value,
-        shape_instance,
+        shape_id,
         optimisation.and_where
       ),
       fn index ->
-        Index.add_shape(index, optimisation.value, shape_instance, optimisation.and_where)
+        Index.add_shape(index, optimisation.value, shape_id, optimisation.and_where)
       end
     )
   end
@@ -115,25 +114,36 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
 
-  def remove_shape(%WhereCondition{} = condition, shape_id) do
-    %{
-      condition
-      | indexes: remove_shape_from_indexes(condition.indexes, shape_id),
-        other_shapes: Map.delete(condition.other_shapes, shape_id)
-    }
+  def remove_shape(%WhereCondition{} = condition, shape_id, where_clause) do
+    case optimise_where(where_clause) do
+      :not_optimised ->
+        %{condition | other_shapes: Map.delete(condition.other_shapes, shape_id)}
+
+      optimisation ->
+        %{
+          condition
+          | indexes: remove_shape_from_indexes(condition.indexes, shape_id, optimisation)
+        }
+    end
   end
 
-  defp remove_shape_from_indexes(indexes, shape_id) do
-    indexes
-    |> Map.new(fn {key, index} -> {key, Index.remove_shape(index, shape_id)} end)
-    |> Enum.reject(fn {_key, index} -> Index.empty?(index) end)
-    |> Map.new()
+  defp remove_shape_from_indexes(indexes, shape_id, optimisation) do
+    index =
+      indexes
+      |> Map.fetch!({optimisation.field, optimisation.operation})
+      |> Index.remove_shape(optimisation.value, shape_id, optimisation.and_where)
+
+    if Index.empty?(index) do
+      Map.delete(indexes, {optimisation.field, optimisation.operation})
+    else
+      Map.put(indexes, {optimisation.field, optimisation.operation}, index)
+    end
   end
 
-  def affected_shapes(%WhereCondition{} = condition, record, refs_fun \\ fn _ -> %{} end) do
+  def affected_shapes(%WhereCondition{} = condition, record, shapes, refs_fun \\ fn _ -> %{} end) do
     MapSet.union(
-      indexed_shapes_affected(condition, record),
-      other_shapes_affected(condition, record, refs_fun)
+      indexed_shapes_affected(condition, record, shapes),
+      other_shapes_affected(condition, record, shapes, refs_fun)
     )
   rescue
     error ->
@@ -143,31 +153,30 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       """)
 
       # We can't tell which shapes are affected, the safest thing to do is return all shapes
-      condition
-      |> all_shapes()
-      |> MapSet.new(fn {shape_id, _shape} -> shape_id end)
+      all_shape_ids(condition)
   end
 
-  defp indexed_shapes_affected(condition, record) do
+  defp indexed_shapes_affected(condition, record, shapes) do
     OpenTelemetry.with_child_span(
       "filter.filter_using_indexes",
       [index_count: map_size(condition.indexes)],
       fn ->
         condition.indexes
         |> Enum.map(fn {{field, _operation}, index} ->
-          Index.affected_shapes(index, field, record)
+          Index.affected_shapes(index, field, record, shapes)
         end)
         |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
       end
     )
   end
 
-  defp other_shapes_affected(condition, record, refs_fun) do
+  defp other_shapes_affected(condition, record, shapes, refs_fun) do
     OpenTelemetry.with_child_span(
       "filter.filter_other_shapes",
       [shape_count: map_size(condition.other_shapes)],
       fn ->
-        for {shape_id, %{where: where, shape: shape}} <- condition.other_shapes,
+        for {shape_id, where} <- condition.other_shapes,
+            shape = Map.fetch!(shapes, shape_id),
             WhereClause.includes_record?(where, record, refs_fun.(shape)),
             into: MapSet.new() do
           shape_id
@@ -176,17 +185,14 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  def all_shapes(%WhereCondition{indexes: indexes, other_shapes: other_shapes}) do
-    Map.merge(
-      for {_key, index} <- indexes,
-          {shape_id, shape} <- Index.all_shapes(index),
-          into: %{} do
-        {shape_id, shape}
-      end,
-      for {shape_id, %{shape: shape}} <- other_shapes,
-          into: %{} do
-        {shape_id, shape}
-      end
+  def all_shape_ids(%WhereCondition{indexes: indexes, other_shapes: other_shapes}) do
+    MapSet.union(
+      Enum.reduce(indexes, MapSet.new(), fn {_key, index}, ids ->
+        MapSet.union(ids, Index.all_shape_ids(index))
+      end),
+      Enum.reduce(other_shapes, MapSet.new(), fn {shape_id, _}, ids ->
+        MapSet.put(ids, shape_id)
+      end)
     )
   end
 end

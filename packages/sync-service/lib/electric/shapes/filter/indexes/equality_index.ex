@@ -20,30 +20,33 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   defimpl Index.Protocol, for: EqualityIndex do
     def empty?(%EqualityIndex{values: values}), do: values == %{}
 
-    def add_shape(%EqualityIndex{} = index, value, {shape_id, shape}, and_where) do
+    def add_shape(%EqualityIndex{} = index, value, shape_id, and_where) do
       index.values
       |> Map.put_new(value, WhereCondition.new())
-      |> Map.update!(value, &WhereCondition.add_shape(&1, {shape_id, shape}, and_where))
+      |> Map.update!(value, &WhereCondition.add_shape(&1, shape_id, and_where))
       |> then(&%{index | values: &1})
     end
 
-    def remove_shape(%EqualityIndex{} = index, shape_id) do
-      index.values
-      |> Enum.map(fn {value, condition} ->
-        {value, WhereCondition.remove_shape(condition, shape_id)}
-      end)
-      |> Enum.reject(fn {_table, condition} -> WhereCondition.empty?(condition) end)
-      |> Map.new()
-      |> then(&%{index | values: &1})
+    def remove_shape(%EqualityIndex{} = index, value, shape_id, and_where) do
+      condition =
+        index.values
+        |> Map.fetch!(value)
+        |> WhereCondition.remove_shape(shape_id, and_where)
+
+      if WhereCondition.empty?(condition) do
+        %{index | values: Map.delete(index.values, value)}
+      else
+        %{index | values: Map.put(index.values, value, condition)}
+      end
     end
 
-    def affected_shapes(%EqualityIndex{values: values, type: type}, field, record) do
+    def affected_shapes(%EqualityIndex{values: values, type: type}, field, record, shapes) do
       case Map.get(values, value_from_record(record, field, type)) do
         nil ->
           MapSet.new()
 
         condition ->
-          WhereCondition.affected_shapes(condition, record)
+          WhereCondition.affected_shapes(condition, record, shapes)
       end
     end
 
@@ -59,12 +62,10 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
       end
     end
 
-    def all_shapes(%EqualityIndex{values: values}) do
-      for {_value, condition} <- values,
-          {shape_id, shape} <- WhereCondition.all_shapes(condition),
-          into: %{} do
-        {shape_id, shape}
-      end
+    def all_shape_ids(%EqualityIndex{values: values}) do
+      Enum.reduce(values, MapSet.new(), fn {_value, condition}, ids ->
+        MapSet.union(ids, WhereCondition.all_shape_ids(condition))
+      end)
     end
   end
 end

@@ -33,7 +33,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
     def empty?(%InclusionIndex{value_tree: value_tree}), do: node_empty?(value_tree)
 
-    def add_shape(%InclusionIndex{} = index, array, {shape_id, shape}, and_where) do
+    def add_shape(%InclusionIndex{} = index, array, shape_id, and_where) do
       ordered = array |> Enum.sort() |> Enum.dedup()
 
       %{
@@ -41,7 +41,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         | value_tree:
             add_shape_to_node(index.value_tree, ordered, %{
               shape_id: shape_id,
-              shape: shape,
               and_where: and_where
             })
       }
@@ -77,107 +76,126 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         :condition,
         WhereCondition.add_shape(
           node[:condition] || WhereCondition.new(),
-          {shape_info.shape_id, shape_info.shape},
+          shape_info.shape_id,
           shape_info.and_where
         )
       )
     end
 
-    def remove_shape(%InclusionIndex{} = index, shape_id) do
-      %{index | value_tree: remove_shape_from_tree(index.value_tree, shape_id)}
+    def remove_shape(%InclusionIndex{} = index, array, shape_id, and_where) do
+      ordered = array |> Enum.sort() |> Enum.dedup()
+
+      %{
+        index
+        | value_tree:
+            remove_shape_from_node(index.value_tree, ordered, %{
+              shape_id: shape_id,
+              and_where: and_where
+            })
+      }
     end
 
-    defp remove_shape_from_tree(node, shape_id) do
-      node
-      |> remove_shape_from_node(shape_id)
-      |> remove_shape_from_children(shape_id)
-    end
+    defp remove_shape_from_node(node, [value | values], shape_info) do
+      # There are still array values left so don't remove the shape from this node, remove it from a child or descendent node instead
+      child =
+        node
+        |> Map.fetch!(value)
+        |> remove_shape_from_node(values, shape_info)
 
-    defp remove_shape_from_node(%{condition: condition} = node, shape_id) do
-      condition = WhereCondition.remove_shape(condition, shape_id)
-
-      if condition == WhereCondition.new() do
-        Map.delete(node, :condition)
+      if node_empty?(child) do
+        node
+        |> Map.delete(value)
+        |> Map.put(:keys, List.delete(node.keys, value))
       else
-        %{node | condition: condition}
+        Map.put(node, value, child)
       end
     end
 
-    defp remove_shape_from_node(node, _shape_id), do: node
+    defp remove_shape_from_node(node, [] = _values, shape_info) do
+      # There are no more arry values left so remove the shape from the node
+      condition =
+        node.condition
+        |> WhereCondition.remove_shape(
+          shape_info.shape_id,
+          shape_info.and_where
+        )
 
-    defp remove_shape_from_children(node, shape_id) do
-      Enum.reduce(node.keys, node, fn key, node ->
-        child = remove_shape_from_tree(node[key], shape_id)
-
-        if node_empty?(child) do
-          node
-          |> Map.delete(key)
-          |> Map.put(:keys, List.delete(node.keys, key))
-        else
-          Map.put(node, key, child)
-        end
-      end)
+      if WhereCondition.empty?(condition) do
+        Map.delete(node, :condition)
+      else
+        Map.put(node, :condition, condition)
+      end
     end
 
     defp node_empty?(%{condition: _}), do: false
     defp node_empty?(%{keys: []}), do: true
     defp node_empty?(_), do: false
 
-    def affected_shapes(%InclusionIndex{} = index, field, record) do
+    def affected_shapes(%InclusionIndex{} = index, field, record, shapes) do
       record
       |> value_from_record(field, index.type)
-      |> shapes_affected_by_array(index, record)
+      |> shapes_affected_by_array(index, record, shapes)
     end
 
-    defp shapes_affected_by_array(nil, _, _), do: MapSet.new()
+    defp shapes_affected_by_array(nil, _, _, _), do: MapSet.new()
 
-    defp shapes_affected_by_array(values, index, record) when is_list(values) do
+    defp shapes_affected_by_array(values, index, record, shapes) when is_list(values) do
       values =
         values
         |> Enum.sort()
         |> Enum.dedup()
 
-      shapes_affected_by_tree(index.value_tree, values, record) || MapSet.new()
+      shapes_affected_by_tree(index.value_tree, values, record, shapes) || MapSet.new()
     end
 
-    defp shapes_affected_by_tree(node, values, record) do
+    defp shapes_affected_by_tree(node, values, record, shapes) do
       union(
-        shapes_affected_by_node(node, record),
-        shapes_affected_by_children(node, values, record)
+        shapes_affected_by_node(node, record, shapes),
+        shapes_affected_by_children(node, values, record, shapes)
       )
     end
 
-    defp shapes_affected_by_node(%{condition: condition}, record) do
-      WhereCondition.affected_shapes(condition, record)
+    defp shapes_affected_by_node(%{condition: condition}, record, shapes) do
+      WhereCondition.affected_shapes(condition, record, shapes)
     end
 
-    defp shapes_affected_by_node(_, _), do: nil
+    defp shapes_affected_by_node(_, _, _), do: nil
 
-    defp shapes_affected_by_children(%{keys: [value | keys]} = node, [value | values], record) do
+    defp shapes_affected_by_children(
+           %{keys: [value | keys]} = node,
+           [value | values],
+           record,
+           shapes
+         ) do
       # key matches value, so add the child then continue with the rest of the values
       union(
-        shapes_affected_by_tree(node[value], values, record),
-        shapes_affected_by_children(%{node | keys: keys}, values, record)
+        shapes_affected_by_tree(node[value], values, record, shapes),
+        shapes_affected_by_children(%{node | keys: keys}, values, record, shapes)
       )
     end
 
-    defp shapes_affected_by_children(%{keys: [key | keys]} = node, [value | _] = values, record)
+    defp shapes_affected_by_children(
+           %{keys: [key | keys]} = node,
+           [value | _] = values,
+           record,
+           shapes
+         )
          when key < value do
       # key can be discarded as it's not in the list of values
-      shapes_affected_by_children(%{node | keys: keys}, values, record)
+      shapes_affected_by_children(%{node | keys: keys}, values, record, shapes)
     end
 
-    defp shapes_affected_by_children(node, [_value | values], record) do
+    defp shapes_affected_by_children(node, [_value | values], record, shapes) do
       # value can be discarded as it's not in the list of keys
-      shapes_affected_by_children(node, values, record)
+      shapes_affected_by_children(node, values, record, shapes)
     end
 
-    defp shapes_affected_by_children(%{keys: []}, _values, _record) do
+    defp shapes_affected_by_children(%{keys: []}, _values, _record, _shapes) do
       # No more keys to process, so no more shapes to find
       nil
     end
 
-    defp shapes_affected_by_children(%{keys: _keys}, [], _record) do
+    defp shapes_affected_by_children(%{keys: _keys}, [], _record, _shapes) do
       # No more values to process, so no more shapes to find
       nil
     end
@@ -194,18 +212,18 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       end
     end
 
-    def all_shapes(%InclusionIndex{value_tree: value_tree}), do: all_shapes_in_tree(value_tree)
+    def all_shape_ids(%InclusionIndex{value_tree: value_tree}), do: shape_ids_in_tree(value_tree)
 
-    defp all_shapes_in_tree(node) do
-      Map.merge(all_shapes_in_node(node), all_shapes_in_children(node))
+    defp shape_ids_in_tree(node) do
+      Map.merge(shape_ids_in_node(node), shape_ids_in_children(node))
     end
 
-    defp all_shapes_in_node(%{condition: condition}), do: WhereCondition.all_shapes(condition)
-    defp all_shapes_in_node(_), do: %{}
+    defp shape_ids_in_node(%{condition: condition}), do: WhereCondition.all_shape_ids(condition)
+    defp shape_ids_in_node(_), do: %{}
 
-    defp all_shapes_in_children(node) do
+    defp shape_ids_in_children(node) do
       Enum.reduce(node.keys, %{}, fn key, shapes ->
-        Map.merge(shapes, all_shapes_in_tree(node[key]))
+        Map.merge(shapes, shape_ids_in_tree(node[key]))
       end)
     end
 

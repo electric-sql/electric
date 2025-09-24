@@ -126,32 +126,42 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_info({{:unsubscribe, shape_handle}, ref, :process, pid, _reason}, state) do
-    OpenTelemetry.with_span("shape_log_collector.unsubscribe", [], state.stack_id, fn ->
-      {:noreply, remove_subscription(state, {pid, ref}, shape_handle)}
-    end)
+    OpenTelemetry.with_span(
+      "shape_log_collector.unsubscribe",
+      [shape_handle: shape_handle],
+      state.stack_id,
+      fn ->
+        {:noreply, remove_subscription(state, {pid, ref}, shape_handle)}
+      end
+    )
   end
 
   def handle_call({:subscribe, shape_handle, shape}, {pid, _ref}, state) do
-    OpenTelemetry.with_span("shape_log_collector.subscribe", [], state.stack_id, fn ->
-      ref = Process.monitor(pid, tag: {:unsubscribe, shape_handle})
-      from = {pid, ref}
+    OpenTelemetry.with_span(
+      "shape_log_collector.subscribe",
+      [shape_handle: shape_handle],
+      state.stack_id,
+      fn ->
+        ref = Process.monitor(pid, tag: {:unsubscribe, shape_handle})
+        from = {pid, ref}
 
-      state =
-        %{
-          state
-          | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
-            filter: Filter.add_shape(state.filter, shape_handle, shape),
-            pids_by_shape_handle: Map.put(state.pids_by_shape_handle, shape_handle, pid),
-            dependency_layers:
-              DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
-        }
-        |> Map.update!(:subscriptions, fn {count, set} ->
-          {count + 1, MapSet.put(set, from)}
-        end)
-        |> log_subscription_status()
+        state =
+          %{
+            state
+            | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
+              filter: Filter.add_shape(state.filter, shape_handle, shape),
+              pids_by_shape_handle: Map.put(state.pids_by_shape_handle, shape_handle, pid),
+              dependency_layers:
+                DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
+          }
+          |> Map.update!(:subscriptions, fn {count, set} ->
+            {count + 1, MapSet.put(set, from)}
+          end)
+          |> log_subscription_status()
 
-      {:reply, :ok, state}
-    end)
+        {:reply, :ok, state}
+      end
+    )
   end
 
   def handle_call({:set_last_processed_lsn, lsn}, _from, state) do

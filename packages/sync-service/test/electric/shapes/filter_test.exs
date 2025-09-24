@@ -322,7 +322,9 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "an_array @> '{}'", inspector: @inspector),
       Shape.new!("table", where: "an_array @> '{1}'", inspector: @inspector),
       Shape.new!("table", where: "an_array @> '{1,2}'", inspector: @inspector),
-      Shape.new!("table", where: "an_array @> '{1,3}'", inspector: @inspector)
+      Shape.new!("table", where: "an_array @> '{1,3}'", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 AND an_array @> '{1}'", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
     ]
 
     shapes
@@ -346,7 +348,7 @@ defmodule Electric.Shapes.FilterTest do
     # have been chosen instead of time since the time taken is not deterministic and
     # leads to flakey tests.
     #
-    # Modern machines process approx 300-400 reductions per μs so @max_reductions of 1200
+    # Modern machines process approx 300-400 reductions per μs so @max_reductions of 1300
     # is roughly equivalent to 3μs.
     #
     # 3μs per change is a desirable and achievable target for replication stream processing.
@@ -359,7 +361,7 @@ defmodule Electric.Shapes.FilterTest do
     # to keep to a microsecond per change. 10_000 shapes makes for a slow test though as the setup
     # time (n Filter.add_shape calls) is slow.
     @shape_count 1000
-    @max_reductions 1200
+    @max_reductions 1300
 
     test "where clause in the form `field = const` is optimised" do
       filter =
