@@ -235,10 +235,18 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     end)
   rescue
     e in DBConnection.ConnectionError ->
-      if e.message =~ "connection not available and request was dropped from queue" do
-        {:error, :connection_not_available}
-      else
-        reraise e, __STACKTRACE__
+      cond do
+        e.message =~ "connection not available and request was dropped from queue" ->
+          {:error, :connection_not_available}
+
+        e.message =~ "the connection was closed by the pool" ->
+          {:error, :connection_not_available}
+
+        Electric.DbConnectionError.from_error(e).type != :unknown ->
+          {:error, :connection_not_available}
+
+        true ->
+          reraise e, __STACKTRACE__
       end
   catch
     :exit, {_, {DBConnection.Holder, :checkout, _}} ->
