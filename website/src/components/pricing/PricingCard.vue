@@ -50,22 +50,25 @@ function formatStorage(num, unit = 'GB') {
 }
 
 function formatPrice(price) {
+  if (typeof price === 'string') {
+    return price
+  }
   if (price >= 1000) {
     return (price / 1000).toLocaleString() + 'k'
   }
   return price.toLocaleString()
 }
 
-const priceColorVar = priceColor === 'ddn' ? 'var(--ddn-color)' : 'var(--electric-color)'
+const priceColorVar = priceColor === 'ddn' ? 'var(--ddn-color)' : priceColor === 'text' ? 'var(--vp-c-text-1)' : 'var(--electric-color)'
 </script>
 
 <template>
   <div class="pricing-card">
     <div class="card-header">
       <h3 class="card-name">{{ name }}</h3>
-      <div class="card-price">
-        <span class="price-amount" :style="{ color: priceColorVar }">${{ formatPrice(price) }}</span>
-        <span class="price-period">/ {{ period }}</span>
+      <div v-if="price !== undefined" class="card-price">
+        <span class="price-amount" :style="{ color: priceColorVar }">{{ typeof price === 'string' ? formatPrice(price) : '$' + formatPrice(price) }}</span>
+        <span v-if="period" class="price-period">/ {{ period }}</span>
       </div>
     </div>
 
@@ -96,7 +99,10 @@ const priceColorVar = priceColor === 'ddn' ? 'var(--ddn-color)' : 'var(--electri
         <div class="service-text">
           <div class="proposition">{{ proposition }}</div>
           <hr class="service-divider" />
-          <div class="description">{{ description }}</div>
+          <div class="description">
+            <slot v-if="!description" name="description"></slot>
+            <span v-else>{{ description }}</span>
+          </div>
         </div>
       </div>
 
@@ -233,10 +239,20 @@ const priceColorVar = priceColor === 'ddn' ? 'var(--ddn-color)' : 'var(--electri
 }
 
 .description {
-  font-size: 0.875rem;
-  color: var(--vp-c-text-2);
-  line-height: 1.4;
+  font-size: 0.935rem;
+  color: var(--vp-c-text-1-5);
+  line-height: 1.5;
   text-align: left;
+  max-width: 670px;
+}
+
+.description :deep(p) {
+  margin: 0 !important;
+  line-height: 1.6;
+}
+
+.description :deep(p:not(:first-child)) {
+  margin-top: 12px !important;
 }
 
 .service-divider {
