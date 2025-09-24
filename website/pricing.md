@@ -7,9 +7,23 @@ hideReleaseBanner: true
 ---
 
 <script setup>
+import { onMounted } from 'vue'
 import Section from './src/components/home/Section.vue'
 import PricingCard from './src/components/pricing/PricingCard.vue'
 import { data as pricing } from './data/pricing.data.ts'
+
+onMounted(() => {
+  if (typeof window !== 'undefined' && document.querySelector) {
+    document.querySelectorAll('.strap-actions a[href^="https://github.com"]').forEach((link) => {
+      if (!link.querySelector('.vpi-social-github')) {
+        const icon = document.createElement('span')
+        icon.classList.add('vpi-social-github')
+
+        link.prepend(icon)
+      }
+    })
+  }
+})
 </script>
 
 <p class="intro-zap-container hidden-lg">
@@ -73,6 +87,56 @@ import { data as pricing } from './data/pricing.data.ts'
   </div>
 </Section>
 
+<Section :actions="[]">
+  <template #title>
+    Need more?
+  </template>
+  <template #tagline>
+    Higher limits, more support, or bespoke requirements?
+  </template>
+  <div class="enterprise-card">
+    <PricingCard
+      name="Enterprise"
+      proposition="Custom pricing and enterprise solutions"
+      ctaText="Contact sales"
+      ctaHref="/about/contact#sales"
+      ctaTheme="alt"
+      priceColor="ddn"
+    >
+      <template #description>
+        <p>Get in touch if you're looking to deploy Electric at large scale or have specific feature or operational requirements.</p>
+        <p>We can offer overage pricing for large workloads and provide custom infrastructure, integration or project solutions.</p>
+      </template>
+    </PricingCard>
+  </div>
+</Section>
+
+<div class="open-source-strap">
+  <div class="section-head">
+    <h1>Open source</h1>
+    <p>
+      Want free with unlimited use? Electric is fully open-source and designed for self-hosting.
+    </p>
+  </div>
+  <div class="strap-actions">
+    <div class="action">
+      <VPButton
+        href="/docs/guides/deployment"
+        text="Self-hosting"
+        theme="brand"
+      />
+    </div>
+    <div class="action">
+      <VPButton
+        href="https://github.com/electric-sql/electric"
+        text="GitHub"
+        theme="alt"
+        target="_blank"
+      />
+    </div>
+  </div>
+</div>
+
 <style scoped>
 .intro-zap-sm {
   height: 60px;
@@ -106,11 +170,11 @@ import { data as pricing } from './data/pricing.data.ts'
     grid-template-columns: 1fr 1fr 1fr;
     gap: 24px;
   }
-  
+
   .pricing-divider {
     display: none;
   }
-  
+
   .pricing-card:has(.service-content) {
     grid-column: 1 / -1;
   }
@@ -121,7 +185,7 @@ import { data as pricing } from './data/pricing.data.ts'
     grid-template-columns: 1fr 1fr;
     gap: 22px;
   }
-  
+
   .pricing-divider {
     display: none;
   }
@@ -136,10 +200,77 @@ import { data as pricing } from './data/pricing.data.ts'
   .pricing-divider {
     display: none;
   }
-  
+
   .pricing-card:has(.service-content) {
     grid-column: 1;
     margin-top: 0;
+  }
+}
+
+/* Enterprise Section */
+.enterprise-card {
+  margin: 40px 0 0;
+}
+
+.enterprise-card :deep(.card-name) {
+  margin: 0;
+  color: var(--ddn-color);
+}
+
+/* Reduce spacing around both sections */
+.page-section {
+  padding: 10px 0;
+}
+
+/* Open Source Strap */
+.open-source-strap {
+  margin: 15px -400px;
+  padding: 80px 400px;
+  background: var(--vp-sidebar-bg-color);
+}
+
+.open-source-strap .section-head {
+  max-width: 725px;
+}
+
+.open-source-strap .section-head h1 {
+  margin-bottom: 16px;
+}
+
+.open-source-strap .section-head p {
+  margin: 10px 0 !important;
+  color: var(--vp-c-text-2);
+  font-weight: 500;
+}
+
+.strap-actions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 959px) {
+  .page-section {
+    padding: 5px 0;
+  }
+
+  .open-source-strap {
+    margin: 7px -24px;
+    padding: 60px 24px;
+    text-align: center;
+  }
+
+  .open-source-strap .section-head {
+    text-align: center;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .strap-actions {
+    justify-content: center;
   }
 }
 </style>
