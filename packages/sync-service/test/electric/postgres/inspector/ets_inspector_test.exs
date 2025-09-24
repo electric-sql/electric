@@ -1,23 +1,20 @@
 defmodule Electric.Postgres.Inspector.EtsInspectorTest do
-  use Support.TransactionCase, async: true
+  use ExUnit.Case, async: true
   use Repatch.ExUnit
   import Support.ComponentSetup
+  import Support.DbSetup
   import Support.DbStructureSetup
   alias Electric.PersistentKV
   alias Electric.Postgres.Inspector.EtsInspector
 
-  setup :with_stack_id_from_test
-  setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
-  setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
-
-  setup %{db_conn: conn} do
-    %{rows: [[oid]]} =
-      Postgrex.query!(conn, "SELECT oid FROM pg_class WHERE relname = 'items'", [])
-
-    %{items_oid: oid}
-  end
-
   describe "load_relation_oid/2" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+    setup :with_items_oid
+
     test "returns the relation id for a given relation", %{opts: opts} do
       assert {:ok, {oid, {"public", "items"}}} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
@@ -62,6 +59,13 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "load_relation_info/2" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+    setup :with_items_oid
+
     test "returns relation info for a given relation", %{opts: opts, items_oid: items_oid} do
       assert {:ok,
               %{relation: {"public", "items"}, relation_id: ^items_oid, kind: :ordinary_table}} =
@@ -164,6 +168,13 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "clean/2" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+    setup :with_items_oid
+
     test "cleans up all information from ETS cache", %{
       inspector: {EtsInspector, opts},
       pg_relation_table: pg_relation_table
@@ -199,6 +210,13 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "load_column_info/2" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+    setup :with_items_oid
+
     test "returns column info for the table", %{opts: opts, items_oid: items_oid} do
       assert {:ok, [%{name: "id"}, %{name: "value"}]} =
                EtsInspector.load_column_info(items_oid, opts)
@@ -288,6 +306,12 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "list_relations_with_stale_cache/1" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+
     test "returns nothing when there is no cache", %{opts: opts} do
       assert {:ok, []} = EtsInspector.list_relations_with_stale_cache(opts)
     end
@@ -383,6 +407,12 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "persistance" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+
     test "loads back last seen state on a restart", %{opts: opts, db_conn: conn} = ctx do
       assert {:ok, {oid, _} = oid_relation} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
@@ -447,16 +477,68 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
   end
 
-  test "handles complete lack of db pool", ctx do
-    stop_supervised!(EtsInspector)
-    %{inspector: {EtsInspector, opts}} = with_inspector(ctx |> Map.put(:db_conn, :no_pool))
+  describe "with complete lack of db pool" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_basic_tables, :with_sql_execute]
 
-    assert {:error, :connection_not_available} =
-             EtsInspector.load_relation_oid({"public", "items"}, opts)
+    setup ctx do
+      %{inspector: {EtsInspector, opts}} = with_inspector(ctx |> Map.put(:db_conn, :no_pool))
+      %{opts: opts}
+    end
 
-    assert {:error, :connection_not_available} =
-             EtsInspector.load_column_info(1234, opts)
+    test "returns error", %{opts: opts} do
+      assert {:error, :connection_not_available} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
 
-    assert :error = EtsInspector.list_relations_with_stale_cache(opts)
+      assert {:error, :connection_not_available} =
+               EtsInspector.load_column_info(1234, opts)
+
+      assert :error = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+  end
+
+  describe "with pool timeout" do
+    setup do: %{connection_opt_overrides: [pool_size: 1, queue_interval: 1, queue_target: 10]}
+    setup {Support.DbSetup, :with_unique_db}
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+
+    setup %{db_conn: conn} do
+      start_link_supervised!({Task, fn -> Postgrex.query!(conn, "SELECT PG_SLEEP(10)", []) end})
+
+      wait_for_pool_to_be_busy(conn)
+    end
+
+    test "returns error", %{opts: opts} do
+      assert {:error, :connection_not_available} =
+               EtsInspector.load_relation_oid({"public", "items"}, opts)
+
+      assert {:error, :connection_not_available} =
+               EtsInspector.load_column_info(1234, opts)
+
+      assert :error = EtsInspector.list_relations_with_stale_cache(opts)
+    end
+  end
+
+  defp wait_for_pool_to_be_busy(conn) do
+    Postgrex.query!(conn, "SELECT 1", [])
+    wait_for_pool_to_be_busy(conn)
+  rescue
+    e in DBConnection.ConnectionError ->
+      if e.message =~ "connection not available and request was dropped from queue" do
+        :ok
+      else
+        reraise e, __STACKTRACE__
+      end
+  end
+
+  defp with_items_oid(%{db_conn: conn}) do
+    %{rows: [[oid]]} =
+      Postgrex.query!(conn, "SELECT oid FROM pg_class WHERE relname = 'items'", [])
+
+    %{items_oid: oid}
   end
 end

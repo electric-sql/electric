@@ -233,8 +233,16 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         :table_not_found -> :table_not_found
       end
     end)
+  rescue
+    e in DBConnection.ConnectionError ->
+      if e.message =~ "connection not available and request was dropped from queue" do
+        {:error, :connection_not_available}
+      else
+        reraise e, __STACKTRACE__
+      end
   catch
-    :exit, {_, {DBConnection.Holder, :checkout, _}} -> {:error, :connection_not_available}
+    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+      {:error, :connection_not_available}
   end
 
   @spec persist_data(map()) :: :ok
