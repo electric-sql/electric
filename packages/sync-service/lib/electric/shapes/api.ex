@@ -179,11 +179,13 @@ defmodule Electric.Shapes.Api do
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
   def validate(%Api{} = api, params) when is_configured(api) do
-    with :ok <- hold_until_stack_ready(api),
-         {:ok, request} <- validate_params(api, params),
-         {:ok, request} <- load_shape_info(request) do
-      {:ok, seek(request)}
-    end
+    handling_stack_down(api, fn ->
+      with :ok <- hold_until_stack_ready(api),
+           {:ok, request} <- validate_params(api, params),
+           {:ok, request} <- load_shape_info(request) do
+        {:ok, seek(request)}
+      end
+    end)
   end
 
   @spec validate_for_delete(t(), %{(atom() | binary()) => term()}) ::
@@ -357,12 +359,16 @@ defmodule Electric.Shapes.Api do
     request
   end
 
-  defp register_shape_subscriber(%Request{} = request) do
+  defp register_shape_subscriber(%Request{registered_pid: nil} = request) do
     %{api: %{stack_id: stack_id}, handle: handle} = request
     :ok = Electric.Shapes.Monitor.register_reader(stack_id, handle)
 
     Logger.debug(fn -> "Registering subscriber for shape #{inspect(handle)}" end)
 
+    %{request | registered_pid: self()}
+  end
+
+  defp register_shape_subscriber(%Request{registered_pid: pid} = request) when is_pid(pid) do
     request
   end
 
@@ -370,7 +376,7 @@ defmodule Electric.Shapes.Api do
     request
   end
 
-  defp listen_for_new_changes(%Request{params: %{live: true}} = request) do
+  defp listen_for_new_changes(%Request{params: %{live: true}, new_changes_pid: nil} = request) do
     %{
       last_offset: last_offset,
       handle: handle,
@@ -391,6 +397,10 @@ defmodule Electric.Shapes.Api do
     else
       request
     end
+  end
+
+  defp listen_for_new_changes(%Request{} = request) do
+    request
   end
 
   defp determine_global_last_seen_lsn(%Request{} = request) do
@@ -438,8 +448,8 @@ defmodule Electric.Shapes.Api do
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
       request
-      |> do_serve_shape_log()
-      |> Response.ensure_cleanup()
+      |> serve_shape_log_catching_stack_shutdown()
+      |> ensure_response_cleanup()
     end)
   end
 
@@ -474,6 +484,14 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  defp ensure_response_cleanup({:error, %Response{} = response}) do
+    Response.ensure_cleanup(response)
+  end
+
+  defp ensure_response_cleanup(%Response{} = response) do
+    Response.ensure_cleanup(response)
+  end
+
   defp if_none_match(%Plug.Conn{} = conn) do
     Plug.Conn.get_req_header(conn, "if-none-match")
     |> Enum.flat_map(&String.split(&1, ","))
@@ -494,6 +512,12 @@ defmodule Electric.Shapes.Api do
           message:
             "Request.serve/1 must be called from the same process that called Request.validate/2"
     end
+  end
+
+  defp serve_shape_log_catching_stack_shutdown(%Request{api: api} = request) do
+    handling_stack_down(api, fn ->
+      do_serve_shape_log(request)
+    end)
   end
 
   defp do_serve_shape_log(%Request{} = request) do
@@ -936,6 +960,24 @@ defmodule Electric.Shapes.Api do
 
   def schema(_req) do
     nil
+  end
+
+  defp handling_stack_down(api, action_fun) do
+    try do
+      action_fun.()
+    rescue
+      e ->
+        Logger.warning(
+          "Got exception serving API request: #{Exception.format(:error, e, __STACKTRACE__)}. Retrying..."
+        )
+
+        with :ok <- hold_until_stack_ready(api) do
+          # if the stack is up then either the error was transient caused by the stack restarting
+          # or its permanent: either the stack is just gone or there's some underlying bug that
+          # will resurface when we retry. either way we retry without catching exceptions
+          action_fun.()
+        end
+    end
   end
 
   @impl Access
