@@ -14,7 +14,6 @@ defmodule Electric.Replication.PublicationManager do
   @callback name(binary() | Keyword.t()) :: term()
   @callback add_shape(shape_handle(), Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(shape_handle(), Keyword.t()) :: :ok
-  @callback refresh_publication(Keyword.t()) :: :ok
 
   defstruct [
     :stack_id,
@@ -117,21 +116,6 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  @impl __MODULE__
-  def refresh_publication(opts \\ []) do
-    server = Access.get(opts, :server, name(opts))
-    timeout = Access.get(opts, :timeout, 10_000)
-
-    case GenServer.call(
-           server,
-           {:refresh_publication, Access.get(opts, :forced?, false)},
-           timeout
-         ) do
-      :ok -> :ok
-      {:error, err} -> raise err
-    end
-  end
-
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       stack_id = Keyword.fetch!(opts, :stack_id)
@@ -194,16 +178,6 @@ defmodule Electric.Replication.PublicationManager do
     if update_needed?(state) do
       state = add_waiter(from, state)
       state = schedule_update_publication(state.update_debounce_timeout, state)
-      {:noreply, state}
-    else
-      {:reply, :ok, state, state.publication_refresh_period}
-    end
-  end
-
-  def handle_call({:refresh_publication, forced?}, from, state) do
-    if forced? or update_needed?(state) do
-      state = add_waiter(from, state)
-      state = schedule_update_publication(state.update_debounce_timeout, forced?, state)
       {:noreply, state}
     else
       {:reply, :ok, state, state.publication_refresh_period}

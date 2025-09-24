@@ -79,17 +79,6 @@ defmodule Electric.Replication.PublicationManagerTest do
           500 -> flunk("Did not receive initial filters")
         end
 
-      # Force refresh to ensure any pending prepared filters are committed
-      :ok = PublicationManager.refresh_publication(Keyword.merge(opts, forced?: true))
-
-      collected =
-        receive do
-          {:filters, filters} ->
-            MapSet.union(collected, MapSet.new(filters))
-        after
-          200 -> collected
-        end
-
       assert [{_, {"public", "items"}}, {_, {"public", "other"}}] = MapSet.to_list(collected)
     end
 
