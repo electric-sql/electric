@@ -8,7 +8,7 @@ import PriorityIcon from '../../components/PriorityIcon'
 import StatusIcon from '../../components/StatusIcon'
 import Avatar from '../../components/Avatar'
 import { memo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { formatDate } from '../../utils/date'
 import { Issue } from '../../types/types'
 
@@ -19,7 +19,6 @@ interface Props {
 
 function IssueRow({ issue, style }: Props) {
   const pg = usePGlite()
-  const navigate = useNavigate()
 
   const handleChangeStatus = (status: string) => {
     pg.sql`
@@ -53,7 +52,6 @@ function IssueRow({ issue, style }: Props) {
       key={issue.id}
       className="flex items-center flex-grow w-full min-w-0 pl-2 pr-8 text-sm border-b border-gray-100 hover:bg-gray-100 shrink-0"
       id={issue.id}
-      onClick={() => navigate(`/issue/${issue.id}`)}
       style={style}
     >
       <div className="flex-shrink-0 ml-4">
@@ -70,22 +68,27 @@ function IssueRow({ issue, style }: Props) {
           onSelect={handleChangeStatus}
         />
       </div>
-      <div className="flex-wrap flex-shrink ml-3 overflow-hidden font-medium line-clamp-1 overflow-ellipsis">
-        {issue.title.slice(0, 3000) || ``}
-      </div>
-      <div className="flex-shrink-0 hidden w-15 ml-auto font-normal text-gray-500 sm:block whitespace-nowrap">
-        {formatDate(issue.created)}
-      </div>
-      <div className="flex-shrink-0 hidden ml-4 font-normal text-gray-500 sm:block w-15 md:block">
-        <Avatar name={issue.username} />
-      </div>
-      <div className="flex-shrink-0 hidden ml-4 font-normal text-gray-500 sm:block w-15 md:block">
-        {issue.synced ? (
-          <SyncedIcon className="text-green-500 w-4 h-4" />
-        ) : (
-          <UnsyncedIcon className="text-orange-500 w-4 h-4" />
-        )}
-      </div>
+      <Link
+        to={`/issue/${issue.id}`}
+        className="flex items-center flex-grow min-w-0 h-full"
+      >
+        <div className="flex-wrap flex-shrink ml-3 overflow-hidden font-medium line-clamp-1 overflow-ellipsis">
+          {issue.title.slice(0, 3000) || ``}
+        </div>
+        <div className="flex-shrink-0 hidden w-15 ml-auto font-normal text-gray-500 sm:block whitespace-nowrap">
+          {formatDate(issue.created)}
+        </div>
+        <div className="flex-shrink-0 hidden ml-4 font-normal text-gray-500 sm:block w-15 md:block">
+          <Avatar name={issue.username} />
+        </div>
+        <div className="flex-shrink-0 hidden ml-4 font-normal text-gray-500 sm:block w-15 md:block">
+          {issue.synced ? (
+            <SyncedIcon className="text-green-500 w-4 h-4" />
+          ) : (
+            <UnsyncedIcon className="text-orange-500 w-4 h-4" />
+          )}
+        </div>
+      </Link>
     </div>
   )
 }
