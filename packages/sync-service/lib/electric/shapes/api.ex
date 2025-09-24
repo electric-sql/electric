@@ -454,8 +454,8 @@ defmodule Electric.Shapes.Api do
     validate_serve_usage!(request)
 
     with_span(request, "shape_get.plug.serve_shape_log", fn ->
-      request
-      |> serve_shape_log_catching_stack_shutdown()
+      request.api
+      |> handling_stack_down(fn -> do_serve_shape_log(request) end)
       |> ensure_response_cleanup()
     end)
   end
@@ -519,12 +519,6 @@ defmodule Electric.Shapes.Api do
           message:
             "Request.serve/1 must be called from the same process that called Request.validate/2"
     end
-  end
-
-  defp serve_shape_log_catching_stack_shutdown(%Request{api: api} = request) do
-    handling_stack_down(api, fn ->
-      do_serve_shape_log(request)
-    end)
   end
 
   defp do_serve_shape_log(%Request{} = request) do
