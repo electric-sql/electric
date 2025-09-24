@@ -1232,10 +1232,8 @@ defmodule Electric.Shapes.ApiTest do
 
     setup [:ready_stack, :configure_request]
 
-    test "gracefully handles stack shutdown", ctx do
+    test "gracefully handles exceptions due to stack shutdown", ctx do
       agent_pid = start_supervised!({Agent, fn -> false end})
-
-      parent = self()
 
       allow_stub = fn match ->
         if Agent.get(agent_pid, & &1) == match do
@@ -1246,42 +1244,133 @@ defmodule Electric.Shapes.ApiTest do
         end
       end
 
-      client_pid =
-        spawn(fn ->
-          receive(do: (:start -> :ok))
+      client_pid = looping_client(ctx.api, self())
 
-          send(parent, {:client, :running})
+      setup_raising_stubs(allow_stub, client_pid)
 
-          try do
-            Enum.reduce_while(1..2000, 0, fn _n, _acc ->
-              case Api.validate(ctx.api, %{
-                     table: "public.users",
-                     offset: "#{@start_offset_50}",
-                     handle: @test_shape_handle
-                   }) do
-                {:ok, request} ->
-                  send(parent, {:client, :validate})
+      set_error_state(agent_pid, client_pid)
 
-                  case Api.serve_shape_log(request) do
-                    %Api.Response{status: 503} ->
-                      send(parent, {:client, :stack_down})
-                      {:halt, 503}
+      refute_receive {:client, :error, _}
+      refute_receive {:client, :exit, _}
+      assert_receive {:client, :stack_down}
+    end
 
-                    %Api.Response{status: 200} ->
-                      Process.sleep(1)
-                      {:cont, 200}
-                  end
+    test "propagates exceptions if stack is up", ctx do
+      agent_pid = start_supervised!({Agent, fn -> false end})
 
-                {:error, %Api.Response{status: 503}} ->
-                  send(parent, {:client, :stack_down})
-                  {:halt, 503}
-              end
-            end)
-          rescue
-            e -> send(parent, {:client, :exception, e})
-          end
-        end)
+      allow_stub = fn match ->
+        if Agent.get(agent_pid, & &1) == match do
+          raise "permanent"
+        else
+          true
+        end
+      end
 
+      client_pid = looping_client(ctx.api, self())
+
+      setup_raising_stubs(allow_stub, client_pid)
+
+      set_error_state(agent_pid, client_pid)
+
+      assert_receive {:client, :error, _}
+      refute_receive {:client, :stack_down}
+    end
+
+    defmodule ExitingServer do
+      use GenServer
+
+      def start_link(args), do: GenServer.start_link(__MODULE__, args)
+      def call_exit(pid), do: GenServer.call(pid, :call_exit)
+      def init(_args), do: {:ok, []}
+      def handle_call(:call_exit, _from, state), do: {:stop, :error, state}
+    end
+
+    test "gracefully handles exits due to stack shutdown", ctx do
+      agent_pid = start_supervised!({Agent, fn -> false end})
+      exiting_server = start_supervised!(ExitingServer)
+
+      allow_stub = fn match ->
+        if Agent.get(agent_pid, & &1) == match do
+          set_status_to_errored(ctx, "stack down")
+          ExitingServer.call_exit(exiting_server)
+        else
+          true
+        end
+      end
+
+      client_pid = looping_client(ctx.api, self())
+
+      setup_raising_stubs(allow_stub, client_pid)
+
+      set_error_state(agent_pid, client_pid)
+
+      refute_receive {:client, :error, _}
+      refute_receive {:client, :exit, _}
+      assert_receive {:client, :stack_down}
+    end
+
+    test "propagates exits if stack is up", ctx do
+      agent_pid = start_supervised!({Agent, fn -> false end})
+      exiting_server = start_supervised!(ExitingServer)
+
+      allow_stub = fn match ->
+        if Agent.get(agent_pid, & &1) == match do
+          ExitingServer.call_exit(exiting_server)
+        else
+          true
+        end
+      end
+
+      client_pid = looping_client(ctx.api, self())
+
+      setup_raising_stubs(allow_stub, client_pid)
+
+      set_error_state(agent_pid, client_pid)
+
+      refute_receive {:client, :error, _}
+      assert_receive {:client, :exit, _}
+      refute_receive {:client, :stack_down}
+    end
+
+    defp looping_client(api, parent) do
+      spawn(fn ->
+        receive(do: (:start -> :ok))
+
+        send(parent, {:client, :running})
+
+        try do
+          Enum.reduce_while(1..2000, 0, fn _n, _acc ->
+            case Api.validate(api, %{
+                   table: "public.users",
+                   offset: "#{@start_offset_50}",
+                   handle: @test_shape_handle
+                 }) do
+              {:ok, request} ->
+                send(parent, {:client, :validate})
+
+                case Api.serve_shape_log(request) do
+                  %Api.Response{status: 503} ->
+                    send(parent, {:client, :stack_down})
+                    {:halt, 503}
+
+                  %Api.Response{status: 200} ->
+                    Process.sleep(1)
+                    {:cont, 200}
+                end
+
+              {:error, %Api.Response{status: 503}} ->
+                send(parent, {:client, :stack_down})
+                {:halt, 503}
+            end
+          end)
+        catch
+          kind, reason -> send(parent, {:client, kind, reason})
+        end
+      end)
+      |> tap(&Process.monitor/1)
+    end
+
+    defp setup_raising_stubs(allow_stub, client_pid) do
       Mock.ShapeCache
       |> stub(:get_shape, fn @test_shape, _opts ->
         if allow_stub.(:get_shape), do: {@test_shape_handle, @test_offset}
@@ -1317,23 +1406,21 @@ defmodule Electric.Shapes.ApiTest do
       end)
       |> allow(self(), client_pid)
 
-      Process.monitor(client_pid)
-
       send(client_pid, :start)
       assert_receive {:client, :running}
       assert_receive {:client, :validate}, 1_000
 
       Process.sleep(Enum.random(1..50))
+    end
 
+    defp set_error_state(agent_pid, client_pid) do
       Agent.update(agent_pid, fn _ ->
         Enum.random(
           ~w[get_shape has_shape? await_snapshot_start get_shape get_chunk_end_log_offset get_log_stream for_shape]a
         )
       end)
 
-      assert_receive {:DOWN, _ref, :process, ^client_pid, :normal}, 1000
-      refute_receive {:client, :exception, _}
-      assert_receive {:client, :stack_down}
+      assert_receive {:DOWN, _ref, :process, ^client_pid, _}, 1000
     end
   end
 end
