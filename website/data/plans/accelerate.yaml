@@ -12,5 +12,5 @@ features:
   - "Help with design, architecture, integration and rollout"
   - "Direct access"
 ctaText: "Contact sales"
-ctaHref: "#"
+ctaHref: "/about/contact#sales"
 ctaTheme: "alt"
