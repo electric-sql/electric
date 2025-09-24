@@ -470,7 +470,12 @@ defmodule Electric.Shapes.Api do
 
     case Shapes.query_subset(shape_definition, subset, request.api) do
       {:ok, {metadata, data_stream}} ->
-        %{response | chunked: true, body: encode(request.api, :subset, {metadata, data_stream})}
+        %{
+          response
+          | chunked: true,
+            body: encode(request.api, :subset, {metadata, data_stream}),
+            response_type: :subset
+        }
         |> Response.final()
 
       {:error, reason} ->

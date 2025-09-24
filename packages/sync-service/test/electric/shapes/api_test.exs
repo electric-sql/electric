@@ -379,7 +379,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(request)
+      assert response = Api.serve_shape_response(request)
       assert response.status == 200
       assert response.handle == test_shape_handle
 
@@ -426,7 +426,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(Plug.Test.conn(:get, "/"), request)
+      assert response = Api.serve_shape_response(Plug.Test.conn(:get, "/"), request)
       assert response.status == 200
 
       assert ["max-age=0, private, must-revalidate"] =
@@ -563,7 +563,7 @@ defmodule Electric.Shapes.ApiTest do
                  %{table: "public.users", offset: "-1"}
                )
 
-      assert response = Api.serve_shape_log(request)
+      assert response = Api.serve_shape_response(request)
 
       assert response.status == 200
       assert response.chunked
@@ -613,7 +613,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(request)
+      assert response = Api.serve_shape_response(request)
       assert response.status == 200
       assert response.chunked
 
@@ -676,7 +676,7 @@ defmodule Electric.Shapes.ApiTest do
                      }
                    )
 
-          response = Api.serve_shape_log(request)
+          response = Api.serve_shape_response(request)
 
           {response, response_body(response)}
         end)
@@ -753,7 +753,7 @@ defmodule Electric.Shapes.ApiTest do
                      }
                    )
 
-          Api.serve_shape_log(request)
+          Api.serve_shape_response(request)
         end)
 
       assert_receive :got_log_stream, @receive_timeout
@@ -836,7 +836,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(request)
+      assert response = Api.serve_shape_response(request)
       assert response.status == 200
 
       # Should see the last seen log entry at the start of the request
@@ -869,7 +869,7 @@ defmodule Electric.Shapes.ApiTest do
           }
         )
 
-      response = Api.serve_shape_log(request)
+      response = Api.serve_shape_response(request)
 
       assert response_body(response) == [
                %{
@@ -927,7 +927,7 @@ defmodule Electric.Shapes.ApiTest do
                      }
                    )
 
-          response = Api.serve_shape_log(request)
+          response = Api.serve_shape_response(request)
           {response, response_body(response)}
         end)
 
@@ -987,7 +987,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(request)
+      assert response = Api.serve_shape_response(request)
 
       assert response.status == 200
 
@@ -1029,7 +1029,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(request)
+      assert response = Api.serve_shape_response(request)
       assert response.status == 409
       assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
     end
@@ -1061,7 +1061,7 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      assert response = Api.serve_shape_log(request)
+      assert response = Api.serve_shape_response(request)
 
       assert response.status == 200
       refute response.chunked
@@ -1102,7 +1102,7 @@ defmodule Electric.Shapes.ApiTest do
                    )
 
           set_status_to_errored(ctx, error_message)
-          Api.serve_shape_log(request)
+          Api.serve_shape_response(request)
         end)
 
       assert response = Task.await(task)

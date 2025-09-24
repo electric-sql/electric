@@ -59,6 +59,7 @@ defmodule Electric.Shapes.Api.Params do
       |> cast(params, __schema__(:fields) -- [:result])
       |> validate_number(:limit, greater_than: 0)
       |> validate_number(:offset, greater_than_or_equal_to: 0)
+      |> validate_ordered_when_limited()
       |> cast_subset(shape_definition, api)
     end
 
@@ -72,6 +73,16 @@ defmodule Electric.Shapes.Api.Params do
 
         {:error, {field, reason}} ->
           add_error(changeset, field, reason)
+      end
+    end
+
+    defp validate_ordered_when_limited(changeset) do
+      if changed?(changeset, :limit) or changed?(changeset, :offset) do
+        validate_required(changeset, [:order_by],
+          message: "order_by is required when limit or offset is present"
+        )
+      else
+        changeset
       end
     end
 

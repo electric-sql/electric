@@ -32,6 +32,7 @@ defmodule Electric.Shapes.Api.Response do
     chunked: false,
     up_to_date: false,
     no_changes: false,
+    response_type: :normal_log,
     params: %Api.Params{},
     status: 200,
     trace_attrs: %{},
@@ -53,7 +54,8 @@ defmodule Electric.Shapes.Api.Response do
           status: pos_integer(),
           trace_attrs: %{optional(atom()) => term()},
           body: Enum.t(),
-          finalized?: boolean()
+          finalized?: boolean(),
+          response_type: :normal_log | :subset
         }
 
   @shape_definition_mismatch %{
@@ -204,6 +206,15 @@ defmodule Electric.Shapes.Api.Response do
     %{api: %{stack_id: stack_id}, handle: handle} = response
     :ok = Electric.Shapes.Monitor.unregister_reader(stack_id, handle)
     response
+  end
+
+  defp put_resp_headers(conn, %__MODULE__{response_type: :subset} = response) do
+    conn
+    |> put_cache_header("cache-control", "no-cache", response.api)
+    |> Plug.Conn.put_resp_header("electric-snapshot", "true")
+    |> put_shape_handle_header(response)
+    |> put_schema_header(response)
+    |> put_known_error_header(response)
   end
 
   defp put_resp_headers(conn, response) do
