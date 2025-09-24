@@ -116,6 +116,7 @@ async function issueLoader({
   params: Params
   request: Request
 }) {
+  await waitForInitialSyncDone()
   const pg = await pgPromise
   const liveIssue = await pg.live.query<IssueType>({
     query: `SELECT * FROM issue WHERE id = $1`,
