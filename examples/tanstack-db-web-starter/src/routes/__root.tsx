@@ -1,3 +1,4 @@
+import * as React from "react"
 import {
   Outlet,
   HeadContent,
@@ -29,12 +30,12 @@ export const Route = createRootRoute({
       },
     ],
   }),
-
+  shellComponent: RootDocument,
   component: () => (
-    <RootDocument>
+    <>
       <Outlet />
       <TanStackRouterDevtools />
-    </RootDocument>
+    </>
   ),
 })
 

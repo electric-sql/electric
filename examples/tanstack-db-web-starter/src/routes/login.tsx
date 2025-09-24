@@ -1,3 +1,4 @@
+import * as React from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { authClient } from "@/lib/auth-client"
 import { useState } from "react"
@@ -32,7 +33,7 @@ function Layout() {
         }
       )
 
-      if (error?.code === `USER_ALREADY_EXISTS`) {
+      if (error?.code === `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`) {
         const result = await authClient.signIn.email(
           {
             email,

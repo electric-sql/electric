@@ -1,4 +1,4 @@
-import { createServerFileRoute } from "@tanstack/react-start/server"
+import { createFileRoute } from "@tanstack/react-router"
 import { auth } from "@/lib/auth"
 import { prepareElectricUrl, proxyElectricRequest } from "@/lib/electric-proxy"
 
@@ -17,6 +17,10 @@ const serve = async ({ request }: { request: Request }) => {
   return proxyElectricRequest(originUrl)
 }
 
-export const ServerRoute = createServerFileRoute("/api/users").methods({
-  GET: serve,
+export const Route = createFileRoute("/api/users")({
+  server: {
+    handlers: {
+      GET: serve,
+    }
+  }
 })
