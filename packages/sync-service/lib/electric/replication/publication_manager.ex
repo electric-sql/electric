@@ -151,8 +151,9 @@ defmodule Electric.Replication.PublicationManager do
   def init(opts) do
     opts = Map.new(opts)
 
-    Logger.metadata(stack_id: opts.stack_id)
     Process.set_label({:publication_manager, opts.stack_id})
+    Logger.metadata(stack_id: opts.stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
     state = %__MODULE__{
       stack_id: opts.stack_id,

@@ -72,6 +72,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Process.set_label({:materializer, shape_handle})
     metadata = [stack_id: stack_id, shape_handle: shape_handle]
     Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
 
     state =
       Map.merge(opts, %{

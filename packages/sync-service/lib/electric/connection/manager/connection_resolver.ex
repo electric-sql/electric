@@ -10,6 +10,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
     def init(stack_id) do
       Logger.metadata(stack_id: stack_id, is_connection_process?: true)
+      Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
       {:ok, []}
     end
 
