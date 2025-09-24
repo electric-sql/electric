@@ -1037,6 +1037,7 @@ defmodule Electric.ShapeCacheTest do
   defp stream_to_list(stream, sort_col \\ "value") do
     stream
     |> Enum.map(&Jason.decode!/1)
+    |> Enum.filter(fn decoded -> Map.has_key?(decoded, "value") end)
     |> Enum.sort_by(fn %{"value" => value} -> value[sort_col] end)
   end
 

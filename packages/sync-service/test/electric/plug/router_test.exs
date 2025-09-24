@@ -76,6 +76,9 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
 
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
       assert [
                %{
                  "headers" => %{"operation" => "insert"},
@@ -84,8 +87,9 @@ defmodule Electric.Plug.RouterTest do
                    "id" => _,
                    "value" => "test value 1"
                  }
-               }
-             ] = Jason.decode!(conn.resp_body)
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
     end
 
     test "GET returns an error when table is not found", %{opts: opts} do
@@ -111,7 +115,13 @@ defmodule Electric.Plug.RouterTest do
     test "GET returns values in the snapshot and the rest of the log in the same format (as strings)",
          %{opts: opts, db_conn: db_conn} do
       conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
-      assert [%{"value" => %{"num" => "1"}}] = Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert [
+               %{"headers" => %{"operation" => "insert"}, "key" => _, "value" => %{"num" => "1"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       Postgrex.query!(
         db_conn,
@@ -149,10 +159,10 @@ defmodule Electric.Plug.RouterTest do
 
       Process.sleep(500)
 
-      # Here, we should have exactly 10 chunks
+      # Here, we should have exactly 10 chunks with data (and 1 chunk with snapshot control messages)
 
       final_offset =
-        for x <- 1..10, reduce: "0_0" do
+        for x <- 0..10, reduce: "0_0" do
           offset ->
             conn =
               conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=#{offset}&live")
@@ -160,11 +170,12 @@ defmodule Electric.Plug.RouterTest do
 
             expected_value = "test value #{x}"
 
-            if x == 10 do
-              assert length(Jason.decode!(conn.resp_body)) == 2
-            else
-              assert [%{value: %{value: ^expected_value}}] =
-                       Jason.decode!(conn.resp_body, keys: :atoms)
+            response = Jason.decode!(conn.resp_body)
+
+            case x do
+              0 -> assert [%{"headers" => %{"control" => "snapshot-end"}}] = response
+              10 -> assert [%{"value" => %{"value" => ^expected_value}}, @up_to_date] = response
+              _ -> assert [%{"value" => %{"value" => ^expected_value}}] = response
             end
 
             {:ok, offset} = LogOffset.from_string(get_resp_header(conn, "electric-offset"))
@@ -180,7 +191,7 @@ defmodule Electric.Plug.RouterTest do
       Process.sleep(200)
 
       conn =
-        conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_0")
+        conn("GET", "/v1/shape?table=items&handle=#{shape_handle}&offset=0_inf")
         |> Router.call(opts)
 
       assert [%{"value" => %{"value" => "test value 10"}}, _] = Jason.decode!(conn.resp_body)
@@ -214,7 +225,13 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 200} = conn
-      assert Jason.decode!(conn.resp_body) == []
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain only the snapshot-end control message (no data records)
+      assert length(response) == 1
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
 
     @tag with_sql: [
@@ -229,8 +246,17 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn
       shape1_handle = get_resp_shape_handle(conn)
 
-      assert [%{"value" => %{"value" => "test value 1"}}] =
-               Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => _,
+                 "value" => %{"value" => "test value 1"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       assert %{status: 202} =
                conn("DELETE", "/v1/shape?table=items&handle=#{shape1_handle}")
@@ -247,8 +273,17 @@ defmodule Electric.Plug.RouterTest do
       shape2_handle = get_resp_shape_handle(conn)
       assert shape1_handle != shape2_handle
 
-      assert [%{"value" => %{"value" => "test value 2"}}] =
-               Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => _,
+                 "value" => %{"value" => "test value 2"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
     end
 
     @tag with_sql: ["INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"]
@@ -376,6 +411,9 @@ defmodule Electric.Plug.RouterTest do
           "third"
         ])
 
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
       assert [
                %{
                  "headers" => %{"operation" => "insert"},
@@ -386,8 +424,9 @@ defmodule Electric.Plug.RouterTest do
                    "third" => "c",
                    "fourth" => "d"
                  }
-               }
-             ] = Jason.decode!(conn.resp_body)
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       task =
         Task.async(fn ->
@@ -496,8 +535,13 @@ defmodule Electric.Plug.RouterTest do
       shape_handle = get_resp_shape_handle(conn)
       latest_offset = get_resp_last_offset(conn)
 
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
       assert [
                %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => key,
                  "value" => %{
                    "txt" => "test",
                    "i2" => "1",
@@ -519,10 +563,10 @@ defmodule Electric.Plug.RouterTest do
                    "complexes" => "{\"(1.1,2.2)\",\"(3.3,4.4)\"}",
                    "jsons" => "{\"{\\\"foo\\\": \\\"bar\\\"}\",\"{\\\"bar\\\": \\\"baz\\\"}\"}",
                    "txts" => "{foo,bar,baz}"
-                 },
-                 "key" => key
-               }
-             ] = Jason.decode!(conn.resp_body)
+                 }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       task =
         Task.async(fn ->
@@ -614,22 +658,15 @@ defmodule Electric.Plug.RouterTest do
         blob
       ])
 
-      conn =
-        conn("GET", "/v1/shape?table=#{@large_binary_table}&offset=-1") |> Router.call(opts)
+      req = make_shape_req(@large_binary_table, [])
 
-      assert %{status: 200} = conn
-      shape_handle = get_resp_shape_handle(conn)
-      latest_offset = get_resp_last_offset(conn)
-      assert [%{"value" => %{"id" => "1", "blob" => ^hex_blob}}] = Jason.decode!(conn.resp_body)
+      assert {req, 200, [%{"value" => %{"id" => "1", "blob" => ^hex_blob}}]} =
+               shape_req(req, opts)
 
-      task =
-        Task.async(fn ->
-          conn(
-            "GET",
-            "/v1/shape?table=#{@large_binary_table}&offset=#{latest_offset}&handle=#{shape_handle}&live"
-          )
-          |> Router.call(opts)
-        end)
+      assert {req, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} =
+               shape_req(req, opts)
+
+      task = live_shape_req(req, opts)
 
       # ensure that updates also work
       blob = :rand.bytes(blob_size)
@@ -639,12 +676,9 @@ defmodule Electric.Plug.RouterTest do
         blob
       ])
 
-      assert %{status: 200} = conn = Task.await(task)
+      assert {_req, 200, body} = Task.await(task)
 
-      assert [
-               %{"value" => %{"id" => "1", "blob" => ^hex_blob}},
-               @up_to_date
-             ] = Jason.decode!(conn.resp_body)
+      assert [%{"value" => %{"id" => "1", "blob" => ^hex_blob}}, @up_to_date] = body
     end
 
     @generated_pk_table "generated_pk_table"
@@ -711,12 +745,17 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn
       shape_handle = get_resp_shape_handle(conn)
 
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
       assert [
                %{
-                 "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
-                 "key" => key
-               }
-             ] = Jason.decode!(conn.resp_body)
+                 "headers" => %{"operation" => "insert"},
+                 "key" => key,
+                 "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       task =
         Task.async(fn ->
@@ -745,12 +784,17 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn
       shape_handle = get_resp_shape_handle(conn)
 
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
       assert [
                %{
-                 "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
-                 "key" => key
-               }
-             ] = Jason.decode!(conn.resp_body)
+                 "headers" => %{"operation" => "insert"},
+                 "key" => key,
+                 "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       task =
         Task.async(fn ->
@@ -808,8 +852,17 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn
       shape_handle = get_resp_shape_handle(conn)
 
-      assert [%{"value" => %{"col1" => "test1", "col2" => "test2"}, "key" => key}] =
-               Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => key,
+                 "value" => %{"col1" => "test1", "col2" => "test2"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       task =
         Task.async(fn ->
@@ -861,12 +914,17 @@ defmodule Electric.Plug.RouterTest do
       shape_handle = get_resp_shape_handle(conn)
       next_offset = get_resp_last_offset(conn)
 
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
       assert [
                %{
-                 "value" => %{"id" => "1", "value1" => "test value 1"},
-                 "key" => key
-               }
-             ] = Jason.decode!(conn.resp_body)
+                 "headers" => %{"operation" => "insert"},
+                 "key" => key,
+                 "value" => %{"id" => "1", "value1" => "test value 1"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       test_pid = self()
 
@@ -909,7 +967,13 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn
       shape_handle = get_resp_shape_handle(conn)
 
-      assert [] = Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain only the snapshot-end control message (no data records)
+      assert length(response) == 1
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       task =
         Task.async(fn ->
@@ -957,15 +1021,20 @@ defmodule Electric.Plug.RouterTest do
       shape_handle = get_resp_shape_handle(conn)
       json_body = Jason.decode!(conn.resp_body)
 
-      assert [
-               %{
-                 "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
-                 "key" => key
-               }
-             ] = json_body
+      # Should contain the data record and the snapshot-end control message
+      assert length(json_body) == 2
 
-      # Old value cannot be present on the snapshot
-      refute match?(%{"old_value" => _}, json_body)
+      assert %{
+               "value" => %{"id" => _, "value1" => _, "value2" => _, "value3" => _},
+               "key" => key
+             } = Enum.find(json_body, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(json_body, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
+
+      # Old value cannot be present on the data records in the snapshot
+      data_records = Enum.filter(json_body, &Map.has_key?(&1, "key"))
+      refute Enum.any?(data_records, &Map.has_key?(&1, "old_value"))
 
       task =
         Task.async(fn ->
@@ -1012,7 +1081,17 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn
 
       shape_handle = get_resp_shape_handle(conn)
-      assert [op] = Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert [
+               op = %{
+                 "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
+                 "key" => ~s|"public"."serial_ids"/"2"|,
+                 "value" => %{"id" => "2", "num" => "10"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       assert op == %{
                "headers" => %{"operation" => "insert", "relation" => ["public", "serial_ids"]},
@@ -1125,7 +1204,16 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       shape_handle = get_resp_shape_handle(conn)
-      assert [op1, op2] = Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain 2 data records and the snapshot-end control message
+      assert length(response) == 3
+
+      # Filter out control messages to get just the data records
+      data_records = Enum.filter(response, &Map.has_key?(&1, "key"))
+      assert length(data_records) == 2
+
+      assert [op1, op2] = data_records
 
       assert [op1, op2] == [
                %{
@@ -1215,7 +1303,13 @@ defmodule Electric.Plug.RouterTest do
       [shape_handle] = Plug.Conn.get_resp_header(conn, "electric-handle")
       [next_offset] = Plug.Conn.get_resp_header(conn, "electric-offset")
 
-      assert [] = Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain only the snapshot-end control message (no data records)
+      assert length(response) == 1
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       # Use a live request to ensure data has been ingested
       task =
@@ -1369,7 +1463,17 @@ defmodule Electric.Plug.RouterTest do
       assert %{status: 200} = conn
       handle = get_resp_shape_handle(conn)
       offset = get_resp_last_offset(conn)
-      assert [%{"value" => %{"value" => "test value 1"}}] = Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => _,
+                 "value" => %{"value" => "test value 1"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       task =
         Task.async(fn ->
@@ -1407,7 +1511,13 @@ defmodule Electric.Plug.RouterTest do
       new_handle = get_resp_shape_handle(conn)
       refute new_handle == handle
       offset = get_resp_last_offset(conn)
-      assert [] = Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain only the snapshot-end control message (no data records)
+      assert length(response) == 1
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       task =
         Task.async(fn ->
@@ -1512,7 +1622,7 @@ defmodule Electric.Plug.RouterTest do
                conn("GET", "/v1/shape?table=items&offset=-1")
                |> Router.call(opts)
 
-      assert [_] = Jason.decode!(body)
+      assert [_, %{"headers" => %{"control" => "snapshot-end"}}] = Jason.decode!(body)
 
       # And the identity should be correctly set too
       assert %{rows: [["f"]]} =
@@ -1815,8 +1925,17 @@ defmodule Electric.Plug.RouterTest do
 
       shape_handle = get_resp_shape_handle(conn)
 
-      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
-               Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "key" => _,
+                 "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
+             ] = response
 
       task =
         Task.async(fn ->
@@ -1867,8 +1986,16 @@ defmodule Electric.Plug.RouterTest do
 
       shape_handle = get_resp_shape_handle(conn)
 
-      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
-               Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       task =
         Task.async(fn ->
@@ -1907,8 +2034,16 @@ defmodule Electric.Plug.RouterTest do
 
       shape_handle = get_resp_shape_handle(conn)
 
-      assert [%{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}}] =
-               Jason.decode!(conn.resp_body)
+      response = Jason.decode!(conn.resp_body)
+
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       task =
         Task.async(fn ->
@@ -1942,7 +2077,15 @@ defmodule Electric.Plug.RouterTest do
           where: "value in (SELECT value FROM parent WHERE other_value >= 10)"
         )
 
-      assert {req, 200, [%{"value" => %{"id" => "1", "value" => "10"}}]} = shape_req(req, opts)
+      assert {req, 200, response} = shape_req(req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "value" => "10"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       # Updating the parent in a way that doesn't change the condition doesn't drop the shape
       task = live_shape_req(req, opts)
@@ -1989,8 +2132,15 @@ defmodule Electric.Plug.RouterTest do
             "parent_id in (SELECT id FROM parent WHERE grandparent_id in (SELECT id FROM grandparent WHERE value = 10))"
         )
 
-      assert {req, 200, [%{"value" => %{"id" => "1", "value" => "10"}}]} =
-               shape_req(orig_req, opts)
+      assert {req, 200, response} = shape_req(orig_req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "value" => "10"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       # Basic update should be visible
       task = live_shape_req(req, opts)
@@ -2006,16 +2156,23 @@ defmodule Electric.Plug.RouterTest do
       assert {_, 409, _} = Task.await(task)
 
       # And fresh view should now see everything
-      assert {_, 200,
-              [
-                %{"value" => _},
-                %{"value" => _}
-              ] = results} = shape_req(orig_req, opts)
+      assert {_, 200, response} = shape_req(orig_req, opts)
+
+      # Should contain 2 data records and the snapshot-end control message
+      assert length(response) == 3
+
+      # Filter out control messages to get just the data records
+      results = Enum.filter(response, &Map.has_key?(&1, "key"))
+      assert length(results) == 2
 
       assert [
                %{"value" => %{"id" => "1", "value" => "2"}},
                %{"value" => %{"id" => "2", "value" => "20"}}
              ] = Enum.sort_by(results, & &1["value"]["id"])
+
+      # Also verify the control message is present
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
 
     @tag with_sql: [
@@ -2032,8 +2189,15 @@ defmodule Electric.Plug.RouterTest do
           where: "id IN (SELECT team_id FROM members WHERE user_id = 1)"
         )
 
-      assert {req, 200, [%{"value" => %{"id" => "1", "name" => "Team A"}}]} =
-               shape_req(orig_req, ctx.opts)
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "name" => "Team A"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       # Basic update should be visible
       task = live_shape_req(req, ctx.opts)
@@ -2049,14 +2213,24 @@ defmodule Electric.Plug.RouterTest do
       assert {_, 409, _} = Task.await(task)
 
       # And new shape should have the correct data
-      assert {_, 200, data} =
-               shape_req(orig_req, ctx.opts)
+      assert {_, 200, response} = shape_req(orig_req, ctx.opts)
+
+      # Should contain 2 data records and the snapshot-end control message
+      assert length(response) == 3
+
+      # Filter out control messages to get just the data records
+      data = Enum.filter(response, &Map.has_key?(&1, "key"))
+      assert length(data) == 2
 
       assert [
                %{"value" => %{"id" => "1", "name" => "Team C"}},
                %{"value" => %{"id" => "2", "name" => "Team B"}}
              ] =
                Enum.sort_by(data, & &1["value"]["id"])
+
+      # Also verify the control message is present
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
 
     @tag with_sql: [
@@ -2079,8 +2253,15 @@ defmodule Electric.Plug.RouterTest do
           where: "(user_id, team_id) IN (SELECT user_id, team_id FROM members WHERE flag = TRUE)"
         )
 
-      assert {req, 200, [%{"value" => %{"id" => "1", "role" => "Member"}}]} =
-               shape_req(orig_req, ctx.opts)
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "role" => "Member"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       # Basic update should be visible
       task = live_shape_req(req, ctx.opts)
@@ -2101,14 +2282,24 @@ defmodule Electric.Plug.RouterTest do
                Task.await(task)
 
       # And new shape should have the correct data
-      assert {_, 200, data} =
-               shape_req(orig_req, ctx.opts)
+      assert {_, 200, response} = shape_req(orig_req, ctx.opts)
+
+      # Should contain 2 data records and the snapshot-end control message
+      assert length(response) == 3
+
+      # Filter out control messages to get just the data records
+      data = Enum.filter(response, &Map.has_key?(&1, "key"))
+      assert length(data) == 2
 
       assert [
                %{"value" => %{"id" => "1", "role" => "Admin"}},
                %{"value" => %{"id" => "2", "role" => "Member"}}
              ] =
                Enum.sort_by(data, & &1["value"]["id"])
+
+      # Also verify the control message is present
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
 
     @tag with_sql: [
@@ -2125,8 +2316,15 @@ defmodule Electric.Plug.RouterTest do
           params: %{"1" => "10", "2" => "6"}
         )
 
-      assert {req, 200, [%{"value" => %{"id" => "1", "value" => "10"}}]} =
-               shape_req(base_req, ctx.opts)
+      assert {req, 200, response} = shape_req(base_req, ctx.opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "value" => "10"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
       # Basic update should be visible
       task = live_shape_req(req, ctx.opts)
@@ -2142,14 +2340,24 @@ defmodule Electric.Plug.RouterTest do
       assert {_, 409, _} = Task.await(task)
 
       # And new shape should have the correct data
-      assert {_, 200, data} =
-               shape_req(base_req, ctx.opts)
+      assert {_, 200, response} = shape_req(base_req, ctx.opts)
+
+      # Should contain 3 data records and the snapshot-end control message
+      assert length(response) == 4
+
+      # Filter out control messages to get just the data records
+      data = Enum.filter(response, &Map.has_key?(&1, "key"))
+      assert length(data) == 3
 
       assert [
                %{"value" => %{"id" => "1", "value" => "10"}},
                %{"value" => %{"id" => "2", "value" => "10"}},
                %{"value" => %{"id" => "3", "value" => "20"}}
              ] = Enum.sort_by(data, & &1["value"]["id"])
+
+      # Also verify the control message is present
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
   end
 

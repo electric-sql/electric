@@ -99,6 +99,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {state, _} =
       stream
       |> Stream.map(&Jason.decode!/1)
+      |> Enum.filter(fn decoded -> Map.has_key?(decoded, "key") end)
       |> Enum.map(fn %{"key" => key, "value" => value, "headers" => %{"operation" => operation}} ->
         case operation do
           "insert" -> %Changes.NewRecord{key: key, record: value}

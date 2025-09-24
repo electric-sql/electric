@@ -84,7 +84,7 @@
   ??electric-schema: {"val":{"type":"text"}}
   ??electric-offset: 0_0
 
-  ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"operation":"insert","relation":["public","items"]}}]
+  ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"operation":"insert","relation":["public","items"]}},{"headers":{"control":"snapshot-end"
 
 ## Wait for the schema reconciler to run and verify that the table is NOT removed from the publication
 [shell psql]
