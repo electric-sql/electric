@@ -1,4 +1,4 @@
-import { SnapshotMetadata, Row } from './types'
+import { Row, SnapshotMetadata } from './types'
 import { ChangeMessage } from './types'
 
 /**
@@ -48,7 +48,7 @@ export class SnapshotTracker {
    * Check if a change message should be filtered based on active snapshots
    * Returns true if the message should be filtered out (not processed)
    */
-  shouldRejectMessage(message: ChangeMessage<any>): boolean {
+  shouldRejectMessage(message: ChangeMessage<Row<unknown>>): boolean {
     const txids = message.headers.txids || []
     if (txids.length === 0) return false
 
