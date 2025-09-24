@@ -12,10 +12,16 @@ import PricingCard from './src/components/pricing/PricingCard.vue'
 import { data as pricing } from './data/pricing.data.ts'
 </script>
 
-<p class="intro-zap-container">
+<p class="intro-zap-container hidden-lg">
   <img src="/img/home/zap-with-halo.svg"
       alt="Electric zap with halo"
       class="intro-zap"
+  />
+</p>
+<p class="intro-zap-container block-lg">
+  <img src="/img/home/zap-with-halo.svg"
+      alt="Electric zap with halo"
+      class="intro-zap-sm"
   />
 </p>
 
@@ -68,6 +74,16 @@ import { data as pricing } from './data/pricing.data.ts'
 </Section>
 
 <style scoped>
+.intro-zap-sm {
+  height: 60px;
+  margin: 32px auto -12px;
+}
+@media (max-width: 767px) {
+  .intro-zap-sm {
+    height: 52px;
+  }
+}
+
 .pricing-grid {
   margin: 40px 0 40px;
   display: grid;
