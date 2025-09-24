@@ -33,30 +33,32 @@ defmodule Electric.Replication.Supervisor do
 
   @impl Supervisor
   def init(opts) do
-    Process.set_label({:replication_supervisor, opts[:stack_id]})
-    Logger.metadata(stack_id: opts[:stack_id])
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
+    stack_id = Keyword.fetch!(opts, :stack_id)
+    Process.set_label({:replication_supervisor, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     Logger.info("Starting shape replication pipeline")
 
     shape_status_owner = Keyword.fetch!(opts, :shape_status_owner)
+    shape_cleaner = Keyword.fetch!(opts, :shape_cleaner)
     log_collector = Keyword.fetch!(opts, :log_collector)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
-    schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
     expiry_manager = Keyword.fetch!(opts, :expiry_manager)
-    stack_id = Keyword.fetch!(opts, :stack_id)
+    schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
 
     children = [
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
       shape_status_owner,
+      shape_cleaner,
       log_collector,
       publication_manager,
       consumer_supervisor,
-      expiry_manager,
       shape_cache,
+      expiry_manager,
       schema_reconciler
     ]
 

@@ -26,30 +26,6 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
     DynamicSupervisor.start_child(name, {ConsumerSupervisor, config})
   end
 
-  def stop_shape_consumer(_name, stack_id, shape_handle) do
-    case GenServer.whereis(ConsumerSupervisor.name(stack_id, shape_handle)) do
-      nil ->
-        {:error, "no consumer for shape handle #{inspect(shape_handle)}"}
-
-      pid when is_pid(pid) ->
-        ConsumerSupervisor.stop_and_clean(%{
-          stack_id: stack_id,
-          shape_handle: shape_handle
-        })
-
-        :ok
-    end
-  end
-
-  @doc false
-  def stop_all_consumers(name) do
-    for {:undefined, pid, _type, _} when is_pid(pid) <- DynamicSupervisor.which_children(name) do
-      DynamicSupervisor.terminate_child(name, pid)
-    end
-
-    :ok
-  end
-
   @impl true
   def init(stack_id: stack_id) do
     Process.set_label({:dynamic_consumer_supervisor, stack_id})

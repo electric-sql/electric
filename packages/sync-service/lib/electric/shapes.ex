@@ -73,7 +73,8 @@ defmodule Electric.Shapes do
   end
 
   @doc """
-  Clean up all data (meta data and shape log + snapshot) associated with the given shape handle
+  Remove and clean up all data (meta data and shape log + snapshot) associated with
+  the given shape handle
   """
   @spec clean_shape(shape_handle(), Access.t()) :: :ok
   def clean_shape(shape_handle, opts \\ []) do

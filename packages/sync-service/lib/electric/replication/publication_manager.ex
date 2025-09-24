@@ -3,6 +3,7 @@ defmodule Electric.Replication.PublicationManager do
   use GenServer
 
   alias Electric.Postgres.Configuration
+  alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
   alias Electric.Utils
 
@@ -16,6 +17,7 @@ defmodule Electric.Replication.PublicationManager do
   @callback refresh_publication(Keyword.t()) :: :ok
 
   defstruct [
+    :stack_id,
     # %{ {oid, relation} => count }
     :relation_ref_counts,
     # %MapSet{{oid, relation}}
@@ -34,12 +36,12 @@ defmodule Electric.Replication.PublicationManager do
     :manual_table_publishing?,
     :configure_tables_for_replication_fn,
     :publication_refresh_period,
-    :shape_cache,
     next_update_forced?: false
   ]
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
   @typep state() :: %__MODULE__{
+           stack_id: Electric.ShapeCacheBehaviour.stack_id(),
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
            prepared_relation_filters: relation_filters(),
            committed_relation_filters: relation_filters(),
@@ -51,7 +53,6 @@ defmodule Electric.Replication.PublicationManager do
            db_pool: term(),
            configure_tables_for_replication_fn: fun(),
            publication_refresh_period: non_neg_integer(),
-           shape_cache: {module(), term()},
            next_update_forced?: boolean()
          }
 
@@ -71,7 +72,6 @@ defmodule Electric.Replication.PublicationManager do
             stack_id: [type: :string, required: true],
             publication_name: [type: :string, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
-            shape_cache: [type: :mod_arg, required: false],
             can_alter_publication?: [type: :boolean, required: false, default: true],
             manual_table_publishing?: [type: :boolean, required: false, default: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
@@ -155,6 +155,7 @@ defmodule Electric.Replication.PublicationManager do
     Process.set_label({:publication_manager, opts.stack_id})
 
     state = %__MODULE__{
+      stack_id: opts.stack_id,
       relation_ref_counts: %{},
       prepared_relation_filters: MapSet.new(),
       committed_relation_filters: MapSet.new(),
@@ -167,7 +168,6 @@ defmodule Electric.Replication.PublicationManager do
       db_pool: opts.db_pool,
       can_alter_publication?: opts.can_alter_publication?,
       manual_table_publishing?: opts.manual_table_publishing?,
-      shape_cache: Map.get(opts, :shape_cache, {Electric.ShapeCache, [stack_id: opts.stack_id]}),
       configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn,
       publication_refresh_period: opts.refresh_period
     }
@@ -270,11 +270,9 @@ defmodule Electric.Replication.PublicationManager do
             "Cleaning up shapes for misconfigured or unpublished relations #{inspect(relations)}"
           )
 
-          {mod, args} = state.shape_cache
-
           relations
           |> MapSet.to_list()
-          |> mod.clean_all_shapes_for_relations(args)
+          |> ShapeCleaner.remove_shapes_for_relations(stack_id: state.stack_id)
 
           tables = Enum.map(relations, fn {_oid, relation} -> Utils.relation_to_sql(relation) end)
           message = publication_error_message(error_type, tables, state)
@@ -329,11 +327,9 @@ defmodule Electric.Replication.PublicationManager do
         "Relations dropped/renamed since last publication update: #{inspect(MapSet.to_list(invalidated_relations))}"
       )
 
-      {mod, args} = state.shape_cache
-
       invalidated_relations
       |> MapSet.to_list()
-      |> mod.clean_all_shapes_for_relations(args)
+      |> ShapeCleaner.remove_shapes_for_relations(stack_id: state.stack_id)
     end
 
     state = reply_to_waiters(:ok, state)

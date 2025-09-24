@@ -1,5 +1,6 @@
 defmodule Electric.Replication.PublicationManagerTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
 
   import Support.ComponentSetup
   import Support.TestUtils
@@ -9,10 +10,6 @@ defmodule Electric.Replication.PublicationManagerTest do
   @shape_handle_1 "shape_handle_1"
   @shape_handle_2 "shape_handle_2"
   @shape_handle_3 "shape_handle_3"
-
-  def clean_all_shapes_for_relations(relations, [parent_pid]) do
-    send(parent_pid, {:clean_all_shapes_for_relations, relations})
-  end
 
   setup :with_stack_id_from_test
 
@@ -31,11 +28,21 @@ defmodule Electric.Replication.PublicationManagerTest do
         test: ctx.test,
         stack_id: ctx.stack_id,
         update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
-        shape_cache: {__MODULE__, [self()]},
         publication_name: "pub_#{ctx.stack_id}",
         pool: :no_pool,
         configure_tables_for_replication_fn: configure_tables_fn
       })
+
+    Repatch.patch(
+      Electric.ShapeCache.ShapeCleaner,
+      :remove_shapes_for_relations,
+      [mode: :shared],
+      fn relations, _ ->
+        send(test_pid, {:remove_shapes_for_relations, relations})
+      end
+    )
+
+    Repatch.allow(test_pid, publication_manager_opts[:server])
 
     %{opts: publication_manager_opts, ctx: ctx}
   end
@@ -129,7 +136,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
       assert_receive {:filters, [{_, {"public", "items"}}]}
-      assert_receive {:clean_all_shapes_for_relations, [{10, {"public", "another_table"}}]}
+      assert_receive {:remove_shapes_for_relations, [{10, {"public", "another_table"}}]}
     end
   end
 
@@ -191,12 +198,12 @@ defmodule Electric.Replication.PublicationManagerTest do
       end)
 
       refute_receive :task1_done, 50
-      refute_received {:filters, _}
-      refute_received :task2_done
+      refute_receive {:filters, _}, 0
+      refute_receive :task2_done, 0
 
       assert_receive :task1_done
-      assert_received :task2_done
-      assert_received {:filters, []}
+      assert_receive :task2_done, 0
+      assert_receive {:filters, []}
       refute_receive {:filters, _}, 200
     end
   end
@@ -224,11 +231,12 @@ defmodule Electric.Replication.PublicationManagerTest do
           test: ctx.test,
           stack_id: ctx.stack_id,
           update_debounce_timeout: 0,
-          shape_cache: {__MODULE__, [self()]},
           publication_name: "pub_#{ctx.stack_id}",
           pool: :no_pool,
           configure_tables_for_replication_fn: configure_tables_fn
         })
+
+      Repatch.allow(self(), publication_manager_opts[:server])
 
       pid = GenServer.whereis(publication_manager_opts[:server])
       mref = Process.monitor(pid)
