@@ -137,6 +137,18 @@ defmodule Electric.Shapes.ApiTest do
              }
     end
 
+    test "returns error when connection not available to parse schema", ctx do
+      api = Map.put(ctx.api, :inspector, Support.StubInspector.no_conn())
+
+      assert {:error, %{status: 503} = response} =
+               Api.validate(api, %{table: "public.users", offset: "-1"})
+
+      assert response_body(response) == %{
+               message:
+                 "Cannot connect to the database to verify the shape. Please try again later."
+             }
+    end
+
     test "returns error for missing shape_handle when offset != -1", ctx do
       assert {:error, %{status: 400} = response} =
                Api.validate(

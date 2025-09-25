@@ -29,13 +29,19 @@ defmodule Electric.Postgres.Inspector do
         }
 
   @callback load_relation_oid(relation(), opts :: term()) ::
-              {:ok, Electric.oid_relation()} | :table_not_found | {:error, String.t()}
+              {:ok, Electric.oid_relation()}
+              | :table_not_found
+              | {:error, String.t() | :connection_not_available}
 
   @callback load_relation_info(relation_id(), opts :: term()) ::
-              {:ok, relation_info()} | :table_not_found | {:error, String.t()}
+              {:ok, relation_info()}
+              | :table_not_found
+              | {:error, String.t() | :connection_not_available}
 
   @callback load_column_info(relation_id(), opts :: term()) ::
-              {:ok, [column_info()]} | :table_not_found | {:error, String.t()}
+              {:ok, [column_info()]}
+              | :table_not_found
+              | {:error, String.t() | :connection_not_available}
 
   @callback clean(relation_id(), opts :: term()) :: :ok
 
@@ -51,7 +57,9 @@ defmodule Electric.Postgres.Inspector do
   Table name is expected to have been normalized beforehand
   """
   @spec load_relation_oid(relation(), inspector()) ::
-          {:ok, Electric.oid_relation()} | :table_not_found | {:error, String.t()}
+          {:ok, Electric.oid_relation()}
+          | :table_not_found
+          | {:error, String.t() | :connection_not_available}
 
   def load_relation_oid(relation, {module, opts}) when is_relation(relation) do
     module.load_relation_oid(relation, opts)
@@ -64,7 +72,9 @@ defmodule Electric.Postgres.Inspector do
   and other metadata.
   """
   @spec load_relation_info(relation_id(), inspector()) ::
-          {:ok, relation_info()} | :table_not_found | {:error, String.t()}
+          {:ok, relation_info()}
+          | :table_not_found
+          | {:error, String.t() | :connection_not_available}
 
   def load_relation_info(relation_id, {module, opts}) when is_relation_id(relation_id) do
     module.load_relation_info(relation_id, opts)
@@ -74,7 +84,9 @@ defmodule Electric.Postgres.Inspector do
   Load column information about a given table using a provided inspector.
   """
   @spec load_column_info(relation_id(), inspector()) ::
-          {:ok, [column_info()]} | :table_not_found | {:error, String.t()}
+          {:ok, [column_info()]}
+          | :table_not_found
+          | {:error, String.t() | :connection_not_available}
   def load_column_info(relation_id, {module, opts}) when is_relation_id(relation_id) do
     module.load_column_info(relation_id, opts)
   end

@@ -101,8 +101,6 @@ defmodule Electric.Shapes.Api.Params do
     |> cast(params, __schema__(:fields) -- [:shape_definition])
   end
 
-  defp convert_error({:ok, params}, _api), do: {:ok, params}
-
   defp convert_error({:error, changeset}, api) do
     reason =
       traverse_errors(changeset, fn {msg, opts} ->
@@ -111,7 +109,13 @@ defmodule Electric.Shapes.Api.Params do
         end)
       end)
 
-    {:error, Api.Response.invalid_request(api, errors: reason)}
+    response =
+      case reason do
+        %{connection_not_available: [msg]} -> Api.Response.error(api, msg, status: 503)
+        _ -> Api.Response.invalid_request(api, errors: reason)
+      end
+
+    {:error, response}
   end
 
   def cast_offset(%Ecto.Changeset{valid?: false} = changeset), do: changeset
@@ -203,6 +207,13 @@ defmodule Electric.Shapes.Api.Params do
          ) do
       {:ok, shape} ->
         put_change(changeset, :shape_definition, shape)
+
+      {:error, :connection_not_available} ->
+        add_error(
+          changeset,
+          :connection,
+          "Cannot connect to the database to verify the table. Please try again later."
+        )
 
       {:error, {field, reasons}} ->
         Enum.reduce(List.wrap(reasons), changeset, fn
