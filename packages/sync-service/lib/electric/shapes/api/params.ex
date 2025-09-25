@@ -101,6 +101,8 @@ defmodule Electric.Shapes.Api.Params do
     |> cast(params, __schema__(:fields) -- [:shape_definition])
   end
 
+  defp convert_error({:ok, params}, _api), do: {:ok, params}
+
   defp convert_error({:error, changeset}, api) do
     reason =
       traverse_errors(changeset, fn {msg, opts} ->
