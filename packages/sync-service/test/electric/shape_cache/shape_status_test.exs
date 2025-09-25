@@ -280,7 +280,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   describe "high concurrency" do
-    @num_shapes_to_seed 10_000
+    @num_shapes_to_seed 50_000
     setup ctx do
       {:ok, state, []} = new_state(ctx)
 
@@ -291,6 +291,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       {:ok, state: state}
     end
 
+    @tag slow: true
     test "add and delete of the same shape should never fail", ctx do
       %{state: state} = ctx
 
@@ -299,7 +300,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       add_task =
         Task.async(fn ->
-          for _ <- 1..100 do
+          for _ <- 1..10_000 do
             case ShapeStatus.get_existing_shape(state, shape) do
               nil -> ShapeStatus.add_shape(state, shape)
               _ -> :ok
@@ -308,7 +309,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         end)
 
       remove_tasks =
-        for _ <- 1..100 do
+        for _ <- 1..10_000 do
           Task.async(fn ->
             case ShapeStatus.get_existing_shape(state, shape) do
               nil -> :ok
