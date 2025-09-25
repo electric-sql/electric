@@ -91,6 +91,8 @@ defmodule Electric.Connection.Manager do
       :replication_client_blocked_by_pending_transaction?,
       # PID of the Postgres connection lock
       :lock_connection_pid,
+      # Postgres backend PID serving the lock connection
+      :lock_connection_pg_backend_pid,
       # Timer reference for the periodic lock status check
       :lock_connection_timer,
       # PIDs of the database connection pools
@@ -124,6 +126,7 @@ defmodule Electric.Connection.Manager do
   end
 
   use GenServer, shutdown: :infinity
+  alias Electric.Postgres.LockBreakerConnection
   alias Electric.Connection.Manager.ConnectionBackoff
   alias Electric.Connection.Manager.ConnectionResolver
   alias Electric.DbConnectionError
@@ -208,6 +211,10 @@ defmodule Electric.Connection.Manager do
 
   def exclusive_connection_lock_acquired(manager) do
     GenServer.cast(manager, :exclusive_connection_lock_acquired)
+  end
+
+  def lock_connection_pid_obtained(manager, pid) do
+    GenServer.cast(manager, {:lock_connection_pid_obtained, pid})
   end
 
   def replication_client_started(manager) do
@@ -564,6 +571,25 @@ defmodule Electric.Connection.Manager do
     {:noreply, state}
   end
 
+  def handle_continue(
+        :check_lock_not_abandoned,
+        %State{lock_connection_pg_backend_pid: pid} = state
+      ) do
+    if state.current_step == {:start_lock_connection, :acquiring_lock} and not is_nil(pid) do
+      {:ok, breaker_pid} =
+        LockBreakerConnection.start_link(
+          connection_opts: state.connection_opts,
+          stack_id: state.stack_id
+        )
+
+      lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
+
+      LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pid)
+    end
+
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info(
         {:timeout, tref, {:check_status, :lock_connection}},
@@ -576,7 +602,7 @@ defmodule Electric.Connection.Manager do
     Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
     tref = schedule_periodic_connection_status_check(:lock_connection)
     state = %{state | lock_connection_timer: tref}
-    {:noreply, state}
+    {:noreply, state, {:continue, :check_lock_not_abandoned}}
   end
 
   def handle_info(
@@ -865,6 +891,10 @@ defmodule Electric.Connection.Manager do
        | pg_system_identifier: info.system_identifier,
          pg_timeline_id: info.timeline_id
      }}
+  end
+
+  def handle_cast({:lock_connection_pid_obtained, pid}, state) do
+    {:noreply, %{state | lock_connection_pg_backend_pid: pid}}
   end
 
   def handle_cast({:pg_info_obtained, %{server_version_num: server_version}}, state) do
