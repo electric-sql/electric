@@ -837,8 +837,8 @@ describe.for(fetchAndSse)(
 
       expect(shapeStream.isLoading()).true
 
-      await waitForFetch(shapeStream)
-
+      await waitForFetch(shapeStream) // Snapshot end marker
+      await waitForFetch(shapeStream) // up-to-date marker
       expect(shapeStream.isLoading()).false
     })
 

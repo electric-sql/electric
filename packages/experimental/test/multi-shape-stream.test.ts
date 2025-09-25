@@ -267,7 +267,7 @@ describe(`MultiShapeStream`, () => {
 
     // Wait for initial sync
     // await sleep(100)
-    await vi.waitFor(() => expect(subFn).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(subFn).toHaveBeenCalledTimes(2))
 
     unsubscribeFn()
     multiShapeStream.unsubscribeAll()
@@ -276,7 +276,7 @@ describe(`MultiShapeStream`, () => {
     await insertIssues({ title: `test title 1`, priority: 5 })
     await waitForIssues({ numChangesExpected: 1 })
     await sleep(100)
-    expect(subFn).toHaveBeenCalledTimes(1) // Only the initial sync
+    expect(subFn).toHaveBeenCalledTimes(2) // Only the initial sync
   })
 })
 
