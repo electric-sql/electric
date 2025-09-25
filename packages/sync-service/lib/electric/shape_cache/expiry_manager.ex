@@ -77,11 +77,10 @@ defmodule Electric.ShapeCache.ExpiryManager do
     )
 
     # Ensure that shapes are discarded on restart
-    Electric.Connection.Manager.store_irrecoverable_timeline(state.stack_id) |> dbg()
+    Electric.Connection.Manager.store_irrecoverable_timeline(state.stack_id)
 
     # # restart the connection
-    pid =
-      GenServer.whereis(Electric.Connection.Manager.name(stack_id: state.stack_id))
+    pid = GenServer.whereis(Electric.Connection.Manager.name(stack_id: state.stack_id))
 
     Process.exit(pid, :restart_due_to_hitting_max_shapes)
   end
