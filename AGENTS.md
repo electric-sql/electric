@@ -24,9 +24,13 @@
 
 ### 0) Create project
 ```sh
-npx @electric-sql/start my-electric-app
+npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-tanstack-db-project
+cd my-tanstack-db-project
+cp .env.example .env
+pnpm install
 pnpm dev
-# deploy: pnpm claim && pnpm deploy
+# in new terminal
+pnpm migrate
 ```
 
 ### 1) Electric proxy (server)
