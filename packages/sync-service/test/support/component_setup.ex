@@ -101,6 +101,7 @@ defmodule Support.ComponentSetup do
            Map.get(ctx, :with_pure_file_storage_opts, [])}
       )
 
+    start_link_supervised!({Electric.StackConfig, stack_id: ctx.stack_id, storage: storage})
     start_supervised!(Storage.stack_child_spec(storage), restart: :temporary)
 
     %{storage: storage, storage_dir: ctx.tmp_dir}
