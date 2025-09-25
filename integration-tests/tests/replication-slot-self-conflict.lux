@@ -66,10 +66,11 @@
   !ROLLBACK;
 
 [shell electric]
-  -$fail_pattern
-
   ??[debug] ReplicationClient step: create_slot
   ??[debug] Created new slot at lsn=
+  
+  -$fail_pattern
+
   ??[info] Starting replication from postgres
   ??[debug] ReplicationClient step: start_streaming
   ??[debug] ReplicationClient step: start_replication_slot

@@ -10,9 +10,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   setup :verify_on_exit!
 
-  defp shape! do
-    assert {:ok, %Shape{where: %{query: "value = 'test'"}} = shape} =
-             Shape.new("other_table", inspector: {__MODULE__, []}, where: "value = 'test'")
+  defp shape!, do: shape!("test")
+
+  defp shape!(val) do
+    where = "value = '#{val}'"
+
+    assert {:ok, %Shape{where: %{query: ^where}} = shape} =
+             Shape.new("other_table", inspector: {__MODULE__, []}, where: where)
 
     shape
   end
@@ -272,6 +276,49 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       ShapeStatus.remove_shape(state, shape2)
 
       assert [] == ShapeStatus.least_recently_used(state, _count = 1)
+    end
+  end
+
+  describe "high concurrency" do
+    @num_shapes_to_seed 10_000
+    setup ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      for i <- 1..@num_shapes_to_seed do
+        ShapeStatus.add_shape(state, shape!("seed_#{i}"))
+      end
+
+      {:ok, state: state}
+    end
+
+    @tag slow: true
+    test "add and delete of the same shape should never fail", ctx do
+      %{state: state} = ctx
+
+      shape = shape!()
+      ShapeStatus.add_shape(state, shape)
+
+      add_task =
+        Task.async(fn ->
+          for _ <- 1..1000 do
+            case ShapeStatus.get_existing_shape(state, shape) do
+              nil -> ShapeStatus.add_shape(state, shape)
+              _ -> :ok
+            end
+          end
+        end)
+
+      remove_tasks =
+        for _ <- 1..1000 do
+          Task.async(fn ->
+            case ShapeStatus.get_existing_shape(state, shape) do
+              nil -> :ok
+              {handle, _} -> ShapeStatus.remove_shape(state, handle)
+            end
+          end)
+        end
+
+      Task.await_many([add_task | remove_tasks], 20_000)
     end
   end
 
