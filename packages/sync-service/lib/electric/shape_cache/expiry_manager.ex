@@ -8,7 +8,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   @schema NimbleOptions.new!(
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             expiry_batch_size: [type: :pos_integer],
-            period: [type: :non_neg_integer, default: 60_000],
+            period: [type: :non_neg_integer, default: 1_000],
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true]
           )
@@ -68,45 +68,62 @@ defmodule Electric.ShapeCache.ExpiryManager do
     end
   end
 
-  defp expire_shapes(shape_count, state) do
-    shapes_to_expire = least_recently_used(state, state.expiry_batch_size)
+  defp expire_shapes(_shape_count, state) do
+    # TEMPORARY HACK: Instead of expiring shapes, we restart the connection
 
-    Logger.info(
-      "Expiring #{length(shapes_to_expire)} shapes as the number of shapes " <>
+    Logger.warning(
+      "Restarting stack as the number of shapes " <>
         "has exceeded the limit (#{state.max_shapes})"
     )
 
-    OpenTelemetry.with_span(
-      "expiry_manager.expire_shapes",
-      [
-        max_shapes: state.max_shapes,
-        shape_count: shape_count,
-        number_to_expire: state.expiry_batch_size
-      ],
-      fn -> Enum.each(shapes_to_expire, &expire_shape(&1, state)) end
-    )
+    # Ensure that shapes are discarded on restart
+    Electric.Connection.Manager.store_irrecoverable_timeline(state.stack_id)
+
+    # # restart the connection
+    pid = GenServer.whereis(Electric.Connection.Manager.name(stack_id: state.stack_id))
+
+    Process.exit(pid, :restart_due_to_hitting_max_shapes)
   end
 
-  defp expire_shape(shape, state) do
-    OpenTelemetry.with_span(
-      "expiry_manager.expire_shape",
-      [
-        shape_handle: shape.shape_handle,
-        elapsed_minutes_since_use: shape.elapsed_minutes_since_use
-      ],
-      fn ->
-        Electric.ShapeCache.ShapeCleaner.remove_shape(shape.shape_handle,
-          stack_id: state.stack_id
-        )
-      end
-    )
-  end
+  # defp expire_shapes(shape_count, state) do
+  #   shapes_to_expire = least_recently_used(state, state.expiry_batch_size)
 
-  defp least_recently_used(%{shape_status: {shape_status, shape_status_state}}, number_to_expire) do
-    OpenTelemetry.with_span("expiry_manager.get_least_recently_used", [], fn ->
-      shape_status.least_recently_used(shape_status_state, number_to_expire)
-    end)
-  end
+  #   Logger.info(
+  #     "Expiring #{length(shapes_to_expire)} shapes as the number of shapes " <>
+  #       "has exceeded the limit (#{state.max_shapes})"
+  #   )
+
+  #   OpenTelemetry.with_span(
+  #     "expiry_manager.expire_shapes",
+  #     [
+  #       max_shapes: state.max_shapes,
+  #       shape_count: shape_count,
+  #       number_to_expire: state.expiry_batch_size
+  #     ],
+  #     fn -> Enum.each(shapes_to_expire, &expire_shape(&1, state)) end
+  #   )
+  # end
+
+  # defp expire_shape(shape, state) do
+  #   OpenTelemetry.with_span(
+  #     "expiry_manager.expire_shape",
+  #     [
+  #       shape_handle: shape.shape_handle,
+  #       elapsed_minutes_since_use: shape.elapsed_minutes_since_use
+  #     ],
+  #     fn ->
+  #       Electric.ShapeCache.ShapeCleaner.remove_shape(shape.shape_handle,
+  #         stack_id: state.stack_id
+  #       )
+  #     end
+  #   )
+  # end
+
+  # defp least_recently_used(%{shape_status: {shape_status, shape_status_state}}, number_to_expire) do
+  #   OpenTelemetry.with_span("expiry_manager.get_least_recently_used", [], fn ->
+  #     shape_status.least_recently_used(shape_status_state, number_to_expire)
+  #   end)
+  # end
 
   defp shape_count(%{shape_status: {shape_status, shape_status_state}}) do
     OpenTelemetry.with_span("expiry_manager.get_shape_count", [], fn ->

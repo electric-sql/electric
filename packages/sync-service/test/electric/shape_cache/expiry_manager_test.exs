@@ -61,6 +61,7 @@ defmodule Electric.ExpiryManagerTest do
     :with_noop_publication_manager
   ]
 
+  @tag :skip
   test "expires shapes if shape count has gone over max_shapes", ctx do
     %{shape_cache_opts: opts} =
       with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}),

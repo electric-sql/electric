@@ -242,6 +242,10 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, {:connection_pool_ready, role, pid})
   end
 
+  def store_irrecoverable_timeline(stack_id) do
+    GenServer.call(name(stack_id), :store_irrecoverable_timeline)
+  end
+
   def connection_resolver_ready(stack_id) do
     stack_id
     |> name()
@@ -890,6 +894,16 @@ defmodule Electric.Connection.Manager do
   @impl true
   def handle_call(:ping, _from, state) do
     {:reply, :pong, state}
+  end
+
+  @impl true
+  def handle_call(:store_irrecoverable_timeline, _from, state) do
+    Electric.Timeline.store_irrecoverable_timeline(
+      state.pg_system_identifier,
+      state.timeline_opts
+    )
+
+    {:reply, :ok, state}
   end
 
   @impl true
