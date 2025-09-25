@@ -13,18 +13,15 @@ defmodule Electric.Replication.SchemaReconciler do
   require Logger
 
   alias Electric.Postgres.Inspector
-  alias Electric.Replication.PublicationManager
   alias Electric.ShapeCache.ShapeCleaner
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
-  @addressable_process {:or, [:atom, :pid, @name_schema_tuple]}
   @schema NimbleOptions.new!(
             name: [type: @genserver_name_schema, required: false],
             period: [type: :pos_integer, required: false, default: 60_000],
             inspector: [type: :any, required: true],
-            stack_id: [type: :string, required: true],
-            publication_manager: [type: @addressable_process, required: false]
+            stack_id: [type: :string, required: true]
           )
 
   def start_link(opts) do
@@ -92,10 +89,7 @@ defmodule Electric.Replication.SchemaReconciler do
     with :ok <-
            ShapeCleaner.remove_shapes_for_relations(diverged_relations, stack_id: state.stack_id),
          :ok <-
-           Enum.each(diverged_relations, fn {oid, _} ->
-             Inspector.clean(oid, state.inspector)
-           end),
-         :ok <- PublicationManager.refresh_publication(stack_id: state.stack_id, forced?: true) do
+           Enum.each(diverged_relations, fn {oid, _} -> Inspector.clean(oid, state.inspector) end) do
       :ok
     else
       {:error, reason} ->

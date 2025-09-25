@@ -65,32 +65,15 @@ defmodule Electric.Replication.PublicationManagerTest do
       refute_receive {:filters, _}, 200
     end
 
-    @tag update_debounce_timeout: 10
     test "accepts multiple relations", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
       shape2 = generate_shape({"public", "other"})
+
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}, 500
+
       assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
-
-      collected =
-        receive do
-          {:filters, filters} -> MapSet.new(filters)
-        after
-          500 -> flunk("Did not receive initial filters")
-        end
-
-      # Force refresh to ensure any pending prepared filters are committed
-      :ok = PublicationManager.refresh_publication(Keyword.merge(opts, forced?: true))
-
-      collected =
-        receive do
-          {:filters, filters} ->
-            MapSet.union(collected, MapSet.new(filters))
-        after
-          200 -> collected
-        end
-
-      assert [{_, {"public", "items"}}, {_, {"public", "other"}}] = MapSet.to_list(collected)
+      assert_receive {:filters, [{_, {"public", "items"}}, {_, {"public", "other"}}]}, 500
     end
 
     @tag update_debounce_timeout: 100

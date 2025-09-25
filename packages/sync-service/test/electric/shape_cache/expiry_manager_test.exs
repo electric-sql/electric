@@ -38,8 +38,6 @@ defmodule Electric.ExpiryManagerTest do
     def add_shape(_handle, _, opts) do
       send(opts[:test_pid], {:called, :prepare_tables_fn})
     end
-
-    def refresh_publication(_), do: :ok
   end
 
   setup :verify_on_exit!

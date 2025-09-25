@@ -83,30 +83,5 @@ defmodule Electric.Replication.PublicationManagerDbTest do
     end
   end
 
-  describe "refresh_publication()" do
-    setup ctx do
-      shape = generate_shape(ctx.relation_with_oid)
-      :ok = PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
-    end
-
-    test "updates the publication if a published table is dropped", ctx do
-      Postgrex.query!(ctx.pool, "DROP TABLE items")
-
-      assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
-      assert [] == fetch_pub_tables(ctx)
-
-      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
-    end
-
-    test "updates the publication if a published table is renamed", ctx do
-      Postgrex.query!(ctx.pool, "ALTER TABLE items RENAME TO items_no_more")
-
-      assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
-      assert [] == fetch_pub_tables(ctx)
-
-      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
-    end
-  end
-
   defp fetch_pub_tables(ctx), do: fetch_publication_tables(ctx.pool, ctx.publication_name)
 end

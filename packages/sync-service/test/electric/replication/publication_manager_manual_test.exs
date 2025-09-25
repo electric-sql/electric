@@ -84,32 +84,4 @@ defmodule Electric.Replication.PublicationManagerManualTest do
       assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
     end
   end
-
-  describe "refresh_publication" do
-    setup ctx do
-      Postgrex.query!(ctx.pool, "ALTER TABLE items REPLICA IDENTITY FULL")
-      Postgrex.query!(ctx.pool, "ALTER PUBLICATION #{ctx.publication_name} ADD TABLE items")
-
-      shape = generate_shape(ctx.relation_with_oid)
-      :ok = PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
-    end
-
-    test "verifies publication state when a table is dropped and cleans up the corresponding shape",
-         ctx do
-      Postgrex.query!(ctx.pool, "DROP TABLE items")
-
-      assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
-
-      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
-    end
-
-    test "verifies publication state when a table is renamed and cleans up the corresponding shape",
-         ctx do
-      Postgrex.query!(ctx.pool, "ALTER TABLE items RENAME TO items_no_more")
-
-      assert :ok == PublicationManager.refresh_publication(ctx.pub_mgr_opts ++ [forced?: true])
-
-      assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
-    end
-  end
 end

@@ -69,10 +69,8 @@
 [shell electric]
   ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, and add [] tables
 
-  # Call refresh_publication() once more to ensure the previous update has completed. This is
-  # going to be a noop call since there are no changes pending for the publication.
-  !Electric.Replication.PublicationManager.refresh_publication(stack_id: "single_stack", forced?: true)
-  ??:ok
+  # sleep a bit to ensure the publication update completed
+  [sleep 3]
 
 [shell psql]
   !SELECT * FROM pg_publication_tables;
