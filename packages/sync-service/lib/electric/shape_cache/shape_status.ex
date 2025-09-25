@@ -198,7 +198,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.select_delete(
         state.shape_meta_table,
         [
-          {{{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle}, [], [true]},
+          {{{@shape_meta_data, shape_handle}, :_, :_, :_}, [], [true]},
           {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]},
           {{{@snapshot_started, shape_handle}, :_}, [], [true]}
           | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
@@ -231,12 +231,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         nil
 
       shape_handle when is_binary(shape_handle) ->
-        try do
-          {shape_handle, latest_offset!(meta_table, shape_handle)}
-        rescue
-          ArgumentError ->
-            nil
-        end
+        {shape_handle, latest_offset!(meta_table, shape_handle)}
     end
   end
 
