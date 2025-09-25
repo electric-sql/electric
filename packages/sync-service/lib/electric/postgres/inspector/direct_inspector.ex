@@ -35,7 +35,9 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   This is an internal function meant to be used by the wrapping caching inspector.
   """
   @spec normalize_and_load_relation_info(Electric.relation(), conn :: Postgrex.conn()) ::
-          {:ok, Inspector.relation_info()} | :table_not_found | {:error, String.t()}
+          {:ok, Inspector.relation_info()}
+          | :table_not_found
+          | {:error, String.t() | :connection_not_available}
   def normalize_and_load_relation_info({schema, table}, conn) do
     query = load_relation_query(@oid_from_schema_table_name_subquery)
 
@@ -53,7 +55,9 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
 
   @impl Electric.Postgres.Inspector
   @spec load_relation_info(Electric.relation_id(), conn :: Postgrex.conn()) ::
-          {:ok, Inspector.relation_info()} | :table_not_found | {:error, String.t()}
+          {:ok, Inspector.relation_info()}
+          | :table_not_found
+          | {:error, String.t() | :connection_not_available}
   def load_relation_info(oid, conn) when is_relation_id(oid) do
     query = load_relation_query("$1::oid")
 
@@ -162,7 +166,9 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   """
   @impl Electric.Postgres.Inspector
   @spec load_column_info(Electric.relation_id(), conn :: Postgrex.conn()) ::
-          {:ok, [Inspector.column_info()]} | :table_not_found | {:error, String.t()}
+          {:ok, [Inspector.column_info()]}
+          | :table_not_found
+          | {:error, String.t() | :connection_not_available}
   def load_column_info(relation_id, conn) when is_relation_id(relation_id) do
     query = """
     #{@column_info_query_base}
