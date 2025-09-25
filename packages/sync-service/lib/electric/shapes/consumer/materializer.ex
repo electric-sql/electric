@@ -74,6 +74,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
+    {storage, opts} = Map.pop(opts, :storage)
+    shape_storage = Storage.for_shape(shape_handle, storage)
+
     state =
       Map.merge(opts, %{
         index: %{},
@@ -83,19 +86,18 @@ defmodule Electric.Shapes.Consumer.Materializer do
         subscribers: MapSet.new()
       })
 
-    {:ok, state |> Map.update!(:storage, &Storage.for_shape(shape_handle, &1)),
-     {:continue, :start_materializer}}
+    {:ok, state, {:continue, {:start_materializer, shape_storage}}}
   end
 
-  def handle_continue(:start_materializer, state) do
+  def handle_continue({:start_materializer, storage}, state) do
     _ = Consumer.await_snapshot_start(state)
     Consumer.subscribe_materializer(state)
 
-    {:noreply, state, {:continue, :read_stream}}
+    {:noreply, state, {:continue, {:read_stream, storage}}}
   end
 
-  def handle_continue(:read_stream, state) do
-    {:ok, offset, stream} = get_stream_up_to_date(state.offset, state)
+  def handle_continue({:read_stream, storage}, state) do
+    {:ok, offset, stream} = get_stream_up_to_date(state.offset, storage)
 
     {state, _} =
       stream
@@ -113,21 +115,21 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:noreply, %{state | offset: offset}}
   end
 
-  def get_stream_up_to_date(min_offset, state) do
-    case Storage.get_chunk_end_log_offset(min_offset, state.storage) do
+  def get_stream_up_to_date(min_offset, storage) do
+    case Storage.get_chunk_end_log_offset(min_offset, storage) do
       nil ->
-        {:ok, max_offset, _} = Storage.get_current_position(state.storage)
+        {:ok, max_offset, _} = Storage.get_current_position(storage)
 
         if is_log_offset_lte(max_offset, min_offset) do
           {:ok, min_offset, []}
         else
-          stream = Storage.get_log_stream(min_offset, max_offset, state.storage)
+          stream = Storage.get_log_stream(min_offset, max_offset, storage)
           {:ok, max_offset, stream}
         end
 
       max_offset ->
-        stream1 = Storage.get_log_stream(min_offset, max_offset, state.storage)
-        {:ok, offset, stream2} = get_stream_up_to_date(max_offset, state)
+        stream1 = Storage.get_log_stream(min_offset, max_offset, storage)
+        {:ok, offset, stream2} = get_stream_up_to_date(max_offset, storage)
         {:ok, offset, Stream.concat(stream1, stream2)}
     end
   end
