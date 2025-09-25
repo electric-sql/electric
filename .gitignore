@@ -1,5 +1,6 @@
 .DS_store
 .vscode
+.certs
 **/*.vitest-temp.json
 **/dist/**
 /packages/sync-service/state/
@@ -24,5 +25,6 @@ wal
 **/deps/*
 **/junit
 **/coverage
+**/test-certs-*
 response.tmp
 .claude
