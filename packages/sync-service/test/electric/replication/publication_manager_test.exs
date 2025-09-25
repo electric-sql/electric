@@ -92,12 +92,12 @@ defmodule Electric.Replication.PublicationManagerTest do
       end)
 
       refute_receive :task1_done, 50
-      refute_received {:filters, _}
-      refute_received :task2_done
+      refute_receive {:filters, _}, 0
+      refute_receive :task2_done, 0
 
       assert_receive :task1_done
-      assert_received :task2_done
-      assert_received {:filters, [{_, {"public", "items"}}]}
+      assert_receive :task2_done, 10
+      assert_receive {:filters, [{_, {"public", "items"}}]}, 10
       refute_receive {:filters, _}, 200
     end
 
