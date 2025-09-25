@@ -163,7 +163,7 @@ defmodule Electric.ShapeCache.Storage do
   @spec child_spec(shape_storage()) :: Supervisor.child_spec()
   def child_spec({module, shape_opts}) do
     %{
-      id: {module, :stack_wide},
+      id: {module, :per_consumer},
       start: {module, :start_link, [shape_opts]},
       restart: :transient
     }
