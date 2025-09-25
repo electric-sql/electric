@@ -92,11 +92,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
          shape_handle
        ) do
     perform_reporting_errors(
-      fn ->
-        shape_handle
-        |> Storage.for_shape(storage_impl)
-        |> Storage.cleanup!()
-      end,
+      fn -> Storage.cleanup!(storage_impl, shape_handle) end,
       "Failed to delete data for shape #{shape_handle}"
     )
   end

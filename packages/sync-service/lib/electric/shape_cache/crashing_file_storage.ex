@@ -24,6 +24,7 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate get_log_stream(offset, max_offset, opts), to: FileStorage
   defdelegate get_chunk_end_log_offset(offset, opts), to: FileStorage
   defdelegate cleanup!(opts), to: FileStorage
+  defdelegate cleanup!(opts, shape_handle), to: FileStorage
   defdelegate cleanup_all!(opts), to: FileStorage
   defdelegate terminate(opts), to: FileStorage
   defdelegate hibernate(opts), to: FileStorage

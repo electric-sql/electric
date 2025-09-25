@@ -315,6 +315,11 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%MS{} = opts) do
+    cleanup!(opts, opts.shape_handle)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def cleanup!(%MS{} = opts, _shape_handle) do
     for table <- tables(opts),
         do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
   end

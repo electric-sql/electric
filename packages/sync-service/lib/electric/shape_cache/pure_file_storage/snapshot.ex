@@ -69,8 +69,8 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
     |> Enum.reduce(0, fn chunk_num, _ -> chunk_num end)
   end
 
-  def chunk_file_path(%ST{log_dir: log_dir}, chunk_num),
-    do: Path.join(log_dir, "#{chunk_num}.jsonsnapshot")
+  def chunk_file_path(%ST{} = opts, chunk_num),
+    do: ST.shape_log_path(opts, "#{chunk_num}.jsonsnapshot")
 
   defp open_snapshot_chunk_to_write(opts, chunk_num) do
     File.open!(chunk_file_path(opts, chunk_num), [:write, :exclusive, :raw])

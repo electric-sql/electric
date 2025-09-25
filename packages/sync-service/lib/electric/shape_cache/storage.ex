@@ -129,6 +129,7 @@ defmodule Electric.ShapeCache.Storage do
   Is expected to be only called once the storage has been stopped.
   """
   @callback cleanup!(shape_opts()) :: any()
+  @callback cleanup!(map(), binary()) :: any()
 
   @doc """
   Cleanup all shape data and metadata from storage.
@@ -276,6 +277,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def cleanup!({mod, shape_opts}) do
     mod.cleanup!(shape_opts)
+  end
+
+  @impl __MODULE__
+  def cleanup!({mod, stack_opts}, shape_handle) do
+    mod.cleanup!(stack_opts, shape_handle)
   end
 
   @impl __MODULE__
