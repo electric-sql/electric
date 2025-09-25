@@ -8,7 +8,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   @schema NimbleOptions.new!(
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             expiry_batch_size: [type: :pos_integer],
-            period: [type: :non_neg_integer, default: 60_000],
+            period: [type: :non_neg_integer, default: 1_000],
             stack_id: [type: :string, required: true],
             shape_status: [type: :mod_arg, required: true]
           )
@@ -71,12 +71,19 @@ defmodule Electric.ShapeCache.ExpiryManager do
   defp expire_shapes(_shape_count, state) do
     # TEMPORARY HACK: Instead of expiring shapes, we restart the connection
 
-    # Ensure that shapes are discarded on restart
-    Electric.Connection.Manager.store_irrecoverable_timeline(state.stack_id)
+    Logger.warning(
+      "Restarting stack as the number of shapes " <>
+        "has exceeded the limit (#{state.max_shapes})"
+    )
 
-    # restart the connection
-    pid = GenServer.whereis(Electric.Connection.Manager.Supervisor.name(state.stack_id))
-    Process.exit(pid, :max_shapes_hit)
+    # Ensure that shapes are discarded on restart
+    Electric.Connection.Manager.store_irrecoverable_timeline(state.stack_id) |> dbg()
+
+    # # restart the connection
+    pid =
+      GenServer.whereis(Electric.Connection.Manager.name(stack_id: state.stack_id))
+
+    Process.exit(pid, :restart_due_to_hitting_max_shapes)
   end
 
   # defp expire_shapes(shape_count, state) do
