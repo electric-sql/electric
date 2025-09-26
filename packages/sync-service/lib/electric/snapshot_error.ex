@@ -78,12 +78,20 @@ defmodule Electric.SnapshotError do
     }
   end
 
+  def from_error(%File.Error{} = error) do
+    %SnapshotError{
+      type: :storage,
+      message: Exception.message(error),
+      original_error: error
+    }
+  end
+
   def from_error(%SnapshotError{} = error), do: error
 
   def from_error(error) do
     %SnapshotError{
       type: :unknown,
-      message: error.message,
+      message: Exception.message(error),
       original_error: error
     }
   end

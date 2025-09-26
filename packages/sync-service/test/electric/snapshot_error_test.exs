@@ -100,5 +100,35 @@ defmodule Electric.SnapshotErrorTest do
                original_error: ^error
              } = SnapshotError.from_error(error)
     end
+
+    test "with a File.Error" do
+      error = %File.Error{
+        reason: :eexist,
+        path: "./persistent/shapes/single_stack/49493699-17",
+        action: "open"
+      }
+
+      assert %SnapshotError{
+               type: :storage,
+               message:
+                 "could not open \"./persistent/shapes/single_stack/49493699-17\": file already exists",
+               original_error: ^error
+             } = SnapshotError.from_error(error)
+    end
+
+    defmodule MyError do
+      defexception [:reason]
+      def message(%{reason: reason}), do: "exception due to: #{reason}"
+    end
+
+    test "with any exception" do
+      error = %MyError{reason: "belief"}
+
+      assert %SnapshotError{
+               type: :unknown,
+               message: "exception due to: belief",
+               original_error: ^error
+             } = SnapshotError.from_error(error)
+    end
   end
 end
