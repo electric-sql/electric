@@ -8,22 +8,28 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
 
   require Logger
 
+  def partition_supervisor_spec(stack_id) do
+    {PartitionSupervisor, child_spec: {__MODULE__, [stack_id: stack_id]}, name: name(stack_id)}
+  end
+
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-
-    DynamicSupervisor.start_link(__MODULE__, [stack_id: stack_id],
-      name: Keyword.get(opts, :name, name(stack_id))
-    )
+    DynamicSupervisor.start_link(__MODULE__, stack_id: stack_id)
   end
 
   def start_shape_consumer(name, config) do
-    Logger.debug(fn -> "Starting consumer for #{Access.fetch!(config, :shape_handle)}" end)
+    Logger.debug(fn -> "Starting consumer for #{Keyword.fetch!(config, :shape_handle)}" end)
 
-    DynamicSupervisor.start_child(name, {ConsumerSupervisor, config})
+    key = :rand.uniform(256)
+
+    DynamicSupervisor.start_child(
+      {:via, PartitionSupervisor, {name, key}},
+      {ConsumerSupervisor, config}
+    )
   end
 
   @impl true
