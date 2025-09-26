@@ -53,8 +53,7 @@ defmodule Electric.Connection.Manager.Supervisor do
       {Electric.ShapeCache.ShapeStatusOwner,
        [stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)]}
 
-    consumer_supervisor_spec =
-      Electric.Shapes.DynamicConsumerSupervisor.partition_supervisor_spec(stack_id)
+    consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
     shape_cleaner_spec =
       {Electric.ShapeCache.ShapeCleaner,
