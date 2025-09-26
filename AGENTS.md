@@ -100,7 +100,7 @@ export const todoCollection = createCollection(
 3. API writes Postgres, returns txid
 4. Client awaits tx on Electric stream→drops optimistic state
 
-**Backend: get Postgres txid**
+**Backend: get Postgres txid and return as an integer**
 ```sql
 SELECT pg_current_xact_id()::xid::text as txid
 ```
