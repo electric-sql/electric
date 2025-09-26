@@ -415,12 +415,32 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
+  defp table_not_found_error(relation),
+    do:
+      {:error,
+       {:table,
+        [
+          "Table #{Electric.Utils.inspect_relation(relation)} does not exist. " <>
+            "If the table name contains capitals or special characters you must quote it."
+        ]}}
+
+  defp connection_not_available_error(),
+    do:
+      {:error,
+       {:connection_not_available,
+        [
+          "Cannot connect to the database to verify the shape. Please try again later."
+        ]}}
+
   defp load_column_info({oid, relation}, inspector) do
     case Inspector.load_column_info(oid, inspector) do
       :table_not_found ->
         # Rare but technically possible if a `clean` call was made to the inspector between
         # validating the relation and here.
         table_not_found_error(relation)
+
+      {:error, :connection_not_available} ->
+        connection_not_available_error()
 
       {:ok, column_info} ->
         Logger.debug(
@@ -448,21 +468,13 @@ defmodule Electric.Shapes.Shape do
     end)
   end
 
-  defp table_not_found_error(relation),
-    do:
-      {:error,
-       {:table,
-        [
-          "Table #{Electric.Utils.inspect_relation(relation)} does not exist. " <>
-            "If the table name contains capitals or special characters you must quote it."
-        ]}}
-
   @spec validate_relation(map(), term()) ::
           {:ok, Electric.oid_relation()} | {:error, {:table, [String.t()]}}
   defp validate_relation(%{relation: relation}, inspector) do
     # Parse identifier locally first to avoid hitting PG for invalid tables
     case Inspector.load_relation_oid(relation, inspector) do
       {:ok, rel} -> {:ok, rel}
+      {:error, :connection_not_available} -> connection_not_available_error()
       :table_not_found -> table_not_found_error(relation)
       {:error, err} -> {:error, {:table, [err]}}
     end

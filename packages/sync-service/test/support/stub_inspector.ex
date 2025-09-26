@@ -50,6 +50,8 @@ defmodule Support.StubInspector do
     {__MODULE__, {Map.new(relation_to_oid), Map.new(info)}}
   end
 
+  def no_conn(), do: {__MODULE__, :no_conn}
+
   defp normalize_oid_relation(oid_relation) when is_oid_relation(oid_relation) do
     oid_relation
   end
@@ -69,6 +71,10 @@ defmodule Support.StubInspector do
   defp get_column_info(column_list) when is_list(column_list), do: column_list
 
   @impl true
+  def load_relation_oid(_, :no_conn) do
+    {:error, :connection_not_available}
+  end
+
   def load_relation_oid(relation, {relation_to_oid, _}) when is_relation(relation) do
     case Map.fetch(relation_to_oid, relation) do
       {:ok, oid} -> {:ok, {oid, relation}}
@@ -77,6 +83,10 @@ defmodule Support.StubInspector do
   end
 
   @impl true
+  def load_column_info(_, :no_conn) do
+    {:error, :connection_not_available}
+  end
+
   def load_column_info(oid, {_, info}) when is_relation_id(oid) when is_map_key(info, oid) do
     info[oid].columns
     |> Enum.map(fn column ->
@@ -91,6 +101,10 @@ defmodule Support.StubInspector do
   end
 
   @impl true
+  def load_relation_info(_, :no_conn) do
+    {:error, :connection_not_available}
+  end
+
   def load_relation_info(oid, {_, info}) when is_relation_id(oid) and is_map_key(info, oid) do
     {:ok, info[oid].relation}
   end
