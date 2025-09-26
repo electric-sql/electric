@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@microsoft/fetch-event-source':
-    hash: lgwcujj3mimdfutlwueisfm32u
+    hash: 46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188
     path: patches/@microsoft__fetch-event-source.patch
 
 importers:
@@ -793,10 +793,6 @@ importers:
       redis:
         specifier: ^4.6.14
         version: 4.7.0
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64':
-        specifier: ^4.18.1
-        version: 4.24.4
     devDependencies:
       '@databases/pg-migrations':
         specifier: ^5.0.3
@@ -840,6 +836,10 @@ importers:
       typescript:
         specifier: ^5.5.2
         version: 5.6.3
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64':
+        specifier: ^4.18.1
+        version: 4.24.4
 
   examples/remix:
     dependencies:
@@ -1030,7 +1030,7 @@ importers:
         version: 17.1.7(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0)))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))(react@19.1.0))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))
       expo-router:
         specifier: ~5.1.4
-        version: 5.1.4(y4jtnr2g2s4ue3hjudtn7mmiri)
+        version: 5.1.4(4385c7d2ebe6e555b6505e0ac211d063)
       expo-status-bar:
         specifier: ~2.2.0
         version: 2.2.3(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))(react@19.1.0)
@@ -1121,7 +1121,7 @@ importers:
         version: 11.5.1(typescript@5.7.2)
       better-auth:
         specifier: ^1.3.16
-        version: 1.3.16(next@14.2.17(@babel/core@7.28.0)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(solid-js@1.9.7)(vue@3.5.12(typescript@5.7.2))
+        version: 1.3.16(next@14.2.17(@babel/core@7.28.4)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(solid-js@1.9.7)(vue@3.5.12(typescript@5.7.2))
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
@@ -1493,10 +1493,6 @@ importers:
   packages/elixir-client: {}
 
   packages/experimental:
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64':
-        specifier: ^4.18.1
-        version: 4.24.4
     devDependencies:
       '@electric-sql/client':
         specifier: workspace:*
@@ -1552,6 +1548,10 @@ importers:
       vitest:
         specifier: ^2.0.2
         version: 2.1.4(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.44.0)
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64':
+        specifier: ^4.18.1
+        version: 4.24.4
 
   packages/react-hooks:
     dependencies:
@@ -1638,11 +1638,7 @@ importers:
     dependencies:
       '@microsoft/fetch-event-source':
         specifier: ^2.0.1
-        version: 2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64':
-        specifier: ^4.18.1
-        version: 4.24.4
+        version: 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
     devDependencies:
       '@types/pg':
         specifier: ^8.11.6
@@ -1704,6 +1700,10 @@ importers:
       vitest-localstorage-mock:
         specifier: ^0.1.2
         version: 0.1.2(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.17.6)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.44.0))
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64':
+        specifier: ^4.18.1
+        version: 4.24.4
 
   packages/y-electric:
     dependencies:
@@ -16519,7 +16519,7 @@ snapshots:
 
   '@electric-sql/client@1.0.7':
     dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)
+      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.46.1
 
@@ -17746,7 +17746,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@microsoft/fetch-event-source@2.0.1(patch_hash=lgwcujj3mimdfutlwueisfm32u)': {}
+  '@microsoft/fetch-event-source@2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)': {}
 
   '@next/env@14.2.17': {}
 
@@ -19786,7 +19786,7 @@ snapshots:
       '@babel/plugin-syntax-typescript': 7.27.1(@babel/core@7.28.0)
       '@babel/template': 7.27.2
       '@babel/traverse': 7.28.0
-      '@babel/types': 7.28.2
+      '@babel/types': 7.28.4
       '@tanstack/directive-functions-plugin': 1.132.0(vite@7.1.7(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.6.0))
       babel-dead-code-elimination: 1.0.10
       tiny-invariant: 1.3.3
@@ -21597,7 +21597,7 @@ snapshots:
     dependencies:
       safe-buffer: 5.1.2
 
-  better-auth@1.3.16(next@14.2.17(@babel/core@7.28.0)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(solid-js@1.9.7)(vue@3.5.12(typescript@5.7.2)):
+  better-auth@1.3.16(next@14.2.17(@babel/core@7.28.4)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(solid-js@1.9.7)(vue@3.5.12(typescript@5.7.2)):
     dependencies:
       '@better-auth/utils': 0.3.0
       '@better-fetch/fetch': 1.1.18
@@ -21612,7 +21612,7 @@ snapshots:
       nanostores: 1.0.1
       zod: 4.1.11
     optionalDependencies:
-      next: 14.2.17(@babel/core@7.28.0)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      next: 14.2.17(@babel/core@7.28.4)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
       solid-js: 1.9.7
@@ -23483,7 +23483,7 @@ snapshots:
     dependencies:
       invariant: 2.2.4
 
-  expo-router@5.1.4(y4jtnr2g2s4ue3hjudtn7mmiri):
+  expo-router@5.1.4(4385c7d2ebe6e555b6505e0ac211d063):
     dependencies:
       '@expo/metro-runtime': 5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))
       '@expo/server': 0.6.3
@@ -26064,7 +26064,7 @@ snapshots:
 
   nested-error-stacks@2.0.1: {}
 
-  next@14.2.17(@babel/core@7.28.0)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
+  next@14.2.17(@babel/core@7.28.4)(@playwright/test@1.52.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
       '@next/env': 14.2.17
       '@swc/helpers': 0.5.5
@@ -26074,7 +26074,7 @@ snapshots:
       postcss: 8.4.31
       react: 19.1.1
       react-dom: 19.1.1(react@19.1.1)
-      styled-jsx: 5.1.1(@babel/core@7.28.0)(react@19.1.1)
+      styled-jsx: 5.1.1(@babel/core@7.28.4)(react@19.1.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 14.2.17
       '@next/swc-darwin-x64': 14.2.17
@@ -28380,12 +28380,12 @@ snapshots:
       stylis: 4.3.2
       tslib: 2.6.2
 
-  styled-jsx@5.1.1(@babel/core@7.28.0)(react@19.1.1):
+  styled-jsx@5.1.1(@babel/core@7.28.4)(react@19.1.1):
     dependencies:
       client-only: 0.0.1
       react: 19.1.1
     optionalDependencies:
-      '@babel/core': 7.28.0
+      '@babel/core': 7.28.4
     optional: true
 
   styled-jsx@5.1.1(react@18.3.1):
