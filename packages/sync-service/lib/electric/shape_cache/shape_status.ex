@@ -227,11 +227,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def get_existing_shape(meta_table, %Shape{} = shape) do
     case :ets.lookup_element(meta_table, {@shape_hash_lookup, Shape.comparable(shape)}, 2, nil) do
-      nil ->
-        nil
-
-      shape_handle when is_binary(shape_handle) ->
-        {shape_handle, latest_offset!(meta_table, shape_handle)}
+      nil -> nil
+      shape_handle when is_binary(shape_handle) -> get_existing_shape(meta_table, shape_handle)
     end
   end
 
