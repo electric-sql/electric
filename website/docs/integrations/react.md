@@ -182,7 +182,7 @@ This allows you to avoid consuming multiple streams for the same shape log.
 [`getShape<T>`](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx#L49) get-or-creates a `Shape` off the global cache.
 
 ```tsx
-// ✅ Production pattern  
+// ✅ Production pattern
 const itemsShape = getShape<Item>({
   url: `http://localhost:3001/api/items`,
 })
@@ -206,7 +206,7 @@ function MyComponent() {
   })
 
   useEffect(() => {
-    return () {
+    return () => {
       // Live updates are now disabled.
       controller.abort()
     }
