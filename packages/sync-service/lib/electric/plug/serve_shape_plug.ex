@@ -5,6 +5,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
 
+  alias Electric.Utils
   alias Electric.Shapes.Api
   alias Electric.Telemetry.OpenTelemetry
   alias Plug.Conn
@@ -18,18 +19,19 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
 
   plug :validate_request
-  plug :serve_shape_log
+  plug :serve_shape_response
 
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
 
   defp validate_request(%Conn{assigns: %{config: config}} = conn, _) do
     Logger.debug("Query String: #{conn.query_string}")
+    query_params = Utils.extract_prefixed_keys_into_map(conn.query_params, "subset", "__")
 
     api = Access.fetch!(config, :api)
 
     all_params =
-      Map.merge(conn.query_params, conn.path_params)
+      Map.merge(query_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
       |> Map.update("experimental_live_sse", "false", &(&1 != "false"))
 
@@ -44,8 +46,8 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp serve_shape_log(%Conn{assigns: %{request: request}} = conn, _) do
-    Api.serve_shape_log(conn, request)
+  defp serve_shape_response(%Conn{assigns: %{request: request}} = conn, _) do
+    Api.serve_shape_response(conn, request)
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do

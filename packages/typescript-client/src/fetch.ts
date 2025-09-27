@@ -5,6 +5,11 @@ import {
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
+  SUBSET_PARAM_LIMIT,
+  SUBSET_PARAM_OFFSET,
+  SUBSET_PARAM_ORDER_BY,
+  SUBSET_PARAM_WHERE,
+  SUBSET_PARAM_WHERE_PARAMS,
 } from './constants'
 import {
   FetchError,
@@ -206,11 +211,24 @@ export function createFetchWithResponseHeadersCheck(
 
       const addMissingHeaders = (requiredHeaders: Array<string>) =>
         missingHeaders.push(...requiredHeaders.filter((h) => !headers.has(h)))
-      addMissingHeaders(requiredElectricResponseHeaders)
 
       const input = args[0]
       const urlString = input.toString()
       const url = new URL(urlString)
+
+      // Snapshot responses (subset params) return a JSON object and do not include Electric chunk headers
+      const isSnapshotRequest = [
+        SUBSET_PARAM_WHERE,
+        SUBSET_PARAM_WHERE_PARAMS,
+        SUBSET_PARAM_LIMIT,
+        SUBSET_PARAM_OFFSET,
+        SUBSET_PARAM_ORDER_BY,
+      ].some((p) => url.searchParams.has(p))
+      if (isSnapshotRequest) {
+        return response
+      }
+
+      addMissingHeaders(requiredElectricResponseHeaders)
       if (url.searchParams.get(LIVE_QUERY_PARAM) === `true`) {
         addMissingHeaders(requiredLiveResponseHeaders)
       }

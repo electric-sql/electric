@@ -231,6 +231,10 @@ defimpl Electric.Walkable, for: PgQuery.RowExpr do
   def children(%PgQuery.RowExpr{args: args}), do: [args: args]
 end
 
+defimpl Electric.Walkable, for: PgQuery.SortBy do
+  def children(%PgQuery.SortBy{node: node, use_op: use_op}), do: [use_op: use_op, node: node]
+end
+
 defimpl Electric.Walkable, for: Electric.Replication.Eval.Parser.Func do
   def children(%Electric.Replication.Eval.Parser.Func{args: args}), do: [args: args]
 end

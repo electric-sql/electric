@@ -8,6 +8,7 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Changes
   alias Electric.Shapes.WhereClause
   alias Electric.Utils
+  alias Electric.Shapes.Shape.Validators
   require Logger
 
   defprotocol Comparable do
@@ -34,6 +35,7 @@ defmodule Electric.Shapes.Shape do
     :explicitly_selected_columns,
     shape_dependencies: [],
     shape_dependencies_handles: [],
+    log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
     replica: @default_replica
@@ -47,6 +49,7 @@ defmodule Electric.Shapes.Shape do
   @type storage_config :: %{
           compaction: :enabled | :disabled
         }
+  @type log_mode() :: :changes_only | :full
   @type flag() :: :selects_all_columns | :non_primitive_columns_in_where
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
@@ -59,7 +62,8 @@ defmodule Electric.Shapes.Shape do
           explicitly_selected_columns: [String.t(), ...],
           replica: replica(),
           storage: storage_config() | nil,
-          shape_dependencies: [t(), ...]
+          shape_dependencies: [t(), ...],
+          log_mode: log_mode()
         }
 
   @type json_relation() :: [String.t(), ...]
@@ -76,7 +80,8 @@ defmodule Electric.Shapes.Shape do
           flags: %{optional(flag()) => boolean()},
           replica: String.t(),
           storage: storage_config() | nil,
-          shape_dependencies: [json_safe(), ...]
+          shape_dependencies: [json_safe(), ...],
+          log_mode: log_mode()
         }
 
   @doc """
@@ -149,7 +154,8 @@ defmodule Electric.Shapes.Shape do
       },
       default: nil,
       type_spec: quote(do: nil | Electric.Shapes.Shape.storage_config())
-    ]
+    ],
+    log_mode: [type: {:in, [:changes_only, :full]}, default: :full]
   ]
   @shape_schema NimbleOptions.new!(@schema_options)
 
@@ -220,7 +226,8 @@ defmodule Electric.Shapes.Shape do
          explicitly_selected_columns: explicitly_selected_columns,
          replica: Map.get(opts, :replica, :default),
          storage: Map.get(opts, :storage) || %{compaction: :disabled},
-         shape_dependencies: shape_dependencies
+         shape_dependencies: shape_dependencies,
+         log_mode: Map.fetch!(opts, :log_mode)
        }}
     end
   end
@@ -234,14 +241,14 @@ defmodule Electric.Shapes.Shape do
          {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
          all_refs = Map.merge(refs, dependency_refs),
-         :ok <- validate_parameters(opts),
+         :ok <- Validators.validate_parameters(opts[:params]),
          {:ok, where} <-
            Parser.validate_where_ast(where,
              params: opts[:params],
              refs: all_refs,
              sublink_queries: extract_sublink_queries(shape_dependencies)
            ),
-         {:ok, where} <- validate_where_return_type(where) do
+         {:ok, where} <- Validators.validate_where_return_type(where) do
       {:ok, where, shape_dependencies}
     else
       {:error, {part, reason}} -> {:error, {part, reason}}
@@ -272,6 +279,7 @@ defmodule Electric.Shapes.Shape do
       shared_opts
       |> Map.put(:select, subquery)
       |> Map.put(:autofill_pk_select?, true)
+      |> Map.put(:log_mode, :full)
       |> new()
     end)
   end
@@ -313,40 +321,6 @@ defmodule Electric.Shapes.Shape do
       {i, base <> where}
     end)
     |> Map.new()
-  end
-
-  defp validate_where_return_type(where) do
-    case where.eval.type do
-      :bool -> {:ok, where}
-      _ -> {:error, {:where, "WHERE clause must return a boolean"}}
-    end
-  end
-
-  defp validate_parameters(%{params: params}) when is_map(params) do
-    with {:ok, keys} <- all_keys_are_numbers(params),
-         :ok <- all_keys_are_sequential(keys) do
-      :ok
-    end
-  end
-
-  defp validate_parameters(_), do: :ok
-
-  defp all_keys_are_numbers(params) do
-    Utils.map_while_ok(params, fn {key, _} ->
-      case Integer.parse(key) do
-        {int, ""} -> {:ok, int}
-        _ -> {:error, {:params, "Parameters can only use numbers as keys"}}
-      end
-    end)
-  end
-
-  defp all_keys_are_sequential(keys) do
-    Enum.with_index(keys, fn key, index -> key == index + 1 end)
-    |> Enum.all?()
-    |> if(
-      do: :ok,
-      else: {:error, {:params, "Parameters must be numbered sequentially, starting from 1"}}
-    )
   end
 
   @spec validate_selected_columns(
@@ -621,7 +595,8 @@ defmodule Electric.Shapes.Shape do
       explicitly_selected_columns: shape.explicitly_selected_columns,
       storage: shape.storage,
       replica: shape.replica,
-      shape_dependencies: Enum.map(shape.shape_dependencies, &to_json_safe/1)
+      shape_dependencies: Enum.map(shape.shape_dependencies, &to_json_safe/1),
+      log_mode: shape.log_mode
     }
   end
 
@@ -656,7 +631,8 @@ defmodule Electric.Shapes.Shape do
            Map.get(data, "explicitly_selected_columns", selected_columns),
          storage: storage_config_from_json(storage),
          replica: String.to_existing_atom(replica),
-         shape_dependencies: shape_dependencies
+         shape_dependencies: shape_dependencies,
+         log_mode: String.to_existing_atom(Map.get(data, "log_mode", "full"))
        }}
     end
   end

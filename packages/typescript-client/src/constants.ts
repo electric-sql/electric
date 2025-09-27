@@ -16,6 +16,12 @@ export const WHERE_PARAMS_PARAM = `params`
 export const EXPERIMENTAL_LIVE_SSE_QUERY_PARAM = `experimental_live_sse`
 export const FORCE_DISCONNECT_AND_REFRESH = `force-disconnect-and-refresh`
 export const PAUSE_STREAM = `pause-stream`
+export const LOG_MODE_QUERY_PARAM = `log`
+export const SUBSET_PARAM_WHERE = `subset__where`
+export const SUBSET_PARAM_LIMIT = `subset__limit`
+export const SUBSET_PARAM_OFFSET = `subset__offset`
+export const SUBSET_PARAM_ORDER_BY = `subset__order_by`
+export const SUBSET_PARAM_WHERE_PARAMS = `subset__params`
 
 // Query parameters that should be passed through when proxying Electric requests
 export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
@@ -24,4 +30,10 @@ export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
   OFFSET_QUERY_PARAM,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   EXPIRED_HANDLE_QUERY_PARAM,
+  LOG_MODE_QUERY_PARAM,
+  SUBSET_PARAM_WHERE,
+  SUBSET_PARAM_LIMIT,
+  SUBSET_PARAM_OFFSET,
+  SUBSET_PARAM_ORDER_BY,
+  SUBSET_PARAM_WHERE_PARAMS,
 ]
