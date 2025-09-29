@@ -628,6 +628,8 @@ defmodule Electric.ClientTest do
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
+          # just put this message in to test handling
+          %{"headers" => %{"control" => "snapshot-end"}},
           %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
         ])
 

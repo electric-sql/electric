@@ -15,4 +15,12 @@ defmodule Support.ClientHelpers do
       }
     )
   end
+
+  defmacro snapshot_end(_opts \\ []) do
+    quote do
+      %ControlMessage{
+        control: :snapshot_end
+      }
+    end
+  end
 end

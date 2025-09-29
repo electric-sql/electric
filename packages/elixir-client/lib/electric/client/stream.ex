@@ -216,6 +216,10 @@ defmodule Electric.Client.Stream do
     handle_up_to_date(%{stream | buffer: :queue.in(msg, stream.buffer), up_to_date?: true})
   end
 
+  defp handle_msg(%Message.ControlMessage{control: :snapshot_end} = msg, stream) do
+    {:cont, stream}
+  end
+
   defp handle_msg(%Message.ChangeMessage{} = msg, stream) do
     {:cont, %{stream | buffer: :queue.in(msg, stream.buffer)}}
   end
