@@ -19,14 +19,16 @@ export default {
       return (a.order || 999) - (b.order || 999)
     })
 
-    // Separate tiers from services
-    const tiers = plans.filter(plan => plan.type !== 'service')
+    // Filter by type
+    const tiers = plans.filter(plan => plan.type === 'tier')
     const services = plans.filter(plan => plan.type === 'service')
+    const comparisonPlans = plans
 
     return {
       plans,
       tiers,
-      services
+      services,
+      comparisonPlans
     }
   }
 }

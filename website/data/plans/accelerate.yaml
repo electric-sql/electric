@@ -14,3 +14,8 @@ features:
 ctaText: "Contact sales"
 ctaHref: "/about/contact#sales"
 ctaTheme: "alt"
+
+# Comparison data
+benefits: "[COPY NEEDED: Accelerate service benefits]"
+when_to_choose: "[COPY NEEDED: When to choose Accelerate]"
+supports_usage: "[COPY NEEDED: Accelerate usage level]"

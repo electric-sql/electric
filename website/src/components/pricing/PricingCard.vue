@@ -82,15 +82,15 @@ const priceColorVar = priceColor === 'ddn' ? 'var(--ddn-color)' : priceColor ===
         <hr />
         <div class="metric-item">
           <span class="metric-value">{{ formatStorage(gbProcessed) }}</span>
-          processed
+          ingested
         </div>
         <div class="metric-item">
           <span class="metric-value">{{ formatNumber(shapes) }}</span>
-          active shapes
+          shapes
         </div>
         <div class="metric-item">
           <span class="metric-value">{{ sources }}</span>
-          sources
+          databases
         </div>
       </div>
 
