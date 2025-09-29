@@ -284,9 +284,15 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
             send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
 
+            # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
             finishing_contol_message =
               Jason.encode!(%{
-                headers: %{control: "snapshot-end", xmin: xmin, xmax: xmax, xip_list: xip_list}
+                headers: %{
+                  control: "snapshot-end",
+                  xmin: to_string(xmin),
+                  xmax: to_string(xmax),
+                  xip_list: Enum.map(xip_list, &to_string/1)
+                }
               })
 
             stream =
