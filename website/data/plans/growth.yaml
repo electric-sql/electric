@@ -2,9 +2,10 @@ name: Growth
 price: 349
 period: month
 order: 3
+type: tier
 
 # Primary headlines
-operations: 20000000
+operations: 2000000000
 shapes: 2000000
 sources: 100
 
@@ -22,3 +23,8 @@ features:
 ctaText: "Get started"
 ctaHref: "https://dashboard.electric-sql.cloud?plan=growth"
 ctaTheme: "brand"
+
+# Comparison data
+benefits: "[COPY NEEDED: Growth tier benefits]"
+when_to_choose: "[COPY NEEDED: When to choose Growth]"
+supports_usage: "[COPY NEEDED: Growth usage level]"

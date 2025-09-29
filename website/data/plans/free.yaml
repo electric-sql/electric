@@ -2,9 +2,13 @@ name: Free
 price: 0
 period: month
 order: 1
+type: tier
+
+for: "For solo devs working on small projects"
+supports: "a few hundred active users"
 
 # Primary headlines
-operations: 100000
+operations: 10000000
 shapes: 10000
 sources: 10
 
@@ -18,3 +22,8 @@ features:
 ctaText: "Get started"
 ctaHref: "https://dashboard.electric-sql.cloud"
 ctaTheme: "brand"
+
+# Comparison data
+benefits: "[COPY NEEDED: Free tier benefits]"
+when_to_choose: "[COPY NEEDED: When to choose Free]"
+supports_usage: "[COPY NEEDED: Free usage level]"

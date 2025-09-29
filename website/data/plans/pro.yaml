@@ -2,9 +2,10 @@ name: Pro
 price: 29
 period: month
 order: 2
+type: tier
 
 # Primary headlines
-operations: 1000000
+operations: 100000000
 shapes: 100000
 sources: 20
 
@@ -20,3 +21,8 @@ features:
 ctaText: "Get started"
 ctaHref: "https://dashboard.electric-sql.cloud?plan=pro"
 ctaTheme: "brand"
+
+# Comparison data
+benefits: "[COPY NEEDED: Pro tier benefits]"
+when_to_choose: "[COPY NEEDED: When to choose Pro]"
+supports_usage: "[COPY NEEDED: Pro usage level]"

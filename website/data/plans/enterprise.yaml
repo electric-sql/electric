@@ -1,0 +1,22 @@
+name: Enterprise
+price: "Custom"
+period: null
+order: 5
+type: other
+
+# This is for comparison table only
+proposition: "Custom pricing and enterprise solutions"
+description: |
+  Get in touch if you're looking to deploy Electric at large scale or have specific feature or operational requirements.
+  
+  We can offer overage pricing for large workloads and provide custom infrastructure, integration or project solutions.
+
+# CTA
+ctaText: "Contact sales"
+ctaHref: "/about/contact#sales"
+ctaTheme: "alt"
+
+# Comparison data
+benefits: "[COPY NEEDED: Enterprise benefits]"
+when_to_choose: "[COPY NEEDED: When to choose Enterprise]"
+supports_usage: "[COPY NEEDED: Enterprise usage level]"
