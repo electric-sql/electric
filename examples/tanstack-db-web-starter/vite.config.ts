@@ -29,7 +29,7 @@ const config = defineConfig({
         enabled: true,
       },
     }),
-    viteReact(), // Now required
+    viteReact(),
   ],
   ssr: {
     noExternal: ["zod"],
