@@ -34,6 +34,15 @@ defmodule Electric.Postgres.LockConnection do
     ]
   end
 
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker,
+      restart: :temporary
+    }
+  end
+
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -150,16 +159,22 @@ defmodule Electric.Postgres.LockConnection do
       current_wal_flush_lsn: xlogpos
     })
 
-    # Now proceed to the actual lock acquisition.
-    send(self(), :acquire_lock)
-
-    {:noreply, state}
+    {:query, "SELECT pg_backend_pid()", state}
   end
 
   def handle_result(%Postgrex.Error{postgres: %{code: :syntax_error}} = error, _state) do
     # Postgrex.SimpleConnection does not support {:stop, ...} or {:shutdown, ...} return values
     # from callback functions, so we raise here and let the connection manager handle the error.
     raise error
+  end
+
+  def handle_result([%Postgrex.Result{columns: ["pg_backend_pid"], rows: [[pid]]}], state) do
+    notify_backend_pid_obtained(state, pid)
+
+    # Now proceed to the actual lock acquisition.
+    send(self(), :acquire_lock)
+
+    {:noreply, state}
   end
 
   def handle_result([%Postgrex.Result{columns: ["pg_advisory_lock"]}], state) do
@@ -197,6 +212,10 @@ defmodule Electric.Postgres.LockConnection do
 
   defp notify_lock_acquired(%State{connection_manager: manager}) do
     Connection.Manager.exclusive_connection_lock_acquired(manager)
+  end
+
+  defp notify_backend_pid_obtained(%State{connection_manager: manager}, pid) do
+    Connection.Manager.lock_connection_pid_obtained(manager, pid)
   end
 
   defp lock_query(%State{lock_name: name} = _state) do
