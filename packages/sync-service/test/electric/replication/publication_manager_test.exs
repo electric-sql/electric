@@ -16,12 +16,6 @@ defmodule Electric.Replication.PublicationManagerTest do
   setup ctx do
     test_pid = self()
 
-    configure_tables_fn = fn _, _, filters, _ ->
-      # Only relations are relevant now
-      send(test_pid, {:filters, MapSet.to_list(filters)})
-      Map.get(ctx, :returned_relations, MapSet.new())
-    end
-
     %{publication_manager: {_, publication_manager_opts}} =
       with_publication_manager(%{
         module: ctx.module,
@@ -29,9 +23,19 @@ defmodule Electric.Replication.PublicationManagerTest do
         stack_id: ctx.stack_id,
         update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
         publication_name: "pub_#{ctx.stack_id}",
-        pool: :no_pool,
-        configure_tables_for_replication_fn: configure_tables_fn
+        pool: :no_pool
       })
+
+    Repatch.patch(
+      Electric.Postgres.Configuration,
+      :configure_publication!,
+      [mode: :shared],
+      fn _, _, filters, _ ->
+        # Only relations are relevant now
+        send(test_pid, {:filters, MapSet.to_list(filters)})
+        Map.get(ctx, :returned_relations, MapSet.new())
+      end
+    )
 
     Repatch.patch(
       Electric.ShapeCache.ShapeCleaner,
@@ -204,10 +208,6 @@ defmodule Electric.Replication.PublicationManagerTest do
         }
       }
 
-      configure_tables_fn = fn _pool, _publication_name, _filters, _opts ->
-        raise missing_pub_error
-      end
-
       %{publication_manager: {_, publication_manager_opts}} =
         with_publication_manager(%{
           module: ctx.module,
@@ -215,9 +215,17 @@ defmodule Electric.Replication.PublicationManagerTest do
           stack_id: ctx.stack_id,
           update_debounce_timeout: 0,
           publication_name: "pub_#{ctx.stack_id}",
-          pool: :no_pool,
-          configure_tables_for_replication_fn: configure_tables_fn
+          pool: :no_pool
         })
+
+      Repatch.restore(Electric.Postgres.Configuration, :configure_publication!, 4, mode: :shared)
+
+      Repatch.patch(
+        Electric.Postgres.Configuration,
+        :configure_publication!,
+        [mode: :shared],
+        fn _, _, _, _ -> raise missing_pub_error end
+      )
 
       Repatch.allow(self(), publication_manager_opts[:server])
 
