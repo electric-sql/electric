@@ -3,3 +3,7 @@
 
   # Node version here should match the one in .tool-versions - that's the authoritative source
   NODE_VERSION = "22.12.0"
+
+[[edge_functions]]
+  function = "serve-markdown"
+  path = "/*"
