@@ -37,16 +37,14 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   end
 
   def start_shape_consumer(name, config) do
-    Logger.debug(fn -> "Starting consumer for #{Keyword.fetch!(config, :shape_handle)}" end)
+    shape_handle = Keyword.fetch!(config, :shape_handle)
 
-    # Use a random integer as the routing key to achieve balanced sharding of child processes
-    # across all dynamic supervisors. The top limit for the key is picked to future-proof it
-    # for cases where Electric runs on a CPU with many cores. 256 should be sufficient for the
-    # foreseeable future.
-    key = :rand.uniform(256)
+    Logger.debug(fn -> "Starting consumer for #{shape_handle}" end)
+
+    routing_key = :erlang.phash2(shape_handle)
 
     DynamicSupervisor.start_child(
-      {:via, PartitionSupervisor, {name, key}},
+      {:via, PartitionSupervisor, {name, routing_key}},
       {ConsumerSupervisor, config}
     )
   end
