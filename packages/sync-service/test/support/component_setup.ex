@@ -198,15 +198,10 @@ defmodule Support.ComponentSetup do
       |> Keyword.merge(additional_opts)
       |> Keyword.merge(Map.get(ctx, :shape_cache_opts_overrides, []))
 
-    start_link_supervised!(%{
-      id: consumer_supervisor,
-      start: {
-        Electric.Shapes.DynamicConsumerSupervisor,
-        :start_link,
-        [[name: consumer_supervisor, stack_id: ctx.stack_id]]
-      },
-      restart: :temporary
-    })
+    {Electric.Shapes.DynamicConsumerSupervisor,
+     [name: consumer_supervisor, stack_id: ctx.stack_id]}
+    |> Supervisor.child_spec(id: consumer_supervisor, restart: :temporary)
+    |> start_link_supervised!()
 
     start_link_supervised!(%{
       id: start_opts[:name],
