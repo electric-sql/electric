@@ -78,6 +78,7 @@ defmodule Electric.Client.Message do
 
     defp control_atom("must-refetch"), do: :must_refetch
     defp control_atom("up-to-date"), do: :up_to_date
+    defp control_atom("snapshot-end"), do: :snapshot_end
     defp control_atom(a) when is_atom(a), do: a
 
     defp global_last_seen_lsn(headers) do
