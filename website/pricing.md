@@ -10,6 +10,7 @@ hideReleaseBanner: true
 import { onMounted } from 'vue'
 import Section from './src/components/home/Section.vue'
 import PricingCard from './src/components/pricing/PricingCard.vue'
+import ComparisonTable from './src/components/pricing/ComparisonTable.vue'
 import { data as pricing } from './data/pricing.data.ts'
 
 onMounted(() => {
@@ -45,8 +46,9 @@ onMounted(() => {
     <span class="no-wrap">teams of all sizes</span>
   </template>
   <template #tagline>
-    <a href="/product/cloud">Electric Cloud</a> has a generous free tier with scalable,
-    <span class="no-wrap">usage-based</span> <span class="no-wrap">pricing-tiers</span> and <span class="no-wrap-lg">additional support to get</span> <span class="no-wrap">teams into</span> <span class="no-wrap">production faster</span>.
+    <a href="/product/cloud">Electric Cloud</a>
+    has a generous free tier, fixed monthly pricing with unlimited fan-out
+    and <span class="no-wrap-lg">additional support to get</span> <span class="no-wrap">teams into</span> <span class="no-wrap">production faster</span>.
   </template>
   <div class="pricing-grid">
     <!-- Main Pricing Tiers -->
@@ -104,8 +106,7 @@ onMounted(() => {
       priceColor="ddn"
     >
       <template #description>
-        <p>Get in touch if you're looking to deploy Electric at large scale or have specific feature or operational requirements.</p>
-        <p>We can offer overage pricing for large workloads and provide custom infrastructure, integration or project solutions.</p>
+        <p>We offer overage pricing for large workloads and can provide custom infrastructure, integration or project solutions.</p>
       </template>
     </PricingCard>
   </div>
@@ -136,6 +137,16 @@ onMounted(() => {
     </div>
   </div>
 </div>
+
+<Section :actions="[]">
+  <template #title>
+    Comparison
+  </template>
+  <template #tagline>
+    Choosing a plan &mdash; compare options and see what's right for you.
+  </template>
+  <ComparisonTable :comparisonPlans="pricing.comparisonPlans" />
+</Section>
 
 <style scoped>
 .intro-zap-sm {
@@ -222,10 +233,15 @@ onMounted(() => {
   padding: 10px 0;
 }
 
+/* Comparison Section */
+.page-section:has(.comparison-table) {
+  padding-top: 50px;
+}
+
 /* Open Source Strap */
 .open-source-strap {
-  margin: 15px -400px;
-  padding: 80px 400px;
+  margin: 50px -400px 60px;
+  padding: 90px 400px 116px;
   background: var(--vp-sidebar-bg-color);
 }
 
@@ -256,9 +272,13 @@ onMounted(() => {
     padding: 5px 0;
   }
 
+  .page-section:has(.comparison-table) {
+    padding-top: 40px;
+  }
+
   .open-source-strap {
-    margin: 7px -24px;
-    padding: 60px 24px;
+    margin: 50px -24px 60px;
+    padding: 80px 24px 70px;
     text-align: center;
   }
 
