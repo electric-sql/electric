@@ -460,7 +460,7 @@ defmodule Electric.DbConnectionError do
           message: "connection refused while trying to connect to #{destination}",
           type: :connection_refused,
           original_error: error,
-          retry_may_fix?: false
+          retry_may_fix?: true
         }
 
       _ ->

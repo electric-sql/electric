@@ -360,7 +360,7 @@ defmodule Electric.DbConnectionErrorTest do
                message: "connection refused while trying to connect to localhost:54321",
                type: :connection_refused,
                original_error: error,
-               retry_may_fix?: false
+               retry_may_fix?: true
              } == DbConnectionError.from_error(error)
     end
 
