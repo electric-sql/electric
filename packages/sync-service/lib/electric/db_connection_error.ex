@@ -294,6 +294,7 @@ defmodule Electric.DbConnectionError do
       maybe_compute_quota_exceeded(error) ||
       maybe_data_transfer_quota_exceeded(error) ||
       maybe_password_authentication_failed(error) ||
+      maybe_pooler_login_error(error) ||
       unknown_error(error)
   end
 
@@ -464,6 +465,20 @@ defmodule Electric.DbConnectionError do
 
       _ ->
         nil
+    end
+  end
+
+  defp maybe_pooler_login_error(error) do
+    if Regex.match?(
+         ~r/^server login has been failing, cached error: connect failed \(server_login_retry\)$/,
+         error.postgres.message
+       ) do
+      %DbConnectionError{
+        message: error.postgres.message,
+        type: :pooler_login_failed,
+        original_error: error,
+        retry_may_fix?: true
+      }
     end
   end
 
