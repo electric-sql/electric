@@ -25,6 +25,19 @@ export type GetExtensions<T> = [T] extends [Row<never>]
 
 export type Offset = `-1` | `${number}_${number}` | `${bigint}_${number}`
 
+/** Information about transaction visibility for a snapshot. All fields are encoded as strings, but should be treated as uint64. */
+export type PostgresSnapshot = {
+  xmin: `${bigint}`
+  xmax: `${bigint}`
+  xip: `${bigint}`[]
+}
+
+export type NormalizedPgSnapshot = {
+  xmin: bigint
+  xmax: bigint
+  xip: bigint[]
+}
+
 interface Header {
   [key: Exclude<string, `operation` | `control`>]: Value
 }
@@ -32,10 +45,12 @@ interface Header {
 export type Operation = `insert` | `update` | `delete`
 
 export type ControlMessage = {
-  headers: Header & {
-    control: `up-to-date` | `must-refetch`
-    global_last_seen_lsn?: string
-  }
+  headers:
+    | (Header & {
+        control: `up-to-date` | `must-refetch`
+        global_last_seen_lsn?: string
+      })
+    | (Header & { control: `snapshot-end` } & PostgresSnapshot)
 }
 
 export type ChangeMessage<T extends Row<unknown> = Row> = {

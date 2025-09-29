@@ -256,7 +256,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               stack_id
             )
 
-            %{rows: [[pg_snapshot]]} =
+            %{rows: [[pg_snapshot = {xmin, xmax, xip_list}]]} =
               query_span!(
                 conn,
                 "shape_snapshot.get_pg_snapshot",
@@ -283,6 +283,17 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             )
 
             send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
+
+            # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
+            finishing_contol_message =
+              Jason.encode!(%{
+                headers: %{
+                  control: "snapshot-end",
+                  xmin: to_string(xmin),
+                  xmax: to_string(xmax),
+                  xip_list: Enum.map(xip_list, &to_string/1)
+                }
+              })
 
             stream =
               Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
@@ -314,6 +325,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   acc
                 end
               )
+              |> Stream.concat([finishing_contol_message])
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
             # that way it has the relation, but it is still missing the pk_cols

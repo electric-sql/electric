@@ -1,4 +1,12 @@
-import { ChangeMessage, ControlMessage, Message, Offset, Row } from './types'
+import {
+  ChangeMessage,
+  ControlMessage,
+  Message,
+  NormalizedPgSnapshot,
+  Offset,
+  PostgresSnapshot,
+  Row,
+} from './types'
 
 /**
  * Type guard for checking {@link Message} is {@link ChangeMessage}.
@@ -63,4 +71,27 @@ export function getOffset(message: ControlMessage): Offset | undefined {
     return
   }
   return `${lsn}_0` as Offset
+}
+
+/**
+ * Checks if a transaction is visible in a snapshot.
+ *
+ * @param txid - the transaction id to check
+ * @param snapshot - the information about the snapshot
+ * @returns true if the transaction is visible in the snapshot
+ */
+export function isVisibleInSnapshot(
+  txid: number | bigint | `${bigint}`,
+  snapshot: PostgresSnapshot | NormalizedPgSnapshot
+): boolean {
+  const xid = BigInt(txid)
+  const xmin = BigInt(snapshot.xmin)
+  const xmax = BigInt(snapshot.xmax)
+  const xip = snapshot.xip.map(BigInt)
+
+  if (xid < xmin) return true
+  if (xid < xmax && !xip.includes(xid)) return true
+  if (xid < xmax) return false
+
+  return false
 }
