@@ -40,7 +40,7 @@ defmodule Electric.Replication.PublicationManager do
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
   @typep state() :: %__MODULE__{
-           stack_id: Electric.ShapeCacheBehaviour.stack_id(),
+           stack_id: Electric.stack_id(),
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
            prepared_relation_filters: relation_filters(),
            committed_relation_filters: relation_filters(),
