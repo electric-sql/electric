@@ -1,9 +1,16 @@
 defmodule Electric.Postgres.LockBreakerConnection do
   @moduledoc """
   A Postgres connection that is used to break an abandoned lock.
-  """
-  alias Electric.Connection
 
+  Electric takes out a session-level advisory lock on a separate connection to better manage the
+  ownership of the replication slot. Unfortunately, we have seen instances (especially on Neon),
+  where the Electric disconnects, but the lock is not auto-released.
+
+  For these cases, this breaker exists - it'll connect to the database, and check that for
+  a given lock name, if that lock is taken, there also exists an active replication slot with the
+  same name. If not, it'll terminate the backend that is holding the lock, under the assumption
+  that it's one of the abandoned locks.
+  """
   require Logger
 
   @behaviour Postgrex.SimpleConnection
@@ -14,25 +21,18 @@ defmodule Electric.Postgres.LockBreakerConnection do
 
   @type options :: [option]
 
-  def name(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
-  end
-
   @spec start_link(options()) :: {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
   def start_link(opts) do
     {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
 
     connection_opts = Electric.Utils.deobfuscate_password(connection_opts)
 
-    stack_id = Keyword.fetch!(opts, :stack_id)
-
     Postgrex.SimpleConnection.start_link(
       __MODULE__,
       init_opts |> Keyword.put(:database, connection_opts[:database]),
       [
         auto_reconnect: false,
-        sync_connect: true,
-        name: name(stack_id)
+        sync_connect: true
       ] ++
         connection_opts
     )
@@ -49,7 +49,6 @@ defmodule Electric.Postgres.LockBreakerConnection do
     Process.set_label({:lock_breaker_connection, opts.stack_id})
 
     metadata = [
-      # flag used for error filtering
       is_connection_process?: true,
       stack_id: opts.stack_id
     ]
@@ -91,7 +90,16 @@ defmodule Electric.Postgres.LockBreakerConnection do
     raise error
   end
 
+  @impl true
+  def notify(_, _, _), do: :ok
+
   defp lock_breaker_query(lock_name, lock_connection_backend_pid, database) do
+    # We're using a `WITH` clause to execute all this in one statement
+    # - See if there are existing but inactive replication slots with the given name
+    # - Find all backends that are holding locks with the same name
+    # - Terminate those backends
+    #
+    # It's generally impossible for this to return more than one row
     """
     WITH inactive_slots AS (
         select slot_name
