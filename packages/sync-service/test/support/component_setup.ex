@@ -121,13 +121,7 @@ defmodule Support.ComponentSetup do
             publication_name: ctx.publication_name,
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
             db_pool: ctx.pool,
-            manual_table_publishing?: Access.get(ctx, :manual_table_publishing?, false),
-            configure_tables_for_replication_fn:
-              Access.get(
-                ctx,
-                :configure_tables_for_replication_fn,
-                &Electric.Postgres.Configuration.configure_publication!/4
-              )
+            manual_table_publishing?: Access.get(ctx, :manual_table_publishing?, false)
           ]
         ]
       },

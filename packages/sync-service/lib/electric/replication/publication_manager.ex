@@ -33,14 +33,13 @@ defmodule Electric.Replication.PublicationManager do
     :db_pool,
     :can_alter_publication?,
     :manual_table_publishing?,
-    :configure_tables_for_replication_fn,
     :publication_refresh_period,
     next_update_forced?: false
   ]
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
   @typep state() :: %__MODULE__{
-           stack_id: Electric.ShapeCacheBehaviour.stack_id(),
+           stack_id: Electric.stack_id(),
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
            prepared_relation_filters: relation_filters(),
            committed_relation_filters: relation_filters(),
@@ -50,7 +49,6 @@ defmodule Electric.Replication.PublicationManager do
            tracked_shape_handles: %{shape_handle() => Electric.oid_relation()},
            publication_name: String.t(),
            db_pool: term(),
-           configure_tables_for_replication_fn: fun(),
            publication_refresh_period: non_neg_integer(),
            next_update_forced?: boolean()
          }
@@ -74,11 +72,6 @@ defmodule Electric.Replication.PublicationManager do
             can_alter_publication?: [type: :boolean, required: false, default: true],
             manual_table_publishing?: [type: :boolean, required: false, default: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
-            configure_tables_for_replication_fn: [
-              type: {:fun, 4},
-              required: false,
-              default: &Configuration.configure_publication!/4
-            ],
             server: [type: :any, required: false],
             refresh_period: [type: :pos_integer, required: false, default: 60_000]
           )
@@ -153,7 +146,6 @@ defmodule Electric.Replication.PublicationManager do
       db_pool: opts.db_pool,
       can_alter_publication?: opts.can_alter_publication?,
       manual_table_publishing?: opts.manual_table_publishing?,
-      configure_tables_for_replication_fn: opts.configure_tables_for_replication_fn,
       publication_refresh_period: opts.refresh_period
     }
 
@@ -388,7 +380,6 @@ defmodule Electric.Replication.PublicationManager do
            prepared_relation_filters: current_filters,
            publication_name: publication_name,
            db_pool: db_pool,
-           configure_tables_for_replication_fn: configure_tables_for_replication_fn,
            next_update_forced?: forced?
          } = state
        ) do
@@ -400,7 +391,7 @@ defmodule Electric.Replication.PublicationManager do
     else
       try do
         missing_relations =
-          configure_tables_for_replication_fn.(
+          Configuration.configure_publication!(
             db_pool,
             committed_filters,
             current_filters,

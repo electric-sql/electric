@@ -360,7 +360,7 @@ defmodule Electric.DbConnectionErrorTest do
                message: "connection refused while trying to connect to localhost:54321",
                type: :connection_refused,
                original_error: error,
-               retry_may_fix?: false
+               retry_may_fix?: true
              } == DbConnectionError.from_error(error)
     end
 
@@ -408,6 +408,29 @@ defmodule Electric.DbConnectionErrorTest do
                type: :data_transfer_quota_exceeded,
                original_error: error,
                retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with pooler login failed error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message:
+            "server login has been failing, cached error: connect failed (server_login_retry)",
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 "server login has been failing, cached error: connect failed (server_login_retry)",
+               type: :pooler_login_failed,
+               original_error: error,
+               retry_may_fix?: true
              } == DbConnectionError.from_error(error)
     end
 
