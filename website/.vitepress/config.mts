@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
+import llmstxt from 'vitepress-plugin-llms'
 
 import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
@@ -27,6 +28,36 @@ const blogSidebarItems = await posts.map(post => ({
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
+  vite: {
+    plugins: [
+      llmstxt({
+        generateLLMsFullTxt: false,
+        customLLMsTxtTemplate: `\
+# {title}
+
+{description}
+
+{details}
+
+> [!IMPORTANT] Instructions for coding agents
+> Coding agents should read [AGENTS.md](/AGENTS.md) for instructions and guidance.
+
+## Table of Contents
+
+{toc}`,
+        ignoreFiles: [
+          'blog/posts/2022*',
+          'blog/posts/2023*',
+          'blog/posts/2024-01-*',
+          'blog/posts/2024-02-*',
+          'blog/posts/2024-03-*',
+          'blog/posts/2024-04-*',
+          'blog/posts/2024-05-*',
+          'blog/posts/2024-06-*'
+        ]
+      })
+    ]
+  },
   lang: 'en',
   title: "ElectricSQL",
   description: "Electric is a Postgres sync engine. It solves the hard problems of sync so that you don't have to.",
