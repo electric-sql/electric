@@ -38,19 +38,13 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc false
   @spec register_reader(stack_id(), shape_handle(), pid()) :: :ok
   def register_reader(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_reader, shape_handle, pid})
+    GenServer.call(name(stack_id), {:register_reader, shape_handle, pid}, :infinity)
   end
 
   @doc false
   @spec unregister_reader(stack_id(), shape_handle(), pid()) :: :ok
   def unregister_reader(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid})
-  end
-
-  @doc false
-  @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
-  def register_writer(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_writer, shape_handle, pid})
+    GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid}, :infinity)
   end
 
   @doc false
@@ -188,38 +182,35 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     {:reply, :ok, state}
   end
 
-  def handle_call({:register_writer, handle, pid}, _from, state) do
-    if supervisor = ConsumerSupervisor.whereis(state.stack_id, handle) do
+  def handle_call({:notify_reader_termination, shape_handle, pid, reason}, _from, state) do
+    if supervisor = ConsumerSupervisor.whereis(state.stack_id, shape_handle) do
+      %{stack_id: stack_id} = state
+
       case state.writers do
         %{^pid => _handle} ->
           {:reply, {:error, "process is already registered"}, state}
 
         writers ->
-          writers = Map.put(writers, pid, handle)
-          Process.monitor(pid, tag: {:down, :writer, handle})
-          Process.monitor(supervisor, tag: {:down, :writer_supervisor, handle})
+          state = %{state | writers: Map.put(writers, pid, shape_handle)}
 
-          {:reply, :ok, %{state | writers: writers}}
+          Process.monitor(pid, tag: {:down, :writer, shape_handle})
+          Process.monitor(supervisor, tag: {:down, :writer_supervisor, shape_handle})
+
+          state =
+            case reader_count(stack_id, shape_handle) do
+              {:ok, 0} ->
+                do_notify_reader_termination({pid, reason}, shape_handle)
+                state
+
+              {:ok, _} ->
+                add_reader_termination_watcher(shape_handle, pid, reason, state)
+            end
+
+          {:reply, :ok, state}
       end
     else
       {:reply, {:error, "no supervisor registered for consumer"}, state}
     end
-  end
-
-  def handle_call({:notify_reader_termination, shape_handle, pid, reason}, _from, state) do
-    %{stack_id: stack_id} = state
-
-    state =
-      case reader_count(stack_id, shape_handle) do
-        {:ok, 0} ->
-          do_notify_reader_termination({pid, reason}, shape_handle)
-          state
-
-        {:ok, _} ->
-          add_reader_termination_watcher(shape_handle, pid, reason, state)
-      end
-
-    {:reply, :ok, state}
   end
 
   def handle_call({:termination_watchers, shape_handle}, _from, state) do

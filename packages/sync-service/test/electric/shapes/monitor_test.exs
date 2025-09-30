@@ -147,6 +147,8 @@ defmodule Electric.Shapes.MonitorTest do
       handle = "some-handle"
       parent = self()
 
+      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle)
+
       {:ok, subscriber1} =
         start_supervised(
           {Task,
@@ -197,7 +199,6 @@ defmodule Electric.Shapes.MonitorTest do
 
       @impl GenServer
       def init({stack_id, handle, parent}) do
-        :ok = Monitor.register_writer(stack_id, handle)
         send(parent, {:ready, :consumer, 1})
         {:ok, {stack_id, handle, parent}}
       end
@@ -218,12 +219,10 @@ defmodule Electric.Shapes.MonitorTest do
       end
     end
 
-    defp exit_consumer(ctx, handle, reason) do
-      %{stack_id: stack_id} = ctx
-
+    defp start_consumer_supervisor(stack_id, handle) do
       parent = self()
 
-      {:ok, consumer_supervisor} =
+      {:ok, pid} =
         start_supervised(
           {Task,
            fn ->
@@ -238,10 +237,20 @@ defmodule Electric.Shapes.MonitorTest do
                _ -> :ok
              end
            end},
-          id: {:consumer_supervisor, 1}
+          id: {:consumer_supervisor, {stack_id, handle}}
         )
 
       assert_receive {:ready, :supervisor}
+
+      {:ok, pid}
+    end
+
+    defp exit_consumer(ctx, handle, reason) do
+      %{stack_id: stack_id} = ctx
+
+      parent = self()
+
+      {:ok, consumer_supervisor} = start_consumer_supervisor(stack_id, handle)
 
       {:ok, consumer} =
         start_supervised(%{
@@ -345,9 +354,13 @@ defmodule Electric.Shapes.MonitorTest do
       handle1 = "some-handle-1"
       handle2 = "some-handle-2"
 
+      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle1)
+      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle2)
+
       :ok = Monitor.register_reader(stack_id, handle1)
 
       Monitor.notify_reader_termination(stack_id, handle1, :my_reason)
+
       assert {:ok, 1} = Monitor.reader_count(stack_id, handle1)
 
       :ok = Monitor.register_reader(stack_id, handle2)
@@ -356,6 +369,7 @@ defmodule Electric.Shapes.MonitorTest do
       assert {:ok, 1} = Monitor.reader_count(stack_id, handle2)
 
       assert_receive {Monitor, :reader_termination, ^handle1, :my_reason}, 100
+
       Monitor.notify_reader_termination(stack_id, handle2, :my_reason)
     end
 

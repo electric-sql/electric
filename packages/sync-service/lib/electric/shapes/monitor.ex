@@ -38,12 +38,6 @@ defmodule Electric.Shapes.Monitor do
   defdelegate unregister_reader(stack_id, shape_handle, pid \\ self()), to: RefCounter
 
   @doc """
-  Register the current process as a writer (consumer) of the given shape.
-  """
-  @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
-  defdelegate register_writer(stack_id, shape_handle, pid \\ self()), to: RefCounter
-
-  @doc """
   The number of active readers of the given shape.
   """
   @spec reader_count(stack_id(), shape_handle()) :: {:ok, non_neg_integer()}
