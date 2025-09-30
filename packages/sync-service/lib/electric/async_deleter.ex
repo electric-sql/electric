@@ -72,7 +72,7 @@ defmodule Electric.AsyncDeleter do
       trash_dir: trash_dir(stack_id),
       interval_ms: Keyword.get(opts, :cleanup_interval_ms, @default_cleanup_interval_ms),
       timer_ref: nil,
-      pending: MapSet.new()
+      pending: []
     }
 
     File.mkdir_p!(state.trash_dir)
@@ -97,8 +97,7 @@ defmodule Electric.AsyncDeleter do
 
   @impl true
   def handle_cast({:schedule_cleanup, path}, state) do
-    {:noreply, %{state | pending: MapSet.put(state.pending, path)},
-     {:continue, :schedule_cleanup}}
+    {:noreply, %{state | pending: [path | state.pending]}, {:continue, :schedule_cleanup}}
   end
 
   defp unique_destination(trash_dir, base) do
@@ -130,17 +129,17 @@ defmodule Electric.AsyncDeleter do
   end
 
   defp do_cleanup(state) do
-    start_time = System.monotonic_time(:millisecond)
+    if state.pending != [] do
+      start_time = System.monotonic_time(:millisecond)
 
-    for dir <- MapSet.to_list(state.pending) do
-      try do
-        unsafe_cleanup_with_retries!(dir)
-      rescue
-        e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
-      end
-    end
+      Enum.each(state.pending, fn dir ->
+        try do
+          unsafe_cleanup_with_retries!(dir)
+        rescue
+          e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
+        end
+      end)
 
-    if MapSet.size(state.pending) > 0 do
       duration = System.monotonic_time(:millisecond) - start_time
 
       Logger.debug(
@@ -149,7 +148,7 @@ defmodule Electric.AsyncDeleter do
       )
     end
 
-    %{state | pending: MapSet.new(), timer_ref: nil}
+    %{state | pending: [], timer_ref: nil}
   end
 
   defp unsafe_cleanup_with_retries!(directory, attempts_left \\ 5) do
