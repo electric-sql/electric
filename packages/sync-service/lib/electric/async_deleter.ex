@@ -25,7 +25,6 @@ defmodule Electric.AsyncDeleter do
   ]
 
   @trash_dir_base ".electric_trash"
-
   @default_cleanup_interval_ms 10_000
 
   def name(stack_id) when is_binary(stack_id),
@@ -117,7 +116,16 @@ defmodule Electric.AsyncDeleter do
     {:noreply, do_cleanup(state)}
   end
 
-  def trash_dir(stack_id), do: Path.join([System.tmp_dir!(), @trash_dir_base, stack_id])
+  def trash_dir(stack_id) do
+    trash_base_dir =
+      Application.get_env(:electric, :trash_dir) ||
+        Path.join(
+          Application.get_env(:electric, :storage_dir, System.tmp_dir!()),
+          @trash_dir_base
+        )
+
+    Path.join(trash_base_dir, stack_id)
+  end
 
   defp do_rename(path, stack_id) do
     trash_dir = trash_dir(stack_id)

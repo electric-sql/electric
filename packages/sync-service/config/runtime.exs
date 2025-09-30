@@ -81,6 +81,7 @@ statsd_host = env!("ELECTRIC_STATSD_HOST", :string?, nil)
 chunk_bytes_threshold = env!("ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD", :integer, nil)
 
 storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
+trash_dir = env!("ELECTRIC_TRASH_DIR", :string, Path.join(storage_dir, ".electric_trash"))
 
 shape_path = Path.join(storage_dir, "./shapes")
 persistent_state_path = Path.join(storage_dir, "./state")
@@ -226,6 +227,7 @@ config :electric,
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
   storage_dir: storage_dir,
+  trash_dir: trash_dir,
   storage: storage_spec,
   cleanup_interval_ms:
     env!("ELECTRIC_CLEANUP_INTERVAL_MS", &Electric.Config.parse_human_readable_time!/1, nil),
