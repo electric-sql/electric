@@ -922,10 +922,16 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   end
 
   defp opts(PureFileStorage, %{tmp_dir: tmp_dir, stack_id: stack_id} = ctx) do
+    # keep tmp_dir out of storage dir because it messes with disk usage stats
     [
-      storage_dir: tmp_dir,
+      storage_dir: random_subdir(tmp_dir),
+      tmp_dir: random_subdir(tmp_dir),
       stack_id: stack_id,
       chunk_bytes_threshold: ctx[:chunk_size] || 10 * 1024 * 1024
     ]
+  end
+
+  defp random_subdir(base) do
+    Path.join(base, :crypto.strong_rand_bytes(16) |> Base.encode32(case: :lower, padding: false))
   end
 end
