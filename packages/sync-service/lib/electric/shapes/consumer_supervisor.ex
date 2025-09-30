@@ -4,14 +4,12 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   require Logger
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
-  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   # TODO: unify these with ShapeCache
   @schema NimbleOptions.new!(
             stack_id: [type: :any, required: true],
             shape_handle: [type: :string, required: true],
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
             inspector: [type: :mod_arg, required: true],
-            log_producer: [type: @genserver_name_schema, required: true],
             registry: [type: :atom, required: true],
             shape_status: [type: :mod_arg, required: true],
             storage: [type: :mod_arg, required: true],

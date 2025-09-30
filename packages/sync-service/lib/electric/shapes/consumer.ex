@@ -93,7 +93,6 @@ defmodule Electric.Shapes.Consumer do
   @impl GenServer
   def handle_continue(:init_storage, state) do
     %{
-      log_producer: producer,
       storage: storage,
       shape_status: {shape_status, shape_status_state}
     } = state
@@ -132,7 +131,7 @@ defmodule Electric.Shapes.Consumer do
       Materializer.subscribe(state.stack_id, shape_handle)
     end
 
-    ShapeLogCollector.subscribe(producer, state.shape_handle, state.shape)
+    ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape)
 
     Logger.debug("Writer for #{state.shape_handle} initialized")
 
@@ -249,7 +248,7 @@ defmodule Electric.Shapes.Consumer do
   def handle_info({ShapeCache.Storage, :flushed, offset}, state) do
     {state, offset} = align_to_txn_boundary(state, offset)
 
-    ShapeLogCollector.notify_flushed(state.log_producer, state.shape_handle, offset)
+    ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, offset)
     {:noreply, state, state.hibernate_after}
   end
 
@@ -661,7 +660,7 @@ defmodule Electric.Shapes.Consumer do
   defp consider_flushed(state, %Transaction{last_log_offset: new_boundary}) do
     if state.txn_offset_mapping == [] do
       # No relevant txns have been observed and unflushed, we can notify immediately
-      ShapeLogCollector.notify_flushed(state.log_producer, state.shape_handle, new_boundary)
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, new_boundary)
       state
     else
       # We're looking to "relabel" the next flush to include this txn, so we're looking for the

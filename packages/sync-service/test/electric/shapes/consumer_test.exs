@@ -160,7 +160,6 @@ defmodule Electric.Shapes.ConsumerTest do
                shape: shape,
                stack_id: ctx.stack_id,
                inspector: {Mock.Inspector, []},
-               log_producer: ShapeLogCollector.name(ctx.stack_id),
                db_pool: Electric.Connection.Manager.snapshot_pool(ctx.stack_id),
                registry: registry_name,
                shape_status: {Mock.ShapeStatus, []},
@@ -701,8 +700,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       %{shape_cache_opts: shape_cache_opts, consumer_supervisor: consumer_supervisor} =
         Support.ComponentSetup.with_shape_cache(ctx,
-          shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000),
-          log_producer: ctx.shape_log_collector
+          shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000)
         )
 
       [
@@ -866,13 +864,7 @@ defmodule Electric.Shapes.ConsumerTest do
       stop_supervised!("shape_task_supervisor")
 
       # Restart the shape cache and the consumers
-      Support.ComponentSetup.with_shape_cache(
-        Map.merge(ctx, %{
-          pool: nil,
-          inspector: @base_inspector
-        }),
-        log_producer: ctx.shape_log_collector
-      )
+      Support.ComponentSetup.with_shape_cache(ctx)
 
       :started = ShapeCache.await_snapshot_start(shape_handle, shape_cache_opts)
       assert {_, offset2} = ShapeCache.get_shape(shape_handle, shape_cache_opts)
