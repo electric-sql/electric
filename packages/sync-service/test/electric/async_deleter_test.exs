@@ -28,7 +28,14 @@ defmodule Electric.AsyncDeleterTest do
   setup ctx do
     start_link_supervised!({AsyncDeleter, stack_id: ctx.stack_id, cleanup_interval_ms: @interval})
 
-    Map.put(ctx, :trash_dir, AsyncDeleter.trash_dir(ctx.stack_id))
+    Map.put(
+      ctx,
+      :trash_dir,
+      Path.join(
+        ctx.tmp_dir,
+        :crypto.strong_rand_bytes(10) |> Base.encode32(case: :lower, padding: false)
+      )
+    )
   end
 
   test "delete moves directory into trash and later removes it", %{
@@ -41,7 +48,7 @@ defmodule Electric.AsyncDeleterTest do
 
     assert File.exists?(file_path)
 
-    assert :ok = AsyncDeleter.delete(dir, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(dir, stack_id: stack_id, trash_dir: trash_dir)
 
     # Original dir should no longer exist (moved)
     refute File.exists?(dir)
@@ -61,6 +68,29 @@ defmodule Electric.AsyncDeleterTest do
     assert File.ls!(trash_dir) == []
   end
 
+  test "uses custom temp dir location", %{
+    stack_id: stack_id,
+    tmp_dir: base,
+    trash_dir: trash_dir
+  } do
+    src_dir = create_temp_dir(%{tmp_dir: base}, "to_delete")
+    file_path = create_temp_file(src_dir, "f.txt")
+
+    assert File.exists?(file_path)
+
+    refute File.exists?(trash_dir)
+
+    assert :ok = AsyncDeleter.delete(src_dir, stack_id: stack_id, trash_dir: trash_dir)
+
+    refute File.exists?(src_dir)
+    assert File.exists?(trash_dir)
+    assert Enum.any?(File.ls!(trash_dir), fn _ -> true end)
+    assert [dest_dir] = File.ls!(trash_dir)
+    assert File.exists?(Path.join([trash_dir, dest_dir, "f.txt"]))
+    Process.sleep(@interval + 30)
+    refute File.exists?(Path.join([trash_dir, dest_dir, "f.txt"]))
+  end
+
   test "multiple deletes are batched into single cleanup", %{
     stack_id: stack_id,
     tmp_dir: base,
@@ -75,9 +105,9 @@ defmodule Electric.AsyncDeleterTest do
     assert File.exists?(f1)
     assert File.exists?(f2)
 
-    assert :ok = AsyncDeleter.delete(d1, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(d1, stack_id: stack_id, trash_dir: trash_dir)
     # quickly queue second before cleanup interval
-    assert :ok = AsyncDeleter.delete(d2, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(d2, stack_id: stack_id, trash_dir: trash_dir)
 
     # Both originals gone
     refute File.exists?(d1)
@@ -94,13 +124,14 @@ defmodule Electric.AsyncDeleterTest do
   end
 
   test "deleting missing path returns ok and does nothing", %{
+    tmp_dir: base,
     stack_id: stack_id,
     trash_dir: trash_dir
   } do
-    path = Path.join(System.tmp_dir!(), "nonexistent_#{System.unique_integer()}")
+    path = Path.join(base, "nonexistent_#{System.unique_integer()}")
     refute File.exists?(path)
 
-    assert :ok = AsyncDeleter.delete(path, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(path, stack_id: stack_id, trash_dir: trash_dir)
     # nothing to assert further; just ensure no crash and no entries after interval
     Process.sleep(@interval + 30)
     assert File.ls!(trash_dir) == []
@@ -118,7 +149,7 @@ defmodule Electric.AsyncDeleterTest do
         f = create_temp_file(d1, "tmp_#{i}")
         sleep_time = round(Enum.random(1..10) * 0.1 * (2 * @interval))
         Process.sleep(sleep_time)
-        assert :ok = AsyncDeleter.delete(f, stack_id: stack_id)
+        assert :ok = AsyncDeleter.delete(f, stack_id: stack_id, trash_dir: trash_dir)
       end)
 
     Enum.to_list(stream)

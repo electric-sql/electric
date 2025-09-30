@@ -186,18 +186,29 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     try do
       case File.touch(marker_file_path) do
-        :ok -> Electric.AsyncDeleter.delete(opts.data_dir, stack_id: opts.stack_id)
+        :ok ->
+          Electric.AsyncDeleter.delete(opts.data_dir,
+            trash_dir: opts.tmp_dir,
+            stack_id: opts.stack_id
+          )
+
         # nothing to delete, no-op
-        {:error, :enoent} -> :ok
-        {:error, reason} -> raise File.Error, reason: reason, path: marker_file_path
+        {:error, :enoent} ->
+          :ok
+
+        {:error, reason} ->
+          raise File.Error, reason: reason, path: marker_file_path
       end
     after
       File.rm(marker_file_path)
     end
   end
 
-  def cleanup_all!(%{stack_id: stack_id, base_path: base_path}) do
-    Electric.AsyncDeleter.delete(base_path, stack_id: stack_id)
+  def cleanup_all!(%{stack_id: stack_id, base_path: base_path, tmp_dir: tmp_dir}) do
+    Electric.AsyncDeleter.delete(base_path,
+      trash_dir: tmp_dir,
+      stack_id: stack_id
+    )
   end
 
   def schedule_compaction(opts) do
