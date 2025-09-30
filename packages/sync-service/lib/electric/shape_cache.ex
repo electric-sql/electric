@@ -46,7 +46,6 @@ defmodule Electric.ShapeCache do
               required: false
             ],
             stack_id: [type: :string, required: true],
-            log_producer: [type: @genserver_name_schema, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
             publication_manager: [type: :mod_arg, required: true],
@@ -224,7 +223,6 @@ defmodule Electric.ShapeCache do
       inspector: opts.inspector,
       shape_status: opts.shape_status,
       db_pool: opts.db_pool,
-      log_producer: opts.log_producer,
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
       subscription: nil,
@@ -246,7 +244,7 @@ defmodule Electric.ShapeCache do
         {:consumers_ready, last_processed_lsn, total_recovered, total_failed_to_recover},
         state
       ) do
-    ShapeLogCollector.set_last_processed_lsn(state.log_producer, last_processed_lsn)
+    ShapeLogCollector.set_last_processed_lsn(state.stack_id, last_processed_lsn)
 
     Electric.Connection.Manager.consumers_ready(
       state.stack_id,
@@ -386,7 +384,6 @@ defmodule Electric.ShapeCache do
            storage: state.storage,
            publication_manager: state.publication_manager,
            chunk_bytes_threshold: state.chunk_bytes_threshold,
-           log_producer: state.log_producer,
            registry: state.registry,
            db_pool: state.db_pool,
            hibernate_after: state.shape_hibernate_after,

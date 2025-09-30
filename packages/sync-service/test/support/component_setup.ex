@@ -210,7 +210,6 @@ defmodule Support.ComponentSetup do
         chunk_bytes_threshold: ctx.chunk_bytes_threshold,
         db_pool: ctx.pool,
         registry: ctx.registry,
-        log_producer: ctx.shape_log_collector,
         consumer_supervisor: consumer_supervisor
       ]
       |> Keyword.merge(additional_opts)
@@ -249,13 +248,12 @@ defmodule Support.ComponentSetup do
   def with_shape_log_collector(ctx) do
     name = ShapeLogCollector.name(ctx.stack_id)
 
-    start_link_supervised!(%{
+    start_link_supervised!(
+      {ShapeLogCollector,
+       [stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]},
       id: name,
-      start:
-        {ShapeLogCollector, :start_link,
-         [[stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]]},
       restart: :temporary
-    })
+    )
 
     %{shape_log_collector: name}
   end

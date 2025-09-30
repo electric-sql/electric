@@ -292,10 +292,6 @@ defmodule Electric.StackSupervisor do
 
     storage = storage_mod_arg(config)
 
-    # This is a name of the ShapeLogCollector process
-    shape_log_collector =
-      Electric.Replication.ShapeLogCollector.name(stack_id)
-
     metadata_db_pool = Electric.Connection.Manager.admin_pool(stack_id)
 
     shape_changes_registry_name = registry_name(stack_id)
@@ -317,13 +313,15 @@ defmodule Electric.StackSupervisor do
       shape_status: shape_status,
       publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
       chunk_bytes_threshold: config.chunk_bytes_threshold,
-      log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
       registry: shape_changes_registry_name,
       shape_hibernate_after: shape_hibernate_after
     ]
 
     {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])
+
+    shape_log_collector =
+      Electric.Replication.ShapeLogCollector.name(stack_id)
 
     new_connection_manager_opts = [
       stack_id: stack_id,

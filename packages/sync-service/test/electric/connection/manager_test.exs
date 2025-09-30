@@ -55,7 +55,6 @@ defmodule Electric.Connection.ConnectionManagerTest do
                 shape_last_used_table:
                   Electric.ShapeCache.ShapeStatus.shape_last_used_table(stack_id)
               )},
-           log_producer: Electric.Replication.ShapeLogCollector.name(stack_id),
            consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
            storage: ctx.storage,
            publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},

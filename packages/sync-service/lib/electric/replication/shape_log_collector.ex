@@ -44,8 +44,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def set_last_processed_lsn(server, last_processed_lsn) do
-    GenServer.call(server, {:set_last_processed_lsn, last_processed_lsn})
+  def set_last_processed_lsn(term, last_processed_lsn) do
+    GenServer.call(server(term), {:set_last_processed_lsn, last_processed_lsn})
   end
 
   # use `GenServer.call/2` here to make the event processing synchronous.
@@ -75,12 +75,12 @@ defmodule Electric.Replication.ShapeLogCollector do
     :ok = GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
-  def subscribe(server, shape_handle, shape) do
-    GenServer.call(server, {:subscribe, shape_handle, shape})
+  def subscribe(term, shape_handle, shape) do
+    GenServer.call(server(term), {:subscribe, shape_handle, shape})
   end
 
-  def notify_flushed(server, shape_handle, offset) do
-    GenServer.cast(server, {:writer_flushed, shape_handle, offset})
+  def notify_flushed(term, shape_handle, offset) do
+    GenServer.cast(server(term), {:writer_flushed, shape_handle, offset})
   end
 
   def init(opts) do
@@ -398,4 +398,8 @@ defmodule Electric.Replication.ShapeLogCollector do
        do: %{state | last_processed_lsn: lsn}
 
   defp put_last_processed_lsn(state, _lsn), do: state
+
+  defp server(stack_id) when is_binary(stack_id), do: name(stack_id)
+  defp server({:via, _, _} = name), do: name
+  defp server(pid) when is_pid(pid), do: pid
 end
