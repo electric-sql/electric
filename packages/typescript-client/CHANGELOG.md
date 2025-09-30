@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.11
+
+### Patch Changes
+
+- aa48e04: feat: add a `snapshot-end` control message to the end of snapshots
+
 ## 1.0.10
 
 ### Patch Changes

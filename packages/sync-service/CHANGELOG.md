@@ -1,5 +1,35 @@
 # @core/sync-service
 
+## 1.1.12
+
+### Patch Changes
+
+- e86543b: Simplify `PublicationManager` to not require a full shape to remove existing tracked shape.
+- 8b9aab4: Optimize shape counting by not copying all shapes from ETS into process memory.
+- aa48e04: feat: add a `snapshot-end` control message to the end of snapshots
+- bb34680: Expire shapes in batches of a fixed size
+- a006938: Parse pooler login errors as retryable errors and `econnrefused` as retryable.
+- 698731d: feat: remove a stuck lock if underlying slot is not active
+- ef7d788: Optimise removing a shape from where clause filter indexes
+- 334b17a: Correctly wrap filesystem errors from the snapshot process
+- 12c55f9: Return a descriptive error to the shape request when Electric doesn't have read access to the database table.
+- 0b88cea: Spead up shape counting and LRU shape expiration by storing last access timestamps in a separate ETS table.
+- c9846f6: Remove unncecessary `refresh_publication` API from `PublicationManager`.
+- cf68fe5: Improve startup and shutdown times for shape processes by partitioning DynamicConsumerSupervisor.
+- 71306c2: Include memory usage statistics in otel export
+- d4ed4cf: Introduce `AsyncDeleter` service for fast batch deletes, done by renaming deprecated files into a temporary directory and batch deleting them in the background.
+- da7a456: Fix race condition between removing and adding new shapes concurrently that led to crashes.
+- b89ac5a: Faster purging of all shape data in case of timeline or replication slot change.
+- 44adea5: Add telemetry to profile shape unsubscription
+- 5ca7997: Set full sentry metadata everywhere
+- 370ad3f: Move shape deletion operations into separate process to avoid blocking `ShapeCache` on critical path.
+- 4abcb3e: Simplify `Connection.Manager` restart logic to restart whole stack in case of replication client failure.
+- a3cef79: Fix premature replies to concurrent publication updates for same shape handle.
+- 596c7df: Decouple `PublicationManager` initialisation from `ShapeCache`, simplifying startup procedure.
+- 98ce149: Handle pool timeouts and disconnections in the DB Inspector more gracefully
+- 4a832d0: Handle connection unavailable in inspector when validating requests
+- d028070: feat: add timeout to first data on snapshots to avoid long-running queries
+
 ## 1.1.11
 
 ### Patch Changes
