@@ -83,7 +83,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     GenServer.call(name(stack_id), {:handle_writer_termination, shape_handle, pid})
   end
 
-  def handle_writer_termination(stack_id, shape_handle, reason, pid), do: :ok
+  def handle_writer_termination(_stack_id, _shape_handle, _reason, _pid), do: :ok
 
   def purge_shape(stack_id, shape_handle) do
     GenServer.call(name(stack_id), {:purge_shape, shape_handle})
