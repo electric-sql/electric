@@ -187,8 +187,9 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       %{stack_id: stack_id} = state
 
       case state.writers do
-        %{^pid => _handle} ->
-          {:reply, {:error, "process is already registered"}, state}
+        %{^pid => ^shape_handle} ->
+          # make this idempotent
+          {:reply, :ok, state}
 
         writers ->
           state = %{state | writers: Map.put(writers, pid, shape_handle)}
