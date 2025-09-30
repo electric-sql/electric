@@ -38,13 +38,13 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @doc false
   @spec register_reader(stack_id(), shape_handle(), pid()) :: :ok
   def register_reader(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:register_reader, shape_handle, pid}, :infinity)
+    GenServer.call(name(stack_id), {:register_reader, shape_handle, pid})
   end
 
   @doc false
   @spec unregister_reader(stack_id(), shape_handle(), pid()) :: :ok
   def unregister_reader(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid}, :infinity)
+    GenServer.call(name(stack_id), {:unregister_reader, shape_handle, pid})
   end
 
   @doc false
