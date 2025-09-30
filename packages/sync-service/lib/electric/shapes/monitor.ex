@@ -66,6 +66,16 @@ defmodule Electric.Shapes.Monitor do
     to: RefCounter
 
   @doc """
+  Called from a consumer's terminate/2 callback.
+
+  Ensures that consumers that exit with an error have their data cleaned up
+  once they've terminated.
+  """
+  @spec handle_writer_termination(stack_id(), shape_handle(), term(), pid()) :: :ok
+  defdelegate handle_writer_termination(stack_id, shape_handle, reason, pid \\ self()),
+    to: RefCounter
+
+  @doc """
   clean up the state of a non-running consumer.
   """
   @spec purge_shape(stack_id(), shape_handle()) :: :ok

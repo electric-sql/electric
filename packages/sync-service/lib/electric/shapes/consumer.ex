@@ -292,6 +292,13 @@ defmodule Electric.Shapes.Consumer do
 
   @impl GenServer
   def terminate(reason, state) do
+    :ok =
+      Electric.Shapes.Monitor.handle_writer_termination(
+        state.stack_id,
+        state.shape_handle,
+        reason
+      )
+
     Logger.debug(fn ->
       case reason do
         {error, stacktrace} when is_tuple(error) and is_list(stacktrace) ->
