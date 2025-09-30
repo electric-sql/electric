@@ -419,6 +419,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #liveCacheBuster: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
   #isUpToDate: boolean = false
+  #isMidStream: boolean = true
   #connected: boolean = false
   #shapeHandle?: string
   #mode: LogMode
@@ -432,6 +433,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
   #snapshotTracker = new SnapshotTracker()
   #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
+  #midStreamPromise?: Promise<void>
+  #midStreamPromiseResolver?: () => void
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -765,6 +768,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
     // Update isUpToDate
     if (batch.length > 0) {
+      // Set isMidStream to true when we receive any data
+      this.#isMidStream = true
+
       const lastMessage = batch[batch.length - 1]
       if (isUpToDateMessage(lastMessage)) {
         if (isSseMessage) {
@@ -778,6 +784,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
         this.#lastSyncedAt = Date.now()
         this.#isUpToDate = true
+        // Set isMidStream to false when we see an up-to-date message
+        this.#isMidStream = false
+        // Resolve the promise waiting for mid-stream to end
+        this.#midStreamPromiseResolver?.()
       }
 
       // Filter messages using snapshot tracker
@@ -972,6 +982,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#tickPromise
   }
 
+  /** Await until we're not in the middle of a stream (i.e., until we see an up-to-date message) */
+  async #waitForStreamEnd() {
+    if (!this.#isMidStream) {
+      return
+    }
+    if (this.#midStreamPromise) {
+      return this.#midStreamPromise
+    }
+    this.#midStreamPromise = new Promise((resolve) => {
+      this.#midStreamPromiseResolver = resolve
+    })
+    this.#midStreamPromise.finally(() => {
+      this.#midStreamPromise = undefined
+      this.#midStreamPromiseResolver = undefined
+    })
+    return this.#midStreamPromise
+  }
+
   /**
    * Refreshes the shape stream.
    * This preemptively aborts any ongoing long poll and reconnects without
@@ -1044,6 +1072,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#liveCacheBuster = ``
     this.#shapeHandle = handle
     this.#isUpToDate = false
+    this.#isMidStream = true
     this.#connected = false
     this.#schema = undefined
     this.#activeSnapshotRequests = 0
@@ -1074,6 +1103,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
     // We shouldn't be getting a snapshot on a shape that's not started
     if (!this.#started) await this.#start()
+
+    // Wait until we're not mid-stream before pausing
+    // This ensures we don't pause in the middle of a transaction
+    await this.#waitForStreamEnd()
 
     // Pause the stream if this is the first snapshot request
     this.#activeSnapshotRequests++

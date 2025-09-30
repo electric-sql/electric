@@ -1608,6 +1608,85 @@ describe.for(fetchAndSse)(
       unsub()
     })
 
+    it(`should wait for up-to-date message before pausing for snapshot`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `A` }, { title: `B` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        mode: `changes_only`,
+        experimentalLiveSse,
+        signal: aborter.signal,
+      })
+
+      const allMessages: Array<Message<Row>> = []
+      const unsub = shapeStream.subscribe((msgs) => {
+        allMessages.push(...msgs)
+      })
+
+      await vi.waitFor(() => {
+        expect(
+          allMessages.some(
+            (m) => isControlMessage(m) && m.headers.control === `up-to-date`
+          )
+        ).toBe(true)
+      })
+
+      await shapeStream.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+
+      // Find all snapshot-end messages - there should be at least 2:
+      // one from the initial sync and one from the snapshot request
+      const snapshotEndIndices = allMessages
+        .map((m, i) => ({ m, i }))
+        .filter(
+          ({ m }) => isControlMessage(m) && m.headers.control === `snapshot-end`
+        )
+        .map(({ i }) => i)
+
+      expect(snapshotEndIndices.length).toBe(2)
+
+      // The snapshot-end from the snapshot request should have a snapshot_mark
+      const snapshotRequestEndIndex = allMessages.findIndex(
+        (m) =>
+          isControlMessage(m) &&
+          m.headers.control === `snapshot-end` &&
+          `snapshot_mark` in m.headers
+      )
+
+      // Find the up-to-date message from the initial sync
+      const upToDateIndex = allMessages.findIndex(
+        (m) => isControlMessage(m) && m.headers.control === `up-to-date`
+      )
+
+      // Find the first insert from the snapshot (has snapshot_mark)
+      const firstSnapshotInsertIndex = allMessages.findIndex(
+        (m) => isChangeMessage(m) && `snapshot_mark` in m.headers
+      )
+
+      // Verify that:
+      // 1. We have an up-to-date message before the snapshot data
+      // 2. The snapshot inserts come after the up-to-date
+      // 3. The snapshot-end marker comes after the snapshot inserts
+      expect(upToDateIndex).toBeGreaterThan(-1)
+      expect(firstSnapshotInsertIndex).toBeGreaterThan(-1)
+      expect(snapshotRequestEndIndex).toBeGreaterThan(-1)
+
+      // The up-to-date should come before the snapshot data
+      expect(upToDateIndex).toBeLessThan(firstSnapshotInsertIndex)
+
+      // The snapshot-end should come after the snapshot data
+      expect(snapshotRequestEndIndex).toBeGreaterThan(firstSnapshotInsertIndex)
+
+      unsub()
+    })
+
     it(`should observe update committed after snapshot taken in parallel transaction`, async ({
       issuesTableUrl,
       issuesTableSql,
