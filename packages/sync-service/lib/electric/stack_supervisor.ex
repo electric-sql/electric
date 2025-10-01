@@ -231,15 +231,6 @@ defmodule Electric.StackSupervisor do
          stack_id: stack_id, server: Electric.Replication.PublicationManager.name(stack_id)}
       )
 
-    inspector =
-      Access.get(
-        opts,
-        :inspector,
-        {Electric.Postgres.Inspector.EtsInspector,
-         stack_id: stack_id,
-         server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: stack_id)}
-      )
-
     persistent_kv = Access.fetch!(opts, :persistent_kv)
 
     [
@@ -247,29 +238,39 @@ defmodule Electric.StackSupervisor do
       publication_manager: publication_manager,
       registry: shape_changes_registry_name,
       stack_events_registry: opts[:stack_events_registry],
-      storage: storage_mod_arg(opts),
-      inspector: inspector,
+      storage: shared_storage_opts(opts),
+      inspector: shared_inspector_opts(opts),
       stack_id: stack_id,
       persistent_kv: persistent_kv,
       feature_flags: Map.get(opts, :feature_flags, [])
     ]
   end
 
-  @doc false
-  def storage_mod_arg(%{stack_id: stack_id, storage: {mod, arg}} = opts) do
-    arg =
-      arg
-      |> put_in([:stack_id], stack_id)
-      |> put_in(
-        [:chunk_bytes_threshold],
-        opts[:chunk_bytes_threshold] || LogChunker.default_chunk_size_threshold()
-      )
-
-    Electric.ShapeCache.Storage.shared_opts({mod, arg})
-  end
-
   def registry_name(stack_id) do
     :"#{inspect(Registry.ShapeChanges)}:#{stack_id}"
+  end
+
+  defp shared_storage_opts(config) do
+    {mod, storage_opts} = config.storage
+
+    storage_opts =
+      storage_opts
+      |> Keyword.put(:stack_id, config.stack_id)
+      |> Keyword.put(:chunk_bytes_threshold, config[:chunk_bytes_threshold])
+
+    Electric.ShapeCache.Storage.shared_opts({mod, storage_opts})
+  end
+
+  defp shared_inspector_opts(config) do
+    Map.get_lazy(
+      config,
+      :inspector,
+      fn ->
+        {Electric.Postgres.Inspector.EtsInspector,
+         stack_id: config.stack_id,
+         server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: config.stack_id)}
+      end
+    )
   end
 
   @impl true
@@ -280,16 +281,8 @@ defmodule Electric.StackSupervisor do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    inspector =
-      Access.get(
-        config,
-        :inspector,
-        {Electric.Postgres.Inspector.EtsInspector,
-         stack_id: stack_id,
-         server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: stack_id)}
-      )
-
-    storage = storage_mod_arg(config)
+    storage = shared_storage_opts(config)
+    inspector = shared_inspector_opts(config)
 
     metadata_db_pool = Electric.Connection.Manager.admin_pool(stack_id)
 
@@ -349,7 +342,6 @@ defmodule Electric.StackSupervisor do
            config.telemetry_opts ++
              [
                stack_id: stack_id,
-               storage: config.storage,
                slot_name: config.replication_opts[:slot_name]
              ]}
         ]
@@ -361,6 +353,7 @@ defmodule Electric.StackSupervisor do
       telemetry_children ++
         [
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
+          {Electric.StackConfig, stack_id: stack_id, storage: storage},
           {Electric.AsyncDeleter,
            stack_id: stack_id,
            storage_dir: Access.fetch!(config, :storage_dir),
