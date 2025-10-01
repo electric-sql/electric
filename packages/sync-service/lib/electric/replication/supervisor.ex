@@ -59,9 +59,19 @@ defmodule Electric.Replication.Supervisor do
       consumer_supervisor,
       shape_cache,
       expiry_manager,
-      schema_reconciler
+      schema_reconciler,
+      canary_spec(stack_id)
     ]
 
     Supervisor.init(children, strategy: :one_for_all)
+  end
+
+  defp canary_spec(stack_id) do
+    {
+      Agent,
+      fn ->
+        Electric.StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      end
+    }
   end
 end

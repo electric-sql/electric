@@ -9,7 +9,8 @@ defmodule Electric.StatusMonitor do
     :replication_client_ready,
     :admin_connection_pool_ready,
     :snapshot_connection_pool_ready,
-    :shape_log_collector_ready
+    :shape_log_collector_ready,
+    :supervisor_processes_ready
   ]
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
@@ -37,7 +38,8 @@ defmodule Electric.StatusMonitor do
         replication_client_ready: {true, _},
         admin_connection_pool_ready: {true, _},
         snapshot_connection_pool_ready: {true, _},
-        shape_log_collector_ready: {true, _}
+        shape_log_collector_ready: {true, _},
+        supervisor_processes_ready: {true, _}
       } ->
         :active
 
@@ -64,6 +66,10 @@ defmodule Electric.StatusMonitor do
 
   def mark_shape_log_collector_ready(stack_id, collector_pid) do
     mark_condition_met(stack_id, :shape_log_collector_ready, collector_pid)
+  end
+
+  def mark_supervisor_processes_ready(stack_id, canary_pid) do
+    mark_condition_met(stack_id, :supervisor_processes_ready, canary_pid)
   end
 
   def mark_pg_lock_as_errored(stack_id, message) when is_binary(message) do
@@ -244,6 +250,9 @@ defmodule Electric.StatusMonitor do
 
       %{shape_log_collector_ready: {false, details}} ->
         "Timeout waiting for shape data to be loaded" <> format_details(details)
+
+      %{supervisor_processes_ready: {false, details}} ->
+        "Timeout waiting for stack restart" <> format_details(details)
     end
   end
 
