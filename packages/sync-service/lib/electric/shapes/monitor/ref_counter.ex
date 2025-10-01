@@ -194,7 +194,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
           # make this idempotent
           {:reply, :ok, state}
 
-        writers ->
+        _writers ->
           state = monitor_consumer_processes(state, pid, supervisor_pid, shape_handle)
 
           state =
