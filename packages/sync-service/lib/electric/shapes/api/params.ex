@@ -202,10 +202,12 @@ defmodule Electric.Shapes.Api.Params do
   def validate_handle_with_offset(%Ecto.Changeset{} = changeset) do
     offset = fetch_change!(changeset, :offset)
 
-    if offset == LogOffset.before_all() do
-      delete_change(changeset, :handle)
-    else
-      validate_required(changeset, [:handle], message: "can't be blank when offset != -1")
+    cond do
+      offset in [LogOffset.before_all(), :now] ->
+        delete_change(changeset, :handle)
+
+      true ->
+        validate_required(changeset, [:handle], message: "can't be blank when offset != -1")
     end
   end
 
@@ -214,10 +216,17 @@ defmodule Electric.Shapes.Api.Params do
   def validate_live_with_offset(%Ecto.Changeset{} = changeset) do
     offset = fetch_change!(changeset, :offset)
 
-    if offset != LogOffset.before_all() do
-      changeset
-    else
-      validate_exclusion(changeset, :live, [true], message: "can't be true when offset == -1")
+    cond do
+      offset == LogOffset.before_all() ->
+        validate_exclusion(changeset, :live, [true], message: "can't be true when offset == -1")
+
+      offset == :now ->
+        validate_exclusion(changeset, :live, [true],
+          message: "can't be true when offset is 'now'"
+        )
+
+      true ->
+        changeset
     end
   end
 

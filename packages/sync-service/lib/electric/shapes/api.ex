@@ -244,6 +244,15 @@ defmodule Electric.Shapes.Api do
     Api.Options.call(conn)
   end
 
+  defp seek(%Request{params: %{offset: :now}} = request) do
+    # For "now" offset, return immediately with up-to-date message
+    # and the last_offset from the shape
+    request
+    |> determine_global_last_seen_lsn()
+    |> use_last_offset_as_chunk_end()
+    |> set_response_offset_for_now()
+  end
+
   defp seek(%Request{} = request) do
     request
     |> register_shape_subscriber()
@@ -251,6 +260,10 @@ defmodule Electric.Shapes.Api do
     |> determine_global_last_seen_lsn()
     |> determine_log_chunk_offset()
     |> determine_up_to_date()
+  end
+
+  defp set_response_offset_for_now(%Request{} = request) do
+    Request.update_response(request, &%{&1 | up_to_date: true, offset: request.last_offset})
   end
 
   defp load_shape_info(%Request{} = request) do
@@ -284,6 +297,20 @@ defmodule Electric.Shapes.Api do
     api
     |> Shapes.get_or_create_shape_handle(shape)
     |> handle_shape_info(request)
+  end
+
+  # Handle "now" offset - it's never out of bounds
+  defp handle_shape_info(
+         {active_shape_handle, last_offset},
+         %Request{params: %{offset: :now, handle: shape_handle}} = request
+       )
+       when is_nil(shape_handle) or shape_handle == active_shape_handle do
+    # We found a shape that matches the shape definition
+    {:ok,
+     Request.update_response(
+       %{request | handle: active_shape_handle, last_offset: last_offset},
+       &%{&1 | handle: active_shape_handle}
+     )}
   end
 
   defp handle_shape_info(
@@ -410,6 +437,11 @@ defmodule Electric.Shapes.Api do
       %{request | chunk_end_offset: chunk_end_offset},
       &%{&1 | offset: chunk_end_offset}
     )
+  end
+
+  # For "now" requests, use the last_offset directly as the chunk_end_offset
+  defp use_last_offset_as_chunk_end(%Request{} = request) do
+    %{request | chunk_end_offset: request.last_offset}
   end
 
   defp determine_up_to_date(%Request{} = request) do
@@ -548,6 +580,18 @@ defmodule Electric.Shapes.Api do
           message:
             "Request.serve/1 must be called from the same process that called Request.validate/2"
     end
+  end
+
+  defp do_serve_shape_log(%Request{params: %{offset: :now}} = request) do
+    # For "now" offset, return an immediate up-to-date response with no log data
+    %{global_last_seen_lsn: global_last_seen_lsn} = request
+
+    %Response{
+      request.response
+      | status: 200,
+        body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)]),
+        finalized?: true
+    }
   end
 
   defp do_serve_shape_log(%Request{} = request) do

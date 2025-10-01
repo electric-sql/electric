@@ -1203,6 +1203,7 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (
     options.offset !== undefined &&
     options.offset !== `-1` &&
+    options.offset !== `now` &&
     !options.handle
   ) {
     throw new MissingShapeHandleError()

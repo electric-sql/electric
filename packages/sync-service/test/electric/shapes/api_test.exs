@@ -444,6 +444,67 @@ defmodule Electric.Shapes.ApiTest do
       assert ["max-age=0, private, must-revalidate"] =
                Plug.Conn.get_resp_header(response, "cache-control")
     end
+
+    test "returns error when offset is 'now' with live=true", ctx do
+      # Note: validation fails before we need to call get_shape
+      assert {:error, %{status: 400} = response} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "now",
+                   handle: @test_shape_handle,
+                   live: "true"
+                 }
+               )
+
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 live: ["can't be true when offset is 'now'"]
+               }
+             }
+    end
+
+    test "accepts 'now' offset with valid handle", ctx do
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, opts -> {@test_shape_handle, opts} end)
+
+      assert {:ok, %{handle: @test_shape_handle}} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "now",
+                   handle: @test_shape_handle
+                 }
+               )
+    end
+
+    test "accepts 'now' offset without a handle", ctx do
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @first_offset}
+      end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+
+      assert {:ok, %{response: %{handle: @test_shape_handle, offset: @first_offset}}} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "now"
+                 }
+               )
+    end
   end
 
   describe "validate_for_delete/2" do
@@ -648,6 +709,40 @@ defmodule Electric.Shapes.ApiTest do
       assert response.shape_definition == @test_shape
       assert response.offset == next_next_offset
       refute response.up_to_date
+    end
+
+    test "returns immediate up-to-date message when offset is 'now'", ctx do
+      Mock.ShapeCache
+      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
+        {@test_shape_handle, @test_offset}
+      end)
+      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
+      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+
+      Mock.Storage
+      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "now",
+                   handle: @test_shape_handle
+                 }
+               )
+
+      assert response = Api.serve_shape_response(request)
+      assert response.status == 200
+      assert response.up_to_date
+
+      # Should return only an up-to-date control message
+      body = response_body(response)
+      assert [%{headers: %{control: "up-to-date"}}] = body
+
+      # Should have the latest offset from the shape
+      assert response.offset == @test_offset
+      assert response.handle == @test_shape_handle
     end
 
     test "handles live updates", ctx do

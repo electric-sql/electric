@@ -23,7 +23,11 @@ export type GetExtensions<T> = [T] extends [Row<never>]
     ? E
     : never
 
-export type Offset = `-1` | `${number}_${number}` | `${bigint}_${number}`
+export type Offset =
+  | `-1`
+  | `now`
+  | `${number}_${number}`
+  | `${bigint}_${number}`
 
 /** Information about transaction visibility for a snapshot. All fields are encoded as strings, but should be treated as uint64. */
 export type PostgresSnapshot = {

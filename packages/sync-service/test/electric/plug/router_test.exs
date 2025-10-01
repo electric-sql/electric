@@ -1893,6 +1893,40 @@ defmodule Electric.Plug.RouterTest do
                })
                |> Router.call(opts)
     end
+
+    test "now offset returns an up-to-date response regardless of existing data", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      req = make_shape_req("items")
+
+      assert {req, 200, _} = shape_req(req, opts)
+
+      task = live_shape_req(req, opts)
+
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO items (id, value) VALUES (gen_random_uuid(), 'test')",
+        []
+      )
+
+      assert {r1, 200, _} = Task.await(task)
+
+      # If we do a direct request with now offset, we shouldn't get any data, but correct offset in the header
+      assert {r2, 200, [%{"headers" => %{"control" => "up-to-date"}}]} =
+               shape_req(req, opts, offset: "now")
+
+      assert r1.offset == r2.offset
+    end
+
+    test "now offset returns an up-to-date response with 0_inf offset when shape is new", %{
+      opts: opts
+    } do
+      req = make_shape_req("items", offset: "now")
+
+      assert {req, 200, [%{"headers" => %{"control" => "up-to-date"}}]} = shape_req(req, opts)
+      assert req.offset == "0_inf"
+    end
   end
 
   describe "/v1/shapes - subqueries" do
@@ -2377,7 +2411,9 @@ defmodule Electric.Plug.RouterTest do
     test "GET with log=changes_only doesn't return any data initial but lets all updates through",
          ctx do
       req = make_shape_req("items", log: "changes_only")
-      assert {req, 200, []} = shape_req(req, ctx.opts)
+
+      assert {req, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} =
+               shape_req(req, ctx.opts)
 
       task = live_shape_req(req, ctx.opts)
 
@@ -2603,7 +2639,7 @@ defmodule Electric.Plug.RouterTest do
     |> Jason.decode!()
   end
 
-  defp make_shape_req(table, opts) do
+  defp make_shape_req(table, opts \\ []) do
     opts
     |> Map.new()
     |> Map.put(:table, table)

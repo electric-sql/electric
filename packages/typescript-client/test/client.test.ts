@@ -974,6 +974,55 @@ describe.for(fetchAndSse)(
       expect(await resolveValue(mockAsyncParamFn())).toBe(`test-value`)
     })
 
+    it(`should support offset=now to skip historical data`, async ({
+      issuesTableUrl,
+      insertIssues,
+      waitForIssues,
+      aborter,
+    }) => {
+      // Create initial data
+      const [id1] = await insertIssues({ title: `historical data` })
+      await waitForIssues({ numChangesExpected: 1 })
+
+      // Create a shape with offset=now
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        offset: `now`,
+        signal: aborter.signal,
+        experimentalLiveSse,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Wait for initial sync to complete
+      await shape.rows
+
+      // Verify initial state is empty despite existing data
+      expect(shape.currentRows).toEqual([])
+
+      // Now insert new data after the stream has started
+      const [id2] = await insertIssues({ title: `new data` })
+
+      // Wait for the new data to arrive
+      await vi.waitFor(
+        () => {
+          expect(shape.currentRows).toEqual([
+            {
+              id: id2,
+              title: `new data`,
+              priority: 10,
+            },
+          ])
+        },
+        { timeout: 3000 }
+      )
+
+      // Verify historical data was not included
+      expect(shape.currentRows.find((row) => row.id === id1)).toBeUndefined()
+    })
+
     it(`should support forceDisconnectAndRefresh() to force a sync`, async ({
       issuesTableUrl,
       insertIssues,
