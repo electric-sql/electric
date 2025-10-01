@@ -112,6 +112,43 @@ defmodule Electric.Replication.Eval.Parser do
 
   @prefix_length String.length("SELECT 1 WHERE ")
 
+  def validate_order_by(order_by, columns) do
+    case PgQuery.parse("SELECT 1 ORDER BY #{order_by}") do
+      {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]}} ->
+        do_validate_order_by(stmt, columns)
+
+      {:ok, _} ->
+        {:error, "Unexpected `;` in order by"}
+
+      {:error, %{cursorpos: loc, message: reason}} ->
+        {:error, "At location #{loc}: #{reason}"}
+    end
+  end
+
+  defp do_validate_order_by(select_stmt, columns) do
+    with {:ok, sort_clause} <- extract_clause(select_stmt, :sort_clause),
+         {:ok, _} <-
+           Walker.reduce(
+             %Array{elements: sort_clause},
+             &check_valid_refs/3,
+             :ok,
+             Map.new(columns, fn %{name: name} -> {[name], :unknown} end)
+           ) do
+      :ok
+    else
+      {:error, {location, reason}} ->
+        {:error, "At location #{location}: #{reason}"}
+    end
+  end
+
+  defp check_valid_refs(%PgQuery.ColumnRef{} = ref, _, refs) do
+    with {:ok, %Ref{}} <- query_to_ast(ref, %{refs: refs}) do
+      {:ok, :ok}
+    end
+  end
+
+  defp check_valid_refs(_, _, _), do: {:ok, :ok}
+
   def extract_subqueries(ast) do
     Walker.reduce(
       ast,
@@ -278,7 +315,7 @@ defmodule Electric.Replication.Eval.Parser do
   defp get_where_internal_ast(query) do
     case PgQuery.parse("SELECT 1 WHERE #{query}") do
       {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]}} ->
-        extract_where_clause(stmt)
+        extract_clause(stmt, :where_clause)
 
       {:ok, %{stmts: _}} ->
         {:error, ~s'unescaped ";" causing statement split'}
@@ -288,14 +325,30 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp extract_where_clause(stmt) do
-    extra_suffixes =
+  @empty_list_clauses [
+    :distinct_clause,
+    :group_clause,
+    :window_clause,
+    :sort_clause,
+    :locking_clause,
+    :from_clause
+  ]
+  @nil_clauses [:having_clause, :limit_clause, :with_clause, :where_clause]
+  @all_clauses @empty_list_clauses ++ @nil_clauses
+
+  defp extract_clause(stmt, clause) when clause in @all_clauses do
+    empty_list_extra_suffixes =
       stmt
-      |> Map.take([:from_clause, :window_clause, :group_clause, :sort_clause, :locking_clause])
+      |> Map.take(@empty_list_clauses -- [clause])
       |> Enum.find(fn {_, value} -> value != [] end)
 
-    if is_nil(extra_suffixes) do
-      {:ok, stmt.where_clause}
+    nil_extra_suffixes =
+      stmt
+      |> Map.take(@nil_clauses -- [clause])
+      |> Enum.find(fn {_, value} -> not is_nil(value) end)
+
+    if is_nil(empty_list_extra_suffixes) and is_nil(nil_extra_suffixes) do
+      {:ok, Map.fetch!(stmt, clause)}
     else
       {:error, "malformed query ending with SQL clauses"}
     end

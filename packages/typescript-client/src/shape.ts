@@ -1,7 +1,7 @@
 import { Message, Offset, Row } from './types'
 import { isChangeMessage, isControlMessage } from './helpers'
 import { FetchError } from './error'
-import { ShapeStreamInterface } from './client'
+import { LogMode, ShapeStreamInterface } from './client'
 
 export type ShapeData<T extends Row<unknown> = Row> = Map<string, T>
 export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
@@ -52,6 +52,9 @@ export class Shape<T extends Row<unknown> = Row> {
 
   readonly #data: ShapeData<T> = new Map()
   readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
+  readonly #insertedKeys = new Set<string>()
+  readonly #requestedSubSnapshots = new Set<string>()
+  #reexecuteSnapshotsPending = false
   #status: ShapeStatus = `syncing`
   #error: FetchError | false = false
 
@@ -125,6 +128,26 @@ export class Shape<T extends Row<unknown> = Row> {
     return this.stream.isConnected()
   }
 
+  /** Current log mode of the underlying stream */
+  get mode(): LogMode {
+    return this.stream.mode
+  }
+
+  /**
+   * Request a snapshot for subset of data. Only available when mode is changes_only.
+   * Returns void; data will be emitted via the stream and processed by this Shape.
+   */
+  async requestSnapshot(
+    params: Parameters<ShapeStreamInterface<T>[`requestSnapshot`]>[0]
+  ): Promise<void> {
+    // Track this snapshot request for future re-execution on shape rotation
+    const key = JSON.stringify(params)
+    this.#requestedSubSnapshots.add(key)
+    // Ensure the stream is up-to-date so schema is available for parsing
+    await this.#awaitUpToDate()
+    await this.stream.requestSnapshot(params)
+  }
+
   subscribe(callback: ShapeChangedCallback<T>): () => void {
     const subscriptionId = Math.random()
 
@@ -149,19 +172,43 @@ export class Shape<T extends Row<unknown> = Row> {
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
         shouldNotify = this.#updateShapeStatus(`syncing`)
-        switch (message.headers.operation) {
-          case `insert`:
-            this.#data.set(message.key, message.value)
-            break
-          case `update`:
-            this.#data.set(message.key, {
-              ...this.#data.get(message.key)!,
-              ...message.value,
-            })
-            break
-          case `delete`:
-            this.#data.delete(message.key)
-            break
+        if (this.mode === `full`) {
+          switch (message.headers.operation) {
+            case `insert`:
+              this.#data.set(message.key, message.value)
+              break
+            case `update`:
+              this.#data.set(message.key, {
+                ...this.#data.get(message.key)!,
+                ...message.value,
+              })
+              break
+            case `delete`:
+              this.#data.delete(message.key)
+              break
+          }
+        } else {
+          // changes_only: only apply updates/deletes for keys for which we observed an insert
+          switch (message.headers.operation) {
+            case `insert`:
+              this.#insertedKeys.add(message.key)
+              this.#data.set(message.key, message.value)
+              break
+            case `update`:
+              if (this.#insertedKeys.has(message.key)) {
+                this.#data.set(message.key, {
+                  ...this.#data.get(message.key)!,
+                  ...message.value,
+                })
+              }
+              break
+            case `delete`:
+              if (this.#insertedKeys.has(message.key)) {
+                this.#data.delete(message.key)
+                this.#insertedKeys.delete(message.key)
+              }
+              break
+          }
         }
       }
 
@@ -169,17 +216,60 @@ export class Shape<T extends Row<unknown> = Row> {
         switch (message.headers.control) {
           case `up-to-date`:
             shouldNotify = this.#updateShapeStatus(`up-to-date`)
+            if (this.#reexecuteSnapshotsPending) {
+              this.#reexecuteSnapshotsPending = false
+              void this.#reexecuteSnapshots()
+            }
             break
           case `must-refetch`:
             this.#data.clear()
+            this.#insertedKeys.clear()
             this.#error = false
             shouldNotify = this.#updateShapeStatus(`syncing`)
+            // Flag to re-execute sub-snapshots once the new shape is up-to-date
+            this.#reexecuteSnapshotsPending = true
             break
         }
       }
     })
 
     if (shouldNotify) this.#notify()
+  }
+
+  async #reexecuteSnapshots(): Promise<void> {
+    // Wait until stream is up-to-date again (ensures schema is available)
+    await this.#awaitUpToDate()
+
+    // Re-execute all snapshots concurrently
+    await Promise.all(
+      Array.from(this.#requestedSubSnapshots).map(async (jsonParams) => {
+        try {
+          const snapshot = JSON.parse(jsonParams)
+          await this.stream.requestSnapshot(snapshot)
+        } catch (_) {
+          // Ignore and continue; errors will be surfaced via stream onError
+        }
+      })
+    )
+  }
+
+  async #awaitUpToDate(): Promise<void> {
+    if (this.stream.isUpToDate) return
+    await new Promise<void>((resolve) => {
+      const check = () => {
+        if (this.stream.isUpToDate) {
+          clearInterval(interval)
+          unsub()
+          resolve()
+        }
+      }
+      const interval = setInterval(check, 10)
+      const unsub = this.stream.subscribe(
+        () => check(),
+        () => check()
+      )
+      check()
+    })
   }
 
   #updateShapeStatus(status: ShapeStatus): boolean {

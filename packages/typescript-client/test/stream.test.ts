@@ -80,7 +80,7 @@ describe(`ShapeStream`, () => {
     )
 
     expect(requestedUrls[0].split(`?`)[1]).toEqual(
-      `columns=id&handle=potato&offset=-1&table=foo&where=a%3D1`
+      `columns=id&handle=potato&log=full&offset=-1&table=foo&where=a%3D1`
     )
   })
 
@@ -156,7 +156,7 @@ describe(`ShapeStream`, () => {
     )
 
     expect(requestedUrls[0].split(`?`)[1]).toEqual(
-      `columns=id&handle=potato&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
+      `columns=id&handle=potato&log=full&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
     )
   })
 
@@ -192,7 +192,7 @@ describe(`ShapeStream`, () => {
     )
 
     expect(requestedUrls[0].split(`?`)[1]).toEqual(
-      `columns=id&handle=potato&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
+      `columns=id&handle=potato&log=full&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
     )
   })
 })

@@ -40,6 +40,63 @@ defmodule Electric.Shapes.Api.Params do
     end
   end
 
+  defmodule SubsetParams do
+    use Ecto.Schema
+    alias Electric.Shapes.Shape
+
+    embedded_schema do
+      field(:order_by, :string)
+      field(:limit, :integer)
+      field(:offset, :integer)
+      field(:where, :string)
+      field(:params, {:map, :string}, default: %{})
+
+      field(:result, :any, virtual: true)
+    end
+
+    def changeset(struct, params, shape_definition, api) do
+      struct
+      |> cast(params, __schema__(:fields) -- [:result])
+      |> validate_number(:limit, greater_than: 0)
+      |> validate_number(:offset, greater_than_or_equal_to: 0)
+      |> validate_ordered_when_limited()
+      |> cast_subset(shape_definition, api)
+    end
+
+    defp cast_subset(%Ecto.Changeset{valid?: false} = changeset, _shape_definition, _api),
+      do: changeset
+
+    defp cast_subset(changeset, shape_definition, api) do
+      case Shape.Subset.new(shape_definition, changeset.changes, api) do
+        {:ok, subset} ->
+          put_change(changeset, :result, subset)
+
+        {:error, {field, reason}} ->
+          add_error(changeset, field, reason)
+      end
+    end
+
+    defp validate_ordered_when_limited(changeset) do
+      if changed?(changeset, :limit) or changed?(changeset, :offset) do
+        validate_required(changeset, [:order_by],
+          message: "order_by is required when limit or offset is present"
+        )
+      else
+        changeset
+      end
+    end
+
+    def extract_result({:ok, data}, from: key) do
+      {:ok,
+       Map.update!(data, key, fn
+         nil -> nil
+         %{result: result} -> result
+       end)}
+    end
+
+    def extract_result(data, _), do: data
+  end
+
   embedded_schema do
     field(:table, :string)
     field(:offset, :string)
@@ -52,6 +109,9 @@ defmodule Electric.Shapes.Api.Params do
     field(:params, {:map, :string}, default: %{})
     field(@tmp_compaction_flag, :boolean, default: false)
     field(@tmp_sse_flag, :boolean, default: false)
+    field(:log, Ecto.Enum, values: [:changes_only, :full], default: :full)
+
+    embeds_one(:subset, SubsetParams)
   end
 
   @type t() :: %__MODULE__{}
@@ -65,7 +125,9 @@ defmodule Electric.Shapes.Api.Params do
     |> validate_live_with_offset()
     |> validate_live_sse()
     |> cast_root_table(api)
+    |> cast_subset(api)
     |> apply_action(:validate)
+    |> SubsetParams.extract_result(from: :subset)
     |> convert_error(api)
   end
 
@@ -98,7 +160,7 @@ defmodule Electric.Shapes.Api.Params do
 
   defp cast_params(params) do
     %__MODULE__{}
-    |> cast(params, __schema__(:fields) -- [:shape_definition])
+    |> cast(params, __schema__(:fields) -- [:shape_definition, :subset])
   end
 
   defp convert_error({:ok, params}, _api), do: {:ok, params}
@@ -140,10 +202,12 @@ defmodule Electric.Shapes.Api.Params do
   def validate_handle_with_offset(%Ecto.Changeset{} = changeset) do
     offset = fetch_change!(changeset, :offset)
 
-    if offset == LogOffset.before_all() do
-      delete_change(changeset, :handle)
-    else
-      validate_required(changeset, [:handle], message: "can't be blank when offset != -1")
+    cond do
+      offset in [LogOffset.before_all(), :now] ->
+        delete_change(changeset, :handle)
+
+      true ->
+        validate_required(changeset, [:handle], message: "can't be blank when offset != -1")
     end
   end
 
@@ -152,10 +216,17 @@ defmodule Electric.Shapes.Api.Params do
   def validate_live_with_offset(%Ecto.Changeset{} = changeset) do
     offset = fetch_change!(changeset, :offset)
 
-    if offset != LogOffset.before_all() do
-      changeset
-    else
-      validate_exclusion(changeset, :live, [true], message: "can't be true when offset == -1")
+    cond do
+      offset == LogOffset.before_all() ->
+        validate_exclusion(changeset, :live, [true], message: "can't be true when offset == -1")
+
+      offset == :now ->
+        validate_exclusion(changeset, :live, [true],
+          message: "can't be true when offset is 'now'"
+        )
+
+      true ->
+        changeset
     end
   end
 
@@ -205,7 +276,8 @@ defmodule Electric.Shapes.Api.Params do
            replica: replica,
            inspector: api.inspector,
            feature_flags: api.feature_flags,
-           storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)}
+           storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)},
+           log_mode: fetch_field!(changeset, :log)
          ) do
       {:ok, shape} ->
         put_change(changeset, :shape_definition, shape)
@@ -229,5 +301,20 @@ defmodule Electric.Shapes.Api.Params do
       {:error, %NimbleOptions.ValidationError{message: message, key: key}} ->
         add_error(changeset, key, message)
     end
+  end
+
+  defp cast_subset(%Ecto.Changeset{valid?: false} = changeset, _api), do: changeset
+
+  defp cast_subset(%Ecto.Changeset{} = changeset, api) do
+    cast_embed(changeset, :subset,
+      with:
+        &SubsetParams.changeset(
+          &1,
+          &2,
+          Ecto.Changeset.fetch_change!(changeset, :shape_definition),
+          api
+        ),
+      required: false
+    )
   end
 end

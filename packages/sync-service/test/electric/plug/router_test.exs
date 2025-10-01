@@ -1893,6 +1893,40 @@ defmodule Electric.Plug.RouterTest do
                })
                |> Router.call(opts)
     end
+
+    test "now offset returns an up-to-date response regardless of existing data", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      req = make_shape_req("items")
+
+      assert {req, 200, _} = shape_req(req, opts)
+
+      task = live_shape_req(req, opts)
+
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO items (id, value) VALUES (gen_random_uuid(), 'test')",
+        []
+      )
+
+      assert {r1, 200, _} = Task.await(task)
+
+      # If we do a direct request with now offset, we shouldn't get any data, but correct offset in the header
+      assert {r2, 200, [%{"headers" => %{"control" => "up-to-date"}}]} =
+               shape_req(req, opts, offset: "now")
+
+      assert r1.offset == r2.offset
+    end
+
+    test "now offset returns an up-to-date response with 0_inf offset when shape is new", %{
+      opts: opts
+    } do
+      req = make_shape_req("items", offset: "now")
+
+      assert {req, 200, [%{"headers" => %{"control" => "up-to-date"}}]} = shape_req(req, opts)
+      assert req.offset == "0_inf"
+    end
   end
 
   describe "/v1/shapes - subqueries" do
@@ -2361,6 +2395,125 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
+  describe "/v1/shapes - subset snapshots" do
+    setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
+
+    setup :with_complete_stack
+
+    setup(ctx) do
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      %{opts: Router.init(build_router_opts(ctx))}
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "GET with log=changes_only doesn't return any data initial but lets all updates through",
+         ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {req, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} =
+               shape_req(req, ctx.opts)
+
+      task = live_shape_req(req, ctx.opts)
+
+      Postgrex.query!(ctx.db_conn, "UPDATE items SET value = 'test value 2'")
+
+      assert {_, 200, [%{"value" => %{"id" => _, "value" => "test value 2"}}, _]} =
+               Task.await(task)
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "GET with any parameter mentioning a subset returns a subset snapshot", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 200,
+              %{
+                "metadata" => %{
+                  "xmin" => _,
+                  "xmax" => _,
+                  "xip_list" => _,
+                  "snapshot_mark" => mark,
+                  "database_lsn" => _
+                },
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => "test value 1"},
+                    "headers" => %{"operation" => "insert", "snapshot_mark" => mark}
+                  }
+                ]
+              }} = shape_req(req, ctx.opts, subset: %{})
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')",
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')"
+         ]
+    test "subsets can be filtered", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => "test value 2"}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts,
+                 subset: %{where: "value ILIKE $1", params: %{"1" => "%2"}}
+               )
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')",
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')"
+         ]
+    test "subsets can be sorted and limited", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => _}}}} =
+               shape_req(req, ctx.opts, subset: %{limit: 1})
+
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => "test value 1"}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts, subset: %{limit: 1, order_by: "value ASC"})
+
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => "test value 2"}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts, subset: %{limit: 1, order_by: "value DESC"})
+    end
+
+    test "GET requests aren't cached", ctx do
+      req = make_shape_req("items", log: "changes_only", subset: %{}, offset: "-1")
+
+      result =
+        conn("GET", "/v1/shape", req)
+        |> Router.call(ctx.opts)
+
+      assert %{status: 200} = result
+
+      assert Plug.Conn.get_resp_header(result, "cache-control") == ["no-cache"]
+    end
+  end
+
   describe "404" do
     test "GET on invalid path returns 404", _ do
       conn =
@@ -2486,26 +2639,30 @@ defmodule Electric.Plug.RouterTest do
     |> Jason.decode!()
   end
 
-  defp make_shape_req(table, opts) do
+  defp make_shape_req(table, opts \\ []) do
     opts
     |> Map.new()
     |> Map.put(:table, table)
   end
 
-  defp shape_req(base, router_opts, opts \\ []) do
-    if Keyword.has_key?(opts, :offset), do: Map.put(base, :offset, opts[:offset]), else: base
-
+  defp shape_req(orig_base, router_opts, opts \\ []) do
     base =
-      base
+      orig_base
       |> Map.put_new(:offset, "-1")
       |> Map.put_new(:live, false)
+      |> Map.merge(Map.new(opts))
 
     result =
       conn("GET", "/v1/shape", base)
       |> Router.call(router_opts)
 
-    case result.status do
-      200 ->
+    case {result.status, Plug.Conn.get_resp_header(result, "electric-snapshot")} do
+      {200, ["true"]} ->
+        base
+        |> Map.put(:handle, get_resp_shape_handle(result))
+        |> then(&{&1, result.status, Jason.decode!(result.resp_body)})
+
+      {200, _} ->
         base
         |> Map.put(:handle, get_resp_shape_handle(result))
         |> Map.put(:offset, get_resp_last_offset(result))

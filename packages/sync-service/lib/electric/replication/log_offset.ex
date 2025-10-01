@@ -272,6 +272,9 @@ defmodule Electric.Replication.LogOffset do
       iex> from_string("-1")
       {:ok, before_all()}
 
+      iex> from_string("now")
+      {:ok, :now}
+
       iex> from_string("0_0")
       {:ok, %LogOffset{tx_offset: 0, op_offset: 0}}
 
@@ -296,19 +299,24 @@ defmodule Electric.Replication.LogOffset do
       iex> from_string("10_32.1")
       {:error, "has invalid format"}
   """
-  @spec from_string(String.t()) :: {:ok, t} | {:error, String.t()}
+  @spec from_string(String.t()) :: {:ok, t | :now} | {:error, String.t()}
   def from_string(str) when is_binary(str) do
-    if str == "-1" do
-      {:ok, before_all()}
-    else
-      with [tx_offset_str, op_offset_str] <- String.split(str, "_"),
-           {tx_offset, ""} <- Integer.parse(tx_offset_str),
-           {op_offset, ""} <- parse_int_or_inf(op_offset_str),
-           offset <- new(tx_offset, op_offset) do
-        {:ok, offset}
-      else
-        _ -> {:error, "has invalid format"}
-      end
+    cond do
+      str == "-1" ->
+        {:ok, before_all()}
+
+      str == "now" ->
+        {:ok, :now}
+
+      true ->
+        with [tx_offset_str, op_offset_str] <- String.split(str, "_"),
+             {tx_offset, ""} <- Integer.parse(tx_offset_str),
+             {op_offset, ""} <- parse_int_or_inf(op_offset_str),
+             offset <- new(tx_offset, op_offset) do
+          {:ok, offset}
+        else
+          _ -> {:error, "has invalid format"}
+        end
     end
   end
 

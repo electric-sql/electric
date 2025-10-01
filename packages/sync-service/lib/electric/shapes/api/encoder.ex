@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Api.Encoder do
   @callback message(term()) :: Enum.t()
   @callback log(term()) :: Enum.t()
+  @callback subset(term()) :: Enum.t()
 
   def validate!(impl) do
     case impl do
@@ -32,6 +33,25 @@ defmodule Electric.Shapes.Api.Encoder.JSON do
   # the log is streamed from storage as a stream of json-encoded messages
   def log(item_stream) do
     item_stream |> Stream.map(&ensure_json/1) |> to_json_stream()
+  end
+
+  @impl Electric.Shapes.Api.Encoder
+  def subset({metadata, item_stream}) do
+    metadata =
+      metadata
+      |> Map.update!(:xmin, &to_string/1)
+      |> Map.update!(:xmax, &to_string/1)
+      |> Map.update!(:xip_list, &Enum.map(&1, fn xid -> to_string(xid) end))
+
+    Stream.concat([
+      [
+        ~s|{"metadata":|,
+        Jason.encode_to_iodata!(metadata),
+        ~s|, "data": |
+      ],
+      to_json_stream(item_stream),
+      [~s|}|]
+    ])
   end
 
   defp ensure_json(json) when is_binary(json) do
@@ -77,6 +97,9 @@ defmodule Electric.Shapes.Api.Encoder.SSE do
     ["data: ", ensure_json(message), "\n\n"]
   end
 
+  @impl Electric.Shapes.Api.Encoder
+  def subset(_), do: raise("Subset encoding not supported for SSE")
+
   defp ensure_json(json) when is_binary(json) do
     json
   end
@@ -102,6 +125,11 @@ defmodule Electric.Shapes.Api.Encoder.Term do
   # the log is streamed from storage as a stream of json-encoded messages
   def log(item_stream) do
     Stream.map(item_stream, &maybe_decode_json!/1)
+  end
+
+  @impl Electric.Shapes.Api.Encoder
+  def subset({metadata, item_stream}) do
+    {metadata, Stream.map(item_stream, &maybe_decode_json!/1)}
   end
 
   defp maybe_decode_json!(json) when is_binary(json) do
