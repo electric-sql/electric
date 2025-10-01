@@ -69,7 +69,7 @@ Once connected you should see your source details akin to the screenshot below.
 
 <img alt="Source details in cloud dashboard" src="/static/img/docs/cloud/source-details.png" />
 
-It shouldn't take long before the source `state` becomes `active` and you're ready to make your first API request.
+When the source `state` is `active`, you're ready to make your first API request.
 
 ### Making API Requests
 
@@ -160,13 +160,11 @@ export async function GET(req: Request) {
 
 ### Pricing
 
-Electric Cloud is currently free in public BETA. We'll be launching low-cost, usage-based pricing soon (by the end of Q3 2025).
-
-Electric Cloud will always provide a generous free tier, so many apps will roll over with zero cost. If your plan is to use Electric in a larger app (more than 1,000 monthly active users) please reach out to make sure we can fully support you and to get a sense of what the future pricing will be like.
+Electric Cloud has a generous free tier and paid plans with usage limits and other features. See the [Pricing page](/pricing) for more details.
 
 ### Support
 
-Let us know if you have any questions. We'll be very happy to help. You can ask questions on [Discord](https://discord.electric-sql.com) or email us directly at [support@electric-sql.com](mailto:support@electric-sql.com).
+Let us know if you have any questions. We'll be very happy to help. You can ask questions on [Discord](https://discord.electric-sql.com) or email us directly at [sales@electric-sql.com](mailto:sales@electric-sql.com).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">

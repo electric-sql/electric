@@ -191,8 +191,7 @@
         License.
         <span class="no-wrap">
           © {{ new Date().getFullYear() }}
-          <a href="https://find-and-update.company-information.service.gov.uk/company/13573370" target="_blank">
-            Electric DB Limited</a>.
+          Electric DB Inc.
         </span>
       </p>
     </div>

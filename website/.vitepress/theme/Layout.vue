@@ -41,12 +41,13 @@ const { Layout } = DefaultTheme
 
 const { frontmatter } = useData()
 const { hasSidebar } = useSidebar()
+const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
 </script>
 
 <template>
   <Layout :class="!hasSidebar ? 'nav-relative' : ''">
     <template #layout-top>
-      <template v-if="!hasSidebar">
+      <template v-if="shouldShowReleasebanner">
         <ReleaseBanner />
       </template>
     </template>
