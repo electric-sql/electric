@@ -29,6 +29,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
     end
@@ -39,6 +40,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
@@ -48,6 +50,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
@@ -58,6 +61,18 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+      assert StatusMonitor.status(stack_id) == :starting
+    end
+
+    test "when canary process not ready returns :starting", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id})
+      StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :starting
     end
@@ -87,6 +102,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == :active
 
@@ -117,6 +133,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
 
       refute_receive :active, 20
       assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
