@@ -86,8 +86,6 @@ defmodule Electric.Shapes.ConsumerSupervisor do
 
     shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
 
-    shape_config = %{config | storage: shape_storage}
-
     children = [
       {Electric.ShapeCache.Storage, shape_storage},
       {Electric.Shapes.Consumer.Snapshotter,
@@ -102,7 +100,17 @@ defmodule Electric.Shapes.ConsumerSupervisor do
          stack_id: config.stack_id,
          storage: shape_storage
        }},
-      {Electric.Shapes.Consumer, shape_config}
+      {Electric.Shapes.Consumer,
+       %{
+         hibernate_after: config.hibernate_after,
+         inspector: config.inspector,
+         registry: config.registry,
+         shape: config.shape,
+         shape_handle: shape_handle,
+         shape_status_mod: Map.get(config, :shape_status_mod),
+         stack_id: config.stack_id,
+         storage: shape_storage
+       }}
     ]
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
