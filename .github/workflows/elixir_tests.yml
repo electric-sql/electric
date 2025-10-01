@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        postgres_version: [14, 15, 17]
+        postgres_version: [14, 15, 17, 18]
     env:
       MIX_ENV: test
       POSTGRES_VERSION: "${{ matrix.postgres_version }}0000"
