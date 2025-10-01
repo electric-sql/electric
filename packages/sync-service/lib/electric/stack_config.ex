@@ -1,0 +1,38 @@
+defmodule Electric.StackConfig do
+  use GenServer
+
+  def lookup(stack_id, key) do
+    :ets.lookup_element(table(stack_id), key, 2)
+  end
+
+  ###
+
+  def name(opts) when is_list(opts), do: name(Keyword.fetch!(opts, :stack_id))
+
+  def name(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  end
+
+  def table(stack_id) do
+    :"#{inspect(__MODULE__)}:#{stack_id}"
+  end
+
+  ###
+
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: name(opts))
+  end
+
+  @impl GenServer
+  def init(opts) do
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    tab = table(stack_id)
+
+    :ets.new(tab, [:protected, :named_table, :set])
+
+    :ets.insert(tab, [{Electric.ShapeCache.Storage, Keyword.fetch!(opts, :storage)}])
+
+    {:ok, nil}
+  end
+end
