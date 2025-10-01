@@ -82,6 +82,9 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       when is_consumer_shutdown_with_data_retention?(reason),
       do: :ok
 
+  # this is the clean shutdown route so the writer has already registered itself
+  def handle_writer_termination(_stack_id, _shape_handle, {:shutdown, :cleanup}, _pid), do: :ok
+
   def handle_writer_termination(stack_id, shape_handle, _reason, pid) do
     GenServer.call(name(stack_id), {:handle_writer_termination, shape_handle, pid})
   end
@@ -305,9 +308,13 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   defp monitor_consumer_processes(state, consumer_pid, supervisor_pid, shape_handle) do
-    if supervisor_pid,
-      do: Process.monitor(supervisor_pid, tag: {:down, :writer_supervisor, shape_handle})
+    if !supervisor_pid,
+      do:
+        raise(RuntimeError,
+          message: "No ConsumerSupervisor process found for shape #{shape_handle}"
+        )
 
+    Process.monitor(supervisor_pid, tag: {:down, :writer_supervisor, shape_handle})
     Process.monitor(consumer_pid, tag: {:down, :writer, shape_handle})
 
     %{state | writers: Map.put(state.writers, consumer_pid, shape_handle)}
