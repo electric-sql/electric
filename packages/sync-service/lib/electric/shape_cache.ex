@@ -242,27 +242,31 @@ defmodule Electric.ShapeCache do
       snapshot_timeout_to_first_data: opts.snapshot_timeout_to_first_data
     }
 
+    start_time = System.monotonic_time()
+
     {last_processed_lsn, total_recovered, total_failed_to_recover} =
       recover_shapes(state, opts.recover_shape_timeout)
 
+    duration = System.monotonic_time() - start_time
+
+    Logger.notice(
+      "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
+    )
+
+    Electric.Telemetry.OpenTelemetry.execute(
+      [:electric, :connection, :consumers_ready],
+      %{duration: duration, total: total_recovered, failed_to_recover: total_failed_to_recover},
+      %{stack_id: state.stack_id}
+    )
+
     # Let ShapeLogCollector that it can start processing after finishing this function so that
     # we're subscribed to the producer before it starts forwarding its demand.
-    {:ok, state,
-     {:continue, {:consumers_ready, last_processed_lsn, total_recovered, total_failed_to_recover}}}
+    {:ok, state, {:continue, {:consumers_ready, last_processed_lsn}}}
   end
 
   @impl GenServer
-  def handle_continue(
-        {:consumers_ready, last_processed_lsn, total_recovered, total_failed_to_recover},
-        state
-      ) do
+  def handle_continue({:consumers_ready, last_processed_lsn}, state) do
     ShapeLogCollector.set_last_processed_lsn(state.log_producer, last_processed_lsn)
-
-    Electric.Connection.Manager.consumers_ready(
-      state.stack_id,
-      total_recovered,
-      total_failed_to_recover
-    )
 
     {:noreply, state}
   end
