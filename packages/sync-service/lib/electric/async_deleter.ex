@@ -32,6 +32,10 @@ defmodule Electric.AsyncDeleter do
 
   def name(opts), do: name(opts[:stack_id])
 
+  def ets_name(stack_id) when is_binary(stack_id) do
+    :"Electric.AsyncDeleter-#{stack_id}"
+  end
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: name(opts[:stack_id]))
   end
@@ -41,13 +45,16 @@ defmodule Electric.AsyncDeleter do
   Returns {:ok, output} on success or {:error, reason} on failure.
   """
   def delete(path, opts) when is_binary(path) do
-    stack_id = opts[:stack_id]
-    trash_dir = Keyword.get(opts, :trash_dir, trash_dir(stack_id))
+    stack_id =
+      opts[:stack_id] ||
+        raise ArgumentError, message: "Missing required :stack_id in opts: #{inspect(opts)}"
+
+    trash_dir = trash_dir!(stack_id)
 
     case do_rename(path, trash_dir) do
-      {:ok, dest} ->
+      {:ok, _dest} ->
         server = opts[:server] || name(stack_id)
-        GenServer.cast(server, {:schedule_cleanup, dest})
+        GenServer.cast(server, {:schedule_cleanup, path})
         :ok
 
       {:error, :enoent} ->
@@ -63,19 +70,27 @@ defmodule Electric.AsyncDeleter do
   @impl true
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
+    storage_dir = Keyword.fetch!(opts, :storage_dir)
 
     Process.set_label({:async_deleter, stack_id})
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
+    config_table =
+      :ets.new(ets_name(stack_id), [:named_table, :protected, read_concurrency: true])
+
+    trash_dir = trash_dir(storage_dir, stack_id)
+
+    :ets.insert(config_table, {:trash_dir, trash_dir})
+
     state = %__MODULE__{
       stack_id: stack_id,
-      trash_dir: trash_dir(stack_id),
+      trash_dir: trash_dir,
       interval_ms: Keyword.get(opts, :cleanup_interval_ms, @default_cleanup_interval_ms),
       timer_ref: nil,
       pending: []
     }
 
-    File.mkdir_p!(state.trash_dir)
+    File.mkdir_p!(trash_dir)
 
     {:ok, state, {:continue, :initial_cleanup}}
   end
@@ -117,28 +132,36 @@ defmodule Electric.AsyncDeleter do
     {:noreply, do_cleanup(state)}
   end
 
-  def trash_dir(stack_id), do: Path.join([System.tmp_dir!(), @trash_dir_base, stack_id])
+  def trash_dir!(stack_id) do
+    case :ets.lookup(ets_name(stack_id), :trash_dir) do
+      [{:trash_dir, trash_dir}] ->
+        trash_dir
+
+      [] ->
+        raise RuntimeError, message: ""
+    end
+  end
+
+  defp trash_dir(storage_dir, stack_id), do: Path.join([storage_dir, @trash_dir_base, stack_id])
 
   defp do_rename(path, trash_dir) do
     dest = unique_destination(trash_dir, Path.basename(path))
 
-    with :ok <- File.mkdir_p!(trash_dir),
-         :ok <- File.rename(path, dest) do
+    with :ok <- File.rename(path, dest) do
       {:ok, dest}
     end
   end
 
   defp do_cleanup(state) do
+    # Remove the entire trash dir contents in one go
     if state.pending != [] do
       start_time = System.monotonic_time(:millisecond)
 
-      Enum.each(state.pending, fn dir ->
-        try do
-          unsafe_cleanup_with_retries!(dir)
-        rescue
-          e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
-        end
-      end)
+      try do
+        clean_dir!(state.trash_dir)
+      rescue
+        e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
+      end
 
       duration = System.monotonic_time(:millisecond) - start_time
 
@@ -149,6 +172,16 @@ defmodule Electric.AsyncDeleter do
     end
 
     %{state | pending: [], timer_ref: nil}
+  end
+
+  def clean_dir!(path) do
+    path
+    |> File.ls!()
+    |> Enum.each(fn entry ->
+      path
+      |> Path.join(entry)
+      |> unsafe_cleanup_with_retries!()
+    end)
   end
 
   defp unsafe_cleanup_with_retries!(directory, attempts_left \\ 5) do

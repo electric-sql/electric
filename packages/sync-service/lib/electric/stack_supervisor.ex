@@ -87,6 +87,7 @@ defmodule Electric.StackSupervisor do
                      "will be passed on to the Postgrex connection pool. See `t:Postgrex.start_option()`, apart from the connection options."
                  ],
                  storage: [type: :mod_arg, required: true],
+                 storage_dir: [type: :string, required: true],
                  chunk_bytes_threshold: [
                    type: :pos_integer,
                    default: LogChunker.default_chunk_size_threshold()
@@ -366,7 +367,9 @@ defmodule Electric.StackSupervisor do
         [
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
           {Electric.AsyncDeleter,
-           stack_id: stack_id, cleanup_interval_ms: config.tweaks[:cleanup_interval_ms]},
+           stack_id: stack_id,
+           storage_dir: Access.fetch!(config, :storage_dir),
+           cleanup_interval_ms: config.tweaks[:cleanup_interval_ms]},
           {Registry,
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},
           Electric.ShapeCache.Storage.stack_child_spec(storage),

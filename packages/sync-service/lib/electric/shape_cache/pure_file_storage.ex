@@ -71,13 +71,16 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
-    base_path = Path.join(storage_dir, stack_id)
-    tmp_dir = Keyword.get(opts, :tmp_dir, Path.join(base_path, ".tmp"))
-
     # Always scope the provided storage dir by stack id
+    base_path = Path.join(storage_dir, stack_id)
+
+    # base the tmp dir at the root of the storage (.tmp/stack_id not
+    # stack_id/.tmp) so it's easy to remove
+    tmp_dir = Keyword.get(opts, :tmp_dir, Path.join([storage_dir, ".tmp", stack_id]))
+
     %{
-      base_path: Path.join(storage_dir, stack_id),
-      tmp_dir: Path.join(tmp_dir, stack_id),
+      base_path: base_path,
+      tmp_dir: tmp_dir,
       stack_ets: :"#{__MODULE__}:#{stack_id}",
       stack_task_supervisor: ProcessRegistry.name(stack_id, __MODULE__.TaskSupervisor),
       stack_id: stack_id,
@@ -187,10 +190,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     try do
       case File.touch(marker_file_path) do
         :ok ->
-          Electric.AsyncDeleter.delete(opts.data_dir,
-            trash_dir: opts.tmp_dir,
-            stack_id: opts.stack_id
-          )
+          Electric.AsyncDeleter.delete(opts.data_dir, stack_id: opts.stack_id)
 
         # nothing to delete, no-op
         {:error, :enoent} ->
@@ -204,11 +204,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def cleanup_all!(%{stack_id: stack_id, base_path: base_path, tmp_dir: tmp_dir}) do
-    Electric.AsyncDeleter.delete(base_path,
-      trash_dir: tmp_dir,
-      stack_id: stack_id
-    )
+  def cleanup_all!(%{stack_id: stack_id, base_path: base_path}) do
+    Electric.AsyncDeleter.delete(base_path, stack_id: stack_id)
   end
 
   def schedule_compaction(opts) do
