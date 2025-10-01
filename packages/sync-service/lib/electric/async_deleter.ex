@@ -90,8 +90,6 @@ defmodule Electric.AsyncDeleter do
       pending: []
     }
 
-    File.mkdir_p!(trash_dir)
-
     {:ok, state, {:continue, :initial_cleanup}}
   end
 
@@ -147,7 +145,8 @@ defmodule Electric.AsyncDeleter do
   defp do_rename(path, trash_dir) do
     dest = unique_destination(trash_dir, Path.basename(path))
 
-    with :ok <- File.rename(path, dest) do
+    with :ok <- File.mkdir_p(trash_dir),
+         :ok <- File.rename(path, dest) do
       {:ok, dest}
     end
   end
