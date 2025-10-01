@@ -139,8 +139,9 @@ defmodule Electric.Shapes.MonitorTest do
 
     test "sends a message immediately if no subscribers active", %{stack_id: stack_id} = _ctx do
       handle = "some-handle"
+      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle)
       Monitor.notify_reader_termination(stack_id, handle, {:shutdown, :bored})
-      assert_receive {Monitor, :reader_termination, ^handle, {:shutdown, :bored}}, 100
+      assert_receive {Monitor, :reader_termination, ^handle, {:shutdown, :bored}}, 1000
     end
 
     test "sends a message when all subcribers have terminated", %{stack_id: stack_id} = _ctx do
