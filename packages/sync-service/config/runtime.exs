@@ -46,11 +46,19 @@ instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 
 replication_database_url_config = env!("DATABASE_URL", &Electric.Config.parse_postgresql_uri!/1)
 
-query_database_url_config =
+# TODO: Remove this in a minor version bump
+old_pooled_database_url_config =
   env!(
     "ELECTRIC_QUERY_DATABASE_URL",
     &Electric.Config.parse_postgresql_uri!/1,
     replication_database_url_config
+  )
+
+pooled_database_url_config =
+  env!(
+    "ELECTRIC_POOLED_DATABASE_URL",
+    &Electric.Config.parse_postgresql_uri!/1,
+    old_pooled_database_url_config
   )
 
 database_ipv6_config = env!("ELECTRIC_DATABASE_USE_IPV6", :boolean, false)
@@ -71,7 +79,7 @@ extra_conn_opts =
 
 config :electric,
   replication_connection_opts: replication_database_url_config ++ extra_conn_opts,
-  query_connection_opts: query_database_url_config ++ extra_conn_opts
+  query_connection_opts: pooled_database_url_config ++ extra_conn_opts
 
 enable_integration_testing? = env!("ELECTRIC_ENABLE_INTEGRATION_TESTING", :boolean, nil)
 cache_max_age = env!("ELECTRIC_CACHE_MAX_AGE", :integer, nil)
