@@ -96,8 +96,10 @@ jobs:
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
 
-      - name: Compiles without warnings
-        run: mix compile --force --all-warnings --warnings-as-errors
+      - name: Compile
+        # don't bail on compile warnings - let's get the results of the tests
+        # and let the formatting task check for compilation warnings
+        run: mix compile
 
       - name: Run tests
         run: mix coveralls.json --include slow --cover --export-coverage test
@@ -158,4 +160,8 @@ jobs:
 
       - run: mix deps.get
 
-      - run: mix format --check-formatted
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors

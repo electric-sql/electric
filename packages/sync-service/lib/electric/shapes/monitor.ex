@@ -38,12 +38,6 @@ defmodule Electric.Shapes.Monitor do
   defdelegate unregister_reader(stack_id, shape_handle, pid \\ self()), to: RefCounter
 
   @doc """
-  Register the current process as a writer (consumer) of the given shape.
-  """
-  @spec register_writer(stack_id(), shape_handle(), pid()) :: :ok | {:error, term()}
-  defdelegate register_writer(stack_id, shape_handle, pid \\ self()), to: RefCounter
-
-  @doc """
   The number of active readers of the given shape.
   """
   @spec reader_count(stack_id(), shape_handle()) :: {:ok, non_neg_integer()}
@@ -69,6 +63,16 @@ defmodule Electric.Shapes.Monitor do
   """
   @spec notify_reader_termination(stack_id(), shape_handle(), term(), pid()) :: :ok
   defdelegate notify_reader_termination(stack_id, shape_handle, reason, pid \\ self()),
+    to: RefCounter
+
+  @doc """
+  Called from a consumer's terminate/2 callback.
+
+  Ensures that consumers that exit with an error have their data cleaned up
+  once they've terminated.
+  """
+  @spec handle_writer_termination(stack_id(), shape_handle(), term(), pid()) :: :ok
+  defdelegate handle_writer_termination(stack_id, shape_handle, reason, pid \\ self()),
     to: RefCounter
 
   @doc """

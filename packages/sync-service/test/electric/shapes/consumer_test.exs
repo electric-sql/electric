@@ -860,7 +860,6 @@ defmodule Electric.Shapes.ConsumerTest do
       # Stop the consumer and the shape cache server to simulate a restart
       stop_supervised!(ctx.consumer_supervisor)
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
-      assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}
 
       ref = shape_cache_opts[:server] |> GenServer.whereis() |> Process.monitor()
       stop_supervised!(shape_cache_opts[:server])
