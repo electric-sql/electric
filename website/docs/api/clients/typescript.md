@@ -224,6 +224,19 @@ export interface ShapeStreamOptions<T = never> {
   subscribe?: boolean
 
   /**
+   * Initial data loading mode.
+   *
+   * When `mode` is `full` (the default), the server creates an initial snapshot
+   * of all data matching the shape definition before delivering real-time updates.
+   *
+   * When `mode` is `changes_only`, the server skips the initial snapshot creation.
+   * The client will only receive changes that occur after the shape is established,
+   * without seeing the base data. In this mode, you can use `requestSnapshot()` to
+   * fetch subsets of data on-demand.
+   */
+  mode?: "full" | "changes_only"
+
+  /**
    * Signal to abort the stream.
    */
   signal?: AbortSignal
@@ -348,7 +361,26 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
 }
 ```
 
-Or a `ControlMessage`, representing an instruction to the client, as [documented here](../http#control-messages).
+Or a `ControlMessage`, representing an instruction to the client:
+
+```ts
+export type ControlMessage = {
+  headers:
+    | (Header & {
+        control: `up-to-date` | `must-refetch`
+        global_last_seen_lsn?: string
+      })
+    | (Header & { control: `snapshot-end` } & PostgresSnapshot)
+}
+```
+
+Control messages include:
+
+- `up-to-date` - Indicates the client has received all available data
+- `must-refetch` - Indicates the client must discard local data and re-sync from scratch
+- `snapshot-end` - Marks the end of a subset snapshot, includes PostgreSQL snapshot metadata (xmin, xmax, xip_list) for tracking which changes to skip
+
+See the [HTTP API control messages documentation](../http#control-messages) for more details.
 
 #### Parsing and Custom Parsing
 
@@ -588,5 +620,100 @@ The following error types may be encountered:
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle
 - `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+
+### Changes-only mode and subset snapshots
+
+Electric supports two log modes for syncing shapes. The default `full` mode creates an initial snapshot and then delivers real-time updates. The `changes_only` mode skips the initial snapshot:
+
+```typescript
+const stream = new ShapeStream({
+  url: "http://localhost:3000/v1/shape",
+  params: {
+    table: "items",
+  },
+  log: "changes_only", // Skip initial snapshot
+})
+```
+
+In `changes_only` log mode, the client only receives changes that occur after the shape is established. This is useful for:
+
+- Places where historical data isn't needed
+- Applications that fetch their initial state through other means
+- Reducing initial sync time when you don't need the complete dataset
+
+Subset snapshots allow users to have a narrower view of data than the entire shape, enabling advanced progressive or dynamic data loading strategies. It helps avoid loading large data sets to the client on startup, especially for rarely changing data that's needed for references (e.g. loading only explicitly mentioned users)
+
+#### Starting from 'now'
+
+You can use `offset: 'now'` to skip all historical data and start from the current point:
+
+```typescript
+const stream = new ShapeStream({
+  url: "http://localhost:3000/v1/shape",
+  params: {
+    table: "items",
+  },
+  offset: "now", // Start from current point, skip all history
+  log: "changes_only",
+})
+```
+
+This immediately provides an up-to-date message with the latest continuation offset, allowing applications to start fresh without processing any historical data.
+
+#### Requesting subset snapshots
+
+In `changes_only` mode, you can request snapshots of specific subsets of data on-demand using the `requestSnapshot()` method:
+
+```typescript
+const stream = new ShapeStream({
+  url: "http://localhost:3000/v1/shape",
+  params: {
+    table: "items",
+  },
+  log: "changes_only",
+})
+
+// Request a subset of data with filtering and pagination
+const { metadata, data } = await stream.requestSnapshot({
+  where: "priority = 'high'",
+  params: { "1": "high" },
+  orderBy: "created_at DESC",
+  limit: 20,
+  offset: 0,
+})
+
+// The snapshot data is automatically injected into the message stream
+// with proper change tracking
+```
+
+The `requestSnapshot` method accepts the following parameters:
+
+- `where` (optional) - WHERE clause to filter the subset
+- `params` (optional) - Parameters for the WHERE clause
+- `orderBy` (required when using limit/offset) - ORDER BY clause
+- `limit` (optional) - Maximum number of rows to return
+- `offset` (optional) - Number of rows to skip for pagination
+
+The method returns a promise with:
+
+- `metadata` - PostgreSQL snapshot metadata (xmin, xmax, xip_list, snapshot_mark, database_lsn)
+- `data` - Array of change messages for the requested subset
+
+The snapshot data is automatically injected into the subscribed message stream with proper change tracking. The client uses the snapshot metadata to filter out changes that were already incorporated into the snapshot, preventing duplicates.
+
+A `snapshot-end` control message is added after the snapshot data to mark its boundary:
+
+```typescript
+{
+  headers: {
+    control: "snapshot-end",
+    xmin: "1234",
+    xmax: "1240",
+    xip_list: ["1235", "1237"],
+    snapshot_mark: 42,
+    database_lsn: "0/12345678"
+  }
+}
+```
 
 See the [Demos](/demos) and [integrations](/docs/integrations/react) for more usage examples.

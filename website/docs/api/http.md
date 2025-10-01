@@ -98,6 +98,22 @@ Note that the other control message is `must-refetch` which indicates that the c
 
 :::
 
+::: info Snapshot-end
+A third control message is `snapshot-end`, which marks the end of a subset snapshot request. This message includes PostgreSQL snapshot metadata that allows clients to determine which changes have been incorporated into the snapshot:
+
+```json
+{
+  "headers": {
+    "control": "snapshot-end",
+    "xmin": "1234",
+    "xmax": "1240",
+    "xip_list": ["1235", "1237"]
+  }
+}
+```
+
+:::
+
 ### Live mode
 
 Once a client is up-to-date, it can switch to live mode to receive real-time updates, by making requests with `live=true`, an `offset` and a shape `handle`, e.g.:
@@ -109,6 +125,58 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&live=true&handle=3833821-17218
 The `live` parameter puts the server into live mode, where it will hold open the connection, waiting for new data arrive. This allows you to implement a long-polling strategy to consume real-time updates.
 
 The server holds open the request until either a timeout (returning `200` with only an up-to-date message) or when new data is available, which it sends back as the response. The client then reconnects and the server blocks again for new content. This way the client is always updated as soon as new data is available.
+
+### Log modes
+
+Electric supports two log modes for syncing shapes, controlled by the `log` query parameter:
+
+#### Full mode (default)
+
+When using `log=full` (the default), the server creates an initial snapshot of all data matching the shape definition and streams it to the client before delivering real-time updates. This is the standard mode where you get the complete current state followed by live changes.
+
+#### Changes-only mode
+
+When using `log=changes_only`, the server skips creating an initial snapshot. The client will only receive changes that occur after the shape is established, without seeing the base data. This mode is useful for:
+
+- Places where historical data isn't needed
+- Applications that fetch their initial state through other means
+- Reducing initial sync time when you don't need historical data
+
+In `changes_only` mode, you can use subset snapshots (see below) to fetch specific portions of data on-demand while tracking which changes to skip.
+
+### Starting from 'now'
+
+You can use `offset=now` to skip all historical data and receive an immediate up-to-date response with the latest continuation offset. This allows applications to start "from scratch" without processing historical data.
+
+```sh
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=now'
+```
+
+This is particularly useful when combined with `log=changes_only` mode and `replica=full` for applications that don't keep state and need to start fresh upon reload without historical data.
+
+### Subset snapshots
+
+When using `changes_only` mode, you can request subset snapshots to fetch specific portions of data on-demand. This is done by adding `subset__*` query parameters to your request:
+
+```sh
+curl -i 'http://localhost:3000/v1/shape?table=foo&offset=123_4&handle=abc-123&subset__where=priority=high&subset__order_by=created_at&subset__limit=10'
+```
+
+The subset parameters include:
+
+- `subset__where` - Additional WHERE clause to filter the subset
+- `subset__params` - Parameters for the subset WHERE clause (using exploded object syntax)
+- `subset__limit` - Maximum number of rows to return
+- `subset__offset` - Number of rows to skip (for pagination)
+- `subset__order_by` - ORDER BY clause (required when using limit/offset)
+
+The response includes the requested data along with PostgreSQL snapshot metadata in a `snapshot-end` control message. This metadata allows clients to determine which subsequent changes have already been incorporated into the snapshot and should be skipped.
+
+Response here has a different format from normal responses - instead of just an array of operations, we return an object with `data` and `metadata` keys, where `data` are insert
+operations (it's up to the client to treat them as upserts if needed) and `metadata` tells
+the client which transactions are part of the snapshot and thus must be skipped on the main shape stream.
+
+The minimal request to get an equivalent of initial snapshot would be `subset__where=TRUE`
 
 ### Clients
 

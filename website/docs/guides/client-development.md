@@ -145,6 +145,8 @@ switch (message.headers.operation) {
 }
 ```
 
+Note that control messages should be skipped if you client doesn't know how to interpret them.
+
 ### Into a database
 
 As well as just a single data structure, it's possible to materialise one or more shapes into a local store. This can be very simple -- just update entries in a normalised store, no matter which shape they came through -- or can be complex, when aiming to maintain database invariants in a local embedded database such as [PGlite](/product/pglite).
