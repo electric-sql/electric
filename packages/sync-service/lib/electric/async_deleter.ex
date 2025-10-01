@@ -136,7 +136,7 @@ defmodule Electric.AsyncDeleter do
         trash_dir
 
       [] ->
-        raise RuntimeError, message: ""
+        raise RuntimeError, message: "#{inspect(__MODULE__)} not running for stack #{stack_id}"
     end
   end
 
