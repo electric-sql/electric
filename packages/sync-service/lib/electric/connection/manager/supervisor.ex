@@ -1,9 +1,10 @@
 defmodule Electric.Connection.Manager.Supervisor do
-  @moduledoc """
-  Intermediate supervisor that helps tie Connection.Manager's lifetime to that of Replication.Supervisor.
-  """
+  # The `restart: :transient, significant: true` combo allows for shutting the supervisor down
+  # and signalling the parent supervisor to shut itself down as well if that one has
+  # `:auto_shutdown` set to `:any_significant` or `:all_significant`.
+  use Supervisor, restart: :transient, significant: true
 
-  use Supervisor
+  require Logger
 
   def name(opts) do
     Electric.ProcessRegistry.name(opts[:stack_id], __MODULE__)
@@ -23,15 +24,23 @@ defmodule Electric.Connection.Manager.Supervisor do
       {Electric.Connection.Manager.ConnectionResolver, stack_id: opts[:stack_id]}
     ]
 
-    # Electric.Connection.Manager is a permanent child of the supervisor, so when it dies, the
-    # :one_for_all strategy will kick in and restart the other children.
-    # This is not the case for Electric.Replication.Supervisor which needs to be a temporary
-    # child such that Electric.Connection.Manager decides when it starts. Because of this, when
-    # Electric.Replication.Supervisor dies, even due to an error, it doesn't activate the
-    # :one_for_all strategy.
-    # We work around this by marking Electric.Replication.Supervisor as significant and
-    # configuring this supervisor with [auto_shutdown: :any_significant].
-    Supervisor.init(children, strategy: :one_for_all, auto_shutdown: :any_significant)
+    Supervisor.init(children, strategy: :one_for_all)
+  end
+
+  def shutdown(stack_id, %Electric.DbConnectionError{} = reason) do
+    if Application.get_env(:electric, :start_in_library_mode, true) do
+      # Log a warning as these errors are to be expected if the stack has been
+      # misconfigured or if the database is not available.
+      Logger.warning(
+        "Stopping connection supervisor with stack_id=#{inspect(stack_id)} " <>
+          "due to an unrecoverable error: #{reason.message}"
+      )
+    else
+      # Log an emergency error in the standalone mode, as the application cannot procede and will be shut down.
+      Logger.emergency(reason.message)
+    end
+
+    Supervisor.stop(name(stack_id: stack_id), {:shutdown, reason}, 1_000)
   end
 
   # Stopping the Connection.Manager causes all database connections to close, letting the

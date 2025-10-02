@@ -1118,7 +1118,7 @@ defmodule Electric.Connection.Manager do
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
     # process is waiting for the supervisor to shut down its children, one of which is the
     # manager process itself.
-    Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
+    Task.start(Electric.Connection.Manager.Supervisor, :shutdown, [state.stack_id, error])
 
     {:noreply, state}
   end
