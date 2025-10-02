@@ -210,7 +210,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     setup :with_started_writer
 
     setup %{writer: writer, opts: opts} = ctx do
-      if Map.get(ctx, :init_writer, true) do
+      if Map.get(ctx, :init_log, true) do
         writer =
           PureFileStorage.append_to_log!(
             [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
@@ -333,7 +333,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
              ]
     end
 
-    @tag init_writer: false
+    @tag init_log: false
     test "correctly handles incomplete chunks as part of the recovery", %{opts: opts} do
       path = PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
 
