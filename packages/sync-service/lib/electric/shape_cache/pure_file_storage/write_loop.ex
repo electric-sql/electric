@@ -318,22 +318,24 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     if buffer_size > 0 do
       IO.binwrite(json_file, buffer)
       :file.datasync(json_file)
+
+      # Tell the parent process that we've flushed up to this point
+      send(self(), {Storage, :flushed, last_seen_offset})
+
+      # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
+      writer_acc(acc,
+        buffer: [],
+        buffer_size: 0,
+        ets_line_buffer: [],
+        last_persisted_offset: last_seen_offset,
+        last_persisted_txn_offset: last_seen_txn,
+        times_flushed: times_flushed + 1
+      )
+      |> update_persistance_metadata(state, last_persisted_txn)
+      |> trim_ets(state)
+    else
+      acc
     end
-
-    # Tell the parent process that we've flushed up to this point
-    send(self(), {Storage, :flushed, last_seen_offset})
-
-    # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
-    writer_acc(acc,
-      buffer: [],
-      buffer_size: 0,
-      ets_line_buffer: [],
-      last_persisted_offset: last_seen_offset,
-      last_persisted_txn_offset: last_seen_txn,
-      times_flushed: times_flushed + 1
-    )
-    |> update_persistance_metadata(state, last_persisted_txn)
-    |> trim_ets(state)
   end
 
   defp update_persistance_metadata(
