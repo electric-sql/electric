@@ -28,7 +28,7 @@ jobs:
           version-type: strict
           version-file: ".tool-versions"
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r build
+      - run: pnpm run -r --filter './packages/**' build
       - name: Create Release Pull Request or Publish
         id: changesets
         uses: changesets/action@v1
