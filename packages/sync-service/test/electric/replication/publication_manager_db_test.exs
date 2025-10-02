@@ -145,7 +145,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
       shape_1 = generate_shape(relation_with_oid, @where_clause_1)
 
       assert_raise Electric.DbConfigurationError,
-                   "Database table #{Utils.relation_to_sql(ctx.relation)} is missing from " <>
+                   "Database table #{Utils.relation_to_sql(ctx.relation) |> Utils.quote_name()} is missing from " <>
                      "the publication #{Utils.quote_name(ctx.publication_name)} and " <>
                      "Electric lacks privileges to add it",
                    fn ->

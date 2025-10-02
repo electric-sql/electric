@@ -480,7 +480,7 @@ defmodule Electric.Replication.PublicationManager do
       end
 
     {_oid, rel} = oid_rel
-    table = Utils.relation_to_sql(rel)
+    table = rel |> Utils.relation_to_sql() |> Utils.quote_name()
 
     %Electric.DbConfigurationError{
       type: :relation_missing_from_publication,
@@ -493,7 +493,7 @@ defmodule Electric.Replication.PublicationManager do
 
   defp publication_error(:misconfigured_replica_identity, oid_rel, _state) do
     {_oid, rel} = oid_rel
-    table = Utils.relation_to_sql(rel)
+    table = rel |> Utils.relation_to_sql() |> Utils.quote_name()
 
     %Electric.DbConfigurationError{
       type: :misconfigured_replica_identity,
@@ -503,7 +503,8 @@ defmodule Electric.Replication.PublicationManager do
 
   defp publication_error(:relation_invalidated, oid_rel, _state) do
     {_oid, rel} = oid_rel
-    table = Utils.relation_to_sql(rel)
+
+    table = rel |> Utils.relation_to_sql() |> Utils.quote_name()
 
     %Electric.DbConfigurationError{
       type: :relation_invalidated,
