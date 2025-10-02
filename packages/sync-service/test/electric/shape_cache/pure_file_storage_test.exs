@@ -209,17 +209,19 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     # If underlying file structure changes, these tests will need to be updated.
     setup :with_started_writer
 
-    setup %{writer: writer, opts: opts} do
-      writer =
-        PureFileStorage.append_to_log!(
-          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
-          writer
-        )
+    setup %{writer: writer, opts: opts} = ctx do
+      if Map.get(ctx, :init_log, true) do
+        writer =
+          PureFileStorage.append_to_log!(
+            [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+            writer
+          )
 
-      PureFileStorage.terminate(writer)
+        PureFileStorage.terminate(writer)
 
-      assert PureFileStorage.get_current_position(opts) ==
-               {:ok, LogOffset.new(10, 0), %{xmin: 100}}
+        assert PureFileStorage.get_current_position(opts) ==
+                 {:ok, LogOffset.new(10, 0), %{xmin: 100}}
+      end
 
       :ok
     end
@@ -328,6 +330,55 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
                PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
              ) == [
                {{LogOffset.new(10, 0), nil}, {0, nil}, {0, nil}}
+             ]
+    end
+
+    @tag init_log: false
+    test "correctly handles incomplete chunks as part of the recovery", %{opts: opts} do
+      path = PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
+
+      File.mkdir_p!(Path.dirname(path))
+
+      File.open!(
+        path,
+        [:append, :raw],
+        fn file ->
+          IO.binwrite(
+            file,
+            <<LogOffset.to_int128(LogOffset.new(20, 0))::binary, 100::64, 100::64>>
+          )
+        end
+      )
+
+      writer = PureFileStorage.init_writer!(opts, @shape)
+
+      assert PureFileStorage.get_current_position(opts) ==
+               {:ok, LogOffset.new(0, 0), %{xmin: 100}}
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(11, 0), "test", :insert, ~S|{"test":2}|},
+            {LogOffset.new(12, 0), "test", :insert, ~S|{"test":3}|}
+          ],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+      assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) == nil
+
+      assert [~S|{"test":2}|, ~S|{"test":3}|] =
+               PureFileStorage.get_log_stream(
+                 LogOffset.last_before_real_offsets(),
+                 LogOffset.last(),
+                 opts
+               )
+               |> Enum.to_list()
+
+      assert PureFileStorage.ChunkIndex.read_chunk_file(
+               PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
+             ) == [
+               {{LogOffset.new(11, 0), nil}, {0, nil}, {0, nil}}
              ]
     end
   end
