@@ -61,8 +61,8 @@ defmodule Electric.Replication.PublicationManagerManualTest do
       shape = generate_shape(ctx.relation_with_oid)
 
       assert_raise Electric.DbConfigurationError,
-                   "Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting " <>
-                     "prevents Electric from adding it",
+                   "Database table \"public.items\" is missing from the publication \"#{ctx.publication_name}\" and " <>
+                     "the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it",
                    fn ->
                      PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
                    end
