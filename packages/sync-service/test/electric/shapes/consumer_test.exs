@@ -167,6 +167,7 @@ defmodule Electric.Shapes.ConsumerTest do
                registry: registry_name,
                shape_status: {Mock.ShapeStatus, []},
                publication_manager: {Mock.PublicationManager, []},
+               hibernate_after: 1_000,
                storage: storage,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
@@ -696,6 +697,7 @@ defmodule Electric.Shapes.ConsumerTest do
             pool: nil,
             inspector: @base_inspector
           }),
+          shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000),
           log_producer: ctx.shape_log_collector,
           run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
@@ -969,6 +971,48 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
       assert_receive {:flush_boundary_updated, 301}, 1_000
+    end
+
+    @tag hibernate_after: 1, with_pure_file_storage_opts: [flush_period: 1]
+    test "should hibernate after :hibernate_after ms", ctx do
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      %{shape_cache_opts: shape_cache_opts} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, shape_cache_opts)
+      lsn1 = Lsn.from_integer(300)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, shape_cache_opts)
+
+      txn =
+        %Transaction{
+          xid: 2,
+          lsn: lsn1,
+          commit_timestamp: DateTime.utc_now()
+        }
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "21"},
+          log_offset: LogOffset.new(lsn1, 0)
+        })
+        |> Transaction.finalize()
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
+
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      Process.sleep(20)
+
+      consumer_pid = Consumer.name(ctx.stack_id, shape_handle) |> GenServer.whereis()
+
+      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
+               Process.info(consumer_pid, :current_function)
+
+      Process.sleep(20)
+
+      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
+               Process.info(consumer_pid, :current_function)
     end
   end
 end

@@ -27,6 +27,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: :timer.seconds(30)
             ],
+            hibernate_after: [type: :integer, required: true],
             otel_ctx: [type: :any, required: false]
           )
 
