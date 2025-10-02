@@ -501,13 +501,13 @@ defmodule Electric.Replication.PublicationManager do
     }
   end
 
-  defp publication_error(:relation_invalidated, oid_rel, _state) do
+  defp publication_error(:schema_changed, oid_rel, _state) do
     {_oid, rel} = oid_rel
 
     table = rel |> Utils.relation_to_sql() |> Utils.quote_name()
 
     %Electric.DbConfigurationError{
-      type: :relation_invalidated,
+      type: :schema_changed,
       message: "Database table #{table} has been dropped or renamed"
     }
   end
