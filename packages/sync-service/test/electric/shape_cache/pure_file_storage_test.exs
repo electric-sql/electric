@@ -332,6 +332,61 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     end
   end
 
+  describe "extended crash recovery" do
+    # These tests make use of known log file structures to test that the storage recovers correctly
+    # If underlying file structure changes, these tests will need to be updated.
+
+    setup :with_started_writer
+
+    test "write without accompanying json index is handled with trim", %{opts: opts} do
+      path = PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
+
+      File.mkdir_p!(Path.dirname(path))
+
+      File.open!(
+        path,
+        [:append, :raw],
+        fn file ->
+          IO.binwrite(
+            file,
+            <<LogOffset.to_int128(LogOffset.new(20, 0))::binary, 100::64, 100::64>>
+          )
+        end
+      )
+
+      writer = PureFileStorage.init_writer!(opts, @shape)
+
+      assert PureFileStorage.get_current_position(opts) ==
+               {:ok, LogOffset.new(0, 0), %{xmin: 100}}
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(11, 0), "test", :insert, ~S|{"test":2}|},
+            {LogOffset.new(12, 0), "test", :insert, ~S|{"test":3}|}
+          ],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+      assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) == nil
+
+      assert [~S|{"test":2}|, ~S|{"test":3}|] =
+               PureFileStorage.get_log_stream(
+                 LogOffset.last_before_real_offsets(),
+                 LogOffset.last(),
+                 opts
+               )
+               |> Enum.to_list()
+
+      assert PureFileStorage.ChunkIndex.read_chunk_file(
+               PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
+             ) == [
+               {{LogOffset.new(11, 0), nil}, {0, nil}, {0, nil}}
+             ]
+    end
+  end
+
   describe "chunk writes - " do
     setup :with_started_writer
 

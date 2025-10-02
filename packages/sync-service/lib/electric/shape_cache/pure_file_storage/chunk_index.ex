@@ -206,7 +206,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
       when not is_log_offset_lt(last_persisted_offset, last_chunk_offset) ->
         {start_pos, key_file_start_pos}
 
-      {:incomplete, _, _} ->
+      {:incomplete, _, _, _} ->
         FileInfo.truncate(chunk_file_path, file_size - @half_record_width)
         trim(file_size - @half_record_width, chunk_file_path, last_persisted_offset)
 
