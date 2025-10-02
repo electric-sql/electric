@@ -237,7 +237,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       )
 
       # Adding a new where clause shoudn't re-add the table to the publication but should return that info
-      assert %{oid_rel1 => {:error, :relation_invalidated}} ==
+      assert %{oid_rel1 => {:error, :schema_changed}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
@@ -355,8 +355,8 @@ defmodule Electric.Postgres.ConfigurationTest do
 
       # Should return invalidated relations
       assert %{
-               oid_rel1 => {:error, :relation_invalidated},
-               oid_rel2 => {:error, :relation_invalidated},
+               oid_rel1 => {:error, :schema_changed},
+               oid_rel2 => {:error, :schema_changed},
                {oid1, {"public", "items_old"}} => :ok
              } ==
                Configuration.validate_publication_configuration!(

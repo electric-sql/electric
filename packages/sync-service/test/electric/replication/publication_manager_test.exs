@@ -103,7 +103,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     @tag configuration_result_overrides: %{
-           {10, {"public", "another_table"}} => {:error, :relation_invalidated}
+           {10, {"public", "another_table"}} => {:error, :schema_changed}
          }
     test "broadcasts dropped relations to shape cache", %{opts: opts} do
       shape = generate_shape({"public", "items"})

@@ -9,13 +9,13 @@ defmodule Electric.Postgres.Configuration do
 
   @type relation_filters :: PublicationManager.relation_filters()
   @type relations_configured :: %{
-          Electric.oid_relation() => :ok | {:error, :relation_invalidated | term()}
+          Electric.oid_relation() => :ok | {:error, :schema_changed | term()}
         }
   @type relations_checked :: %{
           Electric.oid_relation() =>
             :ok
             | {:error,
-               :relation_invalidated
+               :schema_changed
                | :relation_missing_from_publication
                | :misconfigured_replica_identity}
         }
@@ -101,7 +101,7 @@ defmodule Electric.Postgres.Configuration do
         Enum.map(valid, &{&1, :ok}),
         Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
         Enum.map(to_fix, &{&1, {:error, :misconfigured_replica_identity}}),
-        Enum.map(to_invalidate, &{&1, {:error, :relation_invalidated}})
+        Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
       ]
       |> List.flatten()
       |> Map.new()
@@ -174,7 +174,7 @@ defmodule Electric.Postgres.Configuration do
         Enum.map(to_add, &{&1, add_table_to_publication(conn, publication_name, &1)})
       )
       |> Enum.concat(Enum.map(valid, &{&1, :ok}))
-      |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :relation_invalidated}}))
+      |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
       |> Map.new()
 
     configuration_result

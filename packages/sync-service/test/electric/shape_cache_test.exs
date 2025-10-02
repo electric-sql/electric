@@ -306,8 +306,18 @@ defmodule Electric.ShapeCacheTest do
       :ok
     end
 
-    test "creates initial snapshot from DB data", %{storage: storage, shape_cache_opts: opts} do
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+    setup %{inspector: inspector} do
+      %{shape: Shape.new!("items", inspector: inspector)}
+    end
+
+    test "creates initial snapshot from DB data", %{
+      storage: storage,
+      shape_cache_opts: opts,
+      shape: shape
+    } do
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(shape, opts)
+
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
       storage = Storage.for_shape(shape_handle, storage)
 
@@ -335,9 +345,10 @@ defmodule Electric.ShapeCacheTest do
     test "uses correct display settings when querying initial data", %{
       pool: pool,
       storage: storage,
-      shape_cache_opts: opts
+      shape_cache_opts: opts,
+      shape: shape
     } do
-      shape = %{@shape | selected_columns: ~w|id value date timestamptz float bytea interval|}
+      shape = %{shape | selected_columns: ~w|id value date timestamptz float bytea interval|}
 
       Postgrex.query!(
         pool,
@@ -392,9 +403,9 @@ defmodule Electric.ShapeCacheTest do
              } = map
     end
 
-    test "correctly propagates the error", %{shape_cache_opts: opts} do
+    test "correctly propagates the error", %{shape_cache_opts: opts, shape: shape} do
       shape = %{
-        @shape
+        shape
         | root_table: {"public", "nonexistent"},
           root_table_id: 2
       }
@@ -427,13 +438,12 @@ defmodule Electric.ShapeCacheTest do
         [1, 50, 2, 150, 3, 10]
       )
 
-      shape = %Shape{
-        root_table: {"public", "partitioned_items"},
-        root_table_id: 1,
-        root_pk: ["a", "b"],
-        selected_columns: ["a", "b"],
-        explicitly_selected_columns: ["a", "b"]
-      }
+      shape =
+        Shape.new!(
+          "partitioned_items",
+          columns: ["a", "b"],
+          inspector: ctx.inspector
+        )
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.shape_cache_opts)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.shape_cache_opts)
@@ -455,13 +465,14 @@ defmodule Electric.ShapeCacheTest do
 
     @tag shape_cache_opts_overrides: [snapshot_timeout_to_first_data: 500]
     test "crashes when initial snapshot query fails to return data quickly enough", %{
-      shape_cache_opts: opts
+      shape_cache_opts: opts,
+      shape: shape
     } do
       alias Electric.Replication.Eval.Parser
       where_clause = Parser.parse_and_validate_expression!("TRUE", refs: %{})
       # Insert a fake slow query
       where_clause = %{where_clause | query: "PG_SLEEP(10)::text ILIKE ''"}
-      shape = %{@shape | where: where_clause}
+      shape = %{shape | where: where_clause}
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
 
