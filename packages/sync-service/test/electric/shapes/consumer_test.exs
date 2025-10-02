@@ -167,6 +167,7 @@ defmodule Electric.Shapes.ConsumerTest do
                registry: registry_name,
                shape_status: {Mock.ShapeStatus, []},
                publication_manager: {Mock.PublicationManager, []},
+               hibernate_after: 1_000,
                storage: storage,
                chunk_bytes_threshold:
                  Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
@@ -696,6 +697,7 @@ defmodule Electric.Shapes.ConsumerTest do
             pool: nil,
             inspector: @base_inspector
           }),
+          shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000),
           log_producer: ctx.shape_log_collector,
           run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->

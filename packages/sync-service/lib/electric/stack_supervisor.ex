@@ -112,7 +112,11 @@ defmodule Electric.StackSupervisor do
                        ]
                      ],
                      publication_refresh_period: [type: :non_neg_integer, default: 60_000],
-                     schema_reconciler_period: [type: :non_neg_integer, default: 60_000]
+                     schema_reconciler_period: [type: :non_neg_integer, default: 60_000],
+                     shape_hibernate_after: [
+                       type: :integer,
+                       default: Electric.Config.default(:shape_hibernate_after)
+                     ]
                    ]
                  ],
                  manual_table_publishing?: [
@@ -304,6 +308,8 @@ defmodule Electric.StackSupervisor do
          storage: storage
        )}
 
+    shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
+
     shape_cache_opts = [
       stack_id: stack_id,
       storage: storage,
@@ -313,7 +319,8 @@ defmodule Electric.StackSupervisor do
       chunk_bytes_threshold: config.chunk_bytes_threshold,
       log_producer: shape_log_collector,
       consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-      registry: shape_changes_registry_name
+      registry: shape_changes_registry_name,
+      shape_hibernate_after: shape_hibernate_after
     ]
 
     {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])

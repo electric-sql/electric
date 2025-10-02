@@ -55,6 +55,10 @@ defmodule Electric.ShapeCache do
             shape_status: [type: :mod_arg, required: true],
             registry: [type: {:or, [:atom, :pid]}, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
+            shape_hibernate_after: [
+              type: :integer,
+              default: Electric.Config.default(:shape_hibernate_after)
+            ],
             run_with_conn_fn: [
               type: {:fun, 2},
               default: &Shapes.Consumer.Snapshotter.run_with_conn/2
@@ -234,6 +238,7 @@ defmodule Electric.ShapeCache do
       registry: opts.registry,
       consumer_supervisor: opts.consumer_supervisor,
       subscription: nil,
+      shape_hibernate_after: opts.shape_hibernate_after,
       snapshot_timeout_to_first_data: opts.snapshot_timeout_to_first_data
     }
 
@@ -396,6 +401,7 @@ defmodule Electric.ShapeCache do
            db_pool: state.db_pool,
            run_with_conn_fn: state.run_with_conn_fn,
            create_snapshot_fn: state.create_snapshot_fn,
+           hibernate_after: state.shape_hibernate_after,
            otel_ctx: otel_ctx,
            snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data
          ) do

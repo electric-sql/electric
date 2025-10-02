@@ -135,7 +135,8 @@ defmodule Electric.Application do
         registry_partitions: get_env(opts, :process_registry_partitions),
         publication_refresh_period: get_env(opts, :publication_refresh_period),
         schema_reconciler_period: get_env(opts, :schema_reconciler_period),
-        cleanup_interval_ms: get_env(opts, :cleanup_interval_ms)
+        cleanup_interval_ms: get_env(opts, :cleanup_interval_ms),
+        shape_hibernate_after: get_env(opts, :shape_hibernate_after)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )

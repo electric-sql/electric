@@ -62,11 +62,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def start_link(config) when is_map(config) do
-    GenServer.start_link(
-      __MODULE__,
-      Map.put(config, :hibernate_after, Electric.Config.get_env(:shape_hibernate_after)),
-      name: name(config)
-    )
+    GenServer.start_link(__MODULE__, config, name: name(config))
   end
 
   @impl GenServer

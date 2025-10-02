@@ -206,6 +206,7 @@ defmodule Support.ComponentSetup do
         shape_status: ctx.shape_status,
         storage: ctx.storage,
         publication_manager: ctx.publication_manager,
+        shape_hibernate_after: 1_000,
         chunk_bytes_threshold: ctx.chunk_bytes_threshold,
         db_pool: ctx.pool,
         registry: ctx.registry,
