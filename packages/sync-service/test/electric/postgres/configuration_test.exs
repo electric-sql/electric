@@ -248,6 +248,49 @@ defmodule Electric.Postgres.ConfigurationTest do
     end
   end
 
+  describe "check_publication_status!/2" do
+    test "raises if publication is missing", %{pool: conn} do
+      assert_raise Electric.DbConfigurationError,
+                   "Publication \"nonexistent\" not found in the database",
+                   fn ->
+                     Configuration.check_publication_status!(conn, "nonexistent")
+                   end
+    end
+
+    test "raises if publication doesn't publish all operations", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      Postgrex.query!(conn, "ALTER PUBLICATION \"#{publication}\" SET (publish = 'insert')", [])
+
+      assert_raise Electric.DbConfigurationError,
+                   "Publication \"#{publication}\" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE",
+                   fn ->
+                     Configuration.check_publication_status!(conn, publication)
+                   end
+    end
+
+    test "raises if publication isn't owned by the current user", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      role_name = "other_user_#{System.unique_integer([:positive])}"
+      Postgrex.query!(conn, "CREATE ROLE #{role_name} NOLOGIN", [])
+      Postgrex.query!(conn, "ALTER PUBLICATION \"#{publication}\" OWNER TO #{role_name}", [])
+
+      assert_raise Electric.DbConfigurationError,
+                   "Publication \"#{publication}\" is not owned by the provided user",
+                   fn ->
+                     Configuration.check_publication_status!(conn, publication)
+                   end
+    end
+
+    test "succeeds if publication exists, publishes all operations and is owned by the current user",
+         %{pool: conn, publication_name: publication} do
+      assert :ok = Configuration.check_publication_status!(conn, publication)
+    end
+  end
+
   defp get_table_identity(conn, {schema, table}) do
     %{rows: [[ident]]} =
       Postgrex.query!(
