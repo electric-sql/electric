@@ -248,6 +248,127 @@ defmodule Electric.Postgres.ConfigurationTest do
     end
   end
 
+  describe "validate_publication_configuration!/3" do
+    test "validates that relations are correctly configured", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid1 = get_table_oid(conn, {"public", "items"})
+      oid2 = get_table_oid(conn, {"public", "other_table"})
+      oid_rel1 = {oid1, {"public", "items"}}
+      oid_rel2 = {oid2, {"public", "other_table"}}
+
+      assert %{oid_rel1 => :ok, oid_rel2 => :ok} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1, oid_rel2])
+               )
+
+      assert %{oid_rel1 => :ok, oid_rel2 => :ok} ==
+               Configuration.validate_publication_configuration!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1, oid_rel2])
+               )
+    end
+
+    test "fails relations that aren't in the publication", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid1 = get_table_oid(conn, {"public", "items"})
+      oid2 = get_table_oid(conn, {"public", "other_table"})
+      oid3 = get_table_oid(conn, {"public", "other_other_table"})
+      oid_rel1 = {oid1, {"public", "items"}}
+      oid_rel2 = {oid2, {"public", "other_table"}}
+      oid_rel3 = {oid3, {"public", "other_other_table"}}
+
+      assert %{oid_rel1 => :ok} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1])
+               )
+
+      assert %{
+               oid_rel1 => :ok,
+               oid_rel2 => {:error, :relation_missing_from_publication},
+               oid_rel3 => {:error, :relation_missing_from_publication}
+             } ==
+               Configuration.validate_publication_configuration!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1, oid_rel2, oid_rel3])
+               )
+    end
+
+    test "fails relations that don't have replica identity set to FULL", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+
+      assert %{oid_rel => :ok} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel])
+               )
+
+      Postgrex.query!(conn, "ALTER TABLE public.items REPLICA IDENTITY DEFAULT", [])
+
+      assert %{oid_rel => {:error, :misconfigured_replica_identity}} ==
+               Configuration.validate_publication_configuration!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel])
+               )
+    end
+
+    test "returns invalidated relations", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid1 = get_table_oid(conn, {"public", "items"})
+      oid2 = get_table_oid(conn, {"public", "other_table"})
+      oid_rel1 = {oid1, {"public", "items"}}
+      oid_rel2 = {oid2, {"public", "other_table"}}
+
+      assert %{oid_rel1 => :ok} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1])
+               )
+
+      # Rename one table and recreate the other
+      Postgrex.query!(conn, "ALTER TABLE items RENAME TO items_old", [])
+      Postgrex.query!(conn, "DROP TABLE public.other_table", [])
+
+      Postgrex.query!(
+        conn,
+        "CREATE TABLE public.other_table (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      # Should return invalidated relations
+      assert %{
+               oid_rel1 => {:error, :relation_invalidated},
+               oid_rel2 => {:error, :relation_invalidated},
+               {oid1, {"public", "items_old"}} => :ok
+             } ==
+               Configuration.validate_publication_configuration!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1, oid_rel2])
+               )
+
+      assert list_tables_in_publication(conn, publication) == [{"public", "items_old"}]
+    end
+  end
+
   describe "check_publication_status!/2" do
     test "raises if publication is missing", %{pool: conn} do
       assert_raise Electric.DbConfigurationError,
