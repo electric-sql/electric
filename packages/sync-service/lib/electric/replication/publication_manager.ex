@@ -236,8 +236,8 @@ defmodule Electric.Replication.PublicationManager do
           else
             Configuration.validate_publication_configuration!(
               state.db_pool,
-              state.prepared_relation_filters,
-              state.publication_name
+              state.publication_name,
+              state.prepared_relation_filters
             )
           end
 

@@ -85,9 +85,9 @@ defmodule Electric.Postgres.Configuration do
   has changed), those will be returned as a list of invalidated relations from this function to
   allow for the cleanup of their corresponding shapes.
   """
-  @spec validate_publication_configuration!(Postgrex.conn(), relation_filters(), String.t()) ::
+  @spec validate_publication_configuration!(Postgrex.conn(), String.t(), relation_filters()) ::
           relations_configured()
-  def validate_publication_configuration!(conn, expected_rels, publication_name) do
+  def validate_publication_configuration!(conn, publication_name, expected_rels) do
     %{
       valid: valid,
       to_add: to_add,
