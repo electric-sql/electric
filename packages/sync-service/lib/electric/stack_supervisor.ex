@@ -7,7 +7,7 @@ defmodule Electric.StackSupervisor do
   First, we start 2 registries, `Electric.ProcessRegistry`, and a registry for shape subscriptions. Both are named using the provided `stack_id` variable.
 
   1. `Electric.Postgres.Inspector.EtsInspector` is started with a pool name as a config option, module that is passed from the base config is __ignored__
-  2. `Electric.Connection.Supervisor` takes a LOT of options to configure replication and start the rest of the tree. It starts (3) and then (4) in `rest-for-one` mode
+  2. `Electric.Connection.Manager.Supervisor` takes a LOT of options to configure replication and start the rest of the tree. It starts (3) and then (4) in `rest-for-one` mode
   3. `Electric.Connection.Manager` takes all the connection/replication options and starts the db pool. It goes through the following steps:
       - start_lock_connection
       - exclusive_connection_lock_acquired (as a callback from the lock connection)
@@ -440,7 +440,7 @@ defmodule Electric.StackSupervisor do
            log_collector: shape_log_collector_spec,
            schema_reconciler: schema_reconciler_spec,
            expiry_manager: expiry_manager_spec},
-          {Electric.Connection.Supervisor, new_connection_manager_opts}
+          {Electric.Connection.Manager.Supervisor, new_connection_manager_opts}
         ]
 
     # Store the telemetry span attributes in the persistent term for this stack

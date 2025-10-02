@@ -45,7 +45,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     conn_sup =
       start_link_supervised!(
         {
-          Connection.Supervisor,
+          Connection.Manager.Supervisor,
           shape_cache_opts: [
             stack_id: stack_id,
             inspector: ctx.inspector,
@@ -80,7 +80,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
         # `:never`, so we need to make sure the connection supervisor is not a significant
         # child, otherwise we'd get the following error:
         #
-        #     ** (RuntimeError) failed to start child with the spec {Electric.Connection.Supervisor, [...]}.
+        #     ** (RuntimeError) failed to start child with the spec {Electric.Connection.Manager.Supervisor, [...]}.
         #      Reason: bad child specification, got: {:bad_combination, [auto_shutdown: :never, significant: true]}
         significant: false
       )
