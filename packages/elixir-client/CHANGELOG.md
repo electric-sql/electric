@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.7.3
+
+### Patch Changes
+
+- e07f39b: Add support for new snapshot-end control to elixir client
+
 ## 0.7.2
 
 ### Patch Changes
