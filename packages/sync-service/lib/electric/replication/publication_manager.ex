@@ -17,23 +17,18 @@ defmodule Electric.Replication.PublicationManager do
 
   defstruct [
     :stack_id,
-    # %{ {oid, relation} => count }
-    :relation_ref_counts,
-    # %MapSet{{oid, relation}}
-    :prepared_relation_filters,
-    # same shape as above (what DB/pub currently has)
-    :committed_relation_filters,
     :update_debounce_timeout,
-    :scheduled_updated_ref,
-    :retries,
-    :waiters,
-    # MapSet of shape handles we've seen
-    :tracked_shape_handles,
     :publication_name,
     :db_pool,
     :can_alter_publication?,
     :manual_table_publishing?,
     :publication_refresh_period,
+    relation_ref_counts: %{},
+    prepared_relation_filters: MapSet.new(),
+    committed_relation_filters: MapSet.new(),
+    tracked_shape_handles: %{},
+    waiters: %{},
+    scheduled_updated_ref: nil,
     next_update_forced?: false
   ]
 
@@ -45,16 +40,15 @@ defmodule Electric.Replication.PublicationManager do
            committed_relation_filters: relation_filters(),
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
-           waiters: list(GenServer.from()),
+           waiters: %{Electric.oid_relation() => [GenServer.from(), ...]},
            tracked_shape_handles: %{shape_handle() => Electric.oid_relation()},
            publication_name: String.t(),
            db_pool: term(),
+           can_alter_publication?: boolean(),
+           manual_table_publishing?: boolean(),
            publication_refresh_period: non_neg_integer(),
            next_update_forced?: boolean()
          }
-
-  @retry_timeout 300
-  @max_retries 3
 
   # The default debounce timeout is 0, which means that the publication update
   # will be scheduled immediately to run at the end of the current process
@@ -134,13 +128,6 @@ defmodule Electric.Replication.PublicationManager do
 
     state = %__MODULE__{
       stack_id: opts.stack_id,
-      relation_ref_counts: %{},
-      prepared_relation_filters: MapSet.new(),
-      committed_relation_filters: MapSet.new(),
-      scheduled_updated_ref: nil,
-      retries: 0,
-      waiters: [],
-      tracked_shape_handles: %{},
       update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
@@ -156,30 +143,33 @@ defmodule Electric.Replication.PublicationManager do
   def handle_call({:add_shape, shape_handle, oid_rel}, from, state) do
     state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
 
-    if update_needed?(state) do
-      state = add_waiter(from, state)
-      state = schedule_update_publication(state.update_debounce_timeout, state)
+    state =
+      if update_needed?(state),
+        do: schedule_update_publication(state.update_debounce_timeout, state),
+        else: state
+
+    if not relation_tracked?(oid_rel, state) do
+      state = add_waiter(from, oid_rel, state)
       {:noreply, state}
     else
       {:reply, :ok, state, state.publication_refresh_period}
     end
   end
 
-  def handle_call({:remove_shape, shape_handle}, from, state) do
+  def handle_call({:remove_shape, shape_handle}, _from, state) do
     state = remove_shape_from_relation_filters(shape_handle, state)
 
-    if update_needed?(state) do
-      state = add_waiter(from, state)
-      state = schedule_update_publication(state.update_debounce_timeout, state)
-      {:noreply, state}
-    else
-      {:reply, :ok, state, state.publication_refresh_period}
-    end
-  end
+    state =
+      if update_needed?(state),
+        do: schedule_update_publication(state.update_debounce_timeout, state),
+        else: state
 
-  defguardp is_fatal(err)
-            when is_exception(err, Postgrex.Error) and
-                   err.postgres.code in ~w|undefined_function undefined_table insufficient_privilege|a
+    # never wait for removals - reply immediately and let publication manager
+    # reconcile the publication, otherwise you run into issues where only the last
+    # removal fails and all others succeed. No removal guarantees anything about
+    # the state of the publication.
+    {:reply, :ok, state, state.publication_refresh_period}
+  end
 
   @impl true
   def handle_info(:update_publication, state) do
@@ -187,160 +177,95 @@ defmodule Electric.Replication.PublicationManager do
     if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
     state = %{state | scheduled_updated_ref: nil}
 
-    # Invoke the actual handler for the publication update
-    updated_state =
-      if not state.can_alter_publication? or state.manual_table_publishing? do
-        check_publication_relations(state)
-      else
-        update_publication_state(state)
-      end
+    {:ok, state} = configure_publication(state)
 
-    with {:ok, state} <- updated_state do
-      # Schedule a forced refresh to happen periodically unless there's an explicit call to
-      # update the publication that happens sooner.
-      {:noreply, state, state.publication_refresh_period}
-    end
+    # Schedule a forced refresh to happen periodically unless there's an explicit call to
+    # update the publication that happens sooner.
+    {:noreply, state, state.publication_refresh_period}
   end
 
   def handle_info(:timeout, state),
     do: handle_info(:update_publication, %{state | next_update_forced?: true})
 
-  defp check_publication_relations(
-         %__MODULE__{
-           committed_relation_filters: committed_filters,
-           prepared_relation_filters: current_filters,
-           next_update_forced?: forced?
-         } = state
-       ) do
-    if not forced? and filters_are_equal?(current_filters, committed_filters) do
-      Logger.debug("No changes to publication, skipping checkup")
-      {:ok, reply_to_waiters(:ok, state)}
+  # Updates are forced when we're doing periodic checks: we expect no changes to the filters,
+  # but we'll write them anyway because that'll verify that no tables have been dropped/renamed
+  # since the last update. Useful when we're not altering the publication often to catch changes
+  # to the DB.
+  @spec configure_publication(state()) :: {:ok, state()}
+  defp configure_publication(state) do
+    can_update = can_update_publication?(state)
+
+    # If row filtering is disabled, we only care about changes in actual relations
+    # included in the publication
+    if not state.next_update_forced? and not update_needed?(state) do
+      key_word = if can_update, do: "update", else: "validation"
+      Logger.debug("No changes to publication, skipping #{key_word}")
+      {:ok, reply_to_all_waiters(:ok, state)}
     else
-      # We cannot modify the publication, so we only check whether it is in the right state for
-      # the set of currently active relation filters.
-      case Configuration.check_publication_relations_and_identity(
-             state.db_pool,
-             committed_filters,
-             current_filters,
-             state.publication_name
-           ) do
-        {:ok, modified_relations} ->
-          update_relation_filters(state, modified_relations)
+      state = %{state | next_update_forced?: false}
 
-        {:error, reason} ->
-          # Whatever the error, we must invalidate the shapes that match the errored relations
-          # to ensure there's no missed data for a shape after the publication state has been
-          # corrected by the database admin.
-          {error_type, relations} = reason
+      try do
+        relations_configured =
+          if can_update do
+            Configuration.configure_publication!(
+              state.db_pool,
+              state.publication_name,
+              state.prepared_relation_filters
+            )
+          else
+            Configuration.validate_publication_configuration!(
+              state.db_pool,
+              state.prepared_relation_filters,
+              state.publication_name
+            )
+          end
 
-          Logger.info(
-            "Cleaning up shapes for misconfigured or unpublished relations #{inspect(relations)}"
-          )
-
-          relations
-          |> MapSet.to_list()
-          |> ShapeCleaner.remove_shapes_for_relations(stack_id: state.stack_id)
-
-          tables = Enum.map(relations, fn {_oid, relation} -> Utils.relation_to_sql(relation) end)
-          message = publication_error_message(error_type, tables, state)
-          error = %Electric.DbConfigurationError{type: reason, message: message}
-
-          state = reply_to_waiters({:error, error}, state)
-          {:ok, %{state | next_update_forced?: false}}
+        {:ok, handle_publication_update_result(relations_configured, state)}
+      rescue
+        err ->
+          key_word = if can_update, do: "configure", else: "validate"
+          Logger.warning("Failed to #{key_word} publication: #{inspect(err)}")
+          state = reply_to_all_waiters({:error, err}, state)
+          {:ok, state}
       end
     end
   end
 
-  defp update_publication_state(%__MODULE__{retries: retries} = state) do
-    state = %{state | retries: 0}
+  defp handle_publication_update_result(relations_configured, state) do
+    relations_configured
+    |> Enum.reduce(
+      state,
+      fn
+        {oid_rel, :ok}, state ->
+          state = reply_to_relation_waiters(oid_rel, :ok, state)
+          new_committed_filters = MapSet.put(state.committed_relation_filters, oid_rel)
+          %{state | committed_relation_filters: new_committed_filters}
 
-    case update_publication(state) do
-      {:ok, state, missing_relations} ->
-        update_relation_filters(state, missing_relations)
+        {oid_rel, {:error, reason}}, state ->
+          prepared_filters = MapSet.delete(state.prepared_relation_filters, oid_rel)
+          committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
+          ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
 
-      # Handle the case where the publication is not present as a fatal one
-      {:error,
-       %Postgrex.Error{
-         postgres: %{
-           code: :undefined_object,
-           message: "publication" <> _,
-           severity: "ERROR",
-           pg_code: "42704"
-         }
-       } = err} ->
-        Logger.warning(
-          "The publication was expected to be present but was not found: #{inspect(err)}"
-        )
+          error =
+            if message = publication_error_message(reason, oid_rel, state) do
+              %Electric.DbConfigurationError{type: reason, message: message}
+            else
+              Logger.warning(
+                "Failed to configure publication with relation #{inspect(oid_rel)}: #{inspect(reason)}"
+              )
 
-        state = reply_to_waiters({:error, err}, state)
-        {:stop, {:shutdown, err}, state}
+              reason
+            end
 
-      {:error, err} when retries < @max_retries and not is_fatal(err) ->
-        Logger.warning("Failed to configure publication, retrying: #{inspect(err)}")
-        state = schedule_update_publication(@retry_timeout, %{state | retries: retries + 1})
-        {:ok, state}
+          state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
 
-      {:error, err} ->
-        Logger.error("Failed to configure publication: #{inspect(err)}")
-        state = reply_to_waiters({:error, err}, state)
-        {:ok, %{state | next_update_forced?: false}}
-    end
-  end
-
-  # invalidated_relations are those that have been modified or dropped from the publication.
-  defp update_relation_filters(state, invalidated_relations) do
-    if MapSet.size(invalidated_relations) > 0 do
-      Logger.info(
-        "Relations dropped/renamed since last publication update: #{inspect(MapSet.to_list(invalidated_relations))}"
-      )
-
-      invalidated_relations
-      |> MapSet.to_list()
-      |> ShapeCleaner.remove_shapes_for_relations(stack_id: state.stack_id)
-    end
-
-    state = reply_to_waiters(:ok, state)
-    committed_filters = MapSet.difference(state.prepared_relation_filters, invalidated_relations)
-
-    {:ok,
-     %{
-       state
-       | committed_relation_filters: committed_filters,
-         next_update_forced?: false,
-         # We're setting "prepared" filters to the committed filters, despite us maybe dropping missing relations from these filters.
-         # This is correct, because for every filter we're dropping, we're also removing the shape from the shape cache,
-         # which eventually will do the same thing - this lowers the number of attempted alterations to the DB where we do nothing
-         prepared_relation_filters: committed_filters
-     }}
-  end
-
-  defp publication_error_message(:tables_missing_from_publication, tables, state) do
-    tail =
-      cond do
-        state.manual_table_publishing? ->
-          "the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding "
-
-        not state.can_alter_publication? ->
-          "Electric lacks privileges to add "
+          %{
+            state
+            | committed_relation_filters: committed_filters,
+              prepared_relation_filters: prepared_filters
+          }
       end
-
-    {table_clause, pronoun} =
-      case tables do
-        [table] -> {"table " <> inspect(table) <> " is", "it"}
-        _ -> {"tables " <> inspect(tables) <> " are", "them"}
-      end
-
-    "Database #{table_clause} missing from the publication and " <> tail <> pronoun
-  end
-
-  defp publication_error_message(:misconfigured_replica_identity, tables, _state) do
-    table_clause =
-      case tables do
-        [table] -> "table #{inspect(table)} does not have its"
-        _ -> "tables #{inspect(tables)} do not have their"
-      end
-
-    "Database #{table_clause} replica identity set to FULL"
+    )
   end
 
   @spec schedule_update_publication(timeout(), boolean(), state()) :: state()
@@ -362,47 +287,22 @@ defmodule Electric.Replication.PublicationManager do
        ),
        do: %{state | next_update_forced?: forced? or state.next_update_forced?}
 
+  defp relation_tracked?(oid_rel, %__MODULE__{committed_relation_filters: committed}) do
+    MapSet.member?(committed, oid_rel)
+  end
+
   defp update_needed?(%__MODULE__{
          prepared_relation_filters: prepared,
          committed_relation_filters: committed
        }) do
-    not filters_are_equal?(prepared, committed)
+    not MapSet.equal?(prepared, committed)
   end
 
-  # Updates are forced when we're doing periodic checks: we expect no changes to the filters,
-  # but we'll write them anyway because that'll verify that no tables have been dropped/renamed
-  # since the last update. Useful when we're not altering the publication often to catch changes
-  # to the DB.
-  @spec update_publication(state()) :: {:ok, state(), relation_filters()} | {:error, term()}
-  defp update_publication(
-         %__MODULE__{
-           committed_relation_filters: committed_filters,
-           prepared_relation_filters: current_filters,
-           publication_name: publication_name,
-           db_pool: db_pool,
-           next_update_forced?: forced?
-         } = state
-       ) do
-    # If row filtering is disabled, we only care about changes in actual relations
-    # included in the publication
-    if not forced? and filters_are_equal?(current_filters, committed_filters) do
-      Logger.debug("No changes to publication, skipping update")
-      {:ok, state, MapSet.new()}
-    else
-      try do
-        missing_relations =
-          Configuration.configure_publication!(
-            db_pool,
-            committed_filters,
-            current_filters,
-            publication_name
-          )
-
-        {:ok, state, missing_relations}
-      rescue
-        err -> {:error, err}
-      end
-    end
+  defp can_update_publication?(%__MODULE__{
+         can_alter_publication?: can_alter,
+         manual_table_publishing?: manual
+       }) do
+    can_alter and not manual
   end
 
   defguardp is_tracking_shape_handle?(shape_handle, state)
@@ -475,14 +375,22 @@ defmodule Electric.Replication.PublicationManager do
     %{state | prepared_relation_filters: prepared, relation_ref_counts: counts}
   end
 
-  @spec add_waiter(GenServer.from(), state()) :: state()
-  defp add_waiter(from, %__MODULE__{waiters: waiters} = state),
-    do: %{state | waiters: [from | waiters]}
+  @spec add_waiter(GenServer.from(), Electric.oid_relation(), state()) :: state()
+  defp add_waiter(from, oid_rel, %__MODULE__{waiters: waiters} = state),
+    do: %{state | waiters: Map.update(waiters, oid_rel, [from], &[from | &1])}
 
-  @spec reply_to_waiters(any(), state()) :: state()
-  defp reply_to_waiters(reply, %__MODULE__{waiters: waiters} = state) do
-    for from <- waiters, do: GenServer.reply(from, reply)
-    %{state | waiters: []}
+  @spec reply_to_relation_waiters(Electric.oid_relation(), any(), state()) :: state()
+  defp reply_to_relation_waiters(oid_rel, reply, %__MODULE__{waiters: waiters} = state) do
+    rel_waiters = Map.get(waiters, oid_rel, [])
+    for from <- rel_waiters, do: GenServer.reply(from, reply)
+    %{state | waiters: Map.delete(waiters, oid_rel)}
+  end
+
+  @spec reply_to_all_waiters(any(), state()) :: state()
+  defp reply_to_all_waiters(reply, %__MODULE__{waiters: waiters} = state) do
+    Enum.reduce(waiters, state, fn {rel, _}, state ->
+      reply_to_relation_waiters(rel, reply, state)
+    end)
   end
 
   defp fetch_tracked_shape_relation!(
@@ -515,5 +423,32 @@ defmodule Electric.Replication.PublicationManager do
   defp get_oid_relation_from_shape(%Shape{root_table: relation, root_table_id: oid}),
     do: {oid, relation}
 
-  defp filters_are_equal?(old_filters, new_filters), do: MapSet.equal?(old_filters, new_filters)
+  defp publication_error_message(:relation_missing_from_publication, oid_rel, state) do
+    tail =
+      cond do
+        state.manual_table_publishing? ->
+          "the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
+
+        not state.can_alter_publication? ->
+          "Electric lacks privileges to add it"
+      end
+
+    {_oid, rel} = oid_rel
+    table = Utils.relation_to_sql(rel)
+    "Database table #{table} is missing from the publication and " <> tail
+  end
+
+  defp publication_error_message(:misconfigured_replica_identity, oid_rel, _state) do
+    {_oid, rel} = oid_rel
+    table = Utils.relation_to_sql(rel)
+    "Database table #{table} does not have its replica identity set to FULL"
+  end
+
+  defp publication_error_message(:relation_invalidated, oid_rel, _state) do
+    {_oid, rel} = oid_rel
+    table = Utils.relation_to_sql(rel)
+    "Database table #{table} has been dropped or renamed"
+  end
+
+  defp publication_error_message(_reason, _oid_rel, _state), do: nil
 end
