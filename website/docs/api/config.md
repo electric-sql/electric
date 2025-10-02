@@ -53,10 +53,10 @@ For a secure connection, set the `sslmode` query parameter to `require`.
 
 </EnvVarConfig>
 
-### ELECTRIC_QUERY_DATABASE_URL
+### ELECTRIC_POOLED_DATABASE_URL
 
 <EnvVarConfig
-    name="ELECTRIC_QUERY_DATABASE_URL"
+    name="ELECTRIC_POOLED_DATABASE_URL"
     defaultValue="DATABASE_URL"
     example="postgresql://user:password@example-pooled.com:54321/electric">
 
@@ -66,7 +66,11 @@ The connection string must be in the [libpg Connection URI format](https://www.p
 
 The `userspec` section of the connection string specifies the database user that Electric connects to Postgres as. This can point to a connection pooler and does not need a `REPLICATION` role as it does not handle the replication.
 
+This should point to the same instance as the main database URL, as Electric relies on transaction information for consistency reasons.
+
 For a secure connection, set the `sslmode` query parameter to `require`.
+
+This used to be called `ELECTRIC_QUERY_DATABASE_URL`, but that name is deprecated and will be removed in a future release.
 
 </EnvVarConfig>
 
@@ -220,11 +224,12 @@ By default, Electric binds to IPv4. Enable this to listen on IPv6 addresses as w
 Timeout for sending a response chunk back to the client. Defaults to 30 seconds.
 
 Slow response processing on the client or bandwidth restristrictions can cause TCP backpressure leading to the error message:
+
 ```
 Error while streaming response: :timeout
 ```
-This environment variable increases this timeout.
 
+This environment variable increases this timeout.
 
 </EnvVarConfig>
 
@@ -236,7 +241,7 @@ This environment variable increases this timeout.
     example="20971520">
 
 Limit the maximum size of a shape log response, to ensure they are cached by
-upstream caches. Defaults to 10MB (10 * 1024 * 1024).
+upstream caches. Defaults to 10MB (10 _ 1024 _ 1024).
 
 See [#1581](https://github.com/electric-sql/electric/issues/1581) for context.
 
@@ -398,6 +403,7 @@ Enable sending telemetry data to a StatsD reporting endpoint.
 Verbosity of Electric's log output.
 
 Available levels, in the order of increasing verbosity:
+
 - `error`
 - `warning`
 - `info`
@@ -428,7 +434,6 @@ By default, coloring is enabled when Electric's stdout is connected to a termina
 Enable [OTP SASL](https://www.erlang.org/doc/apps/sasl/sasl_app.html) reporting at runtime.
 
 </EnvVarConfig>
-
 
 ## Usage reporting
 

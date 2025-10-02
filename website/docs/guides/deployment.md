@@ -63,10 +63,9 @@ By default, Electric exposes public access to the contents of your database. You
 
 See the [Security guide](/docs/guides/security) for information.
 
-
 ## 1. Running Postgres
 
-You can use ***any standard Postgres***, version 14 and above.
+You can use **_any standard Postgres_**, version 14 and above.
 
 This includes Postgres you host yourself, or Postgres hosted by managed database hosting providers, including:
 
@@ -81,7 +80,7 @@ Postgres must have [logical replication](https://www.postgresql.org/docs/current
 
 ### Data model compatibility
 
-Electric is compatible with ***any Postgres data model***.
+Electric is compatible with **_any Postgres data model_**.
 
 Electric will work as a drop on to any existing data model. There are no limitations on the database features, data types or extensions you can use.
 
@@ -91,7 +90,7 @@ You connect to Postgres using a [`DATABASE_URL`](/docs/api/config#database-url) 
 
 You usually want to connect directly to Postgres and not via a connection pool. This is because Electric uses logical replication and most connection poolers don't support it. (pgBouncer does support logical replication, [as of version 1.23](https://www.pgbouncer.org/changelog.html#pgbouncer-123x) so this may change in future).
 
-You can optionally provide a separate [`ELECTRIC_QUERY_DATABASE_URL`](/docs/api/config#electric-query-database-url) env var, which can use a pooler and will be used for all queries other than replication.
+You can optionally provide a separate [`ELECTRIC_POOLED_DATABASE_URL`](/docs/api/config#electric-query-database-url) env var, which can use a pooler and will be used for all queries other than replication.
 
 To force Electric to verify the database server's certificate when connecting to it using TLS, set the [`ELECTRIC_DATABASE_CA_CERTIFICATE_FILE`](/docs/api/config#electric-database-ca-certificate-file) config option.
 
@@ -163,7 +162,7 @@ Electric provides an HTTP API exposed on a configurable [`ELECTRIC_PORT`](/docs/
 
 ### Caching proxy
 
-Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't *have* to run a proxy in front of Electric but you will benefit from radically better performance if you do.
+Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
 
 See the [Caching section](/docs/api/http#caching) of the HTTP API docs for more information.
 
@@ -175,8 +174,8 @@ You can then connect your app to Electric [over HTTP](/docs/api/http). Typically
 const stream = new ShapeStream({
   url: `https://your-electric-service.example.com/v1/shape`,
   params: {
-    table: `foo`
-  }
+    table: `foo`,
+  },
 })
 const shape = new Shape(stream)
 ```

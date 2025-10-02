@@ -5,7 +5,7 @@
 ### Patch Changes
 
 - 0dd1f0c: feat: add support for parameters in where clauses to clients
-- eb8167a: Implement `ELECTRIC_QUERY_DATABASE_URL` optional env var to perform queries with separate, potentially pooled connection string.
+- eb8167a: Implement `ELECTRIC_POOLED_DATABASE_URL` optional env var to perform queries with separate, potentially pooled connection string.
 - f6a3265: Fix OpenAPI spec 409 response schema
 - f1a9247: feat!: change the wire protocol to remove `offset` and add an explicit `lsn` header. Only valid offset now is the one provided in headers
 - 4d7b8ba: Add support for shapes on partitioned tables
