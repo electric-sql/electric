@@ -272,10 +272,6 @@ defmodule Electric.Replication.PublicationManager do
           %{state | committed_relation_filters: new_committed_filters}
 
         {oid_rel, {:error, reason}}, state ->
-          prepared_filters = MapSet.delete(state.prepared_relation_filters, oid_rel)
-          committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
-          ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
-
           error = publication_error(reason, oid_rel, state) || reason
 
           log_level = if is_known_publication_error(error), do: :warning, else: :error
@@ -287,6 +283,10 @@ defmodule Electric.Replication.PublicationManager do
           )
 
           state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
+
+          prepared_filters = MapSet.delete(state.prepared_relation_filters, oid_rel)
+          committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
+          ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
 
           %{
             state
