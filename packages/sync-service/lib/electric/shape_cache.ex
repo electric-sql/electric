@@ -236,6 +236,17 @@ defmodule Electric.ShapeCache do
       ) do
     ShapeLogCollector.set_last_processed_lsn(state.stack_id, last_processed_lsn)
 
+    # Empirical evidence shows that after recovering 50K shapes ShapeStatusOwner and ShapeCache
+    # each take up 200+MB of memory. Explicitly running garbage collection for both immediately
+    # takes that down to 4-5MB.
+    shape_status_owner_pid =
+      state.stack_id
+      |> Electric.ShapeCache.ShapeStatusOwner.name()
+      |> GenServer.whereis()
+
+    :erlang.garbage_collect(shape_status_owner_pid)
+    :erlang.garbage_collect()
+
     Electric.Connection.Manager.consumers_ready(
       state.stack_id,
       total_recovered,
