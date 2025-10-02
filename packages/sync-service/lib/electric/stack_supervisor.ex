@@ -353,6 +353,47 @@ defmodule Electric.StackSupervisor do
         []
       end
 
+    shape_status_owner_spec =
+      {Electric.ShapeCache.ShapeStatusOwner,
+       [stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)]}
+
+    consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
+
+    shape_cleaner_spec =
+      {Electric.ShapeCache.ShapeCleaner,
+       stack_id: stack_id, shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
+
+    shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
+
+    publication_manager_spec =
+      {
+        Electric.Replication.PublicationManager,
+        stack_id: stack_id,
+        publication_name: Keyword.fetch!(config.replication_opts, :publication_name),
+        can_alter_publication?: true,
+        manual_table_publishing?: config.manual_table_publishing?,
+        db_pool: Electric.Connection.Manager.admin_pool(stack_id),
+        update_debounce_timeout: Keyword.get(config.tweaks, :publication_alter_debounce_ms, 0),
+        refresh_period: Keyword.get(config.tweaks, :publication_refresh_period, 60_000)
+      }
+
+    shape_log_collector_spec =
+      {Electric.Replication.ShapeLogCollector,
+       stack_id: stack_id, inspector: inspector, persistent_kv: config.persistent_kv}
+
+    schema_reconciler_spec =
+      {Electric.Replication.SchemaReconciler,
+       stack_id: stack_id,
+       inspector: inspector,
+       period: Keyword.get(config.tweaks, :schema_reconciler_period, 60_000)}
+
+    expiry_manager_spec =
+      {Electric.ShapeCache.ExpiryManager,
+       max_shapes: config.max_shapes,
+       expiry_batch_size: config.expiry_batch_size,
+       stack_id: stack_id,
+       shape_status: Keyword.fetch!(shape_cache_opts, :shape_status)}
+
     children =
       telemetry_children ++
         [
@@ -374,6 +415,17 @@ defmodule Electric.StackSupervisor do
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},
           {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
+          {Electric.StatusMonitor, stack_id},
+          {Electric.Replication.Supervisor,
+           stack_id: stack_id,
+           shape_status_owner: shape_status_owner_spec,
+           consumer_supervisor: consumer_supervisor_spec,
+           shape_cleaner: shape_cleaner_spec,
+           shape_cache: shape_cache_spec,
+           publication_manager: publication_manager_spec,
+           log_collector: shape_log_collector_spec,
+           schema_reconciler: schema_reconciler_spec,
+           expiry_manager: expiry_manager_spec},
           {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 
