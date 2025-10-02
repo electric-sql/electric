@@ -1090,7 +1090,7 @@ importers:
   examples/tanstack-db-web-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: ^1.0.10
+        specifier: 1.0.11
         version: link:../../packages/typescript-client
       '@tailwindcss/vite':
         specifier: ^4.0.6
