@@ -1,4 +1,11 @@
 defmodule Electric.CoreSupervisor do
+  @moduledoc """
+  A supervisor that starts the core components of the Electric system.
+
+  This is divided into two subsystems:
+  1. The connection subsystem (processes that may exit on a connection failure), started with Connection.Manager.Supervisor
+  2. The shape subsystem (processes that are resilient to connection failures), started with Electric.Replication.Supervisor
+  """
   use Supervisor, restart: :transient, significant: true
 
   alias Electric.ShapeCache.LogChunker
