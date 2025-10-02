@@ -13,6 +13,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   import Support.TestUtils
 
   require Repatch
+  alias Electric.Utils
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.PublicationManager
 
@@ -72,7 +73,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
     %{pub_mgr_opts: pub_mgr_opts, relation: relation, relation_with_oid: {relation_oid, relation}}
   end
 
-  describe "add_shape()" do
+  describe "add_shape/3" do
     test "adds the table to the publication when a shape is created for it", ctx do
       shape = generate_shape(ctx.relation_with_oid)
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
@@ -104,14 +105,59 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   describe "publication misonfiguration" do
     test "handles publication being deleted during operation", ctx do
       Postgrex.query!(ctx.pool, "DROP PUBLICATION #{ctx.publication_name};", [])
-      shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
 
+      shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+
+      assert_raise Electric.DbConfigurationError,
+                   "Publication #{Utils.quote_name(ctx.publication_name)} not found in the database",
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                   end
+
+      refute_receive {:remove_shapes_for_relations, _}
+      assert [] == fetch_pub_tables(ctx)
+    end
+
+    test "handles publication not publishing all operations", ctx do
+      Postgrex.query!(
+        ctx.pool,
+        "ALTER PUBLICATION #{ctx.publication_name} SET (publish = 'insert, update');",
+        []
+      )
+
+      shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+
+      assert_raise Electric.DbConfigurationError,
+                   "Publication #{Utils.quote_name(ctx.publication_name)} does not " <>
+                     "publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE",
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                   end
+
+      refute_receive {:remove_shapes_for_relations, _}
+      assert [] == fetch_pub_tables(ctx)
+    end
+
+    test "handles publication not being owned", ctx do
+      patch_queries_to_unprivileged()
+
+      relation_with_oid = ctx.relation_with_oid
+      shape_1 = generate_shape(relation_with_oid, @where_clause_1)
+
+      assert_raise Electric.DbConfigurationError,
+                   "Database table #{Utils.relation_to_sql(ctx.relation)} is missing from " <>
+                     "the publication #{Utils.quote_name(ctx.publication_name)} and " <>
+                     "Electric lacks privileges to add it",
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                   end
+
+      assert_receive {:remove_shapes_for_relations, [^relation_with_oid]}
       assert [] == fetch_pub_tables(ctx)
     end
   end
 
-  describe "insufficient privilege" do
+  describe "insufficient table privilege" do
     setup ctx do
       relation_not_owned = {"public", "not_owned"}
 
@@ -123,19 +169,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
         "ALTER PUBLICATION #{ctx.publication_name} OWNER TO unprivileged;"
       )
 
-      Repatch.restore(Electric.Postgres.Configuration, :configure_publication!, 3, mode: :shared)
-
-      Repatch.patch(
-        Electric.Postgres.Configuration,
-        :configure_publication!,
-        [mode: :shared],
-        fn pool, a, b ->
-          DBConnection.run(pool, fn conn ->
-            Postgrex.query!(conn, "SET ROLE unprivileged;", [])
-            Repatch.real(Electric.Postgres.Configuration.configure_publication!(conn, a, b))
-          end)
-        end
-      )
+      patch_queries_to_unprivileged()
 
       %{
         relation_not_owned: relation_not_owned,
@@ -145,18 +179,21 @@ defmodule Electric.Replication.PublicationManagerDbTest do
     end
 
     test "returns appropriate error when relation not owned", ctx do
-      shape_1 = generate_shape(ctx.relation_not_owned_with_oid, @where_clause_1)
+      relation_not_owned_with_oid = ctx.relation_not_owned_with_oid
+      shape_1 = generate_shape(relation_not_owned_with_oid, @where_clause_1)
 
       assert_raise Postgrex.Error, ~r/insufficient_privilege/, fn ->
         PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
       end
 
+      assert_receive {:remove_shapes_for_relations, [^relation_not_owned_with_oid]}
       assert [] == fetch_pub_tables(ctx)
     end
 
     @tag update_debounce_timeout: 10
     test "should only fail relevant tables with insufficient privilege errors", ctx do
-      shape_1 = generate_shape(ctx.relation_not_owned_with_oid, @where_clause_1)
+      %{relation_not_owned_with_oid: relation_not_owned_with_oid} = ctx
+      shape_1 = generate_shape(relation_not_owned_with_oid, @where_clause_1)
       shape_2 = generate_shape(ctx.relation_with_oid, @where_clause_1)
 
       task =
@@ -171,9 +208,26 @@ defmodule Electric.Replication.PublicationManagerDbTest do
 
       Task.await(task)
 
+      assert_receive {:remove_shapes_for_relations, [^relation_not_owned_with_oid]}
       assert [ctx.relation] == fetch_pub_tables(ctx)
     end
   end
 
   defp fetch_pub_tables(ctx), do: fetch_publication_tables(ctx.pool, ctx.publication_name)
+
+  defp patch_queries_to_unprivileged() do
+    Repatch.patch(Postgrex, :query!, [mode: :shared], fn conn, sql, params ->
+      DBConnection.run(conn, fn conn ->
+        Repatch.real(Postgrex.query!(conn, "SET ROLE unprivileged", []))
+        Repatch.real(Postgrex.query!(conn, sql, params))
+      end)
+    end)
+
+    Repatch.patch(Postgrex, :query, [mode: :shared], fn conn, sql, params ->
+      DBConnection.run(conn, fn conn ->
+        Repatch.real(Postgrex.query(conn, "SET ROLE unprivileged", []))
+        Repatch.real(Postgrex.query(conn, sql, params))
+      end)
+    end)
+  end
 end

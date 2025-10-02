@@ -177,7 +177,15 @@ defmodule Electric.Replication.PublicationManager do
     if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
     state = %{state | scheduled_updated_ref: nil}
 
-    {:ok, state} = configure_publication(state)
+    state =
+      case check_publication_status(state) do
+        {:ok, state} ->
+          configure_publication(state)
+
+        {:error, err, state} ->
+          Logger.warning("Failed to confirm publication status: #{inspect(err)}")
+          reply_to_all_waiters({:error, err}, state)
+      end
 
     # Schedule a forced refresh to happen periodically unless there's an explicit call to
     # update the publication that happens sooner.
@@ -187,26 +195,47 @@ defmodule Electric.Replication.PublicationManager do
   def handle_info(:timeout, state),
     do: handle_info(:update_publication, %{state | next_update_forced?: true})
 
+  @spec check_publication_status(state()) :: {:ok, state()} | {:error, any(), state()}
+  defp check_publication_status(state) do
+    Configuration.check_publication_status!(state.db_pool, state.publication_name)
+    {:ok, %{state | can_alter_publication?: true}}
+  rescue
+    err in Electric.DbConfigurationError ->
+      case err.type do
+        :publication_not_owned ->
+          # if we can't alter the publication, we can still validate it
+          {:ok, %{state | can_alter_publication?: false}}
+
+        _ ->
+          # TODO: notify connection manager about misconfiguration so that
+          # it can restart itself and set up the publication correctly
+          {:error, err, state}
+      end
+
+    err ->
+      {:error, err, state}
+  end
+
   # Updates are forced when we're doing periodic checks: we expect no changes to the filters,
   # but we'll write them anyway because that'll verify that no tables have been dropped/renamed
   # since the last update. Useful when we're not altering the publication often to catch changes
   # to the DB.
-  @spec configure_publication(state()) :: {:ok, state()}
+  @spec configure_publication(state()) :: state()
   defp configure_publication(state) do
-    can_update = can_update_publication?(state)
+    can_update? = can_update_publication?(state)
 
     # If row filtering is disabled, we only care about changes in actual relations
     # included in the publication
     if not state.next_update_forced? and not update_needed?(state) do
-      key_word = if can_update, do: "update", else: "validation"
+      key_word = if can_update?, do: "update", else: "validation"
       Logger.debug("No changes to publication, skipping #{key_word}")
-      {:ok, reply_to_all_waiters(:ok, state)}
+      reply_to_all_waiters(:ok, state)
     else
       state = %{state | next_update_forced?: false}
 
       try do
         relations_configured =
-          if can_update do
+          if can_update? do
             Configuration.configure_publication!(
               state.db_pool,
               state.publication_name,
@@ -220,16 +249,25 @@ defmodule Electric.Replication.PublicationManager do
             )
           end
 
-        {:ok, handle_publication_update_result(relations_configured, state)}
+        handle_publication_update_result(relations_configured, state)
       rescue
         err ->
-          key_word = if can_update, do: "configure", else: "validate"
+          key_word = if can_update?, do: "configure", else: "validate"
           Logger.warning("Failed to #{key_word} publication: #{inspect(err)}")
-          state = reply_to_all_waiters({:error, err}, state)
-          {:ok, state}
+          reply_to_all_waiters({:error, err}, state)
       end
     end
   end
+
+  defguardp is_known_publication_error(error)
+            when is_exception(error) and
+                   (is_struct(error, Electric.DbConfigurationError) or
+                      (is_struct(error, Postgrex.Error) and
+                         error.postgres.code in [
+                           :insufficient_privilege,
+                           :undefined_table,
+                           :undefined_function
+                         ]))
 
   defp handle_publication_update_result(relations_configured, state) do
     relations_configured
@@ -246,16 +284,15 @@ defmodule Electric.Replication.PublicationManager do
           committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
           ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
 
-          error =
-            if message = publication_error_message(reason, oid_rel, state) do
-              %Electric.DbConfigurationError{type: reason, message: message}
-            else
-              Logger.warning(
-                "Failed to configure publication with relation #{inspect(oid_rel)}: #{inspect(reason)}"
-              )
+          error = publication_error(reason, oid_rel, state) || reason
 
-              reason
-            end
+          log_level = if is_known_publication_error(error), do: :warning, else: :error
+
+          Logger.log(
+            log_level,
+            "Failed to configure publication for relation #{inspect(oid_rel)}: #{inspect(reason)}",
+            relation: inspect(oid_rel)
+          )
 
           state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
 
@@ -423,7 +460,7 @@ defmodule Electric.Replication.PublicationManager do
   defp get_oid_relation_from_shape(%Shape{root_table: relation, root_table_id: oid}),
     do: {oid, relation}
 
-  defp publication_error_message(:relation_missing_from_publication, oid_rel, state) do
+  defp publication_error(:relation_missing_from_publication, oid_rel, state) do
     tail =
       cond do
         state.manual_table_publishing? ->
@@ -435,20 +472,35 @@ defmodule Electric.Replication.PublicationManager do
 
     {_oid, rel} = oid_rel
     table = Utils.relation_to_sql(rel)
-    "Database table #{table} is missing from the publication and " <> tail
+
+    %Electric.DbConfigurationError{
+      type: :relation_missing_from_publication,
+      message:
+        "Database table #{table} is missing from " <>
+          "the publication #{Utils.quote_name(state.publication_name)} and " <>
+          tail
+    }
   end
 
-  defp publication_error_message(:misconfigured_replica_identity, oid_rel, _state) do
+  defp publication_error(:misconfigured_replica_identity, oid_rel, _state) do
     {_oid, rel} = oid_rel
     table = Utils.relation_to_sql(rel)
-    "Database table #{table} does not have its replica identity set to FULL"
+
+    %Electric.DbConfigurationError{
+      type: :misconfigured_replica_identity,
+      message: "Database table #{table} does not have its replica identity set to FULL"
+    }
   end
 
-  defp publication_error_message(:relation_invalidated, oid_rel, _state) do
+  defp publication_error(:relation_invalidated, oid_rel, _state) do
     {_oid, rel} = oid_rel
     table = Utils.relation_to_sql(rel)
-    "Database table #{table} has been dropped or renamed"
+
+    %Electric.DbConfigurationError{
+      type: :relation_invalidated,
+      message: "Database table #{table} has been dropped or renamed"
+    }
   end
 
-  defp publication_error_message(_reason, _oid_rel, _state), do: nil
+  defp publication_error(_reason, _oid_rel, _state), do: nil
 end
