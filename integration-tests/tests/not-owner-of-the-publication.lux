@@ -83,7 +83,7 @@
 
   [invoke shape_get_snapshot items]
   ??HTTP/1.1 503
-  ??{"message":"Database table \"public.items\" is missing from the publication and Electric lacks privileges to add it"}
+  ??{"message":"Database table \"public.items\" is missing from the publication \"electric_publication_integration\" and Electric lacks privileges to add it"}
 
 ## Add the table to the publication and try again
 [shell psql]

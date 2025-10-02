@@ -36,10 +36,10 @@
   # Electric fails to add the table to the publication
   [invoke shape_get_snapshot items]
   ??HTTP/1.1 503
-  ??{"message":"Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"}
+  ??{"message":"Database table \"public.items\" is missing from the publication \"electric_publication_integration\" and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"}
 
 [shell electric]
-  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
+  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" is missing from the publication \"electric_publication_integration\" and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
 
 ## Add the table to the publication and try again
 [shell psql]

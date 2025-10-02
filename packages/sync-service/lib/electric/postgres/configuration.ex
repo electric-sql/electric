@@ -91,7 +91,7 @@ defmodule Electric.Postgres.Configuration do
     %{
       valid: valid,
       to_add: to_add,
-      to_fix_replica_identity: to_fix,
+      to_reconfigure: to_reconfigure,
       to_invalidate: to_invalidate
     } =
       determine_publication_relation_actions!(conn, publication_name, expected_rels)
@@ -100,13 +100,13 @@ defmodule Electric.Postgres.Configuration do
       [
         Enum.map(valid, &{&1, :ok}),
         Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
-        Enum.map(to_fix, &{&1, {:error, :misconfigured_replica_identity}}),
+        Enum.map(to_reconfigure, &{&1, {:error, :misconfigured_replica_identity}}),
         Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
       ]
       |> List.flatten()
       |> Map.new()
 
-    if MapSet.size(to_add) == 0 and MapSet.size(to_fix) == 0 do
+    if MapSet.size(to_add) == 0 and MapSet.size(to_reconfigure) == 0 do
       Logger.info(fn ->
         tables = for {_, rel} <- valid, do: Utils.relation_to_sql(rel)
 
@@ -133,6 +133,10 @@ defmodule Electric.Postgres.Configuration do
     Postgrex.transaction(conn, &do_configure_publication!(&1, publication_name, new_relations))
     |> case do
       {:ok, relations_configured} ->
+        Logger.debug(
+          "Publication configuration committed - result: #{inspect(relations_configured)}"
+        )
+
         relations_configured
 
       {:error, reason} ->
@@ -147,24 +151,27 @@ defmodule Electric.Postgres.Configuration do
       valid: valid,
       to_add: to_add,
       to_drop: to_drop,
-      to_fix_replica_identity: to_fix,
+      to_reconfigure: to_reconfigure,
       to_invalidate: to_invalidate
     } =
       determine_publication_relation_actions!(conn, publication_name, new_publication_rels)
 
-    to_add = MapSet.union(to_add, to_fix) |> MapSet.to_list()
-    to_drop = MapSet.to_list(to_drop)
-    to_invalidate = MapSet.to_list(to_invalidate)
+    # Re-add tables that need fixing
+    to_add = MapSet.union(to_add, to_reconfigure)
 
-    if to_drop != [] or to_add != [] do
+    if MapSet.size(to_add) > 0 or MapSet.size(to_drop) > 0 do
+      to_add_list = for {_, rel} <- to_add, do: Utils.relation_to_sql(rel)
+      to_drop_list = for {_, rel} <- to_drop, do: Utils.relation_to_sql(rel)
+      to_invalidate_list = for {_, rel} <- to_invalidate, do: Utils.relation_to_sql(rel)
+
       Logger.info(
         "Configuring publication #{publication_name} to " <>
-          "drop #{inspect(to_drop)} tables, and " <>
-          "add #{inspect(to_add)} tables " <>
-          "- skipping altered tables #{inspect(to_invalidate)}",
-        publication_alter_drop_tables: to_drop,
-        publication_alter_add_tables: to_add,
-        publication_alter_invalid_tables: to_invalidate
+          "drop #{inspect(to_drop_list)} tables, and " <>
+          "add #{inspect(to_add_list)} tables " <>
+          "- skipping altered tables #{inspect(to_invalidate_list)}",
+        publication_alter_drop_tables: to_drop_list,
+        publication_alter_add_tables: to_add_list,
+        publication_alter_invalid_tables: to_invalidate_list
       )
     end
 
@@ -186,13 +193,13 @@ defmodule Electric.Postgres.Configuration do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
+    Logger.debug(
+      "Adding #{table} to publication #{publication_name} and " <>
+        "setting its replica identity to FULL"
+    )
+
     with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table),
          :ok <- exec_set_replica_identity_full(conn, table) do
-      Logger.debug(
-        "Added #{table} to publication #{publication_name} and " <>
-          "set its replica identity to FULL"
-      )
-
       :ok
     end
   end
@@ -202,6 +209,7 @@ defmodule Electric.Postgres.Configuration do
   defp drop_table_from_publication(conn, publication_name, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
+    Logger.debug("Removing #{table} from publication #{publication_name}")
     exec_alter_publication_for_table(conn, publication_name, :drop, table)
   end
 
@@ -258,7 +266,7 @@ defmodule Electric.Postgres.Configuration do
             valid: relation_filters(),
             to_add: relation_filters(),
             to_drop: relation_filters(),
-            to_fix_replica_identity: relation_filters(),
+            to_reconfigure: relation_filters(),
             to_invalidate: relation_filters()
           }
   defp determine_publication_relation_actions!(conn, publication_name, expected_rels) do
@@ -278,18 +286,18 @@ defmodule Electric.Postgres.Configuration do
 
     valid = MapSet.new(prev_valid_publication_rels, &trim_publication_relation/1)
 
-    to_fix_replica_identity =
-      MapSet.new(prev_misconfigured_publication_rels, &trim_publication_relation/1)
+    invalid = MapSet.new(prev_misconfigured_publication_rels, &trim_publication_relation/1)
 
     valid_expected = MapSet.difference(expected_rels, to_invalidate)
-    to_drop = MapSet.difference(valid, valid_expected)
+    to_reconfigure = MapSet.intersection(invalid, valid_expected)
+    to_drop = MapSet.difference(MapSet.union(invalid, valid), valid_expected)
     to_add = MapSet.difference(valid_expected, valid)
 
     %{
       valid: valid,
       to_add: to_add,
       to_drop: to_drop,
-      to_fix_replica_identity: to_fix_replica_identity,
+      to_reconfigure: to_reconfigure,
       to_invalidate: to_invalidate
     }
   end
