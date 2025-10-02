@@ -80,6 +80,9 @@ paths:
             ongoing_sync:
               value: "26800584_4"
               summary: continue syncing from offset `26800584_4`
+            skip_historical:
+              value: "now"
+              summary: skip all historical data and start from the current point
           required: true
           description: |-
             The offset in the shape stream. This is like a cursor that specifies
@@ -88,10 +91,15 @@ paths:
             When making an initial request to sync a shape from scratch, you
             **must** set the `offset` to `-1`. Then, when continuing to
             sync data, you should set the `offset` to the last offset you have
-            already recieved, to continue syncing new data from that position
+            already received, to continue syncing new data from that position
             in the stream.
 
-            Note that when `offset` is not `-1` then you must also provide
+            Alternatively, you can set `offset` to `now` to skip all historical
+            data and receive an immediate up-to-date message with the latest
+            continuation offset. This is useful when combined with `log=changes_only`
+            mode and `replica=full` for applications that don't need historical data.
+
+            Note that when `offset` is not `-1` or `now` then you must also provide
             the shape's `handle`.
         - name: live
           in: query
@@ -143,11 +151,13 @@ paths:
             query parameter.
           examples:
             title_filter:
-              value: '"title=''Electric''"'
-              summary: Only include rows where the title is 'Electric'.
+              value: |
+                "title = 'Electric'"
+              summary: Only include rows where the title is 'Electric'
             status_filter:
-              value: '"status IN (''backlog'', ''todo'')"'
-              summary: Only include rows whose status is either 'backlog' or 'todo'.
+              value: |
+                "status IN ('backlog', 'todo')"
+              summary: Only include rows whose status is either 'backlog' or 'todo'
         - name: params
           in: query
           style: deepObject
@@ -169,7 +179,7 @@ paths:
               value:
                 1: value1
               summary: replace placeholder `$1` inside the where clause with `value1`
-              
+
         - name: columns
           in: query
           schema:
@@ -209,8 +219,134 @@ paths:
 
             Note that insert operations always include the full row,
             in either mode.
-        - $ref: '#/components/parameters/secret'
-        - $ref: '#/components/parameters/api_secret'
+        - name: log
+          in: query
+          schema:
+            type: string
+            enum:
+              - full
+              - changes_only
+            default: full
+          examples:
+            full_snapshot:
+              value: "full"
+              summary: Load complete historical data (default)
+            changes_only:
+              value: "changes_only"
+              summary: Skip historical data, only receive real-time changes
+          description: |-
+            Controls the initial data loading mode for the shape.
+
+            When `log=full` (the default), the server creates an initial snapshot
+            of all data matching the shape definition and streams it to the client
+            before delivering real-time updates.
+
+            When `log=changes_only`, the server skips the initial snapshot creation.
+            The client will only receive changes that occur after the shape is
+            established, without seeing the base data. This is useful for:
+
+            - Event streams where historical data isn't needed
+            - Applications that fetch their initial state through `subset__*` parameters
+            - Reducing initial sync time when combined with `offset=now`
+
+            In `changes_only` mode, you can use the client's `requestSnapshot` method
+            to fetch subsets of data on-demand while tracking which changes to skip.
+        - name: subset__where
+          in: query
+          schema:
+            type: string
+          examples:
+            status_filter:
+              value: "status = 'active'"
+              summary: Filter subset to only active records
+            priority_filter:
+              value: "priority = 'high' AND status = 'open'"
+              summary: Filter to high priority open items
+          description: |-
+            Optional WHERE clause to filter a subset of the shape data.
+
+            Presence of this or other `subset__*` parameters in the request makes the server
+            return a subset snapshot instead of the regular shape sync.
+
+            This allows you to fetch a specific portion of the shape's data with
+            additional filtering beyond the main shape's WHERE clause. This filter is
+            always applied in addition to the main shape's WHERE clause, so it's not possible
+            to get data that doesn't match the main shape's WHERE clause.
+        - name: subset__params
+          in: query
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            patternProperties:
+              '^\d+$':
+                type: string
+          description: |-
+            Parameters for the subset WHERE clause. Uses the same "exploded object"
+            syntax as the main `params` parameter.
+
+            Presence of this or other `subset__*` parameters in the request makes the server
+            return a subset snapshot instead of the regular shape sync.
+        - name: subset__limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+          examples:
+            page_size:
+              value: 50
+              summary: Return maximum of 50 rows
+            small_batch:
+              value: 10
+              summary: Small batch of 10 rows
+          description: |-
+            Maximum number of rows to return in the subset snapshot.
+
+            Presence of this or other `subset__*` parameters in the request makes the server
+            return a subset snapshot instead of the regular shape sync.
+
+            When `limit` or `offset` is specified, `subset__order_by` becomes required.
+        - name: subset__offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+          examples:
+            first_page:
+              value: 0
+              summary: Start from the first row
+            second_page:
+              value: 50
+              summary: Skip first 50 rows for pagination
+          description: |-
+            Number of rows to skip in the subset snapshot (for pagination).
+
+            Presence of this or other `subset__*` parameters in the request makes the server
+            return a subset snapshot instead of the regular shape sync.
+
+            When `limit` or `offset` is specified, `subset__order_by` becomes required.
+        - name: subset__order_by
+          in: query
+          schema:
+            type: string
+          examples:
+            by_created:
+              value: "created_at DESC"
+              summary: Order by creation date, newest first
+            by_priority:
+              value: "priority ASC, created_at DESC NULLS LAST"
+              summary: Order by priority ascending, then by date descending
+          description: |-
+            ORDER BY clause for the subset snapshot, determining the row ordering. Uses
+            same syntax as `ORDER BY` clause in PostgreSQL.
+
+            Presence of this or other `subset__*` parameters in the request makes the server
+            return a subset snapshot instead of the regular shape sync.
+
+            This becomes required when using `subset__limit` or `subset__offset`.
+
+        - $ref: "#/components/parameters/secret"
+        - $ref: "#/components/parameters/api_secret"
         # Headers
         - name: If-None-Match
           in: header
@@ -253,7 +389,7 @@ paths:
                 type: string
               example: "26800584_4"
               description: |-
-                The latest offset in the batch of data you have recieved.
+                The latest offset in the batch of data you have received.
 
                 If no data is returned, this will be equal to the `offset` parameter
                 you have provided.
@@ -292,121 +428,276 @@ paths:
                 description: |-
                   If present, this header indicates that the response ends with
                   an `up-to-date` control message, indicating that the client has
-                  recieved all of the data that the server is aware of and can
+                  received all of the data that the server is aware of and can
                   safely process/apply any accumulated messages.
           content:
             application/json:
               schema:
-                type: array
-                description: Array of message objects
-                items:
-                  type: object
-                  description: Message object
-                  properties:
-                    headers:
+                oneOf:
+                  - type: array
+                    description: |-
+                      Array of message objects returned for regular shape sync requests
+                      (when no `subset__*` parameters are present).
+                    items:
                       type: object
-                      description: |-
-                        Metadata about the message.
-
-                        Messages can be `control` messages, providing information or
-                        instructions to the client. Or they can be operations that
-                        performed a certain `operation` on a row of data in the shape.
+                      description: Message object
+                      required:
+                        - headers
                       properties:
-                        control:
+                        headers:
+                          type: object
+                          description: |-
+                            Metadata about the message.
+
+                            Messages can be `control` messages, providing information or
+                            instructions to the client. Or they can be operations that
+                            performed a certain `operation` on a row of data in the shape.
+
+                            Control messages include:
+                            - `up-to-date`: Indicates the client has received all available data
+                            - `must-refetch`: Indicates the client must discard local data and re-sync
+                            - `snapshot-end`: Marks the end of a subset snapshot, includes PostgreSQL
+                              snapshot metadata (xmin, xmax, xip_list) for tracking which changes to skip
+                          properties:
+                            control:
+                              type: string
+                              enum:
+                                - up-to-date
+                                - must-refetch
+                                - snapshot-end
+                            xmin:
+                              type: string
+                              description: |-
+                                Minimum transaction ID in the snapshot (for `snapshot-end` control messages only).
+
+                                Part of the PostgreSQL snapshot metadata that allows clients to determine
+                                which changes have been incorporated into a snapshot.
+                            xmax:
+                              type: string
+                              description: |-
+                                Maximum transaction ID in the snapshot (for `snapshot-end` control messages only).
+
+                                Part of the PostgreSQL snapshot metadata that allows clients to determine
+                                which changes have been incorporated into a snapshot.
+                            xip_list:
+                              type: array
+                              items:
+                                type: string
+                              description: |-
+                                List of transaction IDs in progress during the snapshot (for `snapshot-end` control messages only).
+
+                                Part of the PostgreSQL snapshot metadata that allows clients to determine
+                                which changes have been incorporated into a snapshot.
+                            operation:
+                              type: string
+                              enum:
+                                - insert
+                                - update
+                                - delete
+                              description: The type of operation performed on the row of the shape.
+                            lsn:
+                              type: string
+                              description: |-
+                                The logical sequence number of the operation.
+
+                                Only present on operations that were received from the event stream.
+                                It's missing on initial query results and on compacted items.
+                                Operations with the same LSN were committed in the same transaction and
+                                can be ordered by `op_position` within the same LSN.
+                            op_position:
+                              type: integer
+                              description: |-
+                                The position of the operation in the transaction.
+
+                                Only present on operations that were received from the event stream.
+                                It's missing on initial query results and on compacted items.
+                            last:
+                              type: boolean
+                              description: |-
+                                Whether this is the last operation in the transaction for this shape.
+
+                                Last operation in a transaction for the shape does not mean a last
+                                operation in the transaction for the database.
+
+                                Only present on operations that were received from the event stream.
+                                It's missing on initial query results and on compacted items.
+                            txids:
+                              type: array
+                              description: |-
+                                The list of transaction IDs that this operation was part of.
+
+                                Currently, this will only contain a single transaction ID, but future
+                                stream processors may merge operations from multiple transactions into a single
+                                operation in the event stream.
+                            snapshot_mark:
+                              type: integer
+                              description: |-
+                                Random number identifying which snapshot this operation belongs to.
+
+                                Only present on operation messages that are part of a subset snapshot response.
+                                Used to match snapshot data with its corresponding `snapshot-end` control message.
+                        key:
                           type: string
-                          enum:
-                            - up-to-date
-                            - must-refetch
-                        operation:
-                          type: string
-                          enum:
-                            - insert
-                            - update
-                            - delete
-                          description: The type of operation that is performed on the row of the shape that is identified by the `key`.
-                        lsn:
-                          type: string
+                          description: Row ID
+                        value:
+                          type: object
                           description: |-
-                            The logical sequence number of the operation.
+                            The row data.
 
-                            Only present on operations that were received from the event stream.
-                            It's missing on initial query results and on compacted items.
-                            Operations with the same LSN were committed in the same transaction and
-                            can be ordered by `op_position` within the same LSN.
-                        op_position:
-                          type: integer
+                            Note that this does not necessarily contain the whole row:
+
+                            - for inserts it will contain the whole row
+                            - for updates it will contain the primary key and the changed values
+                            - for deletes it will contain just the primary key
+
+                            The values are strings that are formatted according to Postgres' display settings.
+                            Some Postgres types support several display settings, we format values consistently according to the following display settings:
+
+                            - `bytea_output = 'hex'`
+                            - `DateStyle = 'ISO, DMY'`
+                            - `TimeZone = 'UTC'`
+                            - `IntervalStyle = 'iso_8601'`
+                            - `extra_float_digits = 1`
+                        old_value:
+                          type: object
                           description: |-
-                            The position of the operation in the transaction.
+                            The previous value for changed columns on an update.
 
-                            Only present on operations that were received from the event stream.
-                            It's missing on initial query results and on compacted items.    
-                        last:
-                          type: boolean
-                          description: |-
-                            Whether this is the last operation in the transaction for this shape.
+                            Only present on update messages when `replica=full`.
+                  - type: object
+                    description: |-
+                      Object containing subset snapshot data and metadata, returned when
+                      any `subset__*` parameters are present in the request.
+                    required:
+                      - data
+                      - metadata
+                    properties:
+                      metadata:
+                        type: object
+                        description: |-
+                          PostgreSQL snapshot metadata for tracking which changes to skip.
+                          This response format is returned when any `subset__*` parameters are present in the request.
+                        properties:
+                          xmin:
+                            type: string
+                            description: Minimum transaction ID in the snapshot (uint64 as string).
+                          xmax:
+                            type: string
+                            description: Maximum transaction ID in the snapshot (uint64 as string).
+                          xip_list:
+                            type: array
+                            items:
+                              type: string
+                            description: List of transaction IDs that were in progress during the snapshot (uint64 as strings).
+                          snapshot_mark:
+                            type: integer
+                            description: Random number identifying this snapshot, matching the value in operation headers.
+                          database_lsn:
+                            type: string
+                            description: Database log sequence number at the time the snapshot was taken.
+                      data:
+                        type: array
+                        description: Array of operation messages (no control messages) representing the subset snapshot data.
+                        items:
+                          type: object
+                          description: Operation message
+                          properties:
+                            headers:
+                              type: object
+                              description: Metadata about the operation.
+                              properties:
+                                operation:
+                                  type: string
+                                  enum:
+                                    - insert
+                                    - update
+                                    - delete
+                                  description: The type of operation performed on the row of the shape.
+                                snapshot_mark:
+                                  type: integer
+                                  description: |-
+                                    Random number identifying this snapshot.
+                                    Matches the `snapshot_mark` in the metadata object.
+                                lsn:
+                                  type: string
+                                  description: |-
+                                    The logical sequence number of the operation.
 
-                            Last operation in a transaction for the shape does not mean a last
-                            operation in the transaction for the database.
+                                    Only present on operations that were received from the event stream.
+                                    It's missing on initial query results and on compacted items.
+                                op_position:
+                                  type: integer
+                                  description: |-
+                                    The position of the operation in the transaction.
 
-                            Only present on operations that were received from the event stream.
-                            It's missing on initial query results and on compacted items.
-                        txids:
-                          type: array
-                          description: |-
-                            The list of transaction IDs that this operation was part of.
-
-                            Currently, this will only contain a single transaction ID, but future
-                            stream processors may merge operations from multiple transactions into a single
-                            operation in the event stream.
-                    key:
-                      type: string
-                      description: Row ID
-                    value:
-                      type: object
-                      description: |-
-                        The row data.
-
-                        Note that this does not necessarily contain the whole row:
-
-                        - for inserts it will contain the whole row
-                        - for updates it will contain the primary key and the changed values
-                        - for deletes it will contain just the primary key
-
-                        The values are strings that are formatted according to Postgres' display settings.
-                        Some Postgres types support several display settings, we format values consistently according to the following display settings:
-
-                        - `bytea_output = 'hex'`
-                        - `DateStyle = 'ISO, DMY'`
-                        - `TimeZone = 'UTC'`
-                        - `IntervalStyle = 'iso_8601'`
-                        - `extra_float_digits = 1`
-                    old_value:
-                      type: object
-                      description: |-
-                        The previous value for changed columns on an update.
-
-                        Only present on update messages when `replica=full`.
-                example:
-                  - headers:
-                      operation: insert
-                      lsn: 1234
-                      op_position: 0
-                    key: issue-1
-                    value:
-                      id: issue-1
-                      title: Electric
-                      status: backlog
-                  - headers:
-                      operation: insert
-                      lsn: 1234
-                      op_position: 7
-                    key: issue-2
-                    value:
-                      id: issue-2
-                      title: Hello
-                      status: backlog
-                  - headers:
-                      control: up-to-date
+                                    Only present on operations that were received from the event stream.
+                                txids:
+                                  type: array
+                                  description: |-
+                                    The list of transaction IDs that this operation was part of.
+                            key:
+                              type: string
+                              description: Row ID
+                            value:
+                              type: object
+                              description: The row data.
+                            old_value:
+                              type: object
+                              description: |-
+                                The previous value for changed columns on an update.
+                                Only present when `replica=full`.
+              examples:
+                default:
+                  summary: Regular shape sync with insert operations
+                  value:
+                    - headers:
+                        operation: insert
+                        lsn: 1234
+                        op_position: 0
+                      key: issue-1
+                      value:
+                        id: issue-1
+                        title: Electric
+                        status: backlog
+                    - headers:
+                        operation: insert
+                        lsn: 1234
+                        op_position: 7
+                      key: issue-2
+                      value:
+                        id: issue-2
+                        title: Hello
+                        status: backlog
+                    - headers:
+                        control: up-to-date
+                subset_snapshot:
+                  summary: Subset snapshot with data and metadata
+                  value:
+                    data:
+                      - headers:
+                          operation: insert
+                          snapshot_mark: 42
+                          txids: ["1020"]
+                        key: issue-3
+                        value:
+                          id: issue-3
+                          title: High Priority
+                          status: backlog
+                      - headers:
+                          operation: insert
+                          snapshot_mark: 42
+                          txids: ["1020"]
+                        key: issue-5
+                        value:
+                          id: issue-5
+                          title: Another High Priority
+                          status: todo
+                    metadata:
+                      xmin: "1000"
+                      xmax: "1050"
+                      xip_list: ["1025", "1030"]
+                      snapshot_mark: 42
+                      database_lsn: "0/16B3F70"
         "400":
           description: Bad request.
         "404":
@@ -516,8 +807,8 @@ paths:
           description:
             Optional, deletes the current shape if it matches the `handle` provided.
             If not provided, deletes the current shape.
-        - $ref: '#/components/parameters/secret'
-        - $ref: '#/components/parameters/api_secret'
+        - $ref: "#/components/parameters/secret"
+        - $ref: "#/components/parameters/api_secret"
       responses:
         "202":
           description: |-
