@@ -115,8 +115,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
           Enum.zip(cols, row) |> Map.new()
 
         _ ->
-          raise Electric.DbConfigurationError,
-                "Publication #{Utils.quote_name(state.publication_name)} not found in the database"
+          raise Electric.DbConfigurationError.publication_missing(state.publication_name)
       end
 
     case publication do
@@ -124,8 +123,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
         state
 
       _ ->
-        raise Electric.DbConfigurationError,
-              "Publication #{Utils.quote_name(state.publication_name)} does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE"
+        raise Electric.DbConfigurationError.publication_missing_operations(state.publication_name)
     end
   end
 

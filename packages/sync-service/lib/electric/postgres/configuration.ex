@@ -31,6 +31,50 @@ defmodule Electric.Postgres.Configuration do
   @typep publication_relation :: {Electric.relation_id(), Electric.relation(), <<_::8>>}
 
   @doc """
+  Check whether the publication with the given name exists, is configured to
+  publish all required operations, and is owned by the current user.
+  """
+  @spec check_publication_status!(Postgrex.conn(), String.t()) :: :ok
+  def check_publication_status!(conn, publication_name) do
+    case Postgrex.query!(
+           conn,
+           "SELECT pubinsert, pubupdate, pubdelete, pubtruncate FROM pg_publication WHERE pubname = $1",
+           [publication_name]
+         ) do
+      %{num_rows: 1, columns: cols, rows: [row]} ->
+        publication = Enum.zip(cols, row) |> Map.new()
+
+        case publication do
+          %{"pubinsert" => true, "pubupdate" => true, "pubdelete" => true, "pubtruncate" => true} ->
+            case Postgrex.query!(
+                   conn,
+                   """
+                     SELECT
+                       pg_get_userbyid(p.pubowner) = current_role
+                     FROM
+                       pg_publication p
+                     WHERE
+                       p.pubname = $1;
+                   """,
+                   [publication_name]
+                 ) do
+              %{rows: [[true]]} ->
+                :ok
+
+              %{rows: [[false]]} ->
+                raise Electric.DbConfigurationError.publication_not_owned(publication_name)
+            end
+
+          _ ->
+            raise Electric.DbConfigurationError.publication_missing_operations(publication_name)
+        end
+
+      %{num_rows: 0} ->
+        raise Electric.DbConfigurationError.publication_missing(publication_name)
+    end
+  end
+
+  @doc """
   Check whether the state of the publication relations in the database matches the sets of
   filters passed into the function.
 
@@ -42,7 +86,7 @@ defmodule Electric.Postgres.Configuration do
   allow for the cleanup of their corresponding shapes.
   """
   @spec validate_publication_configuration!(Postgrex.conn(), relation_filters(), String.t()) ::
-          {:ok, relations_configured()}
+          relations_configured()
   def validate_publication_configuration!(conn, expected_rels, publication_name) do
     %{
       valid: valid,
@@ -55,7 +99,7 @@ defmodule Electric.Postgres.Configuration do
     configuration_result =
       [
         Enum.map(valid, &{&1, :ok}),
-        Enum.map(to_add, &{&1, {:error, :relation_missing_from_publicatio}}),
+        Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
         Enum.map(to_fix, &{&1, {:error, :misconfigured_replica_identity}}),
         Enum.map(to_invalidate, &{&1, {:error, :relation_invalidated}})
       ]
@@ -70,7 +114,7 @@ defmodule Electric.Postgres.Configuration do
       end)
     end
 
-    {:ok, configuration_result}
+    configuration_result
   end
 
   @doc """
