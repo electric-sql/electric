@@ -8,10 +8,10 @@
   "packageManager": "pnpm@9.15.0",
   "private": true,
   "scripts": {
-    "ci:publish": "pnpm '/^ci:publish:.+/'",
+    "ci:publish": "pnpm '/^ci:publish:.+/' && pnpm exec changeset tag",
     "ci:publish:hex-electric": "pnpm run --dir packages/sync-service publish:hex",
     "ci:publish:hex-electric-client": "pnpm run --dir packages/elixir-client publish:hex",
-    "ci:publish:npm": "pnpm run -r build && pnpm publish -r --no-git-checks --access public && pnpm exec changeset tag",
+    "ci:publish:npm": "pnpm publish -r --filter './packages/**' --no-git-checks --access public",
     "ci:version": "pnpm exec changeset version",
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
     "example-backend:just_up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d",
