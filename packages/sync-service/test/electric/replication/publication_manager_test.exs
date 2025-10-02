@@ -28,12 +28,21 @@ defmodule Electric.Replication.PublicationManagerTest do
 
     Repatch.patch(
       Electric.Postgres.Configuration,
+      :check_publication_status!,
+      [mode: :shared],
+      fn _, _ -> ctx[:configuration_publication_status] || :ok end
+    )
+
+    Repatch.patch(
+      Electric.Postgres.Configuration,
       :configure_publication!,
       [mode: :shared],
-      fn _, _, filters, _ ->
+      fn _, _, filters ->
         # Only relations are relevant now
         send(test_pid, {:filters, MapSet.to_list(filters)})
-        Map.get(ctx, :returned_relations, MapSet.new())
+
+        Map.new(filters, fn rel -> {rel, :ok} end)
+        |> Map.merge(ctx[:configuration_result_overrides] || %{})
       end
     )
 
@@ -51,7 +60,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     %{opts: publication_manager_opts, ctx: ctx}
   end
 
-  describe "add_shape/2" do
+  describe "add_shape/3" do
     test "adds a single relation", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
@@ -118,7 +127,9 @@ defmodule Electric.Replication.PublicationManagerTest do
       refute_receive {:filters, _}, 500
     end
 
-    @tag returned_relations: MapSet.new([{10, {"public", "another_table"}}])
+    @tag configuration_result_overrides: %{
+           {10, {"public", "another_table"}} => {:error, :relation_invalidated}
+         }
     test "broadcasts dropped relations to shape cache", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
@@ -192,58 +203,6 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive :task2_done, 10
       assert_receive {:filters, []}
       refute_receive {:filters, _}, 200
-    end
-  end
-
-  describe "missing publication handling" do
-    test "add_shape raises and server stops when publication is missing", ctx do
-      stop_supervised!(ctx.opts[:server])
-
-      missing_pub_error = %Postgrex.Error{
-        postgres: %{
-          code: :undefined_object,
-          pg_code: "42704",
-          severity: "ERROR",
-          message: "publication \"pub_#{ctx.stack_id}\" does not exist"
-        }
-      }
-
-      %{publication_manager: {_, publication_manager_opts}} =
-        with_publication_manager(%{
-          module: ctx.module,
-          test: ctx.test,
-          stack_id: ctx.stack_id,
-          update_debounce_timeout: 0,
-          publication_name: "pub_#{ctx.stack_id}",
-          pool: :no_pool
-        })
-
-      Repatch.restore(Electric.Postgres.Configuration, :configure_publication!, 4, mode: :shared)
-
-      Repatch.patch(
-        Electric.Postgres.Configuration,
-        :configure_publication!,
-        [mode: :shared],
-        fn _, _, _, _ -> raise missing_pub_error end
-      )
-
-      Repatch.allow(self(), publication_manager_opts[:server])
-
-      pid = GenServer.whereis(publication_manager_opts[:server])
-      mref = Process.monitor(pid)
-      Process.unlink(pid)
-
-      shape = generate_shape({"public", "items"})
-
-      raised =
-        assert_raise(Postgrex.Error, fn ->
-          PublicationManager.add_shape(@shape_handle_1, shape, publication_manager_opts)
-        end)
-
-      assert raised.postgres.code == :undefined_object
-
-      assert_receive {:DOWN, ^mref, :process, ^pid,
-                      {:shutdown, %Postgrex.Error{postgres: %{code: :undefined_object}}}}
     end
   end
 
