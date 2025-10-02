@@ -61,7 +61,6 @@ defmodule Electric.Connection.Supervisor do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
 
     children = [
-      {Electric.StatusMonitor, opts[:stack_id]},
       {Electric.Connection.Manager.Supervisor, opts}
     ]
 

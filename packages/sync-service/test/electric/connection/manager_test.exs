@@ -14,7 +14,14 @@ defmodule Electric.Connection.ConnectionManagerTest do
     :with_persistent_kv,
     :with_inspector,
     :with_slot_name_and_stream_id,
-    :with_in_memory_storage
+    :with_in_memory_storage,
+    :with_status_monitor,
+    :with_shape_log_collector,
+    :with_registry,
+    :with_log_chunking,
+    :with_publication_manager,
+    :with_shape_status,
+    :with_shape_cache
   ]
 
   defp start_connection_manager(%{stack_id: stack_id} = ctx) do
@@ -37,36 +44,38 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
     conn_sup =
       start_link_supervised!(
-        {Connection.Supervisor,
-         stack_id: stack_id,
-         connection_opts: connection_opts,
-         replication_opts: replication_opts,
-         pool_opts: [pool_size: 2],
-         connection_backoff: Connection.Manager.ConnectionBackoff.init(50, 50),
-         timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
-         shape_cache_opts: [
-           stack_id: stack_id,
-           inspector: ctx.inspector,
-           shape_status:
-             {Electric.ShapeCache.ShapeStatus,
-              Electric.ShapeCache.ShapeStatus.opts(
-                storage: ctx.storage,
-                shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id),
-                shape_last_used_table:
-                  Electric.ShapeCache.ShapeStatus.shape_last_used_table(stack_id)
-              )},
-           log_producer: Electric.Replication.ShapeLogCollector.name(stack_id),
-           consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-           storage: ctx.storage,
-           publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
-           chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-           registry: Electric.StackSupervisor.registry_name(stack_id)
-         ],
-         tweaks: [],
-         max_shapes: nil,
-         expiry_batch_size: 1,
-         persistent_kv: ctx.persistent_kv,
-         stack_events_registry: stack_events_registry},
+        {
+          Connection.Supervisor,
+          shape_cache_opts: [
+            stack_id: stack_id,
+            inspector: ctx.inspector,
+            shape_status:
+              {Electric.ShapeCache.ShapeStatus,
+               Electric.ShapeCache.ShapeStatus.opts(
+                 storage: ctx.storage,
+                 shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id),
+                 shape_last_used_table:
+                   Electric.ShapeCache.ShapeStatus.shape_last_used_table(stack_id)
+               )},
+            log_producer: Electric.Replication.ShapeLogCollector.name(stack_id),
+            consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
+            storage: ctx.storage,
+            publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
+            chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
+            registry: Electric.StackSupervisor.registry_name(stack_id)
+          ],
+          stack_id: stack_id,
+          connection_opts: connection_opts,
+          replication_opts: replication_opts,
+          pool_opts: [pool_size: 2],
+          connection_backoff: Connection.Manager.ConnectionBackoff.init(50, 50),
+          timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
+          tweaks: [],
+          max_shapes: nil,
+          expiry_batch_size: 1,
+          persistent_kv: ctx.persistent_kv,
+          stack_events_registry: stack_events_registry
+        },
         # The test supervisor under which this one is started has `auto_shutdown` set to
         # `:never`, so we need to make sure the connection supervisor is not a significant
         # child, otherwise we'd get the following error:
@@ -151,98 +160,6 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       assert StatusMonitor.status(stack_id) == :waiting
-    end
-
-    test "backtracks the status when the shape log collector goes down", %{stack_id: stack_id} do
-      wait_until_active(stack_id)
-
-      :ok = GenServer.stop(Electric.Replication.ShapeLogCollector.name(stack_id), :shutdown)
-
-      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-
-      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
-    end
-
-    test "backtracks the status when the shape cache goes down", %{stack_id: stack_id} do
-      wait_until_active(stack_id)
-
-      # should backtrack the status by virtue of the shape log collector being shut down
-      # by the replication supervisor
-      monitor =
-        stack_id
-        |> Electric.Replication.ShapeLogCollector.name()
-        |> GenServer.whereis()
-        |> Process.monitor()
-
-      :ok = GenServer.stop(Electric.ShapeCache.name(stack_id), :shutdown)
-
-      assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
-
-      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-
-      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
-    end
-
-    test "backtracks the status when the canary goes down", %{stack_id: stack_id} do
-      wait_until_active(stack_id)
-
-      # should backtrack the status by virtue of the shape log collector being shut down
-      # by the replication supervisor
-      monitor =
-        stack_id
-        |> Electric.Replication.Supervisor.canary_name()
-        |> GenServer.whereis()
-        |> Process.monitor()
-
-      :ok = GenServer.stop(Electric.Replication.Supervisor.canary_name(stack_id), :shutdown)
-
-      assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
-
-      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-
-      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
-    end
-  end
-
-  describe "process dependencies" do
-    setup [:start_connection_manager]
-
-    # https://github.com/electric-sql/electric/issues/3018
-    test "handles status messages after shape cache restart", ctx do
-      %{stack_id: stack_id} = ctx
-
-      wait_until_active(stack_id)
-
-      shape_cache_pid = stack_id |> Electric.ShapeCache.name() |> GenServer.whereis()
-      assert Process.alive?(shape_cache_pid)
-
-      manager_pid = GenServer.whereis(Electric.Connection.Manager.name(stack_id))
-      ref = Process.monitor(manager_pid)
-
-      Process.exit(shape_cache_pid, {:error, :reason})
-
-      refute_receive {:DOWN, ^ref, :process, ^manager_pid, _reason}, 300
-    end
-
-    test "manager dies after replication supervisor death", ctx do
-      %{stack_id: stack_id} = ctx
-
-      wait_until_active(stack_id)
-
-      supervisor_pid = stack_id |> Electric.Replication.Supervisor.name() |> GenServer.whereis()
-      assert Process.alive?(supervisor_pid)
-
-      manager_pid = GenServer.whereis(Electric.Connection.Manager.name(stack_id))
-      ref = Process.monitor(manager_pid)
-
-      Supervisor.stop(supervisor_pid, :reason)
-
-      # When the Replication.Supervisor process exits (for whatever reason)
-      # Connection.Manager.Supervisor terminates the rest of its children and shuts down itself
-      # (thanks to [auto_shutdown: :any_significant]).  This is why Connection.Manager exits
-      # with reason :shutdown and is then restarted by Connection.Supervsior under
-      # Connection.Manager.Supervisor again.
-      assert_receive {:DOWN, ^ref, :process, ^manager_pid, :shutdown}
     end
   end
 
