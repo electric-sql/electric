@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.1.13
+
+### Patch Changes
+
+- 47029ef: fix: ensure metrics for live/normal requests are correctly split
+
 ## 1.1.12
 
 ### Patch Changes

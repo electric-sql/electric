@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.12
+
+### Patch Changes
+
+- d87b6ec: fix: rename the `log` property
+
 ## 1.0.11
 
 ### Patch Changes
