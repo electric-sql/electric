@@ -303,10 +303,13 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
   @doc """
   Flush the buffer if it's not empty
   """
+  def flush_buffer(writer_acc(buffer_size: 0) = acc, _state) do
+    acc
+  end
+
   def flush_buffer(
         writer_acc(
           buffer: buffer,
-          buffer_size: buffer_size,
           last_seen_offset: last_seen_offset,
           last_seen_txn_offset: last_seen_txn,
           last_persisted_txn_offset: last_persisted_txn,
@@ -315,27 +318,23 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
         ) = acc,
         state
       ) do
-    if buffer_size > 0 do
-      IO.binwrite(json_file, buffer)
-      :file.datasync(json_file)
+    IO.binwrite(json_file, buffer)
+    :file.datasync(json_file)
 
-      # Tell the parent process that we've flushed up to this point
-      send(self(), {Storage, :flushed, last_seen_offset})
+    # Tell the parent process that we've flushed up to this point
+    send(self(), {Storage, :flushed, last_seen_offset})
 
-      # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
-      writer_acc(acc,
-        buffer: [],
-        buffer_size: 0,
-        ets_line_buffer: [],
-        last_persisted_offset: last_seen_offset,
-        last_persisted_txn_offset: last_seen_txn,
-        times_flushed: times_flushed + 1
-      )
-      |> update_persistance_metadata(state, last_persisted_txn)
-      |> trim_ets(state)
-    else
-      acc
-    end
+    # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
+    writer_acc(acc,
+      buffer: [],
+      buffer_size: 0,
+      ets_line_buffer: [],
+      last_persisted_offset: last_seen_offset,
+      last_persisted_txn_offset: last_seen_txn,
+      times_flushed: times_flushed + 1
+    )
+    |> update_persistance_metadata(state, last_persisted_txn)
+    |> trim_ets(state)
   end
 
   defp update_persistance_metadata(
