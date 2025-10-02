@@ -11,5 +11,11 @@ ExUnit.start(assert_receive_timeout: 400, exclude: [:slow, :telemetry_target], c
 # we force recompilation in the setup. The issue is tracked here:
 # https://github.com/hissssst/repatch/issues/2
 Repatch.setup(
-  recompile: [Postgrex, Electric.StatusMonitor, Electric.Telemetry.Sampler, :otel_tracer]
+  recompile: [
+    Postgrex,
+    Electric.StatusMonitor,
+    Electric.Telemetry.Sampler,
+    Electric.ShapeCache.ShapeCleaner,
+    :otel_tracer
+  ]
 )
