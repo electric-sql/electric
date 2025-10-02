@@ -896,10 +896,9 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
     end
   end
 
-  defp start_storage(%{mod: module, stack_id: stack_id} = context) do
+  defp start_storage(%{mod: module} = context) do
     storage_base = Storage.shared_opts({module, opts(module, context)})
 
-    start_link_supervised!({Electric.StackConfig, stack_id: stack_id, storage: storage_base})
     start_supervised!(Storage.stack_child_spec(storage_base))
 
     storage = Storage.for_shape(@shape_handle, storage_base)

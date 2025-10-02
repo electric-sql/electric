@@ -40,6 +40,7 @@ defmodule Support.ComponentSetup do
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
     registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
+    start_supervised!({Electric.StackConfig, stack_id: stack_id})
     %{stack_id: stack_id, process_registry: registry}
   end
 
@@ -101,7 +102,6 @@ defmodule Support.ComponentSetup do
            Map.get(ctx, :with_pure_file_storage_opts, [])}
       )
 
-    start_link_supervised!({Electric.StackConfig, stack_id: ctx.stack_id, storage: storage})
     start_supervised!(Storage.stack_child_spec(storage), restart: :temporary)
 
     %{storage: storage, storage_dir: ctx.tmp_dir}

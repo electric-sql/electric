@@ -37,8 +37,6 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       )
 
     storage_base = {PureFileStorage, base_opts}
-
-    start_link_supervised!({Electric.StackConfig, stack_id: ctx.stack_id, storage: storage_base})
     start_link_supervised!(Storage.stack_child_spec(storage_base))
 
     %{base_opts: base_opts, opts: PureFileStorage.for_shape(@shape_handle, base_opts)}

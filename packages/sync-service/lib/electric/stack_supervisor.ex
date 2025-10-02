@@ -353,10 +353,10 @@ defmodule Electric.StackSupervisor do
       telemetry_children ++
         [
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
-          {Electric.StackConfig, stack_id: stack_id, storage: storage},
+          {Electric.StackConfig, stack_id: stack_id},
           {Electric.AsyncDeleter,
            stack_id: stack_id,
-           storage_dir: Access.fetch!(config, :storage_dir),
+           storage_dir: config.storage_dir,
            cleanup_interval_ms: config.tweaks[:cleanup_interval_ms]},
           {Registry,
            name: shape_changes_registry_name, keys: :duplicate, partitions: registry_partitions},

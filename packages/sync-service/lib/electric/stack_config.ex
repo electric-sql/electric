@@ -1,6 +1,10 @@
 defmodule Electric.StackConfig do
   use GenServer
 
+  def put(stack_id, key, val) do
+    :ets.insert(table(stack_id), {key, val})
+  end
+
   def lookup(stack_id, key) do
     :ets.lookup_element(table(stack_id), key, 2)
   end
@@ -28,10 +32,7 @@ defmodule Electric.StackConfig do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
     tab = table(stack_id)
-
-    :ets.new(tab, [:protected, :named_table, :set])
-
-    :ets.insert(tab, [{Electric.ShapeCache.Storage, Keyword.fetch!(opts, :storage)}])
+    :ets.new(tab, [:public, :named_table, :set, read_concurrency: true])
 
     {:ok, nil}
   end

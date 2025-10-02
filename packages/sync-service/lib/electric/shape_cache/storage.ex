@@ -173,7 +173,7 @@ defmodule Electric.ShapeCache.Storage do
   def stack_child_spec({module, stack_opts}) do
     %{
       id: module,
-      start: {module, :stack_start_link, [stack_opts]},
+      start: {__MODULE__, :stack_start_link, [{module, stack_opts}]},
       restart: :permanent
     }
   end
@@ -189,7 +189,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def stack_start_link({mod, opts}) do
+  def stack_start_link({mod, opts} = storage) do
+    Electric.StackConfig.put(opts.stack_id, __MODULE__, storage)
     mod.stack_start_link(opts)
   end
 
