@@ -682,7 +682,8 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_shape_log_collector,
       :with_noop_publication_manager,
       :with_status_monitor,
-      :with_shape_monitor
+      :with_shape_monitor,
+      :with_async_deleter
     ]
 
     setup(ctx) do
