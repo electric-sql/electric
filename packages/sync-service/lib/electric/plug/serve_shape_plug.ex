@@ -132,9 +132,8 @@ defmodule Electric.Plug.ServeShapePlug do
         duration: System.monotonic_time() - conn.private[:electric_telemetry_span][:start_time]
       },
       %{
-        live: assigns[:live],
-        shape_handle:
-          conn.query_params["handle"] || assigns[:active_shape_handle] || assigns[:handle],
+        live: get_live_mode(assigns),
+        shape_handle: get_handle(assigns) || conn.query_params["handle"],
         client_ip: conn.remote_ip,
         status: conn.status,
         stack_id: get_in(conn.assigns, [:config, :stack_id])
@@ -145,6 +144,14 @@ defmodule Electric.Plug.ServeShapePlug do
     OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
     conn
   end
+
+  defp get_handle(%{response: %{shape_handle: shape_handle}}), do: shape_handle
+  defp get_handle(%{request: %{shape_handle: shape_handle}}), do: shape_handle
+  defp get_handle(_), do: nil
+
+  defp get_live_mode(%{response: %{params: %{live: live}}}), do: live
+  defp get_live_mode(%{request: %{params: %{live: live}}}), do: live
+  defp get_live_mode(_), do: false
 
   defp add_span_attrs_from_conn(conn) do
     conn
