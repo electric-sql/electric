@@ -209,17 +209,19 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     # If underlying file structure changes, these tests will need to be updated.
     setup :with_started_writer
 
-    setup %{writer: writer, opts: opts} do
-      writer =
-        PureFileStorage.append_to_log!(
-          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
-          writer
-        )
+    setup %{writer: writer, opts: opts} = ctx do
+      if Map.get(ctx, :init_writer, true) do
+        writer =
+          PureFileStorage.append_to_log!(
+            [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+            writer
+          )
 
-      PureFileStorage.terminate(writer)
+        PureFileStorage.terminate(writer)
 
-      assert PureFileStorage.get_current_position(opts) ==
-               {:ok, LogOffset.new(10, 0), %{xmin: 100}}
+        assert PureFileStorage.get_current_position(opts) ==
+                 {:ok, LogOffset.new(10, 0), %{xmin: 100}}
+      end
 
       :ok
     end
@@ -330,15 +332,9 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
                {{LogOffset.new(10, 0), nil}, {0, nil}, {0, nil}}
              ]
     end
-  end
 
-  describe "extended crash recovery" do
-    # These tests make use of known log file structures to test that the storage recovers correctly
-    # If underlying file structure changes, these tests will need to be updated.
-
-    setup :with_started_writer
-
-    test "write without accompanying json index is handled with trim", %{opts: opts} do
+    @tag init_writer: false
+    test "correctly handles incomplete chunks as part of the recovery", %{opts: opts} do
       path = PureFileStorage.chunk_file(opts, PureFileStorage.latest_name(opts))
 
       File.mkdir_p!(Path.dirname(path))
