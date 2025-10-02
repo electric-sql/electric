@@ -1,5 +1,47 @@
 # @core/sync-service
 
+## 1.1.12
+
+### Patch Changes
+
+- 0de17a8: Fix constant hibernate->wakeup->hibernate loop for shape consumers by only sending a flushed message if there was data in the write buffer
+- e86543b: Simplify `PublicationManager` to not require a full shape to remove existing tracked shape.
+- d11b5c4: Detect stack termination and mark as down immediately
+- 8b9aab4: Optimize shape counting by not copying all shapes from ETS into process memory.
+- c2b44ec: Fix async cleanup of storage files across filesystem boundaries
+- aa48e04: feat: add a `snapshot-end` control message to the end of snapshots
+- bb34680: Expire shapes in batches of a fixed size
+- a006938: Parse pooler login errors as retryable errors and `econnrefused` as retryable.
+- 698731d: feat: remove a stuck lock if underlying slot is not active
+- ef7d788: Optimise removing a shape from where clause filter indexes
+- 334b17a: Correctly wrap filesystem errors from the snapshot process
+- 12c55f9: Return a descriptive error to the shape request when Electric doesn't have read access to the database table.
+- bf5d0fd: Remove consumer startup bottleneck by lazily registering shape consumer processes
+- 0b88cea: Spead up shape counting and LRU shape expiration by storing last access timestamps in a separate ETS table.
+- c9846f6: Remove unncecessary `refresh_publication` API from `PublicationManager`.
+- cf68fe5: Improve startup and shutdown times for shape processes by partitioning DynamicConsumerSupervisor.
+- 71306c2: Include memory usage statistics in otel export
+- d4ed4cf: Introduce `AsyncDeleter` service for fast batch deletes, done by renaming deprecated files into a temporary directory and batch deleting them in the background.
+- da7a456: Fix race condition between removing and adding new shapes concurrently that led to crashes.
+- b89ac5a: Faster purging of all shape data in case of timeline or replication slot change.
+- 44adea5: Add telemetry to profile shape unsubscription
+- 5ca7997: Set full sentry metadata everywhere
+- 370ad3f: Move shape deletion operations into separate process to avoid blocking `ShapeCache` on critical path.
+- 4abcb3e: Simplify `Connection.Manager` restart logic to restart whole stack in case of replication client failure.
+- a3cef79: Fix premature replies to concurrent publication updates for same shape handle.
+- 596c7df: Decouple `PublicationManager` initialisation from `ShapeCache`, simplifying startup procedure.
+- 98ce149: Handle pool timeouts and disconnections in the DB Inspector more gracefully
+- 91adf58: Log offending data with OTEL encoding errors
+- 4a832d0: Handle connection unavailable in inspector when validating requests
+- 0724b43: fix: rename `ELECTRIC_QUERY_DATABASE_URL` to `ELECTRIC_POOLED_DATABASE_URL` env variable to avoid confusion
+- 965ef47: feat: add support for `changes_only` mode, subset snapshots, and `offset=now`
+
+  - `changes_only` - in this mode the server will not create initial snapshot for the shape, the clients will start receiving changes without seeing base data. Best paired with...
+  - Subset snapshots - the server now accepts a `subset__*` set of parameters, which when provided result in a special-form response containing a snapshot of a subset (may be full) of a shape, and information on how to position this response in the stream. The client exposes a new method `requestSnapshot` which will make this request and then inject the response into the correct place in the subscribed messages stream, bounded with a `snapshot-end` control message.
+  - `offset=now` - the server now accepts a `offset=now` special value, in which case the client will receive an immediate up-to-date response with the latest possible continuation offset, allowing it to skip all historical data and start "from scratch". This works best with `changes_only` and subset snapshots where a client doesn't keep state and upon a reload needs to start fresh without historical data.
+
+- d028070: feat: add timeout to first data on snapshots to avoid long-running queries
+
 ## 1.1.11
 
 ### Patch Changes
