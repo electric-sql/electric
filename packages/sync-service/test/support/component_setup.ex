@@ -51,8 +51,25 @@ defmodule Support.ComponentSetup do
   end
 
   def with_async_deleter(ctx) do
+    storage_dir =
+      case ctx do
+        %{storage: {_, opts}} ->
+          opts[:storage_dir]
+
+        %{tmp_dir: tmp_dir} when is_binary(tmp_dir) ->
+          tmp_dir
+
+        _ ->
+          nil
+      end ||
+        Path.join(
+          System.tmp_dir!(),
+          "electric-trash-#{System.monotonic_time()}-#{System.unique_integer([:positive, :monotonic])}"
+        )
+
     start_link_supervised!(
-      {Electric.AsyncDeleter, stack_id: ctx.stack_id, cleanup_interval_ms: 0}
+      {Electric.AsyncDeleter,
+       stack_id: ctx.stack_id, storage_dir: storage_dir, cleanup_interval_ms: 0}
     )
 
     %{}
@@ -86,7 +103,7 @@ defmodule Support.ComponentSetup do
 
     start_supervised!(Storage.stack_child_spec(storage), restart: :temporary)
 
-    %{storage: storage}
+    %{storage: storage, storage_dir: ctx.tmp_dir}
   end
 
   def with_persistent_kv(_ctx) do
@@ -379,6 +396,7 @@ defmodule Support.ComponentSetup do
            ),
          persistent_kv: kv,
          storage: storage,
+         storage_dir: ctx.tmp_dir,
          connection_opts: connection_opts,
          replication_opts: [
            connection_opts: replication_connection_opts,

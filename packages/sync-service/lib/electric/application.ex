@@ -190,6 +190,7 @@ defmodule Electric.Application do
       stack_id: stack_id,
       stack_events_registry: Electric.stack_events_registry(),
       persistent_kv: persistent_kv,
+      storage_dir: get_env(opts, :storage_dir),
       storage: storage,
       feature_flags: get_env(opts, :feature_flags)
     ]

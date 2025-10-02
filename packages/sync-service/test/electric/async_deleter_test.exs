@@ -26,9 +26,12 @@ defmodule Electric.AsyncDeleterTest do
   end
 
   setup ctx do
-    start_link_supervised!({AsyncDeleter, stack_id: ctx.stack_id, cleanup_interval_ms: @interval})
+    start_link_supervised!(
+      {AsyncDeleter,
+       stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
+    )
 
-    Map.put(ctx, :trash_dir, AsyncDeleter.trash_dir(ctx.stack_id))
+    [trash_dir: AsyncDeleter.trash_dir!(ctx.stack_id)]
   end
 
   test "delete moves directory into trash and later removes it", %{
@@ -36,7 +39,7 @@ defmodule Electric.AsyncDeleterTest do
     tmp_dir: base,
     trash_dir: trash_dir
   } do
-    dir = create_temp_dir(%{tmp_dir: base, trash_dir: trash_dir}, "to_delete")
+    dir = create_temp_dir(%{tmp_dir: base}, "to_delete")
     file_path = create_temp_file(dir, "f.txt")
 
     assert File.exists?(file_path)
@@ -94,10 +97,11 @@ defmodule Electric.AsyncDeleterTest do
   end
 
   test "deleting missing path returns ok and does nothing", %{
+    tmp_dir: base,
     stack_id: stack_id,
     trash_dir: trash_dir
   } do
-    path = Path.join(System.tmp_dir!(), "nonexistent_#{System.unique_integer()}")
+    path = Path.join(base, "nonexistent_#{System.unique_integer()}")
     refute File.exists?(path)
 
     assert :ok = AsyncDeleter.delete(path, stack_id: stack_id)
@@ -108,8 +112,8 @@ defmodule Electric.AsyncDeleterTest do
 
   test "can manage concurrent deletes while cleaning up", %{
     stack_id: stack_id,
-    trash_dir: trash_dir,
-    tmp_dir: base
+    tmp_dir: base,
+    trash_dir: trash_dir
   } do
     d1 = create_temp_dir(%{tmp_dir: base}, "d1")
 
