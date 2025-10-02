@@ -90,31 +90,6 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     @tag update_debounce_timeout: 100
-    test "queues up requests for same shape handle", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"})
-      test_pid = self()
-
-      run_async(fn ->
-        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-        send(test_pid, :task1_done)
-      end)
-
-      run_async(fn ->
-        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-        send(test_pid, :task2_done)
-      end)
-
-      refute_receive :task1_done, 50
-      refute_receive {:filters, _}, 0
-      refute_receive :task2_done, 0
-
-      assert_receive :task1_done
-      assert_receive :task2_done, 10
-      assert_receive {:filters, [{_, {"public", "items"}}]}, 10
-      refute_receive {:filters, _}, 200
-    end
-
-    @tag update_debounce_timeout: 100
     test "doesn't update when adding same relation again", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
       shape2 = generate_shape({"public", "items"})
@@ -176,22 +151,21 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
       refute_receive {:filters, _}, 500
     end
+  end
 
+  describe "concurrent operations" do
     @tag update_debounce_timeout: 100
-    test "queues up requests for same shape handle", %{opts: opts} do
+    test "queues up requests to add same shape handle", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
-      :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-
       test_pid = self()
 
       run_async(fn ->
-        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
         send(test_pid, :task1_done)
       end)
 
       run_async(fn ->
-        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
         send(test_pid, :task2_done)
       end)
 
@@ -201,7 +175,29 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_receive :task1_done
       assert_receive :task2_done, 10
-      assert_receive {:filters, []}
+      assert_receive {:filters, [{_, {"public", "items"}}]}, 10
+      refute_receive {:filters, _}, 200
+    end
+
+    @tag update_debounce_timeout: 100
+    test "invalidates add requests if removed immediately", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+
+      add_task =
+        Task.async(fn ->
+          assert_raise RuntimeError, "Shape removed before updating publication", fn ->
+            PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+          end
+        end)
+
+      remove_task =
+        Task.async(fn ->
+          Process.sleep(5)
+          :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        end)
+
+      Task.await_many([add_task, remove_task])
+
       refute_receive {:filters, _}, 200
     end
   end

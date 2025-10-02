@@ -142,11 +142,7 @@ defmodule Electric.Replication.PublicationManager do
   @impl true
   def handle_call({:add_shape, shape_handle, oid_rel}, from, state) do
     state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
-
-    state =
-      if update_needed?(state),
-        do: schedule_update_publication(state.update_debounce_timeout, state),
-        else: state
+    state = schedule_update_if_necessary(state)
 
     if not relation_tracked?(oid_rel, state) do
       state = add_waiter(from, oid_rel, state)
@@ -158,11 +154,7 @@ defmodule Electric.Replication.PublicationManager do
 
   def handle_call({:remove_shape, shape_handle}, _from, state) do
     state = remove_shape_from_relation_filters(shape_handle, state)
-
-    state =
-      if update_needed?(state),
-        do: schedule_update_publication(state.update_debounce_timeout, state),
-        else: state
+    state = schedule_update_if_necessary(state)
 
     # never wait for removals - reply immediately and let publication manager
     # reconcile the publication, otherwise you run into issues where only the last
@@ -305,6 +297,14 @@ defmodule Electric.Replication.PublicationManager do
     )
   end
 
+  defp schedule_update_if_necessary(state) do
+    if update_needed?(state) do
+      schedule_update_publication(state.update_debounce_timeout, state)
+    else
+      state
+    end
+  end
+
   @spec schedule_update_publication(timeout(), boolean(), state()) :: state()
   defp schedule_update_publication(timeout, forced? \\ false, state)
 
@@ -409,12 +409,21 @@ defmodule Electric.Replication.PublicationManager do
           {prepared, counts}
       end
 
+    if not MapSet.member?(prepared, rel_key) do
+      reply_to_relation_waiters(
+        rel_key,
+        {:error, %RuntimeError{message: "Shape removed before updating publication"}},
+        state
+      )
+    end
+
     %{state | prepared_relation_filters: prepared, relation_ref_counts: counts}
   end
 
   @spec add_waiter(GenServer.from(), Electric.oid_relation(), state()) :: state()
-  defp add_waiter(from, oid_rel, %__MODULE__{waiters: waiters} = state),
-    do: %{state | waiters: Map.update(waiters, oid_rel, [from], &[from | &1])}
+  defp add_waiter(from, oid_rel, %__MODULE__{waiters: waiters} = state) do
+    %{state | waiters: Map.update(waiters, oid_rel, [from], &[from | &1])}
+  end
 
   @spec reply_to_relation_waiters(Electric.oid_relation(), any(), state()) :: state()
   defp reply_to_relation_waiters(oid_rel, reply, %__MODULE__{waiters: waiters} = state) do
