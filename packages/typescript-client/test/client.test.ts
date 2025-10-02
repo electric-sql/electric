@@ -1398,7 +1398,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1417,7 +1417,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1438,7 +1438,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1472,7 +1472,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1527,7 +1527,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1552,7 +1552,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1578,7 +1578,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1605,7 +1605,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1631,7 +1631,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1667,7 +1667,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1748,7 +1748,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1803,7 +1803,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1883,7 +1883,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
       })
@@ -1927,7 +1927,7 @@ describe.for(fetchAndSse)(
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
-        mode: `changes_only`,
+        log: `changes_only`,
         experimentalLiveSse,
         signal: aborter.signal,
         fetchClient: fetchWrapper,

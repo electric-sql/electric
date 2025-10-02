@@ -280,7 +280,7 @@ export interface ShapeStreamOptions<T = never> {
   /**
    * Initial data loading mode
    */
-  mode?: LogMode
+  log?: LogMode
 
   signal?: AbortSignal
   fetchClient?: typeof fetch
@@ -447,7 +447,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       options.transformer
     )
     this.#onError = this.options.onError
-    this.#mode = this.options.mode ?? `full`
+    this.#mode = this.options.log ?? `full`
 
     const baseFetchClient =
       options.fetchClient ??
