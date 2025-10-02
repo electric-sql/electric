@@ -447,6 +447,32 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [1]}}
     end
 
+    @tag flush_period: 50
+    test "hibernate with empty buffer doesn't schedule a flush", %{writer: writer} do
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+          writer
+        )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+
+      writer = PureFileStorage.perform_scheduled_flush(writer, 0)
+
+      PureFileStorage.append_to_log!(
+        [{LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":1}|}],
+        writer
+      )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [1]}}
+      assert_receive {Storage, :flushed, _last_seen_offset}, 200
+      refute_receive {Storage, {PureFileStorage, :perform_scheduled_flush, _}}, 200
+
+      _writer = PureFileStorage.hibernate(writer)
+
+      refute_receive {Storage, :flushed, _last_seen_offset}, 200
+    end
+
     @flush_alignment_bytes 64 * 1024
     @tag flush_period: 100
     test "should run scheduled flush after empty buffer alignment", %{writer: writer} do
