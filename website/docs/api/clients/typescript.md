@@ -129,7 +129,7 @@ stream.subscribe((messages) => {
 
 #### Options
 
-The `ShapeStream` constructor takes [the following options](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L39):
+The `ShapeStream` constructor takes [the following options](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts):
 
 ```ts
 /**
@@ -142,6 +142,26 @@ export interface ShapeStreamOptions<T = never> {
    * set `http://localhost:3000/v1/shape`
    */
   url: string
+
+  /**
+   * Enable subdomain sharding to bypass browser HTTP/1.1 connection limits.
+   * This is useful in local development.
+   *
+   * Each shape gets a unique subdomain (e.g., `a7f2c.localhost:3000`),
+   * providing independent connection pools. Eliminates need for HTTP/2,
+   * Caddy, or trusted certificates in development.
+   *
+   * Options:
+   * - `'localhost'` - Only shard localhost and *.localhost URLs (recommended for development)
+   * - `'always'` - Shard all URLs (use with custom infrastructure that supports wildcard subdomains)
+   * - `'never'` - Disable sharding (default)
+   * - `true` - Alias for `'always'`
+   * - `false` - Alias for `'never'`
+   *
+   * See the [Troubleshooting guide](/docs/guides/troubleshooting)
+   * for more details on when and why to use this option.
+   */
+  shardSubdomain?: 'localhost' | 'always' | 'never' | boolean
 
   /**
    * PostgreSQL-specific parameters for the shape.

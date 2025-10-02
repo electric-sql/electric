@@ -9,7 +9,13 @@ import {
   SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
-import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
+import {
+  getOffset,
+  isUpToDateMessage,
+  isChangeMessage,
+  applySubdomainSharding,
+  ShardSubdomainOption,
+} from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -282,6 +288,33 @@ export interface ShapeStreamOptions<T = never> {
    */
   log?: LogMode
 
+  /**
+   * Enable subdomain sharding to bypass browser HTTP/1.1 connection limits.
+   *
+   * Each shape gets a unique subdomain (e.g., `a7f2c.localhost:3000`),
+   * providing independent connection pools. Eliminates need for HTTP/2,
+   * Caddy, or trusted certificates in development.
+   *
+   * Options:
+   * - `'localhost'` - Only shard localhost and *.localhost URLs (recommended for development)
+   * - `'always'` - Shard all URLs (use with custom infrastructure that supports wildcard subdomains)
+   * - `'never'` - Disable sharding (default)
+   * - `true` - Alias for `'always'`
+   * - `false` - Alias for `'never'`
+   *
+   * @default 'never'
+   * @example
+   * // Recommended: Opt-in for localhost development
+   * { url: 'http://localhost:3000/v1/shape', shardSubdomain: 'localhost' }
+   * // → http://a7f2c.localhost:3000/v1/shape
+   *
+   * @example
+   * // Advanced: Custom subdomain sharding with supporting infrastructure
+   * { url: 'http://api.example.com/v1/shape', shardSubdomain: 'always' }
+   * // → http://a7f2c.api.example.com/v1/shape
+   */
+  shardSubdomain?: ShardSubdomainOption
+
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
@@ -439,6 +472,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
     validateOptions(this.options)
+    this.options.url = applySubdomainSharding(
+      this.options.url,
+      this.options.shardSubdomain
+    )
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle

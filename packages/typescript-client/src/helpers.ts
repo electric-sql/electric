@@ -97,3 +97,45 @@ export function isVisibleInSnapshot(
 
   return xid < xmin || (xid < xmax && !xip.includes(xid))
 }
+
+export function generateShardId(): string {
+  return Math.floor(Math.random() * 0xfffff)
+    .toString(16)
+    .padStart(5, `0`)
+}
+
+export function isLocalhostUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase()
+  return hostname === `localhost` || hostname.endsWith(`.localhost`)
+}
+
+export type ShardSubdomainOption = `always` | `localhost` | `never` | boolean
+
+export function applySubdomainSharding(
+  originalUrl: string,
+  option: ShardSubdomainOption | undefined
+): string {
+  if (!option || option === `never`) {
+    return originalUrl
+  }
+
+  if (typeof option === `boolean` && !option) {
+    return originalUrl
+  }
+
+  const url = new URL(originalUrl)
+
+  const shouldShard =
+    option === `always` ||
+    option === true ||
+    (option === `localhost` && isLocalhostUrl(url))
+
+  if (!shouldShard) {
+    return originalUrl
+  }
+
+  const shardId = generateShardId()
+  url.hostname = `${shardId}.${url.hostname}`
+
+  return url.toString()
+}
