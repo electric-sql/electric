@@ -1,6 +1,7 @@
 defmodule Electric.Postgres.ConfigurationTest do
   use ExUnit.Case, async: true
-  import ExUnit.CaptureLog
+  use Repatch.ExUnit
+
   import Support.DbSetup
 
   alias Electric.Postgres.Configuration
@@ -43,23 +44,31 @@ defmodule Electric.Postgres.ConfigurationTest do
       []
     )
 
+    test_pid = self()
+
+    Repatch.patch(Postgrex, :query, fn conn, sql, params ->
+      if String.starts_with?(sql, "ALTER TABLE"),
+        do: send(test_pid, {:alter_table, sql, params})
+
+      if String.starts_with?(sql, "ALTER PUBLICATION"),
+        do: send(test_pid, {:alter_publication, sql, params})
+
+      Repatch.real(Postgrex, :query, [conn, sql, params])
+    end)
+
     :ok
   end
 
-  describe "configure_publication!/4" do
+  describe "configure_publication!/3" do
     test "sets REPLICA IDENTITY on the table and adds it to the publication",
          %{pool: conn, publication_name: publication} do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert list_tables_in_publication(conn, publication) == []
       oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
 
-      assert MapSet.new() ==
-               Configuration.configure_publication!(
-                 conn,
-                 MapSet.new(),
-                 MapSet.new([{oid, {"public", "items"}}]),
-                 publication
-               )
+      assert %{oid_rel => :ok} ==
+               Configuration.configure_publication!(conn, publication, MapSet.new([oid_rel]))
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
 
@@ -72,26 +81,18 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert get_table_identity(conn, {"public", "items"}) == "d"
       assert list_tables_in_publication(conn, publication) == []
       oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
 
-      assert capture_log(fn ->
-               Configuration.configure_publication!(
-                 conn,
-                 MapSet.new(),
-                 MapSet.new([{oid, {"public", "items"}}]),
-                 publication
-               )
-             end) =~ ~r"#{:erlang.pid_to_list(self())}.*Altering identity"
+      assert %{oid_rel => :ok} ==
+               Configuration.configure_publication!(conn, publication, MapSet.new([oid_rel]))
 
+      assert_receive {:alter_table, _, _}
       assert get_table_identity(conn, {"public", "items"}) == "f"
 
-      refute capture_log(fn ->
-               Configuration.configure_publication!(
-                 conn,
-                 MapSet.new([{oid, {"public", "items"}}]),
-                 MapSet.new([{oid, {"public", "items"}}]),
-                 publication
-               )
-             end) =~ ~r"#{:erlang.pid_to_list(self())}.*Altering identity"
+      assert %{oid_rel => :ok} ==
+               Configuration.configure_publication!(conn, publication, MapSet.new([oid_rel]))
+
+      refute_receive {:alter_table, _, _}
 
       # Above we include the pid in the regex to ensure that the log message is from this test's process
       # otherwise this test can sporadically fail when run concurrently with other tests that log that message
@@ -103,16 +104,18 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert list_tables_in_publication(conn, publication) == []
       oid1 = get_table_oid(conn, {"public", "items"})
       oid2 = get_table_oid(conn, {"public", "other_table"})
+      oid_rel1 = {oid1, {"public", "items"}}
+      oid_rel2 = {oid2, {"public", "other_table"}}
 
-      Configuration.configure_publication!(
-        conn,
-        MapSet.new(),
-        MapSet.new([
-          {oid1, {"public", "items"}},
-          {oid2, {"public", "other_table"}}
-        ]),
-        publication
-      )
+      assert %{
+               oid_rel1 => :ok,
+               oid_rel2 => :ok
+             } ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1, oid_rel2])
+               )
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
@@ -123,15 +126,17 @@ defmodule Electric.Postgres.ConfigurationTest do
 
     test "doesn't fail when one of the tables is already configured",
          %{pool: conn, publication_name: publication} do
-      oid = get_table_oid(conn, {"public", "items"})
+      oid1 = get_table_oid(conn, {"public", "items"})
       oid2 = get_table_oid(conn, {"public", "other_table"})
+      oid_rel1 = {oid1, {"public", "items"}}
+      oid_rel2 = {oid2, {"public", "other_table"}}
 
-      assert Configuration.configure_publication!(
-               conn,
-               MapSet.new(),
-               MapSet.new([{oid, {"public", "items"}}]),
-               publication
-             ) == MapSet.new()
+      assert %{oid_rel1 => :ok} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1])
+               )
 
       assert get_table_identity(conn, {"public", "other_table"}) == "d"
 
@@ -139,15 +144,12 @@ defmodule Electric.Postgres.ConfigurationTest do
                expected_filters([{"public", "items"}])
 
       # Configure `items` table again but with a different list of selected columns
-      assert Configuration.configure_publication!(
-               conn,
-               MapSet.new([{oid, {"public", "items"}}]),
-               MapSet.new([
-                 {oid, {"public", "items"}},
-                 {oid2, {"public", "other_table"}}
-               ]),
-               publication
-             ) == MapSet.new()
+      assert %{oid_rel1 => :ok, oid_rel2 => :ok} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1, oid_rel2])
+               )
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
       assert get_table_identity(conn, {"public", "other_table"}) == "f"
@@ -156,17 +158,12 @@ defmodule Electric.Postgres.ConfigurationTest do
                expected_filters([{"public", "items"}, {"public", "other_table"}])
     end
 
-    test "fails when a publication doesn't exist", %{pool: conn} do
+    test "fails relation configuration when publication doesn't exist", %{pool: conn} do
       oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
 
-      assert_raise Postgrex.Error, ~r/undefined_object/, fn ->
-        Configuration.configure_publication!(
-          conn,
-          MapSet.new([{oid, {"public", "items"}}]),
-          MapSet.new([{oid, {"public", "items"}}]),
-          "nonexistent"
-        )
-      end
+      assert %{^oid_rel => {:error, %Postgrex.Error{postgres: %{code: :undefined_object}}}} =
+               Configuration.configure_publication!(conn, "nonexistent", MapSet.new([oid_rel]))
     end
 
     test "concurrent alters to the publication don't deadlock and run correctly", %{
@@ -176,48 +173,33 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid1 = get_table_oid(conn, {"public", "items"})
       oid2 = get_table_oid(conn, {"public", "other_table"})
       oid3 = get_table_oid(conn, {"public", "other_other_table"})
+      oid_rel1 = {oid1, {"public", "items"}}
+      oid_rel2 = {oid2, {"public", "other_table"}}
+      oid_rel3 = {oid3, {"public", "other_other_table"}}
+
+      new_relations = MapSet.new([oid_rel1, oid_rel2, oid_rel3])
+      expected_result = %{oid_rel1 => :ok, oid_rel2 => :ok, oid_rel3 => :ok}
 
       # Create the publication first
-      Configuration.configure_publication!(
-        conn,
-        MapSet.new(),
-        MapSet.new([
-          {oid1, {"public", "items"}},
-          {oid2, {"public", "other_table"}},
-          {oid3, {"public", "other_other_table"}}
-        ]),
-        publication
-      )
-
-      new_relations =
-        MapSet.new([
-          {oid1, {"public", "items"}},
-          {oid2, {"public", "other_table"}},
-          {oid3, {"public", "other_other_table"}}
-        ])
+      assert expected_result ==
+               Configuration.configure_publication!(conn, publication, new_relations)
 
       task1 =
         Task.async(fn ->
           Configuration.configure_publication!(
             conn,
-            new_relations,
-            new_relations,
-            publication
+            publication,
+            new_relations
           )
         end)
 
       task2 =
         Task.async(fn ->
-          Configuration.configure_publication!(
-            conn,
-            new_relations,
-            new_relations,
-            publication
-          )
+          Configuration.configure_publication!(conn, publication, new_relations)
         end)
 
       # First check: both tasks completed successfully, that means there were no deadlocks
-      assert [MapSet.new(), MapSet.new()] == Task.await_many([task1, task2])
+      assert [expected_result, expected_result] == Task.await_many([task1, task2])
 
       # Second check: the publication has the correct filters, that means one didn't override the other
       assert list_tables_in_publication(conn, publication) |> Enum.sort() ==
@@ -233,13 +215,14 @@ defmodule Electric.Postgres.ConfigurationTest do
       publication_name: publication
     } do
       oid1 = get_table_oid(conn, {"public", "items"})
+      oid_rel1 = {oid1, {"public", "items"}}
 
-      assert Configuration.configure_publication!(
-               conn,
-               MapSet.new(),
-               MapSet.new([{oid1, {"public", "items"}}]),
-               publication
-             ) == MapSet.new()
+      assert %{oid_rel1 => :ok} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1])
+               )
 
       assert list_tables_in_publication(conn, publication) ==
                expected_filters([{"public", "items"}])
@@ -254,12 +237,12 @@ defmodule Electric.Postgres.ConfigurationTest do
       )
 
       # Adding a new where clause shoudn't re-add the table to the publication but should return that info
-      assert Configuration.configure_publication!(
-               conn,
-               MapSet.new([{oid1, {"public", "items"}}]),
-               MapSet.new([{oid1, {"public", "items"}}]),
-               publication
-             ) == MapSet.new([{oid1, {"public", "items"}}])
+      assert %{oid_rel1 => {:error, :relation_invalidated}} ==
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1])
+               )
 
       assert list_tables_in_publication(conn, publication) == []
     end
