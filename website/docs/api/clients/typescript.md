@@ -144,26 +144,6 @@ export interface ShapeStreamOptions<T = never> {
   url: string
 
   /**
-   * Enable subdomain sharding to bypass browser HTTP/1.1 connection limits.
-   * This is useful in local development.
-   *
-   * Each shape gets a unique subdomain (e.g., `a7f2c.localhost:3000`),
-   * providing independent connection pools. Eliminates need for HTTP/2,
-   * Caddy, or trusted certificates in development.
-   *
-   * Options:
-   * - `'localhost'` - Only shard localhost and *.localhost URLs (recommended for development)
-   * - `'always'` - Shard all URLs (use with custom infrastructure that supports wildcard subdomains)
-   * - `'never'` - Disable sharding (default)
-   * - `true` - Alias for `'always'`
-   * - `false` - Alias for `'never'`
-   *
-   * See the [Troubleshooting guide](/docs/guides/troubleshooting)
-   * for more details on when and why to use this option.
-   */
-  shardSubdomain?: 'localhost' | 'always' | 'never' | boolean
-
-  /**
    * PostgreSQL-specific parameters for the shape.
    * This includes table, where clause, columns, and replica settings.
    */
@@ -255,6 +235,43 @@ export interface ShapeStreamOptions<T = never> {
    * fetch subsets of data on-demand.
    */
   mode?: "full" | "changes_only"
+
+  /**
+   * Enable subdomain sharding to bypass browser HTTP/1.1 connection limits.
+   * This is useful in local development and is enabled by default for localhost URLs.
+   *
+   * See https://electric-sql.com/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development
+   *
+   * When sharded, each shape stream gets a unique subdomain (e.g., `a7f2c.localhost`),
+   * which bypasses the browser HTTP/1.1 connection limits. This avoids the need to serve
+   * the development server over HTTP/2 (and thus HTTPS) in development.
+   *
+   * Options:
+   * - `'localhost'` - Automatically shard `localhost` and `*.localhost` URLs (the default)
+   * - `'always'` - Shard URLs regardless of the hostname
+   * - `'never'` - Disable sharding
+   * - `true` - Alias for `'always'`
+   * - `false` - Alias for `'never'`
+   *
+   * @default 'localhost'
+   *
+   * @example
+   * { url: 'http://localhost:3000/v1/shape', shardSubdomain: 'localhost' }
+   * // → http://a1c2f.localhost:3000/v1/shape
+   *
+   * @example
+   * { url: 'https://api.example.com', shardSubdomain: 'localhost' }
+   * // → https://api.example.com
+   *
+   * @example
+   * { url: 'https://localhost:3000', shardSubdomain: 'never' }
+   * // → https://localhost:3000
+   *
+   * @example
+   * { url: 'https://api.example.com', shardSubdomain: 'always' }
+   * // → https://b2d3g.api.example.com
+   */
+  shardSubdomain?: ShardSubdomainOption
 
   /**
    * Signal to abort the stream.

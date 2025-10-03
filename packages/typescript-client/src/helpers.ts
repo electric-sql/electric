@@ -113,13 +113,9 @@ export type ShardSubdomainOption = `always` | `localhost` | `never` | boolean
 
 export function applySubdomainSharding(
   originalUrl: string,
-  option: ShardSubdomainOption | undefined
+  option: ShardSubdomainOption = `localhost`
 ): string {
-  if (!option || option === `never`) {
-    return originalUrl
-  }
-
-  if (typeof option === `boolean` && !option) {
+  if (option === `never` || option === false) {
     return originalUrl
   }
 

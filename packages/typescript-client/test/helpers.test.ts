@@ -100,11 +100,6 @@ describe(`applySubdomainSharding`, () => {
       const url = `http://localhost:3000/v1/shape`
       expect(applySubdomainSharding(url, false)).toBe(url)
     })
-
-    it(`should not modify URL when option is undefined`, () => {
-      const url = `http://localhost:3000/v1/shape`
-      expect(applySubdomainSharding(url, undefined)).toBe(url)
-    })
   })
 
   describe(`with 'always' or true`, () => {
@@ -139,10 +134,18 @@ describe(`applySubdomainSharding`, () => {
     })
   })
 
-  describe(`with 'localhost'`, () => {
+  describe(`with 'localhost' or undefined`, () => {
     it(`should shard localhost URLs`, () => {
       const url = `http://localhost:3000/v1/shape`
       const result = applySubdomainSharding(url, `localhost`)
+      expect(result).toMatch(
+        /^http:\/\/[0-9a-f]{5}\.localhost:3000\/v1\/shape$/
+      )
+    })
+
+    it(`should shard localhost URLs when option is undefined`, () => {
+      const url = `http://localhost:3000/v1/shape`
+      const result = applySubdomainSharding(url, undefined)
       expect(result).toMatch(
         /^http:\/\/[0-9a-f]{5}\.localhost:3000\/v1\/shape$/
       )
@@ -159,6 +162,12 @@ describe(`applySubdomainSharding`, () => {
     it(`should not shard non-localhost URLs`, () => {
       const url = `http://api.example.com/v1/shape`
       const result = applySubdomainSharding(url, `localhost`)
+      expect(result).toBe(url)
+    })
+
+    it(`should not shard non-localhost URLs when option is undefined`, () => {
+      const url = `http://api.example.com/v1/shape`
+      const result = applySubdomainSharding(url, undefined)
       expect(result).toBe(url)
     })
 

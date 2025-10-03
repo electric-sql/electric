@@ -197,7 +197,35 @@ describe(`ShapeStream`, () => {
   })
 
   describe(`subdomain sharding`, () => {
-    it(`should not shard by default`, async () => {
+    it(`should not shard non-localhost URLs by default`, async () => {
+      const eventTarget = new EventTarget()
+      const requestedUrls: Array<string> = []
+      const fetchWrapper = (
+        ...args: Parameters<typeof fetch>
+      ): Promise<Response> => {
+        requestedUrls.push(args[0].toString())
+        eventTarget.dispatchEvent(new Event(`fetch`))
+        return Promise.resolve(Response.error())
+      }
+
+      const aborter = new AbortController()
+      const stream = new ShapeStream({
+        url: `https://example.com/v1/shape`,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+      })
+
+      const unsub = stream.subscribe(() => unsub())
+
+      await new Promise((resolve) =>
+        eventTarget.addEventListener(`fetch`, resolve, { once: true })
+      )
+
+      expect(requestedUrls[0]).toMatch(/^https:\/\/example.com\/v1\/shape/)
+    })
+
+    it(`should shard localhost URLs by default`, async () => {
       const eventTarget = new EventTarget()
       const requestedUrls: Array<string> = []
       const fetchWrapper = (
@@ -222,7 +250,9 @@ describe(`ShapeStream`, () => {
         eventTarget.addEventListener(`fetch`, resolve, { once: true })
       )
 
-      expect(requestedUrls[0]).toMatch(/^http:\/\/localhost:3000\/v1\/shape/)
+      expect(requestedUrls[0]).toMatch(
+        /^http:\/\/[0-9a-f]{5}\.localhost:3000\/v1\/shape/
+      )
     })
 
     it(`should shard localhost URLs when shardSubdomain is 'localhost'`, async () => {
