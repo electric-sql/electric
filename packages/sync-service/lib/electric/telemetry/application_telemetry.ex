@@ -234,7 +234,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         # Our custom measurements:
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
-        {__MODULE__, :process_memory, [opts]},
+        # {__MODULE__, :process_memory, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
       ]

@@ -274,7 +274,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     defp periodic_measurements(opts) do
       [
         {__MODULE__, :count_shapes, [opts.stack_id]},
-        {__MODULE__, :get_total_disk_usage, [opts.stack_id, opts.storage]},
+        # {__MODULE__, :get_total_disk_usage, [opts.stack_id, opts.storage]},
         {__MODULE__, :report_retained_wal_size, [opts.stack_id, opts.slot_name]}
       ]
     end
