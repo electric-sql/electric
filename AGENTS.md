@@ -197,7 +197,7 @@ shapeOptions: {
 
 1. **Use latest packages** - Check npm for `@electric-sql/*` & `@tanstack/*-db`
 2. **txid handshake required** - Prevents UI flicker when optimistic→synced state
-3. **Local dev slow shapes** - HTTP/1.1 6-connection limit. Fix: HTTP/2 proxy (Caddy/nginx) or Electric Cloud ([Electric][18])
+3. **Local dev slow shapes** - Fixed by default in `@electric-sql/client` v1.0.13+ UPGRADE!
 4. **Proxy must forward headers/params** - Preserve Electric query params
 5. **Parse custom types:**
 ```ts

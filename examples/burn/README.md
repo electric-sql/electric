@@ -157,8 +157,6 @@ Some aspects of the demo app are simplified or not-yet implemented.
 Install the system dependencies in the electric repo root using [asdf](https://asdf-vm.com):
 
 ```sh
-# `asdf plugin add <name> <git-url> if you don't have the dependency plugin already, e.g.:
-# asdf plugin add caddy https://github.com/salasrod/asdf-caddy.git
 cd ../..
 asdf install
 ```
@@ -189,13 +187,7 @@ Start the Phoenix server:
 mix phx.server
 ```
 
-In a different terminal start Caddy (this proxies port `4001` to Phoenix running on `4000`):
-
-```sh
-caddy start
-```
-
-Open [localhost:4001](http://localhost:4001) in your web browser.
+Open [localhost:4000](http://localhost:4000) in your web browser.
 
 ## More info
 
