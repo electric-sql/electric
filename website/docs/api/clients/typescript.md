@@ -224,17 +224,17 @@ export interface ShapeStreamOptions<T = never> {
   subscribe?: boolean
 
   /**
-   * Initial data loading mode.
+   * Initial data loading mode. Controls how data is loaded into the shape log.
    *
-   * When `mode` is `full` (the default), the server creates an initial snapshot
+   * When `log` is `full` (the default), the server creates an initial snapshot
    * of all data matching the shape definition before delivering real-time updates.
    *
-   * When `mode` is `changes_only`, the server skips the initial snapshot creation.
+   * When `log` is `changes_only`, the server skips the initial snapshot creation.
    * The client will only receive changes that occur after the shape is established,
    * without seeing the base data. In this mode, you can use `requestSnapshot()` to
    * fetch subsets of data on-demand.
    */
-  mode?: "full" | "changes_only"
+  log?: "full" | "changes_only"
 
   /**
    * Enable subdomain sharding to bypass browser HTTP/1.1 connection limits.
