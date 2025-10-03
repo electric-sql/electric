@@ -135,13 +135,34 @@ defmodule Support.TestUtils do
       fun
     )
 
+    set_callback_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
+  end
+
+  def set_callback_for_descendant_procs(mod) do
     self_pid = self()
-    mod = Electric.Shapes.Consumer.Snapshotter
     callback_fun = fn pid -> Repatch.allow(self_pid, pid) end
 
-    # The snapshotter process will look up this callback in its root ancestor and execute it.
-    Process.put(:callback_for_descendant_proc, {mod, callback_fun})
+    # The descendant process running module `mod` will look up this callback in its root ancestor and execute it.
+    Process.put(:callback_for_descendant_procs, {mod, callback_fun})
 
     :ok
+  end
+
+  # This function is normally called inside the init() callback of an OTP behaviour to inherit any
+  # patched functions from the test process.
+  #
+  # It looks up the test process' PID in the caller process' dictionary and executes the
+  # function under the `:callback_for_descendant_procs` key matching the caller's module (if
+  # any).
+  def execute_test_callback(caller_mod) do
+    {:dictionary, test_process_dict} =
+      Process.get(:"$ancestors")
+      |> List.last()
+      |> Process.info(:dictionary)
+
+    case Keyword.get(test_process_dict, :callback_for_descendant_procs) do
+      {^caller_mod, fun} -> fun.(self())
+      _ -> :noop
+    end
   end
 end
