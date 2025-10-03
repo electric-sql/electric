@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        postgres_version: [14, 15, 17]
+        postgres_version: [14, 15, 17, 18]
     env:
       MIX_ENV: test
       POSTGRES_VERSION: "${{ matrix.postgres_version }}0000"
@@ -56,10 +56,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # https://github.com/orgs/community/discussions/126453#discussioncomment-11414956
       - name: Set PG settings
         run: |
-          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
-          docker exec ${{ job.services.postgres.id }} sh -c 'echo "max_replication_slots=100" >> /var/lib/postgresql/data/postgresql.conf'
+          docker exec ${{ job.services.postgres.id }} sh -c 'psql -U postgres -c "ALTER SYSTEM SET wal_level = '"'"'logical'"'"';"'
+          docker exec ${{ job.services.postgres.id }} sh -c 'psql -U postgres -c "ALTER SYSTEM SET max_replication_slots = 100;"'
           docker restart ${{ job.services.postgres.id }}
 
       - name: Seed the database

@@ -15,7 +15,7 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
       - ./reset_wal.sh:/docker-entrypoint-initdb.d/initdb-reset_wal.sh:x
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql
       - /tmp
     entrypoint:
       - docker-entrypoint.sh
@@ -34,7 +34,7 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
       - ./reset_wal.sh:/docker-entrypoint-initdb.d/initdb-reset_wal.sh:x
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql
       - /tmp
     entrypoint:
       - docker-entrypoint.sh

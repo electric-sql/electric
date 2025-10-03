@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # This script generates a random WAL position and uses pg_resetwal to reset the WAL to that position.
 # This also requires restarting Postgres if ran as an initdb script, which is recommended
 # as it requires appropriate user privileges.
@@ -15,11 +17,11 @@ log_offset=$(printf "%08X" $(( (RANDOM << 17) | (RANDOM << 2) | (RANDOM % 4) )))
 wal_pos=${ELECTRIC_PG_START_WAL:-$(printf "%08X%s%s" $timeline_id $log_segment $log_offset)}
 
 # Stop PostgreSQL to run pg_resetwal
-pg_ctl stop -D /var/lib/postgresql/data
+pg_ctl stop -D $PGDATA
 
 # Run pg_resetwal with the generated LSN
 echo "Resetting WAL to $wal_pos"
-pg_resetwal -l $wal_pos /var/lib/postgresql/data
+pg_resetwal -l $wal_pos $PGDATA
 
 # Restart PostgreSQL
-pg_ctl start -D /var/lib/postgresql/data
+pg_ctl start -D $PGDATA
