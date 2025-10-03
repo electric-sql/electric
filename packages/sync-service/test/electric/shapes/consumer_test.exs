@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.ConsumerTest do
   use ExUnit.Case, async: true
   use Support.Mock
+  use Repatch.ExUnit
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.{Transaction, Relation}
@@ -44,6 +45,11 @@ defmodule Electric.Shapes.ConsumerTest do
             inspector: @base_inspector,
             where: "id = 1"
           )
+
+  @shape_with_compaction Shape.new!("public.test_table",
+                           inspector: @base_inspector,
+                           storage: %{compaction: :enabled}
+                         )
 
   @shape_position %{
     @shape_handle1 => %{
@@ -1000,6 +1006,25 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
                Process.info(consumer_pid, :current_function)
+    end
+
+    @tag with_pure_file_storage_opts: [compaction_period: 5, keep_complete_chunks: 133]
+    test "compaction is scheduled and invoked for a shape that has compaction enabled", ctx do
+      parent = self()
+      ref = make_ref()
+
+      fun = fn _shape_opts, 133 ->
+        send(parent, {:consumer_did_invoke_compact, ref})
+        :ok
+      end
+
+      Repatch.patch(Electric.ShapeCache.PureFileStorage, :compact, [mode: :shared], fun)
+      Support.TestUtils.set_callback_for_descendant_procs(Consumer)
+
+      {_shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_compaction, ctx.shape_cache_opts)
+
+      assert_receive {:consumer_did_invoke_compact, ^ref}
     end
   end
 end
