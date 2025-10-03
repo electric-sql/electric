@@ -30,12 +30,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   def init(config) do
+    test_callback_hook()
+
     Process.set_label({:snapshotter, config.shape_handle})
     metadata = [stack_id: config.stack_id, shape_handle: config.shape_handle]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
-
-    execute_test_callback()
 
     {:ok, config}
   end
@@ -352,23 +352,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   if Mix.env() == :test do
-    # This function must be called inside the init() callback to inherit any patched functions
-    # from the test process.
-    #
-    # Normally, the start_streaming_snapshot_from_db() function is patched in tests via Repatch.
-    #
-    # This function is only relevant for the test environment and works in tandem with
-    # Support.TestUtils.patch_snapshotter/1.
-    def execute_test_callback do
-      {:dictionary, test_process_dict} =
-        Process.get(:"$ancestors") |> List.last() |> Process.info(:dictionary)
-
-      case Keyword.get(test_process_dict, :callback_for_descendant_proc) do
-        {__MODULE__, fun} -> fun.(self())
-        _ -> :ok
-      end
+    def test_callback_hook do
+      Support.TestUtils.execute_test_callback(__MODULE__)
     end
   else
-    def execute_test_callback, do: :ok
+    def test_callback_hook, do: :noop
   end
 end
