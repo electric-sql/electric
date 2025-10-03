@@ -4,25 +4,18 @@ defmodule Electric.Shapes.ConsumerSupervisor do
   require Logger
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
-  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   # TODO: unify these with ShapeCache
   @schema NimbleOptions.new!(
             stack_id: [type: :any, required: true],
             shape_handle: [type: :string, required: true],
             shape: [type: {:struct, Electric.Shapes.Shape}, required: true],
             inspector: [type: :mod_arg, required: true],
-            log_producer: [type: @genserver_name_schema, required: true],
             registry: [type: :atom, required: true],
-            shape_status: [type: :mod_arg, required: true],
+            shape_status_mod: [type: :atom, required: false],
             storage: [type: :mod_arg, required: true],
             publication_manager: [type: :mod_arg, required: true],
             chunk_bytes_threshold: [type: :non_neg_integer, required: true],
-            run_with_conn_fn: [type: {:fun, 2}, default: &DBConnection.run/2],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}, required: true],
-            create_snapshot_fn: [
-              type: {:fun, 4},
-              default: &Electric.Shapes.Consumer.Snapshotter.query_in_readonly_txn/4
-            ],
             snapshot_timeout_to_first_data: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: :timer.seconds(30)
@@ -93,12 +86,31 @@ defmodule Electric.Shapes.ConsumerSupervisor do
 
     shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
 
-    shape_config = %{config | storage: shape_storage}
-
     children = [
       {Electric.ShapeCache.Storage, shape_storage},
-      {Electric.Shapes.Consumer.Snapshotter, shape_config},
-      {Electric.Shapes.Consumer, shape_config}
+      {Electric.Shapes.Consumer.Snapshotter,
+       %{
+         chunk_bytes_threshold: config.chunk_bytes_threshold,
+         db_pool: config.db_pool,
+         otel_ctx: Map.get(config, :otel_ctx),
+         publication_manager: config.publication_manager,
+         shape: config.shape,
+         shape_handle: shape_handle,
+         snapshot_timeout_to_first_data: config.snapshot_timeout_to_first_data,
+         stack_id: config.stack_id,
+         storage: shape_storage
+       }},
+      {Electric.Shapes.Consumer,
+       %{
+         hibernate_after: config.hibernate_after,
+         inspector: config.inspector,
+         registry: config.registry,
+         shape: config.shape,
+         shape_handle: shape_handle,
+         shape_status_mod: Map.get(config, :shape_status_mod),
+         stack_id: config.stack_id,
+         storage: shape_storage
+       }}
     ]
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)

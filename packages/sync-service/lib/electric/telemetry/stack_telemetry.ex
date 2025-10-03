@@ -274,7 +274,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     defp periodic_measurements(opts) do
       [
         {__MODULE__, :count_shapes, [opts.stack_id]},
-        {__MODULE__, :get_total_disk_usage, [opts]},
+        {__MODULE__, :get_total_disk_usage, [opts.stack_id, opts.storage]},
         {__MODULE__, :report_retained_wal_size, [opts.stack_id, opts.slot_name]}
       ]
     end
@@ -295,15 +295,12 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
       end
     end
 
-    def get_total_disk_usage(opts) do
-      storage = Electric.StackSupervisor.storage_mod_arg(opts)
+    def get_total_disk_usage(stack_id, storage) do
+      disk_used = Electric.ShapeCache.Storage.get_total_disk_usage(storage)
 
-      Electric.ShapeCache.Storage.get_total_disk_usage(storage)
-      |> then(
-        &Electric.Telemetry.OpenTelemetry.execute([:electric, :storage], %{used: &1}, %{
-          stack_id: opts[:stack_id]
-        })
-      )
+      Electric.Telemetry.OpenTelemetry.execute([:electric, :storage], %{used: disk_used}, %{
+        stack_id: stack_id
+      })
     catch
       :exit, {:noproc, _} ->
         :ok

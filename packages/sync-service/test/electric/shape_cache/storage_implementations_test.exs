@@ -747,23 +747,27 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       @describetag skip_initialise: true
       setup :start_storage
 
-      test "retrieves no shape handles if no shapes persisted", %{storage: opts} do
-        assert {:ok, MapSet.new()} == Storage.get_all_stored_shape_handles(opts)
+      test "retrieves no shape handles if no shapes persisted", %{storage_base: storage_base} do
+        assert {:ok, MapSet.new()} == Storage.get_all_stored_shape_handles(storage_base)
       end
 
-      test "retrieves stored shape handles", %{storage: opts} do
+      test "retrieves stored shape handles", %{storage: opts, storage_base: storage_base} do
         _writer = Storage.init_writer!(opts, @shape)
 
-        assert {:ok, MapSet.new([@shape_handle])} == Storage.get_all_stored_shape_handles(opts)
+        assert {:ok, MapSet.new([@shape_handle])} ==
+                 Storage.get_all_stored_shape_handles(storage_base)
       end
 
-      test "ignores shapes marked for deletion", %{storage: opts} do
+      test "ignores shapes marked for deletion", %{storage_base: storage_base, storage: opts} do
         _writer = Storage.init_writer!(opts, @shape)
 
+        {PureFileStorage, stack_opts} = storage_base
         {PureFileStorage, shape_opts} = opts
-        File.touch(PureFileStorage.deletion_marker_path(shape_opts))
 
-        assert {:ok, MapSet.new()} == Storage.get_all_stored_shape_handles(opts)
+        path = PureFileStorage.deletion_marker_path(stack_opts.base_path, shape_opts.shape_handle)
+        File.touch(path)
+
+        assert {:ok, MapSet.new()} == Storage.get_all_stored_shape_handles(storage_base)
       end
     end
 
@@ -771,14 +775,14 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       @describetag skip_initialise: true
       setup :start_storage
 
-      test "retrieves no shapes if no shapes persisted", %{storage: opts} do
-        assert {:ok, %{}} = Storage.get_all_stored_shapes(opts)
+      test "retrieves no shapes if no shapes persisted", %{storage_base: storage_base} do
+        assert {:ok, %{}} = Storage.get_all_stored_shapes(storage_base)
       end
 
-      test "retrieves stored shapes", %{storage: opts} do
+      test "retrieves stored shapes", %{storage: opts, storage_base: storage_base} do
         _writer = Storage.init_writer!(opts, @shape)
 
-        assert {:ok, %{@shape_handle => parsed}} = Storage.get_all_stored_shapes(opts)
+        assert {:ok, %{@shape_handle => parsed}} = Storage.get_all_stored_shapes(storage_base)
 
         assert @shape == parsed
       end
@@ -788,8 +792,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       @describetag skip_initialise: true
       setup :start_storage
 
-      test "returns metadata backup directory", %{storage: opts} do
-        assert dir = Storage.metadata_backup_dir(opts)
+      test "returns metadata backup directory", %{storage_base: storage_base} do
+        assert dir = Storage.metadata_backup_dir(storage_base)
         assert is_binary(dir)
         assert Path.type(dir) == :absolute
       end
@@ -823,9 +827,21 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert Storage.get_total_disk_usage(storage_base) == 0
       end
 
-      test "should handle entire base directory already missing", %{storage: storage} do
-        {_, storage_opts} = storage
-        File.rm_rf!(storage_opts.base_path)
+      test "should handle entire base directory already missing", %{
+        storage: storage,
+        storage_base: storage_base
+      } do
+        base_path =
+          case storage do
+            {_, %{base_path: base_path}} ->
+              base_path
+
+            _ ->
+              {_, stack_opts} = storage_base
+              stack_opts.base_path
+          end
+
+        File.rm_rf!(base_path)
         Storage.cleanup!(storage)
       end
     end
@@ -859,8 +875,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
 
       test "should handle entire base directory already missing", %{storage_base: storage_base} do
-        {_, storage_opts} = storage_base
-        File.rm_rf!(storage_opts.base_path)
+        {_, stack_opts} = storage_base
+        File.rm_rf!(stack_opts.base_path)
         Storage.cleanup_all!(storage_base)
       end
     end
@@ -882,7 +898,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   defp start_storage(%{mod: module} = context) do
     storage_base = Storage.shared_opts({module, opts(module, context)})
-    _shared_pid = start_supervised!(Storage.stack_child_spec(storage_base))
+
+    start_supervised!(Storage.stack_child_spec(storage_base))
 
     storage = Storage.for_shape(@shape_handle, storage_base)
     pid = start_supervised!(Storage.child_spec(storage))

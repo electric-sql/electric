@@ -1,6 +1,7 @@
 defmodule Electric.ShapeCache.ExpiryManager do
   use GenServer
 
+  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -9,8 +10,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
             max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
             expiry_batch_size: [type: :pos_integer],
             period: [type: :non_neg_integer, default: 60_000],
-            stack_id: [type: :string, required: true],
-            shape_status: [type: :mod_arg, required: true]
+            stack_id: [type: :string, required: true]
           )
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
@@ -39,8 +39,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
         stack_id: stack_id,
         max_shapes: Keyword.fetch!(opts, :max_shapes),
         expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size),
-        period: Keyword.fetch!(opts, :period),
-        shape_status: Keyword.fetch!(opts, :shape_status)
+        period: Keyword.fetch!(opts, :period)
       }
 
     if not is_nil(state.max_shapes), do: schedule_next_check(state)
@@ -102,15 +101,15 @@ defmodule Electric.ShapeCache.ExpiryManager do
     )
   end
 
-  defp least_recently_used(%{shape_status: {shape_status, shape_status_state}}, number_to_expire) do
+  defp least_recently_used(%{stack_id: stack_id}, number_to_expire) do
     OpenTelemetry.with_span("expiry_manager.get_least_recently_used", [], fn ->
-      shape_status.least_recently_used(shape_status_state, number_to_expire)
+      ShapeStatus.least_recently_used(stack_id, number_to_expire)
     end)
   end
 
-  defp shape_count(%{shape_status: {shape_status, shape_status_state}}) do
+  defp shape_count(%{stack_id: stack_id}) do
     OpenTelemetry.with_span("expiry_manager.get_shape_count", [], fn ->
-      shape_status.count_shapes(shape_status_state)
+      ShapeStatus.count_shapes(stack_id)
     end)
   end
 end
