@@ -227,20 +227,20 @@ defmodule Electric.ShapeCache.PureFileStorage do
     Electric.AsyncDeleter.delete(base_path, stack_id: stack_id)
   end
 
-  def schedule_compaction(opts) do
-    half_period = div(opts.compaction_config.period, 2)
+  def schedule_compaction(compaction_config) do
+    half_period = div(compaction_config.period, 2)
 
     # Schedule with jitter to avoid all compactions happening at the same time
     Process.send_after(
       self(),
-      {Storage, {__MODULE__, :scheduled_compaction, []}},
-      opts.compaction_config.period + Enum.random(-half_period..half_period)
+      {Storage, {__MODULE__, :scheduled_compaction, [compaction_config]}},
+      compaction_config.period + Enum.random(-half_period..half_period)
     )
   end
 
-  def scheduled_compaction(writer_state(opts: opts) = state) do
-    schedule_compaction(opts)
-    compact(opts, opts.compaction_config.keep_complete_chunks)
+  def scheduled_compaction(writer_state(opts: shape_opts) = state, compaction_config) do
+    schedule_compaction(compaction_config)
+    compact(shape_opts, compaction_config.keep_complete_chunks)
 
     state
   end
@@ -503,7 +503,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
       end
 
     if shape_definition.storage.compaction == :enabled do
-      schedule_compaction(shape_opts)
+      {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
+      schedule_compaction(stack_opts.compaction_config)
     end
 
     writer_state(
