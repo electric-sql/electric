@@ -68,6 +68,8 @@ defmodule Electric.Shapes.Consumer do
   @impl GenServer
 
   def init(config) do
+    test_callback_hook()
+
     Process.set_label({:consumer, config.shape_handle})
     Process.flag(:trap_exit, true)
 
@@ -685,5 +687,13 @@ defmodule Electric.Shapes.Consumer do
           %{state | txn_offset_mapping: Enum.reverse([{offset, new_boundary} | rest], tail)}
       end
     end
+  end
+
+  if Mix.env() == :test do
+    def test_callback_hook do
+      Support.TestUtils.execute_test_callback(__MODULE__)
+    end
+  else
+    def test_callback_hook, do: :noop
   end
 end
