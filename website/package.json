@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/docs",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "scripts": {
     "api:build_docs": "redocly build-docs ./electric-api.yaml --output=./public/openapi.html",
     "api:generate": "npm run api:build_docs && npm run api:patch_version",

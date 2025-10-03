@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.1.14
+
+### Patch Changes
+
+- 550ebd1: Fix recovery of incomplete shape data
+
 ## 1.1.13
 
 ### Patch Changes

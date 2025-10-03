@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.13
+
+### Patch Changes
+
+- 47cda20: Add optional `shardSubdomain` shape option to auto-shard the url subdomain in development. This solves the slow shapes in development problem without needing HTTP/2 or system level deps like Caddy or mkcert.
+
 ## 1.0.12
 
 ### Patch Changes
