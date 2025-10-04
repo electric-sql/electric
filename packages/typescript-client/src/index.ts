@@ -5,7 +5,6 @@ export {
   isChangeMessage,
   isControlMessage,
   isVisibleInSnapshot,
-  type ShardSubdomainOption,
 } from './helpers'
 export { FetchError } from './error'
 export { type BackoffOptions, BackoffDefaults } from './fetch'
