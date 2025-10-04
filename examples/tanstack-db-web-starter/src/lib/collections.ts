@@ -6,22 +6,26 @@ import {
   selectUsersSchema,
 } from "@/db/schema"
 import { trpc } from "@/lib/trpc-client"
+import { shardedFetchClient } from "@/lib/localhost-port-sharding"
+
+const domain =
+  typeof window !== `undefined`
+  ? window.location.origin
+  : `http://localhost:5173`
+
+const parser = {
+  timestamptz: (date: string) => {
+    return new Date(date)
+  }
+}
 
 export const usersCollection = createCollection(
   electricCollectionOptions({
     id: "users",
     shapeOptions: {
-      url: new URL(
-        `/api/users`,
-        typeof window !== `undefined`
-          ? window.location.origin
-          : `http://localhost:5173`
-      ).toString(),
-      parser: {
-        timestamptz: (date: string) => {
-          return new Date(date)
-        },
-      },
+      url: new URL(`/api/users`, domain).toString(),
+      fetchClient: shardedFetchClient(),
+      parser
     },
     schema: selectUsersSchema,
     getKey: (item) => item.id,
@@ -31,17 +35,9 @@ export const projectCollection = createCollection(
   electricCollectionOptions({
     id: "projects",
     shapeOptions: {
-      url: new URL(
-        `/api/projects`,
-        typeof window !== `undefined`
-          ? window.location.origin
-          : `http://localhost:5173`
-      ).toString(),
-      parser: {
-        timestamptz: (date: string) => {
-          return new Date(date)
-        },
-      },
+      url: new URL(`/api/projects`, domain).toString(),
+      fetchClient: shardedFetchClient(),
+      parser
     },
     schema: selectProjectSchema,
     getKey: (item) => item.id,
@@ -84,18 +80,9 @@ export const todoCollection = createCollection(
   electricCollectionOptions({
     id: "todos",
     shapeOptions: {
-      url: new URL(
-        `/api/todos`,
-        typeof window !== `undefined`
-          ? window.location.origin
-          : `http://localhost:5173`
-      ).toString(),
-      parser: {
-        // Parse timestamp columns into JavaScript Date objects
-        timestamptz: (date: string) => {
-          return new Date(date)
-        },
-      },
+      url: new URL(`/api/todos`, domain).toString(),
+      fetchClient: shardedFetchClient(),
+      parser
     },
     schema: selectTodoSchema,
     getKey: (item) => item.id,
