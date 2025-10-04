@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.14
+
+### Patch Changes
+
+- 3775bf6: Revert the shardSubdomain mechanism to avoid CORS and subdomain resolution issues in Safari.
+
 ## 1.0.13
 
 ### Patch Changes
