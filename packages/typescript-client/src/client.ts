@@ -58,7 +58,6 @@ import {
 } from '@microsoft/fetch-event-source'
 import { expiredShapesCache } from './expired-shapes-cache'
 import { SnapshotTracker } from './snapshot-tracker'
-import { getElectricConfig } from './config'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
