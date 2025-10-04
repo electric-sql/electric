@@ -38,7 +38,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
 
     assert [{_, {"public", "partitioned_items"}, _}] =
-             Electric.Postgres.Configuration.get_publication_tables(
+             Electric.Postgres.Configuration.get_publication_tables!(
                ctx.db_conn,
                ctx.publication_name
              )
@@ -88,7 +88,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
 
     assert [{_, {"public", "partitioned_items_100"}, _}] =
-             Electric.Postgres.Configuration.get_publication_tables(
+             Electric.Postgres.Configuration.get_publication_tables!(
                ctx.db_conn,
                ctx.publication_name
              )
@@ -208,11 +208,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
              MapSet.new([partition_shape_handle])
            )
 
-    assert [{_, {"public", "partitioned_items_100"}, _}] =
-             Electric.Postgres.Configuration.get_publication_tables(
-               ctx.db_conn,
-               ctx.publication_name
-             )
+    wait_until_publication_tables(ctx, [{"public", "partitioned_items_100"}])
   end
 
   test "truncation of partition root truncates all partitions", ctx do
@@ -229,7 +225,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     :started = ShapeCache.await_snapshot_start(partition_shape_handle, stack_id: ctx.stack_id)
 
     assert [{_, {"public", "partitioned_items"}, _}, {_, {"public", "partitioned_items_100"}, _}] =
-             Electric.Postgres.Configuration.get_publication_tables(
+             Electric.Postgres.Configuration.get_publication_tables!(
                ctx.db_conn,
                ctx.publication_name
              )
@@ -263,9 +259,27 @@ defmodule Electric.Shapes.PartitionedTablesTest do
 
     assert [] = ShapeCache.list_shapes(stack_id: ctx.stack_id)
 
-    assert Electric.Postgres.Configuration.get_publication_tables(
-             ctx.db_conn,
-             ctx.publication_name
-           ) == []
+    wait_until_publication_tables(ctx, [])
+  end
+
+  defp wait_until_publication_tables(ctx, tables, timeout \\ 500) do
+    start_time = System.monotonic_time(:millisecond)
+
+    try do
+      assert Electric.Postgres.Configuration.get_publication_tables!(
+               ctx.db_conn,
+               ctx.publication_name
+             )
+             |> Enum.map(fn {_, {schema, table}, _} -> {schema, table} end) == tables
+    rescue
+      e in [ExUnit.AssertionError] ->
+        if timeout > 0 do
+          Process.sleep(50)
+          elapsed = System.monotonic_time(:millisecond) - start_time
+          wait_until_publication_tables(ctx, tables, timeout - elapsed)
+        else
+          reraise e, __STACKTRACE__
+        end
+    end
   end
 end

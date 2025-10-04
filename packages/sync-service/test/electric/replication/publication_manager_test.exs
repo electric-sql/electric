@@ -28,12 +28,21 @@ defmodule Electric.Replication.PublicationManagerTest do
 
     Repatch.patch(
       Electric.Postgres.Configuration,
+      :check_publication_status!,
+      [mode: :shared],
+      fn _, _ -> ctx[:configuration_publication_status] || :ok end
+    )
+
+    Repatch.patch(
+      Electric.Postgres.Configuration,
       :configure_publication!,
       [mode: :shared],
-      fn _, _, filters, _ ->
+      fn _, _, filters ->
         # Only relations are relevant now
         send(test_pid, {:filters, MapSet.to_list(filters)})
-        Map.get(ctx, :returned_relations, MapSet.new())
+
+        Map.new(filters, fn rel -> {rel, :ok} end)
+        |> Map.merge(ctx[:configuration_result_overrides] || %{})
       end
     )
 
@@ -51,7 +60,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     %{opts: publication_manager_opts, ctx: ctx}
   end
 
-  describe "add_shape/2" do
+  describe "add_shape/3" do
     test "adds a single relation", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
@@ -81,31 +90,6 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     @tag update_debounce_timeout: 100
-    test "queues up requests for same shape handle", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"})
-      test_pid = self()
-
-      run_async(fn ->
-        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-        send(test_pid, :task1_done)
-      end)
-
-      run_async(fn ->
-        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-        send(test_pid, :task2_done)
-      end)
-
-      refute_receive :task1_done, 50
-      refute_receive {:filters, _}, 0
-      refute_receive :task2_done, 0
-
-      assert_receive :task1_done
-      assert_receive :task2_done, 10
-      assert_receive {:filters, [{_, {"public", "items"}}]}, 10
-      refute_receive {:filters, _}, 200
-    end
-
-    @tag update_debounce_timeout: 100
     test "doesn't update when adding same relation again", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
       shape2 = generate_shape({"public", "items"})
@@ -118,7 +102,9 @@ defmodule Electric.Replication.PublicationManagerTest do
       refute_receive {:filters, _}, 500
     end
 
-    @tag returned_relations: MapSet.new([{10, {"public", "another_table"}}])
+    @tag configuration_result_overrides: %{
+           {10, {"public", "another_table"}} => {:error, :schema_changed}
+         }
     test "broadcasts dropped relations to shape cache", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
@@ -165,22 +151,21 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
       refute_receive {:filters, _}, 500
     end
+  end
 
+  describe "concurrent operations" do
     @tag update_debounce_timeout: 100
-    test "queues up requests for same shape handle", %{opts: opts} do
+    test "queues up requests to add same shape handle", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
-      :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-
       test_pid = self()
 
       run_async(fn ->
-        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
         send(test_pid, :task1_done)
       end)
 
       run_async(fn ->
-        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
         send(test_pid, :task2_done)
       end)
 
@@ -190,60 +175,30 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_receive :task1_done
       assert_receive :task2_done, 10
-      assert_receive {:filters, []}
+      assert_receive {:filters, [{_, {"public", "items"}}]}, 10
       refute_receive {:filters, _}, 200
     end
-  end
 
-  describe "missing publication handling" do
-    test "add_shape raises and server stops when publication is missing", ctx do
-      stop_supervised!(ctx.opts[:server])
+    @tag update_debounce_timeout: 100
+    test "invalidates add requests if removed immediately", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
 
-      missing_pub_error = %Postgrex.Error{
-        postgres: %{
-          code: :undefined_object,
-          pg_code: "42704",
-          severity: "ERROR",
-          message: "publication \"pub_#{ctx.stack_id}\" does not exist"
-        }
-      }
-
-      %{publication_manager: {_, publication_manager_opts}} =
-        with_publication_manager(%{
-          module: ctx.module,
-          test: ctx.test,
-          stack_id: ctx.stack_id,
-          update_debounce_timeout: 0,
-          publication_name: "pub_#{ctx.stack_id}",
-          pool: :no_pool
-        })
-
-      Repatch.restore(Electric.Postgres.Configuration, :configure_publication!, 4, mode: :shared)
-
-      Repatch.patch(
-        Electric.Postgres.Configuration,
-        :configure_publication!,
-        [mode: :shared],
-        fn _, _, _, _ -> raise missing_pub_error end
-      )
-
-      Repatch.allow(self(), publication_manager_opts[:server])
-
-      pid = GenServer.whereis(publication_manager_opts[:server])
-      mref = Process.monitor(pid)
-      Process.unlink(pid)
-
-      shape = generate_shape({"public", "items"})
-
-      raised =
-        assert_raise(Postgrex.Error, fn ->
-          PublicationManager.add_shape(@shape_handle_1, shape, publication_manager_opts)
+      add_task =
+        Task.async(fn ->
+          assert_raise RuntimeError, "Shape removed before updating publication", fn ->
+            PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+          end
         end)
 
-      assert raised.postgres.code == :undefined_object
+      remove_task =
+        Task.async(fn ->
+          Process.sleep(5)
+          :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        end)
 
-      assert_receive {:DOWN, ^mref, :process, ^pid,
-                      {:shutdown, %Postgrex.Error{postgres: %{code: :undefined_object}}}}
+      Task.await_many([add_task, remove_task])
+
+      refute_receive {:filters, _}, 200
     end
   end
 

@@ -48,7 +48,7 @@ defmodule Electric.Plug.LowPrivilegeRouterTest do
       assert {503,
               %{
                 "message" =>
-                  "Database table \"public.items\" is missing from the publication and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
+                  "Database table \"public.items\" is missing from the publication \"#{ctx.publication_name}\" and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it"
               }} == get_shape(ctx)
 
       Postgrex.query!(ctx.pool, "ALTER PUBLICATION \"#{ctx.publication_name}\" ADD TABLE items")
