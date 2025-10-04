@@ -9,16 +9,7 @@ import {
   SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
-<<<<<<< HEAD
 import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
-=======
-import {
-  getOffset,
-  isUpToDateMessage,
-  isChangeMessage,
-  applyPortSharding,
-} from './helpers'
->>>>>>> cadc938ed (ports wip)
 import {
   FetchError,
   FetchBackoffAbortError,
