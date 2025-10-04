@@ -9,7 +9,16 @@ import {
   SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
+<<<<<<< HEAD
 import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
+=======
+import {
+  getOffset,
+  isUpToDateMessage,
+  isChangeMessage,
+  applyPortSharding,
+} from './helpers'
+>>>>>>> cadc938ed (ports wip)
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -58,6 +67,7 @@ import {
 } from '@microsoft/fetch-event-source'
 import { expiredShapesCache } from './expired-shapes-cache'
 import { SnapshotTracker } from './snapshot-tracker'
+import { getElectricConfig } from './config'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,

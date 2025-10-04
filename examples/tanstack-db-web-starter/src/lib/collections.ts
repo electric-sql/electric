@@ -1,3 +1,4 @@
+import "./electric-config"
 import { createCollection } from "@tanstack/react-db"
 import { electricCollectionOptions } from "@tanstack/electric-db-collection"
 import {

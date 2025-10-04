@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { isChangeMessage, isControlMessage, Message } from '../src'
 import { isUpToDateMessage } from '../src/helpers'
 

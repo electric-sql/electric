@@ -3,11 +3,23 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact from "@vitejs/plugin-react"
 import viteTsConfigPaths from "vite-tsconfig-paths"
 import tailwindcss from "@tailwindcss/vite"
-import { caddyPlugin } from "./src/vite-plugin-caddy"
+import multiPortPlugin from "./src/lib/vite-plugin-multi-port"
 
-const config = defineConfig({
+// [51730..51779]
+const shardPorts = Array.from({ length: 25 }, (_, i) => 51730 + i)
+
+const config = defineConfig(({ mode }) => ({
+  define: {
+    '__ELECTRIC_SHARD_PORTS__': mode !== 'production' ? JSON.stringify(shardPorts) : 'undefined',
+  },
   server: {
-    host: true,
+    port: 5173,
+    strictPort: true,
+    host: 'localhost',
+    // cors: {
+    //   origin: true,
+    //   allowedHeaders: ['Content-Type', 'Authorization'],
+    // },
   },
   plugins: [
     // this is the plugin that enables path aliases
@@ -30,10 +42,14 @@ const config = defineConfig({
       },
     }),
     viteReact(),
+    // Also bind to a range of other ports to avoid HTTP/1 concurrent request
+    // limits blocking shapes in local development. This avoids needing to
+    // run over HTTP/2, which is the proper solution in production.
+    ...(mode !== 'production' ? [multiPortPlugin(shardPorts)] : [])
   ],
   ssr: {
     noExternal: ["zod"],
   },
-})
+}))
 
 export default config
