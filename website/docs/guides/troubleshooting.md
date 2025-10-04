@@ -21,28 +21,34 @@ Sometimes people encounter a mysterious slow-down with Electric in local develop
 
 With HTTP/1.1, browsers only allow 6 simultaneous requests to a specific backend. This is because each HTTP/1.1 request uses its own expensive TCP connection. As shapes are loaded over HTTP, this means only 6 shapes can be getting updates with HTTP/1.1 due to this browser restriction. All other requests pause until there's an opening.
 
-HTTP/2, introduced in 2015, fixes this problem by _multiplexing_ each request to a server over the same TCP connection. This allows essentially unlimited connections. HTTP/2 is standard across the vast majority of hosts now. Unfortunately it's not yet standard in local dev environments.
+Luckily, HTTP/2, introduced in 2015, fixes this problem by _multiplexing_ each request to a server over the same TCP connection. This allows essentially unlimited connections. HTTP/2 is standard across the vast majority of hosts now. Unfortunately it's not yet standard in local dev environments.
 
-##### Solution &mdash; subdomain sharding
+##### Solution &mdash; run Caddy
 
-As of version 1.0.13, the Electric TypeScript client automatically solves this problem using subdomain sharding. This assigns each shape a unique subdomain (e.g., `a7f2c.localhost`). This bypasses the browser's HTTP/1.1 connection limits.
+To fix this, you can setup a local reverse-proxy using the popular [Caddy server](https://caddyserver.com). Caddy automatically sets up HTTP/2 and proxies requests to Electric, getting around the 6 requests limitation with HTTP/1.1 in the browser.
 
-Subdomain sharding is enabled by default for `localhost` and `*.localhost` URLs, so if you're running Electric (or your local API / proxy in front of it) on localhost, shapes will now be fast out of the box with no additional setup required.
+1. Install Caddy for your OS — https://caddyserver.com/docs/install
+2. Run `caddy trust` so Caddy can install its certificate into your OS. This is necessary for http/2 to Just Work™ without SSL warnings/errors in your browser — https://caddyserver.com/docs/command-line#caddy-trust
 
-If you're using a custom domain in development, you can explicitly enable subdomain sharding:
+Note — it's really important you run Caddy directly from your computer and not in e.g. a Docker container as otherwise, Caddy won't be able to use http/2 and will fallback to http/1 defeating the purpose of using it!
 
-```ts
-import { ShapeStream } from '@electric-sql/client'
+Once you have Caddy installed and have added its certs — you can run this command to start Caddy listening on port 3001 and proxying shape requests to Electric on port 3000. If you're loading shapes through your API or framework dev server, replace `3000` with the port that your API or dev server is listening on. The browser should talk directly to Caddy.
 
-const stream = new ShapeStream({
-  url: 'http://example-dev-domain:3000/v1/shape',
-  shardSubdomain: 'always' // Enable subdomain sharding for all hosts
-})
+```sh
+caddy run \
+    --config - \
+    --adapter caddyfile \
+    <<EOF
+localhost:3001 {
+  reverse_proxy localhost:3000
+  encode {
+    gzip
+  }
+}
+EOF
 ```
 
-If you're using an older version of `@electric-sql/client` (before 1.0.13) then you should upgrade to get subdomain sharding.
-
-If you're using a custom client or otherwise need a different solution, you can run a reverse proxy, such as [Caddy](https://caddyserver.com) that supports HTTP/2. The Vite development server also supports running in HTTP/2 mode.
+Now change your shape URLs in your frontend code to use port `3001` instead of port 3000 and everything will run much faster 🚀
 
 ### Shape logs &mdash; how do I clear the server state?
 
