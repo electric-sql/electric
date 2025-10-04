@@ -9,13 +9,7 @@ import {
   SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
-import {
-  getOffset,
-  isUpToDateMessage,
-  isChangeMessage,
-  applySubdomainSharding,
-  ShardSubdomainOption,
-} from './helpers'
+import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -288,43 +282,6 @@ export interface ShapeStreamOptions<T = never> {
    */
   log?: LogMode
 
-  /**
-   * Enable subdomain sharding to bypass browser HTTP/1.1 connection limits.
-   * This is useful in local development and is enabled by default for localhost URLs.
-   *
-   * See https://electric-sql.com/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development
-   *
-   * When sharded, each shape stream gets a unique subdomain (e.g., `a7f2c.localhost`),
-   * which bypasses the browser HTTP/1.1 connection limits. This avoids the need to serve
-   * the development server over HTTP/2 (and thus HTTPS) in development.
-   *
-   * Options:
-   * - `'localhost'` - Automatically shard `localhost` and `*.localhost` URLs (the default)
-   * - `'always'` - Shard URLs regardless of the hostname
-   * - `'never'` - Disable sharding
-   * - `true` - Alias for `'always'`
-   * - `false` - Alias for `'never'`
-   *
-   * @default 'localhost'
-   *
-   * @example
-   * { url: 'http://localhost:3000/v1/shape', shardSubdomain: 'localhost' }
-   * // → http://a1c2f.localhost:3000/v1/shape
-   *
-   * @example
-   * { url: 'https://api.example.com', shardSubdomain: 'localhost' }
-   * // → https://api.example.com
-   *
-   * @example
-   * { url: 'https://localhost:3000', shardSubdomain: 'never' }
-   * // → https://localhost:3000
-   *
-   * @example
-   * { url: 'https://api.example.com', shardSubdomain: 'always' }
-   * // → https://b2d3g.api.example.com
-   */
-  shardSubdomain?: ShardSubdomainOption
-
   signal?: AbortSignal
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
@@ -482,10 +439,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
     validateOptions(this.options)
-    this.options.url = applySubdomainSharding(
-      this.options.url,
-      this.options.shardSubdomain
-    )
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
