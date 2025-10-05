@@ -4,8 +4,6 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   """
   use DynamicSupervisor
 
-  alias Electric.Shapes.ConsumerSupervisor
-
   require Logger
 
   @doc """
@@ -37,7 +35,7 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   end
 
   def start_shape_consumer(name, config) do
-    shape_handle = Keyword.fetch!(config, :shape_handle)
+    shape_handle = config.shape_handle
 
     Logger.debug(fn -> "Starting consumer for #{shape_handle}" end)
 
@@ -45,7 +43,7 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
 
     DynamicSupervisor.start_child(
       {:via, PartitionSupervisor, {name, routing_key}},
-      {ConsumerSupervisor, config}
+      {Electric.Shapes.Consumer, config}
     )
   end
 

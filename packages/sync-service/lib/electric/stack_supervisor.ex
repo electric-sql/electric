@@ -353,7 +353,12 @@ defmodule Electric.StackSupervisor do
       telemetry_children ++
         [
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
-          {Electric.StackConfig, stack_id: stack_id},
+          {Electric.StackConfig,
+           stack_id: stack_id,
+           seed_config: [
+             chunk_bytes_threshold: config.chunk_bytes_threshold,
+             snapshot_timeout_to_first_data: :timer.seconds(30)
+           ]},
           {Electric.AsyncDeleter,
            stack_id: stack_id,
            storage_dir: config.storage_dir,

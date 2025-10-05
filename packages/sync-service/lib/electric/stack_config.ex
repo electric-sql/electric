@@ -33,6 +33,7 @@ defmodule Electric.StackConfig do
 
     tab = table(stack_id)
     :ets.new(tab, [:public, :named_table, :set, read_concurrency: true])
+    :ets.insert(tab, Keyword.fetch!(opts, :seed_config))
 
     {:ok, nil}
   end

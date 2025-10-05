@@ -1,7 +1,5 @@
 defmodule Electric.Shapes.Consumer do
-  use GenServer,
-    restart: :temporary,
-    significant: true
+  use GenServer, restart: :transient
 
   import Electric.Postgres.Xid, only: [compare: 2]
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
@@ -61,6 +59,17 @@ defmodule Electric.Shapes.Consumer do
     GenServer.whereis(name(stack_id, shape_handle))
   end
 
+  def stop_and_clean(%{stack_id: stack_id, shape_handle: shape_handle}) do
+    stop_and_clean(stack_id, shape_handle)
+  end
+
+  def stop_and_clean(stack_id, shape_handle) do
+    # if consumer is present, terminate it gracefully
+    GenServer.call(name(stack_id, shape_handle), :stop_and_clean, 30_000)
+  catch
+    :exit, {:noproc, _} -> :noproc
+  end
+
   def start_link(config) when is_map(config) do
     GenServer.start_link(__MODULE__, config, name: name(config))
   end
@@ -69,10 +78,12 @@ defmodule Electric.Shapes.Consumer do
   def init(config) do
     activate_mocked_functions_from_test_process()
 
-    Process.set_label({:consumer, config.shape_handle})
+    %{stack_id: stack_id, shape_handle: shape_handle} = config
+
+    Process.set_label({:consumer, shape_handle})
     Process.flag(:trap_exit, true)
 
-    metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
+    metadata = [shape_handle: shape_handle, stack_id: stack_id]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
@@ -97,15 +108,23 @@ defmodule Electric.Shapes.Consumer do
   @impl GenServer
   def handle_continue(:init_storage, state) do
     %{
+      stack_id: stack_id,
+      shape: shape,
+      shape_handle: shape_handle,
       storage: storage,
       shape_status_mod: shape_status_mod
     } = state
 
+    case Electric.ShapeCache.Storage.start_link(storage) do
+      {:ok, _pid} -> :ok
+      :ignore -> :ok
+    end
+
     writer =
       ShapeCache.Storage.init_writer!(
         storage,
-        state.shape,
-        shape_status_mod.consume_shape_storage_state(state.stack_id, state.shape_handle)
+        shape,
+        shape_status_mod.consume_shape_storage_state(stack_id, shape_handle)
       )
 
     {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
@@ -118,35 +137,66 @@ defmodule Electric.Shapes.Consumer do
     normalized_latest_offset =
       if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
 
+    state =
+      Map.merge(state, %{
+        pg_snapshot: pg_snapshot,
+        latest_offset: normalized_latest_offset,
+        writer: writer
+      })
+
     :ok =
       shape_status_mod.initialise_shape(
-        state.stack_id,
-        state.shape_handle,
+        stack_id,
+        shape_handle,
         pg_snapshot[:xmin],
         normalized_latest_offset
       )
 
-    for shape_handle <- state.shape.shape_dependencies_handles do
+    for dep_shape_handle <- shape.shape_dependencies_handles do
       # TODO: handle a case when materializer is down
-      Process.monitor(Materializer.whereis(state.stack_id, shape_handle),
-        tag: {:dependency_materializer_down, shape_handle}
+      Process.monitor(Materializer.whereis(stack_id, dep_shape_handle),
+        tag: {:dependency_materializer_down, dep_shape_handle}
       )
 
-      Materializer.subscribe(state.stack_id, shape_handle)
+      Materializer.subscribe(stack_id, dep_shape_handle)
     end
 
-    ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape)
+    ShapeLogCollector.subscribe(stack_id, shape_handle, shape)
 
-    Logger.debug("Writer for #{state.shape_handle} initialized")
+    Logger.debug("Writer for #{shape_handle} initialized")
 
-    Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
+    OpenTelemetry.with_span(
+      "shape_snapshot.prepare_tables",
+      shape_attrs(shape_handle, shape),
+      stack_id,
+      fn ->
+        Electric.Replication.PublicationManager.add_shape(shape_handle, shape, stack_id: stack_id)
+      end
+    )
 
-    {:noreply,
-     Map.merge(state, %{
-       latest_offset: normalized_latest_offset,
-       writer: writer,
-       pg_snapshot: pg_snapshot
-     }), state.hibernate_after}
+    state =
+      if ShapeCache.Storage.snapshot_started?(state.storage) do
+        state.pg_snapshot
+        |> set_pg_snapshot(state)
+        |> set_snapshot_started()
+      else
+        {:ok, _pid} =
+          Snapshotter.start_link(%{
+            chunk_bytes_threshold: Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold),
+            db_pool: Electric.Connection.Manager.snapshot_pool(stack_id),
+            otel_ctx: state.otel_ctx,
+            shape: shape,
+            shape_handle: shape_handle,
+            snapshot_timeout_to_first_data:
+              Electric.StackConfig.lookup(stack_id, :snapshot_timeout_to_first_data),
+            stack_id: stack_id,
+            storage: storage
+          })
+
+        state
+      end
+
+    {:noreply, state, state.hibernate_after}
   end
 
   @impl GenServer
@@ -277,6 +327,7 @@ defmodule Electric.Shapes.Consumer do
   # We're trapping exists so that `terminate` is called to clean up the writer,
   # otherwise we respect the OTP exit protocol.
   def handle_info({:EXIT, _from, reason}, state) do
+    # TODO: different behaviour if snapshotter or materializer exit?
     Logger.debug("Caught EXIT: #{inspect(reason)}")
     {:stop, reason, state}
   end

@@ -28,7 +28,6 @@ defmodule Electric.ShapeCache do
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes
-  alias Electric.Shapes.ConsumerSupervisor
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
 
@@ -48,8 +47,6 @@ defmodule Electric.ShapeCache do
             stack_id: [type: :string, required: true],
             consumer_supervisor: [type: @genserver_name_schema, required: true],
             storage: [type: :mod_arg, required: true],
-            publication_manager: [type: :mod_arg, required: true],
-            chunk_bytes_threshold: [type: :non_neg_integer, required: true],
             inspector: [type: :mod_arg, required: true],
             registry: [type: {:or, [:atom, :pid]}, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
@@ -60,10 +57,6 @@ defmodule Electric.ShapeCache do
             recover_shape_timeout: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: 5_000
-            ],
-            snapshot_timeout_to_first_data: [
-              type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
-              default: :timer.seconds(30)
             ]
           )
 
@@ -209,7 +202,6 @@ defmodule Electric.ShapeCache do
       name: opts.name,
       stack_id: stack_id,
       storage: opts.storage,
-      publication_manager: opts.publication_manager,
       chunk_bytes_threshold: opts.chunk_bytes_threshold,
       inspector: opts.inspector,
       db_pool: opts.db_pool,
@@ -337,7 +329,7 @@ defmodule Electric.ShapeCache do
           materialized_type =
             shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
 
-          ConsumerSupervisor.start_materializer(%{
+          Electric.Shapes.ConsumerSupervisor.start_materializer(%{
             stack_id: state.stack_id,
             shape_handle: shape_handle,
             storage: state.storage,
@@ -365,18 +357,17 @@ defmodule Electric.ShapeCache do
   defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
     case Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
            state.consumer_supervisor,
-           stack_id: state.stack_id,
-           inspector: state.inspector,
-           shape_handle: shape_handle,
-           shape: shape,
-           storage: state.storage,
-           publication_manager: state.publication_manager,
-           chunk_bytes_threshold: state.chunk_bytes_threshold,
-           registry: state.registry,
-           db_pool: state.db_pool,
-           hibernate_after: state.shape_hibernate_after,
-           otel_ctx: otel_ctx,
-           snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data
+           %{
+             stack_id: state.stack_id,
+             inspector: state.inspector,
+             shape_handle: shape_handle,
+             shape: shape,
+             storage: Electric.ShapeCache.Storage.for_shape(shape_handle, state.storage),
+             registry: state.registry,
+             db_pool: state.db_pool,
+             hibernate_after: state.shape_hibernate_after,
+             otel_ctx: otel_ctx
+           }
          ) do
       {:ok, _supervisor_pid} ->
         :ok

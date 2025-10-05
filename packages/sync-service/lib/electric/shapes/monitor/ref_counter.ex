@@ -304,13 +304,15 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   defp monitor_consumer_processes(state, consumer_pid, supervisor_pid, shape_handle) do
-    if !supervisor_pid,
-      do:
-        raise(RuntimeError,
-          message: "No ConsumerSupervisor process found for shape #{shape_handle}"
-        )
+    # if !supervisor_pid,
+    #   do:
+    #     raise(RuntimeError,
+    #       message: "No ConsumerSupervisor process found for shape #{shape_handle}"
+    #     )
 
-    Process.monitor(supervisor_pid, tag: {:down, :writer_supervisor, shape_handle})
+    if supervisor_pid,
+      do: Process.monitor(supervisor_pid, tag: {:down, :writer_supervisor, shape_handle})
+
     Process.monitor(consumer_pid, tag: {:down, :writer, shape_handle})
 
     %{state | writers: Map.put(state.writers, consumer_pid, shape_handle)}
