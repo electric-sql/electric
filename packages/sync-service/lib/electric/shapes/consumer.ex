@@ -87,8 +87,15 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
+    # The existing body of consumer tests made it impossible to replace this dynamic
+    # setting with a static module alias. But do note that this is only set to anything
+    # other than Electric.ShapeCache.ShapeStatus in the test environment.
+    shape_status_mod = Map.get(config, :shape_status_mod) || Electric.ShapeCache.ShapeStatus
+    shape = shape_status_mod.get_actual_existing_shape(stack_id, shape_handle)
+
     state =
       Map.merge(config, %{
+        shape: shape,
         snapshot_started: false,
         awaiting_snapshot_start: [],
         buffer: [],
@@ -96,10 +103,8 @@ defmodule Electric.Shapes.Consumer do
         cleaned?: false,
         txn_offset_mapping: [],
         materializer_subscribed?: false,
-        # The existing body of consumer tests made it impossible to replace this dynamic
-        # setting with a static module alias. But do note that this is only set to anything
-        # other than Electric.ShapeCache.ShapeStatus in the test environment.
-        shape_status_mod: Map.get(config, :shape_status_mod) || Electric.ShapeCache.ShapeStatus
+        shape_status_mod: shape_status_mod,
+        hibernate_after: Electric.StackConfig.lookup(stack_id, :shape_hibernate_after)
       })
 
     {:ok, state, {:continue, :init_storage}}
@@ -111,9 +116,11 @@ defmodule Electric.Shapes.Consumer do
       stack_id: stack_id,
       shape: shape,
       shape_handle: shape_handle,
-      storage: storage,
       shape_status_mod: shape_status_mod
     } = state
+
+    stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
+    storage = Electric.ShapeCache.Storage.for_shape(shape_handle, stack_storage)
 
     case Electric.ShapeCache.Storage.start_link(storage) do
       {:ok, _pid} -> :ok
@@ -139,8 +146,9 @@ defmodule Electric.Shapes.Consumer do
 
     state =
       Map.merge(state, %{
-        pg_snapshot: pg_snapshot,
         latest_offset: normalized_latest_offset,
+        pg_snapshot: pg_snapshot,
+        storage: storage,
         writer: writer
       })
 
@@ -271,7 +279,8 @@ defmodule Electric.Shapes.Consumer do
     if error.type == :schema_changed do
       # Schema changed while we were creating stuff, which means shape is functionally invalid.
       # Return a 409 to trigger a fresh start with validation against the new schema.
-      %{shape: %Shape{root_table_id: root_table_id}, inspector: inspector} = state
+      %{shape: %Shape{root_table_id: root_table_id}} = state
+      inspector = Electric.StackConfig.lookup(state.stack_id, :inspector)
       Inspector.clean(root_table_id, inspector)
     end
 
@@ -375,8 +384,7 @@ defmodule Electric.Shapes.Consumer do
   # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
   # is a signal that we need to terminate the shape.
   defp handle_event(%Changes.Relation{}, state) do
-    %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}, inspector: inspector} =
-      state
+    %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}} = state
 
     Logger.info(
       "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
@@ -384,6 +392,7 @@ defmodule Electric.Shapes.Consumer do
 
     # We clean up the relation info from ETS as it has changed and we want
     # to source the fresh info from postgres for the next shape creation
+    inspector = Electric.StackConfig.lookup(state.stack_id, :inspector)
     Inspector.clean(root_table_id, inspector)
 
     state
@@ -549,26 +558,34 @@ defmodule Electric.Shapes.Consumer do
       Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes)
     end
 
-    Registry.dispatch(state.registry, state.shape_handle, fn registered ->
-      Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
-      end)
+    Registry.dispatch(
+      Electric.StackSupervisor.registry_name(state.stack_id),
+      state.shape_handle,
+      fn registered ->
+        Logger.debug(fn ->
+          "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
+        end)
 
-      for {pid, ref} <- registered,
-          do: send(pid, {ref, :new_changes, latest_log_offset})
-    end)
+        for {pid, ref} <- registered,
+            do: send(pid, {ref, :new_changes, latest_log_offset})
+      end
+    )
 
     state
   end
 
   defp notify_shape_rotation(state) do
-    Registry.dispatch(state.registry, state.shape_handle, fn registered ->
-      Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about removal of shape #{state.shape_handle}"
-      end)
+    Registry.dispatch(
+      Electric.StackSupervisor.registry_name(state.stack_id),
+      state.shape_handle,
+      fn registered ->
+        Logger.debug(fn ->
+          "Notifying ~#{length(registered)} clients about removal of shape #{state.shape_handle}"
+        end)
 
-      for {pid, ref} <- registered, do: send(pid, {ref, :shape_rotation})
-    end)
+        for {pid, ref} <- registered, do: send(pid, {ref, :shape_rotation})
+      end
+    )
 
     state
   end
