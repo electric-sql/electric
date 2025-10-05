@@ -6,15 +6,13 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   alias Electric.LogItems
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.Storage
-  alias Electric.Shapes.Consumer
+  alias Electric.Shapes.ConsumerRegistry
   alias Electric.Shapes.Consumer.Materializer
 
-  setup [:with_stack_id_from_test, :with_in_memory_storage]
+  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_consumer_registry]
 
   setup %{storage: storage, stack_id: stack_id} = ctx do
-    {:via, Registry, {registry_name, key}} = Consumer.name(stack_id, "test")
-
-    Registry.register(registry_name, key, :consumer)
+    ConsumerRegistry.register_consumer(self(), "test", stack_id)
 
     Storage.for_shape("test", storage) |> Storage.start_link()
     Storage.for_shape("test", storage) |> Storage.mark_snapshot_as_started()

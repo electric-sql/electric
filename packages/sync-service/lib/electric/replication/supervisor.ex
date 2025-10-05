@@ -20,10 +20,11 @@ defmodule Electric.Replication.Supervisor do
 
   def reset_storage(opts) do
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
-    storage = Keyword.fetch!(shape_cache_opts, :storage)
+    stack_id = Keyword.fetch!(shape_cache_opts, :stack_id)
+    stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
 
     Logger.info("Purging all shapes.")
-    Electric.ShapeCache.Storage.cleanup_all!(storage)
+    Electric.ShapeCache.Storage.cleanup_all!(stack_storage)
   end
 
   def start_link(opts) do

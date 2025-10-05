@@ -1,20 +1,19 @@
 defmodule Electric.Shapes.Consumer do
-  use GenServer,
-    restart: :temporary,
-    significant: true
+  use GenServer, restart: :temporary
 
   import Electric.Postgres.Xid, only: [compare: 2]
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
+  alias Electric.Shapes.ConsumerRegistry
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
-  alias Electric.Shapes.Consumer.Snapshotter
+  alias Electric.Shapes
   alias Electric.Shapes.Shape
   alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
@@ -27,7 +26,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
+    ConsumerRegistry.name(stack_id, shape_handle)
   end
 
   def initial_state(consumer) do
@@ -38,16 +37,20 @@ defmodule Electric.Shapes.Consumer do
   @spec await_snapshot_start(pid() | map(), timeout()) :: :started | {:error, any()}
   def await_snapshot_start(consumer, timeout \\ 30_000)
 
-  def await_snapshot_start(consumer, timeout) when is_pid(consumer) do
-    GenServer.call(consumer, :await_snapshot_start, timeout)
+  def await_snapshot_start(consumer_ref, timeout) when is_map(consumer_ref) do
+    consumer_ref
+    |> whereis()
+    |> await_snapshot_start(timeout)
   end
 
   def await_snapshot_start(consumer, timeout) do
-    GenServer.call(name(consumer), :await_snapshot_start, timeout)
+    GenServer.call(consumer, :await_snapshot_start, timeout)
   end
 
-  def subscribe_materializer(consumer) do
-    GenServer.call(name(consumer), :subscribe_materializer)
+  def subscribe_materializer(consumer_ref) do
+    consumer_ref
+    |> whereis()
+    |> GenServer.call(:subscribe_materializer)
   end
 
   @doc false
@@ -57,12 +60,33 @@ defmodule Electric.Shapes.Consumer do
   # a notification
   @spec monitor(String.t(), ShapeCache.shape_handle(), pid()) :: reference()
   def monitor(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id, shape_handle), {:monitor, pid})
+    stack_id
+    |> whereis(shape_handle)
+    |> GenServer.call({:monitor, pid})
+  end
+
+  @spec whereis(%{stack_id: Electric.stack_id(), shape_handle: ShapeCache.shape_handle()}) ::
+          pid() | nil
+  def whereis(%{stack_id: stack_id, shape_handle: shape_handle}) do
+    whereis(stack_id, shape_handle)
   end
 
   @spec whereis(String.t(), ShapeCache.shape_handle()) :: pid() | nil
   def whereis(stack_id, shape_handle) do
-    GenServer.whereis(name(stack_id, shape_handle))
+    ConsumerRegistry.whereis(stack_id, shape_handle)
+  end
+
+  def stop_and_clean(%{stack_id: stack_id, shape_handle: shape_handle}) do
+    stop_and_clean(stack_id, shape_handle)
+  end
+
+  def stop_and_clean(stack_id, shape_handle) do
+    # if consumer is present, terminate it gracefully
+    stack_id
+    |> whereis(shape_handle)
+    |> GenServer.call(:stop_and_clean, 30_000)
+  catch
+    :exit, {:noproc, _} -> :noproc
   end
 
   def start_link(config) when is_map(config) do
@@ -73,17 +97,28 @@ defmodule Electric.Shapes.Consumer do
   def init(config) do
     activate_mocked_functions_from_test_process()
 
-    Process.set_label({:consumer, config.shape_handle})
+    %{stack_id: stack_id, shape_handle: shape_handle} = config
+
+    Process.set_label({:consumer, shape_handle})
     Process.flag(:trap_exit, true)
 
-    metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
+    metadata = [shape_handle: shape_handle, stack_id: stack_id]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
     {action, config} = Map.pop!(config, :action)
+    # The existing body of consumer tests made it impossible to replace this dynamic
+    # setting with a static module alias. But do note that this is only set to anything
+    # other than Electric.ShapeCache.ShapeStatus in the test environment.
+    shape_status_mod = Map.get(config, :shape_status_mod) || Electric.ShapeCache.ShapeStatus
+    {:ok, shape} = shape_status_mod.fetch_shape_by_handle(stack_id, shape_handle)
+
+    consumer_supervisor =
+      Map.get(config, :consumer_supervisor, Shapes.DynamicConsumerSupervisor.name(stack_id))
 
     state =
       Map.merge(config, %{
+        shape: shape,
         snapshot_started: false,
         awaiting_snapshot_start: [],
         buffer: [],
@@ -92,27 +127,35 @@ defmodule Electric.Shapes.Consumer do
         terminating?: false,
         txn_offset_mapping: [],
         materializer_subscribed?: false,
-        # The existing body of consumer tests made it impossible to replace this dynamic
-        # setting with a static module alias. But do note that this is only set to anything
-        # other than Electric.ShapeCache.ShapeStatus in the test environment.
-        shape_status_mod: Map.get(config, :shape_status_mod) || Electric.ShapeCache.ShapeStatus
+        shape_status_mod: shape_status_mod,
+        hibernate_after: Electric.StackConfig.lookup(stack_id, :shape_hibernate_after)
       })
 
-    {:ok, state, {:continue, {:init_consumer, action}}}
+    {:ok, state, {:continue, {:init_consumer, action, consumer_supervisor}}}
   end
 
   @impl GenServer
-  def handle_continue({:init_consumer, action}, state) do
+  def handle_continue({:init_consumer, action, consumer_supervisor}, state) do
     %{
-      storage: storage,
+      stack_id: stack_id,
+      shape: shape,
+      shape_handle: shape_handle,
       shape_status_mod: shape_status_mod
     } = state
+
+    stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
+    storage = Electric.ShapeCache.Storage.for_shape(shape_handle, stack_storage)
+
+    case Electric.ShapeCache.Storage.start_link(storage) do
+      {:ok, _pid} -> :ok
+      :ignore -> :ok
+    end
 
     writer =
       ShapeCache.Storage.init_writer!(
         storage,
-        state.shape,
-        shape_status_mod.consume_shape_storage_state(state.stack_id, state.shape_handle)
+        shape,
+        shape_status_mod.consume_shape_storage_state(stack_id, shape_handle)
       )
 
     {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
@@ -125,10 +168,18 @@ defmodule Electric.Shapes.Consumer do
     normalized_latest_offset =
       if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
 
+    state =
+      Map.merge(state, %{
+        latest_offset: normalized_latest_offset,
+        pg_snapshot: pg_snapshot,
+        storage: storage,
+        writer: writer
+      })
+
     :ok =
       shape_status_mod.initialise_shape(
-        state.stack_id,
-        state.shape_handle,
+        stack_id,
+        shape_handle,
         pg_snapshot[:xmin],
         normalized_latest_offset
       )
@@ -156,7 +207,31 @@ defmodule Electric.Shapes.Consumer do
 
       Logger.debug("Writer for #{state.shape_handle} initialized")
 
-      Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
+      state =
+        if ShapeCache.Storage.snapshot_started?(state.storage) do
+          state.pg_snapshot
+          |> set_pg_snapshot(state)
+          |> set_snapshot_started()
+        else
+          {:ok, _pid} =
+            Shapes.DynamicConsumerSupervisor.start_snapshotter(
+              consumer_supervisor,
+              %{
+                chunk_bytes_threshold:
+                  Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold),
+                db_pool: Electric.Connection.Manager.snapshot_pool(stack_id),
+                otel_ctx: state.otel_ctx,
+                shape: shape,
+                shape_handle: shape_handle,
+                snapshot_timeout_to_first_data:
+                  Electric.StackConfig.lookup(stack_id, :snapshot_timeout_to_first_data),
+                stack_id: stack_id,
+                storage: storage
+              }
+            )
+
+          state
+        end
 
       {:noreply,
        Map.merge(state, %{
@@ -245,7 +320,8 @@ defmodule Electric.Shapes.Consumer do
     if error.type == :schema_changed do
       # Schema changed while we were creating stuff, which means shape is functionally invalid.
       # Return a 409 to trigger a fresh start with validation against the new schema.
-      %{shape: %Shape{root_table_id: root_table_id}, inspector: inspector} = state
+      %{shape: %Shape{root_table_id: root_table_id}} = state
+      inspector = Electric.StackConfig.lookup(state.stack_id, :inspector)
       Inspector.clean(root_table_id, inspector)
     end
 
@@ -255,12 +331,6 @@ defmodule Electric.Shapes.Consumer do
       |> terminate_safely()
 
     {:noreply, state}
-  end
-
-  def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
-    state = set_pg_snapshot(state.pg_snapshot, state)
-    state = set_snapshot_started(state)
-    {:noreply, state, state.hibernate_after}
   end
 
   @impl GenServer
@@ -309,9 +379,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # We're trapping exists so that `terminate` is called to clean up the writer,
-  # otherwise we respect the OTP exit protocol.
-  def handle_info({:EXIT, _from, reason}, state) do
-    Logger.debug("Caught EXIT: #{inspect(reason)}")
+  # otherwise we respect the OTP exit protocol. Since nothing is linked to the consumer
+  # we shouldn't see this...
+  def handle_info({:EXIT, _pid, reason}, state) do
+    Logger.error("Caught EXIT: #{inspect(reason)}")
     {:stop, reason, state}
   end
 
@@ -358,8 +429,7 @@ defmodule Electric.Shapes.Consumer do
   # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
   # is a signal that we need to terminate the shape.
   defp handle_event(%Changes.Relation{}, state) do
-    %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}, inspector: inspector} =
-      state
+    %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}} = state
 
     Logger.info(
       "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
@@ -367,6 +437,8 @@ defmodule Electric.Shapes.Consumer do
 
     # We clean up the relation info from ETS as it has changed and we want
     # to source the fresh info from postgres for the next shape creation
+    inspector = Inspector.for_stack(state.stack_id)
+
     Inspector.clean(root_table_id, inspector)
 
     state
@@ -532,26 +604,34 @@ defmodule Electric.Shapes.Consumer do
       Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes)
     end
 
-    Registry.dispatch(state.registry, state.shape_handle, fn registered ->
-      Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
-      end)
+    Registry.dispatch(
+      Electric.StackSupervisor.registry_name(state.stack_id),
+      state.shape_handle,
+      fn registered ->
+        Logger.debug(fn ->
+          "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
+        end)
 
-      for {pid, ref} <- registered,
-          do: send(pid, {ref, :new_changes, latest_log_offset})
-    end)
+        for {pid, ref} <- registered,
+            do: send(pid, {ref, :new_changes, latest_log_offset})
+      end
+    )
 
     state
   end
 
   defp notify_shape_rotation(state) do
-    Registry.dispatch(state.registry, state.shape_handle, fn registered ->
-      Logger.debug(fn ->
-        "Notifying ~#{length(registered)} clients about removal of shape #{state.shape_handle}"
-      end)
+    Registry.dispatch(
+      Electric.StackSupervisor.registry_name(state.stack_id),
+      state.shape_handle,
+      fn registered ->
+        Logger.debug(fn ->
+          "Notifying ~#{length(registered)} clients about removal of shape #{state.shape_handle}"
+        end)
 
-      for {pid, ref} <- registered, do: send(pid, {ref, :shape_rotation})
-    end)
+        for {pid, ref} <- registered, do: send(pid, {ref, :shape_rotation})
+      end
+    )
 
     state
   end

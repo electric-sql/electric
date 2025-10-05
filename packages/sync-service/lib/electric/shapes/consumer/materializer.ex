@@ -7,7 +7,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   # NOTES:
   # - Consumer does txn buffering until pg snapshot is known
-  use GenServer
+  use GenServer, restart: :transient
 
   alias Electric.Utils
   alias Electric.Replication.Changes
@@ -94,7 +94,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     _ = Consumer.await_snapshot_start(state)
     Consumer.subscribe_materializer(state)
 
-    Process.monitor(GenServer.whereis(Consumer.name(state)),
+    Process.monitor(Consumer.whereis(state),
       tag: {:consumer_down, state.shape_handle}
     )
 
@@ -180,16 +180,23 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:stop, reason, state}
   end
 
-  def handle_info({{:consumer_down, _}, _ref, :process, _pid, {:shutdown, :cleanup}}, state) do
-    for pid <- state.subscribers do
-      send(pid, {:materializer_shape_invalidated, state.shape_handle})
-    end
+  # notify subscribers of the shape removal if the consumer exit reason is
+  # anything other than a clean supervisor shutdown.
+  def handle_info({{:consumer_down, _}, _ref, :process, _pid, :shutdown}, state) do
+    {:noreply, state}
+  end
 
+  def handle_info({{:consumer_down, _}, _ref, :process, _pid, {:shutdown, reason}}, state)
+      when reason != :cleanup do
     {:noreply, state}
   end
 
   def handle_info({{:consumer_down, _}, _ref, :process, _pid, _reason}, state) do
-    {:noreply, state}
+    for pid <- state.subscribers do
+      send(pid, {:materializer_shape_invalidated, state.shape_handle})
+    end
+
+    {:stop, :shutdown, state}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do

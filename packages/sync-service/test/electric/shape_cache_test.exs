@@ -198,8 +198,20 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} =
-        with_shape_cache(ctx, publication_manager: {TempPubManager, [test_pid: test_pid]})
+      Support.TestUtils.patch_calls(Electric.Replication.PublicationManager,
+        wait_for_restore: fn _ ->
+          send(test_pid, {:called, :wait_for_restore})
+          :ok
+        end,
+        add_shape: fn _handle, _shape, _opts ->
+          send(test_pid, {:called, :prepare_tables_fn})
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
@@ -313,6 +325,12 @@ defmodule Electric.ShapeCacheTest do
     end
 
     setup %{pool: pool} do
+      Repatch.patch(Electric.Connection.Manager, :snapshot_pool, [mode: :shared], fn _stack_id ->
+        pool
+      end)
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer)
+
       Postgrex.query!(pool, "INSERT INTO items (id, value) VALUES ($1, $2), ($3, $4)", [
         Ecto.UUID.dump!("721ae036-e620-43ee-a3ed-1aa3bb98e661"),
         "test1",
@@ -332,8 +350,7 @@ defmodule Electric.ShapeCacheTest do
       shape_cache_opts: opts,
       shape: shape
     } do
-      {shape_handle, _} =
-        ShapeCache.get_or_create_shape_handle(shape, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
 
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
       storage = Storage.for_shape(shape_handle, storage)
@@ -480,7 +497,7 @@ defmodule Electric.ShapeCacheTest do
              ] = stream_to_list(stream, "a")
     end
 
-    @tag shape_cache_opts_overrides: [snapshot_timeout_to_first_data: 500]
+    @tag stack_config_seed: [snapshot_timeout_to_first_data: 500]
     test "crashes when initial snapshot query fails to return data quickly enough", %{
       shape_cache_opts: opts,
       shape: shape
@@ -963,12 +980,21 @@ defmodule Electric.ShapeCacheTest do
 
     test "waits until publication filters are restored", %{shape_cache_opts: opts} = context do
       {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+
       :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
 
-      restart_shape_cache(%{
-        context
-        | publication_manager: {TempPubManager, [test_pid: self()]}
-      })
+      test_pid = self()
+
+      Support.TestUtils.patch_calls(Electric.Replication.PublicationManager,
+        wait_for_restore: fn _ ->
+          send(test_pid, {:called, :wait_for_restore})
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      restart_shape_cache(context)
 
       assert_receive {:called, :wait_for_restore}
 
@@ -1169,8 +1195,7 @@ defmodule Electric.ShapeCacheTest do
                Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
              )
 
-      assert {:ok, [{^shape_handle, _pid1}, {^dep_handle, _pid2}]} =
-               ShapeCache.start_consumer_for_handle(shape_handle, opts)
+      assert {:ok, _pid1} = ShapeCache.start_consumer_for_handle(shape_handle, opts)
 
       # Materializer should be started
       assert Process.alive?(

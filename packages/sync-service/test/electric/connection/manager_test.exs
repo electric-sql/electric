@@ -49,11 +49,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
          shape_cache_opts: [
            stack_id: stack_id,
            inspector: ctx.inspector,
-           consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-           storage: ctx.storage,
-           publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
-           chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-           registry: Electric.StackSupervisor.registry_name(stack_id)
+           consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id)
          ],
          tweaks: [],
          max_shapes: nil,

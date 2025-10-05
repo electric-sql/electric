@@ -6,7 +6,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   """
   use GenServer
 
-  alias Electric.Shapes.ConsumerSupervisor
+  alias Electric.Shapes.Consumer
   alias Electric.ShapeCache.ShapeStatus
 
   require Logger
@@ -67,7 +67,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
   @impl true
   def handle_call({:remove_shape, shape_handle}, _from, state) do
-    :ok = stop_and_clean_shape(shape_handle, state)
+    :ok = stop_and_clean_shape(shape_handle, state.stack_id)
     {:reply, :ok, state}
   end
 
@@ -103,7 +103,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   def handle_cast(:remove_queued_shapes, %{queued_removals: [next_shape | rest]} = state) do
-    :ok = stop_and_clean_shape(next_shape, state)
+    :ok = stop_and_clean_shape(next_shape, state.stack_id)
     # schedule the next removal immediately via another cast to keep mailbox ordering
     if rest != [] do
       GenServer.cast(self(), :remove_queued_shapes)
@@ -115,20 +115,20 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @impl true
   def handle_info({:remove_shape, shape_handle}, state) do
     Logger.debug("Removing shape #{inspect(shape_handle)}")
-    :ok = stop_and_clean_shape(shape_handle, state)
+    :ok = stop_and_clean_shape(shape_handle, state.stack_id)
     {:noreply, state}
   end
 
-  defp stop_and_clean_shape(shape_handle, state) do
+  defp stop_and_clean_shape(shape_handle, stack_id) do
     Logger.debug("Removing shape #{inspect(shape_handle)}")
 
-    case ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
+    case Consumer.stop_and_clean(stack_id, shape_handle) do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously,
         # starting with an immediate shape status removal
-        ShapeStatus.remove_shape(state.stack_id, shape_handle)
+        ShapeStatus.remove_shape(stack_id, shape_handle)
 
-        :ok = purge_shape(state.stack_id, shape_handle)
+        :ok = purge_shape(stack_id, shape_handle)
 
       :ok ->
         # if it is running then the stop_and_clean process will cleanup properly

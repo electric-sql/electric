@@ -1,7 +1,7 @@
 defmodule Electric.Shapes.ConsumerTest do
   use ExUnit.Case, async: true
   use Support.Mock
-  use Repatch.ExUnit
+  use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.{Transaction, Relation}
@@ -18,7 +18,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
   import Support.ComponentSetup
 
-  import Mox
+  import Support.TestUtils,
+    only: [expect_calls: 2, patch_shape_status: 1, expect_shape_status: 1, patch_snapshotter: 1]
 
   @receive_timeout 1_000
   @shape_cleanup_timeout 5_000
@@ -67,14 +68,6 @@ defmodule Electric.Shapes.ConsumerTest do
   }
 
   setup :with_stack_id_from_test
-  setup :set_mox_from_context
-  setup :verify_on_exit!
-
-  setup do
-    stub_with(Mock.Inspector, StubInspector)
-
-    :ok
-  end
 
   defp shape_status(shape_handle, ctx) do
     get_in(ctx, [:shape_position, shape_handle]) || raise "invalid shape_handle #{shape_handle}"
@@ -95,20 +88,15 @@ defmodule Electric.Shapes.ConsumerTest do
     Lsn.from_integer(offset)
   end
 
-  defp stub_shape_status_shutdown(shape_handle, ctx) do
-    Mock.ShapeStatus
-    |> stub(:get_existing_shape, fn _, _ -> {shape_handle, @shape1} end)
-    |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
-    |> allow(self(), Consumer.whereis(ctx.stack_id, shape_handle))
-  end
-
   describe "event handling" do
     setup [
+      :with_registry,
       :with_in_memory_storage,
       :with_shape_status,
       :with_persistent_kv,
       :with_status_monitor,
       :with_shape_monitor,
+      :with_dynamic_consumer_supervisor,
       :with_noop_publication_manager
     ]
 
@@ -119,9 +107,18 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     setup(ctx) do
-      registry_name = Module.concat(__MODULE__, Registry)
-      start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
+      producer =
+        start_link_supervised!({
+          ShapeLogCollector,
+          stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
+        })
 
+      ShapeLogCollector.set_last_processed_lsn(producer, Lsn.from_integer(0))
+
+      [producer: producer]
+    end
+
+    setup(ctx) do
       %{latest_offset: _offset1, snapshot_xmin: xmin1} = shape_status(@shape_handle1, ctx)
       %{latest_offset: _offset2, snapshot_xmin: xmin2} = shape_status(@shape_handle2, ctx)
 
@@ -137,58 +134,49 @@ defmodule Electric.Shapes.ConsumerTest do
           ]
         })
 
-      producer =
-        start_link_supervised!({
-          ShapeLogCollector,
-          stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
-        })
+      Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, storage)
 
-      ShapeLogCollector.set_last_processed_lsn(producer, Lsn.from_integer(0))
+      patch_shape_status(
+        consume_shape_storage_state: fn _, _shape_handle -> nil end,
+        initialise_shape: fn _, _shape_handle, _, _ -> :ok end,
+        set_snapshot_xmin: fn _, _shape_handle, _ -> :ok end,
+        mark_snapshot_started: fn _, _shape_handle -> :ok end,
+        fetch_shape_by_handle: fn _, shape_handle -> Map.fetch(ctx.shapes, shape_handle) end,
+        get_existing_shape: fn
+          _, @shape_handle1 -> {@shape_handle1, @shape1}
+          _, @shape_handle2 -> {@shape_handle2, @shape2}
+        end,
+        set_shape_storage_state: fn _, _, _ -> :ok end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer)
 
       consumers =
         for {shape_handle, shape} <- ctx.shapes do
-          Mock.ShapeStatus
-          |> stub(:consume_shape_storage_state, fn _, ^shape_handle -> nil end)
-          |> expect(:initialise_shape, 1, fn _, ^shape_handle, _, _ -> :ok end)
-          |> expect(:set_snapshot_xmin, 1, fn _, ^shape_handle, _ -> :ok end)
-          |> expect(:mark_snapshot_started, 1, fn _, ^shape_handle -> :ok end)
-          |> allow(self(), fn -> Consumer.whereis(ctx.stack_id, shape_handle) end)
+          %{latest_offset: _offset} = shape_status(shape_handle, ctx)
 
           {:ok, consumer} =
             start_supervised(
-              {Shapes.ConsumerSupervisor,
-               shape_handle: shape_handle,
-               shape: shape,
-               stack_id: ctx.stack_id,
-               inspector: {Mock.Inspector, []},
-               db_pool: Electric.Connection.Manager.snapshot_pool(ctx.stack_id),
-               registry: registry_name,
-               shape_status_mod: Mock.ShapeStatus,
-               publication_manager: ctx.publication_manager,
-               hibernate_after: 1_000,
-               storage: storage,
-               otel_ctx: nil,
-               chunk_bytes_threshold:
-                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold()},
-              id: {Shapes.ConsumerSupervisor, shape_handle}
+              {Shapes.Consumer,
+               %{
+                 stack_id: ctx.stack_id,
+                 shape_handle: shape_handle,
+                 otel_ctx: nil,
+                 consumer_supervisor: ctx.consumer_supervisor,
+                 action: :create
+               }},
+              id: {Shapes.Consumer, shape_handle}
             )
 
           assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, ^shape, _}
-          # Wait for the virtual snapshot to have started to avoid overriding any of the
-          # defined Mox expectations
+
           :started =
             GenServer.call(Consumer.name(ctx.stack_id, shape_handle), :await_snapshot_start)
-
-          stub_shape_status_shutdown(shape_handle, ctx)
 
           consumer
         end
 
-      [
-        producer: producer,
-        registry: registry_name,
-        consumers: consumers
-      ]
+      [consumers: consumers]
     end
 
     test "appends to log when xid >= xmin", ctx do
@@ -199,10 +187,10 @@ defmodule Electric.Shapes.ConsumerTest do
       next_lsn = Lsn.increment(lsn, 1)
       next_log_offset = LogOffset.new(next_lsn, 0)
 
-      Mock.ShapeStatus
-      |> expect(:set_latest_offset, fn _, @shape_handle1, ^last_log_offset -> :ok end)
-      |> expect(:set_latest_offset, fn _, @shape_handle1, ^next_log_offset -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+      expect_shape_status(
+        set_latest_offset: fn _, @shape_handle1, ^last_log_offset -> :ok end,
+        set_latest_offset: fn _, @shape_handle1, ^next_log_offset -> :ok end
+      )
 
       ref = make_ref()
 
@@ -255,13 +243,18 @@ defmodule Electric.Shapes.ConsumerTest do
 
       xid = 150
 
-      Mock.ShapeStatus
-      |> expect(:set_latest_offset, 2, fn
-        _, @shape_handle1, ^change1_offset -> :ok
-        _, @shape_handle2, ^change2_offset -> :ok
-      end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      # the expectations assert an order so we can't add a sequence of
+      # set_latest_offset functions as we have no control over which order
+      # they'll come in from 2 different processes
+      expect_shape_status(
+        set_latest_offset: {
+          fn
+            _, @shape_handle1, ^change1_offset -> :ok
+            _, @shape_handle2, ^change2_offset -> :ok
+          end,
+          exactly: 2
+        }
+      )
 
       ref1 = make_ref()
       ref2 = make_ref()
@@ -322,9 +315,7 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle1)
       ref2 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle2)
 
-      Mock.ShapeStatus
-      |> expect(:set_latest_offset, fn _, @shape_handle2, _offset -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      expect_shape_status(set_latest_offset: fn _, @shape_handle2, _offset -> :ok end)
 
       txn =
         %Transaction{
@@ -353,9 +344,7 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 1, fn _, @shape_handle1 -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+      expect_shape_status(remove_shape: fn _, @shape_handle1 -> :ok end)
 
       txn =
         %Transaction{xid: xid, lsn: lsn, last_log_offset: last_log_offset}
@@ -374,7 +363,6 @@ defmodule Electric.Shapes.ConsumerTest do
     defp assert_consumer_shutdown(stack_id, shape_handle, fun) do
       monitors =
         for name <- [
-              Shapes.ConsumerSupervisor.name(stack_id, shape_handle),
               Shapes.Consumer.name(stack_id, shape_handle),
               Shapes.Consumer.Snapshotter.name(stack_id, shape_handle)
             ],
@@ -408,14 +396,7 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      Mock.ShapeStatus
-      |> expect(:remove_shape, fn _, @shape_handle1 -> :ok end)
-      |> stub(:get_existing_shape, fn _, @shape_handle1 -> {@shape_handle1, @shape1} end)
-      |> stub(:set_shape_storage_state, fn _, @shape_handle1, _ -> :ok end)
-      |> allow(
-        self(),
-        Shapes.Consumer.whereis(ctx.stack_id, @shape_handle1)
-      )
+      expect_shape_status(remove_shape: fn _, @shape_handle1 -> :ok end)
 
       txn =
         %Transaction{
@@ -442,9 +423,7 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      Mock.ShapeStatus
-      |> expect(:set_latest_offset, fn _, @shape_handle1, ^last_log_offset -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+      expect_shape_status(set_latest_offset: fn _, @shape_handle1, ^last_log_offset -> :ok end)
 
       ref = make_ref()
       Registry.register(ctx.registry, @shape_handle1, ref)
@@ -471,22 +450,15 @@ defmodule Electric.Shapes.ConsumerTest do
           columns: []
         }
 
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
 
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> expect(:set_shape_storage_state, 0, fn _, _, _ -> :ok end)
-      |> stub(:get_existing_shape, fn _, _ -> {@shape_handle1, @shape1} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> stub(:get_existing_shape, fn _, _ -> {@shape_handle2, @shape2} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      patch_shape_status(
+        remove_shape: fn _, shape_handle ->
+          raise "Unexpected call to remove_shape: #{shape_handle}"
+        end
+      )
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
@@ -505,28 +477,26 @@ defmodule Electric.Shapes.ConsumerTest do
         columns: []
       }
 
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
 
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       # also cleans up inspector cache and shape status cache
-      Mock.Inspector
-      |> expect(:clean, 1, fn ^cleaned_oid, _ -> true end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:clean, 0, fn _, _ -> true end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      expect_calls(
+        Electric.Postgres.Inspector,
+        clean: fn ^cleaned_oid, _ -> true end
+      )
 
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 1, fn _, @shape_handle1 -> :ok end)
-      |> stub(:get_existing_shape, fn _, @shape_handle1 -> {@shape_handle1, @shape1} end)
-      |> expect(:set_shape_storage_state, 1, fn _, @shape_handle1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> stub(:get_existing_shape, fn _, _ -> {@shape_handle2, @shape2} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      expect_shape_status(
+        remove_shape: fn _, @shape_handle1 -> :ok end,
+        set_shape_storage_state: {
+          fn
+            _, @shape_handle1, _ -> :ok
+            _, @shape_handle2, _ -> :ok
+          end,
+          force: true, exactly: 2
+        }
+      )
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
 
@@ -540,6 +510,7 @@ defmodule Electric.Shapes.ConsumerTest do
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       {orig_schema, orig_table} = @shape1.root_table
+      cleaned_oid = @shape1.root_table_id
 
       rel_before = %Relation{
         id: @shape1.root_table_id,
@@ -555,21 +526,21 @@ defmodule Electric.Shapes.ConsumerTest do
       rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
 
       # also cleans up inspector cache and shape status cache
-      Mock.Inspector
-      |> expect(:clean, 1, fn _, _ -> true end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:clean, 0, fn _, _ -> true end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      expect_calls(
+        Electric.Postgres.Inspector,
+        clean: fn ^cleaned_oid, _ -> true end
+      )
 
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> stub(:get_existing_shape, fn _, @shape_handle1 -> {@shape_handle1, @shape1} end)
-      |> expect(:set_shape_storage_state, 1, fn _, @shape_handle1, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
-      |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> stub(:get_existing_shape, fn _, _ -> {@shape_handle2, @shape2} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
+      expect_shape_status(
+        remove_shape: fn _, @shape_handle1 -> :ok end,
+        set_shape_storage_state: {
+          fn
+            _, @shape_handle1, _ -> :ok
+            _, @shape_handle2, _ -> :ok
+          end,
+          force: true, exactly: 2
+        }
+      )
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
 
@@ -583,6 +554,7 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
 
       {orig_schema, orig_table} = @shape1.root_table
+      cleaned_oid = @shape1.root_table_id
 
       rel_before = %Relation{
         id: @shape1.root_table_id,
@@ -600,13 +572,21 @@ defmodule Electric.Shapes.ConsumerTest do
 
       rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
 
-      Mock.Inspector
-      |> expect(:clean, 1, fn _, _ -> true end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+      expect_calls(
+        Electric.Postgres.Inspector,
+        clean: fn ^cleaned_oid, _ -> true end
+      )
 
-      Mock.ShapeStatus
-      |> expect(:remove_shape, 1, fn _, _ -> :ok end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+      expect_shape_status(
+        remove_shape: fn _, @shape_handle1 -> :ok end,
+        set_shape_storage_state: {
+          fn
+            _, @shape_handle1, _ -> :ok
+            _, @shape_handle2, _ -> :ok
+          end,
+          force: true, exactly: 2
+        }
+      )
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
 
@@ -617,11 +597,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
     test "unexpected error while handling events stops affected consumer and cleans affected shape",
          ctx do
-      Mock.ShapeStatus
-      |> expect(:set_latest_offset, fn _, @shape_handle1, _ ->
-        raise "The unexpected error"
-      end)
-      |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
+      expect_shape_status(
+        set_latest_offset: fn _, @shape_handle1, _ ->
+          raise "The unexpected error"
+        end
+      )
 
       lsn = Lsn.from_string("0/10")
 
@@ -638,11 +618,8 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.first()
         })
 
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
-
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
@@ -655,7 +632,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
     test "consumer crashing stops affected consumer", ctx do
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
-
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)
@@ -670,6 +646,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
   describe "transaction handling with real storage" do
     @describetag :tmp_dir
+
     setup do
       %{inspector: @base_inspector, pool: nil}
     end
@@ -691,7 +668,7 @@ defmodule Electric.Shapes.ConsumerTest do
     setup(ctx) do
       snapshot_delay = Map.get(ctx, :snapshot_delay, nil)
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
         if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
         pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
@@ -699,10 +676,14 @@ defmodule Electric.Shapes.ConsumerTest do
         Storage.make_new_snapshot!([], storage)
       end)
 
+      Electric.StackConfig.put(
+        ctx.stack_id,
+        :shape_hibernate_after,
+        Map.get(ctx, :hibernate_after, 10_000)
+      )
+
       %{shape_cache_opts: shape_cache_opts, consumer_supervisor: consumer_supervisor} =
-        Support.ComponentSetup.with_shape_cache(ctx,
-          shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000)
-        )
+        Support.ComponentSetup.with_shape_cache(ctx)
 
       [
         producer: ctx.shape_log_collector,

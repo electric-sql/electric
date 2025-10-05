@@ -78,13 +78,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     shape_cache_opts =
       [
-        storage: {Mock.Storage, []},
-        chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
         inspector: {Mock.Inspector, elem(@inspector, 1)},
-        publication_manager: ctx.publication_manager,
         stack_id: stack_id,
-        consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-        registry: registry_name
+        consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id)
       ]
 
     shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
@@ -110,6 +106,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           {Support.TransactionConsumer,
            [
              id: 1,
+             stack_id: ctx.stack_id,
              parent: parent,
              producer: ctx.server,
              shape: @shape,
@@ -120,7 +117,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       # since we're starting the consumer manually we have to explictly register it
       :ok =
-        Electric.Shapes.ConsumerRegistry.register_consumer(@shape_handle, consumer, ctx.stack_id)
+        Electric.Shapes.ConsumerRegistry.register_consumer(consumer, @shape_handle, ctx.stack_id)
 
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
@@ -160,6 +157,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                  DynamicSupervisor.start_child(ctx.supervisor, {
                    Support.TransactionConsumer,
                    id: id,
+                   stack_id: ctx.stack_id,
                    parent: parent,
                    producer: ctx.server,
                    shape: @shape,
@@ -167,7 +165,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                    action: :restore
                  }) do
             send(parent, {:start_consumer, shape_handle, id, pid})
-            {:ok, [{shape_handle, pid}]}
+            {:ok, pid}
           end
         end
       )
@@ -250,6 +248,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                  [
                    [
                      id: id,
+                     stack_id: ctx.stack_id,
                      parent: parent,
                      producer: ctx.server,
                      shape: @shape,
@@ -576,6 +575,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                  [
                    [
                      id: id,
+                     stack_id: ctx.stack_id,
                      parent: parent,
                      producer: ctx.server,
                      shape: @shape,
@@ -709,6 +709,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       start_link_supervised!(
         {Support.TransactionConsumer,
          id: consumer_id,
+         stack_id: ctx.stack_id,
          parent: self(),
          producer: pid,
          shape: @shape,
