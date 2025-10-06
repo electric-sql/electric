@@ -20,19 +20,25 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
     )
 
     {:ok, pid} =
-      LockConnection.start_link(
-        connection_opts: config,
-        stack_id: stack_id,
-        connection_manager: self(),
-        lock_name: slot_name
+      start_supervised(
+        {LockConnection,
+         connection_opts: config,
+         stack_id: stack_id,
+         connection_manager: self(),
+         lock_name: slot_name}
       )
 
     ref1 = Process.monitor(pid)
-    Process.unlink(pid)
 
-    {:ok, pid} = LockBreakerConnection.start_link(connection_opts: config, stack_id: stack_id)
+    {:ok, pid} =
+      start_supervised(%{
+        id: :lock_breaker,
+        start:
+          {Electric.Postgres.LockBreakerConnection, :start,
+           [[connection_opts: config, stack_id: stack_id]]}
+      })
+
     ref2 = Process.monitor(pid)
-    Process.unlink(pid)
 
     assert_receive {:"$gen_cast", {:lock_connection_pid_obtained, _pg_backend_pid}}
     assert_receive {:"$gen_cast", :exclusive_connection_lock_acquired}
@@ -55,8 +61,8 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
       "SELECT pg_create_logical_replication_slot('#{slot_name}', 'pgoutput')"
     )
 
-    pid =
-      start_supervised!(
+    {:ok, pid} =
+      start_supervised(
         {LockConnection,
          connection_opts: config,
          stack_id: stack_id,
@@ -66,9 +72,15 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
 
     ref1 = Process.monitor(pid)
 
-    {:ok, pid} = LockBreakerConnection.start_link(connection_opts: config, stack_id: stack_id)
+    {:ok, pid} =
+      start_supervised(%{
+        id: :lock_breaker,
+        start:
+          {Electric.Postgres.LockBreakerConnection, :start,
+           [[connection_opts: config, stack_id: stack_id]]}
+      })
+
     ref2 = Process.monitor(pid)
-    Process.unlink(pid)
 
     assert_receive {:"$gen_cast", {:lock_connection_pid_obtained, pg_backend_pid}}
     assert_receive {:"$gen_cast", :exclusive_connection_lock_acquired}

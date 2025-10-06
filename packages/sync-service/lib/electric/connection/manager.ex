@@ -577,14 +577,10 @@ defmodule Electric.Connection.Manager do
       ) do
     if state.current_step == {:start_lock_connection, :acquiring_lock} and not is_nil(pid) do
       {:ok, breaker_pid} =
-        LockBreakerConnection.start_link(
+        LockBreakerConnection.start(
           connection_opts: state.connection_opts,
           stack_id: state.stack_id
         )
-
-      # unlink the lock breaker so that if it crashes it does not affect the manager,
-      # since it is a one shot fix attempt anyway
-      Process.unlink(breaker_pid)
 
       lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
 
