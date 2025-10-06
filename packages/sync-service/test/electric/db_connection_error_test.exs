@@ -121,6 +121,29 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with connection failure from upstream" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :connection_failure,
+          message: "connection closed by upstream database",
+          unknown: "FATAL",
+          severity: "FATAL",
+          detail: "The upstream Postgres database has closed the connection.",
+          pg_code: "08006"
+        },
+        connection_id: 8186,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "connection closed by upstream database",
+               type: :connection_failure,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with remaining connection slots reserved error" do
       error = %Postgrex.Error{
         message: nil,
@@ -332,6 +355,7 @@ defmodule Electric.DbConnectionErrorTest do
             "ssl recv (idle): closed",
             "tcp recv: closed",
             "ssl recv: closed",
+            "ssl connect: closed",
             "ssl async_recv: closed"
           ] do
         error = %DBConnection.ConnectionError{

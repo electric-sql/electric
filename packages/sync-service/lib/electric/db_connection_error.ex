@@ -28,6 +28,7 @@ defmodule Electric.DbConnectionError do
              "ssl recv (idle): closed",
              "tcp recv: closed",
              "ssl recv: closed",
+             "ssl connect: closed",
              "tcp async recv: closed",
              "ssl async recv: closed",
              "tcp async_recv: closed",
@@ -197,6 +198,19 @@ defmodule Electric.DbConnectionError do
     %DbConnectionError{
       message: error.postgres.message,
       type: :insufficient_resources,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{code: :connection_failure, severity: "FATAL", pg_code: "08006"}
+        } = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :connection_failure,
       original_error: error,
       retry_may_fix?: true
     }
