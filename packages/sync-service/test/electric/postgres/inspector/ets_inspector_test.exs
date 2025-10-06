@@ -502,7 +502,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   describe "with pool timeout" do
     setup {Support.DbSetup, :with_unique_db}
     setup :with_stack_id_from_test
-    setup [:with_persistent_kv, :with_basic_tables, :with_sql_execute]
+    setup [:with_persistent_kv, :with_basic_tables]
 
     setup %{pooled_db_config: conn_opts} = ctx do
       conn_opts =
