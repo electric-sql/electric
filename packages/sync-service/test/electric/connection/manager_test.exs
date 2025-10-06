@@ -78,6 +78,13 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
     Registry.register(stack_events_registry, {:stack_status, stack_id}, nil)
 
+    Repatch.patch(Electric.CoreSupervisor, :reset_storage, [mode: :shared], fn _ -> :ok end)
+    # process allowance doesn't follow the supervision tree in this case
+
+    if ctx[:repatch_in_test] != true do
+      allow_repatch_on_manager_process(stack_id)
+    end
+
     %{conn_sup: conn_sup, connection_opts: connection_opts, replication_opts: replication_opts}
   end
 
@@ -269,6 +276,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       [replication_connection_opts: Keyword.put(ctx.db_config, :host, "unpooled.localhost")]
     end
 
+    @tag repatch_in_test: true
     test "are used correctly", %{stack_id: stack_id} = ctx do
       %{replication_connection_opts: repl_opts, db_config: pooled_conn_opts} = ctx
 
@@ -287,20 +295,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
         end
       )
 
-      # process allowance doesn't follow the supervision tree in this case
-      spawn_link(fn ->
-        Stream.repeatedly(fn -> 0 end)
-        |> Enum.reduce_while(0, fn _, _ ->
-          case GenServer.whereis(Electric.Connection.Manager.name(stack_id)) do
-            nil ->
-              {:cont, 0}
-
-            pid ->
-              Repatch.allow(parent, pid)
-              {:halt, 0}
-          end
-        end)
-      end)
+      allow_repatch_on_manager_process(stack_id)
 
       start_connection_manager(ctx)
 
@@ -355,5 +350,23 @@ defmodule Electric.Connection.ConnectionManagerTest do
     |> Electric.Postgres.ReplicationClient.name()
     |> GenServer.whereis()
     |> Process.monitor()
+  end
+
+  def allow_repatch_on_manager_process(stack_id) do
+    parent = self()
+    # process allowance doesn't follow the supervision tree in this case
+    spawn_link(fn ->
+      Stream.repeatedly(fn -> 0 end)
+      |> Enum.reduce_while(0, fn _, _ ->
+        case GenServer.whereis(Electric.Connection.Manager.name(stack_id)) do
+          nil ->
+            {:cont, 0}
+
+          pid ->
+            Repatch.allow(parent, pid, force: true)
+            {:halt, 0}
+        end
+      end)
+    end)
   end
 end

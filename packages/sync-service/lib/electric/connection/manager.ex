@@ -498,8 +498,10 @@ defmodule Electric.Connection.Manager do
       ) == :timeline_changed
 
     if timeline_changed? or state.purge_all_shapes? do
-      # Before starting the replication supervisor, clean up the on-disk storage from all shapes.
-      Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+      Electric.CoreSupervisor.reset_storage(
+        shape_cache_opts: state.shape_cache_opts,
+        stack_id: state.stack_id
+      )
 
       # The ShapeStatusOwner process lives independently of connection or replication
       # supervisor. Purge all shapes from it before starting the replication supervisor.

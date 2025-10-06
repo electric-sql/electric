@@ -13,7 +13,27 @@ defmodule Electric.CoreSupervisor do
   require Logger
 
   def start_link(opts) do
-    Supervisor.start_link(__MODULE__, opts)
+    Supervisor.start_link(__MODULE__, opts, name: name(opts))
+  end
+
+  def name(stack_id) when is_binary(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  end
+
+  def name(opts) do
+    name(Access.fetch!(opts, :stack_id))
+  end
+
+  def reset_storage(opts) do
+    stack_id = Keyword.fetch!(opts, :stack_id)
+    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
+    storage = Keyword.fetch!(shape_cache_opts, :storage)
+    supervisor = name(stack_id)
+
+    Logger.info("Purging all shapes.")
+    Supervisor.terminate_child(supervisor, Electric.Replication.Supervisor)
+    Electric.ShapeCache.Storage.cleanup_all!(storage)
+    Supervisor.restart_child(supervisor, Electric.Replication.Supervisor)
   end
 
   @impl true
