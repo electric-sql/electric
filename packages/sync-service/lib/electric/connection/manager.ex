@@ -1043,35 +1043,18 @@ defmodule Electric.Connection.Manager do
     schedule_reconnection(step, state)
   end
 
-  defp set_connection_status_error(
-         error_message,
-         _pid_type,
-         %State{
-           current_phase: :connection_setup,
-           current_step: {:start_lock_connection, _}
-         } = state
-       ) do
+  defp set_connection_status_error(error_message, :lock_connection, state) do
     StatusMonitor.mark_pg_lock_as_errored(state.stack_id, error_message)
     "lock_connection"
   end
 
-  defp set_connection_status_error(
-         error_message,
-         _pid_type,
-         %State{
-           current_phase: :connection_setup,
-           current_step: {:start_replication_client, _}
-         } = state
-       ) do
+  defp set_connection_status_error(error_message, :replication_client, state) do
     StatusMonitor.mark_replication_client_as_errored(state.stack_id, error_message)
     "replication"
   end
 
-  defp set_connection_status_error(
-         error_message,
-         pid_type,
-         %State{current_phase: :connection_setup} = state
-       ) do
+  defp set_connection_status_error(error_message, pid_type, state)
+       when pid_type in [:pools, :admin_pool, :snapshot_pool] do
     roles =
       case pid_type do
         :admin_pool -> [:admin]
