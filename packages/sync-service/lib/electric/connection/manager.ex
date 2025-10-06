@@ -537,18 +537,10 @@ defmodule Electric.Connection.Manager do
 
     start_time = System.monotonic_time()
 
-    case Electric.Connection.Manager.Supervisor.start_replication_supervisor(repl_sup_opts) do
-      {:ok, _pid} ->
-        :ok
-
-      {:error, {:already_started, _pid}} ->
-        # Ask the existing shape cache to clean itself up and stuff.
-        # Update last processed lsn based on the the latest replication client state ???
-        :ok
-
-      {:error, reason} ->
-        Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
-        exit(reason)
+    with {:error, reason} <-
+           Electric.Connection.Manager.Supervisor.start_replication_supervisor(repl_sup_opts) do
+      Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+      exit(reason)
     end
 
     state = %{
