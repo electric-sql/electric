@@ -377,13 +377,11 @@ defmodule Electric.Postgres.ReplicationClient do
         {:noreply, %{state | txn_collector: txn_collector}}
 
       {%Transaction{} = txn, txn_meta, %Collector{} = txn_collector} ->
-        timestamp = System.monotonic_time()
-
         state = %{
           state
           | txn_collector: txn_collector,
             last_seen_txn_lsn: txn.lsn,
-            last_seen_txn_timestamp: timestamp
+            last_seen_txn_timestamp: System.monotonic_time()
         }
 
         {m, f, args} = state.transaction_received
