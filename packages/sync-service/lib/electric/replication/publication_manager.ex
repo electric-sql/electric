@@ -264,7 +264,7 @@ defmodule Electric.Replication.PublicationManager do
   defp handle_publication_update_result(relations_configured, state) do
     relations_configured
     |> Enum.reduce(
-      state,
+      %{state | committed_relation_filters: MapSet.new()},
       fn
         {oid_rel, :ok}, state ->
           state = reply_to_relation_waiters(oid_rel, :ok, state)
@@ -285,14 +285,9 @@ defmodule Electric.Replication.PublicationManager do
           state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
 
           prepared_filters = MapSet.delete(state.prepared_relation_filters, oid_rel)
-          committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
           ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
 
-          %{
-            state
-            | committed_relation_filters: committed_filters,
-              prepared_relation_filters: prepared_filters
-          }
+          %{state | prepared_relation_filters: prepared_filters}
       end
     )
   end

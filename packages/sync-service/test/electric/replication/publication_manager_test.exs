@@ -122,6 +122,16 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:filters, []}
     end
 
+    test "subsequent additions should wait for reconfiguration", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
+      assert_receive {:filters, []}
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+    end
+
     @tag update_debounce_timeout: 50
     test "deduplicates shape handle operations", %{opts: opts} do
       shape = generate_shape({"public", "items"})
