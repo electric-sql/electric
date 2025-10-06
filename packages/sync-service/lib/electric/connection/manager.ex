@@ -496,7 +496,10 @@ defmodule Electric.Connection.Manager do
       ) == :timeline_changed
 
     if timeline_changed? or state.purge_all_shapes? do
-      Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+      Electric.CoreSupervisor.reset_storage(
+        shape_cache_opts: state.shape_cache_opts,
+        stack_id: state.stack_id
+      )
     end
 
     if timeline_changed? do
