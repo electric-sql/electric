@@ -500,16 +500,31 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
   end
 
   describe "with pool timeout" do
-    setup do: %{connection_opt_overrides: [pool_size: 1, queue_interval: 1, queue_target: 50]}
     setup {Support.DbSetup, :with_unique_db}
     setup :with_stack_id_from_test
-    setup [:with_persistent_kv, :with_inspector, :with_basic_tables, :with_sql_execute]
-    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+    setup [:with_persistent_kv, :with_basic_tables, :with_sql_execute]
 
-    setup %{db_conn: conn} do
-      start_link_supervised!({Task, fn -> Postgrex.query!(conn, "SELECT PG_SLEEP(10)", []) end})
+    setup %{pooled_db_config: conn_opts} = ctx do
+      conn_opts =
+        conn_opts
+        |> Keyword.merge(pool_size: 1, queue_target: 1, queue_interval: 50)
+        |> Electric.Utils.deobfuscate_password()
 
-      wait_for_pool_to_be_busy(conn)
+      busy_pool =
+        start_link_supervised!(Supervisor.child_spec({Postgrex, conn_opts}, id: :busy_pool))
+
+      %{inspector: {EtsInspector, opts} = inspector} =
+        with_inspector(Map.merge(ctx, %{db_conn: busy_pool}))
+
+      %{inspector: inspector, opts: opts, busy_pool: busy_pool}
+    end
+
+    setup %{busy_pool: busy_pool} do
+      start_link_supervised!(
+        {Task, fn -> Postgrex.query!(busy_pool, "SELECT PG_SLEEP(10)", []) end}
+      )
+
+      wait_for_pool_to_be_busy(busy_pool)
     end
 
     test "returns error", %{opts: opts} do
