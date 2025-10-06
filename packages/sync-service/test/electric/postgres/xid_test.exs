@@ -46,4 +46,20 @@ defmodule Electric.Postgres.XidTest do
 
   defp xid32_gen, do: StreamData.integer(1..@uint32_max)
   defp xid64_gen, do: StreamData.integer((@uint32_max + 1)..@uint64_max)
+
+  describe "after_snapshot?/2" do
+    property "returns true iff xid >= xmax (mixed 32/64-bit xids)" do
+      check all xid <- StreamData.one_of([xid32_gen(), xid64_gen()]),
+                xmax <- StreamData.one_of([xid32_gen(), xid64_gen()]),
+                xmin <- StreamData.integer(1..xmax),
+                xip_list <- StreamData.list_of(StreamData.integer(xmin..xmax), max_length: 5),
+                max_runs: 100_000,
+                max_run_time: 600 do
+        snapshot = {xmin, xmax, xip_list}
+
+        expected = compare(xid, xmax) != :lt
+        assert after_snapshot?(xid, snapshot) == expected
+      end
+    end
+  end
 end

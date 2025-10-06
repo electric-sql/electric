@@ -86,6 +86,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     state =
       Map.merge(opts, %{
         index: %{},
+        tag_indices: %{},
         value_counts: %{},
         offset: LogOffset.before_all(),
         ref: nil,
@@ -118,13 +119,37 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {state, _} =
       stream
       |> Stream.map(&Jason.decode!/1)
-      |> Enum.filter(fn decoded -> Map.has_key?(decoded, "key") end)
-      |> Enum.map(fn %{"key" => key, "value" => value, "headers" => %{"operation" => operation}} ->
-        case operation do
-          "insert" -> %Changes.NewRecord{key: key, record: value}
-          "update" -> %Changes.UpdatedRecord{key: key, record: value}
-          "delete" -> %Changes.DeletedRecord{key: key, old_record: value}
-        end
+      |> Enum.filter(fn decoded ->
+        Map.has_key?(decoded, "key") || Map.has_key?(decoded["headers"], "event")
+      end)
+      |> Enum.map(fn
+        %{
+          "key" => key,
+          "value" => value,
+          "headers" => %{"operation" => operation} = headers
+        } ->
+          case operation do
+            "insert" ->
+              %Changes.NewRecord{key: key, record: value, move_tags: Map.get(headers, "tags", [])}
+
+            "update" ->
+              %Changes.UpdatedRecord{
+                key: key,
+                record: value,
+                move_tags: Map.get(headers, "tags", []),
+                removed_move_tags: Map.get(headers, "removed_tags", [])
+              }
+
+            "delete" ->
+              %Changes.DeletedRecord{
+                key: key,
+                old_record: value,
+                move_tags: Map.get(headers, "tags", [])
+              }
+          end
+
+        %{"headers" => %{"event" => "move-out", "patterns" => patterns}} ->
+          %{headers: %{event: "move-out", patterns: patterns}}
       end)
       |> apply_changes(state)
 
@@ -150,15 +175,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  # def handle_info({ref, :new_changes, log_offset}, %{offset: offset, ref: ref} = state)
-  #     when is_log_offset_lte(log_offset, offset) do
-  #   {:noreply, state}
-  # end
-
-  # def handle_info({ref, :new_changes, _}, %{ref: ref} = state) do
-  #   {:noreply, state, {:continue, :read_stream}}
-  # end
-
   def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
     values = MapSet.new(Map.keys(value_counts))
 
@@ -169,16 +185,25 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, changes}, _from, state) do
-    {state, events} = apply_changes(changes, state)
+  def handle_call({:new_changes, {range_start, range_end}}, _from, state) do
+    stack_storage = Storage.for_stack(state.stack_id)
+    storage = Storage.for_shape(state.shape_handle, stack_storage)
 
-    if events != [] do
-      for pid <- state.subscribers do
-        send(pid, {:materializer_changes, state.shape_handle, events})
+    Storage.get_log_stream(range_start, range_end, storage)
+    |> Stream.map(&Jason.decode!/1)
+    |> Stream.map(fn %{"key" => key, "value" => value, "headers" => %{"operation" => operation}} ->
+      case operation do
+        "insert" -> %Changes.NewRecord{key: key, record: value}
+        "update" -> %Changes.UpdatedRecord{key: key, record: value}
+        "delete" -> %Changes.DeletedRecord{key: key, old_record: value}
       end
-    end
+    end)
+    |> apply_changes_and_notify(state)
+    |> then(fn state -> {:reply, :ok, state} end)
+  end
 
-    {:reply, :ok, state}
+  def handle_call({:new_changes, changes}, _from, state) when is_list(changes) do
+    {:reply, :ok, apply_changes_and_notify(changes, state)}
   end
 
   def handle_call(:subscribe, {pid, _ref} = _from, state) do
@@ -212,71 +237,174 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
   end
 
-  defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
-    {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
-    value
-  end
-
   defp cast!(record, %{columns: columns, materialized_type: {:array, {:row, types}}}) do
+    original_strings = Enum.map(columns, &Map.fetch!(record, &1))
+
     {:ok, values} =
-      Enum.zip(columns, types)
-      |> Utils.map_while_ok(fn {column, type} ->
-        Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
+      Enum.zip(original_strings, types)
+      |> Utils.map_while_ok(fn {const, type} ->
+        Eval.Env.parse_const(Eval.Env.new(), const, type)
       end)
 
-    List.to_tuple(values)
+    {List.to_tuple(values), List.to_tuple(original_strings)}
   end
 
-  defp apply_changes(changes, state) when is_list(changes) do
-    {index, {value_counts, events}} =
-      Enum.reduce(changes, {state.index, {state.value_counts, []}}, fn
-        %Changes.NewRecord{key: key, record: record}, {index, counts_and_events} ->
-          value = cast!(record, state)
-          if is_map_key(index, key), do: raise("Key #{key} already exists")
-          index = Map.put(index, key, value)
+  defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
+    original_string = Map.fetch!(record, column)
+    {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), original_string, type)
+    {value, original_string}
+  end
 
-          {index, increment_value(counts_and_events, value)}
+  defp value_to_string(value, %{materialized_type: {:array, {:row, type}}}) do
+    value
+    |> Tuple.to_list()
+    |> Enum.zip_with(type, &Eval.Env.const_to_pg_string(Eval.Env.new(), &1, &2))
+    |> List.to_tuple()
+  end
 
-        %Changes.UpdatedRecord{key: key, record: record}, {index, counts_and_events} ->
-          # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
-          if Enum.any?(state.columns, &is_map_key(record, &1)) do
-            value = cast!(record, state)
-            old_value = Map.fetch!(index, key)
+  defp value_to_string(value, %{materialized_type: {:array, type}}) do
+    Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
+  end
+
+  defp apply_changes_and_notify(changes, state) do
+    {state, events} = apply_changes(changes, state)
+
+    if events != %{} do
+      events =
+        events
+        |> Map.put_new(:move_in, [])
+        |> Map.put_new(:move_out, [])
+
+      for pid <- state.subscribers do
+        send(pid, {:materializer_changes, state.shape_handle, events})
+      end
+    end
+
+    state
+  end
+
+  defp apply_changes(changes, state) do
+    {{index, tag_indices}, {value_counts, events}} =
+      Enum.reduce(
+        changes |> Enum.to_list(),
+        {{state.index, state.tag_indices}, {state.value_counts, []}},
+        fn
+          %Changes.NewRecord{key: key, record: record, move_tags: move_tags},
+          {{index, tag_indices}, counts_and_events} ->
+            {value, original_string} = cast!(record, state)
+            if is_map_key(index, key), do: raise("Key #{key} already exists")
             index = Map.put(index, key, value)
+            tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
+            {{index, tag_indices}, increment_value(counts_and_events, value, original_string)}
 
-            {index, counts_and_events |> decrement_value(old_value) |> increment_value(value)}
-          else
-            # Nothing relevant to this materializer has been updated
-            {index, counts_and_events}
-          end
+          %Changes.UpdatedRecord{
+            key: key,
+            record: record,
+            move_tags: move_tags,
+            removed_move_tags: removed_move_tags
+          },
+          {{index, tag_indices}, counts_and_events} ->
+            # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
+            if Enum.any?(state.columns, &is_map_key(record, &1)) do
+              {value, original_string} = cast!(record, state)
+              old_value = Map.fetch!(index, key)
+              index = Map.put(index, key, value)
 
-        %Changes.DeletedRecord{key: key}, {index, counts_and_events} ->
-          {value, index} = Map.pop!(index, key)
+              tag_indices =
+                tag_indices
+                |> remove_row_from_tag_indices(key, removed_move_tags)
+                |> add_row_to_tag_indices(key, move_tags)
 
-          {index, decrement_value(counts_and_events, value)}
-      end)
+              {{index, tag_indices},
+               counts_and_events
+               |> decrement_value(old_value, value_to_string(old_value, state))
+               |> increment_value(value, original_string)}
+            else
+              # Nothing relevant to this materializer has been updated
+              {{index, tag_indices}, counts_and_events}
+            end
 
-    {%{state | index: index, value_counts: value_counts}, Enum.reverse(events)}
+          %Changes.DeletedRecord{key: key, move_tags: move_tags},
+          {{index, tag_indices}, counts_and_events} ->
+            {value, index} = Map.pop!(index, key)
+
+            tag_indices = remove_row_from_tag_indices(tag_indices, key, move_tags)
+
+            {{index, tag_indices},
+             decrement_value(counts_and_events, value, value_to_string(value, state))}
+
+          %{headers: %{event: "move-out", patterns: patterns}},
+          {{index, tag_indices}, counts_and_events} ->
+            {keys, tag_indices} = pop_keys_from_tag_indices(tag_indices, patterns)
+
+            {index, counts_and_events} =
+              Enum.reduce(keys, {index, counts_and_events}, fn key, {index, counts_and_events} ->
+                {value, index} = Map.pop!(index, key)
+                {index, decrement_value(counts_and_events, value, value_to_string(value, state))}
+              end)
+
+            {{index, tag_indices}, counts_and_events}
+        end
+      )
+
+    events = Enum.group_by(events, &elem(&1, 0), &elem(&1, 1))
+
+    {%{state | index: index, value_counts: value_counts, tag_indices: tag_indices}, events}
   end
 
-  defp increment_value({value_counts, events}, value) do
+  defp increment_value({value_counts, events}, value, original_string) do
     case Map.fetch(value_counts, value) do
       {:ok, count} ->
         {Map.put(value_counts, value, count + 1), events}
 
       :error ->
-        {Map.put(value_counts, value, 1), [{:move_in, value} | events]}
+        {Map.put(value_counts, value, 1), [{:move_in, original_string} | events]}
     end
   end
 
-  defp decrement_value({value_counts, events}, value) do
+  defp decrement_value({value_counts, events}, value, original_string) do
     # If we're decrementing, it must have been added before
     case Map.fetch!(value_counts, value) do
       1 ->
-        {Map.delete(value_counts, value), [{:move_out, value} | events]}
+        {Map.delete(value_counts, value), [{:move_out, original_string} | events]}
 
       count ->
         {Map.put(value_counts, value, count - 1), events}
     end
+  end
+
+  defp add_row_to_tag_indices(tag_indices, key, move_tags) do
+    # For now we only support one move tag per row (i.e. no `OR`s in the where clause if there's a subquery)
+    Enum.reduce(move_tags, tag_indices, fn [val1], acc ->
+      Map.update(acc, val1, MapSet.new([key]), &MapSet.put(&1, key))
+    end)
+  end
+
+  defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
+    Enum.reduce(move_tags, tag_indices, fn [val1], acc ->
+      case Map.fetch(acc, val1) do
+        {:ok, v} ->
+          new_mapset = MapSet.delete(v, key)
+
+          if MapSet.size(new_mapset) == 0 do
+            Map.delete(acc, val1)
+          else
+            Map.put(acc, val1, new_mapset)
+          end
+
+        :error ->
+          acc
+      end
+    end)
+  end
+
+  defp pop_keys_from_tag_indices(tag_indices, patterns) do
+    # This implementation is naive while we support only one tag per row and no composite tags.
+    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn [val1], {keys, acc} ->
+      case Map.pop(acc, val1) do
+        {nil, acc} -> {keys, acc}
+        {v, acc} -> {MapSet.union(keys, v), acc}
+      end
+    end)
   end
 end

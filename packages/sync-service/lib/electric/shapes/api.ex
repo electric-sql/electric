@@ -505,9 +505,12 @@ defmodule Electric.Shapes.Api do
   end
 
   defp do_serve_subset_response(%Request{} = request) do
-    %{response: response, params: %{subset: subset, shape_definition: shape_definition}} = request
+    %{
+      response: response,
+      params: %{subset: subset, shape_definition: shape_definition, handle: handle}
+    } = request
 
-    case Shapes.query_subset(shape_definition, subset, request.api) do
+    case Shapes.query_subset(handle, shape_definition, subset, request.api) do
       {:ok, {metadata, data_stream}} ->
         %{
           response

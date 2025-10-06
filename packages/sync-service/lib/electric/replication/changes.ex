@@ -12,9 +12,10 @@ defmodule Electric.Replication.Changes do
 
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
+  alias Electric.Postgres.Xid
 
   @type db_identifier() :: String.t()
-  @type xid() :: non_neg_integer()
+  @type xid() :: Xid.anyxid()
   @type relation_name() :: {schema :: db_identifier(), table :: db_identifier()}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
@@ -55,13 +56,14 @@ defmodule Electric.Replication.Changes do
 
   defmodule Transaction do
     alias Electric.Replication.Changes
+    require Electric.Postgres.Xid
 
     @type t() :: %__MODULE__{
             xid: Changes.xid() | nil,
             changes: [Changes.change()],
             num_changes: non_neg_integer(),
             affected_relations: MapSet.t(Changes.relation_name()),
-            commit_timestamp: DateTime.t(),
+            commit_timestamp: DateTime.t() | nil,
             lsn: Electric.Postgres.Lsn.t(),
             last_log_offset: LogOffset.t()
           }
@@ -105,17 +107,39 @@ defmodule Electric.Replication.Changes do
           changes: Enum.reverse(changes)
       }
     end
+
+    require Electric.Postgres.Xid
+
+    @doc """
+    Check if a transaction is visible in a snapshot.
+    """
+    @spec visible_in_snapshot?(
+            t() | Xid.anyxid(),
+            %{xmin: Xid.anyxid(), xmax: Xid.anyxid(), xip_list: [Xid.anyxid()]}
+            | {Xid.anyxid(), Xid.anyxid(), [Xid.anyxid()]}
+          ) :: boolean()
+    def visible_in_snapshot?(%__MODULE__{xid: xid}, %{xmin: xmin, xmax: xmax, xip_list: xip_list}),
+        do: visible_in_snapshot?(xid, {xmin, xmax, xip_list})
+
+    def visible_in_snapshot?(%__MODULE__{xid: xid}, snapshot) when is_tuple(snapshot),
+      do: visible_in_snapshot?(xid, snapshot)
+
+    def visible_in_snapshot?(xid, {xmin, _, _}) when Xid.is_lt(xid, xmin), do: true
+    def visible_in_snapshot?(xid, {_, xmax, _}) when not Xid.is_lt(xid, xmax), do: false
+    def visible_in_snapshot?(_, {_, _, []}), do: true
+    def visible_in_snapshot?(xid, {_, _, xip_list}), do: xid not in xip_list
   end
 
   defmodule NewRecord do
-    defstruct [:relation, :record, :log_offset, :key, last?: false]
+    defstruct [:relation, :record, :log_offset, :key, last?: false, move_tags: []]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
             record: Changes.record(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
-            last?: boolean()
+            last?: boolean(),
+            move_tags: [Changes.tag()]
           }
   end
 
@@ -127,7 +151,8 @@ defmodule Electric.Replication.Changes do
       :log_offset,
       :key,
       :old_key,
-      tags: [],
+      move_tags: [],
+      removed_move_tags: [],
       changed_columns: MapSet.new(),
       last?: false
     ]
@@ -139,7 +164,8 @@ defmodule Electric.Replication.Changes do
             log_offset: LogOffset.t(),
             key: String.t() | nil,
             old_key: String.t() | nil,
-            tags: [Changes.tag()],
+            move_tags: [Changes.tag()],
+            removed_move_tags: [Changes.tag()],
             changed_columns: MapSet.t(),
             last?: boolean()
           }
@@ -177,14 +203,14 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule DeletedRecord do
-    defstruct [:relation, :old_record, :log_offset, :key, tags: [], last?: false]
+    defstruct [:relation, :old_record, :log_offset, :key, move_tags: [], last?: false]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
             old_record: Changes.record(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
-            tags: [Changes.tag()],
+            move_tags: [Changes.tag()],
             last?: boolean()
           }
   end
@@ -344,7 +370,7 @@ defmodule Electric.Replication.Changes do
       old_record: change.old_record,
       key: change.old_key || change.key,
       log_offset: change.log_offset,
-      tags: change.tags
+      move_tags: change.move_tags
     }
   end
 
