@@ -245,6 +245,49 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Like `Enum.unzip/1`, but works for any tuple size instead of just 2.
+
+  Returns nil on empty list.
+
+  ## Examples
+
+      iex> unzip_any([{1, 2}, {3, 4}])
+      {[1, 3], [2, 4]}
+
+      iex> unzip_any([{1, 2, 3}, {4, 5, 6}])
+      {[1, 4], [2, 5], [3, 6]}
+
+      iex> unzip_any([{1, 2, 3, 4, 5, 6}, {7, 8, 9, 10, 11, 12}])
+      {[1, 7], [2, 8], [3, 9], [4, 10], [5, 11], [6, 12]}
+  """
+  def unzip_any([]), do: nil
+
+  def unzip_any([head | _] = list) when is_tuple(head) do
+    base_acc = for(_ <- 1..tuple_size(head)//1, do: [])
+    unzip_any(Enum.reverse(list), base_acc)
+  end
+
+  defp unzip_any([], acc), do: List.to_tuple(acc)
+
+  # This is used in move handling, where composite mathces over 3 columns are exceedingly rare
+  # but we want to support them anyway.
+  # To make this faster, I've unrolled the 3 common cases to avoid the Enum.with_index/1 call
+  # unless necessary.
+  defp unzip_any([{e1, e2} | tail], [l1, l2]),
+    do: unzip_any(tail, [[e1 | l1], [e2 | l2]])
+
+  defp unzip_any([{e1, e2, e3} | tail], [l1, l2, l3]),
+    do: unzip_any(tail, [[e1 | l1], [e2 | l2], [e3 | l3]])
+
+  defp unzip_any([{e1, e2, e3, e4} | tail], [l1, l2, l3, l4]),
+    do: unzip_any(tail, [[e1 | l1], [e2 | l2], [e3 | l3], [e4 | l4]])
+
+  defp unzip_any([head | tail], acc) do
+    acc = Enum.with_index(acc, fn list_n, n -> [elem(head, n) | list_n] end)
+    unzip_any(tail, acc)
+  end
+
+  @doc """
   Parse a markdown table from a string
 
   Options:

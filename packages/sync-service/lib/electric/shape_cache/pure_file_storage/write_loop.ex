@@ -38,6 +38,7 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
                    elem(elem(acc, writer_acc(:open_files)), open_files(:chunk_file)) != nil
 
   def last_persisted_txn_offset(writer_acc(last_persisted_txn_offset: res)), do: res
+  def last_seen_offset(writer_acc(last_seen_offset: res)), do: res
   def cached_chunk_boundaries(writer_acc(cached_chunk_boundaries: res)), do: res
   def has_flushed_since?(writer_acc(times_flushed: res), previous_ref), do: res != previous_ref
   def times_flushed(writer_acc(times_flushed: res)), do: res

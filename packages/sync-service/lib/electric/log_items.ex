@@ -15,6 +15,10 @@ defmodule Electric.LogItems do
     if value, do: Map.put(map, key, value), else: map
   end
 
+  defp put_if_true(map, key, condition, value) do
+    if condition, do: Map.put(map, key, value), else: map
+  end
+
   @type log_item ::
           {LogOffset.t(),
            %{
@@ -44,6 +48,7 @@ defmodule Electric.LogItems do
              op_position: change.log_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
        }}
     ]
   end
@@ -63,6 +68,7 @@ defmodule Electric.LogItems do
              op_position: change.log_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
        }}
     ]
   end
@@ -82,6 +88,8 @@ defmodule Electric.LogItems do
              op_position: change.log_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
+           |> put_if_true(:removed_tags, change.move_tags != [], change.removed_move_tags)
        }
        |> Map.merge(put_update_values(change, pk_cols, replica))}
     ]
@@ -95,14 +103,20 @@ defmodule Electric.LogItems do
        %{
          key: change.old_key,
          value: take_pks_or_all(change.old_record, pk_cols, replica),
-         headers: %{
-           operation: :delete,
-           txids: List.wrap(txids),
-           relation: Tuple.to_list(change.relation),
-           key_change_to: change.key,
-           lsn: to_string(change.log_offset.tx_offset),
-           op_position: change.log_offset.op_offset
-         }
+         headers:
+           %{
+             operation: :delete,
+             txids: List.wrap(txids),
+             relation: Tuple.to_list(change.relation),
+             key_change_to: change.key,
+             lsn: to_string(change.log_offset.tx_offset),
+             op_position: change.log_offset.op_offset
+           }
+           |> put_if_true(
+             :tags,
+             change.move_tags != [],
+             change.move_tags ++ change.removed_move_tags
+           )
        }},
       {new_offset,
        %{
@@ -118,6 +132,7 @@ defmodule Electric.LogItems do
              op_position: new_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
        }}
     ]
   end

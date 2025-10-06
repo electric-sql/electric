@@ -84,7 +84,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1])
 
-      assert_receive {:materializer_changes, _, move_in: 1}
+      assert_receive {:materializer_changes, _, %{move_in: ["1"]}}
     end
 
     @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
@@ -113,7 +113,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([11])
 
-      assert_receive {:materializer_changes, _, move_out: 10, move_in: 11}
+      assert_receive {:materializer_changes, _, %{move_out: ["10"], move_in: ["11"]}}
     end
 
     @tag snapshot_data: [
@@ -140,7 +140,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([])
 
-      assert_receive {:materializer_changes, _, move_out: 10}
+      assert_receive {:materializer_changes, _, %{move_out: ["10"]}}
     end
 
     @tag snapshot_data: [
@@ -191,7 +191,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
 
-      assert_received {:materializer_changes, _, move_out: 10}
+      assert_received {:materializer_changes, _, %{move_out: ["10"]}}
     end
 
     @tag snapshot_data: [
@@ -216,7 +216,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
 
-      assert_received {:materializer_changes, _, move_in: 20}
+      assert_received {:materializer_changes, _, %{move_in: ["20"]}}
     end
 
     @tag snapshot_data: [
@@ -331,7 +331,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 2])
 
-      assert_receive {:materializer_changes, _, move_in: 1, move_in: 2}
+      assert_receive {:materializer_changes, _, %{move_in: ["2", "1"]}}
 
       Materializer.new_changes(ctx, [
         %Changes.UpdatedRecord{
@@ -345,7 +345,190 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 3])
 
-      assert_receive {:materializer_changes, _, move_out: 2, move_in: 3}
+      assert_receive {:materializer_changes, _, %{move_out: ["2"], move_in: ["3"]}}
+    end
+  end
+
+  describe "move_out events" do
+    test "runtime move_out event removes rows matching the pattern", ctx do
+      ctx = with_materializer(ctx)
+
+      # Insert records with move_tags
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: [["tag2"]]},
+        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: [["tag1"]]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20, 30])
+      assert_receive {:materializer_changes, _, %{move_in: _}}
+
+      # Send move_out event to remove rows with tag1
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      assert_receive {:materializer_changes, _, %{move_out: move_out}}
+      assert Enum.sort(move_out) == ["10", "30"]
+    end
+
+    test "runtime move_out event with multiple patterns removes all matching rows", ctx do
+      ctx = with_materializer(ctx)
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: [["tag2"]]},
+        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: [["tag3"]]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20, 30])
+      assert_receive {:materializer_changes, _, %{move_in: _}}
+
+      # Remove rows with tag1 or tag3
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [["tag1"], ["tag3"]]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      assert_receive {:materializer_changes, _, %{move_out: move_out}}
+      assert Enum.sort(move_out) == ["10", "30"]
+    end
+
+    test "runtime move_out event for non-existent pattern causes no events", ctx do
+      ctx = with_materializer(ctx)
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: ["10"]}}
+
+      # Try to remove rows with non-existent tag
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [["non_existent"]]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
+    end
+
+    test "runtime move_out event removes row but value remains if another row has same value",
+         ctx do
+      ctx = with_materializer(ctx)
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "10"}, move_tags: [["tag2"]]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: ["10"]}}
+
+      # Remove only tag1 row
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+      ])
+
+      # Value 10 should still be present because key "2" still has it
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
+    end
+
+    @tag snapshot_data: {
+           [
+             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: [["tag1"]]},
+             %Changes.NewRecord{record: %{"id" => "2", "value" => "20"}, move_tags: [["tag2"]]}
+           ],
+           []
+         }
+    test "on-load tags are tracked and can be removed by runtime move_out", ctx do
+      ctx = with_materializer(ctx)
+
+      # Both values should be present after on-load
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
+
+      # Now send move_out event to remove rows with tag1
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+      ])
+
+      # Only value 20 should remain after move_out
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      assert_receive {:materializer_changes, _, %{move_out: ["10"]}}
+    end
+
+    @tag snapshot_data: {
+           [
+             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: [["tag1"]]},
+             %Changes.NewRecord{record: %{"id" => "2", "value" => "10"}, move_tags: [["tag2"]]}
+           ],
+           []
+         }
+    test "on-load tags tracked correctly when values are duplicated", ctx do
+      ctx = with_materializer(ctx)
+
+      # Value 10 should be present (from both rows)
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Remove rows with tag1
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+      ])
+
+      # Value 10 should still be present because key "2" still has it
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
+    end
+
+    @tag snapshot_data: {
+           [
+             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: [["tag1"]]},
+             %Changes.NewRecord{record: %{"id" => "2", "value" => "20"}, move_tags: [["tag1"]]},
+             %Changes.NewRecord{record: %{"id" => "3", "value" => "30"}, move_tags: [["tag2"]]}
+           ],
+           []
+         }
+    test "on-load tags with multiple rows sharing same tag can all be removed", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20, 30])
+
+      # Remove all rows with tag1
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([30])
+      assert_receive {:materializer_changes, _, %{move_out: move_out}}
+      assert Enum.sort(move_out) == ["10", "20"]
+    end
+
+    @tag snapshot_data: [
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":[["tag1"]]}}),
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"2\\"","value":{"id":"2","value":"20"},"headers":{"operation":"insert","tags":[["tag2"]]}}),
+           ~s({"headers":{"event":"move-out","patterns":[["tag1"]]}})
+         ]
+    test "on-load move_out event in snapshot data is processed correctly", ctx do
+      ctx = with_materializer(ctx)
+
+      # Only value 20 should remain after on-load processing of move_out
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      refute_received {:materializer_changes, _, _}
+    end
+
+    @tag snapshot_data: [
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":[["tag1"]]}}),
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"2\\"","value":{"id":"2","value":"10"},"headers":{"operation":"insert","tags":[["tag2"]]}}),
+           ~s({"headers":{"event":"move-out","patterns":[["tag1"]]}})
+         ]
+    test "on-load move_out event with duplicate values keeps remaining row's value", ctx do
+      ctx = with_materializer(ctx)
+
+      # Value 10 should still be present because key "2" still has it
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
     end
   end
 
