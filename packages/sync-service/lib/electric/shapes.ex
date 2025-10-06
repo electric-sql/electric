@@ -97,7 +97,7 @@ defmodule Electric.Shapes do
     Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
   end
 
-  def query_subset(shape, subset, opts) do
-    Electric.Shapes.PartialModes.query_subset(shape, subset, opts)
+  def query_subset(handle, shape, subset, opts) do
+    Electric.Shapes.PartialModes.query_subset(handle, shape, subset, opts)
   end
 end

@@ -89,6 +89,36 @@ defmodule Electric.ShapeCache.Storage do
   @callback mark_snapshot_as_started(shape_opts()) :: :ok
 
   @doc """
+  Write a move in snapshot to the storage. Should write it alongside the main log,
+  with stiching being done via a separate call `append_move_in_snapshot_to_log!`.
+  """
+  @callback write_move_in_snapshot!(
+              Enumerable.t({key :: String.t(), value :: Querying.json_iodata()}),
+              name :: String.t(),
+              shape_opts()
+            ) :: :ok
+
+  @doc """
+  Splice a move in snapshot into the main log.
+
+  Since snapshot doesn't have an offset associated, the offsets are inferred at splice time, and the range is returned.
+  Range is a tuple of {starting_offset, ending_offset}, with starting offset being right before the first item in
+  the snapshot to match usage of `get_log_stream/3`
+  """
+  @callback append_move_in_snapshot_to_log!(name :: String.t(), writer_state()) ::
+              {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
+
+  @doc """
+  Append a control message to the log that doesn't have an offset associated with it.
+
+  Since control message doesn't have an offset associated, the offsets are inferred at append time,
+  and the range is returned. Range is a tuple of {starting_offset, ending_offset}, with starting offset
+  being right before the control message to match usage of `get_log_stream/3`
+  """
+  @callback append_control_message!(control_message :: map(), writer_state()) ::
+              {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
+
+  @doc """
   Append log items from one transaction to the log.
 
   Each storage implementation is responsible for handling transient errors
@@ -247,6 +277,30 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def mark_snapshot_as_started({mod, shape_opts}) do
     mod.mark_snapshot_as_started(shape_opts)
+  end
+
+  @impl __MODULE__
+  def write_move_in_snapshot!(stream, name, {mod, shape_opts}) do
+    mod.write_move_in_snapshot!(stream, name, shape_opts)
+  end
+
+  @impl __MODULE__
+  def append_move_in_snapshot_to_log!(name, {mod, writer_state}) do
+    {inserted_range, new_writer_state} = mod.append_move_in_snapshot_to_log!(name, writer_state)
+    {inserted_range, {mod, new_writer_state}}
+  end
+
+  @impl __MODULE__
+  def append_control_message!(control_message, state)
+      when is_map(control_message) do
+    append_control_message!(Jason.encode!(control_message), state)
+  end
+
+  def append_control_message!(control_message, {mod, writer_state}) do
+    {inserted_range, new_writer_state} =
+      mod.append_control_message!(control_message, writer_state)
+
+    {inserted_range, {mod, new_writer_state}}
   end
 
   @impl __MODULE__

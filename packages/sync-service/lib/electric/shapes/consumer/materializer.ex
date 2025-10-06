@@ -172,7 +172,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
   def handle_call({:new_changes, changes}, _from, state) do
     {state, events} = apply_changes(changes, state)
 
-    if events != [] do
+    if events != %{} do
+      events =
+        events
+        |> Map.put_new(:move_in, [])
+        |> Map.put_new(:move_out, [])
+
       for pid <- state.subscribers do
         send(pid, {:materializer_changes, state.shape_handle, events})
       end
@@ -212,39 +217,51 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
   end
 
-  defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
-    {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
-    value
-  end
-
   defp cast!(record, %{columns: columns, materialized_type: {:array, {:row, types}}}) do
+    original_strings = Enum.map(columns, &Map.fetch!(record, &1))
+
     {:ok, values} =
-      Enum.zip(columns, types)
-      |> Utils.map_while_ok(fn {column, type} ->
-        Eval.Env.parse_const(Eval.Env.new(), Map.fetch!(record, column), type)
+      Enum.zip(original_strings, types)
+      |> Utils.map_while_ok(fn {const, type} ->
+        Eval.Env.parse_const(Eval.Env.new(), const, type)
       end)
 
-    List.to_tuple(values)
+    {List.to_tuple(values), original_strings}
+  end
+
+  defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
+    original_string = Map.fetch!(record, column)
+    {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), original_string, type)
+    {value, original_string}
+  end
+
+  defp value_to_string(value, %{materialized_type: {:array, type}}) do
+    Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
   end
 
   defp apply_changes(changes, state) when is_list(changes) do
     {index, {value_counts, events}} =
       Enum.reduce(changes, {state.index, {state.value_counts, []}}, fn
         %Changes.NewRecord{key: key, record: record}, {index, counts_and_events} ->
-          value = cast!(record, state)
+          {value, original_string} = cast!(record, state)
           if is_map_key(index, key), do: raise("Key #{key} already exists")
           index = Map.put(index, key, value)
 
-          {index, increment_value(counts_and_events, value)}
+          {index, increment_value(counts_and_events, value, original_string)}
 
-        %Changes.UpdatedRecord{key: key, record: record}, {index, counts_and_events} ->
+        %Changes.UpdatedRecord{key: key, record: record, old_record: old_record},
+        {index, counts_and_events} ->
           # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
           if Enum.any?(state.columns, &is_map_key(record, &1)) do
-            value = cast!(record, state)
+            {value, original_string} = cast!(record, state)
+            {_, old_original_string} = cast!(old_record, state)
             old_value = Map.fetch!(index, key)
             index = Map.put(index, key, value)
 
-            {index, counts_and_events |> decrement_value(old_value) |> increment_value(value)}
+            {index,
+             counts_and_events
+             |> decrement_value(old_value, old_original_string)
+             |> increment_value(value, original_string)}
           else
             # Nothing relevant to this materializer has been updated
             {index, counts_and_events}
@@ -253,27 +270,29 @@ defmodule Electric.Shapes.Consumer.Materializer do
         %Changes.DeletedRecord{key: key}, {index, counts_and_events} ->
           {value, index} = Map.pop!(index, key)
 
-          {index, decrement_value(counts_and_events, value)}
+          {index, decrement_value(counts_and_events, value, value_to_string(value, state))}
       end)
 
-    {%{state | index: index, value_counts: value_counts}, Enum.reverse(events)}
+    events = Enum.group_by(events, &elem(&1, 0), &elem(&1, 1))
+
+    {%{state | index: index, value_counts: value_counts}, events}
   end
 
-  defp increment_value({value_counts, events}, value) do
+  defp increment_value({value_counts, events}, value, original_string) do
     case Map.fetch(value_counts, value) do
       {:ok, count} ->
         {Map.put(value_counts, value, count + 1), events}
 
       :error ->
-        {Map.put(value_counts, value, 1), [{:move_in, value} | events]}
+        {Map.put(value_counts, value, 1), [{:move_in, original_string} | events]}
     end
   end
 
-  defp decrement_value({value_counts, events}, value) do
+  defp decrement_value({value_counts, events}, value, original_string) do
     # If we're decrementing, it must have been added before
     case Map.fetch!(value_counts, value) do
       1 ->
-        {Map.delete(value_counts, value), [{:move_out, value} | events]}
+        {Map.delete(value_counts, value), [{:move_out, original_string} | events]}
 
       count ->
         {Map.put(value_counts, value, count - 1), events}

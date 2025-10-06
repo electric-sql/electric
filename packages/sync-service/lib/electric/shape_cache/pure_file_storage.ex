@@ -100,7 +100,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   @metadata_dir "metadata"
   @log_dir "log"
-
+  @snapshot_dir "snapshot"
   @doc false
   def stack_ets(stack_id), do: :"#{inspect(__MODULE__)}:#{stack_id}"
 
@@ -126,6 +126,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp shape_metadata_dir(opts), do: shape_data_dir(opts, [@metadata_dir])
   defp shape_metadata_path(opts, filename), do: shape_data_dir(opts, [@metadata_dir, filename])
+
+  defp shape_snapshot_dir(opts), do: shape_data_dir(opts, [@snapshot_dir])
+  defp shape_snapshot_path(opts, filename), do: shape_data_dir(opts, [@snapshot_dir, filename])
 
   defp tmp_dir(%__MODULE__{} = opts) do
     {__MODULE__, stack_opts} = Storage.for_stack(opts.stack_id)
@@ -848,6 +851,76 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def make_new_snapshot!(stream, %__MODULE__{} = opts) do
     last_chunk_num = Snapshot.write_snapshot_stream!(stream, opts)
     write_cached_metadata!(opts, :last_snapshot_chunk, LogOffset.new(0, last_chunk_num))
+  end
+
+  def write_move_in_snapshot!(stream, name, %__MODULE__{} = opts) do
+    path = shape_snapshot_path(opts, name)
+    File.mkdir_p!(shape_snapshot_dir(opts))
+
+    stream
+    |> Stream.map(fn [key, json] ->
+      [<<byte_size(key)::32>>, <<byte_size(json)::64>>, ?i, key, json]
+    end)
+    |> Stream.into(File.stream!(path))
+    |> Stream.run()
+
+    :ok
+  end
+
+  def append_move_in_snapshot_to_log!(name, writer_state(opts: opts, writer_acc: acc) = state) do
+    starting_offset = WriteLoop.last_seen_offset(acc)
+
+    writer_state(writer_acc: acc) =
+      state =
+      Stream.resource(
+        fn ->
+          {File.open!(shape_snapshot_path(opts, name), [:read, :raw, :read_ahead]),
+           LogOffset.increment(starting_offset)}
+        end,
+        fn {file, offset} ->
+          with {:meta, <<key_size::32, json_size::64, op_type::8>>} <-
+                 {:meta, IO.binread(file, 13)},
+               <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
+               <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
+            {[{offset, key_size, key, op_type, 0, json_size, json}],
+             {file, LogOffset.increment(offset)}}
+          else
+            {:meta, :eof} ->
+              {:halt, {file, offset}}
+
+            _ ->
+              raise Storage.Error,
+                message: "Incomplete move-in snapshot file at #{shape_snapshot_path(opts, name)}"
+          end
+        end,
+        fn {file, _} ->
+          File.close(file)
+          File.rm!(shape_snapshot_path(opts, name))
+        end
+      )
+      |> append_to_log!(state)
+
+    inserted_range = {starting_offset, WriteLoop.last_seen_offset(acc)}
+
+    {inserted_range, state}
+  end
+
+  def append_control_message!(control_message, state)
+      when is_map(control_message) do
+    append_control_message!(Jason.encode!(control_message), state)
+  end
+
+  def append_control_message!(control_message, writer_state(writer_acc: acc) = state)
+      when is_binary(control_message) do
+    offset = WriteLoop.last_seen_offset(acc)
+    inserted_offset = LogOffset.increment(offset)
+
+    state =
+      [{inserted_offset, 0, "", ?c, 0, byte_size(control_message), control_message}]
+      |> append_to_log!(state)
+
+    inserted_range = {offset, inserted_offset}
+    {inserted_range, state}
   end
 
   def get_log_stream(%LogOffset{} = min_offset, %LogOffset{} = max_offset, opts)

@@ -213,113 +213,57 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     shape_attrs = telemetry_shape_attrs(shape_handle, shape)
     chunk_bytes_threshold = Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold)
 
-    Postgrex.transaction(
-      db_pool,
-      fn conn ->
-        OpenTelemetry.with_span(
-          "shape_snapshot.query_in_readonly_txn",
-          shape_attrs,
-          stack_id,
-          fn ->
-            query_span!(
-              conn,
-              "shape_snapshot.start_readonly_txn",
-              shape_attrs,
-              "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-              [],
-              stack_id
-            )
+    Electric.Postgres.SnapshotQuery.execute_for_shape(db_pool, shape_handle, shape,
+      stack_id: stack_id,
+      snapshot_info_fn: fn shape_handle, pg_snapshot, _lsn ->
+        GenServer.cast(consumer, {:pg_snapshot_known, shape_handle, pg_snapshot})
+      end,
+      query_fn: fn conn, {xmin, xmax, xip_list}, _lsn ->
+        send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
 
-            %{rows: [[pg_snapshot = {xmin, xmax, xip_list}]]} =
-              query_span!(
-                conn,
-                "shape_snapshot.get_pg_snapshot",
-                shape_attrs,
-                "SELECT pg_current_snapshot()",
-                [],
-                stack_id
-              )
+        # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
+        finishing_control_message =
+          Jason.encode!(%{
+            headers: %{
+              control: "snapshot-end",
+              xmin: to_string(xmin),
+              xmax: to_string(xmax),
+              xip_list: Enum.map(xip_list, &to_string/1)
+            }
+          })
 
-            GenServer.cast(
-              consumer,
-              {:pg_snapshot_known, shape_handle, pg_snapshot}
-            )
+        Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
+        |> Stream.transform(
+          fn -> false end,
+          fn item, acc ->
+            if not acc do
+              send(task_parent, :data_received)
+              GenServer.cast(consumer, {:snapshot_started, shape_handle})
+            end
 
-            # Enforce display settings *before* querying initial data to maintain consistent
-            # formatting between snapshot and live log entries.
-            OpenTelemetry.with_span(
-              "shape_snapshot.set_display_settings",
-              shape_attrs,
-              stack_id,
-              fn ->
-                Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
-              end
-            )
+            {[item], true}
+          end,
+          fn acc ->
+            if not acc do
+              # The stream has been read to the end but we haven't seen a single item in
+              # it. Notify `consumer` anyway since an empty file will have been created by
+              # the storage implementation for the API layer to read the snapshot data
+              # from.
+              send(task_parent, :data_received)
+              GenServer.cast(consumer, {:snapshot_started, shape_handle})
+            end
 
-            send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
-
-            # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
-            finishing_control_message =
-              Jason.encode!(%{
-                headers: %{
-                  control: "snapshot-end",
-                  xmin: to_string(xmin),
-                  xmax: to_string(xmax),
-                  xip_list: Enum.map(xip_list, &to_string/1)
-                }
-              })
-
-            stream =
-              Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
-              |> Stream.transform(
-                fn -> false end,
-                fn item, acc ->
-                  if not acc do
-                    send(task_parent, :data_received)
-                    GenServer.cast(consumer, {:snapshot_started, shape_handle})
-                  end
-
-                  {[item], true}
-                end,
-                fn acc ->
-                  if not acc do
-                    # The stream has been read to the end but we haven't seen a single item in
-                    # it. Notify `consumer` anyway since an empty file will have been created by
-                    # the storage implementation for the API layer to read the snapshot data
-                    # from.
-                    send(task_parent, :data_received)
-                    GenServer.cast(consumer, {:snapshot_started, shape_handle})
-                  end
-
-                  {[], acc}
-                end,
-                fn acc ->
-                  # noop after fun just to be able to specify the last fun which is only
-                  # available in `Stream.transoform/5`.
-                  acc
-                end
-              )
-              |> Stream.concat([finishing_control_message])
-
-            # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
-            # that way it has the relation, but it is still missing the pk_cols
-            Storage.make_new_snapshot!(stream, storage)
+            {[], acc}
+          end,
+          fn acc ->
+            # noop after fun just to be able to specify the last fun which is only
+            # available in `Stream.transoform/5`.
+            acc
           end
         )
-      end,
-      timeout: :infinity
-    )
-  catch
-    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
-      raise SnapshotError.connection_not_available()
-  end
-
-  defp query_span!(conn, span_name, span_attrs, query, params, stack_id) do
-    OpenTelemetry.with_span(
-      span_name,
-      span_attrs,
-      stack_id,
-      fn -> Postgrex.query!(conn, query, params) end
+        |> Stream.concat([finishing_control_message])
+        |> Storage.make_new_snapshot!(storage)
+      end
     )
   end
 

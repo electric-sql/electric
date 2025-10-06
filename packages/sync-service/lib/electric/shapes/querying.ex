@@ -4,7 +4,24 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
-  def query_subset(conn, shape, subset, mark) do
+  def query_move_in(conn, shape, {where, params}) do
+    table = Utils.relation_to_sql(shape.root_table)
+
+    {json_like_select, _} = json_like_select(shape, %{"is_move_in" => true})
+    key_select = key_select(shape)
+
+    query =
+      Postgrex.prepare!(
+        conn,
+        table,
+        ~s|SELECT #{key_select}, #{json_like_select} FROM #{table} WHERE #{where}|
+      )
+
+    Postgrex.stream(conn, query, params)
+    |> Stream.flat_map(& &1.rows)
+  end
+
+  def query_subset(conn, shape, subset, headers \\ []) do
     # When querying a subset, we select same columns as the base shape
     table = Utils.relation_to_sql(shape.root_table)
 
@@ -27,7 +44,7 @@ defmodule Electric.Shapes.Querying do
     limit = if limit = subset.limit, do: " LIMIT #{limit}", else: ""
     offset = if offset = subset.offset, do: " OFFSET #{offset}", else: ""
 
-    {json_like_select, params} = json_like_select(shape, snapshot_mark: mark)
+    {json_like_select, params} = json_like_select(shape, headers)
 
     query =
       Postgrex.prepare!(
@@ -96,17 +113,28 @@ defmodule Electric.Shapes.Querying do
     end)
   end
 
+  defp key_select(%Shape{root_table: root_table, root_pk: pk_cols}) do
+    ~s['#{escape_relation(root_table)}' || '/' || #{join_primary_keys(pk_cols)}]
+  end
+
   defp json_like_select(
          %Shape{
            root_table: root_table,
-           selected_columns: columns,
-           root_pk: pk_cols
-         },
-         opts \\ []
+           selected_columns: columns
+         } = shape,
+         additional_headers \\ []
        ) do
-    key_part = build_key_part(root_table, pk_cols)
+    additional_headers =
+      Shape.SubqueryMoves.move_in_tag_structure(shape)
+      |> Enum.map(&Enum.map(&1, fn column_name -> "$${#{column_name}}" end))
+      |> case do
+        [] -> additional_headers
+        tag_structure -> additional_headers |> Map.new() |> Map.put(:tags, tag_structure)
+      end
+
+    key_part = build_key_part(shape)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table, opts)
+    headers_part = build_headers_part(root_table, additional_headers)
 
     # We're building a JSON string that looks like this:
     #
@@ -126,26 +154,25 @@ defmodule Electric.Shapes.Querying do
     {query, []}
   end
 
-  defp build_headers_part({relation, table}, opts) do
+  defp build_headers_part(rel, headers) when is_list(headers),
+    do: build_headers_part(rel, Map.new(headers))
+
+  defp build_headers_part({relation, table}, additional_headers) do
     headers = %{operation: "insert", relation: [relation, table]}
 
     headers =
-      case Keyword.get(opts, :snapshot_mark) do
-        nil -> headers
-        mark -> Map.put(headers, :snapshot_mark, mark)
-      end
+      headers
+      |> Map.merge(additional_headers)
       |> Jason.encode!()
       |> Utils.escape_quotes(?')
+      |> String.replace(~r/\$\$\{(\w+)\}/, ~s[' || \\1::text || '])
 
     ~s['"headers":#{headers}']
   end
 
-  defp build_key_part(root_table, pk_cols) do
-    pk_part = join_primary_keys(pk_cols)
-
+  defp build_key_part(shape) do
     # Because relation part of the key is known at query building time, we can use $1 to inject escaped version of the relation
-    ~s['"key":' || ] <>
-      pg_escape_string_for_json(~s['#{escape_relation(root_table)}' || '/' || #{pk_part}])
+    ~s['"key":' || ] <> pg_escape_string_for_json(key_select(shape))
   end
 
   # This is a bespoke derivation of the record from its contents for Postgres but it must

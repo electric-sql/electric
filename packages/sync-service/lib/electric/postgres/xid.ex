@@ -124,4 +124,10 @@ defmodule Electric.Postgres.Xid do
   defp cmp(a, b) when a == b, do: :eq
   defp cmp(a, b) when a < b, do: :lt
   defp cmp(a, b) when a > b, do: :gt
+
+  @doc """
+  Check if a transaction is after the end of a snapshot - if it's xid is over xmax
+  """
+  @spec after_snapshot?(anyxid, {anyxid, anyxid, [anyxid]}) :: boolean()
+  def after_snapshot?(xid, {_, xmax, _}), do: compare(xid, xmax) != :lt
 end
