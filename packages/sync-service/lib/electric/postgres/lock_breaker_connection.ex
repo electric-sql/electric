@@ -21,21 +21,27 @@ defmodule Electric.Postgres.LockBreakerConnection do
 
   @type options :: [option]
 
-  @spec start_link(options()) :: {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
-  def start_link(opts) do
+  @spec start(options()) :: {:ok, pid()} | {:error, Postgrex.Error.t() | term()}
+  def start(opts) do
     {connection_opts, init_opts} = Keyword.pop(opts, :connection_opts)
 
     connection_opts = Electric.Utils.deobfuscate_password(connection_opts)
 
-    Postgrex.SimpleConnection.start_link(
-      __MODULE__,
-      init_opts |> Keyword.put(:database, connection_opts[:database]),
-      [
-        auto_reconnect: false,
-        sync_connect: true
-      ] ++
-        connection_opts
-    )
+    with {:ok, pid} <-
+           Postgrex.SimpleConnection.start_link(
+             __MODULE__,
+             init_opts |> Keyword.put(:database, connection_opts[:database]),
+             [
+               auto_reconnect: false,
+               sync_connect: true
+             ] ++
+               connection_opts
+           ) do
+      # unlink the lock breaker so that if it crashes it does not affect the caller,
+      # since it is a one shot fix attempt anyway
+      Process.unlink(pid)
+      {:ok, pid}
+    end
   end
 
   def stop_backends_and_close(server, lock_name, lock_connection_backend_pid \\ nil) do
