@@ -964,8 +964,8 @@ defmodule Electric.ShapeCacheTest do
 
       context =
         context
-        |> Map.merge(with_shape_log_collector(context))
         |> Map.merge(with_shape_status(context))
+        |> Map.merge(with_shape_log_collector(context))
 
       with_shape_cache(context, opts)
     end

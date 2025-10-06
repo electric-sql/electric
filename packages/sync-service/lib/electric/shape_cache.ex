@@ -302,7 +302,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp start_and_recover_shape(shape_handle, shape, state) do
-    case start_shape(shape_handle, shape, state) do
+    case start_shape(shape_handle, shape, state, nil, :restore) do
       :ok ->
         consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
         # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
@@ -354,7 +354,7 @@ defmodule Electric.ShapeCache do
 
       Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-      :ok = start_shape(shape_handle, shape, state, otel_ctx)
+      :ok = start_shape(shape_handle, shape, state, otel_ctx, :create)
 
       # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
       # "latest offset" because it'll be in the snapshotting stage
@@ -362,7 +362,7 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp start_shape(shape_handle, shape, state, otel_ctx \\ nil) do
+  defp start_shape(shape_handle, shape, state, otel_ctx, phase) do
     case Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
            state.consumer_supervisor,
            stack_id: state.stack_id,
@@ -376,7 +376,8 @@ defmodule Electric.ShapeCache do
            db_pool: state.db_pool,
            hibernate_after: state.shape_hibernate_after,
            otel_ctx: otel_ctx,
-           snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data
+           snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data,
+           phase: phase
          ) do
       {:ok, _supervisor_pid} ->
         :ok

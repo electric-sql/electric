@@ -75,8 +75,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     :ok = GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
-  def subscribe(server_ref, shape_handle, shape) do
-    GenServer.call(server(server_ref), {:subscribe, shape_handle, shape})
+  def subscribe(server_ref, shape_handle, shape, phase) when phase in [:restore, :create] do
+    GenServer.call(server(server_ref), {:subscribe, shape_handle, shape, phase})
   end
 
   def notify_flushed(server_ref, shape_handle, offset) do
@@ -84,6 +84,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def init(opts) do
+    activate_mocked_functions_from_test_process()
+
     Process.set_label({:shape_log_collector, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
@@ -122,7 +124,32 @@ defmodule Electric.Replication.ShapeLogCollector do
           )
       })
 
-    {:ok, state}
+    {:ok, state, {:continue, :restore_shapes}}
+  end
+
+  def handle_continue(:restore_shapes, state) do
+    OpenTelemetry.with_span(
+      "shape_log_collector.restore_shapes",
+      [],
+      state.stack_id,
+      fn ->
+        {partitions, filter, layers} =
+          state.stack_id
+          |> Electric.ShapeCache.ShapeStatus.list_shapes()
+          |> Enum.reduce(
+            {state.partitions, state.filter, state.dependency_layers},
+            fn {shape_handle, shape}, {partitions, filter, layers} ->
+              {
+                Partitions.add_shape(partitions, shape_handle, shape),
+                Filter.add_shape(filter, shape_handle, shape),
+                DependencyLayers.add_dependency(layers, shape, shape_handle)
+              }
+            end
+          )
+
+        {:noreply, %{state | partitions: partitions, filter: filter, dependency_layers: layers}}
+      end
+    )
   end
 
   def handle_info({{:unsubscribe, shape_handle}, ref, :process, pid, _reason}, state) do
@@ -136,7 +163,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  def handle_call({:subscribe, shape_handle, shape}, {pid, _ref}, state) do
+  def handle_call({:subscribe, shape_handle, shape, phase}, {pid, _ref}, state) do
     OpenTelemetry.with_span(
       "shape_log_collector.subscribe",
       [shape_handle: shape_handle],
@@ -146,14 +173,20 @@ defmodule Electric.Replication.ShapeLogCollector do
         from = {pid, ref}
 
         state =
-          %{
-            state
-            | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
-              filter: Filter.add_shape(state.filter, shape_handle, shape),
-              pids_by_shape_handle: Map.put(state.pids_by_shape_handle, shape_handle, pid),
-              dependency_layers:
-                DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
-          }
+          case phase do
+            :restore ->
+              state
+
+            :create ->
+              %{
+                state
+                | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
+                  filter: Filter.add_shape(state.filter, shape_handle, shape),
+                  dependency_layers:
+                    DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
+              }
+          end
+          |> Map.update!(:pids_by_shape_handle, &Map.put(&1, shape_handle, pid))
           |> Map.update!(:subscriptions, fn {count, set} ->
             {count + 1, MapSet.put(set, from)}
           end)
@@ -402,4 +435,12 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp server(stack_id) when is_binary(stack_id), do: name(stack_id)
   defp server({:via, _, _} = name), do: name
   defp server(pid) when is_pid(pid), do: pid
+
+  if Mix.env() == :test do
+    def activate_mocked_functions_from_test_process do
+      Support.TestUtils.activate_mocked_functions_for_module(__MODULE__)
+    end
+  else
+    def activate_mocked_functions_from_test_process, do: :noop
+  end
 end

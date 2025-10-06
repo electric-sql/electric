@@ -21,6 +21,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
               default: :timer.seconds(30)
             ],
             hibernate_after: [type: :integer, required: true],
+            phase: [type: {:in, [:restore, :create]}, default: :create],
             otel_ctx: [type: :any, required: false]
           )
 
@@ -109,7 +110,8 @@ defmodule Electric.Shapes.ConsumerSupervisor do
          shape_handle: shape_handle,
          shape_status_mod: Map.get(config, :shape_status_mod),
          stack_id: config.stack_id,
-         storage: shape_storage
+         storage: shape_storage,
+         phase: config.phase
        }}
     ]
 
