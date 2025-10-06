@@ -507,7 +507,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     setup %{pooled_db_config: conn_opts} = ctx do
       conn_opts =
         conn_opts
-        |> Keyword.merge(pool_size: 1, queue_target: 1, queue_interval: 50)
+        |> Keyword.merge(pool_size: 1, queue_target: 50, queue_interval: 100)
         |> Electric.Utils.deobfuscate_password()
 
       busy_pool =
