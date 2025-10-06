@@ -135,7 +135,7 @@ defmodule Electric.Shapes.Consumer do
       Materializer.subscribe(state.stack_id, shape_handle)
     end
 
-    ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape)
+    ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape, state.action)
 
     Logger.debug("Writer for #{state.shape_handle} initialized")
 
