@@ -682,6 +682,8 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_shape_status,
       :with_log_chunking,
       :with_persistent_kv,
+      :with_async_deleter,
+      :with_shape_cleaner,
       :with_shape_log_collector,
       :with_noop_publication_manager,
       :with_status_monitor,
