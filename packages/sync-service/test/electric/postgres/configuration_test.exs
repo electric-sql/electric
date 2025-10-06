@@ -361,8 +361,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       # Should return invalidated relations
       assert %{
                oid_rel1 => {:error, :schema_changed},
-               oid_rel2 => {:error, :schema_changed},
-               {oid1, {"public", "items_old"}} => {:ok, :validated}
+               oid_rel2 => {:error, :schema_changed}
              } ==
                Configuration.validate_publication_configuration!(
                  conn,

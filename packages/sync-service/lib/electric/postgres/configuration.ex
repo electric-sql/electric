@@ -90,7 +90,7 @@ defmodule Electric.Postgres.Configuration do
           relations_configured()
   def validate_publication_configuration!(conn, publication_name, expected_rels) do
     %{
-      valid: valid,
+      to_preserve: to_preserve,
       to_add: to_add,
       to_reconfigure: to_reconfigure,
       to_invalidate: to_invalidate
@@ -99,7 +99,7 @@ defmodule Electric.Postgres.Configuration do
 
     configuration_result =
       [
-        Enum.map(valid, &{&1, {:ok, :validated}}),
+        Enum.map(to_preserve, &{&1, {:ok, :validated}}),
         Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
         Enum.map(to_reconfigure, &{&1, {:error, :misconfigured_replica_identity}}),
         Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
@@ -109,7 +109,7 @@ defmodule Electric.Postgres.Configuration do
 
     if MapSet.size(to_add) == 0 and MapSet.size(to_reconfigure) == 0 do
       Logger.info(fn ->
-        tables = for {_, rel} <- valid, do: Utils.relation_to_sql(rel)
+        tables = for {_, rel} <- to_preserve, do: Utils.relation_to_sql(rel)
 
         "Verified publication #{publication_name} to include #{inspect(tables)} tables with REPLICA IDENTITY FULL"
       end)
@@ -149,7 +149,7 @@ defmodule Electric.Postgres.Configuration do
           relations_configured()
   defp do_configure_publication!(conn, publication_name, new_publication_rels) do
     %{
-      valid: valid,
+      to_preserve: to_preserve,
       to_add: to_add,
       to_drop: to_drop,
       to_reconfigure: to_reconfigure,
@@ -181,7 +181,7 @@ defmodule Electric.Postgres.Configuration do
         Enum.map(to_drop, &{&1, drop_table_from_publication(conn, publication_name, &1)}),
         Enum.map(to_add, &{&1, add_table_to_publication(conn, publication_name, &1)})
       )
-      |> Enum.concat(Enum.map(valid, &{&1, {:ok, :validated}}))
+      |> Enum.concat(Enum.map(to_preserve, &{&1, {:ok, :validated}}))
       |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
       |> Map.new()
 
@@ -267,7 +267,7 @@ defmodule Electric.Postgres.Configuration do
 
   @spec determine_publication_relation_actions!(Postgrex.conn(), String.t(), relation_filters()) ::
           %{
-            valid: relation_filters(),
+            to_preserve: relation_filters(),
             to_add: relation_filters(),
             to_drop: relation_filters(),
             to_reconfigure: relation_filters(),
@@ -293,12 +293,13 @@ defmodule Electric.Postgres.Configuration do
     invalid = MapSet.new(prev_misconfigured_publication_rels, &trim_publication_relation/1)
 
     valid_expected = MapSet.difference(expected_rels, to_invalidate)
+    to_preserve = MapSet.intersection(valid, valid_expected)
     to_reconfigure = MapSet.intersection(invalid, valid_expected)
     to_drop = MapSet.difference(MapSet.union(invalid, valid), valid_expected)
     to_add = MapSet.difference(valid_expected, valid)
 
     %{
-      valid: valid,
+      to_preserve: to_preserve,
       to_add: to_add,
       to_drop: to_drop,
       to_reconfigure: to_reconfigure,
