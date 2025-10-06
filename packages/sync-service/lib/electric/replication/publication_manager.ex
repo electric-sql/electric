@@ -268,8 +268,15 @@ defmodule Electric.Replication.PublicationManager do
       fn
         {oid_rel, :ok}, state ->
           state = reply_to_relation_waiters(oid_rel, :ok, state)
-          new_committed_filters = MapSet.put(state.committed_relation_filters, oid_rel)
-          %{state | committed_relation_filters: new_committed_filters}
+
+          if MapSet.member?(state.prepared_relation_filters, oid_rel) do
+            %{
+              state
+              | committed_relation_filters: MapSet.put(state.committed_relation_filters, oid_rel)
+            }
+          else
+            state
+          end
 
         {oid_rel, {:error, reason}}, state ->
           error = publication_error(reason, oid_rel, state) || reason
