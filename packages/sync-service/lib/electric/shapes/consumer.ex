@@ -6,6 +6,9 @@ defmodule Electric.Shapes.Consumer do
   import Electric.Postgres.Xid, only: [compare: 2]
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
+  alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.ShapeCache.Storage
+  alias Electric.Shapes.PartialModes
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
   alias Electric.LogItems
@@ -95,7 +98,10 @@ defmodule Electric.Shapes.Consumer do
         # The existing body of consumer tests made it impossible to replace this dynamic
         # setting with a static module alias. But do note that this is only set to anything
         # other than Electric.ShapeCache.ShapeStatus in the test environment.
-        shape_status_mod: Map.get(config, :shape_status_mod) || Electric.ShapeCache.ShapeStatus
+        shape_status_mod: Map.get(config, :shape_status_mod) || Electric.ShapeCache.ShapeStatus,
+        waiting_move_ins: %{},
+        filtering_move_ins: [],
+        move_in_buffering_snapshot: nil
       })
 
     {:ok, state, {:continue, {:init_consumer, action}}}
@@ -261,8 +267,60 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, %{state | writer: writer}, state.hibernate_after}
   end
 
-  def handle_info({:materializer_changes, shape_handle, events}, state) do
-    Logger.debug("Materializer changes for #{shape_handle}: #{inspect(events)}")
+  # Skip handling move-outs for now
+  def handle_info(
+        {:materializer_changes, shape_handle, %{move_in: move_in, move_out: move_out}},
+        state
+      ) do
+    state = query_move_in(state, shape_handle, move_in)
+
+    writer =
+      if move_out != [] do
+        message =
+          SubqueryMoves.make_move_out_control_message(state.shape, [{shape_handle, move_out}])
+
+        {{_, upper_bound}, writer} = Storage.append_control_message!(message, state.writer)
+
+        notify_new_changes(state, [message], upper_bound)
+
+        writer
+      else
+        state.writer
+      end
+
+    {:noreply, %{state | writer: writer}}
+  end
+
+  def handle_info({:query_move_in_complete, name, key_set}, state) do
+    # 1. Splice the stored data into the main log
+    {{_, upper_bound} = bounds, writer} = Storage.splice_move_in_snapshot!(name, state.writer)
+    # 2. Remove this entry from "waiting" and add to "filtering"
+    {snapshot, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
+    filtering_move_ins = [{snapshot, key_set} | state.filtering_move_ins]
+    # 3. Update the buffering frontier
+    buffering_snapshot = make_move_in_buffering_snapshot(waiting_move_ins)
+
+    state =
+      %{
+        state
+        | waiting_move_ins: waiting_move_ins,
+          filtering_move_ins: filtering_move_ins,
+          move_in_buffering_snapshot: buffering_snapshot,
+          writer: writer
+      }
+      |> notify_new_changes(bounds, upper_bound)
+
+    {:noreply, state}
+  end
+
+  def handle_info({:query_move_in_error, _, error, stacktrace}, state) do
+    Logger.error(
+      "Error querying move in for #{state.shape_handle}: #{Exception.format(:error, error, stacktrace)}"
+    )
+
+    reraise(error, stacktrace)
+
+    # No-op as the raise will crash the process
     {:noreply, terminate_safely(state)}
   end
 
@@ -373,12 +431,12 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_txn(txn, %{pg_snapshot: %{filter_txns?: false}} = state) do
-    handle_txn_in_span(txn, state)
+    handle_or_buffer_until_move_in(txn, state)
   end
 
   defp handle_txn(
          %Transaction{xid: xid} = txn,
-         %{pg_snapshot: %{xmin: xmin, xmax: xmax, xip_list: xip_list}} = state
+         %{pg_snapshot: %{xmax: xmax} = snapshot} = state
        ) do
     # xmin is the lowest active transaction ID, there can be txids > xmin that have
     # committed and so would already be included in the shape's data snapshot.
@@ -388,33 +446,30 @@ defmodule Electric.Shapes.Consumer do
     #
     # See Postgres docs for details on the pg_snapshot fields:
     # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT-PARTS
-    cond do
-      compare(xid, xmin) == :lt ->
-        # Transaction already included in the shape snapshot because it had committed before
-        # the snapshot transaction started.
-        {:cont, consider_flushed(state, txn)}
-
-      compare(xid, xmax) == :lt and xid not in xip_list ->
-        # Transaction commited sometime between xmin and the start of the snapshot transaction.
-        {:cont, consider_flushed(state, txn)}
-
-      compare(xid, xmin) == :eq or xid in xip_list ->
-        # Transaction was active at the time of taking the snapshot so its effects weren't
-        # visible to the snapshot transaction.
-        handle_txn_in_span(txn, state)
-
-      compare(xid, xmax) != :lt ->
-        # The first transaction received from the replication stream whose xid >= xmax.
-        #
-        # From now on the only kinds of transactions coming in from the replication stream will
-        # be either those active at the time of taking the snapshot or those commited after the
-        # snapshot transaction had started. Both kinds need to be appended to the shape log.
-        #
-        # At this point we can disable transaction filtering on the snapshot to avoid further
-        # xid comparisons.
-        state = stop_filtering_txns(state)
-        handle_txn_in_span(txn, state)
+    if Transaction.visible_in_snapshot?(txn, snapshot) do
+      {:cont, consider_flushed(state, txn)}
+    else
+      # Stop initial snapshot filtering if we see anything over xmax.
+      state = maybe_stop_filtering_txns(state, compare(xid, xmax) != :lt)
+      handle_or_buffer_until_move_in(txn, state)
     end
+  end
+
+  defp handle_or_buffer_until_move_in(txn, %{buffer: buffer} = state) do
+    if is_nil(state.move_in_buffering_snapshot) or
+         Transaction.visible_in_snapshot?(txn, state.move_in_buffering_snapshot) do
+      state = remove_completed_move_ins(state, txn)
+      # Transaction preceeds all move-in snapshot, just process
+      handle_txn_in_span(txn, state)
+    else
+      {:cont, %{state | buffer: buffer ++ [txn]}}
+    end
+  end
+
+  defp remove_completed_move_ins(state, %Transaction{xid: xid}) do
+    state.filtering_move_ins
+    |> Enum.reject(fn {{_, xmax, _}, _} -> compare(xid, xmax) != :lt end)
+    |> then(&%{state | filtering_move_ins: &1})
   end
 
   defp handle_txn_in_span(txn, state) do
@@ -443,7 +498,7 @@ defmodule Electric.Shapes.Consumer do
 
     extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
 
-    case filter_changes(changes, shape, extra_refs) do
+    case filter_changes(changes, shape, {xid, state.filtering_move_ins}, extra_refs) do
       :includes_truncate ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
@@ -503,9 +558,14 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp notify_new_changes(state, changes, latest_log_offset) do
+  @spec notify_new_changes(
+          state :: map(),
+          changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
+          latest_log_offset :: LogOffset.t()
+        ) :: map()
+  defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
     if state.materializer_subscribed? do
-      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes)
+      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
     end
 
     Registry.dispatch(state.registry, state.shape_handle, fn registered ->
@@ -566,6 +626,10 @@ defmodule Electric.Shapes.Consumer do
     reply_to_snapshot_waiters(state, :started)
   end
 
+  @spec maybe_stop_filtering_txns(term(), boolean()) :: term()
+  defp maybe_stop_filtering_txns(state, false), do: state
+  defp maybe_stop_filtering_txns(state, true), do: stop_filtering_txns(state)
+
   defp stop_filtering_txns(state) do
     pg_snapshot = Map.put(state.pg_snapshot, :filter_txns?, false)
     ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
@@ -616,21 +680,50 @@ defmodule Electric.Shapes.Consumer do
 
   # Apply shape filter to keep only relevant changes, returning the list of changes.
   # Marks the last change, and infers the last offset after possible splits.
-  defp filter_changes(changes, shape, extra_refs, change_acc \\ [], total_ops_acc \\ 0)
-  defp filter_changes([], _shape, _, [], 0), do: {[], 0, nil}
+  defp filter_changes(
+         changes,
+         shape,
+         snapshot_filtering,
+         extra_refs,
+         change_acc \\ [],
+         total_ops_acc \\ 0
+       )
 
-  defp filter_changes([], _shape, _, [change | rest], total_ops),
+  defp filter_changes([], _shape, _, _, [], 0), do: {[], 0, nil}
+
+  defp filter_changes([], _shape, _, _, [change | rest], total_ops),
     do:
       {Enum.reverse([%{change | last?: true} | rest]), total_ops,
        LogItems.expected_offset_after_split(change)}
 
-  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _),
+  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _, _),
     do: :includes_truncate
 
-  defp filter_changes([change | rest], shape, extra_refs, change_acc, total_ops) do
-    case Shape.convert_change(shape, change, extra_refs) do
-      [] -> filter_changes(rest, shape, extra_refs, change_acc, total_ops)
-      [change] -> filter_changes(rest, shape, extra_refs, [change | change_acc], total_ops + 1)
+  defp filter_changes(
+         [change | rest],
+         shape,
+         snapshot_filtering,
+         extra_refs,
+         change_acc,
+         total_ops
+       ) do
+    if not change_already_visible?(change, snapshot_filtering) do
+      case Shape.convert_change(shape, change, extra_refs) do
+        [] ->
+          filter_changes(rest, shape, snapshot_filtering, extra_refs, change_acc, total_ops)
+
+        [change] ->
+          filter_changes(
+            rest,
+            shape,
+            snapshot_filtering,
+            extra_refs,
+            [change | change_acc],
+            total_ops + 1
+          )
+      end
+    else
+      filter_changes(rest, shape, snapshot_filtering, extra_refs, change_acc, total_ops)
     end
   end
 
@@ -740,6 +833,73 @@ defmodule Electric.Shapes.Consumer do
 
           false
       end
+    end)
+  end
+
+  defp query_move_in(state, _dependency_shape_handle, move_ins) when move_ins == [] do
+    state
+  end
+
+  defp query_move_in(state, dependency_shape_handle, move_ins) do
+    # Something moved in in a dependency shape. We need to query the DB for relevant values.
+    formed_where_clause =
+      Shape.SubqueryMoves.move_in_where_clause(state.shape, dependency_shape_handle, move_ins)
+
+    storage = state.storage
+    name = Utils.uuid4()
+
+    # We're querying and writing to storage in a separate task, but we're blocking until we know
+    # the insertion conditions to know when to start buffering the changes.
+    pg_snapshot =
+      Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor)
+      |> PartialModes.query_move_in(
+        state.shape_handle,
+        state.shape,
+        formed_where_clause |> dbg,
+        stack_id: state.stack_id,
+        results_fn: fn stream ->
+          stream
+          |> Stream.transform(
+            fn -> [] end,
+            fn [key, _] = item, acc -> {[item], [key | acc]} end,
+            fn acc -> send(self(), {:acc, acc}) end
+          )
+          |> Storage.write_move_in_snapshot!(name, storage)
+
+          receive(do: ({:acc, acc} -> acc))
+        end,
+        move_in_name: name
+      )
+
+    state = put_in(state, [:waiting_move_ins, name], pg_snapshot)
+    buffering_snapshot = make_move_in_buffering_snapshot(state.waiting_move_ins)
+    state = put_in(state, [:move_in_buffering_snapshot], buffering_snapshot)
+
+    state
+  end
+
+  # The fake global snapshot allows us to check if a transaction is not visible in any of the pending snapshots
+  # instead of checking each snapshot individually.
+
+  defp make_move_in_buffering_snapshot(waiting_move_ins) when waiting_move_ins == %{} do
+    nil
+  end
+
+  defp make_move_in_buffering_snapshot(waiting_move_ins) do
+    waiting_move_ins
+    |> Map.values()
+    |> Enum.reduce({:infinity, -1, []}, fn {xmin, xmax, xip_list},
+                                           {global_xmin, global_xmax, global_xip_list} ->
+      {Kernel.min(global_xmin, xmin), Kernel.max(global_xmax, xmax), global_xip_list ++ xip_list}
+    end)
+  end
+
+  # Deletes can't be visible in a snapshot
+  defp change_already_visible?(%Changes.DeletedRecord{}, _), do: false
+
+  defp change_already_visible?(%{key: key}, {xid, filters}) do
+    Enum.any?(filters, fn {snapshot, key_set} ->
+      Transaction.visible_in_snapshot?(xid, snapshot) and MapSet.member?(key_set, key)
     end)
   end
 

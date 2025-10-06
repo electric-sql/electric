@@ -2239,42 +2239,18 @@ defmodule Electric.Plug.RouterTest do
       opts: opts,
       db_conn: db_conn
     } do
-      # TEMPORARY: this test is expected to fail once proper move handling is added
-      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
-      assert %{status: 200} =
-               conn =
-               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
-               |> Router.call(opts)
+      assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
+      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} = data
+      assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
-      shape_handle = get_resp_shape_handle(conn)
-
-      response = Jason.decode!(conn.resp_body)
-
-      # Should contain the data record and the snapshot-end control message
-      assert length(response) == 2
-
-      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} =
-               Enum.find(response, &Map.has_key?(&1, "key"))
-
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
-
-      task =
-        Task.async(fn ->
-          conn("GET", "/v1/shape", %{
-            table: "child",
-            offset: "0_0",
-            handle: shape_handle,
-            where: where,
-            live: true
-          })
-          |> Router.call(opts)
-        end)
+      task = live_shape_req(req, opts)
 
       Postgrex.query!(db_conn, "UPDATE parent SET value = 3 WHERE id = 1", [])
 
-      assert %{status: 409} = Task.await(task)
+      assert {_req, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
+      assert %{"headers" => %{"event" => "move_out", "patterns" => [["1"]]}} = data
     end
 
     @tag with_sql: [
@@ -2283,46 +2259,24 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "a move-in from the inner shape invalidates all outer shapes", %{
+    test "a move-in from the inner shape causes a query and new entries in the outer shape", %{
       opts: opts,
       db_conn: db_conn
     } do
-      # TEMPORARY: this test is expected to fail once proper move handling is added
-      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
-      assert %{status: 200} =
-               conn =
-               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
-               |> Router.call(opts)
+      assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
+      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} = data
+      assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
-      shape_handle = get_resp_shape_handle(conn)
+      task = live_shape_req(req, opts)
 
-      response = Jason.decode!(conn.resp_body)
-
-      # Should contain the data record and the snapshot-end control message
-      assert length(response) == 2
-
-      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} =
-               Enum.find(response, &Map.has_key?(&1, "key"))
-
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
-
-      task =
-        Task.async(fn ->
-          conn("GET", "/v1/shape", %{
-            table: "child",
-            offset: "0_0",
-            handle: shape_handle,
-            where: where,
-            live: true
-          })
-          |> Router.call(opts)
-        end)
-
+      # Move in reflects in the new shape without invalidating it
       Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
 
-      assert %{status: 409} = Task.await(task)
+      assert {_, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
+      assert %{"id" => "2", "parent_id" => "2", "value" => "20"} = data["value"]
+      assert %{"operation" => "insert", "is_move_in" => true} = data["headers"]
     end
 
     @tag with_sql: [
