@@ -9,7 +9,8 @@ defmodule Electric.Postgres.Configuration do
 
   @type relation_filters :: PublicationManager.relation_filters()
   @type relations_configured :: %{
-          Electric.oid_relation() => :ok | {:error, :schema_changed | term()}
+          Electric.oid_relation() =>
+            {:ok, :validated | :added | :dropped} | {:error, :schema_changed | term()}
         }
   @type relations_checked :: %{
           Electric.oid_relation() =>
@@ -98,7 +99,7 @@ defmodule Electric.Postgres.Configuration do
 
     configuration_result =
       [
-        Enum.map(valid, &{&1, :ok}),
+        Enum.map(valid, &{&1, {:ok, :validated}}),
         Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
         Enum.map(to_reconfigure, &{&1, {:error, :misconfigured_replica_identity}}),
         Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
@@ -180,7 +181,7 @@ defmodule Electric.Postgres.Configuration do
         Enum.map(to_drop, &{&1, drop_table_from_publication(conn, publication_name, &1)}),
         Enum.map(to_add, &{&1, add_table_to_publication(conn, publication_name, &1)})
       )
-      |> Enum.concat(Enum.map(valid, &{&1, :ok}))
+      |> Enum.concat(Enum.map(valid, &{&1, {:ok, :validated}}))
       |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
       |> Map.new()
 
@@ -188,7 +189,7 @@ defmodule Electric.Postgres.Configuration do
   end
 
   @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
-          :ok | {:error, term()}
+          {:ok, :added} | {:error, term()}
   defp add_table_to_publication(conn, publication_name, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
@@ -200,17 +201,20 @@ defmodule Electric.Postgres.Configuration do
 
     with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table),
          :ok <- exec_set_replica_identity_full(conn, table) do
-      :ok
+      {:ok, :added}
     end
   end
 
   @spec drop_table_from_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
-          :ok | {:error, term()}
+          {:ok, :dropped} | {:error, term()}
   defp drop_table_from_publication(conn, publication_name, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
     Logger.debug("Removing #{table} from publication #{publication_name}")
-    exec_alter_publication_for_table(conn, publication_name, :drop, table)
+
+    with :ok <- exec_alter_publication_for_table(conn, publication_name, :drop, table) do
+      {:ok, :dropped}
+    end
   end
 
   @spec exec_alter_publication_for_table(Postgrex.conn(), String.t(), :add | :drop, String.t()) ::

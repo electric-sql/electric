@@ -67,7 +67,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid = get_table_oid(conn, {"public", "items"})
       oid_rel = {oid, {"public", "items"}}
 
-      assert %{oid_rel => :ok} ==
+      assert %{oid_rel => {:ok, :added}} ==
                Configuration.configure_publication!(conn, publication, MapSet.new([oid_rel]))
 
       assert get_table_identity(conn, {"public", "items"}) == "f"
@@ -83,13 +83,13 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid = get_table_oid(conn, {"public", "items"})
       oid_rel = {oid, {"public", "items"}}
 
-      assert %{oid_rel => :ok} ==
+      assert %{oid_rel => {:ok, :added}} ==
                Configuration.configure_publication!(conn, publication, MapSet.new([oid_rel]))
 
       assert_receive {:alter_table, _, _}
       assert get_table_identity(conn, {"public", "items"}) == "f"
 
-      assert %{oid_rel => :ok} ==
+      assert %{oid_rel => {:ok, :validated}} ==
                Configuration.configure_publication!(conn, publication, MapSet.new([oid_rel]))
 
       refute_receive {:alter_table, _, _}
@@ -108,8 +108,8 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel2 = {oid2, {"public", "other_table"}}
 
       assert %{
-               oid_rel1 => :ok,
-               oid_rel2 => :ok
+               oid_rel1 => {:ok, :added},
+               oid_rel2 => {:ok, :added}
              } ==
                Configuration.configure_publication!(
                  conn,
@@ -131,7 +131,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel1 = {oid1, {"public", "items"}}
       oid_rel2 = {oid2, {"public", "other_table"}}
 
-      assert %{oid_rel1 => :ok} ==
+      assert %{oid_rel1 => {:ok, :added}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
@@ -144,7 +144,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                expected_filters([{"public", "items"}])
 
       # Configure `items` table again but with a different list of selected columns
-      assert %{oid_rel1 => :ok, oid_rel2 => :ok} ==
+      assert %{oid_rel1 => {:ok, :validated}, oid_rel2 => {:ok, :added}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
@@ -178,11 +178,16 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel3 = {oid3, {"public", "other_other_table"}}
 
       new_relations = MapSet.new([oid_rel1, oid_rel2, oid_rel3])
-      expected_result = %{oid_rel1 => :ok, oid_rel2 => :ok, oid_rel3 => :ok}
 
       # Create the publication first
-      assert expected_result ==
+      assert %{oid_rel1 => {:ok, :added}, oid_rel2 => {:ok, :added}, oid_rel3 => {:ok, :added}} ==
                Configuration.configure_publication!(conn, publication, new_relations)
+
+      expected_result = %{
+        oid_rel1 => {:ok, :validated},
+        oid_rel2 => {:ok, :validated},
+        oid_rel3 => {:ok, :validated}
+      }
 
       task1 =
         Task.async(fn ->
@@ -217,7 +222,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid1 = get_table_oid(conn, {"public", "items"})
       oid_rel1 = {oid1, {"public", "items"}}
 
-      assert %{oid_rel1 => :ok} ==
+      assert %{oid_rel1 => {:ok, :added}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
@@ -258,14 +263,14 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel1 = {oid1, {"public", "items"}}
       oid_rel2 = {oid2, {"public", "other_table"}}
 
-      assert %{oid_rel1 => :ok, oid_rel2 => :ok} ==
+      assert %{oid_rel1 => {:ok, :added}, oid_rel2 => {:ok, :added}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
                  MapSet.new([oid_rel1, oid_rel2])
                )
 
-      assert %{oid_rel1 => :ok, oid_rel2 => :ok} ==
+      assert %{oid_rel1 => {:ok, :validated}, oid_rel2 => {:ok, :validated}} ==
                Configuration.validate_publication_configuration!(
                  conn,
                  publication,
@@ -284,7 +289,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel2 = {oid2, {"public", "other_table"}}
       oid_rel3 = {oid3, {"public", "other_other_table"}}
 
-      assert %{oid_rel1 => :ok} ==
+      assert %{oid_rel1 => {:ok, :added}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
@@ -292,7 +297,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                )
 
       assert %{
-               oid_rel1 => :ok,
+               oid_rel1 => {:ok, :validated},
                oid_rel2 => {:error, :relation_missing_from_publication},
                oid_rel3 => {:error, :relation_missing_from_publication}
              } ==
@@ -310,7 +315,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid = get_table_oid(conn, {"public", "items"})
       oid_rel = {oid, {"public", "items"}}
 
-      assert %{oid_rel => :ok} ==
+      assert %{oid_rel => {:ok, :added}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
@@ -336,7 +341,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel1 = {oid1, {"public", "items"}}
       oid_rel2 = {oid2, {"public", "other_table"}}
 
-      assert %{oid_rel1 => :ok} ==
+      assert %{oid_rel1 => {:ok, :added}} ==
                Configuration.configure_publication!(
                  conn,
                  publication,
@@ -357,7 +362,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       assert %{
                oid_rel1 => {:error, :schema_changed},
                oid_rel2 => {:error, :schema_changed},
-               {oid1, {"public", "items_old"}} => :ok
+               {oid1, {"public", "items_old"}} => {:ok, :validated}
              } ==
                Configuration.validate_publication_configuration!(
                  conn,

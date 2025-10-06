@@ -266,17 +266,16 @@ defmodule Electric.Replication.PublicationManager do
     |> Enum.reduce(
       %{state | committed_relation_filters: MapSet.new()},
       fn
-        {oid_rel, :ok}, state ->
+        {_oid_rel, {:ok, :dropped}}, state ->
+          state
+
+        {oid_rel, {:ok, op}}, state when op in [:validated, :added] ->
           state = reply_to_relation_waiters(oid_rel, :ok, state)
 
-          if MapSet.member?(state.prepared_relation_filters, oid_rel) do
-            %{
-              state
-              | committed_relation_filters: MapSet.put(state.committed_relation_filters, oid_rel)
-            }
-          else
+          %{
             state
-          end
+            | committed_relation_filters: MapSet.put(state.committed_relation_filters, oid_rel)
+          }
 
         {oid_rel, {:error, reason}}, state ->
           error = publication_error(reason, oid_rel, state) || reason

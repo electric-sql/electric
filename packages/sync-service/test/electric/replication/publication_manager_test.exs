@@ -41,7 +41,7 @@ defmodule Electric.Replication.PublicationManagerTest do
         # Only relations are relevant now
         send(test_pid, {:filters, MapSet.to_list(filters)})
 
-        Map.new(filters, fn rel -> {rel, :ok} end)
+        Map.new(filters, fn rel -> {rel, {:ok, :added}} end)
         |> Map.merge(ctx[:configuration_result_overrides] || %{})
       end
     )
