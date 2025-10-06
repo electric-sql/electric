@@ -576,15 +576,23 @@ defmodule Electric.Connection.Manager do
         %State{lock_connection_pg_backend_pid: pid} = state
       ) do
     if state.current_step == {:start_lock_connection, :acquiring_lock} and not is_nil(pid) do
-      {:ok, breaker_pid} =
-        LockBreakerConnection.start(
-          connection_opts: state.connection_opts,
-          stack_id: state.stack_id
-        )
+      case validate_connection(pooled_connection_opts(state), :pool, state) do
+        {:ok, conn_opts, state} ->
+          {:ok, breaker_pid} =
+            LockBreakerConnection.start(
+              connection_opts: conn_opts,
+              stack_id: state.stack_id
+            )
 
-      lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
+          lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
 
-      LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pid)
+          LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pid)
+
+        {:error, reason} ->
+          # no-op, this is a one-shot attempt at fixing a lock
+          Logger.debug("Failed to validate pooled connection opts: #{inspect(reason)}")
+          :ok
+      end
     end
 
     {:noreply, state}
