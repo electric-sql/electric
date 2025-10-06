@@ -122,14 +122,24 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:filters, []}
     end
 
+    @tag update_debounce_timeout: 50
     test "subsequent additions should wait for reconfiguration", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
       assert_receive {:filters, [{_, {"public", "items"}}]}
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
       assert_receive {:filters, []}
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+
+      test_pid = self()
+
+      run_async(fn ->
+        res = PublicationManager.add_shape(@shape_handle_1, shape, opts)
+        send(test_pid, {:add_shape_result, res})
+      end)
+
+      refute_receive {:add_shape_result, _}, 10
       assert_receive {:filters, [{_, {"public", "items"}}]}
+      assert_receive {:add_shape_result, :ok}
     end
 
     @tag update_debounce_timeout: 50
