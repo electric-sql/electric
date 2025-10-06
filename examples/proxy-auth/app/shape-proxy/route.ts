@@ -41,7 +41,10 @@ export async function GET(request: Request) {
 
   // Only query orgs the user has access to.
   if (!user.isAdmin) {
-    originUrl.searchParams.set(`where`, `"org_id" = ${user.org_id}`)
+    // Note: For production, use a type-safe query builder like Drizzle or Kysely
+    // to generate WHERE clauses with compile-time type safety. See:
+    // https://electric-sql.com/docs/guides/auth#type-safe-where-clause-generation
+    originUrl.searchParams.set(`where`, `"org_id" = '${user.org_id}'`)
   }
 
   const response = await fetch(originUrl)

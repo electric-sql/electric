@@ -114,6 +114,9 @@ Then for the `/api/shapes/users` route:
 
 ```tsx
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+import { QueryBuilder } from "drizzle-orm/pg-core"
+import { eq } from "drizzle-orm"
+import { users } from "./schema"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -144,7 +147,13 @@ export async function GET(request: Request) {
 
   // Only query data the user has access to unless they're an admin.
   if (!user.roles.includes(`admin`)) {
-    originUrl.searchParams.set(`where`, `"org_id" = ${user.org_id}`)
+    // Generate type-safe WHERE clause
+    const qb = new QueryBuilder()
+    const whereExpr = eq(users.org_id, user.org_id)
+    const { sql } = qb.select().from(users).where(whereExpr).toSQL()
+    const fragment = sql.replace(/^SELECT .* FROM .* WHERE\s+/i, "")
+
+    originUrl.searchParams.set(`where`, fragment)
   }
 
   const response = await fetch(originUrl)
@@ -165,6 +174,99 @@ export async function GET(request: Request) {
   })
 }
 ```
+
+#### Type-safe where clause generation
+
+If you're building a JavaScript/TypeScript API to proxy Shape requests, you can use query builder libraries to generate where clause fragments with full compile-time type safety. This approach catches errors at compile-time if you reference non-existent columns or use incorrect types.
+
+> [!Tip] General pattern
+> These examples show JavaScript/TypeScript APIs, but you can use this same pattern of type-safe where clause generation in any language with similar query builder libraries for your backend API.
+
+**Drizzle** — fully type-safe operators with schema inference:
+
+```tsx
+import { QueryBuilder } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+import { users } from "./schema" // Your Drizzle schema definition
+
+export async function GET(request: Request) {
+  // ... setup code ...
+
+  const user = await loadUser(request.headers.get("authorization"))
+  if (!user || user.roles.includes("admin")) {
+    // admins see everything
+  } else {
+    // Build type-safe WHERE expression using column.name for unqualified column names
+    // TypeScript will error if you reference users.nonexistentColumn
+    const whereExpr = sql`${sql.identifier(users.org_id.name)} = ${user.org_id}`
+
+    // Compile to SQL fragment without DB connection
+    const qb = new QueryBuilder()
+    const { sql: query, params } = qb
+      .select()
+      .from(users)
+      .where(whereExpr)
+      .toSQL()
+
+    // Extract just the WHERE clause fragment
+    const fragment = query.replace(/^SELECT .* FROM .* WHERE\s+/i, "")
+    originUrl.searchParams.set("where", fragment)
+
+    // Add params as individual query parameters: params[1]=value, params[2]=value, etc.
+    params.forEach((value, index) => {
+      originUrl.searchParams.set(`params[${index + 1}]`, String(value))
+    })
+  }
+
+  // ... fetch and return response ...
+}
+```
+
+**Kysely** — type-safe expression builder with generated schema:
+
+```tsx
+import { db } from "./db" // Your Kysely instance with generated types
+
+export async function GET(request: Request) {
+  // ... setup code ...
+
+  if (!user.roles.includes("admin")) {
+    // TypeScript will error if you reference invalid columns
+    const query = db
+      .selectFrom("users")
+      .selectAll()
+      .where((eb) =>
+        eb.and([eb("org_id", "=", user.org_id), eb("status", "=", "active")])
+      )
+
+    const { sql: query, parameters } = query.compile()
+    const fragment = query.replace(/^SELECT .* FROM .* WHERE\s+/i, "")
+    fragment = fragment.replace(/\b\w+\./g, "") // Remove table prefixes
+    originUrl.searchParams.set("where", fragment)
+
+    // Add params as individual query parameters: params[1]=value, params[2]=value, etc.
+    parameters.forEach((value, index) => {
+      originUrl.searchParams.set(`params[${index + 1}]`, String(value))
+    })
+  }
+}
+```
+
+> [!Note] Handling parameterized queries
+> Electric's HTTP API accepts parameters via individual query params (`params[1]=value`, `params[2]=value`) which are used to safely substitute `$1`, `$2` placeholders in WHERE clauses. This prevents SQL injection while maintaining type safety.
+>
+> **Drizzle**: Use `column.name` with `sql.identifier()` to generate unqualified column names (e.g., `"org_id"` instead of `"users"."org_id"`), since Electric expects column names without table prefixes.
+>
+> **Kysely**: Table prefixes are included by default, so strip them with `.replace(/\b\w+\./g, '')` after extracting the WHERE fragment.
+
+Both **Drizzle** and **Kysely** provide full compile-time type safety based on your schema definitions. TypeScript will error if you reference invalid columns, use incorrect types, or apply incompatible operators.
+
+Benefits:
+
+- **Compile-time validation**: Catch errors before runtime
+- **SQL injection protection**: Values are properly escaped and parameterized
+- **Refactoring safety**: Renaming columns updates all references automatically
+- **IDE support**: Auto-completion for column names and types
 
 ### Gatekeeper auth
 
@@ -282,13 +384,13 @@ Vary: Cookie
 ```tsx
 export async function GET(request: Request) {
   // ... auth logic ...
-  
+
   const response = await fetch(originUrl)
   const headers = new Headers(response.headers)
-  
+
   // Add Vary header for Authorization-based auth
-  headers.set('Vary', 'Authorization')
-  
+  headers.set("Vary", "Authorization")
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -302,13 +404,13 @@ export async function GET(request: Request) {
 ```tsx
 export async function GET(request: Request) {
   // ... auth logic ...
-  
+
   const response = await fetch(originUrl)
   const headers = new Headers(response.headers)
-  
+
   // Add Vary header for cookie-based auth
-  headers.set('Vary', 'Cookie')
-  
+  headers.set("Vary", "Cookie")
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -323,7 +425,7 @@ If you support multiple authentication methods:
 
 ```tsx
 // For both Authorization header and Cookie support
-headers.set('Vary', 'Authorization, Cookie')
+headers.set("Vary", "Authorization, Cookie")
 ```
 
 ### How It Works
