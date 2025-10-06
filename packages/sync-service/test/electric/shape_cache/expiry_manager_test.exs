@@ -123,17 +123,23 @@ defmodule Electric.ExpiryManagerTest do
 
   def run_with_conn_noop(conn, cb), do: cb.(conn)
 
-  defp await_for_storage_to_raise(storage, num_attempts \\ 10)
+  defp await_for_storage_to_raise(storage, timeout \\ 5_000)
 
-  defp await_for_storage_to_raise(_storage, 0) do
+  defp await_for_storage_to_raise(_storage, timeout) when timeout <= 0 do
     raise "Storage did not raise Storage.Error in time"
   end
 
-  defp await_for_storage_to_raise(storage, num_attempts) do
+  defp await_for_storage_to_raise(storage, timeout) do
     try do
+      start_time = System.monotonic_time()
       Stream.run(Storage.get_log_stream(LogOffset.before_all(), storage))
       Process.sleep(50)
-      await_for_storage_to_raise(storage, num_attempts - 1)
+      elapsed = System.monotonic_time() - start_time
+
+      await_for_storage_to_raise(
+        storage,
+        timeout - System.convert_time_unit(elapsed, :native, :millisecond)
+      )
     rescue
       Storage.Error -> :ok
     end
