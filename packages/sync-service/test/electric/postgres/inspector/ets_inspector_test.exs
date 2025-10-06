@@ -513,16 +513,30 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       busy_pool =
         start_link_supervised!(Supervisor.child_spec({Postgrex, conn_opts}, id: :busy_pool))
 
-      %{inspector: {EtsInspector, opts} = inspector} =
+      %{inspector: {EtsInspector, opts}} =
+        inspector_ctx =
         with_inspector(Map.merge(ctx, %{db_conn: busy_pool}))
 
-      %{inspector: inspector, opts: opts, busy_pool: busy_pool}
+      Map.merge(inspector_ctx, %{opts: opts, busy_pool: busy_pool})
     end
 
     setup %{busy_pool: busy_pool} do
+      test_pid = self()
+
       start_link_supervised!(
-        {Task, fn -> Postgrex.query!(busy_pool, "SELECT PG_SLEEP(10)", []) end}
+        {Task,
+         fn ->
+           DBConnection.run(
+             busy_pool,
+             fn conn ->
+               send(test_pid, :pool_busy)
+               Postgrex.query!(conn, "SELECT PG_SLEEP(10)", [])
+             end
+           )
+         end}
       )
+
+      assert_receive :pool_busy
 
       wait_for_pool_to_be_busy(busy_pool)
     end
