@@ -582,6 +582,10 @@ defmodule Electric.Connection.Manager do
           stack_id: state.stack_id
         )
 
+      # unlink the lock breaker so that if it crashes it does not affect the manager,
+      # since it is a one shot fix attempt anyway
+      Process.unlink(breaker_pid)
+
       lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
 
       LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pid)
