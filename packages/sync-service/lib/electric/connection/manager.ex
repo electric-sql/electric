@@ -58,7 +58,7 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, :configuring_connection}
             | {:start_connection_pool, nil}
             | {:start_connection_pool, :connecting}
-            | :start_replication_supervisor
+            | :maybe_reset_storage
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
             | :waiting_for_streaming_confirmation
@@ -483,10 +483,10 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(
-        :start_replication_supervisor,
+        :maybe_reset_storage,
         %State{
           current_phase: :connection_setup,
-          current_step: :start_replication_supervisor
+          current_step: :maybe_reset_storage
         } = state
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -834,8 +834,8 @@ defmodule Electric.Connection.Manager do
       %{admin: {pid1, true}, snapshot: {pid2, true}} when is_pid(pid1) and is_pid(pid2) ->
         state = mark_connection_succeeded(state)
 
-        {:noreply, %{state | current_step: :start_replication_supervisor},
-         {:continue, :start_replication_supervisor}}
+        {:noreply, %{state | current_step: :maybe_reset_storage},
+         {:continue, :maybe_reset_storage}}
 
       _ ->
         {:noreply, state}
