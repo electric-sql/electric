@@ -90,14 +90,6 @@ defmodule Electric.MixProject do
       [
         {:backoff, "~> 1.1"},
         {:bandit, "~> 1.6"},
-        # Here we use a fork of CubDB that allows for hibernating all of it's processes.
-        #
-        # Electric currently uses a CubDB instance per shape, each instance has 4 processes, and those processes
-        # can keep references to large binaries. Hibernate these processes when not in use can significantly reduce
-        # the memory footprint.
-        #
-        # See: https://github.com/lucaong/cubdb/pull/78
-        {:electric_cubdb, "~> 2.0"},
         {:dotenvy, "~> 1.1"},
         {:ecto, "~> 3.12"},
         {:jason, "~> 1.4"},
