@@ -71,9 +71,17 @@ defmodule Electric.Replication.SchemaReconciler do
   end
 
   defp handle_reconcile(state) do
-    state.inspector
-    |> Inspector.list_relations_with_stale_cache()
-    |> handle_diverged_relations(state)
+    stack_status = Electric.StatusMonitor.status(state.stack_id)
+
+    if stack_status == :active do
+      state.inspector
+      |> Inspector.list_relations_with_stale_cache()
+      |> handle_diverged_relations(state)
+    else
+      Logger.debug(
+        "Schema reconciliation skipped due to inactive stack: #{inspect(stack_status)}"
+      )
+    end
   catch
     # We essentially never want to fail here, as this is a periodic task.
     # If it fails, we'll just try again next time, so no additional retries are implemented
