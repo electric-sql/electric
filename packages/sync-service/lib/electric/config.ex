@@ -151,6 +151,18 @@ defmodule Electric.Config do
     end
   end
 
+  @doc """
+  The minimum allowed time before Electric can close database connections due to the
+  replication stream inactivity.
+
+  This is to prevent churn where connection and replication supervisors would restart too frequently.
+
+  The scale-to-zero feature of managed providers like Neon takes on the order of minutes before
+  deciding that an idle database can be scaled down.
+  """
+  @spec min_scale_down_on_idle_timeout() :: pos_integer
+  def min_scale_down_on_idle_timeout, do: 30_000
+
   @spec get_env(Application.key()) :: Application.value()
   def get_env(key) do
     # handle the case where the config value was set in runtime.exs but to

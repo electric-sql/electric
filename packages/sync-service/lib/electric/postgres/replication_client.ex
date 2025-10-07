@@ -123,7 +123,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
 
-  @idle_check_interval 60_000
+  @idle_check_interval Electric.Config.min_replication_idle_timeout()
 
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
   def start_link(opts) do
