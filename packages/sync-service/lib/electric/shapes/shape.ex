@@ -101,10 +101,10 @@ defmodule Electric.Shapes.Shape do
      shape.replica}
   end
 
-  def hash(%__MODULE__{} = shape),
-    do: shape |> comparable() |> :erlang.phash2()
+  def hash(shape),
+    do: shape |> :erlang.phash2()
 
-  def generate_id(%__MODULE__{} = shape) do
+  def generate_id(shape) do
     hash = hash(shape)
 
     # Use microseconds to essentially avoid collisions within the same millisecond when we have a hash collision
