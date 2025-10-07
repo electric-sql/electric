@@ -5,7 +5,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
   alias Electric.ShapeCache.PureFileStorage
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
-  alias Electric.ShapeCache.FileStorage
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes
@@ -50,7 +49,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
   setup [:with_stack_id_from_test, :with_async_deleter]
 
-  for module <- [InMemoryStorage, FileStorage, PureFileStorage] do
+  for module <- [InMemoryStorage, PureFileStorage] do
     module_name = module |> Module.split() |> List.last()
 
     @moduletag storage: module_name
@@ -159,8 +158,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
                ] == Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
       end
 
-      # For CubDb-backed storage this test takes about 10s
-      @tag slow: module == FileStorage
       test "adds a lot of items to the log correctly", %{storage: opts, writer: writer} do
         lsn = Lsn.from_integer(1000)
 
@@ -197,8 +194,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert expected == Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
       end
 
-      # For CubDb-backed storage this test takes about 10s
-      @tag slow: module == FileStorage
       test "adds a lot of items to the log correctly in separate steps", %{
         storage: opts,
         writer: writer
@@ -926,15 +921,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       log_ets_table: String.to_atom("log_ets_table_#{Utils.uuid4()}"),
       chunk_checkpoint_ets_table: String.to_atom("chunk_checkpoint_ets_table_#{Utils.uuid4()}"),
       stack_id: stack_id
-    ]
-  end
-
-  defp opts(FileStorage, %{tmp_dir: tmp_dir, stack_id: stack_id} = ctx) do
-    [
-      db: String.to_atom("shape_mixed_disk_#{Utils.uuid4()}"),
-      storage_dir: tmp_dir,
-      stack_id: stack_id,
-      chunk_bytes_threshold: ctx[:chunk_size] || 10 * 1024 * 1024
     ]
   end
 

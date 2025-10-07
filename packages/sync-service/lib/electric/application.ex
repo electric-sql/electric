@@ -194,6 +194,15 @@ defmodule Electric.Application do
       get_env_lazy(opts, :storage, fn ->
         Electric.Config.Defaults.storage(Keyword.take(opts, [:storage_dir]))
       end)
+      |> case do
+        {Electric.ShapeCache.FileStorage, _opts} ->
+          raise RuntimeError,
+            message:
+              "#{inspect(Electric.ShapeCache.FileStorage)} storage is deprecated. Please change to #{inspect(Electric.ShapeCache.PureFileStorage)}"
+
+        storage ->
+          storage
+      end
 
     [
       stack_id: stack_id,
