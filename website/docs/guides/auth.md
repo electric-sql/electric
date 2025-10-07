@@ -235,9 +235,8 @@ export async function GET(request: Request) {
     const query = db
       .selectFrom("users")
       .selectAll()
-      .where((eb) =>
-        eb.and([eb("org_id", "=", user.org_id), eb("status", "=", "active")])
-      )
+      .where("org_id", "=", user.org_id)
+      .where("status", "=", "active")
 
     const { sql: query, parameters } = query.compile()
     const fragment = query.replace(/^SELECT .* FROM .* WHERE\s+/i, "")
