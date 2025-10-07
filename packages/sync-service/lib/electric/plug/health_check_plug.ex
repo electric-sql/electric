@@ -18,7 +18,7 @@ defmodule Electric.Plug.HealthCheckPlug do
       case StatusMonitor.status(config[:stack_id]) do
         :waiting -> {202, "waiting"}
         :starting -> {202, "starting"}
-        :active -> {200, "active"}
+        active when active in [:active, :db_conn_sleeping] -> {200, "active"}
       end
 
     conn |> assign(:status_text, status_text) |> assign(:status_code, status_code)
