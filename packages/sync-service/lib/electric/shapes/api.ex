@@ -366,13 +366,24 @@ defmodule Electric.Shapes.Api do
      )}
   end
 
-  defp hold_until_stack_ready(%Api{} = api) do
-    api
-    |> stack_id()
-    |> Electric.StatusMonitor.wait_until_active(api.stack_ready_timeout)
-    |> case do
+  defp hold_until_stack_ready(%Api{} = api, opts \\ []) do
+    stack_id = stack_id(api)
+    opts = [timeout: api.stack_ready_timeout] ++ opts
+
+    case Electric.StatusMonitor.wait_until_active(stack_id, opts) do
       :ok ->
         :ok
+
+      :db_conn_sleeping ->
+        # If the database connections are sleeping, initiate the scaleup process immediately
+        # and hold the request until the stack becomes active again.
+        #
+        # Because the state change happens asynchronoously, we pass the
+        # `block_on_db_conn_sleeping` flag to the next call of
+        # `Electric.StatusMonitor.wait_until_active()` to prevent this request from getting
+        # into a recursive spin loop until the status value changes in StatusMonitor's ETS table.
+        Electric.Connection.Restarter.restart_connection_subsystem(stack_id)
+        hold_until_stack_ready(api, block_on_db_conn_sleeping: true)
 
       {:error, message} ->
         Logger.warning("Stack not ready after #{api.stack_ready_timeout}ms. Reason: #{message}")

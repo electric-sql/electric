@@ -290,9 +290,11 @@ defmodule Electric.Connection.Manager do
     # process alive and able to correct those errors, it has to trap exits.
     Process.flag(:trap_exit, true)
 
-    Process.set_label({:connection_manager, opts[:stack_id]})
-    Logger.metadata(stack_id: opts[:stack_id])
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    Process.set_label({:connection_manager, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
     timeline_opts = Keyword.fetch!(opts, :timeline_opts)
@@ -309,7 +311,7 @@ defmodule Electric.Connection.Manager do
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         connection_backoff: {connection_backoff, nil},
-        stack_id: Keyword.fetch!(opts, :stack_id),
+        stack_id: stack_id,
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
@@ -319,6 +321,8 @@ defmodule Electric.Connection.Manager do
         expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size)
       }
       |> initialize_connection_opts(opts)
+
+    Electric.Connection.Restarter.connection_manager_started(stack_id, self())
 
     # Wait for the connection resolver to start before continuing with
     # connection setup.
@@ -698,9 +702,7 @@ defmodule Electric.Connection.Manager do
       "Closing all database connections after the replication stream has been idle for #{time_s} seconds"
     )
 
-    # Perform shutdown in a task so that connection manager doesn't end up blocking the
-    # supervisor trying to shut it down.
-    Task.start(Electric.StackSupervisor, :shutdown_database_connections, [state.stack_id])
+    Electric.Connection.Restarter.stop_connection_subsystem(state.stack_id)
 
     {:noreply, state}
   end

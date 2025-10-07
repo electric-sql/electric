@@ -123,7 +123,7 @@ defmodule Electric.StatusMonitorTest do
       stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
 
       Task.async(fn ->
-        assert StatusMonitor.wait_until_active(stack_id, 100) == :ok
+        assert StatusMonitor.wait_until_active(stack_id, timeout: 100) == :ok
         send(test_process, :active)
       end)
 
@@ -143,19 +143,19 @@ defmodule Electric.StatusMonitorTest do
     test "returns error on timeout when process registry is not present", %{stack_id: stack_id} do
       stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error, "Stack ID not recognised: #{stack_id}"}
     end
 
     test "returns error on timeout when status monitor is not present", %{stack_id: stack_id} do
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error, "Status monitor not found for stack ID: #{stack_id}"}
     end
 
     test "returns error on timeout when mark_pg_lock_acquired not received", %{stack_id: stack_id} do
       start_link_supervised!({StatusMonitor, stack_id})
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error, "Timeout waiting for Postgres lock acquisition"}
     end
 
@@ -166,7 +166,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
 
       assert {:error, "Timeout waiting for replication client to be ready" <> _} =
-               StatusMonitor.wait_until_active(stack_id, 1)
+               StatusMonitor.wait_until_active(stack_id, timeout: 1)
     end
 
     test "returns error on timeout when metadata mark_connection_pool_ready not received", %{
@@ -177,7 +177,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error, "Timeout waiting for database connection pool (metadata) to be ready"}
     end
 
@@ -189,7 +189,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error, "Timeout waiting for database connection pool (snapshot) to be ready"}
     end
 
@@ -202,7 +202,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error, "Timeout waiting for shape data to be loaded"}
     end
 
@@ -218,7 +218,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_connection_pool_as_errored(stack_id, :snapshot, error_message)
 
-      assert StatusMonitor.wait_until_active(stack_id, 1) ==
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error,
                 "Timeout waiting for database connection pool (snapshot) to be ready: #{error_message}"}
     end
@@ -245,7 +245,7 @@ defmodule Electric.StatusMonitorTest do
       task =
         Task.async(fn ->
           send(parent, {:monitor, :wait})
-          StatusMonitor.wait_until_active(stack_id, 100)
+          StatusMonitor.wait_until_active(stack_id, timeout: 100)
         end)
 
       ref = Process.monitor(pid)

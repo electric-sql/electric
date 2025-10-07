@@ -2,7 +2,7 @@ defmodule Electric.StatusMonitor do
   @moduledoc false
   use GenServer
 
-  @type status() :: :waiting | :starting | :active
+  @type status() :: :waiting | :starting | :active | :db_conn_sleeping
 
   @conditions [
     :pg_lock_acquired,
@@ -15,9 +15,7 @@ defmodule Electric.StatusMonitor do
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
 
-  @db_scaled_down_key :db_scaled_down?
-
-  @wake_up_if_scaled_down_opt :wake_up_if_scaled_down
+  @db_state_key :db_state
 
   def start_link(stack_id) do
     GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
@@ -32,24 +30,16 @@ defmodule Electric.StatusMonitor do
     {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
   end
 
-  @spec status(String.t(), [Atom.t()]) :: status()
-  def status(stack_id, opts \\ []) do
-    if db_scaled_down?(stack_id) do
-      # If there's an explicit request to wake up the DB connections, do so. Otherwise, we
-      # assume this call is coming from the health check endpoint and report the service as active.
-      if @wake_up_if_scaled_down_opt in opts do
-        Electric.StackSupervisor.restore_database_connections(stack_id)
-        :starting
-      else
-        # Basically a hack to keep the system from shutting down when DB connections are deliberately closed.
-        # TODO(alco): Think about returning `:scaled_down` or similar and handling it by
-        # different callers to make the scaled-down state of the application more legitimate.
-        :active
-      end
-    else
-      stack_id
-      |> results()
-      |> status_from_results()
+  @spec status(String.t()) :: status()
+  def status(stack_id) do
+    case db_state(stack_id) do
+      :up ->
+        stack_id
+        |> results()
+        |> status_from_results()
+
+      :sleeping ->
+        :db_conn_sleeping
     end
   end
 
@@ -66,12 +56,12 @@ defmodule Electric.StatusMonitor do
 
   defp status_from_results(_), do: :starting
 
-  def database_connections_scaling_down(stack_id) do
-    GenServer.cast(name(stack_id), :db_scaling_down)
+  def database_connections_going_to_sleep(stack_id) do
+    GenServer.cast(name(stack_id), :database_connections_going_to_sleep)
   end
 
-  def database_connections_scaling_up(stack_id) do
-    GenServer.cast(name(stack_id), :db_scaling_up)
+  def database_connections_waking_up(stack_id) do
+    GenServer.cast(name(stack_id), :database_connections_waking_up)
   end
 
   def mark_pg_lock_acquired(stack_id, lock_pid) do
@@ -122,55 +112,72 @@ defmodule Electric.StatusMonitor do
     GenServer.cast(name(stack_id), {:condition_met, condition, process})
   end
 
-  def wait_until_active(stack_id, timeout) do
-    if status(stack_id, [@wake_up_if_scaled_down_opt]) == :active do
-      :ok
-    else
-      try do
-        stack_id
-        |> name()
-        |> GenServer.whereis()
-        |> case do
-          nil ->
-            # Either the status monitor has not started yet, or the stack has
-            # been terminated in some permanent way
-            maybe_retry_wait_until_active(
-              stack_id,
-              timeout,
-              "Status monitor not found for stack ID: #{stack_id}"
-            )
+  def wait_until_active(stack_id, opts \\ []) do
+    case status(stack_id) do
+      :active ->
+        :ok
 
-          pid when is_pid(pid) ->
-            GenServer.call(pid, {:wait_until_active, timeout}, :infinity)
+      :db_conn_sleeping ->
+        if Keyword.get(opts, :block_on_db_conn_sleeping, false) do
+          do_wait_until_active(stack_id, opts)
+        else
+          :db_conn_sleeping
         end
-      rescue
-        ArgumentError ->
-          # This happens when the Process Registry has not been created yet
+
+      _ ->
+        do_wait_until_active(stack_id, opts)
+    end
+  end
+
+  defp do_wait_until_active(stack_id, opts) do
+    timeout = Keyword.fetch!(opts, :timeout)
+
+    try do
+      status_monitor_pid = stack_id |> name() |> GenServer.whereis()
+
+      case status_monitor_pid do
+        nil ->
+          # Either the status monitor has not started yet, or the stack has
+          # been terminated in some permanent way
           maybe_retry_wait_until_active(
             stack_id,
+            opts,
             timeout,
-            "Stack ID not recognised: #{stack_id}"
+            "Status monitor not found for stack ID: #{stack_id}"
           )
-      catch
-        :exit, _reason ->
-          maybe_retry_wait_until_active(
-            stack_id,
-            timeout,
-            "Stack #{inspect(stack_id)} has terminated"
-          )
+
+        pid when is_pid(pid) ->
+          GenServer.call(pid, {:wait_until_active, timeout}, :infinity)
       end
+    rescue
+      ArgumentError ->
+        # This happens when the Process Registry has not been created yet
+        maybe_retry_wait_until_active(
+          stack_id,
+          opts,
+          timeout,
+          "Stack ID not recognised: #{stack_id}"
+        )
+    catch
+      :exit, _reason ->
+        maybe_retry_wait_until_active(
+          stack_id,
+          opts,
+          timeout,
+          "Stack #{inspect(stack_id)} has terminated"
+        )
     end
   end
 
   @retry_time 10
-  defp maybe_retry_wait_until_active(_stack_id, timeout, last_error)
+  defp maybe_retry_wait_until_active(_stack_id, _opts, timeout, last_error)
        when timeout <= @retry_time do
     {:error, last_error}
   end
 
-  defp maybe_retry_wait_until_active(stack_id, timeout, _) do
+  defp maybe_retry_wait_until_active(stack_id, opts, timeout, _) do
     Process.sleep(@retry_time)
-    wait_until_active(stack_id, timeout - @retry_time)
+    wait_until_active(stack_id, Keyword.put(opts, :timeout, timeout - @retry_time))
   end
 
   # Only used in tests
@@ -190,14 +197,19 @@ defmodule Electric.StatusMonitor do
     {:noreply, state}
   end
 
-  def handle_cast(:db_scaling_down, state) do
-    :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, true})
+  def handle_cast(:database_connections_going_to_sleep, state) do
+    :ets.insert(ets_table(state.stack_id), {@db_state_key, :sleeping})
     {:noreply, maybe_reply_to_waiters(state)}
   end
 
-  def handle_cast(:db_scaling_up, state) do
-    :ets.insert(ets_table(state.stack_id), {@db_scaled_down_key, false})
-    {:noreply, maybe_reply_to_waiters(state)}
+  def handle_cast(:database_connections_waking_up, state) do
+    # Only update the ETS table on the first request. Subsequent requests will just wait for the stack to become active.
+    case :ets.lookup_element(ets_table(state.stack_id), @db_state_key, 2) do
+      :sleeping -> :ets.insert(ets_table(state.stack_id), {@db_state_key, :up})
+      :up -> :noop
+    end
+
+    {:noreply, state}
   end
 
   def handle_call({:wait_until_active, timeout}, from, %{waiters: waiters} = state) do
@@ -244,13 +256,13 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  defp db_scaled_down?(stack_id) do
-    :ets.lookup_element(ets_table(stack_id), @db_scaled_down_key, 2, false)
+  defp db_state(stack_id) do
+    :ets.lookup_element(ets_table(stack_id), @db_state_key, 2, :up)
   rescue
     ArgumentError ->
       # This happens when the table is not found, which means the
       # process has not been started yet
-      false
+      :up
   end
 
   defp results(stack_id) do

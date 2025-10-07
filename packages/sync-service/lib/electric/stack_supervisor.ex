@@ -371,6 +371,7 @@ defmodule Electric.StackSupervisor do
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},
           {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
+          {Electric.Connection.Restarter, stack_id: stack_id},
           {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 
@@ -385,15 +386,5 @@ defmodule Electric.StackSupervisor do
         )
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
-  end
-
-  def shutdown_database_connections(stack_id) do
-    Electric.StatusMonitor.database_connections_scaling_down(stack_id)
-    Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: stack_id)
-  end
-
-  def restore_database_connections(stack_id) do
-    Electric.StatusMonitor.database_connections_scaling_up(stack_id)
-    Electric.Connection.Manager.Supervisor.restart(stack_id: stack_id)
   end
 end

@@ -387,7 +387,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       start_connection_manager(ctx)
 
-      StatusMonitor.wait_until_active(stack_id, 1000)
+      StatusMonitor.wait_until_active(stack_id, timeout: 1000)
 
       assert_receive {:validate, ^pooled_conn_opts}
       assert_receive {:validate, ^repl_opts}
@@ -429,7 +429,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     assert_receive {:stack_status, _, :waiting_for_connection_lock}
     assert_receive {:stack_status, _, :connection_lock_acquired}
     assert_receive {:stack_status, _, :ready}
-    StatusMonitor.wait_until_active(stack_id, 1000)
+    StatusMonitor.wait_until_active(stack_id, timeout: 1000)
     assert StatusMonitor.status(stack_id) == :active
   end
 
