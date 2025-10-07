@@ -1,21 +1,20 @@
 name: Accelerate
-price: 5000
-period: month
-order: 4
+order: 40
 type: service
-proposition: "Get to production faster"
-description: |
-  Hands-on technical support for faster time to market
+
+price: "Faster"
+priceQualifier: "→ prod"
+
+# Hero card display
+who: "fewer mistakes and faster time to market"
+featuresTitle: "Direct access"
 features:
-  - "Avoid common mistakes"
-  - "Dedicated engineering resource"
-  - "Help with design, architecture, integration and rollout"
-  - "Direct access"
-ctaText: "Contact sales"
+  - "Dedicated resources"
+  - "Design, architecture, integration and rollout"
+
+
+# CTA
+ctaText: "Free consultation"
 ctaHref: "/about/contact#sales"
 ctaTheme: "alt"
-
-# Comparison data
-benefits: "[COPY NEEDED: Accelerate service benefits]"
-when_to_choose: "[COPY NEEDED: When to choose Accelerate]"
-supports_usage: "[COPY NEEDED: Accelerate usage level]"
+priceColor: "ddn"

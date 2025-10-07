@@ -22,12 +22,14 @@ export default {
     // Filter by type
     const tiers = plans.filter(plan => plan.type === 'tier')
     const services = plans.filter(plan => plan.type === 'service')
-    const comparisonPlans = plans
+    const enterprise = plans.filter(plan => plan.type === 'enterprise')
+    const comparisonPlans = plans.filter(plan => plan.type === 'tier' || plan.type === 'enterprise')
 
     return {
       plans,
       tiers,
       services,
+      enterprise,
       comparisonPlans
     }
   }
