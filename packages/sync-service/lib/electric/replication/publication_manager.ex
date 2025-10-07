@@ -5,6 +5,7 @@ defmodule Electric.Replication.PublicationManager do
   alias Electric.Postgres.Configuration
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
+  alias Electric.Telemetry.OpenTelemetry
   alias Electric.Utils
 
   require Logger
@@ -83,21 +84,21 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @impl __MODULE__
-  def add_shape(shape_id, shape, opts \\ []) do
+  def add_shape(shape_handle, shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
     oid_relation = get_oid_relation_from_shape(shape)
 
-    case GenServer.call(server, {:add_shape, shape_id, oid_relation}) do
+    case GenServer.call(server, {:add_shape, shape_handle, oid_relation}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
   end
 
   @impl __MODULE__
-  def remove_shape(shape_id, opts \\ []) do
+  def remove_shape(shape_handle, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
-    case GenServer.call(server, {:remove_shape, shape_id}) do
+    case GenServer.call(server, {:remove_shape, shape_handle}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
@@ -136,7 +137,40 @@ defmodule Electric.Replication.PublicationManager do
       publication_refresh_period: opts.refresh_period
     }
 
-    {:ok, state, state.publication_refresh_period}
+    {:ok, state, {:continue, :restore_relations}}
+  end
+
+  @impl true
+  def handle_continue(:restore_relations, state) do
+    OpenTelemetry.with_span(
+      "publication_manager.restore_shapes",
+      [],
+      state.stack_id,
+      fn ->
+        state =
+          state.stack_id
+          |> Electric.ShapeCache.ShapeStatus.list_shapes()
+          |> Enum.reduce(
+            state,
+            fn {shape_handle, shape}, state ->
+              rel_key = get_oid_relation_from_shape(shape)
+              do_update_relation_filters_with_shape(shape_handle, rel_key, :add, state)
+            end
+          )
+
+        case check_publication_status(state) do
+          {:ok, state} ->
+            {:ok, relations_configured, state} = do_configure_publication!(state)
+            handle_publication_update_result(relations_configured, state)
+
+          {:error, err, state} ->
+            Logger.warning("Failed to confirm publication status: #{inspect(err)}")
+            raise err
+        end
+
+        {:noreply, state, state.publication_refresh_period}
+      end
+    )
   end
 
   @impl true
@@ -247,22 +281,7 @@ defmodule Electric.Replication.PublicationManager do
       state = %{state | next_update_forced?: false}
 
       try do
-        relations_configured =
-          if can_update? do
-            Configuration.configure_publication!(
-              state.db_pool,
-              state.publication_name,
-              state.prepared_relation_filters
-            )
-          else
-            Configuration.validate_publication_configuration!(
-              state.db_pool,
-              state.publication_name,
-              state.prepared_relation_filters
-            )
-          end
-
-        {:ok, relations_configured, state}
+        do_configure_publication!(state)
       rescue
         err ->
           Logger.warning("Failed to #{key_word} publication: #{inspect(err)}")
@@ -273,6 +292,25 @@ defmodule Electric.Replication.PublicationManager do
           {:error, %RuntimeError{message: "Database connection not available"}, state}
       end
     end
+  end
+
+  defp do_configure_publication!(state) do
+    relations_configured =
+      if can_update_publication?(state) do
+        Configuration.configure_publication!(
+          state.db_pool,
+          state.publication_name,
+          state.prepared_relation_filters
+        )
+      else
+        Configuration.validate_publication_configuration!(
+          state.db_pool,
+          state.publication_name,
+          state.prepared_relation_filters
+        )
+      end
+
+    {:ok, relations_configured, state}
   end
 
   defguardp is_known_publication_error(error)

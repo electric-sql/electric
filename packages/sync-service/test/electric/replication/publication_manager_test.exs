@@ -6,10 +6,18 @@ defmodule Electric.Replication.PublicationManagerTest do
   import Support.TestUtils
 
   alias Electric.Replication.PublicationManager
+  alias Electric.Shapes.Shape
 
   @shape_handle_1 "shape_handle_1"
   @shape_handle_2 "shape_handle_2"
   @shape_handle_3 "shape_handle_3"
+
+  @inspector Support.StubInspector.new(
+               tables: [{1234, {"public", "test_table"}}],
+               columns: [%{name: "id", type: "int8", pk_position: 0}]
+             )
+
+  @shape Shape.new!("test_table", inspector: @inspector)
 
   setup :with_stack_id_from_test
 
@@ -58,6 +66,17 @@ defmodule Electric.Replication.PublicationManagerTest do
     Repatch.allow(test_pid, publication_manager_opts[:server])
 
     %{opts: publication_manager_opts, ctx: ctx}
+  end
+
+  describe "restore shapes" do
+    setup(ctx) do
+      # mock existing shapes from ctx.existing_shapes
+      # so that publication manager restores them
+    end
+
+    @tag existing_shapes: [{@shape_handle_1, @shape}]
+    test "syncs publication with existing shapes", ctx do
+    end
   end
 
   describe "add_shape/3" do
