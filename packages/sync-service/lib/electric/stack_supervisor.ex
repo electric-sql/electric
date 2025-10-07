@@ -76,7 +76,10 @@ defmodule Electric.StackSupervisor do
                      slot_temporary?: [type: :boolean, default: false],
                      try_creating_publication?: [type: :boolean, default: true],
                      max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil],
-                     max_idle_time: [type: :non_neg_integer, default: 0],
+                     replication_idle_timeout: [
+                       type: :non_neg_integer,
+                       default: Electric.Config.default(:replication_idle_timeout)
+                     ],
                      stream_id: [type: :string, required: false]
                    ]
                  ],

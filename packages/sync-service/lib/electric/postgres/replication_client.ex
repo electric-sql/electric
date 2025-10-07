@@ -44,7 +44,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :display_settings,
       :txn_collector,
       :publication_owner?,
-      :max_idle_time,
+      :replication_idle_timeout,
       step: :disconnected,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
@@ -75,7 +75,7 @@ defmodule Electric.Postgres.ReplicationClient do
             display_settings: [String.t()],
             txn_collector: Collector.t(),
             publication_owner?: boolean(),
-            max_idle_time: non_neg_integer(),
+            replication_idle_timeout: non_neg_integer(),
             step: Electric.Postgres.ReplicationClient.step(),
             received_wal: non_neg_integer(),
             flushed_wal: non_neg_integer(),
@@ -94,7 +94,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    start_streaming?: [type: :boolean, default: true],
                    slot_name: [required: true, type: :string],
                    slot_temporary?: [type: :boolean, default: false],
-                   max_idle_time: [type: :non_neg_integer, default: 0],
+                   replication_idle_timeout: [type: :non_neg_integer, default: 0],
                    # Set a reasonable limit for the maximum size of a transaction that
                    # we can handle, above which we would exit as we run the risk of running
                    # out of memmory.
@@ -265,7 +265,7 @@ defmodule Electric.Postgres.ReplicationClient do
   def handle_info(:check_if_idle, %State{last_seen_txn_timestamp: txn_ts} = state) do
     time_diff = System.convert_time_unit(System.monotonic_time() - txn_ts, :native, :millisecond)
 
-    if time_diff >= state.max_idle_time do
+    if time_diff >= state.replication_idle_timeout do
       {:disconnect, {:shutdown, {:connection_idle, time_diff}}}
     else
       {:noreply, state}
@@ -302,7 +302,7 @@ defmodule Electric.Postgres.ReplicationClient do
     # starting point to check how long the stream has been idle for.
     state = %{state | step: :streaming, last_seen_txn_timestamp: System.monotonic_time()}
 
-    if state.max_idle_time > 0 do
+    if state.replication_idle_timeout > 0 do
       :timer.send_interval(@idle_check_interval, :check_if_idle)
     end
 

@@ -265,9 +265,9 @@ config :electric,
       &Electric.Config.parse_human_readable_time!/1,
       nil
     ),
-  scale_down_on_idle_timeout:
+  replication_idle_timeout:
     env!(
-      "ELECTRIC_DATABASE_SCALE_DOWN_ON_IDLE_TIMEOUT",
+      "ELECTRIC_REPLICATION_IDLE_TIMEOUT",
       &Electric.Config.parse_human_readable_time!/1,
       nil
     )

@@ -112,11 +112,12 @@ defmodule Electric.Application do
       end
 
     replication_connection_opts = get_env!(opts, :replication_connection_opts)
-    scale_down_on_idle_timeout = get_env(opts, :scale_down_on_idle_timeout)
+    replication_idle_timeout = get_env(opts, :replication_idle_timeout)
 
-    if scale_down_on_idle_timeout > 0 and
-         scale_down_on_idle_timeout < Electric.Config.min_scale_down_on_idle_timeout() do
-      raise "Invalid value for ELECTRIC_DATABASE_SCALE_DOWN_ON_IDLE_TIMEOUT: #{scale_down_on_idle_timeout}. The minimum supported timeout is 30sec."
+    if replication_idle_timeout > 0 and
+         replication_idle_timeout < Electric.Config.min_replication_idle_timeout() do
+      raise "Invalid value for ELECTRIC_REPLICATION_IDLE_TIMEOUT: #{replication_idle_timeout}. " <>
+              "The minimum supported timeout is #{Electric.Config.min_replication_idle_timeout_in_seconds()}sec."
     end
 
     Keyword.merge(
@@ -129,7 +130,7 @@ defmodule Electric.Application do
         slot_name: slot_name,
         slot_temporary?: get_env(opts, :replication_slot_temporary?),
         max_txn_size: get_env(opts, :max_txn_size),
-        max_idle_time: scale_down_on_idle_timeout
+        replication_idle_timeout: replication_idle_timeout
       ],
       pool_opts:
         get_env_lazy(opts, :pool_opts, fn -> [pool_size: get_env(opts, :db_pool_size)] end),
