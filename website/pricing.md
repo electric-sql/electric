@@ -11,7 +11,13 @@ import { onMounted } from 'vue'
 import Section from './src/components/home/Section.vue'
 import PricingCard from './src/components/pricing/PricingCard.vue'
 import ComparisonTable from './src/components/pricing/ComparisonTable.vue'
+import PricingCalculator from './src/components/pricing/PricingCalculator.vue'
 import { data as pricing } from './data/pricing.data.ts'
+
+const tiers = pricing.tiers
+const services = pricing.services
+const enterprise = pricing.enterprise
+const comparisonPlans = pricing.comparisonPlans
 
 onMounted(() => {
   if (typeof window !== 'undefined' && document.querySelector) {
@@ -47,44 +53,39 @@ onMounted(() => {
   </template>
   <template #tagline>
     <a href="/product/cloud">Electric Cloud</a>
-    has a generous free tier, fixed monthly pricing with unlimited fan-out
-    and <span class="no-wrap-lg">additional support to get</span> <span class="no-wrap">teams into</span> <span class="no-wrap">production faster</span>.
+    has a generous free tier,
+    <span class="no-wrap-lg">unlimited data delivery</span>
+    and <span class="no-wrap-lg">additional support</span> <span class="no-wrap">to get teams into</span> <span class="no-wrap">production faster</span>.
   </template>
   <div class="pricing-grid">
-    <!-- Main Pricing Tiers -->
     <PricingCard
-      v-for="tier in pricing.tiers"
+      v-for="tier in tiers"
       :key="tier.slug"
       :name="tier.name"
       :price="tier.price"
-      :period="tier.period"
-      :operations="tier.operations"
-      :shapes="tier.shapes"
-      :sources="tier.sources"
-      :gbProcessed="tier.gbProcessed"
-      :featuresLabel="tier.featuresLabel"
+      :priceQualifier="tier.priceQualifier"
+      :who="tier.who"
+      :featuresTitle="tier.featuresTitle"
       :features="tier.features"
-      :contactNote="tier.contactNote"
       :ctaText="tier.ctaText"
       :ctaHref="tier.ctaHref"
       :ctaTheme="tier.ctaTheme"
+      :priceColor="tier.priceColor"
     />
-    <!-- Divider -->
-    <div class="pricing-divider"></div>
-    <!-- Accelerate Service -->
     <PricingCard
-      v-for="service in pricing.services"
+      v-for="service in services"
       :key="service.slug"
       :name="service.name"
       :price="service.price"
-      :period="service.period"
-      :proposition="service.proposition"
-      :description="service.description"
+      :priceQualifier="service.priceQualifier"
+      :who="service.who"
+      :featuresTitle="service.featuresTitle"
       :features="service.features"
       :ctaText="service.ctaText"
       :ctaHref="service.ctaHref"
       :ctaTheme="service.ctaTheme"
-      priceColor="ddn"
+      :priceColor="service.priceColor"
+      class="service-card"
     />
   </div>
 </Section>
@@ -98,17 +99,18 @@ onMounted(() => {
   </template>
   <div class="enterprise-card">
     <PricingCard
-      name="Enterprise"
-      proposition="Custom pricing and enterprise solutions"
-      ctaText="Contact sales"
-      ctaHref="/about/contact#sales"
-      ctaTheme="alt"
+      v-for="ent in enterprise"
+      :key="ent.slug"
+      :name="ent.name"
+      :price="ent.price"
+      :who="ent.who"
+      :features="ent.features"
+      :featuresTitle="ent.featuresTitle"
+      :ctaText="ent.ctaText"
+      :ctaHref="ent.ctaHref"
+      :ctaTheme="ent.ctaTheme"
       priceColor="ddn"
-    >
-      <template #description>
-        <p>We offer overage pricing for large workloads and can provide custom infrastructure, integration or project solutions.</p>
-      </template>
-    </PricingCard>
+    />
   </div>
 </Section>
 
@@ -116,7 +118,12 @@ onMounted(() => {
   <div class="section-head">
     <h1>Open source</h1>
     <p>
-      Want free with unlimited use? Electric is fully open-source and designed for self-hosting.
+      Want free with unlimited use?
+      Electric is fully open-source and
+      <span class="no-wrap-sm">
+        designed for
+        <span class="no-wrap">
+          self-hosting</span></span>.
     </p>
   </div>
   <div class="strap-actions">
@@ -140,12 +147,22 @@ onMounted(() => {
 
 <Section :actions="[]">
   <template #title>
-    Comparison
+    Compare plans
   </template>
   <template #tagline>
-    Choosing a plan &mdash; compare options and see what's right for you.
+    Dive into the details to see what's right for you.
   </template>
-  <ComparisonTable :comparisonPlans="pricing.comparisonPlans" />
+  <ComparisonTable :comparisonPlans="comparisonPlans" />
+</Section>
+
+<Section :actions="[]">
+  <template #title>
+    Model your workload
+  </template>
+  <template #tagline>
+    Use our calculator to find the right plan for your workload.
+  </template>
+  <PricingCalculator />
 </Section>
 
 <style scoped>
@@ -162,32 +179,47 @@ onMounted(() => {
 .pricing-grid {
   margin: 40px 0 40px;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 2px 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 24px;
   align-items: start;
 }
 
-.pricing-divider {
-  width: 0.5px;
-  margin: 8px 0;
-  background: rgba(255, 255, 255, 0.1);
-  justify-self: center;
-  align-self: stretch;
-}
-
-/* Responsive Design */
 @media (max-width: 1149px) and (min-width: 806px) {
   .pricing-grid {
     grid-template-columns: 1fr 1fr 1fr;
     gap: 24px;
   }
 
-  .pricing-divider {
-    display: none;
+  .service-card {
+    grid-column: 1 / -1;
   }
 
-  .pricing-card:has(.service-content) {
-    grid-column: 1 / -1;
+  .service-card :deep(.card-features) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+  }
+
+  .service-card :deep(.features-title) {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .service-card :deep(.feature-item) {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .service-card :deep(.feature-item::after) {
+    content: "•";
+    margin: 0 10px;
+    color: var(--vp-c-text-3);
+  }
+
+  .service-card :deep(.feature-item:last-child::after) {
+    content: none;
   }
 }
 
@@ -196,10 +228,6 @@ onMounted(() => {
     grid-template-columns: 1fr 1fr;
     gap: 22px;
   }
-
-  .pricing-divider {
-    display: none;
-  }
 }
 
 @media (max-width: 529px) {
@@ -207,41 +235,53 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: 24px;
   }
-
-  .pricing-divider {
-    display: none;
-  }
-
-  .pricing-card:has(.service-content) {
-    grid-column: 1;
-    margin-top: 0;
-  }
 }
 
-/* Enterprise Section */
 .enterprise-card {
   margin: 40px 0 0;
 }
 
-.enterprise-card :deep(.card-name) {
-  margin: 0;
-  color: var(--ddn-color);
+@media (min-width: 530px) {
+  .enterprise-card :deep(.card-features) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+  }
+
+  .enterprise-card :deep(.features-title) {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .enterprise-card :deep(.feature-item) {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .enterprise-card :deep(.feature-item::after) {
+    content: "•";
+    margin: 0 10px;
+    color: var(--vp-c-text-3);
+  }
+
+  .enterprise-card :deep(.feature-item:last-child::after) {
+    content: none;
+  }
 }
 
-/* Reduce spacing around both sections */
 .page-section {
   padding: 10px 0;
 }
 
-/* Comparison Section */
 .page-section:has(.comparison-table) {
   padding-top: 50px;
 }
 
-/* Open Source Strap */
 .open-source-strap {
-  margin: 50px -400px 60px;
-  padding: 90px 400px 116px;
+  margin: 50px -400px 50px;
+  padding: 90px 400px 106px;
   background: var(--vp-sidebar-bg-color);
 }
 

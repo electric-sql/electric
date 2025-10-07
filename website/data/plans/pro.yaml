@@ -1,28 +1,27 @@
 name: Pro
-price: 29
-period: month
-order: 2
+order: 20
 type: tier
 
-# Primary headlines
-operations: 100000000
-shapes: 100000
-sources: 20
+price: 29
+priceQualifier: "/ month"
 
-# Secondary limits
-gbProcessed: 100
-
-#featuresLabel: "Includes"
+# Hero card display
+who: "pro teams and startups building production apps"
+featuresTitle: "Free features +"
 features:
   - "Dedicated resources"
-  - "Unlimited clients"
+  - "Higher usage limits"
+
+# Comparison table metrics
+monthlyActiveUsers: "~10K"
+writesPerMinute: "~300"
+operations: 10000000
+shapes: 100000
+sources: 20
+gbProcessed: 100
+shapeRetention: "2 weeks"
 
 # CTA
 ctaText: "Get started"
 ctaHref: "https://dashboard.electric-sql.cloud?plan=pro"
 ctaTheme: "brand"
-
-# Comparison data
-benefits: "[COPY NEEDED: Pro tier benefits]"
-when_to_choose: "[COPY NEEDED: When to choose Pro]"
-supports_usage: "[COPY NEEDED: Pro usage level]"

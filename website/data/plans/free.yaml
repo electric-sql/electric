@@ -1,29 +1,26 @@
 name: Free
-price: 0
-period: month
-order: 1
+order: 10
 type: tier
 
-for: "For solo devs working on small projects"
-supports: "a few hundred active users"
+price: 0
+priceQualifier: "/ month"
 
-# Primary headlines
-operations: 10000000
+# Hero card display
+who: "solo developers, side projects and prototypes"
+featuresTitle: "Features"
+features:
+  - "Fully managed"
+
+# Comparison table metrics
+monthlyActiveUsers: "~1K"
+writesPerMinute: "~20"
+operations: 1000000
 shapes: 10000
 sources: 10
-
-# Secondary limits
 gbProcessed: 10
-
-features:
-  - "Shared resources"
+shapeRetention: "1 week"
 
 # CTA
 ctaText: "Get started"
 ctaHref: "https://dashboard.electric-sql.cloud"
 ctaTheme: "brand"
-
-# Comparison data
-benefits: "[COPY NEEDED: Free tier benefits]"
-when_to_choose: "[COPY NEEDED: When to choose Free]"
-supports_usage: "[COPY NEEDED: Free usage level]"
