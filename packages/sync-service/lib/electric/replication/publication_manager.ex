@@ -202,8 +202,16 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
-  def handle_info(:timeout, state),
-    do: handle_info(:update_publication, %{state | next_update_forced?: true})
+  def handle_info(:timeout, state) do
+    stack_status = Electric.StatusMonitor.status(state.stack_id)
+
+    if stack_status == :active do
+      handle_info(:update_publication, %{state | next_update_forced?: true})
+    else
+      Logger.debug("Publication update skipped due to inactive stack: #{inspect(stack_status)}")
+      {:noreply, state}
+    end
+  end
 
   defp check_publication_relations(
          %__MODULE__{
