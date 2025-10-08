@@ -1,21 +1,7 @@
 <script setup>
-const { 
-  name, 
-  price,
-  priceQualifier,
-  who,
-  featuresTitle,
-  features,
-  ctaText,
-  ctaHref,
-  ctaTheme = 'brand',
-  priceColor = 'electric'
-} = defineProps([
-  'name', 'price', 'priceQualifier', 'who', 'featuresTitle', 'features',
-  'ctaText', 'ctaHref', 'ctaTheme', 'priceColor'
-])
+const { plan } = defineProps(['plan'])
 
-const priceColorVar = priceColor === 'ddn' ? 'var(--ddn-color)' : 'var(--electric-color)'
+const priceColorVar = (plan.priceColor === 'ddn') ? 'var(--ddn-color)' : 'var(--electric-color)'
 
 function formatPrice(p) {
   if (typeof p === 'number') return '$' + p
@@ -26,30 +12,30 @@ function formatPrice(p) {
 <template>
   <div class="pricing-card">
     <div class="card-header">
-      <h3 class="card-name">{{ name }}</h3>
+      <h3 class="card-name">{{ plan.name }}</h3>
       <div class="card-price">
-        <span class="price-amount" :style="{ color: priceColorVar }">{{ formatPrice(price) }}</span>
-        <span v-if="priceQualifier" class="price-qualifier">{{ priceQualifier }}</span>
+        <span class="price-amount" :style="{ color: priceColorVar }">{{ formatPrice(plan.price) }}</span>
+        <span v-if="plan.priceQualifier" class="price-qualifier">{{ plan.priceQualifier }}</span>
       </div>
     </div>
     <div class="card-content">
-      <div v-if="who" class="card-who">
-        <slot name="who">For {{ who }}</slot>
+      <div v-if="plan.who" class="card-who">
+        <slot name="who">For {{ plan.who }}</slot>
       </div>
-      <div v-if="features && features.length" class="card-features">
-        <div v-if="featuresTitle" class="features-title">
-          {{ featuresTitle }}
+      <div v-if="plan.features && plan.features.length" class="card-features">
+        <div v-if="plan.featuresTitle" class="features-title">
+          {{ plan.featuresTitle }}
         </div>
-        <div v-for="feature in features" :key="feature" class="feature-item">
+        <div v-for="feature in plan.features" :key="feature" class="feature-item">
           {{ feature }}
         </div>
       </div>
     </div>
     <div class="card-footer">
       <VPButton
-        :href="ctaHref"
-        :text="ctaText"
-        :theme="ctaTheme"
+        :href="plan.ctaHref"
+        :text="plan.ctaText"
+        :theme="plan.ctaTheme || 'brand'"
       />
     </div>
   </div>
