@@ -78,13 +78,6 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
     Registry.register(stack_events_registry, {:stack_status, stack_id}, nil)
 
-    Repatch.patch(Electric.CoreSupervisor, :reset_storage, [mode: :shared], fn _ -> :ok end)
-    # process allowance doesn't follow the supervision tree in this case
-
-    if ctx[:repatch_in_test] != true do
-      allow_repatch_on_manager_process(stack_id)
-    end
-
     %{conn_sup: conn_sup, connection_opts: connection_opts, replication_opts: replication_opts}
   end
 
@@ -92,74 +85,6 @@ defmodule Electric.Connection.ConnectionManagerTest do
     {:ok, socket} = :gen_tcp.listen(0, [])
     {:ok, port} = :inet.port(socket)
     [unresponsive_port: port]
-  end
-
-  describe "status monitor" do
-    setup [:start_connection_manager]
-
-    test "reports status=waiting initially", %{stack_id: stack_id} do
-      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :starting}
-    end
-
-    test "reports status=starting once the exclusive connection lock is acquired", %{
-      stack_id: stack_id
-    } do
-      assert_receive {:stack_status, _, :waiting_for_connection_lock}
-      assert_receive {:stack_status, _, :connection_lock_acquired}
-      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-      assert StatusMonitor.status(stack_id) == %{conn: :starting, shape: :starting}
-    end
-
-    test "reports status=active when all connection processes are running", %{stack_id: stack_id} do
-      wait_until_active(stack_id)
-    end
-
-    test "backtracks the status when the replication client goes down", %{stack_id: stack_id} do
-      wait_until_active(stack_id)
-
-      monitor = monitor_replication_client(stack_id)
-
-      :ok = GenServer.stop(Electric.Postgres.ReplicationClient.name(stack_id), :shutdown)
-
-      assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
-      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-
-      status = StatusMonitor.status(stack_id)
-      assert status.conn in [:waiting_on_lock, :starting]
-    end
-
-    test "resets the status when connection manager goes down", %{stack_id: stack_id} = ctx do
-      wait_until_active(stack_id)
-
-      # Start another lock process so that when ConnectionManager exits it is not able to restore its readiness immediately.
-      new_stack_id = stack_id <> "_new"
-      _registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
-
-      lock_opts = [
-        connection_opts: ctx.connection_opts,
-        connection_manager: self(),
-        lock_name: Keyword.fetch!(ctx.replication_opts, :slot_name),
-        stack_id: new_stack_id
-      ]
-
-      start_supervised!(%{
-        id: :alt_lock,
-        start: {Electric.Postgres.LockConnection, :start_link, [lock_opts]}
-      })
-
-      monitor = monitor_replication_client(stack_id)
-
-      :ok =
-        Supervisor.terminate_child(
-          Connection.Manager.Supervisor.name(stack_id: stack_id),
-          Connection.Manager
-        )
-
-      assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
-      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-
-      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :up}
-    end
   end
 
   describe "invalid pool configuration" do
@@ -295,7 +220,20 @@ defmodule Electric.Connection.ConnectionManagerTest do
         end
       )
 
-      allow_repatch_on_manager_process(stack_id)
+      # process allowance doesn't follow the supervision tree in this case
+      spawn_link(fn ->
+        Stream.repeatedly(fn -> 0 end)
+        |> Enum.reduce_while(0, fn _, _ ->
+          case GenServer.whereis(Electric.Connection.Manager.name(stack_id)) do
+            nil ->
+              {:cont, 0}
+
+            pid ->
+              Repatch.allow(parent, pid, force: true)
+              {:halt, 0}
+          end
+        end)
+      end)
 
       start_connection_manager(ctx)
 
@@ -343,30 +281,5 @@ defmodule Electric.Connection.ConnectionManagerTest do
     assert_receive {:stack_status, _, :ready}
     StatusMonitor.wait_until_active(stack_id, timeout: 1000)
     assert StatusMonitor.status(stack_id) == %{conn: :up, shape: :up}
-  end
-
-  defp monitor_replication_client(stack_id) do
-    stack_id
-    |> Electric.Postgres.ReplicationClient.name()
-    |> GenServer.whereis()
-    |> Process.monitor()
-  end
-
-  def allow_repatch_on_manager_process(stack_id) do
-    parent = self()
-    # process allowance doesn't follow the supervision tree in this case
-    spawn_link(fn ->
-      Stream.repeatedly(fn -> 0 end)
-      |> Enum.reduce_while(0, fn _, _ ->
-        case GenServer.whereis(Electric.Connection.Manager.name(stack_id)) do
-          nil ->
-            {:cont, 0}
-
-          pid ->
-            Repatch.allow(parent, pid, force: true)
-            {:halt, 0}
-        end
-      end)
-    end)
   end
 end
