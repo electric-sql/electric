@@ -44,8 +44,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def set_last_processed_lsn(term, last_processed_lsn) do
-    GenServer.call(server(term), {:set_last_processed_lsn, last_processed_lsn})
+  def set_last_processed_lsn(server_ref, last_processed_lsn) do
+    GenServer.call(server(server_ref), {:set_last_processed_lsn, last_processed_lsn})
   end
 
   # use `GenServer.call/2` here to make the event processing synchronous.
@@ -75,12 +75,12 @@ defmodule Electric.Replication.ShapeLogCollector do
     :ok = GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
-  def subscribe(term, shape_handle, shape) do
-    GenServer.call(server(term), {:subscribe, shape_handle, shape})
+  def subscribe(server_ref, shape_handle, shape) do
+    GenServer.call(server(server_ref), {:subscribe, shape_handle, shape})
   end
 
-  def notify_flushed(term, shape_handle, offset) do
-    GenServer.cast(server(term), {:writer_flushed, shape_handle, offset})
+  def notify_flushed(server_ref, shape_handle, offset) do
+    GenServer.cast(server(server_ref), {:writer_flushed, shape_handle, offset})
   end
 
   def init(opts) do
