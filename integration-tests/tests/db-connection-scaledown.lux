@@ -68,7 +68,7 @@
 
 # Scaling back up is just one shape request away
 [shell client]
-  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&offset=-1"]
+  [invoke shape_get_snapshot items]
 
   ??HTTP/1.1 200
   ??transfer-encoding: chunked
