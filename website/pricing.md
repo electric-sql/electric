@@ -61,10 +61,15 @@ onMounted(() => {
   <template #tagline>
     <a href="/product/cloud">Electric Cloud</a>
     has a generous free tier,
-    fixed plans with
-    <span class="no-wrap-sm electric-green">unlimited data delivery</span>
+    <span class="inline hidden-md">
+      fixed plans with</span>
+    <span class="no-wrap electric-green">
+      unlimited data delivery</span>
     and
-    <span class="no-wrap-lg">additional support</span>
+    <span class="no-wrap-lg">
+      <span class="inline hidden-sm">
+        additional</span>
+      support</span>
     <span class="no-wrap-sm">
       to get you</span> <span class="no-wrap-sm">
       into production&nbsp;faster</span>.
@@ -89,7 +94,7 @@ onMounted(() => {
     Need more?
   </template>
   <template #tagline>
-    Higher limits, more support, or bespoke requirements?
+    Higher limits<span class="inline hidden-sm">, more support,</span> or bespoke&nbsp;requirements?
   </template>
   <div class="enterprise-card">
     <PricingCard
@@ -109,11 +114,7 @@ onMounted(() => {
 <div class="quotes">
   <Quote image="/img/home/quotes/trigger.jpg">
     <template #quote>
-        “We use ElectricSQL to power Trigger.dev Realtime<span class="hidden-md">, a core feature of our product</span>.
-        It's&nbsp;simple to operate
-        <span class="hidden-md">
-          as we already use Postgres,</span>
-        and it scales to millions of updates&nbsp;per&nbsp;day.”
+        “We use ElectricSQL to power Trigger.dev Realtime<span class="hidden-md">, a core feature of our product</span><span class="hidden-xs">. It<span class="inline hidden-sm">'s&nbsp;simple to operate and it</span>&nbsp;scales to</span><span class="inline-xs"> with</span> millions of updates per&nbsp;day.”
     </template>
     <template #attribution>
       <span class="hidden-md">
@@ -124,9 +125,9 @@ onMounted(() => {
   <Quote image="/img/home/quotes/otto.jpg">
     <template #quote>
       “ElectricSQL enables us to reliably stream agent updates
-      in real-time at scale. It has dramatically simplified
+      in real-time at&nbsp;scale.<span class="hidden-xs"> It has dramatically simplified
       our&nbsp;architecture<span class="hidden-md">
-        while delivering cell-level reactive updates</span>.
+        while delivering cell-level reactive updates</span>.</span>
     </template>
     <template #attribution>
       <span class="hidden-md">
@@ -141,11 +142,11 @@ onMounted(() => {
     <h1>Open source</h1>
     <p>
       Want free with unlimited use?
-      Electric is fully open-source and
+      <span class="no-wrap-xs">Electric is fully open-source</span> <span class="inline hidden-sm">
       <span class="no-wrap-sm">
-        designed for
+        and
         <span class="no-wrap">
-          self-hosting</span></span>.
+          designed for self-hosting</span></span></span>.
     </p>
   </div>
   <div class="strap-actions">
@@ -186,8 +187,7 @@ onMounted(() => {
     Model your workload
   </template>
   <template #tagline>
-    Use our calculator to find the right plan
-    <span class="no-wrap-xs">
+    Use our calculator to find the right plan<span class="hidden-sm">
       for your&nbsp;workload</span>.
   </template>
   <PricingCalculator />
@@ -197,7 +197,13 @@ onMounted(() => {
   <div class="section-head">
     <h1>Get in touch</h1>
     <p>
-      Let's chat through your requirements and
+      Let's chat
+      <span class="hidden-sm">
+        through your requirements and
+      </span>
+      <span class="inline-sm">
+        to
+      </span>
       <span class="no-wrap-sm">
         see
         <span class="no-wrap-xs">

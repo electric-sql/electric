@@ -54,7 +54,10 @@ function formatStorage(num) {
       <div class="section-header">
         <div class="section-title-wrapper">
           <div class="section-title">Typical workload</div>
-          <div class="section-tagline">Maximum usage levels typically supported by this plan. These are estimates, not hard&nbsp;limits.</div>
+          <div class="section-tagline">
+            Maximum usage levels typically supported by this plan.
+            <span class="no-wrap-xs">
+              These are estimates, not hard&nbsp;limits</span>.</div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
@@ -75,7 +78,12 @@ function formatStorage(num) {
       <div class="section-header">
         <div class="section-title-wrapper">
           <div class="section-title">Source databases</div>
-          <div class="section-tagline">A "source" is a Postgres database connected to an Electric sync&nbsp;service. Typically one per app/env.</div>
+          <div class="section-tagline">
+            A "source" is a Postgres database connected to an
+            <span class="no-wrap-xs">
+              Electric sync&nbsp;service.
+              Typically one per app/env.</span>
+          </div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
@@ -90,7 +98,14 @@ function formatStorage(num) {
       <div class="section-header">
         <div class="section-title-wrapper">
           <div class="section-title">Data processing</div>
-          <div class="section-tagline">An "operation processed" is a change ingested from Postgres and written to a shape log. 3 inserts written to 3 shapes = 9 operations&nbsp;processed.</div>
+          <div class="section-tagline">
+            An "operation processed" is a change ingested from Postgres and
+            <span class="no-wrap-xs">
+              written to a shape&nbsp;log</span>.
+            <span class="hidden-sm">
+              3 inserts written to
+              3 shapes = 9 operations&nbsp;processed.</span>
+          </div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
@@ -111,7 +126,11 @@ function formatStorage(num) {
       <div class="section-header">
         <div class="section-title-wrapper">
           <div class="section-title">Shape retention</div>
-          <div class="section-tagline">Electric caches shapes on disk and deletes inactive shapes after a retention period. Clients re-connecting to deleted shapes re-sync from scratch.</div>
+          <div class="section-tagline">
+            Electric caches shapes on disk and deletes inactive shapes after a retention&nbsp;period.
+            <span class="hidden-sm">
+              Clients re-connecting to deleted shapes re-sync from scratch.</span>
+          </div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
@@ -132,7 +151,9 @@ function formatStorage(num) {
       <div class="section-header">
         <div class="section-title-wrapper">
           <div class="section-title">Delivery to clients</div>
-          <div class="section-tagline">Electric Cloud's built-in CDN enables unlimited data delivery to any number of clients—without any fan-out limits or charges.</div>
+          <div class="section-tagline">
+            Electric Cloud's built-in CDN enables unlimited data delivery to
+            <span class="no-wrap-xs">any number of&nbsp;clients</span><span class="hidden-sm"> &mdash; <span class="no-wrap-sm">without any fan-out limits or&nbsp;charges</span></span>.</div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
@@ -392,6 +413,13 @@ function formatStorage(num) {
   .table-header .plan-column .cta-small {
     display: inline-flex;
   }
+
+  .section-header .section-tagline {
+    max-width: 450px;
+  }
+  .metric-value {
+    color: var(--vp-c-text-1-5);
+  }
 }
 
 @media (min-width: 960px) {
@@ -435,7 +463,7 @@ function formatStorage(num) {
   }
 
   .metric-row .metric-label {
-    font-weight: 600;
+    font-weight: 550;
     font-size: 0.85rem;
     padding: 12px 16px;
     display: block;
