@@ -87,6 +87,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
     Registry.register(stack_events_registry, {:stack_status, stack_id}, nil)
 
+    Electric.StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+
     %{conn_sup: conn_sup, connection_opts: connection_opts, replication_opts: replication_opts}
   end
 
