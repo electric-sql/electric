@@ -6,7 +6,7 @@ price: 0
 priceQualifier: "/ month"
 
 # Hero card display
-who: "solo developers, side projects and prototypes"
+who: "solo developers, side projects and prototypes"
 featuresTitle: "Features"
 features:
   - "Fully managed"
@@ -22,5 +22,6 @@ shapeRetention: "1 week"
 
 # CTA
 ctaText: "Get started"
+ctaTextSmall: "Choose"
 ctaHref: "https://dashboard.electric-sql.cloud"
 ctaTheme: "brand"

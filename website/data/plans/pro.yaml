@@ -6,7 +6,7 @@ price: 29
 priceQualifier: "/ month"
 
 # Hero card display
-who: "pro teams and startups building production apps"
+who: "pro teams and startups building production apps"
 featuresTitle: "Free features +"
 features:
   - "Dedicated resources"
@@ -23,5 +23,6 @@ shapeRetention: "2 weeks"
 
 # CTA
 ctaText: "Get started"
+ctaTextSmall: "Choose"
 ctaHref: "https://dashboard.electric-sql.cloud?plan=pro"
 ctaTheme: "brand"

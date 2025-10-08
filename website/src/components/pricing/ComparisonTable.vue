@@ -34,6 +34,20 @@ function formatStorage(num) {
       <div class="metric-column header-spacer"></div>
       <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
         <div class="plan-name">{{ plan.name }}</div>
+        <VPButton
+          :href="plan.ctaHref"
+          :text="plan.ctaText"
+          :theme="plan.ctaTheme"
+          size="small"
+          class="cta-large"
+        />
+        <VPButton
+          :href="plan.ctaHref"
+          :text="plan.ctaTextSmall || plan.ctaText"
+          :theme="plan.ctaTheme"
+          size="small"
+          class="cta-small"
+        />
       </div>
     </div>
     <div class="section first-section">
@@ -46,14 +60,14 @@ function formatStorage(num) {
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Monthly active users</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">{{ plan.monthlyActiveUsers }}</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ plan.monthlyActiveUsers }}</div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Writes per minute</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">{{ plan.writesPerMinute }}</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ plan.writesPerMinute }}</div>
         </div>
       </div>
     </div>
@@ -61,35 +75,35 @@ function formatStorage(num) {
       <div class="section-header">
         <div class="section-title-wrapper">
           <div class="section-title">Source databases</div>
-          <div class="section-tagline">A "source" is a sync service for a Postgres database. Each source gets a unique&nbsp;URL.</div>
+          <div class="section-tagline">A "source" is a Postgres database connected to an Electric sync&nbsp;service. Typically one per app/env.</div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Monthly active sources</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">{{ formatNumber(plan.sources) }}</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatNumber(plan.sources) }}</div>
         </div>
       </div>
     </div>
     <div class="section">
       <div class="section-header">
         <div class="section-title-wrapper">
-          <div class="section-title">Database ingestion</div>
+          <div class="section-title">Data processing</div>
           <div class="section-tagline">An "operation processed" is a change ingested from Postgres and written to a shape log. 3 inserts written to 3 shapes = 9 operations&nbsp;processed.</div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Operations processed</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">{{ formatNumber(plan.operations) }}</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatNumber(plan.operations) }}</div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Data ingested</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">{{ formatStorage(plan.gbProcessed) }}</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatStorage(plan.gbProcessed) }}</div>
         </div>
       </div>
     </div>
@@ -103,14 +117,14 @@ function formatStorage(num) {
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Active shapes</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">{{ formatNumber(plan.shapes) }}</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatNumber(plan.shapes) }}</div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Inactive shape retention</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">{{ plan.shapeRetention }}</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ plan.shapeRetention }}</div>
         </div>
       </div>
     </div>
@@ -124,26 +138,26 @@ function formatStorage(num) {
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Operations delivered</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">Unlimited</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Data delivered</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">Unlimited</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Active clients</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">Unlimited</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Concurrent clients</div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" :data-plan="plan.name" class="plan-column">
-          <div class="metric-value">Unlimited</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
         </div>
       </div>
     </div>
@@ -154,7 +168,7 @@ function formatStorage(num) {
           :href="plan.ctaHref"
           :text="plan.ctaText"
           :theme="plan.ctaTheme"
-          :size="small"
+          size="small"
         />
       </div>
     </div>
@@ -170,6 +184,13 @@ function formatStorage(num) {
   overflow: hidden;
 }
 
+@media (max-width: 959px) {
+  .comparison-table {
+    overflow: visible;
+    position: relative;
+  }
+}
+
 .table-header {
   display: grid;
   grid-template-columns: 2fr repeat(4, 1fr);
@@ -178,11 +199,11 @@ function formatStorage(num) {
 }
 
 .table-header .metric-column {
-  padding: 20px 14px 28px 20px;
+  padding: 16px 14px 24px 20px;
 }
 
 .table-header .plan-column {
-  padding: 20px 14px 18px;
+  padding: 16px 14px 14px;
   border-left: 1.5px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -215,31 +236,31 @@ function formatStorage(num) {
 }
 
 .section-header .section-title-wrapper {
-  padding: 24px 16px 16px 20px;
+  padding: 16px 16px 12px 16px;
 }
 
 .section-header .section-title {
-  font-size: 1.15rem;
+  font-size: 1.075rem;
   font-weight: 600;
   color: var(--vp-c-text-1);
   margin-bottom: 10px;
 }
 
 .section-header .section-tagline {
-  font-size: 0.825rem;
+  font-size: 0.775rem;
   color: var(--vp-c-text-3);
   line-height: 1.5;
   max-width: 700px;
 }
 
 .section-header .plan-column {
-  padding: 12px;
+  padding: 10px;
   border-left: 1.5px solid rgba(255, 255, 255, 0.08);
 }
 
 .metric-row {
   display: grid;
-  grid-template-columns: 2fr repeat(4, 1fr);
+  grid-template-columns: 2fr 4fr;
   border-top: 1.5px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -248,22 +269,40 @@ function formatStorage(num) {
 }
 
 .metric-row .metric-column {
-  padding: 12px 16px 12px 20px;
+  padding: 10px 14px 10px 16px;
   text-align: left;
 }
 
 .metric-row:last-child .metric-column {
-  padding-bottom: 20px;
+  padding-bottom: 14px;
 }
 
 .metric-row .plan-column {
-  padding: 12px;
+  padding: 0;
   border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+}
+
+.metric-row .plan-column .metric-value {
+  padding: 10px;
   text-align: center;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.metric-row .plan-column .metric-value:first-child {
+  border-left: none;
+}
+
+.metric-value {
+  font-size: 0.875rem;
+  color: var(--vp-c-text-1-5);
+  font-weight: 500;
 }
 
 .metric-label {
-  font-size: 0.925rem;
+  font-size: 0.875rem;
   color: var(--vp-c-text-1);
   font-weight: 500;
 }
@@ -281,11 +320,11 @@ function formatStorage(num) {
 }
 
 .cta-row .metric-column {
-  padding: 24px 16px;
+  padding: 18px 14px 22px;
 }
 
 .cta-row .plan-column {
-  padding: 24px 16px;
+  padding: 18px 14px 22px;
   border-left: 1.5px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: center;
@@ -294,85 +333,160 @@ function formatStorage(num) {
 
 @media (max-width: 959px) {
   .table-header {
+    display: flex;
+    width: 100%;
+    gap: 0;
+    position: -webkit-sticky;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--vp-sidebar-bg-color);
+    padding: 0;
+    border-bottom: 1.5px solid rgb(45, 45, 49);
+    border-radius: 12px 12px 0 0;
+  }
+
+  .table-header .header-spacer {
     display: none;
   }
 
+  .table-header .plan-column {
+    flex: 1;
+    padding: 0;
+    border-left: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .table-header .plan-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 14px 8px 12px;
+  }
+
+  .table-header .plan-column .VPButton {
+    display: inline-flex;
+    margin: 0 0 19px;
+  }
+
+  .table-header .plan-column .cta-small {
+    display: none;
+  }
+
+  .first-section {
+    border-top: none;
+  }
+
+  .cta-row {
+    display: none;
+  }
+}
+
+@media (max-width: 759px) {
+  .table-header .plan-column .cta-large {
+    display: none;
+  }
+
+  .table-header .plan-column .cta-small {
+    display: inline-flex;
+  }
+}
+
+@media (min-width: 960px) {
+  .table-header .plan-column .cta-large,
+  .table-header .plan-column .cta-small {
+    display: none;
+  }
+}
+
+@media (max-width: 959px) {
   .section-header {
     display: block;
+    border-bottom: none;
+  }
+
+  .section-header .section-title-wrapper {
+    padding: 18px 16px 16px;
   }
 
   .section-header .section-title {
-    padding: 20px 16px 12px;
     font-size: 1rem;
+    margin-bottom: 8px;
   }
 
   .section-header .section-tagline {
-    grid-column: auto;
-    padding: 0 16px 16px;
+    font-size: 0.75rem;
+  }
+
+  .section-header .plan-column {
+    display: none;
   }
 
   .metric-row {
     display: block;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 8px;
-    margin: 0 16px 16px;
+    border-width: 1px;
   }
 
   .metric-row .metric-column {
-    padding: 12px 16px 12px;
+    padding: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  .metric-label {
+  .metric-row .metric-label {
     font-weight: 600;
-    color: var(--vp-c-text-1);
+    font-size: 0.85rem;
+    padding: 12px 16px;
+    display: block;
   }
 
   .metric-row .plan-column {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 16px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    padding: 0;
     border-left: none;
-    border-top: 1.5px solid rgba(255, 255, 255, 0.08);
   }
 
-  .metric-row .plan-column:first-of-type {
-    border-top: none;
+  .metric-row .plan-column .metric-value {
+    text-align: center;
+    padding: 10px 6px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  .plan-column::before {
-    content: attr(data-plan);
-    font-size: 0.8rem;
-    color: var(--vp-c-text-3);
-    font-weight: 500;
+  .metric-row .plan-column .metric-value:first-child {
+    border-left: none;
   }
 
-  .metric-column,
-  .plan-column {
-    text-align: left;
-  }
-
-  .cta-row {
-    display: block;
-    margin: 16px;
-  }
-
-  .cta-row .metric-column {
+  .metric-row .plan-column .metric-value::before {
     display: none;
   }
 
-  .cta-row .plan-column {
-    padding: 12px 16px;
-    border-left: none;
-    border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+  .cta-row {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .table-header .plan-column:nth-child(5) {
+    display: none;
   }
 
-  .cta-row .plan-column:first-of-type {
-    border-top: none;
+  .section-header .plan-column:nth-child(5) {
+    display: none;
   }
 
-  .cta-row .plan-column::before {
-    content: none;
+  .metric-row .plan-column {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .metric-row .plan-column .metric-value:nth-child(4) {
+    display: none;
+  }
+
+  .cta-row .plan-column:nth-child(5) {
+    display: none;
   }
 }
 </style>

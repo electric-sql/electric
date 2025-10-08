@@ -6,7 +6,7 @@ price: 349
 priceQualifier: "/ month"
 
 # Hero card display
-who: "scale-ups building large apps and platforms"
+who: "scale-ups building large apps and platforms"
 featuresTitle: "Pro features +"
 features:
   - "Role-based access control"
@@ -24,5 +24,6 @@ shapeRetention: "4 weeks"
 
 # CTA
 ctaText: "Get started"
+ctaTextSmall: "Choose"
 ctaHref: "https://dashboard.electric-sql.cloud?plan=growth"
 ctaTheme: "brand"

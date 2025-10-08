@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { data as pricing } from '../../../data/pricing.data.ts'
 
 // ============================================================================
 // CALCULATOR DEFAULTS - Pro plan workload
@@ -15,49 +16,13 @@ const needsTeamManagement = ref(false)
 const needsBespokeInfrastructure = ref(false)
 
 // ============================================================================
-// PLAN THRESHOLDS - Based on plan YAML files
+// PLAN THRESHOLDS - Derived from YAML data
 // ============================================================================
 const PLAN_THRESHOLDS = {
-  free: {
-    name: 'Free',
-    maxMAU: 1000,
-    maxWPM: 20,
-    maxDataGB: 10,
-    price: 0,
-    ctaText: 'Get started',
-    ctaHref: 'https://dashboard.electric-sql.cloud',
-    ctaTheme: 'brand'
-  },
-  pro: {
-    name: 'Pro',
-    maxMAU: 10000,
-    maxWPM: 300,
-    maxDataGB: 100,
-    price: 29,
-    ctaText: 'Get started',
-    ctaHref: 'https://dashboard.electric-sql.cloud?plan=pro',
-    ctaTheme: 'brand'
-  },
-  growth: {
-    name: 'Growth',
-    maxMAU: 200000,
-    maxWPM: 6000,
-    maxDataGB: 2000,
-    price: 349,
-    ctaText: 'Get started',
-    ctaHref: 'https://dashboard.electric-sql.cloud?plan=growth',
-    ctaTheme: 'brand'
-  },
-  enterprise: {
-    name: 'Enterprise',
-    maxMAU: Infinity,
-    maxWPM: Infinity,
-    maxDataGB: Infinity,
-    price: 'Custom',
-    ctaText: 'Contact sales',
-    ctaHref: '/about/contact#sales',
-    ctaTheme: 'alt'
-  }
+  free: pricing.tiers.find(t => t.slug === 'free'),
+  pro: pricing.tiers.find(t => t.slug === 'pro'),
+  growth: pricing.tiers.find(t => t.slug === 'growth'),
+  enterprise: pricing.enterprise[0]
 }
 
 // ============================================================================
@@ -86,21 +51,34 @@ const recommendedPlan = computed(() => {
   const wpm = writesPerMinute.value
   const dataGB = dataThroughputGB.value
   
-  if (mau > PLAN_THRESHOLDS.free.maxMAU || 
-      wpm > PLAN_THRESHOLDS.free.maxWPM || 
-      dataGB > PLAN_THRESHOLDS.free.maxDataGB) {
+  const parseNumeric = (val) => {
+    if (typeof val === 'string') {
+      if (val.toLowerCase() === 'unlimited') return Infinity
+      const match = val.match(/[\d.]+/)
+      if (!match) return Infinity
+      let num = parseFloat(match[0])
+      if (val.toLowerCase().includes('k')) num *= 1000
+      if (val.toLowerCase().includes('m')) num *= 1000000
+      return num
+    }
+    return val
+  }
+
+  if (mau > parseNumeric(PLAN_THRESHOLDS.free.monthlyActiveUsers) ||
+      wpm > parseNumeric(PLAN_THRESHOLDS.free.writesPerMinute) ||
+      dataGB > PLAN_THRESHOLDS.free.gbProcessed) {
     requiredPlan = 'pro'
   }
   
-  if (mau > PLAN_THRESHOLDS.pro.maxMAU || 
-      wpm > PLAN_THRESHOLDS.pro.maxWPM || 
-      dataGB > PLAN_THRESHOLDS.pro.maxDataGB) {
+  if (mau > parseNumeric(PLAN_THRESHOLDS.pro.monthlyActiveUsers) ||
+      wpm > parseNumeric(PLAN_THRESHOLDS.pro.writesPerMinute) ||
+      dataGB > PLAN_THRESHOLDS.pro.gbProcessed) {
     requiredPlan = 'growth'
   }
   
-  if (mau > PLAN_THRESHOLDS.growth.maxMAU || 
-      wpm > PLAN_THRESHOLDS.growth.maxWPM || 
-      dataGB > PLAN_THRESHOLDS.growth.maxDataGB) {
+  if (mau > parseNumeric(PLAN_THRESHOLDS.growth.monthlyActiveUsers) ||
+      wpm > parseNumeric(PLAN_THRESHOLDS.growth.writesPerMinute) ||
+      dataGB > PLAN_THRESHOLDS.growth.gbProcessed) {
     requiredPlan = 'enterprise'
   }
   
@@ -159,7 +137,7 @@ function formatNumberInput(value) {
       </div>
       <div class="input-group">
         <label class="input-label">
-          Writes per minute
+          Write workload (writes per minute)
           <input 
             v-model.number="writesPerMinute" 
             type="number" 
@@ -171,7 +149,7 @@ function formatNumberInput(value) {
       </div>
       <div class="input-group">
         <label class="input-label">
-          Data throughput (GB/month)
+          Data throughput (ingested, GB/month)
           <input 
             v-model.number="dataThroughputGB" 
             type="number" 
@@ -182,7 +160,6 @@ function formatNumberInput(value) {
         </label>
       </div>
       <div class="toggles-section">
-        <h4 class="toggles-title">Additional requirements</h4>
         <label class="toggle-label">
           <input 
             v-model="needsDedicatedResources" 
@@ -218,10 +195,10 @@ function formatNumberInput(value) {
       </div>
     </div>
     <div class="calculator-result">
-      <div class="result-content">
+      <div :class="`result-content result-content-${recommendedPlan.ctaTheme}`">
         <div class="result-header">
           <h4 class="result-label">Recommended plan</h4>
-          <h2 class="result-plan-name">{{ recommendedPlan.name }}</h2>
+          <h2 :class="`result-plan-name result-plan-name-${recommendedPlan.ctaTheme}`">{{ recommendedPlan.name }}</h2>
         </div>
         <div class="result-pricing">
           <div class="result-price">{{ formattedPrice }}</div>
@@ -231,7 +208,7 @@ function formatNumberInput(value) {
           <VPButton
             :href="recommendedPlan.ctaHref"
             :text="recommendedPlan.ctaText"
-            :theme="recommendedPlan.ctaTheme"
+            theme="brand"
           />
         </div>
       </div>
@@ -254,7 +231,7 @@ function formatNumberInput(value) {
 .calculator-inputs {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 .calculator-title {
@@ -290,8 +267,8 @@ function formatNumberInput(value) {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  padding: 10px 14px;
-  font-size: 1rem;
+  padding: 9px 12px;
+  font-size: 0.875rem;
   color: var(--vp-c-text-1);
   font-family: inherit;
   transition: border-color 0.2s, background 0.2s;
@@ -306,8 +283,8 @@ function formatNumberInput(value) {
 .toggles-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 0px;
 }
 
 .toggles-title {
@@ -346,36 +323,47 @@ function formatNumberInput(value) {
 }
 
 .result-content {
-  background: rgba(0, 210, 160, 0.08);
-  border: 1px solid rgba(0, 210, 160, 0.2);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
   padding: 32px;
   width: 100%;
   text-align: center;
 }
+.result-content-brand {
+  border: 1px solid var(--electric-color);
+}
+.result-content-alt {
+  border: 1px solid var(--ddn-color);
+}
 
 .result-header {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .result-label {
-  font-size: 0.85rem;
+  font-size: 0.825rem;
   font-weight: 500;
-  color: var(--vp-c-text-2);
+  color: var(--vp-c-text-3);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin: 0 0 12px 0;
+  margin: 0;
+  line-height: 1.5;
 }
 
 .result-plan-name {
-  font-size: 2rem;
+  font-size: 2.25rem;
   font-weight: 700;
-  color: var(--electric-color);
   margin: 0;
+}
+.result-plan-name-brand {
+  color: var(--electric-color);
+}
+.result-plan-name-alt {
+  color: var(--ddn-color);
 }
 
 .result-pricing {
-  margin-bottom: 28px;
+  margin-bottom: 30px;
   display: flex;
   align-items: baseline;
   justify-content: center;
@@ -383,7 +371,7 @@ function formatNumberInput(value) {
 }
 
 .result-price {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 700;
   color: var(--vp-c-text-1);
   line-height: 1;
@@ -400,15 +388,24 @@ function formatNumberInput(value) {
   justify-content: center;
 }
 
-@media (max-width: 959px) {
+@media (max-width: 759px) {
   .calculator-container {
     grid-template-columns: 1fr;
-    gap: 32px;
+    gap: 24px;
     padding: 32px 24px;
   }
   
   .calculator-result {
     order: -1;
+    padding-top: 0;
+  }
+
+  .calculator-inputs {
+    gap: 12px;
+  }
+
+  .toggles-section {
+    gap: 4px;
   }
 }
 

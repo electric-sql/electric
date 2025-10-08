@@ -6,11 +6,12 @@ price: "Faster"
 priceQualifier: "→ prod"
 
 # Hero card display
-who: "fewer mistakes and faster time to market"
+who: "fewer mistakes and faster time to market"
 featuresTitle: "Direct access"
 features:
   - "Dedicated resources"
-  - "Design, architecture, integration and rollout"
+  - "Design and architecture"
+  - "Integration and rollout"
 
 
 # CTA
