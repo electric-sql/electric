@@ -68,15 +68,16 @@
 
 # Scaling back up is just one shape request away
 [shell client]
-  [invoke shape_get_snapshot items]
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&offset=-1"]
 
   ??HTTP/1.1 200
   ??transfer-encoding: chunked
   ??electric-schema: {"val":{"type":"text"}}
   ??electric-offset: 0_0
 
-  ??[{"key":"\"public\".\"items\"/\"1\"","value":{"val":"1"},"headers":{"operation":"insert","relation":["public","items"]}},\
-     {"key":"\"public\".\"items\"/\"2\"","value":{"val":"2"},"headers":{"operation":"insert","relation":["public","items"]}}]
+  ??[{"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"1\"","value":{"val":"1"}},\
+     {"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"2\"","value":{"val":"2"}},\
+     {"headers":{"control":"snapshot-end"
 
 [cleanup]
   [invoke teardown]

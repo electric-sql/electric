@@ -256,3 +256,12 @@
   # strip ANSI codes from response for easier matching
   !curl -i "http://localhost:3000/v1/shape?table=$table&handle=$handle&offset=$offset" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
 [endmacro]
+
+# Prevent curl from outputing download progress, output response headers nd sort the keys in the response JSON body.
+[macro curl_shape url]
+  !curl --no-progress-meter -i "$url" | awk '\
+    BEGIN {reading_headers=1} \
+    reading_headers && /^\s*$/ {reading_headers=0; print ""; next} \
+    reading_headers {print} \
+    !reading_headers {print | "jq --sort-keys --compact-output --monochrome-output"}'
+[endmacro]
