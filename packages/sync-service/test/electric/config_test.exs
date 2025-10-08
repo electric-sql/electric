@@ -65,4 +65,14 @@ defmodule Electric.ConfigTest do
       Electric.Application.api_plug_opts()
     end
   end
+
+  describe "validations" do
+    test "configuring deprecated FileStorage raises" do
+      assert_raise RuntimeError, ~r/FileStorage storage is deprecated/, fn ->
+        Electric.Application.configuration(
+          storage: {Electric.ShapeCache.FileStorage, storage_dir: "./persistent"}
+        )
+      end
+    end
+  end
 end
