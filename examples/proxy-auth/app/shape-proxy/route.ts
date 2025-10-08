@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
   // Only query orgs the user has access to.
   if (!user.isAdmin) {
-    originUrl.searchParams.set(`where`, `"org_id" = '${user.org_id}'`)
+    originUrl.searchParams.set(`where`, `"org_id" = "${user.org_id}"`)
   }
 
   const response = await fetch(originUrl)
