@@ -523,6 +523,8 @@ defmodule Electric.Connection.Manager do
       )
     end
 
+    StatusMonitor.mark_integrety_checks_passed(state.stack_id, self())
+
     state = %{
       state
       | current_step: {:start_replication_client, :start_streaming},
