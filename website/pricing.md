@@ -142,11 +142,8 @@ onMounted(() => {
     <h1>Open source</h1>
     <p>
       Want free with unlimited use?
-      <span class="no-wrap-xs">Electric is fully open-source</span> <span class="inline hidden-sm">
-      <span class="no-wrap-sm">
-        and
-        <span class="no-wrap">
-          designed for self-hosting</span></span></span>.
+      <span class="no-wrap">Electric is fully open-source</span><span class="hidden inline-sm">.</span> <span class="hidden-sm">
+        <span class="no-wrap-sm"> and <span class="no-wrap">designed for self-hosting.</span></span></span>
     </p>
   </div>
   <div class="strap-actions">
@@ -228,9 +225,12 @@ onMounted(() => {
 </div>
 
 <style>
-  @media (max-width: 959px) {
-    .Layout {
-      overflow: unset !important;
+  @supports (overflow: clip) {
+    @media (max-width: 959px) {
+      .Layout {
+        /* Enables sticky header support for the comparison table */
+        overflow-x: clip !important;
+      }
     }
   }
 </style>
