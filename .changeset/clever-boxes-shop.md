@@ -1,5 +1,5 @@
 ---
-"@core/sync-service": patch
+"@core/sync-service": minor
 ---
 
 Remove old FileStorage implementation
