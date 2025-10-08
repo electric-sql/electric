@@ -135,10 +135,10 @@ defmodule Support.TestUtils do
       fun
     )
 
-    set_callback_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
+    activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
   end
 
-  def set_callback_for_descendant_procs(mod) do
+  def activate_mocks_for_descendant_procs(mod) do
     self_pid = self()
     callback_fun = fn pid -> Repatch.allow(self_pid, pid) end
 
@@ -149,12 +149,12 @@ defmodule Support.TestUtils do
   end
 
   # This function is normally called inside the init() callback of an OTP behaviour to inherit any
-  # patched functions from the test process.
+  # `Repatch.patch()`ed functions from the test process.
   #
   # It looks up the test process' PID in the caller process' dictionary and executes the
   # function under the `:callback_for_descendant_procs` key matching the caller's module (if
   # any).
-  def execute_test_callback(caller_mod) do
+  def activate_mocked_functions_for_module(caller_mod) do
     {:dictionary, test_process_dict} =
       Process.get(:"$ancestors")
       |> List.last()

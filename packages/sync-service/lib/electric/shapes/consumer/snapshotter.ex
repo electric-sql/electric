@@ -30,7 +30,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   def init(config) do
-    test_callback_hook()
+    activate_mocked_functions_from_test_process()
 
     Process.set_label({:snapshotter, config.shape_handle})
     metadata = [stack_id: config.stack_id, shape_handle: config.shape_handle]
@@ -352,10 +352,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   if Mix.env() == :test do
-    def test_callback_hook do
-      Support.TestUtils.execute_test_callback(__MODULE__)
+    def activate_mocked_functions_from_test_process do
+      Support.TestUtils.activate_mocked_functions_for_module(__MODULE__)
     end
   else
-    def test_callback_hook, do: :noop
+    def activate_mocked_functions_from_test_process, do: :noop
   end
 end

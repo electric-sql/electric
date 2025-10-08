@@ -1019,7 +1019,7 @@ defmodule Electric.Shapes.ConsumerTest do
       end
 
       Repatch.patch(Electric.ShapeCache.PureFileStorage, :compact, [mode: :shared], fun)
-      Support.TestUtils.set_callback_for_descendant_procs(Consumer)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
 
       {_shape_handle, _} =
         ShapeCache.get_or_create_shape_handle(@shape_with_compaction, ctx.shape_cache_opts)
