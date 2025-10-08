@@ -432,7 +432,12 @@ defmodule Electric.Shapes.Api do
   end
 
   defp determine_global_last_seen_lsn(%Request{} = request) do
-    %{request | global_last_seen_lsn: get_global_last_seen_lsn(request)}
+    offset =
+      request.api.stack_id
+      |> Electric.LsnTracker.get_last_processed_lsn()
+      |> Electric.Postgres.Lsn.to_integer()
+
+    %{request | global_last_seen_lsn: offset}
   end
 
   # If chunk offsets are available, use those instead of the latest available
@@ -772,18 +777,10 @@ defmodule Electric.Shapes.Api do
     after
       # If we timeout, return an up-to-date message
       long_poll_timeout ->
-        # Ensure stack is ready after a long poll timeout, as it might
-        # have failed during this period
-        case hold_until_stack_ready(request.api) do
-          :ok ->
-            request
-            |> update_attrs(%{ot_is_long_poll_timeout: true})
-            |> determine_global_last_seen_lsn()
-            |> no_change_response()
-
-          {:error, response} ->
-            response
-        end
+        request
+        |> update_attrs(%{ot_is_long_poll_timeout: true})
+        |> determine_global_last_seen_lsn()
+        |> no_change_response()
     end
   end
 
@@ -951,11 +948,6 @@ defmodule Electric.Shapes.Api do
         no_changes: true,
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)])
     }
-  end
-
-  defp get_global_last_seen_lsn(%Request{} = request) do
-    Electric.LsnTracker.get_last_processed_lsn(request.api.stack_id)
-    |> Electric.Postgres.Lsn.to_integer()
   end
 
   defp update_attrs(%Request{} = request, attrs) do

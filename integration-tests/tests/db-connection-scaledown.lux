@@ -16,6 +16,19 @@
   "" \
   "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
+# Create a table for subsequent shape requests
+[invoke start_psql]
+
+[shell psql]
+  !create table items(val text);
+  ??CREATE
+
+  !insert into items values ('1'), ('2');
+  ??INSERT
+
+  !alter table items owner to electric_test;
+  ??ALTER TABLE
+
 # Start Electric and wait for it to finish initialization.
 # Have to disable the ConnectionManagerPing process, otherwise it will error when
 # Connection.Manager itself goes down as part of the test scenario.
@@ -25,8 +38,6 @@
   ??[debug] Replication client started streaming
 
 # Verify that Electric has multiple database connections open
-[invoke start_psql]
-
 [shell psql]
   !\a
   !\pset pager_min_lines 1000
@@ -36,6 +47,23 @@
   ??electric|electric_test|walsender|SELECT pg_advisory_lock(hashtext('electric_slot_integration'))
   ??electric|electric_test|walsender|START_REPLICATION SLOT "electric_slot_integration"
   ?\(([1-9]|[1-9][0-9]) rows\)
+
+# Start a live shape request
+[shell client]
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&offset=-1"]
+
+  ??HTTP/1.1 200 OK
+
+  ?electric-handle: ([\d-]+)
+  [global handle=$1]
+
+  ??electric-offset: 0_0
+
+  ??[{"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"1\"","value":{"val":"1"}},\
+     {"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"2\"","value":{"val":"2"}},\
+     {"headers":{"control":"snapshot-end"
+
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=0_0&live"]
 
 # Force Electric to scale down by sending the :idle_check message to the replication client.
 # Normally the client performs the check once a minute, so we're speeding it up here for
@@ -55,29 +83,49 @@
   !select datname, usename, backend_type, query from pg_stat_activity where usename = 'electric_test';
   ??(0 rows)
 
-# Create a table for a subsequent shape request
+# Verify that the live shape request runs to completion and does not receive the write that was
+# committed while Electric's database connections were closed.
 [shell psql]
-  !create table items(val text);
-  ??CREATE
-
-  !insert into items values ('1'), ('2');
+  !insert into items values ('3');
   ??INSERT
 
-  !alter table items owner to electric_test;
-  ??ALTER TABLE
-
-# Scaling back up is just one shape request away
 [shell client]
-  [invoke shape_get_snapshot items]
+  [timeout 20]
+
+  ??HTTP/1.1 200 OK
+
+  ??electric-offset: 0_inf
+
+  ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
+
+[shell electric]
+  ??[debug] Sent 200 in
+
+# The very next request results in Electric waking database connections up and serving the newly inserted row to the client.
+[shell client]
+  [timeout 1]
+
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=0_0&live"]
 
   ??HTTP/1.1 200
-  ??transfer-encoding: chunked
-  ??electric-schema: {"val":{"type":"text"}}
-  ??electric-offset: 0_0
 
-  ??[{"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"1\"","value":{"val":"1"}},\
-     {"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"2\"","value":{"val":"2"}},\
-     {"headers":{"control":"snapshot-end"
+  ??transfer-encoding: chunked
+  ?electric-offset: ([0-9]+)_0
+  [local global_last_seen_lsn=$1]
+
+  ??"headers":{"last":true,"lsn":"$global_last_seen_lsn","op_position":0,"operation":"insert","relation":["public","items"],"txids":
+  ??"key":"\"public\".\"items\"/\"3\"","value":{"val":"3"}
+  ??"headers":{"control":"up-to-date","global_last_seen_lsn":"$global_last_seen_lsn"}
+
+[shell electric]
+  ??[debug] GET /v1/shape
+  ??[debug] Query String: table=items&handle=$handle&offset=0_0&live
+
+  ??[debug] Opening lock connection
+  ??[debug] Starting consumer for $handle
+  ??[info] Starting replication from postgres
+
+  ??[debug] Chunked 200 in
 
 [cleanup]
   [invoke teardown]
