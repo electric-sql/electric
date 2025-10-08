@@ -21,8 +21,8 @@
   ??INSERT 0 2
 
 [shell client]
-  # strip ANSI codes from response for easier matching
-  !curl -i "http://localhost:3000/v1/shape?table=items&offset=-1" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  [invoke shape_get_snapshot items]
+
   ??HTTP/1.1 200 OK
 
   ?electric-handle: (\d+-\d+)
@@ -60,13 +60,15 @@
 
 ## Verify that the old shape is no longer accessible
 [shell client]
-  !curl -i "http://localhost:3000/v1/shape?table=items&handle=$shape_handle&offset=0_0"
+  [invoke shape_get items $shape_handle "0_0"]
+
   ??HTTP/1.1 409 Conflict
   ??[{"headers":{"control":"must-refetch"}}]
 
 ## Verify that a new snapshot has been created that includes the new row
 [shell client]
-  !curl -i "http://localhost:3000/v1/shape?table=items&offset=-1" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  [invoke shape_get_snapshot items]
+
   ??HTTP/1.1 200 OK
 
   ?electric-handle: (\d+-\d+)

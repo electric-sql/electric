@@ -120,7 +120,8 @@
   ??electric-schema: {"val":{"type":"text"}}
   ??electric-offset: 0_0
 
-  ??[{"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"},"headers":{"relation":["public","items"],"operation":"insert"}},{"headers":{"control":"snapshot-end"
+  ??[{"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"hello\"","value":{"val":"hello"}},\
+     {"headers":{"control":"snapshot-end"
 
 [cleanup]
   [invoke teardown]

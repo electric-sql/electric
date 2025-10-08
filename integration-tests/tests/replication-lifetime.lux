@@ -42,11 +42,15 @@
   # Initialize a shape and collect the offset
   [shell client]
     [invoke shape_get_snapshot $table_name]
+
     ??HTTP/1.1 200 OK
+
     ?electric-handle: ([\d-]+)
     [local handle=$1]
+
     ?electric-offset: ([\w\d_]+)
     [local offset=$1]
+
     [loop i 1..$num_items_per_batch]
         ??"val":"#$i initial val"
     [endloop]

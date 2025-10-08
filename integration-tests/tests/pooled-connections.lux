@@ -40,10 +40,15 @@
 # Initialize a shape and collect the offset
 [shell client]
   [invoke shape_get_snapshot items]
+
+  ??HTTP/1.1 200 OK
+
   ?electric-handle: ([\d-]+)
   [local handle=$1]
+
   ?electric-offset: ([\w\d_]+)
   [local offset=$1]
+
   ??"val":"#10 initial val"
 
 ## Add some more data

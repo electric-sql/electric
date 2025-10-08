@@ -38,11 +38,9 @@
 
 [shell client]
   [invoke shape_get_snapshot items]
+
   ??HTTP/1.1 200 OK
-  ?electric-handle: ([\d-]+)
-  [local handle=$1]
-  ?electric-offset: ([\w\d_]+)
-  [local offset=$1]
+
   ??"val":"initial"
 
 [shell psql]
@@ -68,11 +66,9 @@
 ## Should now be able to observe data from large transaction
 [shell client]
   [invoke shape_get_snapshot items]
+
   ??HTTP/1.1 200 OK
-  ?electric-handle: ([\d-]+)
-  [local handle=$1]
-  ?electric-offset: ([\w\d_]+)
-  [local offset=$1]
+
   ??"val":"initial"
   ?"val":"large val [\w\d]+"
 
