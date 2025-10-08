@@ -114,9 +114,6 @@ Then for the `/api/shapes/users` route:
 
 ```tsx
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
-import { QueryBuilder } from "drizzle-orm/pg-core"
-import { eq } from "drizzle-orm"
-import { users } from "./schema"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -147,13 +144,8 @@ export async function GET(request: Request) {
 
   // Only query data the user has access to unless they're an admin.
   if (!user.roles.includes(`admin`)) {
-    // Generate type-safe WHERE clause
-    const qb = new QueryBuilder()
-    const whereExpr = eq(users.org_id, user.org_id)
-    const { sql } = qb.select().from(users).where(whereExpr).toSQL()
-    const fragment = sql.replace(/^SELECT .* FROM .* WHERE\s+/i, "")
-
-    originUrl.searchParams.set(`where`, fragment)
+    // For type-safe WHERE clause generation, see the section below
+    originUrl.searchParams.set(`where`, `org_id = '${user.org_id}'`)
   }
 
   const response = await fetch(originUrl)
@@ -177,7 +169,7 @@ export async function GET(request: Request) {
 
 #### Type-safe where clause generation
 
-If you're building a JavaScript/TypeScript API to proxy Shape requests, you can use query builder libraries to generate where clause fragments with full compile-time type safety. This approach catches errors at compile-time if you reference non-existent columns or use incorrect types.
+The example above uses simple string-based WHERE clauses, which works well for straightforward cases. If you'd like type-safe WHERE clause generation with compile-time validation, you can use query builder libraries like Drizzle or Kysely. This is particularly useful for complex queries or when you want to catch column reference errors at compile-time rather than runtime.
 
 > [!Tip] General pattern
 > These examples show JavaScript/TypeScript APIs, but you can use this same pattern of type-safe where clause generation in any language with similar query builder libraries for your backend API.
