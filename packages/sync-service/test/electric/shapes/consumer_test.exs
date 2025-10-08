@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.ConsumerTest do
   use ExUnit.Case, async: true
   use Support.Mock
+  use Repatch.ExUnit
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.{Transaction, Relation}
@@ -44,6 +45,11 @@ defmodule Electric.Shapes.ConsumerTest do
             inspector: @base_inspector,
             where: "id = 1"
           )
+
+  @shape_with_compaction Shape.new!("public.test_table",
+                           inspector: @base_inspector,
+                           storage: %{compaction: :enabled}
+                         )
 
   @shape_position %{
     @shape_handle1 => %{
@@ -95,8 +101,6 @@ defmodule Electric.Shapes.ConsumerTest do
     |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
     |> allow(self(), Consumer.whereis(ctx.stack_id, shape_handle))
   end
-
-  defp run_with_conn_noop(conn, cb), do: cb.(conn)
 
   describe "event handling" do
     setup [
@@ -162,16 +166,15 @@ defmodule Electric.Shapes.ConsumerTest do
                shape: shape,
                stack_id: ctx.stack_id,
                inspector: {Mock.Inspector, []},
-               log_producer: ShapeLogCollector.name(ctx.stack_id),
                db_pool: Electric.Connection.Manager.snapshot_pool(ctx.stack_id),
                registry: registry_name,
-               shape_status: {Mock.ShapeStatus, []},
+               shape_status_mod: Mock.ShapeStatus,
                publication_manager: {Mock.PublicationManager, []},
                hibernate_after: 1_000,
                storage: storage,
+               otel_ctx: nil,
                chunk_bytes_threshold:
-                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-               run_with_conn_fn: &run_with_conn_noop/2},
+                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold()},
               id: {Shapes.ConsumerSupervisor, shape_handle}
             )
 
@@ -673,7 +676,7 @@ defmodule Electric.Shapes.ConsumerTest do
   describe "transaction handling with real storage" do
     @describetag :tmp_dir
     setup do
-      %{inspector: @base_inspector}
+      %{inspector: @base_inspector, pool: nil}
     end
 
     setup [
@@ -693,22 +696,17 @@ defmodule Electric.Shapes.ConsumerTest do
     setup(ctx) do
       snapshot_delay = Map.get(ctx, :snapshot_delay, nil)
 
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+        if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
+        pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+        Storage.make_new_snapshot!([], storage)
+      end)
+
       %{shape_cache_opts: shape_cache_opts, consumer_supervisor: consumer_supervisor} =
-        Support.ComponentSetup.with_shape_cache(
-          Map.merge(ctx, %{
-            pool: nil,
-            inspector: @base_inspector
-          }),
-          shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000),
-          log_producer: ctx.shape_log_collector,
-          run_with_conn_fn: &run_with_conn_noop/2,
-          create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
-            if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
-            pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
-            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-            Storage.make_new_snapshot!([], storage)
-          end
+        Support.ComponentSetup.with_shape_cache(ctx,
+          shape_hibernate_after: Map.get(ctx, :hibernate_after, 10_000)
         )
 
       [
@@ -872,14 +870,7 @@ defmodule Electric.Shapes.ConsumerTest do
       stop_supervised!("shape_task_supervisor")
 
       # Restart the shape cache and the consumers
-      Support.ComponentSetup.with_shape_cache(
-        Map.merge(ctx, %{
-          pool: nil,
-          inspector: @base_inspector
-        }),
-        log_producer: ctx.shape_log_collector,
-        run_with_conn_fn: &run_with_conn_noop/2
-      )
+      Support.ComponentSetup.with_shape_cache(ctx)
 
       :started = ShapeCache.await_snapshot_start(shape_handle, shape_cache_opts)
       assert {_, offset2} = ShapeCache.get_shape(shape_handle, shape_cache_opts)
@@ -1015,6 +1006,25 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
                Process.info(consumer_pid, :current_function)
+    end
+
+    @tag with_pure_file_storage_opts: [compaction_period: 5, keep_complete_chunks: 133]
+    test "compaction is scheduled and invoked for a shape that has compaction enabled", ctx do
+      parent = self()
+      ref = make_ref()
+
+      fun = fn _shape_opts, 133 ->
+        send(parent, {:consumer_did_invoke_compact, ref})
+        :ok
+      end
+
+      Repatch.patch(Electric.ShapeCache.PureFileStorage, :compact, [mode: :shared], fun)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      {_shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_compaction, ctx.shape_cache_opts)
+
+      assert_receive {:consumer_did_invoke_compact, ^ref}
     end
   end
 end

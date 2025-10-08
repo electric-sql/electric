@@ -126,4 +126,43 @@ defmodule Support.TestUtils do
 
     for [schema_name, table_name] <- rows, do: {schema_name, table_name}
   end
+
+  def patch_snapshotter(fun) do
+    Repatch.patch(
+      Electric.Shapes.Consumer.Snapshotter,
+      :start_streaming_snapshot_from_db,
+      [mode: :shared],
+      fun
+    )
+
+    activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
+  end
+
+  def activate_mocks_for_descendant_procs(mod) do
+    self_pid = self()
+    callback_fun = fn pid -> Repatch.allow(self_pid, pid) end
+
+    # The descendant process running module `mod` will look up this callback in its root ancestor and execute it.
+    Process.put(:callback_for_descendant_procs, {mod, callback_fun})
+
+    :ok
+  end
+
+  # This function is normally called inside the init() callback of an OTP behaviour to inherit any
+  # `Repatch.patch()`ed functions from the test process.
+  #
+  # It looks up the test process' PID in the caller process' dictionary and executes the
+  # function under the `:callback_for_descendant_procs` key matching the caller's module (if
+  # any).
+  def activate_mocked_functions_for_module(caller_mod) do
+    {:dictionary, test_process_dict} =
+      Process.get(:"$ancestors")
+      |> List.last()
+      |> Process.info(:dictionary)
+
+    case Keyword.get(test_process_dict, :callback_for_descendant_procs) do
+      {^caller_mod, fun} -> fun.(self())
+      _ -> :noop
+    end
+  end
 end

@@ -19,7 +19,6 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
                    Electric.Telemetry.Opts.schema() ++
                      [
                        stack_id: [type: :string, required: true],
-                       storage: [type: :mod_arg, required: true],
                        slot_name: [type: :string, required: true]
                      ]
                  )

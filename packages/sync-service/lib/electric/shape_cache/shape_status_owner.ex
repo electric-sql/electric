@@ -10,11 +10,13 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   use GenServer, shutdown: 60_000
 
+  alias Electric.ShapeCache.ShapeStatus
+
   require Logger
 
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
-            shape_status: [type: :mod_arg, required: true]
+            storage: [type: :mod_arg, required: true]
           )
 
   def name(stack_id) do
@@ -32,15 +34,21 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   def init(opts) do
     Process.flag(:trap_exit, true)
 
-    Process.set_label({:shape_status_owner, opts[:stack_id]})
-    Logger.metadata(stack_id: opts[:stack_id])
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
+    stack_id = Keyword.fetch!(opts, :stack_id)
 
-    {shape_status, shape_status_state} = Keyword.fetch!(opts, :shape_status)
+    Process.set_label({:shape_status_owner, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ok = shape_status.initialise(shape_status_state)
+    storage = Keyword.fetch!(opts, :storage)
+    :ok = ShapeStatus.initialise(stack_id, storage)
 
-    {:ok, %{shape_status: {shape_status, shape_status_state}}}
+    # Empirical evidence shows that after recovering 50K shapes ShapeStatusOwner and ShapeCache
+    # each take up 200+MB of memory. Explicitly running garbage collection for both immediately
+    # takes that down to 4-5MB.
+    :erlang.garbage_collect()
+
+    {:ok, %{stack_id: stack_id, backup_dir: ShapeStatus.backup_dir(storage)}}
   end
 
   @impl true
@@ -49,9 +57,9 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   end
 
   @impl true
-  def terminate(_reason, %{shape_status: {shape_status, shape_status_state}}) do
+  def terminate(_reason, %{stack_id: stack_id, backup_dir: backup_dir}) do
     Logger.info("Terminating shape status owner, backing up state for faster recovery.")
-    shape_status.terminate(shape_status_state)
+    ShapeStatus.terminate(stack_id, backup_dir)
     :ok
   end
 end

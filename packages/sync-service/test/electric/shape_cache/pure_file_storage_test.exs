@@ -36,7 +36,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         flush_period: ctx[:flush_period] || 1000
       )
 
-    start_link_supervised!(Storage.stack_child_spec({PureFileStorage, base_opts}))
+    storage_base = {PureFileStorage, base_opts}
+    start_link_supervised!(Storage.stack_child_spec(storage_base))
 
     %{base_opts: base_opts, opts: PureFileStorage.for_shape(@shape_handle, base_opts)}
   end
@@ -440,8 +441,12 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
            |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|, ~S|{"test":3}|, ~S|{"test":4}|]
   end
 
-  test "includes the underlying file open error when unable to open a chunk", %{opts: opts} do
-    chunk_index_path = Path.join([opts.base_path, @shape_handle, "log", "log.latest.0.chunk.bin"])
+  test "includes the underlying file open error when unable to open a chunk", %{
+    base_opts: base_opts,
+    opts: opts
+  } do
+    chunk_index_path =
+      Path.join([base_opts.base_path, @shape_handle, "log", "log.latest.0.chunk.bin"])
 
     assert_raise Electric.ShapeCache.Storage.Error,
                  "Could not open chunk index file #{chunk_index_path}: :enoent",
@@ -558,7 +563,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   describe "restore cached state" do
     test "should use new table on every restore", %{opts: opts} do
       %{writer: writer} = with_started_writer(%{opts: opts})
-      [meta] = :ets.lookup(opts.stack_ets, opts.shape_handle)
+      [meta] = :ets.lookup(PureFileStorage.stack_ets(opts.stack_id), opts.shape_handle)
       old_ets_table = storage_meta(meta, :ets_table)
       assert old_ets_table != nil
 
@@ -567,10 +572,18 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert storage_meta(meta, :ets_table) == nil
 
       PureFileStorage.init_writer!(opts, @shape, recovery_state)
-      [meta] = :ets.lookup(opts.stack_ets, opts.shape_handle)
+      [meta] = :ets.lookup(PureFileStorage.stack_ets(opts.stack_id), opts.shape_handle)
       new_ets_table = storage_meta(meta, :ets_table)
       assert new_ets_table != nil
       assert new_ets_table != old_ets_table
+    end
+  end
+
+  describe "schedule_compaction/1" do
+    test "sends a message to the calling process within the predefined time period", ctx do
+      compaction_config = Map.put(ctx.base_opts.compaction_config, :period, 5)
+      PureFileStorage.schedule_compaction(compaction_config)
+      assert_receive {Storage, {PureFileStorage, :scheduled_compaction, [^compaction_config]}}, 20
     end
   end
 

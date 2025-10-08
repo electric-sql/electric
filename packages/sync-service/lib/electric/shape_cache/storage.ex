@@ -129,6 +129,7 @@ defmodule Electric.ShapeCache.Storage do
   Is expected to be only called once the storage has been stopped.
   """
   @callback cleanup!(shape_opts()) :: any()
+  @callback cleanup!(map(), binary()) :: any()
 
   @doc """
   Cleanup all shape data and metadata from storage.
@@ -155,20 +156,24 @@ defmodule Electric.ShapeCache.Storage do
     {mod, apply(m, f, [writer_state | a])}
   end
 
+  def for_stack(stack_id) do
+    Electric.StackConfig.lookup(stack_id, Electric.ShapeCache.Storage)
+  end
+
   @spec child_spec(shape_storage()) :: Supervisor.child_spec()
   def child_spec({module, shape_opts}) do
     %{
-      id: {module, :stack_wide},
+      id: {module, :per_consumer},
       start: {module, :start_link, [shape_opts]},
       restart: :transient
     }
   end
 
   @spec stack_child_spec(storage()) :: Supervisor.child_spec()
-  def stack_child_spec({module, compiled_opts}) do
+  def stack_child_spec({module, stack_opts}) do
     %{
       id: module,
-      start: {module, :stack_start_link, [compiled_opts]},
+      start: {__MODULE__, :stack_start_link, [{module, stack_opts}]},
       restart: :permanent
     }
   end
@@ -184,7 +189,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def stack_start_link({mod, opts}) do
+  def stack_start_link({mod, opts} = storage) do
+    Electric.StackConfig.put(opts.stack_id, __MODULE__, storage)
     mod.stack_start_link(opts)
   end
 
@@ -272,6 +278,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def cleanup!({mod, shape_opts}) do
     mod.cleanup!(shape_opts)
+  end
+
+  @impl __MODULE__
+  def cleanup!({mod, stack_opts}, shape_handle) do
+    mod.cleanup!(stack_opts, shape_handle)
   end
 
   @impl __MODULE__

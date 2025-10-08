@@ -817,8 +817,13 @@ defmodule Electric.ShapeCache.FileStorage do
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%FS{} = opts) do
+    cleanup!(opts, opts.shape_handle)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def cleanup!(%FS{} = opts, shape_handle) do
     # do a quick touch operation to exclude this directory from `get_all_stored_shapes`
-    marker_file = deletion_marker_path(opts.base_path, opts.shape_handle)
+    marker_file = deletion_marker_path(opts.base_path, shape_handle)
 
     try do
       File.touch!(marker_file)
