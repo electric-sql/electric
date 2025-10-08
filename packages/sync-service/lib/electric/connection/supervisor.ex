@@ -56,12 +56,15 @@ defmodule Electric.Connection.Supervisor do
   end
 
   def init(opts) do
-    Process.set_label({:connection_supervisor, opts[:stack_id]})
-    Logger.metadata(stack_id: opts[:stack_id])
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    Process.set_label({:connection_supervisor, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     children = [
-      {Electric.StatusMonitor, opts[:stack_id]},
+      {Electric.StatusMonitor, stack_id: stack_id},
+      {Electric.Connection.Restarter, stack_id: stack_id},
       {Electric.Connection.Manager.Supervisor, opts}
     ]
 
