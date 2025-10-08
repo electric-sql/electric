@@ -3,35 +3,42 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   Behaviour defining the ShapeStatus functions to be used in mocks
   """
   alias Electric.Shapes.Shape
-  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Replication.LogOffset
 
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin() :: non_neg_integer()
 
-  @callback initialise(String.t(), Storage.t()) :: :ok | {:error, term()}
-  @callback terminate(String.t(), String.t()) :: :ok | {:error, term()}
-  @callback list_shapes(ShapeStatus.t()) :: [{shape_handle(), Shape.t()}]
-  @callback count_shapes(ShapeStatus.t()) :: non_neg_integer()
-  @callback get_existing_shape(ShapeStatus.t(), Shape.t() | shape_handle()) ::
+  @type stack_id() :: String.t()
+
+  if Mix.env() == :test do
+    @type stack_ref() ::
+            atom()
+            | stack_id()
+            | [stack_id: stack_id()]
+            | %{shape_meta_table: atom(), shape_last_used_table: atom()}
+  else
+    @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
+  end
+
+  @callback initialise(stack_ref(), Storage.t()) :: :ok | {:error, term()}
+  @callback terminate(stack_ref(), String.t()) :: :ok | {:error, term()}
+  @callback list_shapes(stack_ref()) :: [{shape_handle(), Shape.t()}]
+  @callback count_shapes(stack_ref()) :: non_neg_integer()
+  @callback get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
-  @callback add_shape(ShapeStatus.t(), Shape.t()) ::
-              {:ok, shape_handle()} | {:error, term()}
-  @callback initialise_shape(ShapeStatus.t(), shape_handle(), xmin(), LogOffset.t()) ::
-              :ok
-  @callback set_snapshot_xmin(ShapeStatus.t(), shape_handle(), xmin()) :: :ok
-  @callback set_latest_offset(ShapeStatus.t(), shape_handle(), LogOffset.t()) :: :ok
-  @callback mark_snapshot_started(ShapeStatus.t(), shape_handle()) :: :ok
-  @callback snapshot_started?(ShapeStatus.t(), shape_handle()) :: boolean()
-  @callback remove_shape(ShapeStatus.t(), shape_handle()) ::
-              {:ok, Shape.t()} | {:error, term()}
+  @callback add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
+  @callback initialise_shape(stack_ref(), shape_handle(), xmin(), LogOffset.t()) :: :ok
+  @callback set_snapshot_xmin(stack_ref(), shape_handle(), xmin()) :: :ok
+  @callback set_latest_offset(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
+  @callback mark_snapshot_started(stack_ref(), shape_handle()) :: :ok
+  @callback snapshot_started?(stack_ref(), shape_handle()) :: boolean()
+  @callback remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
 
-  @callback set_shape_storage_state(ShapeStatus.t(), shape_handle(), term()) :: :ok
-  @callback consume_shape_storage_state(ShapeStatus.t(), shape_handle()) ::
-              term() | nil
+  @callback set_shape_storage_state(stack_ref(), shape_handle(), term()) :: :ok
+  @callback consume_shape_storage_state(stack_ref(), shape_handle()) :: term() | nil
 
-  @callback shape_meta_table(Keyword.t() | binary() | atom()) :: atom()
-  @callback shape_last_used_table(Keyword.t() | binary() | atom()) :: atom()
+  @callback shape_meta_table(stack_ref()) :: atom()
+  @callback shape_last_used_table(stack_ref()) :: atom()
 end
 
 defmodule Electric.ShapeCache.ShapeStatus do
