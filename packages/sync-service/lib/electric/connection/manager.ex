@@ -489,13 +489,16 @@ defmodule Electric.Connection.Manager do
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
     # and reset any replication related persistent state
-    timeline_changed? =
+    timeline_check =
       Electric.Timeline.check(
         {state.pg_system_identifier, state.pg_timeline_id},
         state.timeline_opts
-      ) == :timeline_changed
+      )
 
-    if timeline_changed? or state.purge_all_shapes? do
+    timeline_changed? = timeline_check == :timeline_changed
+    initializing? = timeline_check == :no_previous_timeline
+
+    if timeline_changed? or (state.purge_all_shapes? and not initializing?) do
       Electric.CoreSupervisor.reset_storage(
         shape_cache_opts: state.shape_cache_opts,
         stack_id: state.stack_id
