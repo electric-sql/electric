@@ -1,7 +1,11 @@
 const FALLBACK_ELECTRIC_COUNT = 6_000
 const FALLBACK_PGLITE_COUNT = 7_500
 
-export async function localStorageCache(key: string, ttl: number, valueCb: () => unknown) {
+export async function localStorageCache(
+  key: string,
+  ttl: number,
+  valueCb: () => unknown
+) {
   const now = new Date().getTime()
   const cachedItem = localStorage.getItem(key)
 
@@ -50,12 +54,12 @@ export async function fetchStarCounts() {
   const counts = {}
 
   const results = await Promise.allSettled([
-    fetchStarCount('electric', FALLBACK_ELECTRIC_COUNT),
-    fetchStarCount('pglite', FALLBACK_PGLITE_COUNT)
+    fetchStarCount("electric", FALLBACK_ELECTRIC_COUNT),
+    fetchStarCount("pglite", FALLBACK_PGLITE_COUNT),
   ])
 
-  counts['electric'] = results[0].value
-  counts['pglite'] = results[1].value
+  counts["electric"] = results[0].value
+  counts["pglite"] = results[1].value
 
   return counts
 }

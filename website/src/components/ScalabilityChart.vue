@@ -23,7 +23,7 @@ function humanizeBytes(bytes) {
 
 function formatClients(numClients) {
   if (numClients === 0) {
-    return '0'
+    return "0"
   } else if (numClients < 1e6) {
     return `${numClients / 1000}k`
   } else {
@@ -74,11 +74,11 @@ export default {
               data: meanData,
               borderColor: latencyColor,
               borderWidth: 1.5,
-              backgroundColor: 'transparent',
+              backgroundColor: "transparent",
               padding: 20,
               pointStyle: false,
               fill: false,
-              yAxisID: 'y',
+              yAxisID: "y",
               order: 1,
             },
             // {
@@ -98,12 +98,12 @@ export default {
               data: p99Data,
               borderWidth: 1.5,
               borderColor: latencyColor,
-              backgroundColor: 'transparent',
+              backgroundColor: "transparent",
               borderWidth: 1.5,
               borderDash: [2, 2],
               pointStyle: false,
               fill: false,
-              yAxisID: 'y',
+              yAxisID: "y",
               order: 3,
             },
             {
@@ -111,10 +111,10 @@ export default {
               data: memoryData,
               borderColor: memoryColor,
               borderWidth: 1.5,
-              backgroundColor: 'transparent',
+              backgroundColor: "transparent",
               pointStyle: false,
               fill: false,
-              yAxisID: 'y1',
+              yAxisID: "y1",
               order: 4,
             },
           ],
@@ -128,19 +128,19 @@ export default {
               labels: {
                 color: getComputedStyleValue("--vp-c-text-2"),
                 usePointStyle: false,
-                padding: 14
-              }
+                padding: 14,
+              },
             },
             tooltip: {
               enabled: false,
-              mode: 'index',
+              mode: "index",
               intersect: false,
               callbacks: {
                 title: (context) => {
                   return `Clients: ${formatClients(parseInt(context[0].label))}`
                 },
                 label: (context) => {
-                  if (context.dataset.yAxisID === 'y1') {
+                  if (context.dataset.yAxisID === "y1") {
                     return `${context.dataset.label}: ${humanizeBytes(context.raw)}`
                   }
                   return `${context.dataset.label}: ${context.raw} ms`
@@ -149,7 +149,7 @@ export default {
             },
             crosshair: {
               line: {
-                color: '#ffffff40',
+                color: "#ffffff40",
                 width: 1,
               },
             },
@@ -157,41 +157,40 @@ export default {
           responsive: true,
           maintainAspectRatio: false,
           onResize: (chart, size) => {
-            chart.canvas.parentNode.style.height = 'max(min(384px, 33vw), 280px)';
-            chart.canvas.parentNode.style.width = `100%`;
+            chart.canvas.parentNode.style.height =
+              "max(min(384px, 33vw), 280px)"
+            chart.canvas.parentNode.style.width = `100%`
 
             let hasChanged = false
 
             if (size.width < 500) {
-              if (chart.data.datasets[0].label !== 'Mean') {
+              if (chart.data.datasets[0].label !== "Mean") {
                 hasChanged = true
               }
 
-              chart.data.datasets[0].label = 'Mean'
-              chart.data.datasets[2].label = 'Memory'
-            }
-            else {
-              if (chart.data.datasets[0].label !== 'Mean latency') {
+              chart.data.datasets[0].label = "Mean"
+              chart.data.datasets[2].label = "Memory"
+            } else {
+              if (chart.data.datasets[0].label !== "Mean latency") {
                 hasChanged = true
               }
 
-              chart.data.datasets[0].label = 'Mean latency'
-              chart.data.datasets[2].label = 'Memory use'
+              chart.data.datasets[0].label = "Mean latency"
+              chart.data.datasets[2].label = "Memory use"
             }
 
             if (size.width < 650) {
-              if (chart.data.datasets[1].label !== 'P99') {
+              if (chart.data.datasets[1].label !== "P99") {
                 hasChanged = true
               }
 
-              chart.data.datasets[1].label = 'P99'
-            }
-            else {
-              if (chart.data.datasets[1].label !== 'P95 latency') {
+              chart.data.datasets[1].label = "P99"
+            } else {
+              if (chart.data.datasets[1].label !== "P95 latency") {
                 hasChanged = true
               }
 
-              chart.data.datasets[1].label = 'P99 latency'
+              chart.data.datasets[1].label = "P99 latency"
             }
 
             if (hasChanged) {
@@ -201,11 +200,11 @@ export default {
           aspectRatio: 16 / 10,
           resizeDelay: 40,
           interaction: {
-            mode: 'index',
+            mode: "index",
             intersect: false,
           },
           hover: {
-            mode: 'index',
+            mode: "index",
             intersect: false,
           },
           elements: {
@@ -214,8 +213,8 @@ export default {
             },
           },
           cursor: {
-            mode: 'vertical',
-            color: '#ffffff40',
+            mode: "vertical",
+            color: "#ffffff40",
           },
           scales: {
             x: {

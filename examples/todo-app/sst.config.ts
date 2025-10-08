@@ -30,7 +30,7 @@ export default $config({
         dbName,
         migrationsDirectory: `./db/migrations`,
       })
-    
+
     if (!process.env.ELECTRIC_API) {
       throw new Error(`ELECTRIC_API environment variable is required`)
     }

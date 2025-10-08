@@ -67,7 +67,7 @@ We list a selection of projects below, including for example:
 
 ### Local-first
 
-Electric and PGlite are *components* that can be composed, with other tools, into a local-first stack. Other local-first libraries and frameworks include:
+Electric and PGlite are _components_ that can be composed, with other tools, into a local-first stack. Other local-first libraries and frameworks include:
 
 - [Automerge](https://automerge.org)
 - [Ditto](https://ditto.live)
@@ -100,7 +100,7 @@ You can also find out more about local-first software development and discover o
 
 - [lofi.software](https://lofi.software)
 - [localfirst.fm](https://www.localfirst.fm)
-- [Local-first Conf](https://www.localfirstconf.com) (*disclaimer: we're a co-organiser*)
+- [Local-first Conf](https://www.localfirstconf.com) (_disclaimer: we're a co-organiser_)
 - [crdt.tech](https://crdt.tech)
 
 ### State transfer

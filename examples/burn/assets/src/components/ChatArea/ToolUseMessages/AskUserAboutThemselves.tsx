@@ -21,11 +21,11 @@ function AskUserAboutThemselves({ event }: Props) {
   // Figure out whether this is the first question asked of this user in
   // this thread. If it is, we prefix the question test with "Hi, ".
   const { data: previousEvents } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ event: eventCollection })
         .select(({ event }) => ({
-          id: event.id
+          id: event.id,
         }))
         .orderBy(({ event }) => event.inserted_at, 'asc')
         .limit(1)
@@ -35,9 +35,10 @@ function AskUserAboutThemselves({ event }: Props) {
         .fn.where(({ event }) => {
           const { input, name } = event.data
 
-          return name === 'ask_user_about_themselves' && input.subject === subject
-        })
-    ),
+          return (
+            name === 'ask_user_about_themselves' && input.subject === subject
+          )
+        }),
     [insertedAt, subject, threadId]
   )
   const isFirstQuestion = previousEvents.length === 0

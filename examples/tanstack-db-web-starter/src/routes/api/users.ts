@@ -21,6 +21,6 @@ export const Route = createFileRoute("/api/users")({
   server: {
     handlers: {
       GET: serve,
-    }
-  }
+    },
+  },
 })

@@ -48,7 +48,6 @@ When connecting to a Supabase Postgres, you either need to make sure Electric an
 > [!Tip] Need somewhere to host Electric?
 > If you need to deploy Electric, then [Supabase works great](https://supabase.com/blog/postgres-on-fly-by-supabase) with [Fly.io](./fly#deploy-electric).
 
-
 ### Sync into Edge Function
 
 You can also use Electric to sync data into a Supabase [Edge Function](https://supabase.com/docs/guides/functions).
@@ -88,22 +87,21 @@ $ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/hello-e
 Now, replace the contents of `supabase/functions/hello-electric/index.ts` with the following, replacing `[YOUR_ELECTRIC_URL]` with the URL of an Electric service, running against a Postgres database with an `items` table. (This can be `http://localhost:3000` if you're running the local docker command we [used above](#connect-electric) when connecting Electric to Supabase Postgres).
 
 ```ts
-import { Shape, ShapeStream } from 'npm:@electric-sql/client'
+import { Shape, ShapeStream } from "npm:@electric-sql/client"
 
 Deno.serve(async (req) => {
   const stream = new ShapeStream({
-    url: '[YOUR_ELECTRIC_URL]/v1/shape',
+    url: "[YOUR_ELECTRIC_URL]/v1/shape",
     params: {
-      table: 'items'
-    }
+      table: "items",
+    },
   })
   const shape = new Shape(stream)
-  const items = [...await shape.value]
+  const items = [...(await shape.value)]
 
-  return new Response(
-    JSON.stringify(items),
-    { headers: { "Content-Type": "application/json" } },
-  )
+  return new Response(JSON.stringify(items), {
+    headers: { "Content-Type": "application/json" },
+  })
 })
 ```
 

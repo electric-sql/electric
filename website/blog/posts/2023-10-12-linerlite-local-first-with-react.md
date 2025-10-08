@@ -47,7 +47,7 @@ Electric comprises a [sync layer](https://legacy.electric-sql.com/docs/api/servi
 
 In some ways Electric is similar to Hasura or PostgREST in that it can provide a plug-and-play API to your Postgres database. However, there are three key differences:
 
-- SQL throughout - it’s SQL on the server _and_ SQL on the client. 
+- SQL throughout - it’s SQL on the server _and_ SQL on the client.
 - Offline support - you get offline _for free,_ you don’t have to build any complex syncing logic.
 - Reactive queries - build a UI declaratively that updates as the underlying database changes.
 
@@ -91,7 +91,7 @@ Electric is built upon [_rich-CRDTs_](/blog/2022/05/03/introducing-rich-crdts) -
 
 However, in a relational database there are some further complexities. Records can be linked to one another, this is often enforced in the database though foreign keys, ensuring that all records that have a foreign key always link to a record that exists. This is know as referential integrity.
 
-Electric employs the concept  of “[Compensations](/blog/2022/05/03/introducing-rich-crdts#compensations)” from rich-CRDTs. These are, as the name suggests, compensations which Electric applies to resolve the state of the database, ensuring referential integrity is maintained.
+Electric employs the concept of “[Compensations](/blog/2022/05/03/introducing-rich-crdts#compensations)” from rich-CRDTs. These are, as the name suggests, compensations which Electric applies to resolve the state of the database, ensuring referential integrity is maintained.
 
 When issues are tracked in Linearlite, multiple comments can be associated with each individual issue. Therefore, if one user deletes an issue concurrently with another user posting a related comment, it is imperative that this data is preserved. In this case, Electric understands that a new comment has been added with a foreign key linking to a now-deleted issue; in order to maintain the comment and referential integrity the issue is thus ‘resurrected’. You can see this in action in the following video.
 
@@ -194,27 +194,26 @@ A key file is `/src/electric.ts` - This file contains an `initElectric` function
 
 ```typescript
 // src/electric.ts
-import { makeElectricContext } from 'electric-sql/react'
-import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
+import { makeElectricContext } from "electric-sql/react"
+import { electrify, ElectricDatabase } from "electric-sql/wa-sqlite"
 
 // The generated electric client:
-import { Electric, schema } from './generated/client'
-export type { Issue } from './generated/client'
+import { Electric, schema } from "./generated/client"
+export type { Issue } from "./generated/client"
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const initElectric = async () => {
- const electricUrl = import.meta.env.ELECTRIC_URL ?? 'ws://localhost:5133'
- const config = {
-  auth: {
-   token: insecureAuthToken({ user_id: uuid() }),
-  },
-  url: electricUrl,
- }
- const conn = await ElectricDatabase.init(dbName, '/')
- return await electrify(conn, schema, config)
+  const electricUrl = import.meta.env.ELECTRIC_URL ?? "ws://localhost:5133"
+  const config = {
+    auth: {
+      token: insecureAuthToken({ user_id: uuid() }),
+    },
+    url: electricUrl,
+  }
+  const conn = await ElectricDatabase.init(dbName, "/")
+  return await electrify(conn, schema, config)
 }
-
 ```
 
 In the `App.tsx` file you will find code that imports `initElectric`, runs it to create your database, and then passes the Electric database to an `<ElectricProvider>` component to make it available to any components in your app:
@@ -257,9 +256,9 @@ In the `init` function inside the useEffect in the App component we add the code
 ```typescript
 // src/App.tsx
 const { synced } = await client.db.issue.sync({
- include: {
-  comment: true,
- },
+  include: {
+    comment: true,
+  },
 })
 await synced
 ```
@@ -274,11 +273,10 @@ In any component where you want to access your database you employ `useElectric`
 
 ```typescript
 // src/pages/Issue/index.tsx
-import { useElectric } from '../../electric'
+import { useElectric } from "../../electric"
 
 function IssuePage() {
- const { db } = useElectric()!
- // ...
+  const { db } = useElectric()! // ...
 }
 ```
 
@@ -290,17 +288,17 @@ Throughout Linearlite we use the Electric DAL for a number of queries. Below are
 // src/components/IssueModal.tsx
 const date = new Date().toISOString()
 db.issue.create({
- data: {
-  id: uuidv4(),
-  title: title,
-  username: 'testuser',
-  priority: priority,
-  status: status,
-  description: description,
-  modified: date,
-  created: date,
-  kanbanorder: kanbanorder,
- },
+  data: {
+    id: uuidv4(),
+    title: title,
+    username: "testuser",
+    priority: priority,
+    status: status,
+    description: description,
+    modified: date,
+    created: date,
+    kanbanorder: kanbanorder,
+  },
 })
 ```
 
@@ -313,15 +311,14 @@ See the [documentation for ".create()"](https://legacy.electric-sql.com/docs/usa
 ```typescript
 // src/pages/Issue/index.tsx
 await db.issue.update({
- data: {
-  title: title,
-  modified: new Date().toISOString(),
- },
- where: {
-  id: issue.id,
- },
+  data: {
+    title: title,
+    modified: new Date().toISOString(),
+  },
+  where: {
+    id: issue.id,
+  },
 })
-
 ```
 
 This uses the `.update()` method with a `where` clause to specify which issue to update.
@@ -333,14 +330,13 @@ See the [documentation for ".update()"](https://legacy.electric-sql.com/docs/usa
 ```typescript
 // src/pages/List/index.tsx
 const { results } = useLiveQuery(
- db.issue.liveMany({
-  orderBy: {
-   kanbanorder: 'asc',
-  },
-  where: filterStateToWhere(filterState),
-  // `filterStateToWhere` is a helper function that converts the filter 
-  // state (tied to url parameters) to a where caluse for the query.
- })
+  db.issue.liveMany({
+    orderBy: {
+      kanbanorder: "asc",
+    },
+    where: filterStateToWhere(filterState), // `filterStateToWhere` is a helper function that converts the filter
+    // state (tied to url parameters) to a where caluse for the query.
+  })
 )
 ```
 

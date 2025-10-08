@@ -16,10 +16,13 @@
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
     "example-backend:just_up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d",
     "example-backend:up": "pnpm example-backend:down && pnpm example-backend:just_up",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "stylecheck-all": "pnpm --if-present --recursive run stylecheck"
   },
   "devDependencies": {
-    "glob": "^10.3.10"
+    "glob": "^10.3.10",
+    "prettier": "^3.6.2"
   },
   "pnpm": {
     "patchedDependencies": {

@@ -23,6 +23,9 @@ importers:
       glob:
         specifier: ^10.3.10
         version: 10.4.5
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
 
   examples/.shared:
     devDependencies:
@@ -26078,7 +26081,7 @@ snapshots:
       '@next/env': 14.2.17
       '@swc/helpers': 0.5.5
       busboy: 1.6.0
-      caniuse-lite: 1.0.30001743
+      caniuse-lite: 1.0.30001677
       graceful-fs: 4.2.11
       postcss: 8.4.31
       react: 19.1.1

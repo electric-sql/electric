@@ -58,7 +58,7 @@ If you haven't checked out Electric recently, it's a great time to [take another
 
 [Electric](/product/electric) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
 
-Use Electric to swap out data *fetching* for [data *sync*](/use-cases/data-sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
+Use Electric to swap out data _fetching_ for [data _sync_](/use-cases/data-sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
 
 We also develop [PGlite](/product/pglite), a lightweight WASM Postgres you can run in the browser.
 
@@ -80,13 +80,13 @@ Six months ago, we [took on a clean re-write](/blog/2024/07/17/electric-next).
 Electric and PGlite are being used in production by companies including [Google](https://firebase.google.com/docs/data-connect), [Supabase](https://database.build), [Trigger.dev](https://trigger.dev/launchweek/0/realtime), [Otto](https://ottogrid.ai) and [Doorboost](https://www.doorboost.com).
 
 > We use ElectricSQL to power [Trigger.dev Realtime](https://trigger.dev/launchweek/0/realtime), a core feature of our product. When we execute our users background tasks they get instant updates in their web apps. It's simple to operate since we already use Postgres, and it scales to millions of updates per day.<br />
-> *&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)*
+> _&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)_
 
 > At [Otto](https://ottogrid.ai), we built a spreadsheet product where every cell operates as its own AI agent. ElectricSQL enables us to reliably stream agent updates to our spreadsheet in real-time and efficiently manage large spreadsheets at scale. It has dramatically simplified our architecture while delivering the performance we need for cell-level reactive updates.<br />
-> *&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)*
+> _&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)_
 
 > At [Doorboost](https://www.doorboost.com) we aggregate millions of rows from a dozen platforms, all of which gets distilled down to a simple dashboard. With Electric we have been able to deliver this dashboard in milliseconds and update live. Moving forward, we will be building all our products using Electric.<br />
-> *&mdash; [Vache Asatryan](https://am.linkedin.com/in/vacheasatryan), CTO, [Doorboost](https://doorboost.com)*
+> _&mdash; [Vache Asatryan](https://am.linkedin.com/in/vacheasatryan), CTO, [Doorboost](https://doorboost.com)_
 
 ### Scalable
 
@@ -141,14 +141,14 @@ We have [client libraries](/docs/api/clients/typescript), [integration docs](/do
 You can adopt Electric one component and one route at a time. Wherever you have code doing something like this:
 
 ```tsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from "react"
 
 const MyComponent = () => {
   const [items, setItems] = useState([])
 
   useEffect(() => {
     const fetchItems = async () => {
-      const response = await fetch('https://api.example.com/v1/items')
+      const response = await fetch("https://api.example.com/v1/items")
       const data = await response.json()
 
       setItems(data)
@@ -157,32 +157,28 @@ const MyComponent = () => {
     fetchItems()
   }, [])
 
-  return (
-    <List items={ items } />
-  )
+  return <List items={items} />
 }
 ```
 
 Swap it out for code like this (replacing the `fetch` in the `useEffect` with [`useShape`](/docs/integrations/react)):
 
 ```tsx
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 const MyComponent = () => {
   const { data: items } = useShape({
-    url: 'https://electric.example.com/v1/shapes',
+    url: "https://electric.example.com/v1/shapes",
     params: {
-      table: 'items'
-    }
+      table: "items",
+    },
   })
 
-  return (
-    <List items={ items } />
-  )
+  return <List items={items} />
 }
 ```
 
-This works with *any* Postgres [data model and host](/docs/guides/deployment), any data type, extension and Postgres feature. Including [pgvector](https://github.com/pgvector/pgvector), [PostGIS](https://postgis.net), sequential IDs, unique constraints, etc. You don't have to change your data model or your migrations to use Electric.
+This works with _any_ Postgres [data model and host](/docs/guides/deployment), any data type, extension and Postgres feature. Including [pgvector](https://github.com/pgvector/pgvector), [PostGIS](https://postgis.net), sequential IDs, unique constraints, etc. You don't have to change your data model or your migrations to use Electric.
 
 ### With your existing API
 

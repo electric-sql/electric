@@ -11,7 +11,7 @@
     "location": "Istria",
     "country": "Croatia",
     "flag": "hr",
-    "published": true
+    "published": true,
   },
   {
     "slug": "valter",
@@ -25,7 +25,7 @@
     "location": "Lisbon",
     "country": "Portugal",
     "flag": "pt",
-    "published": true
+    "published": true,
   },
   {
     "slug": "kyle",
@@ -39,7 +39,7 @@
     "location": "Salt Lake City",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "kevin",
@@ -53,7 +53,7 @@
     "location": "Brussels",
     "country": "Belgium",
     "flag": "be",
-    "published": true
+    "published": true,
   },
   {
     "slug": "ilia",
@@ -67,7 +67,7 @@
     "location": "Istanbul",
     "country": "Turkey",
     "flag": "tr",
-    "published": true
+    "published": true,
   },
   {
     "slug": "sam",
@@ -81,7 +81,7 @@
     "location": "Cambridge",
     "country": "England",
     "flag": "gb",
-    "published": true
+    "published": true,
   },
   {
     "slug": "oleksii",
@@ -95,7 +95,7 @@
     "location": "Lucca",
     "country": "Italy",
     "flag": "it",
-    "published": true
+    "published": true,
   },
   {
     "slug": "garry",
@@ -109,7 +109,7 @@
     "location": "Belfast",
     "country": "Northern Ireland",
     "flag": "gb",
-    "published": true
+    "published": true,
   },
   {
     "slug": "paul",
@@ -123,7 +123,7 @@
     "location": "London",
     "country": "England",
     "flag": "gb",
-    "published": true
+    "published": true,
   },
   {
     "slug": "pmp-p",
@@ -137,13 +137,13 @@
     "location": "Undisclosed",
     "country": "France",
     "flag": "fr",
-    "published": true
+    "published": true,
   },
   {
     "slug": "stefanos",
     "name": "Stefanos Mousafeiris",
     "job_title": "Staff Engineer",
-    "short_bio": "Lead Engineer at boat navigation app \"savvy navvy\". Quantum physics at Imperial.",
+    "short_bio": 'Lead Engineer at boat navigation app "savvy navvy". Quantum physics at Imperial.',
     "image": "/img/team/stefanos.jpg",
     "profile_uri": "https://www.linkedin.com/in/stefanosmousafeiris",
     "profile_display_uri": "in/smousafeiris",
@@ -151,7 +151,7 @@
     "location": "Thessaloniki",
     "country": "Greece",
     "flag": "gr",
-    "published": true
+    "published": true,
   },
   {
     "slug": "rob",
@@ -165,6 +165,6 @@
     "location": "Brighton",
     "country": "England",
     "flag": "gb",
-    "published": true
-  }
+    "published": true,
+  },
 ]

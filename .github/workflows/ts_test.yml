@@ -56,6 +56,8 @@ jobs:
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm run stylecheck
       - run: pnpm run typecheck
+      - run: pnpm run format:check
+        working-directory: .
 
   build_and_test_packages:
     name: Test TS packages against sync-service

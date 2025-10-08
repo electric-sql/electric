@@ -32,7 +32,6 @@
   ```
 
   ## Common Use Cases
-
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state
@@ -77,7 +76,6 @@
   ```
 
   ## Common Use Cases
-
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state

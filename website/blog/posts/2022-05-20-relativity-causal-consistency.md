@@ -56,7 +56,7 @@ So what to do?
 
 Enter causal consistency. A distributed system that implements causal consistency discards total ordering by timestamps in favor of causal ordering. With causal ordering, if event A causes event B, then event A precedes event B in every frame of reference.
 
-For example, if Alice posts a comment on a collaborative document and Bob then responds to that comment, it doesn’t matter if Alice and Bob are standing light-years apart – Claire will never see Bob’s reply without Alice’s message. Causally consistent databases keep track of causal relationships (using vector clocks), but allow other events that aren’t causally related to be *indeterminately* ordered, so that there’s no need for a total order to be imposed.
+For example, if Alice posts a comment on a collaborative document and Bob then responds to that comment, it doesn’t matter if Alice and Bob are standing light-years apart – Claire will never see Bob’s reply without Alice’s message. Causally consistent databases keep track of causal relationships (using vector clocks), but allow other events that aren’t causally related to be _indeterminately_ ordered, so that there’s no need for a total order to be imposed.
 
 <div class="side-by-side-videos">
   <div class="embed-container">

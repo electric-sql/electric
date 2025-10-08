@@ -11,7 +11,7 @@
     "location": "Kaiserslautern",
     "country": "Germany",
     "flag": "de",
-    "published": true
+    "published": true,
   },
   {
     "slug": "marc",
@@ -25,7 +25,7 @@
     "location": "Paris",
     "country": "France",
     "flag": "fr",
-    "published": true
+    "published": true,
   },
   {
     "slug": "nuno",
@@ -39,7 +39,7 @@
     "location": "Lisbon",
     "country": "Portugal",
     "flag": "pt",
-    "published": true
+    "published": true,
   },
   {
     "slug": "johannes",
@@ -53,7 +53,7 @@
     "location": "Berlin",
     "country": "Germany",
     "flag": "de",
-    "published": true
+    "published": true,
   },
   {
     "slug": "purva",
@@ -67,6 +67,6 @@
     "location": "San Francisco",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
 ]

@@ -88,29 +88,27 @@ function ThreadTopBar({ threadId, onEditClick }: Props) {
           id: user.id,
           avatar_url: user.avatar_url,
           name: user.name,
-          type: user.type
+          type: user.type,
         }))
         .where(({ membership }) => eq(membership.thread_id, threadId)),
     [threadId]
   )
 
   const { data: agents } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: threadUsers })
         .where(({ result }) => eq(result.type, 'agent'))
-        .orderBy(({ result }) => result.name, 'desc')
-    ),
+        .orderBy(({ result }) => result.name, 'desc'),
     [threadUsers]
   )
 
   const { data: users } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: threadUsers })
         .where(({ result }) => eq(result.type, 'human'))
-        .orderBy(({ result }) => result.name, 'asc')
-    ),
+        .orderBy(({ result }) => result.name, 'asc'),
     [threadUsers]
   )
 

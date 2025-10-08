@@ -6,13 +6,13 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
-    "electricRegionVpc2EuWest1": {
-      "type": "sst.aws.Vpc"
+    electricRegionVpc2EuWest1: {
+      type: "sst.aws.Vpc"
     }
-    "phoenixLiveviewServiceEuWest1": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
+    phoenixLiveviewServiceEuWest1: {
+      service: string
+      type: "sst.aws.Service"
+      url: string
     }
   }
 }

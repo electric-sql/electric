@@ -20,7 +20,7 @@ import HomeFeaturesBefore from "../../src/partials/home-features-before.md"
 const router = useRouter()
 onMounted(() => {
   // Only run PostHog tracking in production
-  if (window.location.hostname === 'electric-sql.com') {
+  if (window.location.hostname === "electric-sql.com") {
     watch(
       () => router.route.data.relativePath,
       (path) => {

@@ -50,17 +50,17 @@ The `/src/electric.ts` file from our starter contains an `initElectric` function
 
 ```typescript
 // src/electric.ts
-import { makeElectricContext } from 'electric-sql/react'
-import { Capacitor } from '@capacitor/core'
+import { makeElectricContext } from "electric-sql/react"
+import { Capacitor } from "@capacitor/core"
 
 // The generated electric client:
-import { Electric, schema } from './generated/client'
-export type { Issue } from './generated/client'
+import { Electric, schema } from "./generated/client"
+export type { Issue } from "./generated/client"
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const initElectric = async () => {
-  const electricUrl = import.meta.env.ELECTRIC_URL ?? 'ws://localhost:5133'
+  const electricUrl = import.meta.env.ELECTRIC_URL ?? "ws://localhost:5133"
   const config = {
     auth: {
       token: insecureAuthToken({ user_id: genUUID() }),
@@ -77,26 +77,31 @@ export const initElectric = async () => {
 
 async function initWaSQLite(dbName: string, config: ElectricConfig) {
   // Import and initiate an electrified wa-sqlite
-  const { ElectricDatabase, electrify } = await import('electric-sql/wa-sqlite')
+  const { ElectricDatabase, electrify } = await import("electric-sql/wa-sqlite")
   const conn = await ElectricDatabase.init(dbName, distPath)
   return await electrify(conn, schema, config)
 }
 
 async function initCapacitorSQLite(dbName: string, config: ElectricConfig) {
   // Import and initiate an electrified Capacitor SQLite
-  const { electrify } = await import('electric-sql/capacitor')
+  const { electrify } = await import("electric-sql/capacitor")
   const { CapacitorSQLite, SQLiteConnection } = await import(
-    '@capacitor-community/sqlite'
+    "@capacitor-community/sqlite"
   )
   const sqliteConnection = new SQLiteConnection(CapacitorSQLite)
-  const conn = await sqliteConnection.createConnection(dbName, false, '', 1, false,)
+  const conn = await sqliteConnection.createConnection(
+    dbName,
+    false,
+    "",
+    1,
+    false
+  )
   await conn.open()
   return await electrify(conn, schema, config)
 }
 ```
 
 There are more details of how to [initialise an Electric client database in the documentation](https://electric-sql.com/docs/api/clients/typescript#instantiation).
-
 
 ## Conclusion
 

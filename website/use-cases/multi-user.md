@@ -13,5 +13,4 @@ benefits:
 
 ## Add realtime multi-user collaboration to your application
 
-
 ...

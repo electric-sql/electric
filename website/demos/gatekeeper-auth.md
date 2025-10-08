@@ -39,6 +39,6 @@ The auth token should include a claim containing the shape definition. This allo
 This keeps your main auth logic:
 
 - in your API (in the gatekeeper endpoint) where it's natural to do things like query the database and call external services
-- running *once* when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
+- running _once_ when generating a token, rather than on the "hot path" of every shape request in your authorising proxy
 
 <DemoCTAs :demo="$frontmatter" />

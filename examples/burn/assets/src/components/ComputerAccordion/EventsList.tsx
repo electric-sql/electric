@@ -52,7 +52,7 @@ function EventsList({ threadId, filter }: Props) {
 
   // First filter the events by threadId.
   const { collection: eventResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ event: eventCollection })
         .innerJoin({ user: userCollection }, ({ event, user }) =>
@@ -70,19 +70,15 @@ function EventsList({ threadId, filter }: Props) {
           user_type: user.type,
         }))
         .where(({ event }) => eq(event.thread_id, threadId))
-        .fn.where(
-          ({ event }) => {
-            if (!filterOutDoNothings) {
-              return true
-            }
-
-            return !(
-              event.type === 'tool_use' &&
-              event.data?.name === 'do_nothing'
-            )
+        .fn.where(({ event }) => {
+          if (!filterOutDoNothings) {
+            return true
           }
-        )
-    ),
+
+          return !(
+            event.type === 'tool_use' && event.data?.name === 'do_nothing'
+          )
+        }),
     [filterOutDoNothings, threadId]
   )
 

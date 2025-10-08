@@ -59,7 +59,7 @@ function Welcome() {
 
     await auth.signIn(user_id)
 
-    navigate({ to: search.next ? search.next : '/'})
+    navigate({ to: search.next ? search.next : '/' })
   }
 
   return (

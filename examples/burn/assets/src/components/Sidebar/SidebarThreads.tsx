@@ -37,7 +37,7 @@ function SidebarThreads({ threadId }: Props) {
   const navigate = useNavigate()
 
   const { collection: threadResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ thread: threadCollection })
         .innerJoin(
@@ -47,15 +47,14 @@ function SidebarThreads({ threadId }: Props) {
         .select(({ thread }) => ({
           id: thread.id,
           name: thread.name,
-          inserted_at: thread.inserted_at!
+          inserted_at: thread.inserted_at!,
         }))
-        .where(({ membership }) => eq(membership.user_id, currentUserId))
-    ),
+        .where(({ membership }) => eq(membership.user_id, currentUserId)),
     [currentUserId]
   )
 
   const { data: threads } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: threadResults })
         .orderBy(({ result }) => result.inserted_at, {
@@ -65,8 +64,7 @@ function SidebarThreads({ threadId }: Props) {
         .select(({ result }) => ({
           id: result.id,
           name: result.name,
-        }))
-    ),
+        })),
     [threadResults]
   )
 

@@ -8,127 +8,127 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
-import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as ApiUsersRouteImport } from './routes/api/users'
-import { Route as ApiTodosRouteImport } from './routes/api/todos'
-import { Route as ApiProjectsRouteImport } from './routes/api/projects'
-import { Route as ApiAuthRouteImport } from './routes/api/auth'
-import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
-import { Route as AuthenticatedProjectProjectIdRouteImport } from './routes/_authenticated/project/$projectId'
+import { Route as rootRouteImport } from "./routes/__root"
+import { Route as LoginRouteImport } from "./routes/login"
+import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
+import { Route as AuthenticatedIndexRouteImport } from "./routes/_authenticated/index"
+import { Route as ApiUsersRouteImport } from "./routes/api/users"
+import { Route as ApiTodosRouteImport } from "./routes/api/todos"
+import { Route as ApiProjectsRouteImport } from "./routes/api/projects"
+import { Route as ApiAuthRouteImport } from "./routes/api/auth"
+import { Route as ApiTrpcSplatRouteImport } from "./routes/api/trpc/$"
+import { Route as AuthenticatedProjectProjectIdRouteImport } from "./routes/_authenticated/project/$projectId"
 
 const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+  id: "/login",
+  path: "/login",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
+  id: "/_authenticated",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const ApiUsersRoute = ApiUsersRouteImport.update({
-  id: '/api/users',
-  path: '/api/users',
+  id: "/api/users",
+  path: "/api/users",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTodosRoute = ApiTodosRouteImport.update({
-  id: '/api/todos',
-  path: '/api/todos',
+  id: "/api/todos",
+  path: "/api/todos",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProjectsRoute = ApiProjectsRouteImport.update({
-  id: '/api/projects',
-  path: '/api/projects',
+  id: "/api/projects",
+  path: "/api/projects",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthRoute = ApiAuthRouteImport.update({
-  id: '/api/auth',
-  path: '/api/auth',
+  id: "/api/auth",
+  path: "/api/auth",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
-  id: '/api/trpc/$',
-  path: '/api/trpc/$',
+  id: "/api/trpc/$",
+  path: "/api/trpc/$",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedProjectProjectIdRoute =
   AuthenticatedProjectProjectIdRouteImport.update({
-    id: '/project/$projectId',
-    path: '/project/$projectId',
+    id: "/project/$projectId",
+    path: "/project/$projectId",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/login': typeof LoginRoute
-  '/api/auth': typeof ApiAuthRoute
-  '/api/projects': typeof ApiProjectsRoute
-  '/api/todos': typeof ApiTodosRoute
-  '/api/users': typeof ApiUsersRoute
-  '/': typeof AuthenticatedIndexRoute
-  '/project/$projectId': typeof AuthenticatedProjectProjectIdRoute
-  '/api/trpc/$': typeof ApiTrpcSplatRoute
+  "/login": typeof LoginRoute
+  "/api/auth": typeof ApiAuthRoute
+  "/api/projects": typeof ApiProjectsRoute
+  "/api/todos": typeof ApiTodosRoute
+  "/api/users": typeof ApiUsersRoute
+  "/": typeof AuthenticatedIndexRoute
+  "/project/$projectId": typeof AuthenticatedProjectProjectIdRoute
+  "/api/trpc/$": typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesByTo {
-  '/login': typeof LoginRoute
-  '/api/auth': typeof ApiAuthRoute
-  '/api/projects': typeof ApiProjectsRoute
-  '/api/todos': typeof ApiTodosRoute
-  '/api/users': typeof ApiUsersRoute
-  '/': typeof AuthenticatedIndexRoute
-  '/project/$projectId': typeof AuthenticatedProjectProjectIdRoute
-  '/api/trpc/$': typeof ApiTrpcSplatRoute
+  "/login": typeof LoginRoute
+  "/api/auth": typeof ApiAuthRoute
+  "/api/projects": typeof ApiProjectsRoute
+  "/api/todos": typeof ApiTodosRoute
+  "/api/users": typeof ApiUsersRoute
+  "/": typeof AuthenticatedIndexRoute
+  "/project/$projectId": typeof AuthenticatedProjectProjectIdRoute
+  "/api/trpc/$": typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_authenticated': typeof AuthenticatedRouteWithChildren
-  '/login': typeof LoginRoute
-  '/api/auth': typeof ApiAuthRoute
-  '/api/projects': typeof ApiProjectsRoute
-  '/api/todos': typeof ApiTodosRoute
-  '/api/users': typeof ApiUsersRoute
-  '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/project/$projectId': typeof AuthenticatedProjectProjectIdRoute
-  '/api/trpc/$': typeof ApiTrpcSplatRoute
+  "/_authenticated": typeof AuthenticatedRouteWithChildren
+  "/login": typeof LoginRoute
+  "/api/auth": typeof ApiAuthRoute
+  "/api/projects": typeof ApiProjectsRoute
+  "/api/todos": typeof ApiTodosRoute
+  "/api/users": typeof ApiUsersRoute
+  "/_authenticated/": typeof AuthenticatedIndexRoute
+  "/_authenticated/project/$projectId": typeof AuthenticatedProjectProjectIdRoute
+  "/api/trpc/$": typeof ApiTrpcSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/login'
-    | '/api/auth'
-    | '/api/projects'
-    | '/api/todos'
-    | '/api/users'
-    | '/'
-    | '/project/$projectId'
-    | '/api/trpc/$'
+    | "/login"
+    | "/api/auth"
+    | "/api/projects"
+    | "/api/todos"
+    | "/api/users"
+    | "/"
+    | "/project/$projectId"
+    | "/api/trpc/$"
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/login'
-    | '/api/auth'
-    | '/api/projects'
-    | '/api/todos'
-    | '/api/users'
-    | '/'
-    | '/project/$projectId'
-    | '/api/trpc/$'
+    | "/login"
+    | "/api/auth"
+    | "/api/projects"
+    | "/api/todos"
+    | "/api/users"
+    | "/"
+    | "/project/$projectId"
+    | "/api/trpc/$"
   id:
-    | '__root__'
-    | '/_authenticated'
-    | '/login'
-    | '/api/auth'
-    | '/api/projects'
-    | '/api/todos'
-    | '/api/users'
-    | '/_authenticated/'
-    | '/_authenticated/project/$projectId'
-    | '/api/trpc/$'
+    | "__root__"
+    | "/_authenticated"
+    | "/login"
+    | "/api/auth"
+    | "/api/projects"
+    | "/api/todos"
+    | "/api/users"
+    | "/_authenticated/"
+    | "/_authenticated/project/$projectId"
+    | "/api/trpc/$"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -141,68 +141,68 @@ export interface RootRouteChildren {
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
+    "/login": {
+      id: "/login"
+      path: "/login"
+      fullPath: "/login"
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: ''
+    "/_authenticated": {
+      id: "/_authenticated"
+      path: ""
+      fullPath: ""
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/': {
-      id: '/_authenticated/'
-      path: '/'
-      fullPath: '/'
+    "/_authenticated/": {
+      id: "/_authenticated/"
+      path: "/"
+      fullPath: "/"
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/api/users': {
-      id: '/api/users'
-      path: '/api/users'
-      fullPath: '/api/users'
+    "/api/users": {
+      id: "/api/users"
+      path: "/api/users"
+      fullPath: "/api/users"
       preLoaderRoute: typeof ApiUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/todos': {
-      id: '/api/todos'
-      path: '/api/todos'
-      fullPath: '/api/todos'
+    "/api/todos": {
+      id: "/api/todos"
+      path: "/api/todos"
+      fullPath: "/api/todos"
       preLoaderRoute: typeof ApiTodosRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/projects': {
-      id: '/api/projects'
-      path: '/api/projects'
-      fullPath: '/api/projects'
+    "/api/projects": {
+      id: "/api/projects"
+      path: "/api/projects"
+      fullPath: "/api/projects"
       preLoaderRoute: typeof ApiProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth': {
-      id: '/api/auth'
-      path: '/api/auth'
-      fullPath: '/api/auth'
+    "/api/auth": {
+      id: "/api/auth"
+      path: "/api/auth"
+      fullPath: "/api/auth"
       preLoaderRoute: typeof ApiAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/trpc/$': {
-      id: '/api/trpc/$'
-      path: '/api/trpc/$'
-      fullPath: '/api/trpc/$'
+    "/api/trpc/$": {
+      id: "/api/trpc/$"
+      path: "/api/trpc/$"
+      fullPath: "/api/trpc/$"
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/project/$projectId': {
-      id: '/_authenticated/project/$projectId'
-      path: '/project/$projectId'
-      fullPath: '/project/$projectId'
+    "/_authenticated/project/$projectId": {
+      id: "/_authenticated/project/$projectId"
+      path: "/project/$projectId"
+      fullPath: "/project/$projectId"
       preLoaderRoute: typeof AuthenticatedProjectProjectIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
@@ -220,7 +220,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
-  AuthenticatedRouteChildren,
+  AuthenticatedRouteChildren
 )
 
 const rootRouteChildren: RootRouteChildren = {
@@ -236,9 +236,9 @@ export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.tsx'
-declare module '@tanstack/react-start' {
+import type { getRouter } from "./router.tsx"
+import type { startInstance } from "./start.tsx"
+declare module "@tanstack/react-start" {
   interface Register {
     router: Awaited<ReturnType<typeof getRouter>>
     config: Awaited<ReturnType<typeof startInstance.getOptions>>

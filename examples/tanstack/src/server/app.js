@@ -65,16 +65,10 @@ const server = http.createServer(async (req, res) => {
 
       // Add source credentials if available
       if (process.env.ELECTRIC_SOURCE_ID) {
-        originUrl.searchParams.set(
-          `source_id`,
-          process.env.ELECTRIC_SOURCE_ID
-        )
+        originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
       }
       if (process.env.ELECTRIC_SOURCE_SECRET) {
-        originUrl.searchParams.set(
-          `secret`,
-          process.env.ELECTRIC_SOURCE_SECRET
-        )
+        originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
       }
 
       try {

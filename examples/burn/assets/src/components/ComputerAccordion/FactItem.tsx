@@ -58,7 +58,7 @@ const useStyles = makeStyles({
   },
   predicate: {
     color: 'var(--gray-12)',
-    flex: '0 1 auto'
+    flex: '0 1 auto',
   },
   object: {
     flex: '0 2 auto',

@@ -97,12 +97,12 @@ TanStack grew out of React Query, now [TanStack Query](https://tanstack.com/quer
 This is TanStack Query code to read data into a React component:
 
 ```tsx
-import { useQuery } from '@tanstack/react-query'
+import { useQuery } from "@tanstack/react-query"
 
 function Todos() {
   const { data } = useQuery({
-    queryFn: async () => await api.get('/todos'),
-    queryKey: ['todos']
+    queryFn: async () => await api.get("/todos"),
+    queryKey: ["todos"],
   })
 
   // ...
@@ -114,16 +114,17 @@ You provide a `queryFn` that defines how you fetch your data. TanStack Query the
 For writes, you create a mutation with a `mutationFn` that defines how you actually send your data to the server (in this case by posting it to your API):
 
 ```tsx
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 function Todos() {
   const queryClient = useQueryClient()
 
   const { mutate } = useMutation({
-    mutationFn: (todo) => api.post('/todos', todo),
-    onSettled: () => queryClient.invalidateQueries({
-      queryKey: ['todos']
-    })
+    mutationFn: (todo) => api.post("/todos", todo),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["todos"],
+      }),
   })
 
   // continues below ...
@@ -136,9 +137,9 @@ You can then use this mutation in your components to make instant local writes, 
 function Todos() {
   // ... as above
 
-  const addTodo = () => mutate({title: 'Some Title' })
+  const addTodo = () => mutate({ title: "Some Title" })
 
-  return <Button onClick={ addTodo } />
+  return <Button onClick={addTodo} />
 }
 ```
 
@@ -199,7 +200,7 @@ If we have these three things &mdash; collections, live queries and mutations th
 - [live queries](#live-queries)
 - [transactional mutations](#transactional-mutations)
 
-It allows you to *incrementally* migrate existing API-based apps to local-first sync and build real-time apps that are resilient, reactive and, as we’ll see, insanely fast 🔥
+It allows you to _incrementally_ migrate existing API-based apps to local-first sync and build real-time apps that are resilient, reactive and, as we’ll see, insanely fast 🔥
 
 Let’s dive it and see how it works!
 
@@ -214,20 +215,20 @@ You can populate data in many ways, such as fetching data from API endpoints usi
 Query collections fetch data using [TanStack Query](https://tanstack.com/query/latest).
 
 ```ts
-import { QueryClient } from '@tanstack/query-core'
-import { queryCollectionOptions } from '@tanstack/query-db-collection'
-import { createCollection } from '@tanstack/react-db'
+import { QueryClient } from "@tanstack/query-core"
+import { queryCollectionOptions } from "@tanstack/query-db-collection"
+import { createCollection } from "@tanstack/react-db"
 
 const queryClient = new QueryClient()
 
 const queryTodoCollection = createCollection(
   queryCollectionOptions({
-    id: 'fetch-todos',
-    queryKey: ['todos'],
-    queryFn: async () => await api.get('/todos'),
+    id: "fetch-todos",
+    queryKey: ["todos"],
+    queryFn: async () => await api.get("/todos"),
     getKey: (item) => item.id,
     schema: todoSchema, // any standard schema
-    queryClient
+    queryClient,
   })
 )
 ```
@@ -236,7 +237,7 @@ We’ve seen the heart of this before, right? It fetches data using a managed `q
 
 ```ts
 queryClient.invalidateQueries({
-  queryKey: ['todos']
+  queryKey: ["todos"],
 })
 ```
 
@@ -253,20 +254,20 @@ There are already a number of TanStack DB collections for different sync engines
 Electric is our open-source, Postgres-native, super fast sync engine. To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/api/clients/typescript) when defining a [Shape](/docs/guides/shapes). A shape is a [filtered view on a database table](/docs/guides/shapes#where-clause) that Electric syncs out-of Postgres, into the client for you:
 
 ```ts
-import { electricCollectionOptions } from '@tanstack/electric-db-collection'
-import { createCollection } from '@tanstack/react-db'
+import { electricCollectionOptions } from "@tanstack/electric-db-collection"
+import { createCollection } from "@tanstack/react-db"
 
 const electricTodoCollection = createCollection(
   electricCollectionOptions({
-    id: 'sync-todos',
+    id: "sync-todos",
     shapeOptions: {
-      url: 'http://localhost:3003/v1/shape',
+      url: "http://localhost:3003/v1/shape",
       params: {
-        table: 'todos',
-      }
+        table: "todos",
+      },
     },
     getKey: (item) => item.id,
-    schema: todoSchema
+    schema: todoSchema,
   })
 )
 ```
@@ -278,20 +279,20 @@ You can create as many filtered views as you like on the same table. For example
 ```ts
 const myRecentTodoCollection = createCollection(
   electricCollectionOptions({
-    id: 'sync-my-recent-todos',
+    id: "sync-my-recent-todos",
     shapeOptions: {
-      url: 'http://localhost:3003/v1/shape',
+      url: "http://localhost:3003/v1/shape",
       params: {
-        table: 'todos',
+        table: "todos",
         where: `
           user_id = '${currentUser.id}'
           AND
           inserted_at >= '2025-01-01'
-        `
-      }
+        `,
+      },
     },
     getKey: (item) => item.id,
-    schema: todoSchema
+    schema: todoSchema,
   })
 )
 ```
@@ -309,7 +310,7 @@ Once you have your data in collections, you can access it using live queries.
 There's a number of ways to build and use them. The most common is using a framework hook in your components like `useLiveQuery` for React:
 
 ```tsx
-import { useLiveQuery, eq } from '@tanstack/react-db'
+import { useLiveQuery, eq } from "@tanstack/react-db"
 
 const Todos = () => {
   const { data } = useLiveQuery((query) =>
@@ -318,7 +319,7 @@ const Todos = () => {
       .where(({ todo }) => eq(todo.completed, true))
   )
 
-  return <List items={ data } />
+  return <List items={data} />
 }
 ```
 
@@ -378,14 +379,20 @@ Instead of your application grinding to a halt when you have lots of components 
 Just as you can create live queries from collections, you can also create collections from live queries. This allows you to create new collections as materialised views derived from your synced or loaded data:
 
 ```ts
-import { createCollection, liveQueryCollectionOptions, eq } from '@tanstack/react-db'
+import {
+  createCollection,
+  liveQueryCollectionOptions,
+  eq,
+} from "@tanstack/react-db"
 
-const pendingTodos = createCollection(liveQueryCollectionOptions({
-  query: (query) =>
-    query
-      .from({ todo: todoCollection })
-      .where(({ todo }) => eq(todo.completed, false))
-}))
+const pendingTodos = createCollection(
+  liveQueryCollectionOptions({
+    query: (query) =>
+      query
+        .from({ todo: todoCollection })
+        .where(({ todo }) => eq(todo.completed, false)),
+  })
+)
 ```
 
 You can also access live query results as collections in your components:
@@ -446,7 +453,7 @@ const todoCollection = createCollection({
     const { original, changes } = transaction.mutations[0]
 
     await api.post(`/todos/${original.id}`, changes)
-  }
+  },
 })
 
 // Then in your components you can call `collection.update()`
@@ -455,7 +462,7 @@ function Todo({ todo }) {
     draft.completed = true
   })
 
-  return <Button onClick={ completeTodo } />
+  return <Button onClick={completeTodo} />
 }
 ```
 
@@ -520,10 +527,10 @@ Then in your component the usage is simple:
 ```tsx
 function SignUp() {
   const handleClick = () => {
-    createUserWithDefaultWorkspace('thruflo')
+    createUserWithDefaultWorkspace("thruflo")
   }
 
-  return <Button onClick={ handleClick } />
+  return <Button onClick={handleClick} />
 }
 ```
 
@@ -553,15 +560,15 @@ For example, when using TanStack DB with Electric, you can use the Electric coll
 export const mutationFn = async (_variables, { transaction }) => {
   const mutations = transaction.mutations
 
-  const collections = new Set(mutations.map(mutation => mutation.collection))
-  const payloadData = mutations.map(mutation => {
+  const collections = new Set(mutations.map((mutation) => mutation.collection))
+  const payloadData = mutations.map((mutation) => {
     const { collection, ...result } = mutation
 
     return result
   })
 
   // Post the mutations data to the ingest endpoint.
-  const txid = await api.post('/ingest', { mutations: payloadData })
+  const txid = await api.post("/ingest", { mutations: payloadData })
 
   // Monitor the collections for the transaction to sync back in.
   const promises = [...collections].map(({ utils }) => utils.awaitTxId(txid))

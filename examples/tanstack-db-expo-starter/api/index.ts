@@ -177,12 +177,10 @@ app.get(`/api/todos`, async (req, res) => {
     await pipeline(nodeStream, res)
   } catch (outerError) {
     if (!res.headersSent) {
-      res
-        .status(500)
-        .json({
-          error: "Internal server error",
-          details: (outerError as any).message,
-        })
+      res.status(500).json({
+        error: "Internal server error",
+        details: (outerError as any).message,
+      })
     }
   }
 })

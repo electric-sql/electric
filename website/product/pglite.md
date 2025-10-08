@@ -71,7 +71,7 @@ real-time, reactive bindings.
 PGlite is a lightweight WASM Postgres build, packaged into a TypeScript library for the browser, Node.js, Bun and Deno. PGlite allows you to run Postgres in JavaScript, with no need to install any other dependencies. It is under 3MB gzipped.
 
 ```ts
-import { PGlite } from '@electric-sql/pglite'
+import { PGlite } from "@electric-sql/pglite"
 
 const db = new PGlite()
 await db.query("select 'Hello world' as message;")

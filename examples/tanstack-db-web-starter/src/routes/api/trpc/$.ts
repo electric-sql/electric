@@ -32,6 +32,6 @@ export const Route = createFileRoute("/api/trpc/$")({
     handlers: {
       GET: serve,
       POST: serve,
-    }
-  }
+    },
+  },
 })

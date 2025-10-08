@@ -1,36 +1,36 @@
 <script setup>
-import { defineProps, withDefaults } from 'vue'
+import { defineProps, withDefaults } from "vue"
 
 const props = defineProps({
   name: {
     type: String,
-    required: true
+    required: true,
   },
   description: {
     type: [String, Object], // Accepts both string and other components
-    required: false
+    required: false,
   },
   optional: {
     type: Boolean,
-    default: false
+    default: false,
   },
   required: {
     type: Boolean,
-    default: false
+    default: false,
   },
   defaultValue: {
     type: String,
-    default: undefined
+    default: undefined,
   },
   example: {
     type: String,
-    required: true
-  }
+    required: true,
+  },
 })
 
 // Error handling
 if (!(props.required || props.optional || props.defaultValue !== undefined)) {
-  throw new Error('Must have a defaultValue if not required');
+  throw new Error("Must have a defaultValue if not required")
 }
 </script>
 
@@ -65,7 +65,9 @@ if (!(props.required || props.optional || props.defaultValue !== undefined)) {
       </tr>
       <tr v-if="defaultValue">
         <td>Default</td>
-        <td><code>{{ defaultValue }}</code></td>
+        <td>
+          <code>{{ defaultValue }}</code>
+        </td>
       </tr>
       <tr>
         <td>Description</td>
@@ -75,7 +77,9 @@ if (!(props.required || props.optional || props.defaultValue !== undefined)) {
       </tr>
       <tr>
         <td>Example</td>
-        <td><code>{{ name }}={{ example }}</code></td>
+        <td>
+          <code>{{ name }}={{ example }}</code>
+        </td>
       </tr>
     </tbody>
   </table>

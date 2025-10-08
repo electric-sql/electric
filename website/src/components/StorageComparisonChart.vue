@@ -87,7 +87,10 @@ export default {
       return props.height
     })
 
-    const wrapperStyle = computed(() => ({ width: widthValue.value, height: heightValue.value }))
+    const wrapperStyle = computed(() => ({
+      width: widthValue.value,
+      height: heightValue.value,
+    }))
 
     const createChart = () => {
       if (chartInstance.value) {
@@ -104,9 +107,12 @@ export default {
         backgroundColor: "transparent",
         borderWidth: 2,
         // Force CubDB lines to be solid regardless of dashed flag
-        borderDash: (dataset.label && dataset.label.toLowerCase().includes('cubdb'))
-          ? undefined
-          : (dataset.dashed ? [5, 5] : undefined),
+        borderDash:
+          dataset.label && dataset.label.toLowerCase().includes("cubdb")
+            ? undefined
+            : dataset.dashed
+              ? [5, 5]
+              : undefined,
         pointStyle: false,
         fill: false,
         order: index + 1,

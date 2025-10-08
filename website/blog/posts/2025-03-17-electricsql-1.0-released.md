@@ -58,10 +58,10 @@ Our policy is now no backwards-incompatible changes in patch or minor releases. 
 Electric is stable, reliable and scales. It's been stress-tested in production for some time now by companies like [Trigger](https://trigger.dev), [Otto](https://ottogrid.ai) and [IP.world](https://ip.world).
 
 > We use ElectricSQL to power [Trigger.dev Realtime](https://trigger.dev/launchweek/0/realtime), a core feature of our product. When we execute our users background tasks they get instant updates in their web apps. It's simple to operate since we already use Postgres, and it scales to millions of updates per day.<br />
-> *&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)*
+> _&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)_
 
 > At [Otto](https://ottogrid.ai), we built a spreadsheet product where every cell operates as its own AI agent. ElectricSQL enables us to reliably stream agent updates to our spreadsheet in real-time and efficiently manage large spreadsheets at scale. It has dramatically simplified our architecture while delivering the performance we need for cell-level reactive updates.<br />
-> *&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)*
+> _&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)_
 
 We process millions of requests and transactions each day. With hundreds of thousands of active [shapes](/docs/guides/shapes) and application users.
 

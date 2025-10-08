@@ -14,11 +14,11 @@ post: true
 
 Last Thursday, the Electric team was excited to host the first [Local-first Software London](https://guild.host/local-first-software-london/events) meet-up. It was a really successful evening, and it was brilliant to meet so many people from the Local-first movement in person, many of whom had travelled to London for the [React Advanced](https://reactadvanced.com) conference on Friday.
 
-We had a great turn out for the meet-up, both in person, and from those joining in via the livestream. We were delighted that the speakers we'd asked to join us accepted our invitation, and we were treated to an evening of interesting and enthusiastic presentations from each. Our guest speakers are all leaders from across the broad spectrum of Local-first projects and products. We are grateful to all of them for contributing to this first meet-up, and for further taking the time to answer follow-up questions from the attendees after each talk.  
+We had a great turn out for the meet-up, both in person, and from those joining in via the livestream. We were delighted that the speakers we'd asked to join us accepted our invitation, and we were treated to an evening of interesting and enthusiastic presentations from each. Our guest speakers are all leaders from across the broad spectrum of Local-first projects and products. We are grateful to all of them for contributing to this first meet-up, and for further taking the time to answer follow-up questions from the attendees after each talk.
 
-Recordings of each of the evening's presentations  are embedded below, and also available in this [playlist on YouTube](https://www.youtube.com/playlist?list=PL_BU3cf65mE_mT3QJPUIaj2Msw0Itt6Od).
+Recordings of each of the evening's presentations are embedded below, and also available in this [playlist on YouTube](https://www.youtube.com/playlist?list=PL_BU3cf65mE_mT3QJPUIaj2Msw0Itt6Od).
 
-If you are interested  in attending the next meet-up, please join the [Guild](https://guild.host/local-first-software-london) to stay up to date with information about future events.
+If you are interested in attending the next meet-up, please join the [Guild](https://guild.host/local-first-software-london) to stay up to date with information about future events.
 
 Here at Electric we're keen to help organise future meet-ups, both in London and elsewhere, so if you are interested in hosting, or helping to organise the next one, please get in touch with [Sam](mailto:sam@emectric-sql.com). We have also worked with [Guild.host](https://guild.host) to create a [Local-first Network](https://guild.host/local-first-software-london/network) for organising meet-ups in other cities.
 
@@ -40,7 +40,7 @@ Brief welcome and introduction to the event by organiser [Sam Willis](https://tw
 
 ## Secsync - End to end encryption for CRDTs
 
-An overview of [Secsync](https://github.com/serenity-kit/secsync) -  an end to end encryption system for CRDTs by [Nik Graf](https://twitter.com/nikgraf)
+An overview of [Secsync](https://github.com/serenity-kit/secsync) - an end to end encryption system for CRDTs by [Nik Graf](https://twitter.com/nikgraf)
 
 <div class="embed-container">
   <YoutubeEmbed video-id="dCGpD8F4isw" />
@@ -48,7 +48,7 @@ An overview of [Secsync](https://github.com/serenity-kit/secsync) -  an end to e
 
 ## DDLX - Permissions for Local-first sync
 
-[Paul Harter](https://twitter.com/paulharter)  talks about the permission system built for ElectricSQL.
+[Paul Harter](https://twitter.com/paulharter) talks about the permission system built for ElectricSQL.
 
 <div class="embed-container">
   <YoutubeEmbed video-id="UQMOnKdO1O0" />

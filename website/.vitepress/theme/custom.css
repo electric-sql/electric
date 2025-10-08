@@ -2,96 +2,100 @@
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 800;
-  src: url('./fonts/OpenSauceOne-Black.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-Black.woff2") format("woff2");
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 700;
-  src: url('./fonts/OpenSauceOne-ExtraBold.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-ExtraBold.woff2") format("woff2");
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 600;
-  src: url('./fonts/OpenSauceOne-Bold.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-Bold.woff2") format("woff2");
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 600;
-  src: url('./fonts/OpenSauceOne-BoldItalic.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-BoldItalic.woff2") format("woff2");
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 500;
-  src: url('./fonts/OpenSauceOne-Medium.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-Medium.woff2") format("woff2");
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 500;
-  src: url('./fonts/OpenSauceOne-MediumItalic.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-MediumItalic.woff2") format("woff2");
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 400;
-  src: url('./fonts/OpenSauceOne-Regular.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-Regular.woff2") format("woff2");
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 400;
-  src: url('./fonts/OpenSauceOne-Italic.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-Italic.woff2") format("woff2");
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 300;
-  src: url('./fonts/OpenSauceOne-Light.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-Light.woff2") format("woff2");
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 300;
-  src: url('./fonts/OpenSauceOne-LightItalic.woff2') format('woff2');
+  src: url("./fonts/OpenSauceOne-LightItalic.woff2") format("woff2");
 }
 
 @font-face {
   font-family: SourceCodePro;
   font-style: normal;
   font-weight: 400;
-  src: url('./fonts/SourceCodePro-Regular.woff2') format('woff2');
+  src: url("./fonts/SourceCodePro-Regular.woff2") format("woff2");
 }
 
-
-:root, .dark {
-  --vp-c-indigo-1: #D0BCFF;
-  --vp-c-indigo-2: #998FE7;
-  --vp-c-indigo-3: #7E78DB;
+:root,
+.dark {
+  --vp-c-indigo-1: #d0bcff;
+  --vp-c-indigo-2: #998fe7;
+  --vp-c-indigo-3: #7e78db;
 
   --vp-nav-logo-height: 30px;
 
   --vp-c-text-1: rgba(255, 255, 245, 0.92);
-  --vp-c-text-2: rgba(235, 235, 245, 0.80);
+  --vp-c-text-2: rgba(235, 235, 245, 0.8);
   --vp-c-text-3: rgba(235, 235, 245, 0.68);
 
-  --electric-color: #00D2A0;
-  --ddn-color: #D0BCFF;
-  --pglite-color: #F6F95C;
+  --electric-color: #00d2a0;
+  --ddn-color: #d0bcff;
+  --pglite-color: #f6f95c;
 
   --vp-code-bg: var(--vp-c-bg-elv);
-  --vp-code-color: #9ECBFF;
+  --vp-code-color: #9ecbff;
   --vp-code-font-size: 0.875em;
-  --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --vp-font-family-base:
+    OpenSauceOne, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --vp-font-family-mono:
+    SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
 }
 
 .Layout {
@@ -126,7 +130,7 @@
 .feature-cta a:hover {
   border-color: var(--vp-button-alt-hover-border);
   color: var(--vp-button-alt-hover-text);
-  background-color: var(--vp-button-alt-hover-bg)
+  background-color: var(--vp-button-alt-hover-bg);
 }
 .action a,
 .cloud-cta a {
@@ -134,7 +138,7 @@
   align-items: center;
 }
 .vpi-social-github {
-  --icon: url('https://api.iconify.design/simple-icons/github.svg');
+  --icon: url("https://api.iconify.design/simple-icons/github.svg");
 }
 .action a .vpi-social-discord,
 .action a .vpi-social-github,
@@ -160,10 +164,10 @@
 }
 
 .vpi-social-pglite {
-  --icon: url('/img/icons/pglite-social.svg') !important;
+  --icon: url("/img/icons/pglite-social.svg") !important;
 }
 .vpi-social-tanstack {
-  --icon: url('/img/icons/tanstack-social.svg') !important;
+  --icon: url("/img/icons/tanstack-social.svg") !important;
 }
 
 .feature-cta a .count {
@@ -177,13 +181,13 @@
   margin-top: -24px;
 }
 
-.home-cta div[class*='language-'] {
+.home-cta div[class*="language-"] {
   display: inline-block;
   max-width: calc(100vw - 48px);
 }
 
 @media (min-width: 760px) {
-  .home-cta div[class*='language-'] code {
+  .home-cta div[class*="language-"] code {
     padding-left: 36px !important;
     padding-right: 36px !important;
   }
@@ -199,26 +203,29 @@ span.no-visual {
   color: var(--vp-c-text-1);
 }
 @media (max-width: 959px) {
-  :root, .dark {
+  :root,
+  .dark {
     --vp-code-font-size: 0.875em;
   }
 }
 @media (max-width: 759px) {
-  :root, .dark {
+  :root,
+  .dark {
     --vp-code-font-size: 0.85em;
   }
 }
 @media (max-width: 559px) {
-  :root, .dark {
+  :root,
+  .dark {
     --vp-code-font-size: 0.835em;
   }
 }
 @media (max-width: 459px) {
-  :root, .dark {
+  :root,
+  .dark {
     --vp-code-font-size: 0.825em;
   }
 }
-
 
 .highlight {
   color: var(--vp-home-hero-name-color);
@@ -505,7 +512,7 @@ span.no-visual {
 @media (min-width: 960px) {
   .features-content {
     margin: 64px 64px 32px;
-/*    text-align: left;*/
+    /*    text-align: left;*/
   }
 }
 .vp-doc .features-content h2 {
@@ -571,7 +578,10 @@ span.no-visual {
   text-align: center;
   font-weight: 600;
   white-space: nowrap;
-  transition: color 0.25s, border-color 0.25s, background-color 0.25s !important;
+  transition:
+    color 0.25s,
+    border-color 0.25s,
+    background-color 0.25s !important;
 }
 .VPButton.brand {
   background-color: var(--vp-button-brand-bg);
@@ -783,13 +793,13 @@ iframe {
 }
 
 .vp-block,
-.vp-doc div[class*='language-'] {
+.vp-doc div[class*="language-"] {
   border-radius: 14px !important;
   margin: 18px 0 !important;
 }
 
 .vp-block pre,
-.vp-doc [class*='language-'] pre {
+.vp-doc [class*="language-"] pre {
   padding: 24px 0 !important;
 }
 
@@ -846,7 +856,7 @@ ul.benefits {
   margin: 40px 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px
+  gap: 24px;
 }
 @media (max-width: 559px) {
   .side-by-side-videos {
@@ -994,7 +1004,7 @@ ul.demo-actions li .VPButton {
 
   /* Add a divider above the button in mobile view */
   .VPNavScreen .primary-cta-button::before {
-    content: '';
+    content: "";
     display: block;
     height: 1px;
     background-color: rgba(255, 255, 255, 0.1);

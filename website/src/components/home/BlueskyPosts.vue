@@ -1,16 +1,16 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from "vue"
 
 // Props to configure the component
 const props = defineProps({
   did: {
     type: String,
-    required: true
+    required: true,
   },
   limit: {
     type: Number,
-    default: 2
-  }
+    default: 2,
+  },
 })
 
 const posts = ref([])
@@ -32,7 +32,7 @@ function getFromCache() {
       }
     }
   } catch (err) {
-    console.warn('Cache error:', err)
+    console.warn("Cache error:", err)
   }
   return null
 }
@@ -40,12 +40,15 @@ function getFromCache() {
 // Save data to cache
 function saveToCache(data) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
-      data,
-      timestamp: Date.now()
-    }))
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        data,
+        timestamp: Date.now(),
+      })
+    )
   } catch (err) {
-    console.warn('Error saving to cache:', err)
+    console.warn("Error saving to cache:", err)
   }
 }
 
@@ -57,12 +60,17 @@ function utf16ToUtf8Indices(str) {
   for (let i = 0; i < str.length; i++) {
     const code = str.charCodeAt(i)
     // Calculate UTF-8 byte length for each character
-    utf8Lengths[i] = code < 0x80 ? 1 :
-                     code < 0x800 ? 2 :
-                     code < 0xD800 || code >= 0xE000 ? 3 : 4
+    utf8Lengths[i] =
+      code < 0x80
+        ? 1
+        : code < 0x800
+          ? 2
+          : code < 0xd800 || code >= 0xe000
+            ? 3
+            : 4
 
     // Skip the second part of surrogate pairs
-    if (code >= 0xD800 && code < 0xDC00 && i + 1 < str.length) {
+    if (code >= 0xd800 && code < 0xdc00 && i + 1 < str.length) {
       utf8Lengths[i + 1] = 0
       i++
     }
@@ -80,21 +88,23 @@ function utf16ToUtf8Indices(str) {
 // Render the Bluesky post with proper formatting
 function renderPost(text, facets) {
   if (!text || !facets || !Array.isArray(facets)) {
-    return text || ''
+    return text || ""
   }
 
   // Create segments for easier manipulation
-  const segments = [{
-    text,
-    link: null
-  }]
+  const segments = [
+    {
+      text,
+      link: null,
+    },
+  ]
 
   // Map from UTF-8 byte positions to UTF-16 string indices
   const indexMap = utf16ToUtf8Indices(text)
 
   // Sort facets by start position (in descending order to avoid offset shifts)
-  const sortedFacets = [...facets].sort((a, b) =>
-    b.index.byteStart - a.index.byteStart
+  const sortedFacets = [...facets].sort(
+    (a, b) => b.index.byteStart - a.index.byteStart
   )
 
   // Process each facet
@@ -113,7 +123,11 @@ function renderPost(text, facets) {
       const segment = segments[i]
       const segmentEnd = segmentStart + segment.text.length
 
-      if (segmentStart <= startUtf16 && endUtf16 <= segmentEnd && !segment.link) {
+      if (
+        segmentStart <= startUtf16 &&
+        endUtf16 <= segmentEnd &&
+        !segment.link
+      ) {
         segmentIndex = i
         break
       }
@@ -128,7 +142,11 @@ function renderPost(text, facets) {
     const relativeEnd = endUtf16 - segmentStart
 
     // Skip if positions are invalid
-    if (relativeStart < 0 || relativeEnd > segment.text.length || relativeStart >= relativeEnd) {
+    if (
+      relativeStart < 0 ||
+      relativeEnd > segment.text.length ||
+      relativeStart >= relativeEnd
+    ) {
       continue
     }
 
@@ -136,14 +154,26 @@ function renderPost(text, facets) {
     let linkInfo = null
     if (facet.features && Array.isArray(facet.features)) {
       for (const feature of facet.features) {
-        if (feature.$type === 'app.bsky.richtext.facet#link' && feature.uri) {
-          linkInfo = { type: 'link', href: feature.uri }
+        if (feature.$type === "app.bsky.richtext.facet#link" && feature.uri) {
+          linkInfo = { type: "link", href: feature.uri }
           break
-        } else if (feature.$type === 'app.bsky.richtext.facet#mention' && feature.did) {
-          linkInfo = { type: 'mention', href: `https://bsky.app/profile/${feature.did}` }
+        } else if (
+          feature.$type === "app.bsky.richtext.facet#mention" &&
+          feature.did
+        ) {
+          linkInfo = {
+            type: "mention",
+            href: `https://bsky.app/profile/${feature.did}`,
+          }
           break
-        } else if (feature.$type === 'app.bsky.richtext.facet#tag' && feature.tag) {
-          linkInfo = { type: 'tag', href: `https://bsky.app/search?q=${encodeURIComponent(feature.tag)}` }
+        } else if (
+          feature.$type === "app.bsky.richtext.facet#tag" &&
+          feature.tag
+        ) {
+          linkInfo = {
+            type: "tag",
+            href: `https://bsky.app/search?q=${encodeURIComponent(feature.tag)}`,
+          }
           break
         }
       }
@@ -167,18 +197,20 @@ function renderPost(text, facets) {
   }
 
   // Now render the segments to HTML
-  return segments.map(segment => {
-    if (segment.link) {
-      return `<a href="${segment.link.href}" target="_blank" rel="noopener noreferrer" class="post-${segment.link.type}">${segment.text}</a>`
-    }
-    return segment.text
-  }).join('')
+  return segments
+    .map((segment) => {
+      if (segment.link) {
+        return `<a href="${segment.link.href}" target="_blank" rel="noopener noreferrer" class="post-${segment.link.type}">${segment.text}</a>`
+      }
+      return segment.text
+    })
+    .join("")
 }
 
 // Format the date for display (e.g., "Mar 7, 2025")
 function formatDisplayDate(timestamp) {
   const date = new Date(timestamp)
-  const month = date.toLocaleString('en-US', { month: 'short' })
+  const month = date.toLocaleString("en-US", { month: "short" })
   const day = date.getDate()
   const year = date.getFullYear()
 
@@ -186,19 +218,19 @@ function formatDisplayDate(timestamp) {
 }
 
 // Get post author
-const getPostAuthor = post => post.post.author
+const getPostAuthor = (post) => post.post.author
 
 // Get post time
-const getPostTime = post => post.post.indexedAt || post.post.record?.createdAt
+const getPostTime = (post) => post.post.indexedAt || post.post.record?.createdAt
 
 // Process posts to handle facets and other formatting
 const processedPosts = computed(() => {
-  return posts.value.map(post => ({
+  return posts.value.map((post) => ({
     ...post,
     processedText: renderPost(
-      post.post.record?.text || '',
+      post.post.record?.text || "",
       post.post.record?.facets || []
-    )
+    ),
   }))
 })
 
@@ -227,7 +259,7 @@ async function fetchPosts() {
     posts.value = data.feed
     saveToCache(data.feed)
   } catch (err) {
-    console.error('Error fetching Bluesky posts:', err)
+    console.error("Error fetching Bluesky posts:", err)
     error.value = err.message
   } finally {
     loading.value = false
@@ -241,17 +273,11 @@ onMounted(() => {
 
 <template>
   <div class="bluesky-posts">
-    <div v-if="loading" class="loading">
-      Loading posts...
-    </div>
+    <div v-if="loading" class="loading">Loading posts...</div>
 
-    <div v-else-if="error" class="error">
-      Error: {{ error }}
-    </div>
+    <div v-else-if="error" class="error">Error: {{ error }}</div>
 
-    <div v-else-if="posts.length === 0" class="no-posts">
-      No posts found.
-    </div>
+    <div v-else-if="posts.length === 0" class="no-posts">No posts found.</div>
 
     <div v-else class="posts-grid">
       <div v-for="post in processedPosts" :key="post.post.uri" class="post">
@@ -275,11 +301,15 @@ onMounted(() => {
               rel="noopener noreferrer"
               class="profile-link"
             >
-              <div class="display-name">{{ getPostAuthor(post).displayName }}</div>
+              <div class="display-name">
+                {{ getPostAuthor(post).displayName }}
+              </div>
               <div class="handle">@{{ getPostAuthor(post).handle }}</div>
             </a>
           </div>
-          <div class="post-date">{{ formatDisplayDate(getPostTime(post)) }}</div>
+          <div class="post-date">
+            {{ formatDisplayDate(getPostTime(post)) }}
+          </div>
         </div>
 
         <div class="post-content" v-html="post.processedText"></div>
@@ -301,11 +331,17 @@ onMounted(() => {
 
 <style scoped>
 .bluesky-posts {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   max-width: 100%;
 }
 
-.loading, .error, .no-posts {
+.loading,
+.error,
+.no-posts {
   padding: 1rem;
   text-align: center;
   color: #666;

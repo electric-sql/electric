@@ -46,8 +46,8 @@ const headers = {
 async function onError(error: Error) {
   const status =
     'status' in error && Number.isInteger(error.status)
-    ? error.status as number
-    : undefined
+      ? (error.status as number)
+      : undefined
 
   if (status === 403 && authCollection.has('current')) {
     await authCollection.delete('current')

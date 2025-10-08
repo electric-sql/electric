@@ -66,7 +66,7 @@ const useClasses = makeStyles({
     position: `relative`,
     boxSizing: `border-box`,
     fontSize: `var(--font-size-2)`,
-    overflow: 'hidden'
+    overflow: 'hidden',
   },
   image: {
     width: '100%',

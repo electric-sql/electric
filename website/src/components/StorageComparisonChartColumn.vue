@@ -20,11 +20,19 @@ export default {
     xAxisTitle: { type: String, default: "X Axis" },
     yAxisTitle: { type: String, default: "Y Axis" },
     yAxisSuffix: { type: String, default: "" },
-    yScaleType: { type: String, default: "linear", validator: (v) => ["linear", "logarithmic"].includes(v) },
+    yScaleType: {
+      type: String,
+      default: "linear",
+      validator: (v) => ["linear", "logarithmic"].includes(v),
+    },
     // Second Y-axis props
     y2AxisTitle: { type: String, default: "" },
     y2AxisSuffix: { type: String, default: "" },
-    y2ScaleType: { type: String, default: "linear", validator: (v) => ["linear", "logarithmic"].includes(v) },
+    y2ScaleType: {
+      type: String,
+      default: "linear",
+      validator: (v) => ["linear", "logarithmic"].includes(v),
+    },
     // Compute and display speedup = old / new for each x index using these dataset labels
     speedupNewLabel: { type: String, default: "" },
     speedupOldLabel: { type: String, default: "" },
@@ -35,7 +43,9 @@ export default {
   },
   setup(props) {
     // Ensure logarithmic scale is registered even when using chart.js/auto
-    try { Chart.register(LogarithmicScale) } catch (_) {}
+    try {
+      Chart.register(LogarithmicScale)
+    } catch (_) {}
     Chart.defaults.color = getComputedStyleValue("--vp-c-text-1")
     Chart.defaults.borderColor = `#ffffff50`
     Chart.defaults.font = {
@@ -69,8 +79,13 @@ export default {
       }
     }
 
-    const heightValue = computed(() => (typeof props.height === "number" ? `${props.height}px` : props.height))
-    const wrapperStyle = computed(() => ({ width: widthValue.value, height: heightValue.value }))
+    const heightValue = computed(() =>
+      typeof props.height === "number" ? `${props.height}px` : props.height
+    )
+    const wrapperStyle = computed(() => ({
+      width: widthValue.value,
+      height: heightValue.value,
+    }))
 
     const createChart = () => {
       if (chartInstance.value) {
@@ -80,7 +95,8 @@ export default {
       const defaultColors = [brandColor1, brandColor2, brandColor3, brandColor4]
 
       const datasets = props.data.map((dataset, index) => {
-        const baseColor = dataset.color || defaultColors[index % defaultColors.length]
+        const baseColor =
+          dataset.color || defaultColors[index % defaultColors.length]
         return {
           label: dataset.label,
           data: dataset.data,
@@ -88,7 +104,7 @@ export default {
           borderColor: baseColor,
           borderWidth: 1,
           order: index + 1,
-          yAxisID: dataset.yAxisID || 'y', // Default to 'y' if not specified
+          yAxisID: dataset.yAxisID || "y", // Default to 'y' if not specified
         }
       })
 
@@ -118,53 +134,60 @@ export default {
       const speedupLabelsPlugin = {
         id: "speedupLabels",
         afterDatasetsDraw: (chart) => {
-          const newLabel = (props.speedupNewLabel || '').trim()
-          const oldLabel = (props.speedupOldLabel || '').trim()
+          const newLabel = (props.speedupNewLabel || "").trim()
+          const oldLabel = (props.speedupOldLabel || "").trim()
           if (!newLabel || !oldLabel) return
           const dataLabels = chart.data?.labels
           const datasetsArr = chart.data?.datasets || []
           if (!Array.isArray(dataLabels) || datasetsArr.length < 2) return
-          const idxNew = datasetsArr.findIndex(d => d && typeof d.label === 'string' && d.label.trim() === newLabel)
-          const idxOld = datasetsArr.findIndex(d => d && typeof d.label === 'string' && d.label.trim() === oldLabel)
+          const idxNew = datasetsArr.findIndex(
+            (d) =>
+              d && typeof d.label === "string" && d.label.trim() === newLabel
+          )
+          const idxOld = datasetsArr.findIndex(
+            (d) =>
+              d && typeof d.label === "string" && d.label.trim() === oldLabel
+          )
           if (idxNew < 0 || idxOld < 0) return
           const dataNew = datasetsArr[idxNew]?.data || []
           const dataOld = datasetsArr[idxOld]?.data || []
           const metaNew = chart.getDatasetMeta(idxNew)
           const metaOld = chart.getDatasetMeta(idxOld)
-          
+
           // Actual latency values for annotation
           const actualLatencies = props.rawData
-          
+
           const ctx = chart.ctx
           ctx.save()
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'bottom'
+          ctx.textAlign = "center"
+          ctx.textBaseline = "bottom"
           ctx.fillStyle = getComputedStyleValue("--vp-c-text-2") || "#666"
-          ctx.font = `${Chart.defaults.font.size || 12}px ${Chart.defaults.font.family || 'sans-serif'}`
+          ctx.font = `${Chart.defaults.font.size || 12}px ${Chart.defaults.font.family || "sans-serif"}`
           const n = Array.isArray(dataLabels) ? dataLabels.length : 0
           for (let i = 0; i < n; i += 1) {
             const vNew = Number(dataNew[i])
             const vOld = Number(dataOld[i])
-            if (!isFinite(vNew) || !isFinite(vOld) || vNew <= 0 || vOld <= 0) continue
+            if (!isFinite(vNew) || !isFinite(vOld) || vNew <= 0 || vOld <= 0)
+              continue
             const speedup = vOld / vNew
             if (!isFinite(speedup) || speedup <= 0) continue
             const elNew = metaNew?.data?.[i]
             const elOld = metaOld?.data?.[i]
             if (!elNew || !elOld) continue
-            
+
             // Place latency above the 1.0.24 bar
-            const oldLatency = actualLatencies['1.0.24']?.[i]
+            const oldLatency = actualLatencies["1.0.24"]?.[i]
             if (oldLatency !== undefined) {
               const oldText = `${oldLatency.toFixed(oldLatency >= 100 ? 0 : oldLatency >= 1 ? 1 : 2)}ms`
               ctx.fillText(oldText, elOld.x, elOld.y - 6)
             }
-            
+
             // Place latency and speedup above the 1.1.0 bar
-            const newLatency = actualLatencies['1.1.0']?.[i]
+            const newLatency = actualLatencies["1.1.0"]?.[i]
             if (newLatency !== undefined) {
               const newText = `${newLatency.toFixed(newLatency >= 100 ? 0 : newLatency >= 1 ? 1 : 2)}ms`
               const speedupText = `×${speedup.toFixed(speedup >= 10 ? 0 : speedup >= 3 ? 1 : 2)}`
-              
+
               // Draw latency on first line
               ctx.fillText(newText, elNew.x, elNew.y - 20)
               // Draw speedup on second line
@@ -172,10 +195,8 @@ export default {
             }
           }
           ctx.restore()
-        }
+        },
       }
-
-
 
       const chart = new Chart(chartCanvas.value, {
         type: "bar",
@@ -192,9 +213,11 @@ export default {
                 filter: (legendItem, chartData) => {
                   // Deduplicate legend items with the same label
                   const label = legendItem.text
-                  const firstIndex = chartData.datasets.findIndex(dataset => dataset.label === label)
+                  const firstIndex = chartData.datasets.findIndex(
+                    (dataset) => dataset.label === label
+                  )
                   return legendItem.datasetIndex === firstIndex
-                }
+                },
               },
             },
             tooltip: {
@@ -204,34 +227,55 @@ export default {
                 title: (context) => `${props.xAxisTitle}: ${context[0].label}`,
                 label: (context) => {
                   // Only show tooltip for non-null values
-                  if (context.raw === null || context.raw === undefined) return null
-                  
+                  if (context.raw === null || context.raw === undefined)
+                    return null
+
                   // Get raw latency value for this dataset and data point
                   const datasetLabel = context.dataset.label
                   const dataIndex = context.dataIndex
                   const rawLatency = props.rawData[datasetLabel]?.[dataIndex]
-                  
+
                   if (rawLatency !== undefined) {
                     const base = `${context.dataset.label}: ${rawLatency.toFixed(rawLatency >= 100 ? 0 : rawLatency >= 1 ? 1 : 2)}ms`
                     // Append inline speedup only on the new/faster dataset line
-                    const newLabel = (props.speedupNewLabel || '').trim()
-                    const oldLabel = (props.speedupOldLabel || '').trim()
+                    const newLabel = (props.speedupNewLabel || "").trim()
+                    const oldLabel = (props.speedupOldLabel || "").trim()
                     if (!newLabel || !oldLabel) return base
-                    if (typeof context.dataset.label !== 'string' || context.dataset.label.trim() !== newLabel) return base
+                    if (
+                      typeof context.dataset.label !== "string" ||
+                      context.dataset.label.trim() !== newLabel
+                    )
+                      return base
                     const chart = context.chart
                     const datasetsArr = chart?.data?.datasets || []
-                    const iNew = datasetsArr.findIndex(d => d && typeof d.label === 'string' && d.label.trim() === newLabel)
-                    const iOld = datasetsArr.findIndex(d => d && typeof d.label === 'string' && d.label.trim() === oldLabel)
+                    const iNew = datasetsArr.findIndex(
+                      (d) =>
+                        d &&
+                        typeof d.label === "string" &&
+                        d.label.trim() === newLabel
+                    )
+                    const iOld = datasetsArr.findIndex(
+                      (d) =>
+                        d &&
+                        typeof d.label === "string" &&
+                        d.label.trim() === oldLabel
+                    )
                     if (iNew < 0 || iOld < 0) return base
                     const vNew = Number(datasetsArr[iNew]?.data?.[dataIndex])
                     const vOld = Number(datasetsArr[iOld]?.data?.[dataIndex])
-                    if (!isFinite(vNew) || !isFinite(vOld) || vNew <= 0 || vOld <= 0) return base
+                    if (
+                      !isFinite(vNew) ||
+                      !isFinite(vOld) ||
+                      vNew <= 0 ||
+                      vOld <= 0
+                    )
+                      return base
                     const speedup = vOld / vNew
                     if (!isFinite(speedup) || speedup <= 0) return base
                     const text = ` (×${speedup.toFixed(speedup >= 10 ? 0 : speedup >= 3 ? 1 : 2)} faster)`
                     return base + text
                   }
-                  
+
                   // Fallback to normalized value if raw data not available
                   const base = `${context.dataset.label}: ${context.raw}${props.yAxisSuffix}`
                   return base
@@ -251,8 +295,8 @@ export default {
               top: 30,
               bottom: 20,
               left: 20,
-              right: 20
-            }
+              right: 20,
+            },
           },
           scales: {
             x: {
@@ -280,7 +324,13 @@ export default {
       window.removeEventListener("resize", updateWidth)
     })
 
-    watch([() => props.data, () => props.labels], () => { createChart() }, { deep: true })
+    watch(
+      [() => props.data, () => props.labels],
+      () => {
+        createChart()
+      },
+      { deep: true }
+    )
 
     return { chartCanvas, wrapperEl, wrapperStyle }
   },
@@ -292,7 +342,7 @@ export default {
     <h3>{{ title }}</h3>
     <canvas ref="chartCanvas"></canvas>
   </div>
-  </template>
+</template>
 
 <style scoped>
 .StorageComparisonGraph {
@@ -316,5 +366,3 @@ export default {
   font-weight: 600;
 }
 </style>
-
-

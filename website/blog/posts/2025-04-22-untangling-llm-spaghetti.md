@@ -20,20 +20,20 @@ For example, [Bolt](https://bolt.new) and [Lovable](http://lovable.dev) use Supa
 ```js
 const fetchTodos = async () => {
   try {
-    setLoading(true);
+    setLoading(true)
     const { data, error } = await supabase
-      .from('todos')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .from("todos")
+      .select("*")
+      .order("created_at", { ascending: false })
 
-    if (error) throw error;
-    setTodos(data || []);
+    if (error) throw error
+    setTodos(data || [])
   } catch (error) {
-    console.error('Error fetching todos:', error);
+    console.error("Error fetching todos:", error)
   } finally {
-    setLoading(false);
+    setLoading(false)
   }
-};
+}
 ```
 
 This code is imperative. It's a function inlined into a React component that's called when the component mounts.
@@ -44,18 +44,22 @@ It's a big ball of spaghetti.
 
 So what's the solution? Declarative data dependencies and a sync engine. So that the network requests, the actual data fetching, can be delegated to a system that optimises data transfer and placement for you.
 
-Start with a logical data model. Your LLM understands that &mdash; it has no problem generating and evolving a schema for you. Then, instead of telling the LLM to generate code that fetches data, tell it to use a sync engine and generate code that *declares* the data that your component needs.
+Start with a logical data model. Your LLM understands that &mdash; it has no problem generating and evolving a schema for you. Then, instead of telling the LLM to generate code that fetches data, tell it to use a sync engine and generate code that _declares_ the data that your component needs.
 
 [GraphQL](https://relay.dev/docs/tutorial/fragments-1/) does it with fragments and an aggregated top-level fetch:
 
 ```js
 export const TodoFragment = graphql`
   fragment TodoFragment on Todo {
-    id text
-    complete createdAt
+    id
+    text
+    complete
+    createdAt
     updatedAt
-    relationship user {
-      id name
+    relationship
+    user {
+      id
+      name
     }
   }
 `
@@ -79,13 +83,13 @@ In general, local-first systems use a local store like [Valtio](https://valtio.d
 ```js
 const shape = await pg.electric.syncShapeToTable({
   shape: {
-    url: 'http://localhost:3000/v1/shape',
+    url: "http://localhost:3000/v1/shape",
     params: {
-      table: 'todo'
-    }
+      table: "todo",
+    },
   },
-  table: 'todo',
-  primaryKey: ['id']
+  table: "todo",
+  primaryKey: ["id"],
 })
 ```
 

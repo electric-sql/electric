@@ -11,7 +11,7 @@
     "location": "Singapore",
     "country": "Malasia",
     "flag": "ml",
-    "published": true
+    "published": true,
   },
   {
     "slug": "spencer",
@@ -25,7 +25,7 @@
     "location": "New York",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "jordan",
@@ -39,7 +39,7 @@
     "location": "Seattle",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "monica",
@@ -53,7 +53,7 @@
     "location": "Berlin",
     "country": "Germany",
     "flag": "de",
-    "published": true
+    "published": true,
   },
   {
     "slug": "pvh",
@@ -67,7 +67,7 @@
     "location": "Seattle",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "adam",
@@ -81,7 +81,7 @@
     "location": "Berlin",
     "country": "Germany",
     "flag": "de",
-    "published": true
+    "published": true,
   },
   {
     "slug": "chris",
@@ -95,7 +95,7 @@
     "location": "San Francisco",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "jose",
@@ -109,7 +109,7 @@
     "location": "Kraków",
     "country": "Poland",
     "flag": "pl",
-    "published": true
+    "published": true,
   },
   {
     "slug": "sriram",
@@ -123,7 +123,7 @@
     "location": "San Francisco",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "liam",
@@ -137,7 +137,7 @@
     "location": "San Francisco",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "theo",
@@ -151,7 +151,7 @@
     "location": "San Francisco",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "jack",
@@ -165,7 +165,7 @@
     "location": "San Francisco",
     "country": "USA",
     "flag": "us",
-    "published": true
+    "published": true,
   },
   {
     "slug": "emma",
@@ -179,7 +179,7 @@
     "location": "Berlin",
     "country": "Germany",
     "flag": "de",
-    "published": true
+    "published": true,
   },
   {
     "slug": "andrei",
@@ -195,7 +195,7 @@
     "country": "Australia",
     "flag": "au",
     "published": true,
-    "angel": true
+    "angel": true,
   },
   {
     "slug": "niamh",
@@ -209,7 +209,7 @@
     "location": "Oxford",
     "country": "England",
     "flag": "gb",
-    "published": true
+    "published": true,
   },
   {
     "slug": "phil",
@@ -224,7 +224,7 @@
     "country": "England",
     "flag": "gb",
     "published": true,
-    "angel": true
+    "angel": true,
   },
   {
     "slug": "michael",
@@ -239,7 +239,7 @@
     "country": "England",
     "flag": "gb",
     "published": true,
-    "angel": true
+    "angel": true,
   },
   {
     "slug": "mehdi",
@@ -255,6 +255,6 @@
     "country": "USA",
     "flag": "us",
     "published": true,
-    "angel": true
-  }
+    "angel": true,
+  },
 ]

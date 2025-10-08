@@ -29,7 +29,9 @@ export default defineConfig(({ command, mode }) => {
     define: {
       __APP_ENV__: env.APP_ENV,
       // Explicitly force production React
-      'process.env.NODE_ENV': JSON.stringify(isProd ? 'production' : 'development'),
+      'process.env.NODE_ENV': JSON.stringify(
+        isProd ? 'production' : 'development'
+      ),
       'import.meta.env.PROD': isProd,
       'import.meta.env.DEV': !isProd,
     },

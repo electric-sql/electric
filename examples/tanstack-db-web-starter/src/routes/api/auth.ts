@@ -15,6 +15,6 @@ export const Route = createFileRoute("/api/auth")({
       PATCH: serve,
       OPTIONS: serve,
       HEAD: serve,
-    }
-  }
+    },
+  },
 })

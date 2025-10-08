@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import { useLiveQuery, eq, not } from '@tanstack/react-db'
-import { Box, Flex, Text, TextField, Button, IconButton } from '@radix-ui/themes'
+import {
+  Box,
+  Flex,
+  Text,
+  TextField,
+  Button,
+  IconButton,
+} from '@radix-ui/themes'
 import { X as CloseIcon } from 'lucide-react'
 import { makeStyles, mergeClasses } from '@griffel/react'
 import { useAuth } from '../../db/auth'
@@ -8,7 +15,11 @@ import { copyInviteLink, getJoinUrl } from '../../utils/clipboard'
 import UserAvatar from '../UserAvatar'
 import ThreadRemoveUserModal from './ThreadRemoveUserModal'
 
-import { membershipCollection, threadCollection, userCollection } from '../../db/collections'
+import {
+  membershipCollection,
+  threadCollection,
+  userCollection,
+} from '../../db/collections'
 import type { Membership, User } from '../../db/schema'
 
 const useClasses = makeStyles({
@@ -27,13 +38,8 @@ const useClasses = makeStyles({
   },
 })
 
-type UserResult = Pick<
-  User,
-  | 'id'
-  | 'name'
-  | 'avatar_url'
-> & {
-  membership_id: Membership['id'],
+type UserResult = Pick<User, 'id' | 'name' | 'avatar_url'> & {
+  membership_id: Membership['id']
   membership_role: Membership['role']
 }
 
@@ -65,7 +71,7 @@ function ThreadEditForm({ threadId }: Props) {
   // All the users and agents in the thread.
 
   const { collection: memberResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ user: userCollection })
         .innerJoin(
@@ -80,44 +86,39 @@ function ThreadEditForm({ threadId }: Props) {
           membership_id: membership.id,
           membership_role: membership.role,
         }))
-        .where(({ membership }) => eq(membership.thread_id, threadId))
-    ),
+        .where(({ membership }) => eq(membership.thread_id, threadId)),
     [threadId]
   )
 
   // Just the humans.
 
   const { collection: userResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: memberResults })
-        .where(({ result }) => eq(result.type, 'human'))
-    ),
+        .where(({ result }) => eq(result.type, 'human')),
     [memberResults]
   )
   const { data: ownerUsers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: userResults })
-        .where(({ result }) => eq(result.membership_role, 'owner'))
-    ),
+        .where(({ result }) => eq(result.membership_role, 'owner')),
     [userResults]
   )
   const { data: currentUsers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: userResults })
-        .where(({ result }) => eq(result.id, currentUserId))
-    ),
+        .where(({ result }) => eq(result.id, currentUserId)),
     [userResults, currentUserId]
   )
   const { data: otherUsers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: userResults })
         .orderBy(({ result }) => result.name, 'asc')
-        .where(({ result }) => not(eq(result.id, currentUserId)))
-    ),
+        .where(({ result }) => not(eq(result.id, currentUserId))),
     [userResults, currentUserId]
   )
   const currentUser = currentUsers[0]!
@@ -129,29 +130,26 @@ function ThreadEditForm({ threadId }: Props) {
   // Just the agents.
 
   const { collection: agentResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: memberResults })
-        .where(({ result }) => eq(result.type, 'agent'))
-    ),
+        .where(({ result }) => eq(result.type, 'agent')),
     [memberResults]
   )
   const { data: producers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: agentResults })
         .orderBy(({ result }) => result.name, 'asc')
-        .where(({ result }) => eq(result.membership_role, 'producer'))
-    ),
+        .where(({ result }) => eq(result.membership_role, 'producer')),
     [agentResults]
   )
   const { data: comedians } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: agentResults })
         .orderBy(({ result }) => result.name, 'asc')
-        .where(({ result }) => eq(result.membership_role, 'comedian'))
-    ),
+        .where(({ result }) => eq(result.membership_role, 'comedian')),
     [agentResults]
   )
   const threadAgents = [...producers, ...comedians]
@@ -248,7 +246,11 @@ function ThreadEditForm({ threadId }: Props) {
                 onClick={() => handleUserRowClick(user)}
               >
                 <Flex align="center" gap="2">
-                  <UserAvatar username={user.name} imageUrl={user.avatar_url} size="medium" />
+                  <UserAvatar
+                    username={user.name}
+                    imageUrl={user.avatar_url}
+                    size="medium"
+                  />
                   <Text size="2">{user.name}</Text>
                   {index === 0 && (
                     <Text size="1" color="gray">
@@ -317,7 +319,11 @@ function ThreadEditForm({ threadId }: Props) {
                 onClick={() => handleUserRowClick(agent)}
               >
                 <Flex align="center" gap="2">
-                  <UserAvatar username={agent.name} imageUrl={agent.avatar_url} size="medium" />
+                  <UserAvatar
+                    username={agent.name}
+                    imageUrl={agent.avatar_url}
+                    size="medium"
+                  />
                   <Text size="2">{agent.name}</Text>
                   <Text size="1" color="gray">
                     ({agent.membership_role})

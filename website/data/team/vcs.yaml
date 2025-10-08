@@ -12,7 +12,7 @@
     "country": "USA",
     "flag": "us",
     "published": true,
-    "fund": true
+    "fund": true,
   },
   {
     "slug": "lunar",
@@ -27,7 +27,7 @@
     "country": "Germany",
     "flag": "de",
     "published": true,
-    "fund": true
+    "fund": true,
   },
   {
     "slug": "stepfunction",
@@ -42,7 +42,7 @@
     "country": "USA",
     "flag": "us",
     "published": true,
-    "fund": true
+    "fund": true,
   },
   {
     "slug": "firestreak",
@@ -57,7 +57,7 @@
     "country": "USA",
     "flag": "us",
     "published": true,
-    "fund": true
+    "fund": true,
   },
   {
     "slug": "ninja",
@@ -72,6 +72,6 @@
     "country": "USA",
     "flag": "us",
     "published": true,
-    "fund": true
-  }
+    "fund": true,
+  },
 ]
