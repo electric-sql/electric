@@ -322,8 +322,6 @@ defmodule Electric.Connection.Manager do
       }
       |> initialize_connection_opts(opts)
 
-    Electric.Connection.Restarter.connection_manager_started(stack_id, self())
-
     # Wait for the connection resolver to start before continuing with
     # connection setup.
     {:ok, state}

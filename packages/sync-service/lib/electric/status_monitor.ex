@@ -17,7 +17,8 @@ defmodule Electric.StatusMonitor do
 
   @db_state_key :db_state
 
-  def start_link(stack_id) do
+  def start_link(opts) do
+    stack_id = Keyword.fetch!(opts, :stack_id)
     GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
   end
 
@@ -180,6 +181,24 @@ defmodule Electric.StatusMonitor do
     wait_until_active(stack_id, Keyword.put(opts, :timeout, timeout - @retry_time))
   end
 
+  @doc """
+  Just like `wait_until_active/2` but non-blocking.
+
+  This function basically subscribes to status updates to get notified by StatusMonitor when
+  the status transitions to :active.
+
+  Returns a ref that will then be included in the notification message as `{<ref>, <reply from StatusMonitor>}`.
+  """
+  @spec wait_until_active_async(String.t()) :: reference()
+  def wait_until_active_async(stack_id) do
+    pid = stack_id |> name() |> GenServer.whereis()
+    call_ref = make_ref()
+
+    send(pid, {:"$gen_call", {self(), call_ref}, {:wait_until_active, nil}})
+
+    call_ref
+  end
+
   # Only used in tests
   def wait_for_messages_to_be_processed(stack_id) do
     GenServer.call(name(stack_id), :wait_for_messages_to_be_processed)
@@ -216,7 +235,7 @@ defmodule Electric.StatusMonitor do
     if status(state.stack_id) == :active do
       {:reply, :ok, state}
     else
-      Process.send_after(self(), {:timeout_waiter, from}, timeout)
+      if timeout, do: Process.send_after(self(), {:timeout_waiter, from}, timeout)
       {:noreply, %{state | waiters: MapSet.put(waiters, from)}}
     end
   end

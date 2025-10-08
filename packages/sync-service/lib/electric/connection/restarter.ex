@@ -34,25 +34,17 @@ defmodule Electric.Connection.Restarter do
     :ok
   end
 
-  def connection_manager_started(stack_id, pid) do
-    GenServer.cast(name(stack_id), {:connection_manager_started, pid})
-  end
-
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: name(opts))
   end
 
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
+
     # pending_db_state is used as an exclusion mechanism when the database connections are
     # sleeping: multiple concurrent shape requests will only trigger DB connection wakeup once
-    # because they're all serialized through this Restarter process.
-    {:ok, %{stack_id: stack_id, pending_db_state: nil}}
-  end
-
-  def handle_cast({:connection_manager_started, _pid}, state) do
-    # Reset the pending DB state. Restarter is now ready for the next scale-down/wake-up cycle.
-    {:noreply, %{state | pending_db_state: nil}}
+    # because they will all be serialized through this Restarter process.
+    {:ok, %{stack_id: stack_id, pending_db_state: nil, status_monitor_ref: nil}}
   end
 
   def handle_cast(:stop_connection_subsystem, state) do
@@ -62,12 +54,18 @@ defmodule Electric.Connection.Restarter do
 
   def handle_cast(:restart_connection_subsystem, %{pending_db_state: nil} = state) do
     Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
-    {:noreply, %{state | pending_db_state: :up}}
+    ref = Electric.StatusMonitor.wait_until_active_async(state.stack_id)
+    {:noreply, %{state | pending_db_state: :up, status_monitor_ref: ref}}
   end
 
   def handle_cast(:restart_connection_subsystem, %{pending_db_state: :up} = state) do
     # Ignore the restart request since we're already waiting on the connection manager to
     # start.
     {:noreply, state}
+  end
+
+  def handle_info({ref, :ok}, %{status_monitor_ref: ref} = state) do
+    # Reset the pending DB state. Restarter is now ready for the next scale-down/wake-up cycle.
+    {:noreply, %{state | pending_db_state: nil, status_monitor_ref: nil}}
   end
 end
