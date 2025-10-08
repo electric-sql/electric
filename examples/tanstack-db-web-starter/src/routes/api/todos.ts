@@ -23,6 +23,6 @@ export const Route = createFileRoute("/api/todos")({
   server: {
     handlers: {
       GET: serve,
-    }
-  }
+    },
+  },
 })
