@@ -18,8 +18,8 @@ function Index() {
           ({ thread, membership }) => eq(thread.id, membership.thread_id)
         )
         .orderBy(({ thread }) => thread.inserted_at, {
-          direction: 'desc',
-          nulls: 'first',
+          direction: `desc`,
+          nulls: `first`,
         })
         .limit(1)
         .select(({ thread }) => ({ id: thread.id }))
@@ -33,7 +33,7 @@ function Index() {
       return
     }
 
-    navigate({ to: '/threads/$threadId', params: { threadId: latestThreadId } })
+    navigate({ to: `/threads/$threadId`, params: { threadId: latestThreadId } })
   }, [isAuthenticated, latestThreadId, navigate])
 
   return null

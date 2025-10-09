@@ -14,7 +14,7 @@ const useClasses = makeStyles({
     paddingLeft: `4px`,
   },
   icon: {
-    marginRight: 'var(--space-2)',
+    marginRight: `var(--space-2)`,
   },
   closeButton: {
     position: `absolute`,
@@ -34,7 +34,7 @@ function RightSidebarHeader() {
       <IconButton
         size="1"
         variant="ghost"
-        className={mergeClasses(classes.closeButton, 'closeButton')}
+        className={mergeClasses(classes.closeButton, `closeButton`)}
         onClick={() => setRightSidebarOpen(false)}
       >
         ✕

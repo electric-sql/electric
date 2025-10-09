@@ -5,7 +5,7 @@ import { useLiveQuery } from "@electric-sql/pglite-react"
 
 // Create a persistent local PGlite database
 const pg = await PGlite.create({
-  dataDir: "idb://my-database",
+  dataDir: `idb://my-database`,
   extensions: {
     electric: electricSync(),
     live,
@@ -22,8 +22,8 @@ await pg.exec(`
 // Establish a persistent shape subscription
 await pg.electric.syncShapeToTable({
   shape: { url: `${BASE_URL}/v1/shape` },
-  table: "items",
-  primaryKey: ["id"],
+  table: `items`,
+  primaryKey: [`id`],
 })
 
 // Bind data to your components using live queries

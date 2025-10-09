@@ -11,14 +11,14 @@ import { z } from "zod"
  *
  * Represents the core data structure for todo items in the application
  */
-export const todos = pgTable("todos", {
-  id: serial("id").primaryKey(),
-  text: text("text").notNull(),
-  completed: boolean("completed").notNull().default(false),
-  created_at: timestamp("created_at", { withTimezone: true })
+export const todos = pgTable(`todos`, {
+  id: serial(`id`).primaryKey(),
+  text: text(`text`).notNull(),
+  completed: boolean(`completed`).notNull().default(false),
+  created_at: timestamp(`created_at`, { withTimezone: true })
     .notNull()
     .defaultNow(),
-  updated_at: timestamp("updated_at", { withTimezone: true })
+  updated_at: timestamp(`updated_at`, { withTimezone: true })
     .notNull()
     .defaultNow(),
 })

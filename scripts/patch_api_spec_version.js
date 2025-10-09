@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 
-const fs = require("fs")
-const path = require("path")
+const fs = require(`fs`)
+const path = require(`path`)
 
-const REPO_ROOT = path.resolve(__dirname, "..")
+const REPO_ROOT = path.resolve(__dirname, `..`)
 
 const packageVersionPlaceholders = {
-  "sync-service": "__PLACEHOLDER_SYNC_SERVICE_VERSION__",
+  "sync-service": `__PLACEHOLDER_SYNC_SERVICE_VERSION__`,
 }
 
 function getPackageVersion(packageName) {
   const packagePath = path.join(
     REPO_ROOT,
-    "packages",
+    `packages`,
     packageName,
-    "package.json"
+    `package.json`
   )
 
-  return JSON.parse(fs.readFileSync(packagePath, "utf8")).version
+  return JSON.parse(fs.readFileSync(packagePath, `utf8`)).version
 }
 
 function replaceVersionPlaceholders(content) {
@@ -29,7 +29,7 @@ function replaceVersionPlaceholders(content) {
     const version = getPackageVersion(packageName)
 
     updatedContent = updatedContent.replace(
-      new RegExp(placeholder, "g"),
+      new RegExp(placeholder, `g`),
       version
     )
   }
@@ -42,14 +42,14 @@ function main() {
   const filePath = process.argv[2]
 
   if (!filePath) {
-    console.error("Error: Please provide a file path")
+    console.error(`Error: Please provide a file path`)
 
     process.exit(1)
   }
 
   try {
     // Read the file
-    const content = fs.readFileSync(filePath, "utf8")
+    const content = fs.readFileSync(filePath, `utf8`)
 
     // Replace placeholders
     const updatedContent = replaceVersionPlaceholders(content)

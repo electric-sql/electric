@@ -11,7 +11,7 @@ export default function RootLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "Todo App",
+          title: `Todo App`,
           headerShown: false,
         }}
       />

@@ -4,7 +4,7 @@ import { execSync } from "child_process"
 
 async function tagLatest() {
   // Find all package.json files in the packages directory
-  const packageFiles = glob.sync("./packages/*/package.json")
+  const packageFiles = glob.sync(`./packages/*/package.json`)
 
   for (const file of packageFiles) {
     const pkg = JSON.parse(readFileSync(file))
@@ -15,7 +15,7 @@ async function tagLatest() {
     console.log(`Tagging ${name}@${version} as latest`)
     try {
       execSync(`npm dist-tag add ${name}@${version} latest`, {
-        stdio: "inherit",
+        stdio: `inherit`,
         env: { ...process.env },
       })
     } catch (e) {

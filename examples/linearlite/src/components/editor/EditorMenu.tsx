@@ -17,7 +17,7 @@ export interface EditorMenuProps {
 const EditorMenu = ({ editor }: EditorMenuProps) => {
   return (
     <div className="bg-white flex shadow-md rounded border p-1">
-      {/* eslint-disable @typescript-eslint/no-explicit-any */}
+      {}
       <button
         type="button"
         onClick={() => (editor.chain().focus() as any).toggleBold().run()}

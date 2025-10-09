@@ -9,7 +9,7 @@ import { trpc } from "@/lib/trpc-client"
 
 export const usersCollection = createCollection(
   electricCollectionOptions({
-    id: "users",
+    id: `users`,
     shapeOptions: {
       url: new URL(
         `/api/users`,
@@ -29,7 +29,7 @@ export const usersCollection = createCollection(
 )
 export const projectCollection = createCollection(
   electricCollectionOptions({
-    id: "projects",
+    id: `projects`,
     shapeOptions: {
       url: new URL(
         `/api/projects`,
@@ -82,7 +82,7 @@ export const projectCollection = createCollection(
 
 export const todoCollection = createCollection(
   electricCollectionOptions({
-    id: "todos",
+    id: `todos`,
     shapeOptions: {
       url: new URL(
         `/api/todos`,

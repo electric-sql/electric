@@ -10,7 +10,7 @@ import * as schema from "./schema"
  */
 
 // Database connection string
-const connectionString = "postgres://postgres:password@localhost:54321/electric"
+const connectionString = `postgres://postgres:password@localhost:54321/electric`
 
 // Create a Postgres client
 const client = postgres(connectionString)

@@ -9,7 +9,7 @@ function JoinPage() {
   const navigate = useNavigate()
 
   const { currentUserId, isAuthenticated } = useAuth()
-  const { threadId } = useParams({ from: '/join/$threadId' })
+  const { threadId } = useParams({ from: `/join/$threadId` })
 
   const { data: memberships } = useLiveQuery(
     (query) =>
@@ -31,7 +31,7 @@ function JoinPage() {
         id: crypto.randomUUID(),
         thread_id: threadId,
         user_id: userId,
-        role: 'member',
+        role: `member`,
       })
 
       navigate({ to: `/threads/${threadId}` })

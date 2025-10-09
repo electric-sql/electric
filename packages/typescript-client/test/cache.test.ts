@@ -1,4 +1,3 @@
-/* eslint-disable no-empty-pattern */
 import { describe, expect, assert, inject } from 'vitest'
 import { exec } from 'child_process'
 import { setTimeout as sleep } from 'node:timers/promises'

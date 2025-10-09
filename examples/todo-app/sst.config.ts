@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
 import { createDatabaseForCloudElectric } from "../.shared/lib/database"
@@ -38,7 +37,7 @@ export default $config({
     const cluster = getSharedCluster(`todo-app-${$app.stage}`)
     const service = cluster.addService(`todo-app-${$app.stage}-service`, {
       loadBalancer: {
-        ports: [{ listen: "443/https", forward: "3010/http" }],
+        ports: [{ listen: `443/https`, forward: `3010/http` }],
         health: {
           "3010/http": {
             path: `/health`,
@@ -56,18 +55,18 @@ export default $config({
         ELECTRIC_SOURCE_ID: sourceId,
       },
       image: {
-        context: "../..",
-        dockerfile: "Dockerfile",
+        context: `../..`,
+        dockerfile: `Dockerfile`,
       },
       dev: {
-        command: "node server.js",
+        command: `node server.js`,
       },
     })
 
-    const website = new sst.aws.StaticSite("todo-app-website", {
+    const website = new sst.aws.StaticSite(`todo-app-website`, {
       build: {
-        command: "npm run build",
-        output: "dist",
+        command: `npm run build`,
+        output: `dist`,
       },
       environment: {
         VITE_SERVER_URL: service.url.apply((url) =>
@@ -80,7 +79,7 @@ export default $config({
         dns: sst.cloudflare.dns(),
       },
       dev: {
-        command: "npm run vite",
+        command: `npm run vite`,
       },
     })
 

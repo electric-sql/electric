@@ -4,21 +4,20 @@ import { makeStyles, mergeClasses } from '@griffel/react'
 
 const useClasses = makeStyles({
   container: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding:
-      'calc((var(--space-4) + var(--space-5)) / 2) var(--space-4) var(--space-4) var(--space-4)',
-    backgroundColor: 'var(--color-background)',
+    display: `flex`,
+    alignItems: `center`,
+    justifyContent: `space-between`,
+    padding: `calc((var(--space-4) + var(--space-5)) / 2) var(--space-4) var(--space-4) var(--space-4)`,
+    backgroundColor: `var(--color-background)`,
   },
   title: {
-    fontWeight: '500',
+    fontWeight: `500`,
   },
   closeButton: {
     flexShrink: 0,
   },
   clickable: {
-    cursor: 'pointer',
+    cursor: `pointer`,
   },
 })
 
@@ -37,7 +36,7 @@ function ThreadEditTopBar({ onClose }: Props) {
       <IconButton
         variant="ghost"
         size="1"
-        className={mergeClasses('clickable', classes.closeButton)}
+        className={mergeClasses(`clickable`, classes.closeButton)}
         onClick={onClose}
       >
         <CloseIcon size={16} />

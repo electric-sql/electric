@@ -1,6 +1,6 @@
 import { FetchError, Shape, ShapeStream } from "@electric-sql/client"
 
-const API_URL = process.env.API_URL || "http://localhost:4000"
+const API_URL = process.env.API_URL || `http://localhost:4000`
 
 /*
  * Makes a request to the gatekeeper endpoint to fetch a config object
@@ -10,7 +10,7 @@ const API_URL = process.env.API_URL || "http://localhost:4000"
 async function fetchConfig() {
   const url = `${API_URL}/gatekeeper/items`
 
-  const resp = await fetch(url, { method: "POST" })
+  const resp = await fetch(url, { method: `POST` })
   return await resp.json()
 }
 
@@ -22,7 +22,7 @@ const stream = new ShapeStream({
   onError: async (error) => {
     if (error instanceof FetchError) {
       const status = error.status
-      console.log("handling fetch error: ", status)
+      console.log(`handling fetch error: `, status)
 
       // If the auth token is invalid or expires, hit the gatekeeper
       // again to update the auth headers and thus keep streaming
@@ -40,5 +40,5 @@ const stream = new ShapeStream({
 // so we can see the client working.
 const shape = new Shape(stream)
 shape.subscribe(({ rows }) => {
-  console.log("num rows: ", rows ? rows.length : 0)
+  console.log(`num rows: `, rows ? rows.length : 0)
 })

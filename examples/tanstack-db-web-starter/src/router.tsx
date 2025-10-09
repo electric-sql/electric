@@ -9,7 +9,7 @@ import "./styles.css"
 export function getRouter() {
   return createTanstackRouter({
     routeTree,
-    defaultPreload: "viewport",
+    defaultPreload: `viewport`,
     scrollRestoration: true,
   })
 }

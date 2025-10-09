@@ -27,7 +27,7 @@ const useClasses = makeStyles({
 function Welcome() {
   const classes = useClasses()
   const navigate = useNavigate()
-  const search = useSearch({ from: '/welcome' })
+  const search = useSearch({ from: `/welcome` })
 
   const [username, setUsername] = useState(``)
   const avatarUrl = useGithubAvatar(username)
@@ -59,7 +59,7 @@ function Welcome() {
 
     await auth.signIn(user_id)
 
-    navigate({ to: search.next ? search.next : '/' })
+    navigate({ to: search.next ? search.next : `/` })
   }
 
   return (
@@ -135,7 +135,7 @@ function Welcome() {
   )
 }
 
-export const Route = createFileRoute('/welcome')({
+export const Route = createFileRoute(`/welcome`)({
   component: Welcome,
   validateSearch: (search: Record<string, unknown>) => ({
     next: (search.next as string) || undefined,
