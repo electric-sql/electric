@@ -145,12 +145,12 @@ defmodule Electric.Replication.PublicationManagerTest do
     @tag update_debounce_timeout: 50
     test "deduplicates shape handle operations", %{opts: opts} do
       shape = generate_shape({"public", "items"})
-      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape, opts) end)
-      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape, opts) end)
+      assert :ok = PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape, opts) end)
+      task2 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
       task3 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
-      task4 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
 
-      Task.await_many([task1, task2, task3, task4])
+      Task.await_many([task1, task2, task3])
 
       assert_receive {:filters, [{_, {"public", "items"}}]}
       refute_receive {:filters, _}, 300
