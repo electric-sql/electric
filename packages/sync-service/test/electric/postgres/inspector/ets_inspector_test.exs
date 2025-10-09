@@ -537,8 +537,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       )
 
       assert_receive :pool_busy
-
-      wait_for_pool_to_be_busy(busy_pool)
+      :ok
     end
 
     test "returns error", %{opts: opts} do
@@ -550,18 +549,6 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
       assert :error = EtsInspector.list_relations_with_stale_cache(opts)
     end
-  end
-
-  defp wait_for_pool_to_be_busy(conn) do
-    Postgrex.query!(conn, "SELECT 1", [])
-    wait_for_pool_to_be_busy(conn)
-  rescue
-    e in DBConnection.ConnectionError ->
-      if e.message =~ "connection not available and request was dropped from queue" do
-        :ok
-      else
-        reraise e, __STACKTRACE__
-      end
   end
 
   defp with_items_oid(%{db_conn: conn}) do
