@@ -43,7 +43,6 @@ import {
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
-  EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
   LIVE_SSE_QUERY_PARAM,
   ELECTRIC_PROTOCOL_QUERY_PARAMS,
   LOG_MODE_QUERY_PARAM,
@@ -272,11 +271,6 @@ export interface ShapeStreamOptions<T = never> {
    * shape and stop, pass false.
    */
   subscribe?: boolean
-
-  /**
-   * @deprecated No longer experimental, use {@link liveSse} instead.
-   */
-  experimentalLiveSse?: boolean
 
   /**
    * Use Server-Sent Events (SSE) for live updates.
@@ -827,14 +821,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
     resumingFromPause?: boolean
   }): Promise<void> {
-    const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
     if (
       this.#isUpToDate &&
-      useSse &&
+      this.options.liveSse &&
       !this.#isRefreshing &&
       !opts.resumingFromPause
     ) {
-      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
       opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
       return this.#requestShapeSSE(opts)
     }

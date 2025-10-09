@@ -918,54 +918,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert body =~ "test-key"
       assert body =~ "test-value"
     end
-
-    test "works with deprecated experimental_live_sse=true",
-         ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
-
-      # Remove unused variable
-      # Set up storage mocks
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ -> nil end)
-      |> expect(:get_log_stream, fn @test_offset, @test_offset, @test_opts -> [] end)
-
-      # Use a short SSE timeout for the test
-      ctx = Map.put(ctx, :sse_timeout, 100)
-
-      conn =
-        ctx
-        |> conn(
-          :get,
-          %{"table" => "public.users"},
-          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true&experimental_live_sse=true"
-        )
-        |> call_serve_shape_plug(ctx)
-
-      # Validate response headers for SSE
-      assert {"content-type", "text/event-stream"} in conn.resp_headers
-      assert {"connection", "keep-alive"} in conn.resp_headers
-
-      # Verify cache control header for request collapsing
-      cache_control =
-        Enum.find_value(conn.resp_headers, fn
-          {"cache-control", value} -> value
-          _ -> nil
-        end)
-
-      assert cache_control =~ "public"
-      assert cache_control =~ "max-age="
-
-      # Verify chunked transfer encoding
-      assert conn.state == :chunked
-
-      # Verify response format (should be SSE events)
-      assert conn.status == 200
-      assert conn.state == :chunked
-    end
   end
 
   describe "stack not ready" do

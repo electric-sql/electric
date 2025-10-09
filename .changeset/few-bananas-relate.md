@@ -3,4 +3,4 @@
 "@core/sync-service": minor
 ---
 
-Deprecate `experimental_live_sse` and introduce proper `live_sse` flag for sending live updates as server sent events.
+[BREAKING] Removes `experimental_live_sse` and introduces proper `live_sse` flag for sending live updates as server sent events.
