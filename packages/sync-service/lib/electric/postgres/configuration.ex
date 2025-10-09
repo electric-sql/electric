@@ -42,33 +42,28 @@ defmodule Electric.Postgres.Configuration do
            "SELECT pubinsert, pubupdate, pubdelete, pubtruncate FROM pg_publication WHERE pubname = $1",
            [publication_name]
          ) do
-      %{num_rows: 1, columns: cols, rows: [row]} ->
-        publication = Enum.zip(cols, row) |> Map.new()
+      %{num_rows: 1, rows: [[true, true, true, true]]} ->
+        case Postgrex.query!(
+               conn,
+               """
+                 SELECT
+                   pg_get_userbyid(p.pubowner) = current_role
+                 FROM
+                   pg_publication p
+                 WHERE
+                   p.pubname = $1;
+               """,
+               [publication_name]
+             ) do
+          %{rows: [[true]]} ->
+            :ok
 
-        case publication do
-          %{"pubinsert" => true, "pubupdate" => true, "pubdelete" => true, "pubtruncate" => true} ->
-            case Postgrex.query!(
-                   conn,
-                   """
-                     SELECT
-                       pg_get_userbyid(p.pubowner) = current_role
-                     FROM
-                       pg_publication p
-                     WHERE
-                       p.pubname = $1;
-                   """,
-                   [publication_name]
-                 ) do
-              %{rows: [[true]]} ->
-                :ok
-
-              %{rows: [[false]]} ->
-                raise Electric.DbConfigurationError.publication_not_owned(publication_name)
-            end
-
-          _ ->
-            raise Electric.DbConfigurationError.publication_missing_operations(publication_name)
+          %{rows: [[false]]} ->
+            raise Electric.DbConfigurationError.publication_not_owned(publication_name)
         end
+
+      %{num_rows: 1} ->
+        raise Electric.DbConfigurationError.publication_missing_operations(publication_name)
 
       %{num_rows: 0} ->
         raise Electric.DbConfigurationError.publication_missing(publication_name)
@@ -104,7 +99,7 @@ defmodule Electric.Postgres.Configuration do
         Enum.map(to_reconfigure, &{&1, {:error, :misconfigured_replica_identity}}),
         Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
       ]
-      |> List.flatten()
+      |> Stream.concat()
       |> Map.new()
 
     if MapSet.size(to_add) == 0 and MapSet.size(to_reconfigure) == 0 do

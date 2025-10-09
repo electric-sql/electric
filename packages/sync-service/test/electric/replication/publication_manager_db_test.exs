@@ -53,24 +53,21 @@ defmodule Electric.Replication.PublicationManagerDbTest do
       end
     )
 
-    # send message when publication is configured to avoid timing issues
-    Repatch.patch(
-      Electric.Postgres.Configuration,
-      :configure_publication!,
-      [mode: :shared],
-      fn pool, a, b ->
-        res = Repatch.real(Electric.Postgres.Configuration.configure_publication!(pool, a, b))
-        send(test_pid, :publication_configured)
-        res
-      end
-    )
+    # notify when publication is configured to avoid timing issues
+    config_notification =
+      Repatch.notify(Electric.Postgres.Configuration, :configure_publication!, 3, mode: :shared)
 
     Repatch.allow(test_pid, pub_mgr_opts[:server])
 
     relation = {"public", "items"}
     relation_oid = lookup_relation_oid(ctx.pool, relation)
 
-    %{pub_mgr_opts: pub_mgr_opts, relation: relation, relation_with_oid: {relation_oid, relation}}
+    %{
+      pub_mgr_opts: pub_mgr_opts,
+      relation: relation,
+      relation_with_oid: {relation_oid, relation},
+      config_notification: config_notification
+    }
   end
 
   describe "add_shape/3" do
@@ -81,23 +78,23 @@ defmodule Electric.Replication.PublicationManagerDbTest do
     end
 
     test "keeps the table in the publication when shapes with different where clauses are added and removed",
-         ctx do
+         %{config_notification: config_notification} = ctx do
       shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
-      assert_receive :publication_configured
+      assert_receive ^config_notification
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
       shape_2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
       assert :ok == PublicationManager.add_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
-      refute_receive :publication_configured
+      refute_receive ^config_notification
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
       assert :ok == PublicationManager.remove_shape(@shape_handle_2, ctx.pub_mgr_opts)
-      refute_receive :publication_configured
+      refute_receive ^config_notification
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
-      assert_receive :publication_configured
+      assert_receive ^config_notification
       assert [] == fetch_pub_tables(ctx)
     end
   end
@@ -218,7 +215,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   defp patch_queries_to_unprivileged() do
     Repatch.patch(Postgrex, :query!, [mode: :shared], fn conn, sql, params ->
       DBConnection.run(conn, fn conn ->
-        Repatch.real(Postgrex.query!(conn, "SET ROLE unprivileged", []))
+        Repatch.real(Postgrex.query(conn, "SET ROLE unprivileged", []))
         Repatch.real(Postgrex.query!(conn, sql, params))
       end)
     end)
