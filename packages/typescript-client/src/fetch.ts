@@ -118,6 +118,10 @@ export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
       const text = await res.text()
       return new Response(text, res)
     } catch (err) {
+      if (args[1]?.signal?.aborted) {
+        throw new FetchBackoffAbortError()
+      }
+
       throw new FetchError(
         res.status,
         undefined,
