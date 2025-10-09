@@ -604,7 +604,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const newShapeHandle =
           e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
         this.#reset(newShapeHandle)
-        await this.#publish(e.json as Message<T>[])
+
+        // must refetch control message might be in a list or not depending
+        // on whether it came from an SSE request or long poll - handle both
+        // cases for safety here but worth revisiting 409 handling
+        await this.#publish(
+          (Array.isArray(e.json) ? e.json : [e.json]) as Message<T>[]
+        )
         return this.#requestShape()
       } else {
         // Notify subscribers

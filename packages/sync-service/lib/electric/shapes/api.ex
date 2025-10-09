@@ -890,8 +890,8 @@ defmodule Electric.Shapes.Api do
         end
 
       {^ref, :shape_rotation} ->
-        must_refetch = %{headers: %{control: "must-refetch"}}
-        message = encode_message(request, must_refetch)
+        must_refetch = Api.Error.must_refetch(live_sse: true)
+        message = encode_message(request, must_refetch.message)
 
         {message, %{state | mode: :done}}
 

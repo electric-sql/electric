@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Api.Error do
   """
   def must_refetch(opts) do
     message =
-      if Keyword.get(opts, :experimental_sse_mode, false) do
+      if Keyword.get(opts, :live_sse, false) do
         @must_refetch
       else
         [@must_refetch]
