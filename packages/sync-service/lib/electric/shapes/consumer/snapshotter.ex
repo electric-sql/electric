@@ -25,11 +25,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     GenServer.call(name(stack_id, shape_handle), :start_snapshot, 1_000)
   end
 
-  def start_link(config) do
+  def start_link(config) when is_map(config) do
     GenServer.start_link(__MODULE__, config, name: name(config))
   end
 
   def init(config) do
+    activate_mocked_functions_from_test_process()
+
     Process.set_label({:snapshotter, config.shape_handle})
     metadata = [stack_id: config.stack_id, shape_handle: config.shape_handle]
     Logger.metadata(metadata)
@@ -47,21 +49,16 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       shape_handle: shape_handle,
       shape: shape,
       stack_id: stack_id
-    } =
-      state
+    } = state
 
-    ctx_token = if not is_nil(state[:otel_ctx]), do: :otel_ctx.attach(state[:otel_ctx])
+    ctx_token = if not is_nil(state.otel_ctx), do: :otel_ctx.attach(state.otel_ctx)
 
     result =
       case Shapes.Consumer.whereis(stack_id, shape_handle) do
         consumer when is_pid(consumer) ->
           %{
-            db_pool: pool,
-            storage: storage,
-            create_snapshot_fn: create_snapshot_fn,
-            publication_manager: {publication_manager, publication_manager_opts},
             stack_id: stack_id,
-            chunk_bytes_threshold: chunk_bytes_threshold
+            publication_manager: {publication_manager, publication_manager_opts}
           } = state
 
           OpenTelemetry.with_span(
@@ -80,18 +77,18 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                 )
 
                 if not Storage.snapshot_started?(state.storage) do
-                  apply(create_snapshot_fn, [
+                  start_streaming_snapshot_from_db(
                     consumer,
                     shape_handle,
                     shape,
-                    %{
-                      db_pool: pool,
-                      storage: storage,
-                      stack_id: stack_id,
-                      chunk_bytes_threshold: chunk_bytes_threshold,
-                      timeout_to_first_data: state.snapshot_timeout_to_first_data
-                    }
-                  ])
+                    Map.take(state, [
+                      :stack_id,
+                      :db_pool,
+                      :storage,
+                      :chunk_bytes_threshold,
+                      :snapshot_timeout_to_first_data
+                    ])
+                  )
                 else
                   # Let the shape cache know that the snapshot is available. When the
                   # shape cache starts and restores the shapes from disk, it doesn't
@@ -138,7 +135,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   end
 
   @doc false
-  def query_in_readonly_txn(
+  def start_streaming_snapshot_from_db(
         consumer,
         shape_handle,
         shape,
@@ -160,7 +157,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       Task.Supervisor.async_nolink(supervisor, fn ->
         try do
           result =
-            do_query_in_readonly_txn(
+            stream_snapshot_from_db(
               self_pid,
               consumer,
               shape_handle,
@@ -177,7 +174,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       end)
 
     ref = task.ref
-    timeout_to_first_data = Map.get(ctx, :timeout_to_first_data, :timer.seconds(30))
+    timeout_to_first_data = Map.get(ctx, :snapshot_timeout_to_first_data, :timer.seconds(30))
 
     receive do
       {:ready_to_stream, task_pid, start_time} ->
@@ -225,7 +222,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   defp handle_task_exit({:error, error, stacktrace}), do: reraise(error, stacktrace)
   defp handle_task_exit(reason), do: exit(reason)
 
-  def do_query_in_readonly_txn(
+  def stream_snapshot_from_db(
         task_parent,
         consumer,
         shape_handle,
@@ -352,5 +349,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       "shape.root_table": shape.root_table,
       "shape.where": shape.where
     ]
+  end
+
+  if Mix.env() == :test do
+    def activate_mocked_functions_from_test_process do
+      Support.TestUtils.activate_mocked_functions_for_module(__MODULE__)
+    end
+  else
+    def activate_mocked_functions_from_test_process, do: :noop
   end
 end

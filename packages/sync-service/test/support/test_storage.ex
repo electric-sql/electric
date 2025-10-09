@@ -143,7 +143,12 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def cleanup!({parent, shape_handle, _, storage}) do
+  def cleanup!({_, shape_handle, _, _} = opts) do
+    cleanup!(opts, shape_handle)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def cleanup!({parent, _, _, storage}, shape_handle) do
     send(parent, {__MODULE__, :cleanup!, shape_handle})
     Storage.cleanup!(storage)
   end
