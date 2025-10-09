@@ -17,7 +17,7 @@ defmodule Electric.ShapeCacheTest do
   import Support.DbStructureSetup
 
   @stub_inspector Support.StubInspector.new(
-                    tables: [{1, {"public", "items"}}],
+                    tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
                     columns: [
                       %{
                         name: "id",
@@ -30,6 +30,10 @@ defmodule Electric.ShapeCacheTest do
                     ]
                   )
   @shape Shape.new!("items", inspector: @stub_inspector)
+  @shape_with_subquery Shape.new!("items",
+                         inspector: @stub_inspector,
+                         where: "id IN (SELECT id FROM public.other_table)"
+                       )
   @lsn Electric.Postgres.Lsn.from_integer(13)
   @change_offset LogOffset.new(@lsn, 2)
   @xid 99
@@ -830,9 +834,11 @@ defmodule Electric.ShapeCacheTest do
     ]
 
     setup ctx do
+      snapshot_data = ctx[:snapshot_data] || []
+
       Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        Storage.make_new_snapshot!(snapshot_data, storage)
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -940,8 +946,64 @@ defmodule Electric.ShapeCacheTest do
       end
     end
 
+    test "restores shapes with subqueries and their materializers", ctx do
+      %{shape_cache_opts: opts} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape_with_subquery, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+
+      # Materializer should be started
+      assert Process.alive?(
+               GenServer.whereis(
+                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
+               )
+             )
+
+      # Register this test as the connection manager to get "consumers ready" notification
+      {:via, Registry, {registry, key}} = Electric.Connection.Manager.name(ctx.stack_id)
+      Registry.register(registry, key, nil)
+
+      restart_shape_cache(ctx)
+      assert_receive {:"$gen_cast", {:consumers_ready, 2, 0}}
+
+      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+    end
+
+    test "restores shapes with subqueries and their materializers when backup missing", ctx do
+      %{shape_cache_opts: opts} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape_with_subquery, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+
+      # Materializer should be started
+      assert Process.alive?(
+               GenServer.whereis(
+                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
+               )
+             )
+
+      # Register this test as the connection manager to get "consumers ready" notification
+      {:via, Registry, {registry, key}} = Electric.Connection.Manager.name(ctx.stack_id)
+      Registry.register(registry, key, nil)
+
+      restart_shape_cache(ctx, remove_backup: true)
+      assert_receive {:"$gen_cast", {:consumers_ready, 2, 0}}
+
+      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+    end
+
     defp restart_shape_cache(context, opts \\ []) do
       stop_shape_cache(context)
+
+      {remove_backup?, opts} = Keyword.pop(opts, :remove_backup, false)
+
+      if remove_backup? do
+        File.rm_rf!(ShapeCache.ShapeStatus.backup_dir(context.storage))
+      end
 
       context =
         context

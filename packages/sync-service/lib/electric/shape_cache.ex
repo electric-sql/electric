@@ -260,42 +260,43 @@ defmodule Electric.ShapeCache do
     {:reply, !is_nil(ShapeStatus.get_existing_shape(state.stack_id, shape_handle)), state}
   end
 
-  defp shape_handles(state) do
-    ShapeStatus.list_shapes(state.stack_id)
-  end
-
   # Timeout is per-shape, not for the entire function
   defp recover_shapes(state, timeout) do
-    all_handles = shape_handles(state)
+    # we're starting here group after group without parallelization between groups
+    all_handles_and_shapes = ShapeStatus.list_shapes(state.stack_id)
 
     recovered =
-      Task.Supervisor.async_stream_nolink(
-        Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor),
-        all_handles,
-        fn {shape_handle, shape} -> start_and_recover_shape(shape_handle, shape, state) end,
-        ordered: false,
-        timeout: timeout,
-        on_timeout: :kill_task,
-        zip_input_on_exit: true
-      )
-      |> Stream.flat_map(fn
-        {:ok, result} ->
-          result
+      all_handles_and_shapes
+      |> group_into_layers()
+      |> Enum.flat_map(fn shape_group ->
+        Task.Supervisor.async_stream_nolink(
+          Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor),
+          shape_group,
+          fn {shape_handle, shape} -> start_and_recover_shape(shape_handle, shape, state) end,
+          ordered: true,
+          timeout: timeout,
+          on_timeout: :kill_task,
+          zip_input_on_exit: true
+        )
+        |> Stream.flat_map(fn
+          {:ok, result} ->
+            result
 
-        # All other exit reasons are caught in the `start_and_recover_shape/3` function
-        {:exit, {{shape_handle, shape}, :timeout}} ->
-          Logger.error(
-            "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
-          )
+          # All other exit reasons are caught in the `start_and_recover_shape/3` function
+          {:exit, {{shape_handle, shape}, :timeout}} ->
+            Logger.error(
+              "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
+            )
 
-          ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
+            ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
 
-          []
+            []
+        end)
+        |> Enum.to_list()
       end)
-      |> Enum.to_list()
 
     total_recovered = length(recovered)
-    total_failed_to_recover = length(all_handles) - total_recovered
+    total_failed_to_recover = length(all_handles_and_shapes) - total_recovered
 
     {Lsn.max(recovered), total_recovered, total_failed_to_recover}
   end
@@ -331,21 +332,8 @@ defmodule Electric.ShapeCache do
     else
       shape_handles =
         shape.shape_dependencies
-        |> Enum.map(&{&1, maybe_create_shape(&1, otel_ctx, state)})
-        |> Enum.with_index(fn {inner_shape, {shape_handle, _}}, index ->
-          materialized_type =
-            shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
-
-          ConsumerSupervisor.start_materializer(%{
-            stack_id: state.stack_id,
-            shape_handle: shape_handle,
-            storage: state.storage,
-            columns: inner_shape.explicitly_selected_columns,
-            materialized_type: materialized_type
-          })
-
-          shape_handle
-        end)
+        |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
+        |> Enum.map(&elem(&1, 0))
 
       shape = %{shape | shape_dependencies_handles: shape_handles}
 
@@ -362,6 +350,20 @@ defmodule Electric.ShapeCache do
   end
 
   defp start_shape(shape_handle, shape, state, otel_ctx, action) do
+    Enum.zip(shape.shape_dependencies_handles, shape.shape_dependencies)
+    |> Enum.with_index(fn {shape_handle, inner_shape}, index ->
+      materialized_type =
+        shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
+
+      ConsumerSupervisor.start_materializer(%{
+        stack_id: state.stack_id,
+        shape_handle: shape_handle,
+        storage: state.storage,
+        columns: inner_shape.explicitly_selected_columns,
+        materialized_type: materialized_type
+      })
+    end)
+
     case Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
            state.consumer_supervisor,
            stack_id: state.stack_id,
@@ -387,5 +389,20 @@ defmodule Electric.ShapeCache do
         ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
         :error
     end
+  end
+
+  @spec group_into_layers([{shape_handle(), Shape.t()}]) :: [[{shape_handle(), Shape.t()}], ...]
+  defp group_into_layers(handles_and_shapes, acc \\ [], visited \\ MapSet.new())
+  defp group_into_layers([], acc, _visited), do: Enum.reverse(acc)
+
+  defp group_into_layers(handles_and_shapes, acc, visited) do
+    {appendable, missing_deps} =
+      Enum.split_with(handles_and_shapes, fn {_, shape} ->
+        Enum.all?(shape.shape_dependencies_handles, &MapSet.member?(visited, &1))
+      end)
+
+    visited = MapSet.new(appendable, &elem(&1, 0)) |> MapSet.union(visited)
+
+    group_into_layers(missing_deps, [appendable | acc], visited)
   end
 end
