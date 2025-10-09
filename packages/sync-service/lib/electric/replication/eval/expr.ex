@@ -57,14 +57,19 @@ defmodule Electric.Replication.Eval.Expr do
 
   @doc false
   @spec from_json_safe(map()) :: {:ok, t()} | {:error, String.t()}
-  def from_json_safe(%{"version" => 1, "query" => query, "used_refs" => refs}) do
+  def from_json_safe(map, sublink_queries \\ %{})
+
+  def from_json_safe(
+        %{"version" => 1, "query" => query, "used_refs" => refs},
+        sublink_queries
+      ) do
     refs =
       Map.new(refs, fn [k, v] -> {k, type_from_json_safe(v)} end)
 
-    Parser.parse_and_validate_expression(query, refs: refs)
+    Parser.parse_and_validate_expression(query, refs: refs, sublink_queries: sublink_queries)
   end
 
-  def from_json_safe(_),
+  def from_json_safe(_, _),
     do: {:error, "Incorrect serialized format: keys must be `version`, `query`, `used_refs`"}
 
   defp type_from_json_safe(["array", type]), do: {:array, type_from_json_safe(type)}
