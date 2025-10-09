@@ -28,12 +28,21 @@ defmodule Electric.Replication.PublicationManagerTest do
 
     Repatch.patch(
       Electric.Postgres.Configuration,
+      :check_publication_status!,
+      [mode: :shared],
+      fn _, _ -> ctx[:configuration_publication_status] || :ok end
+    )
+
+    Repatch.patch(
+      Electric.Postgres.Configuration,
       :configure_publication!,
       [mode: :shared],
-      fn _, _, filters, _ ->
+      fn _, _, filters ->
         # Only relations are relevant now
         send(test_pid, {:filters, MapSet.to_list(filters)})
-        Map.get(ctx, :returned_relations, MapSet.new())
+
+        Map.new(filters, fn rel -> {rel, {:ok, :added}} end)
+        |> Map.merge(ctx[:configuration_result_overrides] || %{})
       end
     )
 
@@ -51,7 +60,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     %{opts: publication_manager_opts, ctx: ctx}
   end
 
-  describe "add_shape/2" do
+  describe "add_shape/3" do
     test "adds a single relation", %{opts: opts} do
       shape = generate_shape({"public", "items"})
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
@@ -81,7 +90,92 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     @tag update_debounce_timeout: 100
-    test "queues up requests for same shape handle", %{opts: opts} do
+    test "doesn't update when adding same relation again", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      shape2 = generate_shape({"public", "items"})
+      shape3 = generate_shape({"public", "items"})
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
+      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
+
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      refute_receive {:filters, _}, 500
+    end
+
+    @tag configuration_result_overrides: %{
+           {10, {"public", "another_table"}} => {:error, :schema_changed}
+         }
+    test "broadcasts dropped relations to shape cache", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      assert_receive {:remove_shapes_for_relations, [{10, {"public", "another_table"}}]}
+    end
+  end
+
+  describe "remove_shape/2" do
+    test "removes single relation when last shape removed", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
+      assert_receive {:filters, []}
+    end
+
+    @tag update_debounce_timeout: 50
+    test "subsequent additions should wait for reconfiguration", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
+      assert_receive {:filters, []}
+
+      test_pid = self()
+
+      run_async(fn ->
+        res = PublicationManager.add_shape(@shape_handle_1, shape, opts)
+        send(test_pid, {:add_shape_result, res})
+      end)
+
+      refute_receive {:add_shape_result, _}, 10
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      assert_receive {:add_shape_result, :ok}
+    end
+
+    @tag update_debounce_timeout: 50
+    test "deduplicates shape handle operations", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+      assert :ok = PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape, opts) end)
+      task2 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
+      task3 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
+
+      Task.await_many([task1, task2, task3])
+
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+      refute_receive {:filters, _}, 300
+    end
+
+    @tag update_debounce_timeout: 50
+    test "reference counts relations to avoid premature removal", %{opts: opts} do
+      shape1 = generate_shape({"public", "items"})
+      shape2 = generate_shape({"public", "items"})
+      shape3 = generate_shape({"public", "items"})
+      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
+      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
+      task3 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_3, shape3, opts) end)
+      Task.await_many([task1, task2, task3])
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+
+      # Remove one handle; relation should stay
+      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
+      refute_receive {:filters, _}, 500
+    end
+  end
+
+  describe "concurrent operations" do
+    @tag update_debounce_timeout: 100
+    test "queues up requests to add same shape handle", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
       test_pid = self()
 
@@ -106,144 +200,25 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
 
     @tag update_debounce_timeout: 100
-    test "doesn't update when adding same relation again", %{opts: opts} do
+    test "invalidates add requests if removed immediately", %{opts: opts} do
       shape1 = generate_shape({"public", "items"})
-      shape2 = generate_shape({"public", "items"})
-      shape3 = generate_shape({"public", "items"})
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, opts)
 
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-      refute_receive {:filters, _}, 500
-    end
-
-    @tag returned_relations: MapSet.new([{10, {"public", "another_table"}}])
-    test "broadcasts dropped relations to shape cache", %{opts: opts} do
-      shape = generate_shape({"public", "items"})
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-      assert_receive {:remove_shapes_for_relations, [{10, {"public", "another_table"}}]}
-    end
-  end
-
-  describe "remove_shape/2" do
-    test "removes single relation when last shape removed", %{opts: opts} do
-      shape = generate_shape({"public", "items"})
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
-      assert_receive {:filters, []}
-    end
-
-    @tag update_debounce_timeout: 50
-    test "deduplicates shape handle operations", %{opts: opts} do
-      shape = generate_shape({"public", "items"})
-      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape, opts) end)
-      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape, opts) end)
-      task3 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
-      task4 = Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, opts) end)
-
-      Task.await_many([task1, task2, task3, task4])
-
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-      refute_receive {:filters, _}, 300
-    end
-
-    @tag update_debounce_timeout: 50
-    test "reference counts relations to avoid premature removal", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"})
-      shape2 = generate_shape({"public", "items"})
-      shape3 = generate_shape({"public", "items"})
-      task1 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_1, shape1, opts) end)
-      task2 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_2, shape2, opts) end)
-      task3 = Task.async(fn -> PublicationManager.add_shape(@shape_handle_3, shape3, opts) end)
-      Task.await_many([task1, task2, task3])
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-
-      # Remove one handle; relation should stay
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
-      refute_receive {:filters, _}, 500
-    end
-
-    @tag update_debounce_timeout: 100
-    test "queues up requests for same shape handle", %{opts: opts} do
-      shape1 = generate_shape({"public", "items"})
-      :ok = PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-      assert_receive {:filters, [{_, {"public", "items"}}]}
-
-      test_pid = self()
-
-      run_async(fn ->
-        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
-        send(test_pid, :task1_done)
-      end)
-
-      run_async(fn ->
-        :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
-        send(test_pid, :task2_done)
-      end)
-
-      refute_receive :task1_done, 50
-      refute_receive {:filters, _}, 0
-      refute_receive :task2_done, 0
-
-      assert_receive :task1_done
-      assert_receive :task2_done, 10
-      assert_receive {:filters, []}
-      refute_receive {:filters, _}, 200
-    end
-  end
-
-  describe "missing publication handling" do
-    test "add_shape raises and server stops when publication is missing", ctx do
-      stop_supervised!(ctx.opts[:server])
-
-      missing_pub_error = %Postgrex.Error{
-        postgres: %{
-          code: :undefined_object,
-          pg_code: "42704",
-          severity: "ERROR",
-          message: "publication \"pub_#{ctx.stack_id}\" does not exist"
-        }
-      }
-
-      %{publication_manager: {_, publication_manager_opts}} =
-        with_publication_manager(%{
-          module: ctx.module,
-          test: ctx.test,
-          stack_id: ctx.stack_id,
-          update_debounce_timeout: 0,
-          publication_name: "pub_#{ctx.stack_id}",
-          pool: :no_pool
-        })
-
-      Repatch.restore(Electric.Postgres.Configuration, :configure_publication!, 4, mode: :shared)
-
-      Repatch.patch(
-        Electric.Postgres.Configuration,
-        :configure_publication!,
-        [mode: :shared],
-        fn _, _, _, _ -> raise missing_pub_error end
-      )
-
-      Repatch.allow(self(), publication_manager_opts[:server])
-
-      pid = GenServer.whereis(publication_manager_opts[:server])
-      mref = Process.monitor(pid)
-      Process.unlink(pid)
-
-      shape = generate_shape({"public", "items"})
-
-      raised =
-        assert_raise(Postgrex.Error, fn ->
-          PublicationManager.add_shape(@shape_handle_1, shape, publication_manager_opts)
+      add_task =
+        Task.async(fn ->
+          assert_raise RuntimeError, "Shape removed before updating publication", fn ->
+            PublicationManager.add_shape(@shape_handle_1, shape1, opts)
+          end
         end)
 
-      assert raised.postgres.code == :undefined_object
+      remove_task =
+        Task.async(fn ->
+          Process.sleep(5)
+          :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
+        end)
 
-      assert_receive {:DOWN, ^mref, :process, ^pid,
-                      {:shutdown, %Postgrex.Error{postgres: %{code: :undefined_object}}}}
+      Task.await_many([add_task, remove_task])
+
+      refute_receive {:filters, _}, 200
     end
   end
 
@@ -254,5 +229,33 @@ defmodule Electric.Replication.PublicationManagerTest do
         id: make_ref()
       )
     )
+  end
+
+  describe "network failure" do
+    setup do
+      Repatch.restore(
+        Electric.Postgres.Configuration,
+        :check_publication_status!,
+        2,
+        mode: :shared
+      )
+
+      Repatch.restore(
+        Electric.Postgres.Configuration,
+        :configure_publication!,
+        3,
+        mode: :shared
+      )
+    end
+
+    test "publication configuration fails when DB is unreachable", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+
+      assert_raise RuntimeError, "Database connection not available", fn ->
+        PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      end
+
+      refute_receive {:filters, _}, 50
+    end
   end
 end

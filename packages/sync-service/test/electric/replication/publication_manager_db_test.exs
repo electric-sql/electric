@@ -12,6 +12,8 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   import Support.DbStructureSetup
   import Support.TestUtils
 
+  require Repatch
+  alias Electric.Utils
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.PublicationManager
 
@@ -23,6 +25,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   setup [
     :with_stack_id_from_test,
     :with_unique_db,
+    :with_sql_execute,
     :with_publication_name,
     :with_publication,
     :with_basic_tables
@@ -50,15 +53,24 @@ defmodule Electric.Replication.PublicationManagerDbTest do
       end
     )
 
+    # notify when publication is configured to avoid timing issues
+    config_notification =
+      Repatch.notify(Electric.Postgres.Configuration, :configure_publication!, 3, mode: :shared)
+
     Repatch.allow(test_pid, pub_mgr_opts[:server])
 
     relation = {"public", "items"}
     relation_oid = lookup_relation_oid(ctx.pool, relation)
 
-    %{pub_mgr_opts: pub_mgr_opts, relation: relation, relation_with_oid: {relation_oid, relation}}
+    %{
+      pub_mgr_opts: pub_mgr_opts,
+      relation: relation,
+      relation_with_oid: {relation_oid, relation},
+      config_notification: config_notification
+    }
   end
 
-  describe "add_shape()" do
+  describe "add_shape/3" do
     test "adds the table to the publication when a shape is created for it", ctx do
       shape = generate_shape(ctx.relation_with_oid)
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
@@ -66,22 +78,153 @@ defmodule Electric.Replication.PublicationManagerDbTest do
     end
 
     test "keeps the table in the publication when shapes with different where clauses are added and removed",
-         ctx do
+         %{config_notification: config_notification} = ctx do
       shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+      assert_receive ^config_notification
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
       shape_2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
       assert :ok == PublicationManager.add_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
+      refute_receive ^config_notification
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
       assert :ok == PublicationManager.remove_shape(@shape_handle_2, ctx.pub_mgr_opts)
+      refute_receive ^config_notification
       assert [ctx.relation] == fetch_pub_tables(ctx)
 
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
+      assert_receive ^config_notification
       assert [] == fetch_pub_tables(ctx)
     end
   end
 
+  describe "publication misonfiguration" do
+    test "handles publication being deleted during operation", ctx do
+      Postgrex.query!(ctx.pool, "DROP PUBLICATION #{ctx.publication_name};", [])
+
+      shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+
+      assert_raise Electric.DbConfigurationError,
+                   "Publication #{Utils.quote_name(ctx.publication_name)} not found in the database",
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                   end
+
+      refute_receive {:remove_shapes_for_relations, _}
+      assert [] == fetch_pub_tables(ctx)
+    end
+
+    test "handles publication not publishing all operations", ctx do
+      Postgrex.query!(
+        ctx.pool,
+        "ALTER PUBLICATION #{ctx.publication_name} SET (publish = 'insert, update');",
+        []
+      )
+
+      shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+
+      assert_raise Electric.DbConfigurationError,
+                   "Publication #{Utils.quote_name(ctx.publication_name)} does not " <>
+                     "publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE",
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                   end
+
+      refute_receive {:remove_shapes_for_relations, _}
+      assert [] == fetch_pub_tables(ctx)
+    end
+
+    test "handles publication not being owned", ctx do
+      patch_queries_to_unprivileged()
+
+      relation_with_oid = ctx.relation_with_oid
+      shape_1 = generate_shape(relation_with_oid, @where_clause_1)
+
+      assert_raise Electric.DbConfigurationError,
+                   "Database table #{Utils.relation_to_sql(ctx.relation) |> Utils.quote_name()} is missing from " <>
+                     "the publication #{Utils.quote_name(ctx.publication_name)} and " <>
+                     "Electric lacks privileges to add it",
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                   end
+
+      assert_receive {:remove_shapes_for_relations, [^relation_with_oid]}
+      assert [] == fetch_pub_tables(ctx)
+    end
+  end
+
+  describe "insufficient table privilege" do
+    setup ctx do
+      relation_not_owned = {"public", "not_owned"}
+
+      Postgrex.query!(ctx.pool, "CREATE TABLE not_owned (id SERIAL PRIMARY KEY);")
+      Postgrex.query!(ctx.pool, "ALTER TABLE items OWNER TO unprivileged;")
+
+      Postgrex.query!(
+        ctx.pool,
+        "ALTER PUBLICATION #{ctx.publication_name} OWNER TO unprivileged;"
+      )
+
+      patch_queries_to_unprivileged()
+
+      %{
+        relation_not_owned: relation_not_owned,
+        relation_not_owned_with_oid:
+          {lookup_relation_oid(ctx.pool, relation_not_owned), relation_not_owned}
+      }
+    end
+
+    test "returns appropriate error when relation not owned", ctx do
+      relation_not_owned_with_oid = ctx.relation_not_owned_with_oid
+      shape_1 = generate_shape(relation_not_owned_with_oid, @where_clause_1)
+
+      assert_raise Postgrex.Error, ~r/insufficient_privilege/, fn ->
+        PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+      end
+
+      assert_receive {:remove_shapes_for_relations, [^relation_not_owned_with_oid]}
+      assert [] == fetch_pub_tables(ctx)
+    end
+
+    @tag update_debounce_timeout: 10
+    test "should only fail relevant tables with insufficient privilege errors", ctx do
+      %{relation_not_owned_with_oid: relation_not_owned_with_oid} = ctx
+      shape_1 = generate_shape(relation_not_owned_with_oid, @where_clause_1)
+      shape_2 = generate_shape(ctx.relation_with_oid, @where_clause_1)
+
+      task =
+        Task.async(fn ->
+          assert_raise Postgrex.Error, ~r/insufficient_privilege/, fn ->
+            PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+          end
+        end)
+
+      # this should succeed, even if the other one fails
+      assert :ok = PublicationManager.add_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
+
+      Task.await(task)
+
+      assert_receive {:remove_shapes_for_relations, [^relation_not_owned_with_oid]}
+      assert [ctx.relation] == fetch_pub_tables(ctx)
+    end
+  end
+
   defp fetch_pub_tables(ctx), do: fetch_publication_tables(ctx.pool, ctx.publication_name)
+
+  defp patch_queries_to_unprivileged() do
+    Repatch.patch(Postgrex, :query!, [mode: :shared], fn conn, sql, params ->
+      DBConnection.run(conn, fn conn ->
+        Repatch.real(Postgrex.query(conn, "SET ROLE unprivileged", []))
+        Repatch.real(Postgrex.query!(conn, sql, params))
+      end)
+    end)
+
+    Repatch.patch(Postgrex, :query, [mode: :shared], fn conn, sql, params ->
+      DBConnection.run(conn, fn conn ->
+        Repatch.real(Postgrex.query(conn, "SET ROLE unprivileged", []))
+        Repatch.real(Postgrex.query(conn, sql, params))
+      end)
+    end)
+  end
 end

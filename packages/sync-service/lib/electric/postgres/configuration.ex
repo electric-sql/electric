@@ -7,296 +7,300 @@ defmodule Electric.Postgres.Configuration do
   alias Electric.Utils
   alias Electric.Replication.PublicationManager
 
+  @type relation_filters :: PublicationManager.relation_filters()
+  @type relations_configured :: %{
+          Electric.oid_relation() =>
+            {:ok, :validated | :added | :dropped} | {:error, :schema_changed | term()}
+        }
+  @type relations_checked :: %{
+          Electric.oid_relation() =>
+            :ok
+            | {:error,
+               :schema_changed
+               | :relation_missing_from_publication
+               | :misconfigured_replica_identity}
+        }
+
+  @typep changed_relation ::
+           {
+             Electric.relation_id(),
+             Electric.relation(),
+             Electric.relation_id() | nil,
+             Electric.relation() | nil
+           }
+
+  @typep publication_relation :: {Electric.relation_id(), Electric.relation(), <<_::8>>}
+
+  @doc """
+  Check whether the publication with the given name exists, is configured to
+  publish all required operations, and is owned by the current user.
+  """
+  @spec check_publication_status!(Postgrex.conn(), String.t()) :: :ok
+  def check_publication_status!(conn, publication_name) do
+    query =
+      """
+      SELECT
+        pubinsert AND pubupdate AND pubdelete AND pubtruncate as all_operations,
+        pg_get_userbyid(p.pubowner) = current_role as is_owned
+      FROM pg_publication as p WHERE pubname = $1
+      """
+
+    Postgrex.query!(conn, query, [publication_name])
+    |> one_or_nil()
+    |> case do
+      %{"all_operations" => true, "is_owned" => true} ->
+        :ok
+
+      %{"is_owned" => false} ->
+        raise Electric.DbConfigurationError.publication_not_owned(publication_name)
+
+      %{"all_operations" => false} ->
+        raise Electric.DbConfigurationError.publication_missing_operations(publication_name)
+
+      _ ->
+        raise Electric.DbConfigurationError.publication_missing(publication_name)
+    end
+  end
+
+  defp one_or_nil(%Postgrex.Result{rows: [row], columns: cols}),
+    do: Enum.zip(cols, row) |> Map.new()
+
+  defp one_or_nil(_), do: nil
+
   @doc """
   Check whether the state of the publication relations in the database matches the sets of
   filters passed into the function.
 
-  If any of the relations in the filters are missing from the publication or don't have their
+  For any of the relations in the filters that is missing from the publication or doesn't have its
   replica identity set to full, an error is returned.
 
   If some of the relations included in the publication have been modified (e.g. the table name
-  has changed), those will be returned as a list of modified relations from this function to
+  has changed), those will be returned as a list of invalidated relations from this function to
   allow for the cleanup of their corresponding shapes.
   """
-  @spec check_publication_relations_and_identity(
-          Postgrex.conn(),
-          PublicationManager.relation_filters(),
-          PublicationManager.relation_filters(),
-          String.t()
-        ) ::
-          {:ok, PublicationManager.relation_filters()}
-          | {:error,
-             {:misconfigured_replica_identity, PublicationManager.relation_filters()}
-             | {:tables_missing_from_publication, PublicationManager.relation_filters()}}
-  def check_publication_relations_and_identity(
-        conn,
-        previous_relations,
-        new_relations,
-        publication_name
-      ) do
-    known_relations = known_relations(previous_relations, new_relations)
-    changed_relations = list_changed_relations(conn, known_relations)
-    published_relations = get_publication_tables(conn, publication_name)
+  @spec validate_publication_configuration!(Postgrex.conn(), String.t(), relation_filters()) ::
+          relations_configured()
+  def validate_publication_configuration!(conn, publication_name, expected_rels) do
+    %{
+      to_preserve: to_preserve,
+      to_add: to_add,
+      to_reconfigure: to_reconfigure,
+      to_invalidate: to_invalidate
+    } =
+      determine_publication_relation_actions!(conn, publication_name, expected_rels)
 
-    with :ok <-
-           check_relations_in_publication(
-             published_relations,
-             MapSet.union(previous_relations, new_relations),
-             changed_relations
-           ),
-         :ok <- check_replica_identity(published_relations) do
-      tables = for {_, relation, _} <- published_relations, do: Utils.relation_to_sql(relation)
+    configuration_result =
+      [
+        Enum.map(to_preserve, &{&1, {:ok, :validated}}),
+        Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
+        Enum.map(to_reconfigure, &{&1, {:error, :misconfigured_replica_identity}}),
+        Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
+      ]
+      |> Stream.concat()
+      |> Map.new()
 
-      Logger.info(
+    if MapSet.size(to_add) == 0 and MapSet.size(to_reconfigure) == 0 do
+      Logger.info(fn ->
+        tables = for {_, rel} <- to_preserve, do: Utils.relation_to_sql(rel)
+
         "Verified publication #{publication_name} to include #{inspect(tables)} tables with REPLICA IDENTITY FULL"
-      )
-
-      {:ok, Enum.map(changed_relations, &trim_changed_relation/1) |> MapSet.new()}
+      end)
     end
-  end
 
-  defp check_relations_in_publication(published_relations, known_relations, changed_relations) do
-    published_relations_set =
-      MapSet.new(published_relations, fn {oid, relation, _replica_identity} -> {oid, relation} end)
-
-    diff_set = MapSet.difference(known_relations, published_relations_set)
-
-    if MapSet.size(diff_set) == 0 do
-      :ok
-    else
-      # Some of the known relations are not published. It's okay if they have been dropped or
-      # renamed, their corresponding shapes will get cleaned up by the publication manager.
-      missing_relations =
-        Enum.filter(diff_set, fn {oid, relation} ->
-          case List.keyfind(changed_relations, oid, 0) do
-            {^oid, ^relation, nil, _} ->
-              # Dropped relation, so it physically can no longer be included in the publication.
-              false
-
-            {^oid, ^relation, ^oid, renamed_relation} when relation != renamed_relation ->
-              # Renamed relation. Its shape will be cleaned up and the validation performed on
-              # the next add_shape() request will succeed since the new relation is already
-              # included in the publication under the new name.
-              false
-
-            nil ->
-              # The relation is not included in the publication and hasn't been changed, so it
-              # is indeed an error which must be corrected by the database admin.
-              true
-          end
-        end)
-        |> MapSet.new()
-
-      if MapSet.size(missing_relations) == 0 do
-        :ok
-      else
-        {:error, {:tables_missing_from_publication, missing_relations}}
-      end
-    end
-  end
-
-  defp check_replica_identity(relations) do
-    bad_relations =
-      Enum.reject(relations, fn {_oid, _relation, replica_identity} -> replica_identity == "f" end)
-
-    if bad_relations == [] do
-      :ok
-    else
-      {:error,
-       {:misconfigured_replica_identity,
-        MapSet.new(bad_relations, fn {oid, relation, _ident} -> {oid, relation} end)}}
-    end
+    configuration_result
   end
 
   @doc """
   Configure the publication to include all relevant tables, also setting table identity to `FULL`
-  if necessary. Return a list of tables that could not be configured.
+  if necessary. Return a map of relations and whether they were successfully configured.
 
   Any tables that were previously configured but were either renamed or dropped will *not* be automatically
   re-added to the publication. Mentioned tables that have been renamed or dropped will be returned as a list.
 
-  `previous_relations` argument is used to figure out renamed/dropped table based on table OIDs.
-
   Important: this function should not be ran in a transaction, because it starts multiple
   internal transactions that are sometimes expected to fail.
-
-  Raises if it fails to configure all the tables in the expected way.
   """
-  @spec configure_publication!(
-          Postgrex.conn(),
-          prev_relations :: PublicationManager.relation_filters(),
-          new_relations :: PublicationManager.relation_filters(),
-          String.t()
-        ) ::
-          relations_failed_to_configure
-        when relations_failed_to_configure: PublicationManager.relation_filters()
-  def configure_publication!(conn, previous_relations, new_relations, publication_name) do
-    Postgrex.transaction(conn, fn conn ->
-      # "New filters" were configured using a schema read in a different transaction (if at all, might have been from cache)
-      # so we need to check if any of the relations were dropped/renamed since then
-      changed_relations =
-        conn
-        |> list_changed_relations(known_relations(previous_relations, new_relations))
-        |> Enum.map(&trim_changed_relation/1)
-        |> MapSet.new()
-
-      used_relations = MapSet.difference(new_relations, changed_relations)
-
-      if MapSet.size(changed_relations) > 0,
-        do:
-          Logger.info(
-            "Configuring publication #{publication_name} to include #{MapSet.size(used_relations)} tables - " <>
-              "skipping altered tables #{inspect(MapSet.to_list(changed_relations))}"
-          )
-
-      alter_publication!(conn, publication_name, used_relations)
-
-      # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
-      # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
-      # deadlock if the order is reversed.
-      set_replica_identity!(conn, used_relations)
-
-      changed_relations
-    end)
+  @spec configure_publication!(Postgrex.conn(), String.t(), relation_filters()) ::
+          relations_configured()
+  def configure_publication!(conn, publication_name, new_relations) do
+    Postgrex.transaction(conn, &do_configure_publication!(&1, publication_name, new_relations))
     |> case do
-      {:ok, missing_relations} ->
-        missing_relations
+      {:ok, relations_configured} ->
+        Logger.debug(
+          "Publication configuration committed - result: #{inspect(relations_configured)}"
+        )
+
+        relations_configured
 
       {:error, reason} ->
         raise reason
     end
   end
 
-  defp known_relations(previous_relations, new_relations) do
-    known_relations = MapSet.union(previous_relations, new_relations)
-    {oids, relations} = Enum.unzip(known_relations)
-    {schemas, tables} = Enum.unzip(relations)
-    {oids, schemas, tables}
-  end
+  @spec do_configure_publication!(Postgrex.conn(), String.t(), relation_filters()) ::
+          relations_configured()
+  defp do_configure_publication!(conn, publication_name, new_publication_rels) do
+    %{
+      to_preserve: to_preserve,
+      to_add: to_add,
+      to_drop: to_drop,
+      to_reconfigure: to_reconfigure,
+      to_invalidate: to_invalidate
+    } =
+      determine_publication_relation_actions!(conn, publication_name, new_publication_rels)
 
-  defp list_changed_relations(conn, known_relations) do
-    # We're checking whether the table has been renamed (same oid, different name) or
-    # dropped (maybe same name exists, but different oid). If either is true, we need to update
-    # the new filters and maybe notify existing shapes.
+    # Re-add tables that need fixing
+    to_add = MapSet.union(to_add, to_reconfigure)
 
-    {oids, schemas, tables} = known_relations
+    if MapSet.size(to_add) > 0 or MapSet.size(to_drop) > 0 do
+      to_add_list = for {_, rel} <- to_add, do: Utils.relation_to_sql(rel)
+      to_drop_list = for {_, rel} <- to_drop, do: Utils.relation_to_sql(rel)
+      to_invalidate_list = for {_, rel} <- to_invalidate, do: Utils.relation_to_sql(rel)
 
-    %Postgrex.Result{rows: rows} =
-      Postgrex.query!(
-        conn,
-        """
-        WITH input_relations AS (
-          SELECT
-            UNNEST($1::oid[]) AS oid,
-            UNNEST($2::text[]) AS input_nspname,
-            UNNEST($3::text[]) AS input_relname
-        )
-        SELECT
-          ir.oid, (ir.input_nspname, ir.input_relname) as input_relation, pc.oid, (pn.nspname, pc.relname)
-        FROM input_relations ir
-        LEFT JOIN pg_class pc ON pc.oid = ir.oid
-        LEFT JOIN pg_namespace pn ON pc.relnamespace = pn.oid
-        WHERE pc.oid IS NULL OR (pc.relname != input_relname OR pn.nspname != input_nspname)
-        """,
-        [oids, schemas, tables]
+      Logger.info(
+        "Configuring publication #{publication_name} to " <>
+          "drop #{inspect(to_drop_list)} tables, and " <>
+          "add #{inspect(to_add_list)} tables " <>
+          "- skipping altered tables #{inspect(to_invalidate_list)}",
+        publication_alter_drop_tables: to_drop_list,
+        publication_alter_add_tables: to_add_list,
+        publication_alter_invalid_tables: to_invalidate_list
       )
+    end
 
-    Enum.map(rows, &List.to_tuple/1)
+    configuration_result =
+      Enum.concat(
+        Enum.map(to_drop, &{&1, drop_table_from_publication(conn, publication_name, &1)}),
+        Enum.map(to_add, &{&1, add_table_to_publication(conn, publication_name, &1)})
+      )
+      |> Enum.concat(Enum.map(to_preserve, &{&1, {:ok, :validated}}))
+      |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
+      |> Map.new()
+
+    configuration_result
   end
 
-  defp alter_publication!(conn, publication_name, relation_filters) do
-    prev_published_tables =
-      get_publication_tables(conn, publication_name)
-      |> Enum.map(fn {_oid, relation, _replident} -> Utils.relation_to_sql(relation) end)
-      |> MapSet.new()
+  @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
+          {:ok, :added} | {:error, term()}
+  defp add_table_to_publication(conn, publication_name, oid_relation) do
+    {_oid, relation} = oid_relation
+    table = Utils.relation_to_sql(relation)
 
-    new_published_tables =
-      relation_filters
-      |> Enum.map(&elem(&1, 1))
-      |> Enum.map(&Utils.relation_to_sql/1)
-      |> MapSet.new()
-
-    to_drop = MapSet.difference(prev_published_tables, new_published_tables) |> Enum.to_list()
-    to_add = MapSet.difference(new_published_tables, prev_published_tables) |> Enum.to_list()
-    execute_alter_publication_statements!(conn, publication_name, to_drop, to_add)
-  end
-
-  defp execute_alter_publication_statements!(_, _, [], []), do: :ok
-
-  defp execute_alter_publication_statements!(conn, publication_name, to_drop, to_add) do
-    Logger.info(
-      "Configuring publication #{publication_name} to " <>
-        "drop #{inspect(to_drop)} tables, and " <> "add #{inspect(to_add)} tables",
-      publication_alter_drop_tables: to_drop,
-      publication_alter_add_tables: to_add
+    Logger.debug(
+      "Adding #{table} to publication #{publication_name} and " <>
+        "setting its replica identity to FULL"
     )
 
-    alter_ops =
-      Enum.concat(Enum.map(to_add, &{&1, "ADD"}), Enum.map(to_drop, &{&1, "DROP"}))
+    with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table),
+         :ok <- exec_set_replica_identity_full(conn, table) do
+      {:ok, :added}
+    end
+  end
 
-    for {table, op} <- alter_ops do
-      Postgrex.query!(conn, "SAVEPOINT before_publication", [])
+  @spec drop_table_from_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
+          {:ok, :dropped} | {:error, term()}
+  defp drop_table_from_publication(conn, publication_name, oid_relation) do
+    {_oid, relation} = oid_relation
+    table = Utils.relation_to_sql(relation)
+    Logger.debug("Removing #{table} from publication #{publication_name}")
 
-      # PG 14 and below do not support filters on tables of publications
-      case Postgrex.query(
-             conn,
-             "ALTER PUBLICATION #{Utils.quote_name(publication_name)} #{op} TABLE #{table}",
-             []
-           ) do
-        {:ok, _} ->
-          Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-          :ok
+    with :ok <- exec_alter_publication_for_table(conn, publication_name, :drop, table) do
+      {:ok, :dropped}
+    end
+  end
 
-        # Duplicate object error is raised if we're trying to add a table to the publication when it's already there.
-        {:error, %{postgres: %{code: :duplicate_object}}} ->
-          Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_publication", [])
-          Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-          :ok
-
-        {:error, reason} ->
-          raise reason
+  @spec exec_alter_publication_for_table(Postgrex.conn(), String.t(), :add | :drop, String.t()) ::
+          :ok | {:error, term()}
+  defp exec_alter_publication_for_table(conn, publication_name, op, table) do
+    op =
+      case op do
+        :add -> "ADD"
+        :drop -> "DROP"
       end
+
+    publication_query =
+      "ALTER PUBLICATION #{Utils.quote_name(publication_name)} #{op} TABLE #{table}"
+
+    Postgrex.query!(conn, "SAVEPOINT before_publication", [])
+
+    case Postgrex.query(conn, publication_query, []) do
+      {:ok, _} ->
+        Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
+        :ok
+
+      {:error, reason} ->
+        Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_publication", [])
+        Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
+
+        case reason do
+          # Duplicate object error is raised if we're trying to add a table
+          # to the publication when it's already there.
+          %{postgres: %{code: :undefined_table}} -> :ok
+          _ -> {:error, reason}
+        end
     end
   end
 
-  defp set_replica_identity!(conn, relation_filters) do
-    query_for_relations_without_full_identity = """
-    SELECT nspname, relname
-    FROM pg_class pc
-    JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-    WHERE relreplident != 'f' AND pc.oid = ANY($1)
-    """
+  @spec exec_set_replica_identity_full(Postgrex.conn(), String.t()) :: :ok | {:error, term()}
+  defp exec_set_replica_identity_full(conn, table) do
+    Postgrex.query!(conn, "SAVEPOINT before_replica", [])
 
-    oids = Enum.map(relation_filters, &elem(&1, 0))
+    case Postgrex.query(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", []) do
+      {:ok, _} ->
+        Postgrex.query!(conn, "RELEASE SAVEPOINT before_replica", [])
+        :ok
 
-    %Postgrex.Result{rows: rows} =
-      Postgrex.query!(conn, query_for_relations_without_full_identity, [oids])
-
-    tables = for [schema, table] <- rows, do: Utils.relation_to_sql({schema, table})
-
-    if tables != [] do
-      Logger.info("Altering identity of #{Enum.join(tables, ", ")} to FULL")
-
-      queries = for table <- tables, do: "ALTER TABLE #{table} REPLICA IDENTITY FULL;"
-
-      Postgrex.query!(
-        conn,
-        """
-        DO $$
-        BEGIN
-        #{Enum.join(queries, "\n")}
-        END $$;
-        """,
-        []
-      )
-
-      Logger.info("Altered identity of #{Enum.join(tables, ", ")} to FULL")
+      {:error, reason} ->
+        Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_replica", [])
+        Postgrex.query!(conn, "RELEASE SAVEPOINT before_replica", [])
+        {:error, reason}
     end
   end
 
-  @spec get_publication_tables(Postgrex.conn(), String.t()) ::
-          list({Electric.relation_id(), Electric.relation(), String.t()})
-  def get_publication_tables(conn, publication) do
+  @spec determine_publication_relation_actions!(Postgrex.conn(), String.t(), relation_filters()) ::
+          %{
+            to_preserve: relation_filters(),
+            to_add: relation_filters(),
+            to_drop: relation_filters(),
+            to_reconfigure: relation_filters(),
+            to_invalidate: relation_filters()
+          }
+  defp determine_publication_relation_actions!(conn, publication_name, expected_rels) do
+    # New relations were configured using a schema read in a different transaction
+    # (if at all, might have been from cache) so we need to check if any of
+    # the relations were dropped/renamed since then
+    to_invalidate =
+      list_changed_relations!(conn, expected_rels)
+      |> Enum.map(&trim_changed_relation/1)
+      |> MapSet.new()
+
+    # Compare with current relations in the publication to determine what needs dropping/adding,
+    # as well as reconfiguring because of misconfigured replica identity
+    {prev_valid_publication_rels, prev_misconfigured_publication_rels} =
+      get_publication_tables!(conn, publication_name)
+      |> Enum.split_with(fn {_oid, _rel, replident} -> replident == "f" end)
+
+    valid = MapSet.new(prev_valid_publication_rels, &trim_publication_relation/1)
+
+    invalid = MapSet.new(prev_misconfigured_publication_rels, &trim_publication_relation/1)
+
+    valid_expected = MapSet.difference(expected_rels, to_invalidate)
+    to_preserve = MapSet.intersection(valid, valid_expected)
+    to_reconfigure = MapSet.intersection(invalid, valid_expected)
+    to_drop = MapSet.difference(MapSet.union(invalid, valid), valid_expected)
+    to_add = MapSet.difference(valid_expected, valid)
+
+    %{
+      to_preserve: to_preserve,
+      to_add: to_add,
+      to_drop: to_drop,
+      to_reconfigure: to_reconfigure,
+      to_invalidate: to_invalidate
+    }
+  end
+
+  @spec get_publication_tables!(Postgrex.conn(), String.t()) :: list(publication_relation())
+  def get_publication_tables!(conn, publication) do
     # `pg_publication_tables` is too clever for us -- if you add a partitioned
     # table to the publication `pg_publication_tables` lists all the partitions
     # as members, not the actual partitioned table. `pg_publication_rel`
@@ -328,5 +332,40 @@ defmodule Electric.Postgres.Configuration do
     Enum.map(rows, &List.to_tuple/1)
   end
 
+  @spec list_changed_relations!(Postgrex.conn(), relation_filters()) :: list(changed_relation())
+  defp list_changed_relations!(conn, known_relations) do
+    # We're checking whether the table has been renamed (same oid, different name) or
+    # dropped (maybe same name exists, but different oid). If either is true, we need to update
+    # the new filters and maybe notify existing shapes.
+    {oids, relations} = Enum.unzip(known_relations)
+    {schemas, tables} = Enum.unzip(relations)
+
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        WITH input_relations AS (
+          SELECT
+            UNNEST($1::oid[]) AS oid,
+            UNNEST($2::text[]) AS input_nspname,
+            UNNEST($3::text[]) AS input_relname
+        )
+        SELECT
+          ir.oid, (ir.input_nspname, ir.input_relname) as input_relation, pc.oid, (pn.nspname, pc.relname)
+        FROM input_relations ir
+        LEFT JOIN pg_class pc ON pc.oid = ir.oid
+        LEFT JOIN pg_namespace pn ON pc.relnamespace = pn.oid
+        WHERE pc.oid IS NULL OR (pc.relname != input_relname OR pn.nspname != input_nspname)
+        """,
+        [oids, schemas, tables]
+      )
+
+    Enum.map(rows, &List.to_tuple/1)
+  end
+
+  @spec trim_changed_relation(changed_relation()) :: Electric.oid_relation()
   defp trim_changed_relation({oid, relation, _new_oid, _renamed_relation}), do: {oid, relation}
+
+  @spec trim_publication_relation(publication_relation()) :: Electric.oid_relation()
+  defp trim_publication_relation({oid, relation, _replident}), do: {oid, relation}
 end
