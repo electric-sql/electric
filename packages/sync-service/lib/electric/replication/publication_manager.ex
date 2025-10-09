@@ -122,10 +122,6 @@ defmodule Electric.Replication.PublicationManager do
   def init(opts) do
     opts = Map.new(opts)
 
-    # we trap exits to ensure we can handle connection errors due to missing
-    # DB connection pools gracefully
-    Process.flag(:trap_exit, true)
-
     Process.set_label({:publication_manager, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
@@ -199,10 +195,6 @@ defmodule Electric.Replication.PublicationManager do
 
   def handle_info(:timeout, state),
     do: handle_info(:update_publication, %{state | next_update_forced?: true})
-
-  # We're trapping exits so that we can handle DB connection issues gracefully,
-  # otherwise we respect the OTP exit protocol.
-  def handle_info({:EXIT, _, reason}, state), do: {:stop, reason, state}
 
   @spec check_publication_status(state()) :: {:ok, state()} | {:error, any(), state()}
   defp check_publication_status(state) do
