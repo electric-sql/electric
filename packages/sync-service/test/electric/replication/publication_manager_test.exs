@@ -233,7 +233,19 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   describe "network failure" do
     setup do
-      Repatch.restore_all()
+      Repatch.restore(
+        Electric.Postgres.Configuration,
+        :check_publication_status!,
+        2,
+        mode: :shared
+      )
+
+      Repatch.restore(
+        Electric.Postgres.Configuration,
+        :configure_publication!,
+        3,
+        mode: :shared
+      )
     end
 
     test "publication configuration fails when DB is unreachable", %{opts: opts} do
