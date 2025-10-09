@@ -1,7 +1,7 @@
 <script setup>
-import Actions from "./Actions.vue"
+import Actions from './Actions.vue'
 
-const { actions, wideSectionHead } = defineProps(["actions", "wideSectionHead"])
+const { actions, wideSectionHead } = defineProps(['actions', 'wideSectionHead'])
 </script>
 
 <style scoped>

@@ -6,10 +6,10 @@ import { getSharedCluster, isProduction } from "../.shared/lib/infra"
 export default $config({
   app(input) {
     return {
-      name: `phoenix-liveview`,
+      name: "phoenix-liveview",
       removal:
         input?.stage.toLocaleLowerCase() === `production` ? `retain` : `remove`,
-      home: `aws`,
+      home: "aws",
       providers: {
         cloudflare: `5.42.0`,
         aws: {

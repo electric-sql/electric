@@ -1,5 +1,5 @@
 ---
-title: "Electric BETA release"
+title: 'Electric BETA release'
 description: >-
   The Electric sync engine is now in BETA.
   If you haven't checked out Electric recently,
@@ -79,14 +79,11 @@ Six months ago, we [took on a clean re-write](/blog/2024/07/17/electric-next).
 
 Electric and PGlite are being used in production by companies including [Google](https://firebase.google.com/docs/data-connect), [Supabase](https://database.build), [Trigger.dev](https://trigger.dev/launchweek/0/realtime), [Otto](https://ottogrid.ai) and [Doorboost](https://www.doorboost.com).
 
-> We use ElectricSQL to power [Trigger.dev Realtime](https://trigger.dev/launchweek/0/realtime), a core feature of our product. When we execute our users background tasks they get instant updates in their web apps. It's simple to operate since we already use Postgres, and it scales to millions of updates per day.<br />
-> _&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)_
+> We use ElectricSQL to power [Trigger.dev Realtime](https://trigger.dev/launchweek/0/realtime), a core feature of our product. When we execute our users background tasks they get instant updates in their web apps. It's simple to operate since we already use Postgres, and it scales to millions of updates per day.<br /> > _&mdash; [Matt Aitken](https://www.linkedin.com/in/mattaitken1985), Founder &amp; CEO, [Trigger.dev](https://trigger.dev)_
 
-> At [Otto](https://ottogrid.ai), we built a spreadsheet product where every cell operates as its own AI agent. ElectricSQL enables us to reliably stream agent updates to our spreadsheet in real-time and efficiently manage large spreadsheets at scale. It has dramatically simplified our architecture while delivering the performance we need for cell-level reactive updates.<br />
-> _&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)_
+> At [Otto](https://ottogrid.ai), we built a spreadsheet product where every cell operates as its own AI agent. ElectricSQL enables us to reliably stream agent updates to our spreadsheet in real-time and efficiently manage large spreadsheets at scale. It has dramatically simplified our architecture while delivering the performance we need for cell-level reactive updates.<br /> > _&mdash; [Sully Omar](https://x.com/SullyOmarr), Co-founder &amp; CEO, [Otto](https://ottogrid.ai)_
 
-> At [Doorboost](https://www.doorboost.com) we aggregate millions of rows from a dozen platforms, all of which gets distilled down to a simple dashboard. With Electric we have been able to deliver this dashboard in milliseconds and update live. Moving forward, we will be building all our products using Electric.<br />
-> _&mdash; [Vache Asatryan](https://am.linkedin.com/in/vacheasatryan), CTO, [Doorboost](https://doorboost.com)_
+> At [Doorboost](https://www.doorboost.com) we aggregate millions of rows from a dozen platforms, all of which gets distilled down to a simple dashboard. With Electric we have been able to deliver this dashboard in milliseconds and update live. Moving forward, we will be building all our products using Electric.<br /> > _&mdash; [Vache Asatryan](https://am.linkedin.com/in/vacheasatryan), CTO, [Doorboost](https://doorboost.com)_
 
 ### Scalable
 
@@ -141,14 +138,14 @@ We have [client libraries](/docs/api/clients/typescript), [integration docs](/do
 You can adopt Electric one component and one route at a time. Wherever you have code doing something like this:
 
 ```tsx
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect } from 'react'
 
 const MyComponent = () => {
   const [items, setItems] = useState([])
 
   useEffect(() => {
     const fetchItems = async () => {
-      const response = await fetch("https://api.example.com/v1/items")
+      const response = await fetch('https://api.example.com/v1/items')
       const data = await response.json()
 
       setItems(data)
@@ -164,13 +161,13 @@ const MyComponent = () => {
 Swap it out for code like this (replacing the `fetch` in the `useEffect` with [`useShape`](/docs/integrations/react)):
 
 ```tsx
-import { useShape } from "@electric-sql/react"
+import { useShape } from '@electric-sql/react'
 
 const MyComponent = () => {
   const { data: items } = useShape({
-    url: "https://electric.example.com/v1/shapes",
+    url: 'https://electric.example.com/v1/shapes',
     params: {
-      table: "items",
+      table: 'items',
     },
   })
 

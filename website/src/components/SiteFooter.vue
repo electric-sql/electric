@@ -96,16 +96,16 @@
 }
 
 .vpi-social-x {
-  --icon: url("https://api.iconify.design/simple-icons/x.svg");
+  --icon: url('https://api.iconify.design/simple-icons/x.svg');
 }
 .vpi-social-bluesky {
-  --icon: url("https://api.iconify.design/simple-icons/bluesky.svg");
+  --icon: url('https://api.iconify.design/simple-icons/bluesky.svg');
 }
 .vpi-social-discord {
-  --icon: url("https://api.iconify.design/simple-icons/discord.svg");
+  --icon: url('https://api.iconify.design/simple-icons/discord.svg');
 }
 .vpi-social-tanstack {
-  --icon: url("https://api.iconify.design/simple-icons/tanstack.svg");
+  --icon: url('https://api.iconify.design/simple-icons/tanstack.svg');
 }
 
 .VPFooter .footer-logo {

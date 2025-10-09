@@ -1,6 +1,6 @@
-import { glob } from "glob"
-import { readFileSync } from "fs"
-import { execSync } from "child_process"
+import { glob } from 'glob'
+import { readFileSync } from 'fs'
+import { execSync } from 'child_process'
 
 async function tagLatest() {
   // Find all package.json files in the packages directory

@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken"
+import jwt from 'jsonwebtoken'
 
 const AUTH_SECRET =
   Deno.env.get(`AUTH_SECRET`) || `NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY`

@@ -1,5 +1,5 @@
 ---
-title: "Developing local-first software"
+title: 'Developing local-first software'
 description: >-
   Exploring the key differences and trade-offs between building local-first vs cloud-first apps.
 excerpt: >-

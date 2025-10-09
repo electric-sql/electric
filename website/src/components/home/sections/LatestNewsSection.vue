@@ -1,24 +1,24 @@
 <script setup>
-import BlogPostListing from "../../BlogPostListing.vue"
-import BlueskyPosts from "../BlueskyPosts.vue"
-import Section from "../Section.vue"
+import BlogPostListing from '../../BlogPostListing.vue'
+import BlueskyPosts from '../BlueskyPosts.vue'
+import Section from '../Section.vue'
 
-import { data } from "../../../../data/posts.data.ts"
+import { data } from '../../../../data/posts.data.ts'
 const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
 
 const actions = [
   {
-    href: "https://dashboard.electric-sql.cloud/",
-    text: "Subscribe",
-    theme: "brand",
+    href: 'https://dashboard.electric-sql.cloud/',
+    text: 'Subscribe',
+    theme: 'brand',
   },
   {
-    href: "/blog",
-    text: "Blog",
+    href: '/blog',
+    text: 'Blog',
   },
   {
-    href: "https://bsky.app/profile/electric-sql.com",
-    text: "Follow",
+    href: 'https://bsky.app/profile/electric-sql.com',
+    text: 'Follow',
   },
 ]
 </script>

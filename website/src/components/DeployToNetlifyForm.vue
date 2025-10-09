@@ -1,9 +1,9 @@
 <script setup>
-import { useTemplateRef } from "vue"
+import { useTemplateRef } from 'vue'
 
-const { repo } = defineProps(["repo"])
+const { repo } = defineProps(['repo'])
 const electricUrl = defineModel()
-const form = useTemplateRef("form")
+const form = useTemplateRef('form')
 </script>
 
 <template>

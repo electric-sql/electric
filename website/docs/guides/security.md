@@ -92,13 +92,13 @@ Electric doesn't provide or prescribe any specific key management solution. You'
 For example, imagine you store keys in a seperate, extra secure, Postgres database and you segment your encryption by tenant (or group, or some other shared resource). You could sync keys to the client using a shape like this:
 
 ```ts
-import { ShapeStream } from "@electric-sql/client"
+import { ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `${ELECTRIC_URL}/v1/shape`,
   params: {
-    table: "tenants",
-    columns: ["keys"],
+    table: 'tenants',
+    columns: ['keys'],
     where: `id in ('${user.tenant_ids.join(`', '`)}')`,
   },
 })

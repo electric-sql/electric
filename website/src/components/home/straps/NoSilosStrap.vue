@@ -1,19 +1,19 @@
 <script setup>
-import CTAStrap from "../CTAStrap.vue"
+import CTAStrap from '../CTAStrap.vue'
 
 const actions = [
   {
-    href: "/docs/quickstart",
-    text: "Quickstart",
-    theme: "brand",
+    href: '/docs/quickstart',
+    text: 'Quickstart',
+    theme: 'brand',
   },
   // {
   //   href: '/docs/tutorial',
   //   text: 'Tutorial'
   // },
   {
-    href: "/docs/intro",
-    text: "Docs",
+    href: '/docs/intro',
+    text: 'Docs',
   },
 ]
 </script>

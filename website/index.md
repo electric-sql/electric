@@ -1,8 +1,8 @@
 ---
 layout: home
 hero:
-  name: "Sync"
-  text: "solved"
+  name: 'Sync'
+  text: 'solved'
   tagline: >-
     Sync makes apps awesome.<br />Electric solves sync.
   actions:
@@ -16,12 +16,12 @@ hero:
       text: Quickstart
       link: /docs/quickstart
     - theme: alt
-      text: "​"
-      target: "_blank"
+      text: '​'
+      target: '_blank'
       link: https://github.com/electric-sql/electric
     - theme: alt
       text: GitHub
-      target: "_blank"
+      target: '_blank'
       link: https://github.com/electric-sql/electric
   image:
     src: /img/home/zap-with-halo.svg
@@ -80,7 +80,7 @@ CREATE TABLE issues (
 function Component({ project }) {
   const { data } = useShape({
     params: {
-      table: "issues",
+      table: 'issues',
       where: `project_id = ${project.id}`,
     },
   })

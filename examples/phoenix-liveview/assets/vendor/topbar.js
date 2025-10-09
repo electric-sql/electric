@@ -5,7 +5,7 @@
  * Copyright (c) 2021 Buu Nguyen
  */
 ;(function (window, document) {
-  "use strict"
+  'use strict'
 
   // https://gist.github.com/paulirish/1579671
   ;(function () {
@@ -50,10 +50,10 @@
       barThickness: 3,
       barColors: {
         0: `rgba(26,  188, 156, .9)`,
-        ".25": `rgba(52,  152, 219, .9)`,
-        ".50": `rgba(241, 196, 15,  .9)`,
-        ".75": `rgba(230, 126, 34,  .9)`,
-        "1.0": `rgba(211, 84,  0,   .9)`,
+        '.25': `rgba(52,  152, 219, .9)`,
+        '.50': `rgba(241, 196, 15,  .9)`,
+        '.75': `rgba(230, 126, 34,  .9)`,
+        '1.0': `rgba(211, 84,  0,   .9)`,
       },
       shadowBlur: 10,
       shadowColor: `rgba(0,   0,   0,   .6)`,

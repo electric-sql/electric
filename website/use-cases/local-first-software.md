@@ -1,5 +1,5 @@
 ---
-title: "Local-first software"
+title: 'Local-first software'
 description: >-
   Take the network off the interaction path and build
   software that works offline and is
@@ -9,7 +9,7 @@ outline: deep
 case: true
 homepage: true
 homepage_order: 30
-solves: "availability"
+solves: 'availability'
 benefits:
   - Simplifies your ops
   - No more broken apps

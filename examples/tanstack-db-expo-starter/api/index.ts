@@ -1,12 +1,12 @@
-import express from "express"
-import cors from "cors"
-import { db } from "../src/db"
-import { todos } from "../src/db/schema"
-import { validateInsertTodo, validateUpdateTodo } from "../src/db/schema"
-import { sql, eq } from "drizzle-orm"
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
-import { Readable } from "stream"
-import { pipeline } from "stream/promises"
+import express from 'express'
+import cors from 'cors'
+import { db } from '../src/db'
+import { todos } from '../src/db/schema'
+import { validateInsertTodo, validateUpdateTodo } from '../src/db/schema'
+import { sql, eq } from 'drizzle-orm'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
 
 // Create Express app
 const app = express()
@@ -139,7 +139,7 @@ app.get(`/api/todos`, async (req, res) => {
 
     if (!response.ok) {
       const errorText = await response.text()
-      res.writeHead(response.status, { "Content-Type": `application/json` })
+      res.writeHead(response.status, { 'Content-Type': `application/json` })
       res.end(JSON.stringify({ error: `Electric error: ${response.status}` }))
       return
     }

@@ -1,7 +1,7 @@
 <script setup>
-import Card from "./Card.vue"
+import Card from './Card.vue'
 
-const { backer } = defineProps(["backer"])
+const { backer } = defineProps(['backer'])
 
 const { image, name, profile_uri, short_bio } = backer
 </script>

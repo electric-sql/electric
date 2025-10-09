@@ -22,14 +22,14 @@ const fetchTodos = async () => {
   try {
     setLoading(true)
     const { data, error } = await supabase
-      .from("todos")
-      .select("*")
-      .order("created_at", { ascending: false })
+      .from('todos')
+      .select('*')
+      .order('created_at', { ascending: false })
 
     if (error) throw error
     setTodos(data || [])
   } catch (error) {
-    console.error("Error fetching todos:", error)
+    console.error('Error fetching todos:', error)
   } finally {
     setLoading(false)
   }
@@ -83,13 +83,13 @@ In general, local-first systems use a local store like [Valtio](https://valtio.d
 ```js
 const shape = await pg.electric.syncShapeToTable({
   shape: {
-    url: "http://localhost:3000/v1/shape",
+    url: 'http://localhost:3000/v1/shape',
     params: {
-      table: "todo",
+      table: 'todo',
     },
   },
-  table: "todo",
-  primaryKey: ["id"],
+  table: 'todo',
+  primaryKey: ['id'],
 })
 ```
 

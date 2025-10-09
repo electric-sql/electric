@@ -165,7 +165,7 @@ If you maintain a materialised data structure, it's often useful to know when it
 This can then be used by a framework to trigger re-rendering. See the [`useShape` React hook source code](https://github.com/electric-sql/electric/blob/main/packages/react-hooks/src/react-hooks.tsx) for a real example but in short, e.g.: for a React component:
 
 ```tsx
-import { useEffect, useState } from "react"
+import { useEffect, useState } from 'react'
 
 const MyComponent = ({ shapeDefinition }) => {
   const [data, setData] = useState([])

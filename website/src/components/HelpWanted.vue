@@ -1,5 +1,5 @@
 <script setup>
-const { issue } = defineProps(["issue"])
+const { issue } = defineProps(['issue'])
 
 const issueUrl = `https://github.com/electric-sql/electric/issues/${issue}`
 </script>

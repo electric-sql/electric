@@ -1,5 +1,5 @@
-import "react-native-random-uuid"
-import React, { useState } from "react"
+import 'react-native-random-uuid'
+import React, { useState } from 'react'
 import {
   View,
   Text,
@@ -8,14 +8,14 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-} from "react-native"
-import { useLiveQuery } from "@tanstack/react-db"
-import { StatusBar } from "expo-status-bar"
-import { apiClient, hostname } from "../src/utils/api-client"
-import { selectTodoSchema } from "../src/db/schema"
-import { electricCollectionOptions } from "@tanstack/electric-db-collection"
-import { createCollection } from "@tanstack/react-db"
-import { parseISO } from "date-fns"
+} from 'react-native'
+import { useLiveQuery } from '@tanstack/react-db'
+import { StatusBar } from 'expo-status-bar'
+import { apiClient, hostname } from '../src/utils/api-client'
+import { selectTodoSchema } from '../src/db/schema'
+import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { createCollection } from '@tanstack/react-db'
+import { parseISO } from 'date-fns'
 
 const todoCollection = createCollection(
   electricCollectionOptions({

@@ -1,11 +1,11 @@
 <script setup>
-import LogoStrip from "/static/img/blog/electric-beta-release/logo-strip.svg"
-import LogoStripSm from "/static/img/blog/electric-beta-release/logo-strip.sm.svg"
-import LogoStripXs from "/static/img/blog/electric-beta-release/logo-strip.xs.svg"
-import LogoStripXxs from "/static/img/blog/electric-beta-release/logo-strip.xxs.svg"
+import LogoStrip from '/static/img/blog/electric-beta-release/logo-strip.svg'
+import LogoStripSm from '/static/img/blog/electric-beta-release/logo-strip.sm.svg'
+import LogoStripXs from '/static/img/blog/electric-beta-release/logo-strip.xs.svg'
+import LogoStripXxs from '/static/img/blog/electric-beta-release/logo-strip.xxs.svg'
 
-import Quote from "../Quote.vue"
-import Section from "../Section.vue"
+import Quote from '../Quote.vue'
+import Section from '../Section.vue'
 
 const actions = [
   // {
@@ -14,13 +14,13 @@ const actions = [
   //   theme: 'brand'
   // },
   {
-    href: "/use-cases/data-sync",
-    text: "Use cases",
-    theme: "brand",
+    href: '/use-cases/data-sync',
+    text: 'Use cases',
+    theme: 'brand',
   },
   {
-    href: "/demos",
-    text: "Examples",
+    href: '/demos',
+    text: 'Examples',
   },
 ]
 </script>

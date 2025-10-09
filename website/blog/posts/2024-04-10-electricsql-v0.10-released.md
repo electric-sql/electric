@@ -35,7 +35,7 @@ The [`sync()` API](/docs/api/clients/typescript#sync) remains the same. For exam
 ```typescript
 const shape = await db.projects.sync({
   where: {
-    id: "abcd",
+    id: 'abcd',
   },
   include: {
     issues: true,
@@ -51,7 +51,7 @@ In addition, it's now also possible to pass an SQL string as the `where` clause 
 
 ```javascript
 const { synced } = await electric.db.issues.sync({
-  where: "this.project_id in [7, 42]",
+  where: 'this.project_id in [7, 42]',
 })
 ```
 

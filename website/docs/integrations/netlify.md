@@ -40,7 +40,7 @@ const ELECTRIC_URL = process.env.ELECTRIC_URL
 const stream = new ShapeStream({
   url: `${ELECTRIC_URL}/v1/shape`,
   params: {
-    table: "items",
+    table: 'items',
   },
 })
 ```

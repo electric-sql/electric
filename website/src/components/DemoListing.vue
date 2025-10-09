@@ -1,7 +1,7 @@
 <script setup>
-import { onMounted } from "vue"
+import { onMounted } from 'vue'
 
-const { demo } = defineProps(["demo"])
+const { demo } = defineProps(['demo'])
 </script>
 
 <template>

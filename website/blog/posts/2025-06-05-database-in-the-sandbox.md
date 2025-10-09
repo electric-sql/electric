@@ -118,13 +118,13 @@ There's nothing in this approach that prevents running against a hosted database
 
 ```ts
 const sql =
-  process.env.NODE_ENV === "production"
+  process.env.NODE_ENV === 'production'
     ? postgres(process.env.DATABASE_URL)
     : postgres({
-        host: "/tmp/",
-        username: "postgres",
-        password: "postgres",
-        database: "postgres",
+        host: '/tmp/',
+        username: 'postgres',
+        password: 'postgres',
+        database: 'postgres',
         max: 1,
         connect_timeout: 0,
       })

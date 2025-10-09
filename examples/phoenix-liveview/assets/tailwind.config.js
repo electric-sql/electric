@@ -77,11 +77,11 @@ module.exports = {
             }
             return {
               [`--hero-${name}`]: `url('data:image/svg+xml;utf8,${content}')`,
-              "-webkit-mask": `var(--hero-${name})`,
+              '-webkit-mask': `var(--hero-${name})`,
               mask: `var(--hero-${name})`,
-              "mask-repeat": `no-repeat`,
-              "background-color": `currentColor`,
-              "vertical-align": `middle`,
+              'mask-repeat': `no-repeat`,
+              'background-color': `currentColor`,
+              'vertical-align': `middle`,
               display: `inline-block`,
               width: size,
               height: size,

@@ -1,11 +1,11 @@
 ---
 layout: home
-title: "ElectricSQL"
-titleTemplate: "Postgres sync engine"
-description: "Sync little subsets of your Postgres data into local apps and services."
+title: 'ElectricSQL'
+titleTemplate: 'Postgres sync engine'
+description: 'Sync little subsets of your Postgres data into local apps and services.'
 hero:
-  name: "Realtime sync"
-  text: "for Postgres"
+  name: 'Realtime sync'
+  text: 'for Postgres'
   tagline: >-
     Sync is the best way of building modern&nbsp;apps.
     Electric&nbsp;solves sync so&nbsp;that&nbsp;you don't have to.
@@ -22,13 +22,13 @@ hero:
       text: Quickstart
       link: /docs/quickstart
     - theme: alt
-      text: "​"
-      target: "_blank"
+      text: '​'
+      target: '_blank'
       link: https://github.com/electric-sql/electric
     - theme: alt
       text: >-
         GitHub
-      target: "_blank"
+      target: '_blank'
       link: https://github.com/electric-sql/electric
 features:
   - title: Electric
@@ -40,8 +40,8 @@ features:
       <span class="feature-cta electric-star-count">
       </span>
     icon:
-      src: "/img/icons/electric.svg"
-    link: "/product/electric"
+      src: '/img/icons/electric.svg'
+    link: '/product/electric'
   - title: Cloud
     details: >-
       <span class="para">
@@ -52,8 +52,8 @@ features:
       <span class="feature-cta sign-up-link">
       </span>
     icon:
-      src: "/img/icons/ddn.svg"
-    link: "/product/cloud"
+      src: '/img/icons/ddn.svg'
+    link: '/product/cloud'
   - title: PGlite
     details: >-
       <span class="para">
@@ -64,8 +64,8 @@ features:
       <span class="feature-cta pglite-star-count">
       </span>
     icon:
-      src: "/img/icons/pglite.svg"
-    link: "/product/pglite"
+      src: '/img/icons/pglite.svg'
+    link: '/product/pglite'
 ---
 
 <script setup>

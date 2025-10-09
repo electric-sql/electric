@@ -38,10 +38,10 @@ pnpm migrate
 
 ```ts
 // TanStack Start server function
-import { createServerFileRoute } from "@tanstack/react-start/server"
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+import { createServerFileRoute } from '@tanstack/react-start/server'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
 
-const ELECTRIC_URL = "https://api.electric-sql.cloud/v1/shape"
+const ELECTRIC_URL = 'https://api.electric-sql.cloud/v1/shape'
 
 const serve = async ({ request }: { request: Request }) => {
   const url = new URL(request.url)
@@ -54,16 +54,16 @@ const serve = async ({ request }: { request: Request }) => {
   })
 
   // Server decides shape
-  origin.searchParams.set("table", "todos")
+  origin.searchParams.set('table', 'todos')
   // Tenant isolation: origin.searchParams.set('where', `user_id=$1`)
   // origin.searchParams.set('params', JSON.stringify([user.id]))
-  origin.searchParams.set("source_id", process.env.SOURCE_ID!)
-  origin.searchParams.set("secret", process.env.SOURCE_SECRET!)
+  origin.searchParams.set('source_id', process.env.SOURCE_ID!)
+  origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
 
   const res = await fetch(origin)
   const headers = new Headers(res.headers)
-  headers.delete("content-encoding")
-  headers.delete("content-length")
+  headers.delete('content-encoding')
+  headers.delete('content-length')
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,
@@ -71,7 +71,7 @@ const serve = async ({ request }: { request: Request }) => {
   })
 }
 
-export const ServerRoute = createServerFileRoute("/api/todos").methods({
+export const ServerRoute = createServerFileRoute('/api/todos').methods({
   GET: serve,
 })
 ```
@@ -79,16 +79,16 @@ export const ServerRoute = createServerFileRoute("/api/todos").methods({
 ### 2) Electric Collection (client)
 
 ```ts
-import { createCollection } from "@tanstack/react-db"
-import { electricCollectionOptions } from "@tanstack/electric-db-collection"
-import { todoSchema } from "./schema"
+import { createCollection } from '@tanstack/react-db'
+import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { todoSchema } from './schema'
 
 export const todoCollection = createCollection(
   electricCollectionOptions({
-    id: "todos",
+    id: 'todos',
     schema: todoSchema,
     getKey: (row) => row.id,
-    shapeOptions: { url: "/api/todos" },
+    shapeOptions: { url: '/api/todos' },
     onInsert: async ({ transaction }) => {
       const newTodo = transaction.mutations[0].modified
       const { txid } = await api.todos.create(newTodo)
@@ -123,14 +123,14 @@ SELECT pg_current_xact_id()::xid::text as txid
 TanStack DB SQL-like queries **sub-ms performance** differential dataflow ([TanStack][7]):
 
 ```tsx
-import { useLiveQuery, eq } from "@tanstack/react-db"
+import { useLiveQuery, eq } from '@tanstack/react-db'
 
 export function TodoList() {
   const { data: todos } = useLiveQuery((q) =>
     q
       .from({ todo: todoCollection })
       .where(({ todo }) => eq(todo.completed, false))
-      .orderBy(({ todo }) => todo.created_at, "desc")
+      .orderBy(({ todo }) => todo.created_at, 'desc')
       .limit(50)
   )
   return (
@@ -146,7 +146,7 @@ export function TodoList() {
 Dependencies:
 
 ```tsx
-const [direction, setDirection] = useState("desc")
+const [direction, setDirection] = useState('desc')
 const { data } = useLiveQuery(
   (q) =>
     q
@@ -181,7 +181,7 @@ function TodoActions() {
   const handleAdd = () => {
     todoCollection.insert({
       id: crypto.randomUUID(),
-      text: "New todo",
+      text: 'New todo',
       completed: false,
       createdAt: Date.now(),
     })
@@ -198,7 +198,7 @@ function TodoActions() {
 ### Custom optimistic actions
 
 ```tsx
-import { createOptimisticAction } from "@tanstack/react-db"
+import { createOptimisticAction } from '@tanstack/react-db'
 
 const bootstrapTodoListAction = createOptimisticAction<string>({
   onMutate: (listId, itemText) => {
@@ -248,7 +248,7 @@ npm install @tanstack/{angular,react,solid,svelte,vue}-db
 ```
 
 ```ts
-import { useLiveQuery } from "..."
+import { useLiveQuery } from '...'
 const { data, isLoading } = useLiveQuery((q) =>
   q.from({ todos: todosCollection })
 )
@@ -281,7 +281,7 @@ docker run -e DATABASE_URL=postgres://... electricsql/electric
 Docker compose:
 
 ```yaml
-name: "electric-backend"
+name: 'electric-backend'
 services:
   postgres:
     image: postgres:16-alpine
@@ -289,18 +289,18 @@ services:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-    ports: ["54321:5432"]
-    volumes: ["./postgres.conf:/etc/postgresql/postgresql.conf:ro"]
-    tmpfs: ["/var/lib/postgresql/data", "/tmp"]
-    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    ports: ['54321:5432']
+    volumes: ['./postgres.conf:/etc/postgresql/postgresql.conf:ro']
+    tmpfs: ['/var/lib/postgresql/data', '/tmp']
+    command: ['postgres', '-c', 'config_file=/etc/postgresql/postgresql.conf']
 
   backend:
     image: electricsql/electric:canary
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
       ELECTRIC_INSECURE: true
-    ports: ["3000:3000"]
-    depends_on: ["postgres"]
+    ports: ['3000:3000']
+    depends_on: ['postgres']
 ```
 
 **Postgres requirements:** v14+, logical replication, user with REPLICATION role, `wal_level=logical`
@@ -322,7 +322,7 @@ Avoid old patterns:
 ```ts
 // ❌ OLD (doesn't exist)
 const { db } = await electrify(conn, schema)
-await db.todos.create({ text: "New todo" })
+await db.todos.create({ text: 'New todo' })
 ```
 
 Write path: `todos.insert()`→optimistic→`onInsert`→API→Postgres txid→Electric streams→reconcile→drop optimistic

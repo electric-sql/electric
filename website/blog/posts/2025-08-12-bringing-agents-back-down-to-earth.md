@@ -309,9 +309,9 @@ Burn defines TanStack DB collections which map to the sync endpoints we saw abov
 
 export const eventCollection = createCollection(
   electricCollectionOptions({
-    id: "events",
+    id: 'events',
     shapeOptions: {
-      url: relativeUrl("/sync/events"),
+      url: relativeUrl('/sync/events'),
       ...baseShapeOptions,
     },
     schema: eventSchema,
@@ -320,9 +320,9 @@ export const eventCollection = createCollection(
 
 export const userCollection = createCollection(
   electricCollectionOptions({
-    id: "users",
+    id: 'users',
     shapeOptions: {
-      url: relativeUrl("/sync/users"),
+      url: relativeUrl('/sync/users'),
       ...baseShapeOptions,
     },
     schema: userSchema,

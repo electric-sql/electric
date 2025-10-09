@@ -126,7 +126,7 @@ This allows you to define and personalise the shape definition at runtime using 
 You can sync _into_ any client in any language that [speaks HTTP and JSON](/docs/api/http). For example, using the Electric [Typescript client](/docs/api/clients/typescript):
 
 ```typescript
-import { Shape, ShapeStream } from "@electric-sql/client"
+import { Shape, ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `/shapes/todos`,
@@ -140,7 +140,7 @@ shape.subscribe((data) => console.log(data))
 Or binding a shape to a component using the [React bindings](/docs/integrations/react):
 
 ```tsx
-import { useShape } from "@electric-sql/react"
+import { useShape } from '@electric-sql/react'
 
 const MyComponent = () => {
   const { data } = useShape({

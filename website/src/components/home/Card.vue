@@ -1,11 +1,11 @@
 <script setup>
 const { background, body, href, icon, image, title } = defineProps([
-  "background",
-  "body",
-  "href",
-  "icon",
-  "image",
-  "title",
+  'background',
+  'body',
+  'href',
+  'icon',
+  'image',
+  'title',
 ])
 </script>
 

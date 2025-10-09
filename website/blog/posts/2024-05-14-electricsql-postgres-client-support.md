@@ -73,20 +73,20 @@ Then change your app code to import PGlite, create the database and electrify it
 
 ```ts
 // Import the PGlite database client.
-import { PGlite } from "@electric-sql/pglite"
+import { PGlite } from '@electric-sql/pglite'
 
 // Import the adapter to electrify PGlite from the ElectricSQL library.
-import { electrify } from "electric-sql/pglite"
+import { electrify } from 'electric-sql/pglite'
 
 // Import your generated database schema.
-import { schema } from "./generated/client"
+import { schema } from './generated/client'
 
 // Create the PGlite database connection.
 // In the browser use a `idb://` prefixed path to store your
 // database in IndexedDB.
 // In Node use a path to a directory on the file system where
 // you would like the pgdata directory.
-const conn = new PGlite("idb://electric.db", {
+const conn = new PGlite('idb://electric.db', {
   // You can optionally use the relaxed durability mode to
   // improve responsiveness.
   // This schedules a flush to indexedDB for after a query has
@@ -96,7 +96,7 @@ const conn = new PGlite("idb://electric.db", {
 
 // Instantiate your Electric client.
 const electric = await electrify(conn, schema, {
-  url: "https://example.com:5133",
+  url: 'https://example.com:5133',
 })
 ```
 

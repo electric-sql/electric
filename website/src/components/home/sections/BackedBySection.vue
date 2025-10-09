@@ -1,8 +1,8 @@
 <script setup>
-import Backer from "../Backer.vue"
-import Section from "../Section.vue"
+import Backer from '../Backer.vue'
+import Section from '../Section.vue'
 
-import { data } from "../../../../data/team.data.ts"
+import { data } from '../../../../data/team.data.ts'
 
 const backers = []
 
@@ -16,25 +16,25 @@ function select(slug) {
   backers.push(angel)
 }
 
-select("copple")
-select("spencer")
-select("jordan")
-select("monica")
-select("sriram")
-select("pvh")
-select("chris")
-select("jose")
-select("adam")
+select('copple')
+select('spencer')
+select('jordan')
+select('monica')
+select('sriram')
+select('pvh')
+select('chris')
+select('jose')
+select('adam')
 
 const actions = [
   {
-    href: "/about/team",
-    text: "Team",
-    theme: "brand",
+    href: '/about/team',
+    text: 'Team',
+    theme: 'brand',
   },
   {
-    href: "/about/team#investors",
-    text: "Investors",
+    href: '/about/team#investors',
+    text: 'Investors',
   },
 ]
 </script>

@@ -2,14 +2,14 @@ name: TS tests
 
 on:
   push:
-    branches: ["main"]
+    branches: ['main']
     paths-ignore:
-      - "website/**"
-      - "**/README.md"
+      - 'website/**'
+      - '**/README.md'
   pull_request:
     paths-ignore:
-      - "website/**"
-      - "**/README.md"
+      - 'website/**'
+      - '**/README.md'
 
 permissions:
   contents: read
@@ -50,8 +50,8 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: ".tool-versions"
-          cache: "pnpm"
+          node-version-file: '.tool-versions'
+          cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm run stylecheck
@@ -78,11 +78,11 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
-          version-file: ".tool-versions"
+          version-file: '.tool-versions'
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: ".tool-versions"
+          node-version-file: '.tool-versions'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
@@ -102,7 +102,7 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}"
+          key: '${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}'
           restore-keys: |
             ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
             ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-
@@ -173,7 +173,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: ".tool-versions"
+          node-version-file: '.tool-versions'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build

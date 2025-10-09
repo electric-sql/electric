@@ -1,5 +1,5 @@
 <script setup>
-import { defineProps, withDefaults } from "vue"
+import { defineProps, withDefaults } from 'vue'
 
 const props = defineProps({
   name: {
@@ -30,7 +30,7 @@ const props = defineProps({
 
 // Error handling
 if (!(props.required || props.optional || props.defaultValue !== undefined)) {
-  throw new Error("Must have a defaultValue if not required")
+  throw new Error('Must have a defaultValue if not required')
 }
 </script>
 

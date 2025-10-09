@@ -6,10 +6,10 @@ import { createNeonDb, getNeonConnectionString } from "../.shared/lib/neon"
 export default $config({
   app(input) {
     return {
-      name: `burn`,
+      name: "burn",
       removal:
         input?.stage.toLocaleLowerCase() === `production` ? `retain` : `remove`,
-      home: `aws`,
+      home: "aws",
       providers: {
         cloudflare: `5.42.0`,
         aws: {

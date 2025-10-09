@@ -1,5 +1,5 @@
 ---
-title: "Development environments"
+title: 'Development environments'
 description: >-
   Eliminate system-level dependencies and ad-hoc data provisioning
   by replicating data into an embedded PGlite database.

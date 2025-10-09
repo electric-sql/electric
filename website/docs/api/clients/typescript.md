@@ -38,7 +38,7 @@ While the Electric client can connect directly to the Electric service, **we str
 
 ```ts
 // Client code - Clean API pattern
-import { ShapeStream, Shape } from "@electric-sql/client"
+import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3001/api/items`, // Your API endpoint
@@ -50,10 +50,10 @@ shape.subscribe((data) => console.log(data))
 
 ```ts
 // Server code - Handles Electric details
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
 
-app.get("/api/items", async (req, res) => {
-  const electricUrl = new URL("http://localhost:3000/v1/shape")
+app.get('/api/items', async (req, res) => {
+  const electricUrl = new URL('http://localhost:3000/v1/shape')
 
   // Forward only Electric protocol parameters
   ELECTRIC_PROTOCOL_QUERY_PARAMS.forEach((param) => {
@@ -63,8 +63,8 @@ app.get("/api/items", async (req, res) => {
   })
 
   // Server controls table and authorization
-  electricUrl.searchParams.set("table", "items")
-  electricUrl.searchParams.set("where", `user_id = '${req.user.id}'`)
+  electricUrl.searchParams.set('table', 'items')
+  electricUrl.searchParams.set('where', `user_id = '${req.user.id}'`)
 
   // Proxy response with streaming...
   const response = await fetch(electricUrl)
@@ -87,12 +87,12 @@ This pattern provides:
 For development or examples, you can connect directly:
 
 ```ts
-import { ShapeStream, Shape } from "@electric-sql/client"
+import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
   params: {
-    table: "items",
+    table: 'items',
   },
 })
 const shape = new Shape(stream)
@@ -110,7 +110,7 @@ The [`ShapeStream`](https://github.com/electric-sql/electric/blob/main/packages/
 Construct with a shape definition and options and then either subscribe to the shape log messages directly or pass into a [`Shape`](#shape) to materialise the stream into an object.
 
 ```tsx
-import { ShapeStream } from "@electric-sql/client"
+import { ShapeStream } from '@electric-sql/client'
 
 // Passes subscribers rows as they're inserted, updated, or deleted
 const stream = new ShapeStream({
@@ -234,7 +234,7 @@ export interface ShapeStreamOptions<T = never> {
    * without seeing the base data. In this mode, you can use `requestSnapshot()` to
    * fetch subsets of data on-demand.
    */
-  log?: "full" | "changes_only"
+  log?: 'full' | 'changes_only'
 
   /**
    * Signal to abort the stream.
@@ -299,13 +299,13 @@ Example with PostgreSQL-specific parameters:
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "users",
-    where: "age > $1",
-    columns: ["id", "name", "email"],
-    params: ["18"],
-    replica: "full",
+    table: 'users',
+    where: 'age > $1',
+    columns: ['id', 'name', 'email'],
+    params: ['18'],
+    replica: 'full',
   },
 })
 ```
@@ -314,10 +314,10 @@ You can also include additional custom parameters in the `params` object alongsi
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "users",
-    customParam: "value",
+    table: 'users',
+    customParam: 'value',
   },
 })
 ```
@@ -328,15 +328,15 @@ Both `params` and `headers` support function options that are resolved when need
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "items",
+    table: 'items',
     userId: () => getCurrentUserId(),
     filter: async () => await getUserPreferences(),
   },
   headers: {
     Authorization: async () => `Bearer ${await getAccessToken()}`,
-    "X-Tenant-Id": () => getCurrentTenant(),
+    'X-Tenant-Id': () => getCurrentTenant(),
   },
 })
 ```
@@ -407,9 +407,9 @@ type CustomRow = {
 }
 
 const stream = new ShapeStream<CustomRow>({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "posts",
+    table: 'posts',
   },
   parser: {
     // Parse timestamp columns into JavaScript Date objects
@@ -444,9 +444,9 @@ const camelCaseKeys: TransformFunction = (row) =>
   Object.fromEntries(Object.entries(row).map(([k, v]) => [toCamelCase(k), v]))
 
 const stream = new ShapeStream<CustomRow>({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "posts",
+    table: 'posts',
   },
   transformer: camelCaseKeys,
 })
@@ -468,7 +468,7 @@ By default Electric sends the modified columns in an update message, not the com
 If you'd like to receive the full row value for updates and deletes, you can set the `replica` option of your `ShapeStream` to `full`:
 
 ```tsx
-import { ShapeStream } from "@electric-sql/client"
+import { ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
@@ -498,7 +498,7 @@ The [`Shape`](https://github.com/electric-sql/electric/blob/main/packages/typesc
 It takes a [`ShapeStream`](#shapestream), consumes the stream, materialises it into a Shape object and notifies you when this changes.
 
 ```tsx
-import { ShapeStream, Shape } from "@electric-sql/client"
+import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,
@@ -526,9 +526,9 @@ The `subscribe` method allows you to receive updates whenever the shape changes.
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "issues",
+    table: 'issues',
   },
 })
 
@@ -536,11 +536,11 @@ const stream = new ShapeStream({
 stream.subscribe(
   (messages) => {
     // Process messages
-    console.log("Received messages:", messages)
+    console.log('Received messages:', messages)
   },
   (error) => {
     // Get notified about errors
-    console.error("Error in subscription:", error)
+    console.error('Error in subscription:', error)
   }
 )
 ```
@@ -555,7 +555,7 @@ To stop receiving updates, you can either:
 ```typescript
 // Store the unsubscribe function
 const unsubscribe = stream.subscribe((messages) => {
-  console.log("Received messages:", messages)
+  console.log('Received messages:', messages)
 })
 
 // Later, unsubscribe this specific subscription
@@ -573,16 +573,16 @@ The ShapeStream provides two ways to handle errors:
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "issues",
+    table: 'issues',
   },
   onError: (error) => {
     // Handle all stream errors here
     if (error instanceof FetchError) {
-      console.error("HTTP error:", error.status, error.message)
+      console.error('HTTP error:', error.status, error.message)
     } else {
-      console.error("Stream error:", error)
+      console.error('Stream error:', error)
     }
   },
 })
@@ -599,7 +599,7 @@ stream.subscribe(
   },
   (error) => {
     // Handle errors for this specific subscription
-    console.error("Subscription error:", error)
+    console.error('Subscription error:', error)
   }
 )
 ```
@@ -627,11 +627,11 @@ Electric supports two log modes for syncing shapes. The default `full` mode crea
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "items",
+    table: 'items',
   },
-  log: "changes_only", // Skip initial snapshot
+  log: 'changes_only', // Skip initial snapshot
 })
 ```
 
@@ -649,12 +649,12 @@ You can use `offset: 'now'` to skip all historical data and start from the curre
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "items",
+    table: 'items',
   },
-  offset: "now", // Start from current point, skip all history
-  log: "changes_only",
+  offset: 'now', // Start from current point, skip all history
+  log: 'changes_only',
 })
 ```
 
@@ -666,18 +666,18 @@ In `changes_only` mode, you can request snapshots of specific subsets of data on
 
 ```typescript
 const stream = new ShapeStream({
-  url: "http://localhost:3000/v1/shape",
+  url: 'http://localhost:3000/v1/shape',
   params: {
-    table: "items",
+    table: 'items',
   },
-  log: "changes_only",
+  log: 'changes_only',
 })
 
 // Request a subset of data with filtering and pagination
 const { metadata, data } = await stream.requestSnapshot({
   where: "priority = 'high'",
-  params: { "1": "high" },
-  orderBy: "created_at DESC",
+  params: { '1': 'high' },
+  orderBy: 'created_at DESC',
   limit: 20,
   offset: 0,
 })

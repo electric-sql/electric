@@ -1,5 +1,5 @@
-import fs from "node:fs"
-import { parse } from "yaml"
+import fs from 'node:fs'
+import { parse } from 'yaml'
 
 export default {
   watch: [`./blog/authors.yaml`],

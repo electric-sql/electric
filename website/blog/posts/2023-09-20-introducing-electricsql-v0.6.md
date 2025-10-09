@@ -113,7 +113,7 @@ npx electric-sql generate [--watch]
 And import a [type-safe, schema-aware client library](https://legacy.electric-sql.com/docs/usage/data-access/client) into your app:
 
 ```tsx
-import { schema, Project } from "./generated/client"
+import { schema, Project } from './generated/client'
 
 const { db } = await electrify(conn, schema, config)
 const projects: Project[] = db.projects.findMany({
@@ -161,7 +161,7 @@ You can sync wide, shallow shapes, such as a small set of columns from all rows 
 ```tsx
 await db.projects.sync({
   where: {
-    id: "abcd",
+    id: 'abcd',
   },
   include: {
     issues: {
@@ -211,7 +211,7 @@ And [write directly to the local database](https://legacy.electric-sql.com/docs/
 ```tsx
 await db.projects.update({
   data: {
-    status: "completed",
+    status: 'completed',
   },
   where: {
     id: project.id,

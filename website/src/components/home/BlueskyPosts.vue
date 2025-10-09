@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from "vue"
+import { ref, onMounted, computed } from 'vue'
 
 // Props to configure the component
 const props = defineProps({
@@ -32,7 +32,7 @@ function getFromCache() {
       }
     }
   } catch (err) {
-    console.warn("Cache error:", err)
+    console.warn('Cache error:', err)
   }
   return null
 }
@@ -48,7 +48,7 @@ function saveToCache(data) {
       })
     )
   } catch (err) {
-    console.warn("Error saving to cache:", err)
+    console.warn('Error saving to cache:', err)
   }
 }
 
@@ -88,7 +88,7 @@ function utf16ToUtf8Indices(str) {
 // Render the Bluesky post with proper formatting
 function renderPost(text, facets) {
   if (!text || !facets || !Array.isArray(facets)) {
-    return text || ""
+    return text || ''
   }
 
   // Create segments for easier manipulation
@@ -154,24 +154,24 @@ function renderPost(text, facets) {
     let linkInfo = null
     if (facet.features && Array.isArray(facet.features)) {
       for (const feature of facet.features) {
-        if (feature.$type === "app.bsky.richtext.facet#link" && feature.uri) {
-          linkInfo = { type: "link", href: feature.uri }
+        if (feature.$type === 'app.bsky.richtext.facet#link' && feature.uri) {
+          linkInfo = { type: 'link', href: feature.uri }
           break
         } else if (
-          feature.$type === "app.bsky.richtext.facet#mention" &&
+          feature.$type === 'app.bsky.richtext.facet#mention' &&
           feature.did
         ) {
           linkInfo = {
-            type: "mention",
+            type: 'mention',
             href: `https://bsky.app/profile/${feature.did}`,
           }
           break
         } else if (
-          feature.$type === "app.bsky.richtext.facet#tag" &&
+          feature.$type === 'app.bsky.richtext.facet#tag' &&
           feature.tag
         ) {
           linkInfo = {
-            type: "tag",
+            type: 'tag',
             href: `https://bsky.app/search?q=${encodeURIComponent(feature.tag)}`,
           }
           break
@@ -204,13 +204,13 @@ function renderPost(text, facets) {
       }
       return segment.text
     })
-    .join("")
+    .join('')
 }
 
 // Format the date for display (e.g., "Mar 7, 2025")
 function formatDisplayDate(timestamp) {
   const date = new Date(timestamp)
-  const month = date.toLocaleString("en-US", { month: "short" })
+  const month = date.toLocaleString('en-US', { month: 'short' })
   const day = date.getDate()
   const year = date.getFullYear()
 
@@ -228,7 +228,7 @@ const processedPosts = computed(() => {
   return posts.value.map((post) => ({
     ...post,
     processedText: renderPost(
-      post.post.record?.text || "",
+      post.post.record?.text || '',
       post.post.record?.facets || []
     ),
   }))
@@ -259,7 +259,7 @@ async function fetchPosts() {
     posts.value = data.feed
     saveToCache(data.feed)
   } catch (err) {
-    console.error("Error fetching Bluesky posts:", err)
+    console.error('Error fetching Bluesky posts:', err)
     error.value = err.message
   } finally {
     loading.value = false

@@ -110,7 +110,7 @@ The recommended pattern for secure use of the Electric Cloud is to add the sourc
 In your client, request the shape as normal, without the `source_id` and `secret` parameters. For example here using the [Typescript client](/docs/api/clients/typescript):
 
 ```ts
-import { ShapeStream } from "@electric-sql/client"
+import { ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `https://your-api-or-proxy.example.com/v1/shape`,

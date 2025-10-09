@@ -361,7 +361,7 @@ npm install @electric-sql/pglite
 ```
 
 ```ts
-import { PGlite } from "@electric-sql/pglite"
+import { PGlite } from '@electric-sql/pglite'
 
 const db = new PGlite()
 ```
@@ -377,7 +377,7 @@ PGlite is a Postgres database that runs inside your dev environment. With it, yo
 Electric can be used to hydrate data into a PGlite instance using the [sync plugin](https://pglite.dev/docs/sync):
 
 ```ts
-import { electricSync } from "@electric-sql/pglite-sync"
+import { electricSync } from '@electric-sql/pglite-sync'
 
 const pg = await PGlite.create({
   extensions: {

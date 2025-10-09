@@ -1,7 +1,7 @@
 <script setup>
-import Actions from "./Actions.vue"
+import Actions from './Actions.vue'
 
-const { actions } = defineProps(["actions"])
+const { actions } = defineProps(['actions'])
 </script>
 
 <style scoped>

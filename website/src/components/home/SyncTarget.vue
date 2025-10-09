@@ -1,7 +1,7 @@
 <script setup>
-import Card from "./Card.vue"
+import Card from './Card.vue'
 
-const { target } = defineProps(["target"])
+const { target } = defineProps(['target'])
 const { body, href, title } = target
 
 const icon = `/img/home/sync-targets/${target.slug}.svg`

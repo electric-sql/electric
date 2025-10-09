@@ -1,4 +1,4 @@
-import type { Context } from "https://edge.netlify.com"
+import type { Context } from 'https://edge.netlify.com'
 
 // Path prefixes that should serve markdown to agents
 const PATH_PREFIXES = [
@@ -78,7 +78,7 @@ export default async (request: Request, context: Context) => {
 
         if (mdResponse.ok) {
           return new Response(mdResponse.body, {
-            headers: { "Content-Type": `text/markdown; charset=utf-8` },
+            headers: { 'Content-Type': `text/markdown; charset=utf-8` },
           })
         }
       }
@@ -112,7 +112,7 @@ export default async (request: Request, context: Context) => {
 
     if (mdResponse.ok) {
       return new Response(mdResponse.body, {
-        headers: { "Content-Type": `text/markdown; charset=utf-8` },
+        headers: { 'Content-Type': `text/markdown; charset=utf-8` },
       })
     }
   }

@@ -1,7 +1,7 @@
-import { PGlite } from "@electric-sql/pglite"
-import { live } from "@electric-sql/pglite/live"
-import { electricSync } from "@electric-sql/pglite-sync"
-import { useLiveQuery } from "@electric-sql/pglite-react"
+import { PGlite } from '@electric-sql/pglite'
+import { live } from '@electric-sql/pglite/live'
+import { electricSync } from '@electric-sql/pglite-sync'
+import { useLiveQuery } from '@electric-sql/pglite-react'
 
 // Create a persistent local PGlite database
 const pg = await PGlite.create({

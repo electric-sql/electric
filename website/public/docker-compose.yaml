@@ -1,4 +1,4 @@
-name: "electric_quickstart"
+name: 'electric_quickstart'
 
 services:
   postgres:
@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - "54321:5432"
+      - '54321:5432'
     tmpfs:
       - /var/lib/postgresql/data
       - /tmp
@@ -18,7 +18,7 @@ services:
       - -c
       - wal_level=logical
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -31,7 +31,7 @@ services:
       # See https://electric-sql.com/docs/guides/security
       ELECTRIC_INSECURE: true
     ports:
-      - "3000:3000"
+      - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,18 +1,18 @@
 <script setup>
-import ScalabilityChart from "../../ScalabilityChart.vue"
+import ScalabilityChart from '../../ScalabilityChart.vue'
 
-import Card from "../Card.vue"
-import Section from "../Section.vue"
+import Card from '../Card.vue'
+import Section from '../Section.vue'
 
 const actions = [
   {
-    href: "/product/cloud",
-    text: "Electric Cloud",
-    theme: "brand",
+    href: '/product/cloud',
+    text: 'Electric Cloud',
+    theme: 'brand',
   },
   {
-    href: "/docs/reference/benchmarks",
-    text: "Benchmarks",
+    href: '/docs/reference/benchmarks',
+    text: 'Benchmarks',
   },
 ]
 </script>

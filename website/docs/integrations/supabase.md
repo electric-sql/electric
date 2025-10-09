@@ -87,20 +87,20 @@ $ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/hello-e
 Now, replace the contents of `supabase/functions/hello-electric/index.ts` with the following, replacing `[YOUR_ELECTRIC_URL]` with the URL of an Electric service, running against a Postgres database with an `items` table. (This can be `http://localhost:3000` if you're running the local docker command we [used above](#connect-electric) when connecting Electric to Supabase Postgres).
 
 ```ts
-import { Shape, ShapeStream } from "npm:@electric-sql/client"
+import { Shape, ShapeStream } from 'npm:@electric-sql/client'
 
 Deno.serve(async (req) => {
   const stream = new ShapeStream({
-    url: "[YOUR_ELECTRIC_URL]/v1/shape",
+    url: '[YOUR_ELECTRIC_URL]/v1/shape',
     params: {
-      table: "items",
+      table: 'items',
     },
   })
   const shape = new Shape(stream)
   const items = [...(await shape.value)]
 
   return new Response(JSON.stringify(items), {
-    headers: { "Content-Type": "application/json" },
+    headers: { 'Content-Type': 'application/json' },
   })
 })
 ```

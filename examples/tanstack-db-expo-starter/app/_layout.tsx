@@ -1,5 +1,5 @@
-import React from "react"
-import { Stack } from "expo-router"
+import React from 'react'
+import { Stack } from 'expo-router'
 
 /**
  * Root layout component that provides the TanStack DB context

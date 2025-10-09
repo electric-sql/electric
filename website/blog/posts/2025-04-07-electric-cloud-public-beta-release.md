@@ -1,5 +1,5 @@
 ---
-title: "Electric Cloud public BETA: Sync in 30 seconds"
+title: 'Electric Cloud public BETA: Sync in 30 seconds'
 description: >-
   Electric Cloud is now in public BETA!
   This means it's open to everyone for immediate access.
@@ -7,7 +7,7 @@ excerpt: >-
   Electric Cloud is now in public BETA!
   This means it's open to everyone for immediate access.
 authors: [kyle, thruflo]
-image: "/img/blog/electric-cloud-public-beta-release/header.jpg"
+image: '/img/blog/electric-cloud-public-beta-release/header.jpg'
 tags: [release]
 outline: [2, 3]
 post: true

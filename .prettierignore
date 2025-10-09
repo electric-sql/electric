@@ -10,3 +10,5 @@ coverage
 *.min.js
 *.min.css
 pnpm-lock.yaml
+sst-env.d.ts
+sst.config.ts

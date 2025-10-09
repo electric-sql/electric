@@ -1,5 +1,5 @@
 packages:
-  - "packages/*"
-  - "examples/*"
-  - "website"
-  - "examples/.shared"
+  - 'packages/*'
+  - 'examples/*'
+  - 'website'
+  - 'examples/.shared'

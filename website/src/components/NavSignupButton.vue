@@ -1,8 +1,8 @@
 <script setup>
-const { screenMenu } = defineProps(["screenMenu"])
+const { screenMenu } = defineProps(['screenMenu'])
 
-const classes = ["nav-item VPNavBarMenuLink VPNavBarCTA"]
-const extraClasses = [screenMenu ? "is-mobile" : ""]
+const classes = ['nav-item VPNavBarMenuLink VPNavBarCTA']
+const extraClasses = [screenMenu ? 'is-mobile' : '']
 </script>
 
 <template>

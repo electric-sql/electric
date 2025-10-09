@@ -1,33 +1,33 @@
 <script setup>
-import Section from "../Section.vue"
-import SyncTarget from "../SyncTarget.vue"
+import Section from '../Section.vue'
+import SyncTarget from '../SyncTarget.vue'
 
 const actions = [
   {
-    href: "/blog/2025/04/09/building-ai-apps-on-sync",
-    text: "Why sync",
-    theme: "brand",
+    href: '/blog/2025/04/09/building-ai-apps-on-sync',
+    text: 'Why sync',
+    theme: 'brand',
   },
   {
-    href: "https://dashboard.electric-sql.cloud/",
-    text: "Sign-up",
+    href: 'https://dashboard.electric-sql.cloud/',
+    text: 'Sign-up',
   },
 ]
 
 const syncTargets = [
   {
-    slug: "agent",
-    title: "Agents",
+    slug: 'agent',
+    title: 'Agents',
     body: `
         Keep AI agents and
         <span class="no-wrap">
           users in sync </span>&nbsp;&nbsp;&nbsp;
       `,
-    href: "/demos/ai-chat",
+    href: '/demos/ai-chat',
   },
   {
-    slug: "app",
-    title: "Apps",
+    slug: 'app',
+    title: 'Apps',
     body: `
         Make apps
         <span class="no-wrap">
@@ -37,22 +37,22 @@ const syncTargets = [
         <span class="no-wrap">
           and collaborative</span>
       `,
-    href: "/demos/linearlite",
+    href: '/demos/linearlite',
   },
   {
-    slug: "dashboard",
-    title: "Dashboards",
+    slug: 'dashboard',
+    title: 'Dashboards',
     body: `
         Build live,
         <span class="no-wrap">
           real-time</span>
         dashboards&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       `,
-    href: "#dashboard-examples",
+    href: '#dashboard-examples',
   },
   {
-    slug: "worker",
-    title: "Workers",
+    slug: 'worker',
+    title: 'Workers',
     body: `
         Sync data into
         <span class="no-wrap-1117">
@@ -61,7 +61,7 @@ const syncTargets = [
             at the edge</span>
         </span>
       `,
-    href: "/docs/integrations/cloudflare",
+    href: '/docs/integrations/cloudflare',
   },
 ]
 </script>

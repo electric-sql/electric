@@ -1,7 +1,7 @@
 <script setup>
-import { data as authors } from "../../data/authors.data.ts"
+import { data as authors } from '../../data/authors.data.ts'
 
-const { post } = defineProps(["post"])
+const { post } = defineProps(['post'])
 </script>
 
 <style scoped>

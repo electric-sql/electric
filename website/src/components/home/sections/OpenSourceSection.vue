@@ -1,24 +1,24 @@
 <script setup>
-import { onMounted, useTemplateRef } from "vue"
-import reloadRepoCards from "../../../../src/lib/repo-card"
-import Section from "../Section.vue"
+import { onMounted, useTemplateRef } from 'vue'
+import reloadRepoCards from '../../../../src/lib/repo-card'
+import Section from '../Section.vue'
 
 const actions = [
   {
-    href: "https://discord.electric-sql.com",
-    text: "Join the Discord",
-    theme: "brand",
+    href: 'https://discord.electric-sql.com',
+    text: 'Join the Discord',
+    theme: 'brand',
   },
   {
-    href: "https://github.com/electric-sql/electric",
-    text: "Star on GitHub",
+    href: 'https://github.com/electric-sql/electric',
+    text: 'Star on GitHub',
   },
 ]
 
-const cards = useTemplateRef("cards")
+const cards = useTemplateRef('cards')
 
 onMounted(() => {
-  if (typeof window !== "undefined" && document.querySelector) {
+  if (typeof window !== 'undefined' && document.querySelector) {
     reloadRepoCards(cards.value)
   }
 })

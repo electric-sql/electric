@@ -1,49 +1,49 @@
 <script setup>
-import { onMounted, ref } from "vue"
+import { onMounted, ref } from 'vue'
 
-import Card from "../Card.vue"
-import Section from "../Section.vue"
+import Card from '../Card.vue'
+import Section from '../Section.vue'
 
 const integrations = [
   {
-    slug: "tanstack",
-    name: "TanStack",
+    slug: 'tanstack',
+    name: 'TanStack',
   },
   {
-    slug: "phoenix",
-    name: "Phoenix",
+    slug: 'phoenix',
+    name: 'Phoenix',
   },
   {
-    slug: "react",
-    name: "React",
+    slug: 'react',
+    name: 'React',
   },
   {
-    slug: "next",
-    name: "Next.js",
+    slug: 'next',
+    name: 'Next.js',
   },
   {
-    slug: "neon",
-    name: "Neon",
+    slug: 'neon',
+    name: 'Neon',
   },
   {
-    slug: "supabase",
-    name: "Supabase",
+    slug: 'supabase',
+    name: 'Supabase',
   },
 ]
 
 const actions = [
   {
-    href: "/docs/quickstart",
-    text: "Quickstart",
-    theme: "brand",
+    href: '/docs/quickstart',
+    text: 'Quickstart',
+    theme: 'brand',
   },
   // {
   //   href: '/docs/tutorial',
   //   text: 'Tutorial'
   // }
   {
-    href: "/docs/intro",
-    text: "Docs",
+    href: '/docs/intro',
+    text: 'Docs',
   },
 ]
 
@@ -51,9 +51,9 @@ const sql = ref(undefined)
 const tsx = ref(undefined)
 
 onMounted(() => {
-  if (typeof window !== "undefined" && document.querySelector) {
-    sql.value = document.getElementById("works-with-sql-template").innerHTML
-    tsx.value = document.getElementById("works-with-tsx-template").innerHTML
+  if (typeof window !== 'undefined' && document.querySelector) {
+    sql.value = document.getElementById('works-with-sql-template').innerHTML
+    tsx.value = document.getElementById('works-with-tsx-template').innerHTML
   }
 })
 </script>
@@ -67,7 +67,7 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.your-stack :deep(div[class*="language-"]) {
+.your-stack :deep(div[class*='language-']) {
   margin: 0 !important;
 
   border-radius: 12px;
@@ -76,12 +76,12 @@ onMounted(() => {
   height: 288px;
 }
 
-.your-stack :deep(div[class*="language-"] button),
-.your-stack :deep(div[class*="language-"] .lang) {
+.your-stack :deep(div[class*='language-'] button),
+.your-stack :deep(div[class*='language-'] .lang) {
   display: none;
 }
 
-.your-stack :deep(div[class*="language-"].placeholder) {
+.your-stack :deep(div[class*='language-'].placeholder) {
   width: 100%;
   height: 288px;
 }
@@ -151,7 +151,7 @@ onMounted(() => {
 }
 
 @media (min-width: 960px) and (max-width: 1099px) {
-  .your-stack :deep(div[class*="language-"]) {
+  .your-stack :deep(div[class*='language-']) {
     font-size: 14px;
   }
 }
@@ -171,7 +171,7 @@ onMounted(() => {
     margin-bottom: 0px;
   }
 
-  .your-stack :deep(div[class*="language-"]) {
+  .your-stack :deep(div[class*='language-']) {
     max-width: 512px;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -222,7 +222,7 @@ onMounted(() => {
     order: 2;
   }
   .layers,
-  .your-stack :deep(div[class*="language-"]) {
+  .your-stack :deep(div[class*='language-']) {
     max-width: 448px;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -235,13 +235,13 @@ onMounted(() => {
 }
 @media (max-width: 639px) {
   .layers,
-  .your-stack :deep(div[class*="language-"]) {
+  .your-stack :deep(div[class*='language-']) {
     max-width: 384px;
   }
 }
 @media (max-width: 518px) {
   .layers,
-  .your-stack :deep(div[class*="language-"]) {
+  .your-stack :deep(div[class*='language-']) {
     max-width: 320px;
   }
 }

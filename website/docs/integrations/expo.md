@@ -26,17 +26,17 @@ You can use the Electric [Typescript client](/docs/api/clients/typescript) in yo
 Follow the [Expo Quickstart](https://docs.expo.dev/get-started/create-a-project/) to create an Expo app. Replace the generated `./app/(tabs)/index.tsx` with the following:
 
 ```tsx
-import { Text } from "react-native"
-import { useShape } from "@electric-sql/react"
+import { Text } from 'react-native'
+import { useShape } from '@electric-sql/react'
 
 // Edit to match your setup.
-const ELECTRIC_URL = "https://my-electric-sync-service.example.com"
+const ELECTRIC_URL = 'https://my-electric-sync-service.example.com'
 
 export default function HomeScreen() {
   const { isLoading, data } = useShape({
     url: `${ELECTRIC_URL}/v1/shape`,
     params: {
-      table: "items",
+      table: 'items',
     },
   })
 

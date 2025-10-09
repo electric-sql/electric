@@ -1,5 +1,5 @@
 <script setup>
-const { videoId } = defineProps(["videoId"])
+const { videoId } = defineProps(['videoId'])
 
 const src = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`
 </script>

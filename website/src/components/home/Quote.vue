@@ -1,7 +1,7 @@
 <script setup>
-import Card from "./Card.vue"
+import Card from './Card.vue'
 
-const { image, href } = defineProps(["image", "href"])
+const { image, href } = defineProps(['image', 'href'])
 </script>
 
 <style scoped>

@@ -194,24 +194,24 @@ A key file is `/src/electric.ts` - This file contains an `initElectric` function
 
 ```typescript
 // src/electric.ts
-import { makeElectricContext } from "electric-sql/react"
-import { electrify, ElectricDatabase } from "electric-sql/wa-sqlite"
+import { makeElectricContext } from 'electric-sql/react'
+import { electrify, ElectricDatabase } from 'electric-sql/wa-sqlite'
 
 // The generated electric client:
-import { Electric, schema } from "./generated/client"
-export type { Issue } from "./generated/client"
+import { Electric, schema } from './generated/client'
+export type { Issue } from './generated/client'
 
 export const { ElectricProvider, useElectric } = makeElectricContext<Electric>()
 
 export const initElectric = async () => {
-  const electricUrl = import.meta.env.ELECTRIC_URL ?? "ws://localhost:5133"
+  const electricUrl = import.meta.env.ELECTRIC_URL ?? 'ws://localhost:5133'
   const config = {
     auth: {
       token: insecureAuthToken({ user_id: uuid() }),
     },
     url: electricUrl,
   }
-  const conn = await ElectricDatabase.init(dbName, "/")
+  const conn = await ElectricDatabase.init(dbName, '/')
   return await electrify(conn, schema, config)
 }
 ```
@@ -273,7 +273,7 @@ In any component where you want to access your database you employ `useElectric`
 
 ```typescript
 // src/pages/Issue/index.tsx
-import { useElectric } from "../../electric"
+import { useElectric } from '../../electric'
 
 function IssuePage() {
   const { db } = useElectric()! // ...
@@ -291,7 +291,7 @@ db.issue.create({
   data: {
     id: uuidv4(),
     title: title,
-    username: "testuser",
+    username: 'testuser',
     priority: priority,
     status: status,
     description: description,
@@ -332,7 +332,7 @@ See the [documentation for ".update()"](https://legacy.electric-sql.com/docs/usa
 const { results } = useLiveQuery(
   db.issue.liveMany({
     orderBy: {
-      kanbanorder: "asc",
+      kanbanorder: 'asc',
     },
     where: filterStateToWhere(filterState), // `filterStateToWhere` is a helper function that converts the filter
     // state (tied to url parameters) to a where caluse for the query.

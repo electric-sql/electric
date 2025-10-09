@@ -1,17 +1,17 @@
 <script setup>
-import { onMounted } from "vue"
-import Tweet from "vue-tweet"
+import { onMounted } from 'vue'
+import Tweet from 'vue-tweet'
 
-const { columns, tweets } = defineProps(["columns", "tweets"])
+const { columns, tweets } = defineProps(['columns', 'tweets'])
 
 const forceResize = () => {
-  const wrapper = document.querySelector(".masonry-wall-wrapper")
+  const wrapper = document.querySelector('.masonry-wall-wrapper')
 
   if (!wrapper) {
     return
   }
 
-  const wall = document.querySelector(".masonry-wall")
+  const wall = document.querySelector('.masonry-wall')
 
   wrapper.style.height = `${wall.offsetHeight * 0.75}px`
 }
@@ -37,14 +37,14 @@ const handleTweetLoad = () => {
   clearTimeout(loadTimer)
   loadTimer = setTimeout(handleResize, 600)
 
-  const wrapper = document.querySelector(".masonry-wall-wrapper")
-  wrapper.classList.add("visible")
+  const wrapper = document.querySelector('.masonry-wall-wrapper')
+  wrapper.classList.add('visible')
 }
 
 onMounted(async () => {
-  if (typeof window !== "undefined" && document.querySelector) {
+  if (typeof window !== 'undefined' && document.querySelector) {
     let resizeTimer
-    window.addEventListener("resize", (event) => {
+    window.addEventListener('resize', (event) => {
       clearTimeout(resizeTimer)
 
       resizeTimer = setTimeout(handleResize, 300)

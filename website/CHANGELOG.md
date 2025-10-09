@@ -19,9 +19,9 @@
 
   ```typescript
   const stream = new ShapeStream({
-    url: "http://localhost:3000/v1/shape",
+    url: 'http://localhost:3000/v1/shape',
     params: {
-      table: "items",
+      table: 'items',
       userId: () => getCurrentUserId(),
       filter: async () => await getUserPreferences(),
     },
@@ -32,6 +32,7 @@
   ```
 
   ## Common Use Cases
+
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state
@@ -63,9 +64,9 @@
 
   ```typescript
   const stream = new ShapeStream({
-    url: "http://localhost:3000/v1/shape",
+    url: 'http://localhost:3000/v1/shape',
     params: {
-      table: "items",
+      table: 'items',
       userId: () => getCurrentUserId(),
       filter: async () => await getUserPreferences(),
     },
@@ -76,6 +77,7 @@
   ```
 
   ## Common Use Cases
+
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state

@@ -6,7 +6,7 @@ const path = require(`path`)
 const REPO_ROOT = path.resolve(__dirname, `..`)
 
 const packageVersionPlaceholders = {
-  "sync-service": `__PLACEHOLDER_SYNC_SERVICE_VERSION__`,
+  'sync-service': `__PLACEHOLDER_SYNC_SERVICE_VERSION__`,
 }
 
 function getPackageVersion(packageName) {

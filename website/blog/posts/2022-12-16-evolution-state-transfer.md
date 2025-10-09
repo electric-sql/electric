@@ -1,5 +1,5 @@
 ---
-title: "The evolution of state transfer"
+title: 'The evolution of state transfer'
 description: >-
   Web development has been progressing through an evolution of state transfer. Hybrid local-first architecture is the natural endgame for this progression.
 excerpt: >-
@@ -187,8 +187,7 @@ This hybrid architecture has a number of layers, from central cloud to the end u
 
 Managing the placement and movement of data across these layers, [from cloud to edge to local devices](https://dl.acm.org/doi/abs/10.1145/3464298.3493405), is complex. Too complex to be optimised by hand. It needs to be managed and optimised by the system. I.e.: rather than imperatively placing data onto locations in your cloud architecture, you need to declare your requirements and optimisation parameters and have the cloud handle the rest.
 
-> "As cloud programming matures, it seems inevitable that it will depart from traditional sequential programming. The cloud is a massive, globe-spanning distributed computer. Parallelism abounds at all scales. Creative programmers are held back by legacy programming models. [What's needed] is a separation of distributed programs into program semantics, availablity, consistency and targets of optimization.<br />
-> &mdash; [New Directions in Cloud Programming, Joe Hellerstein, et al.](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf)
+> "As cloud programming matures, it seems inevitable that it will depart from traditional sequential programming. The cloud is a massive, globe-spanning distributed computer. Parallelism abounds at all scales. Creative programmers are held back by legacy programming models. [What's needed] is a separation of distributed programs into program semantics, availablity, consistency and targets of optimization.<br /> > &mdash; [New Directions in Cloud Programming, Joe Hellerstein, et al.](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf)
 
 This is the endgame of state transfer: where the combination of static programme analysis and AI not only optimises the _transfer_ of data from point to point, but also the _placement_ of data and where the _points_ and _layers_ are in the first place.
 

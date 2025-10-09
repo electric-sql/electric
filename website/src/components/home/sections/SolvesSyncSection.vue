@@ -1,6 +1,6 @@
 <script setup>
-import PartialReplicationDiagramme from "../PartialReplicationDiagramme.vue"
-import Section from "../Section.vue"
+import PartialReplicationDiagramme from '../PartialReplicationDiagramme.vue'
+import Section from '../Section.vue'
 
 const actions = [
   // {
@@ -10,13 +10,13 @@ const actions = [
   // },
   {
     // href: '/how/it-works',
-    href: "/product/electric",
-    text: "How it works",
-    theme: "brand",
+    href: '/product/electric',
+    text: 'How it works',
+    theme: 'brand',
   },
   {
-    href: "/docs/guides/shapes",
-    text: "Partial replication",
+    href: '/docs/guides/shapes',
+    text: 'Partial replication',
   },
 ]
 </script>

@@ -1,10 +1,10 @@
 <script>
-import { ref, onMounted, markRaw } from "vue"
-import { Chart } from "chart.js/auto"
-import benchmarkData from "../../static/data/benchmarks/cdn_perf_benchmark_2024-12-09.json"
+import { ref, onMounted, markRaw } from 'vue'
+import { Chart } from 'chart.js/auto'
+import benchmarkData from '../../static/data/benchmarks/cdn_perf_benchmark_2024-12-09.json'
 
 function getComputedStyleValue(name) {
-  if (typeof window !== "undefined") {
+  if (typeof window !== 'undefined') {
     return window
       .getComputedStyle(document.documentElement)
       .getPropertyValue(name)
@@ -12,8 +12,8 @@ function getComputedStyleValue(name) {
 }
 
 function humanizeBytes(bytes) {
-  if (bytes < 0) throw new Error("Byte value cannot be negative.")
-  const units = ["B", "KB", "MB", "GB"]
+  if (bytes < 0) throw new Error('Byte value cannot be negative.')
+  const units = ['B', 'KB', 'MB', 'GB']
   const factor = 1024
   if (bytes === 0) return `0 B`
   const index = Math.floor(Math.log(bytes) / Math.log(factor))
@@ -23,7 +23,7 @@ function humanizeBytes(bytes) {
 
 function formatClients(numClients) {
   if (numClients === 0) {
-    return "0"
+    return '0'
   } else if (numClients < 1e6) {
     return `${numClients / 1000}k`
   } else {
@@ -33,20 +33,20 @@ function formatClients(numClients) {
 
 export default {
   setup() {
-    Chart.defaults.color = getComputedStyleValue("--vp-c-text-1")
+    Chart.defaults.color = getComputedStyleValue('--vp-c-text-1')
     Chart.defaults.borderColor = `#ffffff50`
     Chart.defaults.font = {
       ...Chart.defaults.font,
-      family: getComputedStyleValue("--vp-font-family-base"),
+      family: getComputedStyleValue('--vp-font-family-base'),
     }
 
     const chartCanvas = ref(null)
     const chartInstance = ref(null)
 
-    const brandColor1 = getComputedStyleValue("--electric-color")
-    const brandColor2 = getComputedStyleValue("--vp-c-brand-1")
-    const brandColor3 = getComputedStyleValue("--vp-c-brand-2")
-    const brandColor4 = getComputedStyleValue("--vp-c-brand-3")
+    const brandColor1 = getComputedStyleValue('--electric-color')
+    const brandColor2 = getComputedStyleValue('--vp-c-brand-1')
+    const brandColor3 = getComputedStyleValue('--vp-c-brand-2')
+    const brandColor4 = getComputedStyleValue('--vp-c-brand-3')
 
     const createChart = () => {
       if (chartInstance.value) {
@@ -54,7 +54,7 @@ export default {
       }
 
       // Get data for 960 writes/min (16 writes/sec)
-      const data = benchmarkData["16"]
+      const data = benchmarkData['16']
       const labels = data.clients
       const meanData = data.latencyMean
       const p95Data = data.latencyP95
@@ -65,20 +65,20 @@ export default {
       const memoryColor = brandColor2
 
       const chart = new Chart(chartCanvas.value, {
-        type: "line",
+        type: 'line',
         data: {
           labels,
           datasets: [
             {
-              label: "Mean latency",
+              label: 'Mean latency',
               data: meanData,
               borderColor: latencyColor,
               borderWidth: 1.5,
-              backgroundColor: "transparent",
+              backgroundColor: 'transparent',
               padding: 20,
               pointStyle: false,
               fill: false,
-              yAxisID: "y",
+              yAxisID: 'y',
               order: 1,
             },
             // {
@@ -94,27 +94,27 @@ export default {
             //   order: 2,
             // },
             {
-              label: "P99",
+              label: 'P99',
               data: p99Data,
               borderWidth: 1.5,
               borderColor: latencyColor,
-              backgroundColor: "transparent",
+              backgroundColor: 'transparent',
               borderWidth: 1.5,
               borderDash: [2, 2],
               pointStyle: false,
               fill: false,
-              yAxisID: "y",
+              yAxisID: 'y',
               order: 3,
             },
             {
-              label: "Memory use",
+              label: 'Memory use',
               data: memoryData,
               borderColor: memoryColor,
               borderWidth: 1.5,
-              backgroundColor: "transparent",
+              backgroundColor: 'transparent',
               pointStyle: false,
               fill: false,
-              yAxisID: "y1",
+              yAxisID: 'y1',
               order: 4,
             },
           ],
@@ -123,24 +123,24 @@ export default {
           plugins: {
             legend: {
               display: true,
-              position: "top",
+              position: 'top',
               // onClick: null, // Disable toggling datasets
               labels: {
-                color: getComputedStyleValue("--vp-c-text-2"),
+                color: getComputedStyleValue('--vp-c-text-2'),
                 usePointStyle: false,
                 padding: 14,
               },
             },
             tooltip: {
               enabled: false,
-              mode: "index",
+              mode: 'index',
               intersect: false,
               callbacks: {
                 title: (context) => {
                   return `Clients: ${formatClients(parseInt(context[0].label))}`
                 },
                 label: (context) => {
-                  if (context.dataset.yAxisID === "y1") {
+                  if (context.dataset.yAxisID === 'y1') {
                     return `${context.dataset.label}: ${humanizeBytes(context.raw)}`
                   }
                   return `${context.dataset.label}: ${context.raw} ms`
@@ -149,7 +149,7 @@ export default {
             },
             crosshair: {
               line: {
-                color: "#ffffff40",
+                color: '#ffffff40',
                 width: 1,
               },
             },
@@ -158,39 +158,39 @@ export default {
           maintainAspectRatio: false,
           onResize: (chart, size) => {
             chart.canvas.parentNode.style.height =
-              "max(min(384px, 33vw), 280px)"
+              'max(min(384px, 33vw), 280px)'
             chart.canvas.parentNode.style.width = `100%`
 
             let hasChanged = false
 
             if (size.width < 500) {
-              if (chart.data.datasets[0].label !== "Mean") {
+              if (chart.data.datasets[0].label !== 'Mean') {
                 hasChanged = true
               }
 
-              chart.data.datasets[0].label = "Mean"
-              chart.data.datasets[2].label = "Memory"
+              chart.data.datasets[0].label = 'Mean'
+              chart.data.datasets[2].label = 'Memory'
             } else {
-              if (chart.data.datasets[0].label !== "Mean latency") {
+              if (chart.data.datasets[0].label !== 'Mean latency') {
                 hasChanged = true
               }
 
-              chart.data.datasets[0].label = "Mean latency"
-              chart.data.datasets[2].label = "Memory use"
+              chart.data.datasets[0].label = 'Mean latency'
+              chart.data.datasets[2].label = 'Memory use'
             }
 
             if (size.width < 650) {
-              if (chart.data.datasets[1].label !== "P99") {
+              if (chart.data.datasets[1].label !== 'P99') {
                 hasChanged = true
               }
 
-              chart.data.datasets[1].label = "P99"
+              chart.data.datasets[1].label = 'P99'
             } else {
-              if (chart.data.datasets[1].label !== "P95 latency") {
+              if (chart.data.datasets[1].label !== 'P95 latency') {
                 hasChanged = true
               }
 
-              chart.data.datasets[1].label = "P99 latency"
+              chart.data.datasets[1].label = 'P99 latency'
             }
 
             if (hasChanged) {
@@ -200,11 +200,11 @@ export default {
           aspectRatio: 16 / 10,
           resizeDelay: 40,
           interaction: {
-            mode: "index",
+            mode: 'index',
             intersect: false,
           },
           hover: {
-            mode: "index",
+            mode: 'index',
             intersect: false,
           },
           elements: {
@@ -213,14 +213,14 @@ export default {
             },
           },
           cursor: {
-            mode: "vertical",
-            color: "#ffffff40",
+            mode: 'vertical',
+            color: '#ffffff40',
           },
           scales: {
             x: {
               title: {
                 display: true,
-                text: "Concurrent Clients",
+                text: 'Concurrent Clients',
               },
               min: 0,
               ticks: {
@@ -234,27 +234,27 @@ export default {
               },
             },
             y: {
-              type: "linear",
-              position: "left",
+              type: 'linear',
+              position: 'left',
               min: 0,
               title: {
                 display: true,
-                text: "Latency (ms)",
+                text: 'Latency (ms)',
               },
               ticks: {
                 callback: (value) => `${value} ms`,
               },
               grid: {
-                color: "#ffffff20",
+                color: '#ffffff20',
               },
             },
             y1: {
-              type: "linear",
-              position: "right",
+              type: 'linear',
+              position: 'right',
               min: 0,
               title: {
                 display: true,
-                text: "Memory use",
+                text: 'Memory use',
               },
               ticks: {
                 callback: (value) => humanizeBytes(value),

@@ -1,15 +1,15 @@
 <script setup>
-import Actions from "../Actions.vue"
+import Actions from '../Actions.vue'
 
 const actions = [
   {
-    href: "https://pglite.dev",
-    text: "PGlite.dev ↗",
-    theme: "pglite",
+    href: 'https://pglite.dev',
+    text: 'PGlite.dev ↗',
+    theme: 'pglite',
   },
   {
-    href: "https://github.com/electric-sql/pglite",
-    text: "GitHub",
+    href: 'https://github.com/electric-sql/pglite',
+    text: 'GitHub',
   },
 ]
 </script>

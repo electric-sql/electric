@@ -1,10 +1,10 @@
-import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, serial, text, boolean, timestamp } from 'drizzle-orm/pg-core'
 import {
   createSelectSchema,
   createInsertSchema,
   createUpdateSchema,
-} from "drizzle-zod"
-import { z } from "zod"
+} from 'drizzle-zod'
+import { z } from 'zod'
 
 /**
  * Todos table schema definition

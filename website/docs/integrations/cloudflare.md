@@ -38,19 +38,19 @@ For example, you could validate an auth token to protect access to a shape and t
 ```ts
 export default {
   async fetch(request): Promise<Response> {
-    const ELECTRIC_URL = "https://my-electric.example.com"
+    const ELECTRIC_URL = 'https://my-electric.example.com'
 
     const headers = request.headers
-    const authHeader = request.headers.get("Authorization")
+    const authHeader = request.headers.get('Authorization')
     const isValid = (header) => {
       /* ... e.g.: verify JWT ... */
     }
     if (!isValid(authHeader)) {
-      return new Response("Forbidden", { status: 403 })
+      return new Response('Forbidden', { status: 403 })
     }
 
     if (request.method != `GET`) {
-      return new Response("Method Not Allowed", { status: 405 })
+      return new Response('Method Not Allowed', { status: 405 })
     }
 
     const url = new URL(request.url)
@@ -70,16 +70,16 @@ export default {
 Or you can use Electric to hydrate data quickly into an edge worker. For example, you could sync data into an edge worker to dynamically redirect the request:
 
 ```ts
-import { ShapeStream, Shape } from "@electric-sql/client"
+import { ShapeStream, Shape } from '@electric-sql/client'
 
 export default {
   async fetch(request): Promise<Response> {
-    const ELECTRIC_URL = "https://my-electric.example.com"
+    const ELECTRIC_URL = 'https://my-electric.example.com'
 
     const stream = new ShapeStream({
       url: `${ELECTRIC_URL}/v1/shape`,
       params: {
-        table: "routes",
+        table: 'routes',
       },
     })
     const shape = new Shape(stream)
@@ -89,7 +89,7 @@ export default {
     const match = routes.find((x) => x.path == url.pathname)
 
     if (!match) {
-      return new Response("Not Found", { status: 404 })
+      return new Response('Not Found', { status: 404 })
     }
 
     return Response.redirect(match.redirect, 301)

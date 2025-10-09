@@ -2,73 +2,73 @@
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 800;
-  src: url("./fonts/OpenSauceOne-Black.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-Black.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 700;
-  src: url("./fonts/OpenSauceOne-ExtraBold.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-ExtraBold.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 600;
-  src: url("./fonts/OpenSauceOne-Bold.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-Bold.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 600;
-  src: url("./fonts/OpenSauceOne-BoldItalic.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-BoldItalic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 500;
-  src: url("./fonts/OpenSauceOne-Medium.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-Medium.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 500;
-  src: url("./fonts/OpenSauceOne-MediumItalic.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-MediumItalic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 400;
-  src: url("./fonts/OpenSauceOne-Regular.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-Regular.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 400;
-  src: url("./fonts/OpenSauceOne-Italic.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-Italic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: OpenSauceOne;
   font-style: normal;
   font-weight: 300;
-  src: url("./fonts/OpenSauceOne-Light.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-Light.woff2') format('woff2');
 }
 @font-face {
   font-family: OpenSauceOne;
   font-style: italic;
   font-weight: 300;
-  src: url("./fonts/OpenSauceOne-LightItalic.woff2") format("woff2");
+  src: url('./fonts/OpenSauceOne-LightItalic.woff2') format('woff2');
 }
 
 @font-face {
   font-family: SourceCodePro;
   font-style: normal;
   font-weight: 400;
-  src: url("./fonts/SourceCodePro-Regular.woff2") format("woff2");
+  src: url('./fonts/SourceCodePro-Regular.woff2') format('woff2');
 }
 
 :root,
@@ -90,12 +90,10 @@
   --vp-code-bg: var(--vp-c-bg-elv);
   --vp-code-color: #9ecbff;
   --vp-code-font-size: 0.875em;
-  --vp-font-family-base:
-    OpenSauceOne, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --vp-font-family-mono:
-    SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
 }
 
 .Layout {
@@ -138,7 +136,7 @@
   align-items: center;
 }
 .vpi-social-github {
-  --icon: url("https://api.iconify.design/simple-icons/github.svg");
+  --icon: url('https://api.iconify.design/simple-icons/github.svg');
 }
 .action a .vpi-social-discord,
 .action a .vpi-social-github,
@@ -164,10 +162,10 @@
 }
 
 .vpi-social-pglite {
-  --icon: url("/img/icons/pglite-social.svg") !important;
+  --icon: url('/img/icons/pglite-social.svg') !important;
 }
 .vpi-social-tanstack {
-  --icon: url("/img/icons/tanstack-social.svg") !important;
+  --icon: url('/img/icons/tanstack-social.svg') !important;
 }
 
 .feature-cta a .count {
@@ -181,13 +179,13 @@
   margin-top: -24px;
 }
 
-.home-cta div[class*="language-"] {
+.home-cta div[class*='language-'] {
   display: inline-block;
   max-width: calc(100vw - 48px);
 }
 
 @media (min-width: 760px) {
-  .home-cta div[class*="language-"] code {
+  .home-cta div[class*='language-'] code {
     padding-left: 36px !important;
     padding-right: 36px !important;
   }
@@ -395,7 +393,7 @@ span.no-visual {
     width: 1px;
     height: 24px;
     background-color: var(--vp-c-divider);
-    content: "";
+    content: '';
   }
 }
 @media (min-width: 1200px) {
@@ -744,10 +742,10 @@ iframe {
 .VPFeature h2.title {
   font-size: 20px;
 }
-.VPFeature.link[href="/product/electric"]:hover {
+.VPFeature.link[href='/product/electric']:hover {
   border-color: var(--electric-color);
 }
-.VPFeature.link[href="/product/pglite"]:hover {
+.VPFeature.link[href='/product/pglite']:hover {
   border-color: var(--pglite-color);
 }
 
@@ -793,13 +791,13 @@ iframe {
 }
 
 .vp-block,
-.vp-doc div[class*="language-"] {
+.vp-doc div[class*='language-'] {
   border-radius: 14px !important;
   margin: 18px 0 !important;
 }
 
 .vp-block pre,
-.vp-doc [class*="language-"] pre {
+.vp-doc [class*='language-'] pre {
   padding: 24px 0 !important;
 }
 
@@ -811,7 +809,7 @@ pre {
 ul.benefits {
   color: var(--vp-c-text-1) !important;
 
-  list-style-type: "→ ";
+  list-style-type: '→ ';
   list-style-position: inside;
   padding: 0;
 }
@@ -1004,7 +1002,7 @@ ul.demo-actions li .VPButton {
 
   /* Add a divider above the button in mobile view */
   .VPNavScreen .primary-cta-button::before {
-    content: "";
+    content: '';
     display: block;
     height: 1px;
     background-color: rgba(255, 255, 255, 0.1);

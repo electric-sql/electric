@@ -1,5 +1,5 @@
-import Constants from "expo-constants"
-import { Todo } from "../db/schema"
+import Constants from 'expo-constants'
+import { Todo } from '../db/schema'
 
 export const hostname = new URL(Constants.linkingUri).hostname
 const API_BASE_URL = `http://${hostname}:3001/api` // Port 3001 from api/index.ts
@@ -12,7 +12,7 @@ export const apiClient = {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
-        "Content-Type": `application/json`,
+        'Content-Type': `application/json`,
         ...options.headers,
       },
     })

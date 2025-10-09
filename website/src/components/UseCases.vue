@@ -1,5 +1,5 @@
 <script setup>
-const { cases } = defineProps(["cases"])
+const { cases } = defineProps(['cases'])
 </script>
 
 <style>

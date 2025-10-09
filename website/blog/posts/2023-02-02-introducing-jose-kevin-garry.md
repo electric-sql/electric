@@ -1,5 +1,5 @@
 ---
-title: "Welcome José, Kevin and Garry!"
+title: 'Welcome José, Kevin and Garry!'
 description: >-
   Welcoming new team members José Valim, Kevin de Porre and Garry Hill to ElectricSQL.
 excerpt: >-
