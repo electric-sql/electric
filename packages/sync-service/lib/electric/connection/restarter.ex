@@ -48,13 +48,13 @@ defmodule Electric.Connection.Restarter do
   end
 
   def handle_cast(:stop_connection_subsystem, state) do
-    StatusMonitor.database_connections_going_to_sleep(stack_id)
+    StatusMonitor.database_connections_going_to_sleep(state.stack_id)
     Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: state.stack_id)
     {:noreply, state}
   end
 
   def handle_cast(:restart_connection_subsystem, %{pending_db_state: nil} = state) do
-    StatusMonitor.database_connections_waking_up(stack_id)
+    StatusMonitor.database_connections_waking_up(state.stack_id)
     Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
 
     ref = StatusMonitor.wait_until_conn_up_async(state.stack_id)
