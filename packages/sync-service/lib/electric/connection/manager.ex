@@ -696,7 +696,7 @@ defmodule Electric.Connection.Manager do
       ) do
     time_s = System.convert_time_unit(time, :millisecond, :second)
 
-    Logger.warning(
+    Logger.notice(
       "Closing all database connections after the replication stream has been idle for #{time_s} seconds"
     )
 
