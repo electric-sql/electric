@@ -146,6 +146,16 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ])
   end
 
+  def list_shape_handles(term) do
+    :ets.select(shape_meta_table(term), [
+      {
+        {{@shape_meta_data, :"$1"}, :_, :_, :_},
+        [],
+        [:"$1"]
+      }
+    ])
+  end
+
   @impl true
   def count_shapes(stack_ref) do
     :ets.info(shape_last_used_table(stack_ref), :size)
@@ -228,6 +238,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
       nil -> nil
       offset -> {shape_handle, offset}
     end
+  end
+
+  def get_actual_existing_shape(term, shape_handle) when is_binary(shape_handle) do
+    :ets.lookup_element(
+      shape_meta_table(term),
+      {@shape_meta_data, shape_handle},
+      @shape_meta_shape_pos
+    )
   end
 
   @impl true
