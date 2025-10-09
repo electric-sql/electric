@@ -12,17 +12,17 @@ defmodule Electric.Plug.ServeShapePlug do
 
   require Logger
 
-  plug :fetch_query_params
+  plug(:fetch_query_params)
 
   # start_telemetry_span needs to always be the first plug after fetching query params.
-  plug :start_telemetry_span
-  plug :put_resp_content_type, "application/json"
+  plug(:start_telemetry_span)
+  plug(:put_resp_content_type, "application/json")
 
-  plug :validate_request
-  plug :serve_shape_response
+  plug(:validate_request)
+  plug(:serve_shape_response)
 
   # end_telemetry_span needs to always be the last plug here.
-  plug :end_telemetry_span
+  plug(:end_telemetry_span)
 
   defp validate_request(%Conn{assigns: %{config: config}} = conn, _) do
     Logger.debug("Query String: #{conn.query_string}")
@@ -33,7 +33,12 @@ defmodule Electric.Plug.ServeShapePlug do
     all_params =
       Map.merge(query_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
-      |> Map.update("experimental_live_sse", "false", &(&1 != "false"))
+      |> Map.update(
+        "live_sse",
+        # TODO: remove experimental_live_sse after proper deprecation
+        Map.get(query_params, "experimental_live_sse", "false"),
+        &(&1 != "false")
+      )
 
     case Api.validate(api, all_params) do
       {:ok, request} ->
