@@ -26,7 +26,7 @@ defmodule Electric.Connection.Restarter do
   end
 
   def restart_connection_subsystem(stack_id) do
-    if Electric.StatusMonitor.status(stack_id) == :db_conn_sleeping do
+    with %{conn: :sleeping} <- Electric.StatusMonitor.status(stack_id) do
       Electric.StatusMonitor.database_connections_waking_up(stack_id)
       GenServer.cast(name(stack_id), :restart_connection_subsystem)
     end
@@ -54,7 +54,7 @@ defmodule Electric.Connection.Restarter do
 
   def handle_cast(:restart_connection_subsystem, %{pending_db_state: nil} = state) do
     Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
-    ref = Electric.StatusMonitor.wait_until_active_async(state.stack_id)
+    ref = Electric.StatusMonitor.wait_until_conn_up_async(state.stack_id)
     {:noreply, %{state | pending_db_state: :up, status_monitor_ref: ref}}
   end
 

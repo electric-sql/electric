@@ -2,7 +2,10 @@ defmodule Electric.StatusMonitor do
   @moduledoc false
   use GenServer
 
-  @type status() :: :waiting | :starting | :active | :db_conn_sleeping
+  @type status() :: %{
+          conn: :waiting_on_lock | :starting | :up | :sleeping,
+          shape: :starting | :up
+        }
 
   @conditions [
     :pg_lock_acquired,
@@ -28,34 +31,44 @@ defmodule Electric.StatusMonitor do
 
     :ets.new(ets_table(stack_id), [:named_table, :protected])
 
-    {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
+    {:ok, %{stack_id: stack_id, waiters: MapSet.new(), conn_waiters: []}}
   end
 
   @spec status(String.t()) :: status()
   def status(stack_id) do
-    case db_state(stack_id) do
-      :up ->
-        stack_id
-        |> results()
-        |> status_from_results()
+    table = ets_table(stack_id)
 
-      :sleeping ->
-        :db_conn_sleeping
-    end
+    results = results(table)
+
+    conn_status =
+      case db_state(table) do
+        :up -> conn_status_from_results(results)
+        :sleeping -> :sleeping
+      end
+
+    shape_status = shape_status_from_results(results)
+
+    %{conn: conn_status, shape: shape_status}
   end
 
-  defp status_from_results(%{pg_lock_acquired: {false, _}}), do: :waiting
+  defp conn_status_from_results(%{pg_lock_acquired: {false, _}}), do: :waiting_on_lock
 
-  defp status_from_results(%{
+  defp conn_status_from_results(%{
          replication_client_ready: {true, _},
          admin_connection_pool_ready: {true, _},
-         snapshot_connection_pool_ready: {true, _},
+         snapshot_connection_pool_ready: {true, _}
+       }),
+       do: :up
+
+  defp conn_status_from_results(_), do: :starting
+
+  defp shape_status_from_results(%{
          shape_log_collector_ready: {true, _},
          supervisor_processes_ready: {true, _}
        }),
-       do: :active
+       do: :up
 
-  defp status_from_results(_), do: :starting
+  defp shape_status_from_results(_), do: :starting
 
   def database_connections_going_to_sleep(stack_id) do
     GenServer.cast(name(stack_id), :database_connections_going_to_sleep)
@@ -115,14 +128,14 @@ defmodule Electric.StatusMonitor do
 
   def wait_until_active(stack_id, opts \\ []) do
     case status(stack_id) do
-      :active ->
+      %{conn: :up, shape: :up} ->
         :ok
 
-      :db_conn_sleeping ->
-        if Keyword.get(opts, :block_on_db_conn_sleeping, false) do
+      %{conn: :sleeping} ->
+        if Keyword.get(opts, :block_on_conn_sleeping, false) do
           do_wait_until_active(stack_id, opts)
         else
-          :db_conn_sleeping
+          :conn_sleeping
         end
 
       _ ->
@@ -185,16 +198,16 @@ defmodule Electric.StatusMonitor do
   Just like `wait_until_active/2` but non-blocking.
 
   This function basically subscribes to status updates to get notified by StatusMonitor when
-  the status transitions to :active.
+  the status transitions to `%{conn: :up, shape: :up}`.
 
-  Returns a ref that will then be included in the notification message as `{<ref>, <reply from StatusMonitor>}`.
+  Returns a ref that will then be passed in the notification message as `{<ref>, <reply from StatusMonitor>}`.
   """
-  @spec wait_until_active_async(String.t()) :: reference()
-  def wait_until_active_async(stack_id) do
+  @spec wait_until_conn_up_async(String.t()) :: reference()
+  def wait_until_conn_up_async(stack_id) do
     pid = stack_id |> name() |> GenServer.whereis()
     call_ref = make_ref()
 
-    send(pid, {:"$gen_call", {self(), call_ref}, {:wait_until_active, nil}})
+    send(pid, {:"$gen_call", {self(), call_ref}, :wait_until_conn_up})
 
     call_ref
   end
@@ -232,11 +245,20 @@ defmodule Electric.StatusMonitor do
   end
 
   def handle_call({:wait_until_active, timeout}, from, %{waiters: waiters} = state) do
-    if status(state.stack_id) == :active do
-      {:reply, :ok, state}
-    else
-      if timeout, do: Process.send_after(self(), {:timeout_waiter, from}, timeout)
-      {:noreply, %{state | waiters: MapSet.put(waiters, from)}}
+    case status(state.stack_id) do
+      %{conn: :up, shape: :up} ->
+        {:reply, :ok, state}
+
+      _ ->
+        Process.send_after(self(), {:timeout_waiter, from}, timeout)
+        {:noreply, %{state | waiters: MapSet.put(waiters, from)}}
+    end
+  end
+
+  def handle_call(:wait_until_conn_up, from, %{conn_waiters: conn_waiters} = state) do
+    case status(state.stack_id) do
+      %{conn: :up} -> {:reply, :ok, state}
+      _ -> {:noreply, %{state | conn_waiters: [from | conn_waiters]}}
     end
   end
 
@@ -259,24 +281,32 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  defp maybe_reply_to_waiters(%{waiters: waiters} = state) when map_size(waiters) == 0, do: state
+  defp maybe_reply_to_waiters(%{waiters: waiters, conn_waiters: conn_waiters} = state)
+       when map_size(waiters) == 0 and conn_waiters == [],
+       do: state
 
-  defp maybe_reply_to_waiters(%{waiters: waiters} = state) do
-    case status(state.stack_id) do
-      :active ->
-        Enum.each(waiters, fn waiter ->
-          GenServer.reply(waiter, :ok)
-        end)
+  defp maybe_reply_to_waiters(state) do
+    status = status(state.stack_id)
 
-        %{state | waiters: MapSet.new()}
+    waiters =
+      if status.conn == :up and status.shape == :up do
+        Enum.each(state.waiters, &GenServer.reply(&1, :ok))
+        MapSet.new()
+      end
 
-      _ ->
-        state
-    end
+    conn_waiters =
+      if status.conn == :up do
+        Enum.each(state.conn_waiters, &GenServer.reply(&1, :ok))
+        []
+      end
+
+    state
+    |> Map.update!(:waiters, &(waiters || &1))
+    |> Map.update!(:conn_waiters, &(conn_waiters || &1))
   end
 
-  defp db_state(stack_id) do
-    :ets.lookup_element(ets_table(stack_id), @db_state_key, 2, :up)
+  defp db_state(table) do
+    :ets.lookup_element(table, @db_state_key, 2, :up)
   rescue
     ArgumentError ->
       # This happens when the table is not found, which means the
@@ -284,13 +314,8 @@ defmodule Electric.StatusMonitor do
       :up
   end
 
-  defp results(stack_id) do
-    results =
-      stack_id
-      |> ets_table()
-      |> :ets.tab2list()
-      |> Map.new()
-
+  defp results(table) do
+    results = table |> :ets.tab2list() |> Map.new()
     Map.merge(@default_results, results)
   rescue
     ArgumentError ->
@@ -300,7 +325,7 @@ defmodule Electric.StatusMonitor do
   end
 
   def timeout_message(stack_id) do
-    case results(stack_id) do
+    case stack_id |> ets_table() |> results() do
       %{timeout_message: message} when is_binary(message) ->
         message
 
@@ -339,7 +364,5 @@ defmodule Electric.StatusMonitor do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  defp ets_table(stack_id) do
-    :"#{stack_id}:status_monitor"
-  end
+  defp ets_table(stack_id), do: :"#{stack_id}:status_monitor"
 end

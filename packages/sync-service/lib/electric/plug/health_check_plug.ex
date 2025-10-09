@@ -16,9 +16,14 @@ defmodule Electric.Plug.HealthCheckPlug do
   defp check_service_status(%Conn{assigns: %{config: config}} = conn, _) do
     {status_code, status_text} =
       case StatusMonitor.status(config[:stack_id]) do
-        :waiting -> {202, "waiting"}
-        :starting -> {202, "starting"}
-        active when active in [:active, :db_conn_sleeping] -> {200, "active"}
+        %{conn: :waiting_on_lock, shape: _} -> {202, "waiting"}
+        %{conn: :starting, shape: _} -> {202, "starting"}
+        %{conn: _, shape: :starting} -> {202, "starting"}
+        %{conn: :up, shape: :up} -> {200, "active"}
+        # when Electric is in the scaled-down mode (all database connections are closed),
+        # report its status as active because for any incoming shape request it will
+        # transparently restore the connection subsystem before processing the request
+        %{conn: :sleeping, shape: _} -> {200, "active"}
       end
 
     conn |> assign(:status_text, status_text) |> assign(:status_code, status_code)
