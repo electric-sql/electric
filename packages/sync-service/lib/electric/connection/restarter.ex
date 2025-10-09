@@ -14,6 +14,8 @@ defmodule Electric.Connection.Restarter do
 
   use GenServer
 
+  alias Electric.StatusMonitor
+
   def name(stack_id) when is_binary(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
@@ -21,13 +23,11 @@ defmodule Electric.Connection.Restarter do
   def name(opts), do: name(opts[:stack_id])
 
   def stop_connection_subsystem(stack_id) do
-    Electric.StatusMonitor.database_connections_going_to_sleep(stack_id)
     GenServer.cast(name(stack_id), :stop_connection_subsystem)
   end
 
   def restart_connection_subsystem(stack_id) do
-    with %{conn: :sleeping} <- Electric.StatusMonitor.status(stack_id) do
-      Electric.StatusMonitor.database_connections_waking_up(stack_id)
+    with %{conn: :sleeping} <- StatusMonitor.status(stack_id) do
       GenServer.cast(name(stack_id), :restart_connection_subsystem)
     end
 
@@ -48,13 +48,17 @@ defmodule Electric.Connection.Restarter do
   end
 
   def handle_cast(:stop_connection_subsystem, state) do
+    StatusMonitor.database_connections_going_to_sleep(stack_id)
     Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: state.stack_id)
     {:noreply, state}
   end
 
   def handle_cast(:restart_connection_subsystem, %{pending_db_state: nil} = state) do
+    StatusMonitor.database_connections_waking_up(stack_id)
     Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
-    ref = Electric.StatusMonitor.wait_until_conn_up_async(state.stack_id)
+
+    ref = StatusMonitor.wait_until_conn_up_async(state.stack_id)
+
     {:noreply, %{state | pending_db_state: :up, status_monitor_ref: ref}}
   end
 
