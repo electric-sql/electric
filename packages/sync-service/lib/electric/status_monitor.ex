@@ -231,7 +231,7 @@ defmodule Electric.StatusMonitor do
 
   def handle_cast(:database_connections_going_to_sleep, state) do
     :ets.insert(ets_table(state.stack_id), {@db_state_key, :sleeping})
-    {:noreply, maybe_reply_to_waiters(state)}
+    {:noreply, state}
   end
 
   def handle_cast(:database_connections_waking_up, state) do
