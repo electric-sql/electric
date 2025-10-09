@@ -126,6 +126,9 @@ defmodule Support.ComponentSetup do
   def with_publication_manager(ctx) do
     server = :"publication_manager_#{full_test_name(ctx)}"
 
+    publication_name =
+      Map.get(ctx, :publication_name, "electric_test_pub_#{:erlang.phash2(ctx.stack_id)}")
+
     start_link_supervised!(%{
       id: server,
       start: {
@@ -135,7 +138,7 @@ defmodule Support.ComponentSetup do
           [
             name: server,
             stack_id: ctx.stack_id,
-            publication_name: ctx.publication_name,
+            publication_name: publication_name,
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
             db_pool: ctx.pool,
             manual_table_publishing?: Access.get(ctx, :manual_table_publishing?, false)

@@ -58,8 +58,7 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, :configuring_connection}
             | {:start_connection_pool, nil}
             | {:start_connection_pool, :connecting}
-            | :start_replication_supervisor
-            | {:waiting_for_consumers, integer()}
+            | :maybe_reset_storage
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
             | :waiting_for_streaming_confirmation
@@ -199,10 +198,6 @@ defmodule Electric.Connection.Manager do
 
   def lock_connection_started(manager) do
     GenServer.cast(manager, :lock_connection_started)
-  end
-
-  def consumers_ready(stack_id, total_recovered, total_failed_to_recover) do
-    GenServer.cast(name(stack_id), {:consumers_ready, total_recovered, total_failed_to_recover})
   end
 
   def exclusive_connection_lock_acquisition_failed(manager, error) do
@@ -486,22 +481,28 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(
-        :start_replication_supervisor,
+        :maybe_reset_storage,
         %State{
           current_phase: :connection_setup,
-          current_step: :start_replication_supervisor
+          current_step: :maybe_reset_storage
         } = state
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
     # and reset any replication related persistent state
-    timeline_changed? =
+    timeline_check =
       Electric.Timeline.check(
         {state.pg_system_identifier, state.pg_timeline_id},
         state.timeline_opts
-      ) == :timeline_changed
+      )
 
-    if timeline_changed? or state.purge_all_shapes? do
-      Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+    timeline_changed? = timeline_check == :timeline_changed
+    initializing? = timeline_check == :no_previous_timeline
+
+    if timeline_changed? or (state.purge_all_shapes? and not initializing?) do
+      Electric.CoreSupervisor.reset_storage(
+        shape_cache_opts: state.shape_cache_opts,
+        stack_id: state.stack_id
+      )
     end
 
     if timeline_changed? do
@@ -522,32 +523,15 @@ defmodule Electric.Connection.Manager do
       )
     end
 
-    start_time = System.monotonic_time()
-
-    with {:error, reason} <-
-           Electric.Connection.Manager.Supervisor.start_replication_supervisor(
-             stack_id: state.stack_id,
-             shape_cache_opts: state.shape_cache_opts,
-             pool_opts: state.pool_opts,
-             replication_opts: state.replication_opts,
-             tweaks: state.tweaks,
-             can_alter_publication?: state.can_alter_publication?,
-             manual_table_publishing?: state.manual_table_publishing?,
-             persistent_kv: state.persistent_kv,
-             max_shapes: state.max_shapes,
-             expiry_batch_size: state.expiry_batch_size
-           ) do
-      Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
-      exit(reason)
-    end
+    StatusMonitor.mark_integrety_checks_passed(state.stack_id, self())
 
     state = %{
       state
-      | current_step: {:waiting_for_consumers, start_time},
+      | current_step: {:start_replication_client, :start_streaming},
         purge_all_shapes?: false
     }
 
-    {:noreply, state}
+    {:noreply, state, {:continue, :start_streaming}}
   end
 
   def handle_continue(
@@ -831,40 +815,12 @@ defmodule Electric.Connection.Manager do
       %{admin: {pid1, true}, snapshot: {pid2, true}} when is_pid(pid1) and is_pid(pid2) ->
         state = mark_connection_succeeded(state)
 
-        {:noreply, %{state | current_step: :start_replication_supervisor},
-         {:continue, :start_replication_supervisor}}
+        {:noreply, %{state | current_step: :maybe_reset_storage},
+         {:continue, :maybe_reset_storage}}
 
       _ ->
         {:noreply, state}
     end
-  end
-
-  def handle_cast(
-        {:consumers_ready, total_recovered, total_failed_to_recover},
-        %State{
-          current_phase: :connection_setup,
-          current_step: {:waiting_for_consumers, start_time}
-        } = state
-      ) do
-    duration = System.monotonic_time() - start_time
-
-    Logger.notice(
-      "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
-    )
-
-    Electric.Telemetry.OpenTelemetry.execute(
-      [:electric, :connection, :consumers_ready],
-      %{duration: duration, total: total_recovered, failed_to_recover: total_failed_to_recover},
-      %{stack_id: state.stack_id}
-    )
-
-    state = %{state | current_step: {:start_replication_client, :start_streaming}}
-    {:noreply, state, {:continue, :start_streaming}}
-  end
-
-  def handle_cast({:consumers_ready, _recovered, _failed} = msg, state) do
-    Logger.debug("Received #{inspect(msg)} in phase #{state.current_phase}: ignoring")
-    {:noreply, state}
   end
 
   def handle_cast(
@@ -1143,7 +1099,7 @@ defmodule Electric.Connection.Manager do
     # Perform supervisor shutdown in a task to avoid a circular dependency where the manager
     # process is waiting for the supervisor to shut down its children, one of which is the
     # manager process itself.
-    Task.start(Electric.Connection.Supervisor, :shutdown, [state.stack_id, error])
+    Task.start(Electric.Connection.Manager.Supervisor, :shutdown, [state.stack_id, error])
 
     {:noreply, state}
   end

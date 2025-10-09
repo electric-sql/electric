@@ -7,7 +7,7 @@ defmodule Electric.StackSupervisor do
   First, we start 2 registries, `Electric.ProcessRegistry`, and a registry for shape subscriptions. Both are named using the provided `stack_id` variable.
 
   1. `Electric.Postgres.Inspector.EtsInspector` is started with a pool name as a config option, module that is passed from the base config is __ignored__
-  2. `Electric.Connection.Supervisor` takes a LOT of options to configure replication and start the rest of the tree. It starts (3) and then (4) in `rest-for-one` mode
+  2. `Electric.Connection.Manager.Supervisor` takes a LOT of options to configure replication and start the rest of the tree. It starts (3) and then (4) in `rest-for-one` mode
   3. `Electric.Connection.Manager` takes all the connection/replication options and starts the db pool. It goes through the following steps:
       - start_lock_connection
       - exclusive_connection_lock_acquired (as a callback from the lock connection)
@@ -281,20 +281,7 @@ defmodule Electric.StackSupervisor do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    inspector =
-      Access.get(
-        config,
-        :inspector,
-        {Electric.Postgres.Inspector.EtsInspector,
-         stack_id: stack_id,
-         server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: stack_id)}
-      )
-
     storage = storage_mod_arg(config)
-
-    # This is a name of the ShapeLogCollector process
-    shape_log_collector =
-      Electric.Replication.ShapeLogCollector.name(stack_id)
 
     metadata_db_pool = Electric.Connection.Manager.admin_pool(stack_id)
 
@@ -308,48 +295,7 @@ defmodule Electric.StackSupervisor do
          storage: storage
        )}
 
-    shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
-
-    shape_cache_opts = [
-      stack_id: stack_id,
-      storage: storage,
-      inspector: inspector,
-      shape_status: shape_status,
-      publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
-      chunk_bytes_threshold: config.chunk_bytes_threshold,
-      log_producer: shape_log_collector,
-      consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-      registry: shape_changes_registry_name,
-      shape_hibernate_after: shape_hibernate_after
-    ]
-
-    {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])
-
-    new_connection_manager_opts = [
-      stack_id: stack_id,
-      # Coming from the outside, need validation
-      connection_opts: config.connection_opts,
-      stack_events_registry: config.stack_events_registry,
-      replication_opts:
-        [
-          stack_id: stack_id,
-          transaction_received:
-            {Electric.Replication.ShapeLogCollector, :store_transaction, [shape_log_collector]},
-          relation_received:
-            {Electric.Replication.ShapeLogCollector, :handle_relation_msg, [shape_log_collector]}
-        ] ++ config.replication_opts,
-      pool_opts: [types: PgInterop.Postgrex.Types] ++ config.pool_opts,
-      timeline_opts: [
-        stack_id: stack_id,
-        persistent_kv: config.persistent_kv
-      ],
-      persistent_kv: config.persistent_kv,
-      shape_cache_opts: shape_cache_opts,
-      max_shapes: config.max_shapes,
-      expiry_batch_size: config.expiry_batch_size,
-      tweaks: tweaks,
-      manual_table_publishing?: config.manual_table_publishing?
-    ]
+    monitor_opts = Keyword.get(config.tweaks, :monitor_opts, [])
 
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
@@ -384,11 +330,15 @@ defmodule Electric.StackSupervisor do
            stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
           {Electric.Shapes.Monitor,
            Electric.Utils.merge_all([
-             [stack_id: stack_id, storage: storage, shape_status: shape_status],
-             Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
-             Keyword.take(shape_cache_opts, [:publication_manager])
+             [
+               stack_id: stack_id,
+               storage: storage,
+               shape_status: shape_status,
+               publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id}
+             ],
+             Keyword.take(monitor_opts, [:on_remove, :on_cleanup])
            ])},
-          {Electric.Connection.Supervisor, new_connection_manager_opts}
+          {Electric.MonitoredCoreSupervisor, config}
         ]
 
     # Store the telemetry span attributes in the persistent term for this stack

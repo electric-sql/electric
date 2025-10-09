@@ -88,11 +88,16 @@ defmodule Electric.ShapeCacheTest do
       :with_noop_publication_manager
     ]
 
-    setup ctx do
-      with_shape_cache(
-        Map.put(ctx, :inspector, @stub_inspector),
-        create_snapshot_fn: fn _, _, _, _ -> nil end
-      )
+    setup %{stack_id: stack_id} = ctx do
+      ctx =
+        with_shape_cache(
+          Map.put(ctx, :inspector, @stub_inspector),
+          create_snapshot_fn: fn _, _, _, _ -> nil end
+        )
+
+      wait_for_consumer_restore(stack_id)
+
+      ctx
     end
 
     test "creates a new shape_handle", %{shape_cache_opts: opts} do
@@ -168,6 +173,8 @@ defmodule Electric.ShapeCacheTest do
           end
         )
 
+      wait_for_consumer_restore(ctx.stack_id)
+
       {shape_handle, offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert offset == @zero_offset
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
@@ -190,6 +197,8 @@ defmodule Electric.ShapeCacheTest do
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
@@ -217,6 +226,8 @@ defmodule Electric.ShapeCacheTest do
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       link_pid = Process.whereis(opts[:server])
 
@@ -258,6 +269,8 @@ defmodule Electric.ShapeCacheTest do
           create_snapshot_fn: fn _, _, _, _ -> nil end
         )
 
+      wait_for_consumer_restore(ctx.stack_id)
+
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
       consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
@@ -290,6 +303,7 @@ defmodule Electric.ShapeCacheTest do
     ]
 
     setup ctx do
+      wait_for_consumer_restore(ctx.stack_id)
       # Stub out the shape relation cleaning as we are using a stub inspector
       # and thus our shapes are always using "missing" relations
       Repatch.patch(
@@ -495,6 +509,8 @@ defmodule Electric.ShapeCacheTest do
           run_with_conn_fn: &run_with_conn_noop/2
         )
 
+      wait_for_consumer_restore(ctx.stack_id)
+
       assert ShapeCache.list_shapes(opts) == []
     end
 
@@ -508,6 +524,8 @@ defmodule Electric.ShapeCacheTest do
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
@@ -531,6 +549,8 @@ defmodule Electric.ShapeCacheTest do
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
@@ -560,6 +580,8 @@ defmodule Electric.ShapeCacheTest do
       %{shape_cache_opts: opts} =
         with_shape_cache(Map.merge(ctx, %{pool: nil, inspector: @stub_inspector}))
 
+      wait_for_consumer_restore(ctx.stack_id)
+
       Enum.each(1..num_shapes, fn i ->
         Shape.new!("items", inspector: @stub_inspector, where: "id = #{i}")
         |> ShapeCache.get_or_create_shape_handle(opts)
@@ -587,6 +609,8 @@ defmodule Electric.ShapeCacheTest do
           end
         )
 
+      wait_for_consumer_restore(ctx.stack_id)
+
       refute ShapeCache.has_shape?("some-random-id", opts)
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
@@ -603,6 +627,8 @@ defmodule Electric.ShapeCacheTest do
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
       assert ShapeCache.has_shape?(shape_handle, opts)
@@ -627,6 +653,8 @@ defmodule Electric.ShapeCacheTest do
           end
         )
 
+      wait_for_consumer_restore(ctx.stack_id)
+
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
       assert ShapeCache.await_snapshot_start(shape_handle, opts) == :started
@@ -646,6 +674,8 @@ defmodule Electric.ShapeCacheTest do
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       assert {:error, :unknown} = ShapeCache.await_snapshot_start(shape_handle, opts)
 
@@ -671,6 +701,8 @@ defmodule Electric.ShapeCacheTest do
             Storage.make_new_snapshot!([[1], [2]], storage)
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
@@ -724,6 +756,8 @@ defmodule Electric.ShapeCacheTest do
             Storage.make_new_snapshot!(stream_from_database, storage)
           end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
@@ -790,6 +824,8 @@ defmodule Electric.ShapeCacheTest do
           end
         )
 
+      wait_for_consumer_restore(ctx.stack_id)
+
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
       task = Task.async(ShapeCache, :await_snapshot_start, [shape_handle, opts])
@@ -809,6 +845,8 @@ defmodule Electric.ShapeCacheTest do
           run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn _, _, _, _ -> nil end
         )
+
+      wait_for_consumer_restore(ctx.stack_id)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
 
@@ -849,8 +887,8 @@ defmodule Electric.ShapeCacheTest do
       :with_no_pool
     ]
 
-    setup(ctx,
-      do:
+    setup(%{stack_id: stack_id} = ctx) do
+      ctx =
         with_shape_cache(Map.put(ctx, :inspector, @stub_inspector),
           run_with_conn_fn: &run_with_conn_noop/2,
           create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
@@ -859,7 +897,10 @@ defmodule Electric.ShapeCacheTest do
             GenServer.cast(parent, {:snapshot_started, shape_handle})
           end
         )
-    )
+
+      wait_for_consumer_restore(stack_id)
+      ctx
+    end
 
     test "restores shape_handles", %{shape_cache_opts: opts} = context do
       {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
@@ -999,7 +1040,7 @@ defmodule Electric.ShapeCacheTest do
       assert shape_handle1 != shape_handle2
     end
 
-    defp restart_shape_cache(context, opts \\ []) do
+    defp restart_shape_cache(%{stack_id: stack_id} = context, opts \\ []) do
       stop_shape_cache(context)
 
       context =
@@ -1007,16 +1048,21 @@ defmodule Electric.ShapeCacheTest do
         |> Map.merge(with_shape_log_collector(context))
         |> Map.merge(with_shape_status(context))
 
-      with_shape_cache(
-        Map.put(context, :inspector, @stub_inspector),
-        Keyword.merge(opts,
-          create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
-            GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-            Storage.make_new_snapshot!([["test"]], storage)
-            GenServer.cast(parent, {:snapshot_started, shape_handle})
-          end
+      context =
+        with_shape_cache(
+          Map.put(context, :inspector, @stub_inspector),
+          Keyword.merge(opts,
+            create_snapshot_fn: fn parent, shape_handle, _shape, %{storage: storage} ->
+              GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+              Storage.make_new_snapshot!([["test"]], storage)
+              GenServer.cast(parent, {:snapshot_started, shape_handle})
+            end
+          )
         )
-      )
+
+      wait_for_consumer_restore(stack_id)
+
+      context
     end
 
     defp stop_shape_cache(ctx) do
@@ -1060,5 +1106,15 @@ defmodule Electric.ShapeCacheTest do
       other ->
         other
     end
+  end
+
+  defp wait_for_consumer_restore(stack_id) do
+    Electric.StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+    Electric.StatusMonitor.mark_replication_client_ready(stack_id, self())
+    Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+    Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+    Electric.StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+    Electric.StatusMonitor.mark_integrety_checks_passed(stack_id, self())
+    :ok = Electric.StatusMonitor.wait_until_active(stack_id, 100)
   end
 end

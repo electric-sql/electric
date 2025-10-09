@@ -75,6 +75,7 @@ defmodule Support.TestUtils do
     Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
     Electric.StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
     Electric.StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+    Electric.StatusMonitor.mark_integrety_checks_passed(stack_id, self())
     Electric.StatusMonitor.wait_for_messages_to_be_processed(stack_id)
   end
 
