@@ -4,7 +4,7 @@ defmodule Electric.Shapes.Api.Error do
   @must_refetch %{headers: %{control: "must-refetch"}}
 
   @doc """
-  When responding to client HTTP requests, the value of the `experimental_live_sse` option
+  When responding to client HTTP requests, the value of the `live_sse` option
   passed to `must_refetch/1` (based on whether the fetch request is using SSE mode or not)
   determines the formatting of the response body: SSE clients expect single events but long
   polling clients expect an array of messages.

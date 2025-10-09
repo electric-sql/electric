@@ -8,7 +8,6 @@ defmodule Electric.Shapes.Api.Params do
   import Ecto.Changeset
 
   @tmp_compaction_flag :experimental_compaction
-  @tmp_sse_flag :experimental_live_sse
 
   @primary_key false
   defmodule ColumnList do
@@ -108,7 +107,7 @@ defmodule Electric.Shapes.Api.Params do
     field(:replica, Ecto.Enum, values: [:default, :full], default: :default)
     field(:params, {:map, :string}, default: %{})
     field(@tmp_compaction_flag, :boolean, default: false)
-    field(@tmp_sse_flag, :boolean, default: false)
+    field(:live_sse, :boolean, default: false)
     field(:log, Ecto.Enum, values: [:changes_only, :full], default: :full)
 
     embeds_one(:subset, SubsetParams)
@@ -238,7 +237,7 @@ defmodule Electric.Shapes.Api.Params do
     if live do
       changeset
     else
-      validate_exclusion(changeset, @tmp_sse_flag, [true],
+      validate_exclusion(changeset, :live_sse, [true],
         message: "can't be true unless live is also true"
       )
     end

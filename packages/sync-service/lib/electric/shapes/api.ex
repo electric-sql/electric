@@ -356,8 +356,8 @@ defmodule Electric.Shapes.Api do
     # TODO: discuss returning a 307 redirect rather than a 409, the client
     # will have to detect this and throw out old data
 
-    %{params: %{experimental_live_sse: in_sse?}} = request
-    error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+    %{params: %{live_sse: in_sse?}} = request
+    error = Api.Error.must_refetch(live_sse: in_sse?)
 
     {:error,
      Response.error(request, error.message,
@@ -501,7 +501,7 @@ defmodule Electric.Shapes.Api do
   end
 
   def serve_subset_response(%Request{} = request) do
-    if request.params.experimental_live_sse do
+    if request.params.live_sse do
       Response.error(
         request,
         "Subset snapshots are a stable view of data, so SSE is not applicable"
@@ -615,7 +615,7 @@ defmodule Electric.Shapes.Api do
       handle: shape_handle,
       chunk_end_offset: chunk_end_offset,
       global_last_seen_lsn: global_last_seen_lsn,
-      params: %{offset: offset, live: live?, experimental_live_sse: in_sse?},
+      params: %{offset: offset, live: live?, live_sse: in_sse?},
       api: api,
       response: response
     } = request
@@ -623,7 +623,7 @@ defmodule Electric.Shapes.Api do
     case Shapes.get_merged_log_stream(api, shape_handle,
            since: offset,
            up_to: chunk_end_offset,
-           experimental_live_sse: in_sse?
+           live_sse: in_sse?
          ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do
@@ -654,11 +654,11 @@ defmodule Electric.Shapes.Api do
       {:error, :unknown} ->
         # the shape has been deleted between the request validation and the attempt
         # to return the log stream
-        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+        error = Api.Error.must_refetch(live_sse: in_sse?)
         Response.error(request, error.message, status: error.status)
 
       {:error, %SnapshotError{type: :schema_changed}} ->
-        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+        error = Api.Error.must_refetch(live_sse: in_sse?)
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
@@ -701,7 +701,7 @@ defmodule Electric.Shapes.Api do
     end
   end
 
-  defp handle_live_request(%Request{params: %{experimental_live_sse: true}} = request) do
+  defp handle_live_request(%Request{params: %{live_sse: true}} = request) do
     stream_sse_events(request)
   end
 
@@ -748,7 +748,7 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      params: %{experimental_live_sse: in_sse?},
+      params: %{live_sse: in_sse?},
       api: %{long_poll_timeout: long_poll_timeout}
     } = request
 
@@ -764,7 +764,7 @@ defmodule Electric.Shapes.Api do
         |> do_serve_shape_log()
 
       {^ref, :shape_rotation, new_handle} ->
-        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+        error = Api.Error.must_refetch(live_sse: in_sse?)
 
         Response.error(request, error.message,
           handle: new_handle,
@@ -772,7 +772,7 @@ defmodule Electric.Shapes.Api do
         )
 
       {^ref, :shape_rotation} ->
-        error = Api.Error.must_refetch(experimental_live_sse: in_sse?)
+        error = Api.Error.must_refetch(live_sse: in_sse?)
         Response.error(request, error.message, status: error.status)
     after
       # If we timeout, return an up-to-date message
@@ -861,7 +861,7 @@ defmodule Electric.Shapes.Api do
                shape_handle,
                since: since_offset,
                up_to: end_offset,
-               experimental_live_sse: in_sse?
+               live_sse: in_sse?
              ) do
           {:ok, log} ->
             Process.cancel_timer(keepalive_ref)
@@ -976,7 +976,7 @@ defmodule Electric.Shapes.Api do
   def stack_id(%Api{stack_id: stack_id}), do: stack_id
   def stack_id(%{api: %{stack_id: stack_id}}), do: stack_id
 
-  defp encode_log(%Request{api: api, params: %{live: true, experimental_live_sse: true}}, stream) do
+  defp encode_log(%Request{api: api, params: %{live: true, live_sse: true}}, stream) do
     encode_sse(api, :log, stream)
   end
 
@@ -998,7 +998,7 @@ defmodule Electric.Shapes.Api do
 
   @spec encode_message(Request.t(), term()) :: Enum.t()
   def encode_message(
-        %Request{api: api, params: %{live: true, experimental_live_sse: true}},
+        %Request{api: api, params: %{live: true, live_sse: true}},
         message
       ) do
     encode_sse(api, :message, message)
