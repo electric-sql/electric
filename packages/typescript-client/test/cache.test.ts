@@ -154,11 +154,6 @@ describe(`HTTP Proxy Cache`, () => {
       const stream = new ShapeStream({
         url: `${proxyCacheBaseUrl}/v1/shape`,
         signal: aborter.signal,
-        onError: (err) => {
-          if (err.message !== `Test complete`) {
-            throw err
-          }
-        },
         fetchClient,
         params: {
           table: issuesTableUrl,
