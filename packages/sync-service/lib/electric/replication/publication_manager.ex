@@ -122,6 +122,8 @@ defmodule Electric.Replication.PublicationManager do
   def init(opts) do
     opts = Map.new(opts)
 
+    Process.flag(:trap_exit, true)
+
     Process.set_label({:publication_manager, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
@@ -172,7 +174,16 @@ defmodule Electric.Replication.PublicationManager do
     state =
       case check_publication_status(state) do
         {:ok, state} ->
-          configure_publication(state)
+          case configure_publication(state) do
+            {:ok, state} ->
+              reply_to_all_waiters(:ok, state)
+
+            {:ok, relations_configured, state} ->
+              handle_publication_update_result(relations_configured, state)
+
+            {:error, err, state} ->
+              reply_to_all_waiters({:error, err}, state)
+          end
 
         {:error, err, state} ->
           Logger.warning("Failed to confirm publication status: #{inspect(err)}")
@@ -186,6 +197,8 @@ defmodule Electric.Replication.PublicationManager do
 
   def handle_info(:timeout, state),
     do: handle_info(:update_publication, %{state | next_update_forced?: true})
+
+  def handle_info({:EXIT, _, reason}, state), do: {:stop, reason, state}
 
   @spec check_publication_status(state()) :: {:ok, state()} | {:error, any(), state()}
   defp check_publication_status(state) do
@@ -206,22 +219,26 @@ defmodule Electric.Replication.PublicationManager do
 
     err ->
       {:error, err, state}
+  catch
+    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+      {:error, %RuntimeError{message: "Database connection not available"}, state}
   end
 
   # Updates are forced when we're doing periodic checks: we expect no changes to the filters,
   # but we'll write them anyway because that'll verify that no tables have been dropped/renamed
   # since the last update. Useful when we're not altering the publication often to catch changes
   # to the DB.
-  @spec configure_publication(state()) :: state()
+  @spec configure_publication(state()) ::
+          {:ok, state()}
+          | {:ok, Configuration.relations_configured(), state()}
+          | {:error, any(), state()}
   defp configure_publication(state) do
     can_update? = can_update_publication?(state)
+    key_word = if can_update?, do: "configure", else: "validate"
 
-    # If row filtering is disabled, we only care about changes in actual relations
-    # included in the publication
     if not state.next_update_forced? and not update_needed?(state) do
-      key_word = if can_update?, do: "update", else: "validation"
-      Logger.debug("No changes to publication, skipping #{key_word}")
-      reply_to_all_waiters(:ok, state)
+      Logger.debug("No changes to publication, will not #{key_word}")
+      {:ok, state}
     else
       state = %{state | next_update_forced?: false}
 
@@ -241,12 +258,15 @@ defmodule Electric.Replication.PublicationManager do
             )
           end
 
-        handle_publication_update_result(relations_configured, state)
+        {:ok, relations_configured, state}
       rescue
         err ->
-          key_word = if can_update?, do: "configure", else: "validate"
           Logger.warning("Failed to #{key_word} publication: #{inspect(err)}")
-          reply_to_all_waiters({:error, err}, state)
+          {:error, err, state}
+      catch
+        :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+          Logger.warning("Failed to #{key_word} publication: connection not available")
+          {:error, %RuntimeError{message: "Database connection not available"}, state}
       end
     end
   end
