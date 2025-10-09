@@ -13,7 +13,7 @@ type UserAvatarProps = {
 // Simple hash function to generate a consistent color from username
 function stringToColor(str: string) {
   if (!str) {
-    return 'hsl(280, 60%, 55%)'
+    return `hsl(280, 60%, 55%)`
   }
 
   let hash = 0
@@ -66,12 +66,12 @@ const useClasses = makeStyles({
     position: `relative`,
     boxSizing: `border-box`,
     fontSize: `var(--font-size-2)`,
-    overflow: 'hidden'
+    overflow: `hidden`,
   },
   image: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
+    width: `100%`,
+    height: `100%`,
+    objectFit: `cover`,
   },
   small: {
     width: `20px`,
@@ -119,7 +119,7 @@ const UserAvatar = memo(
           index > 0 && classes[`${size}.overlap`]
         )}
         style={{
-          backgroundColor: imageUrl ? 'transparent' : backgroundColor,
+          backgroundColor: imageUrl ? `transparent` : backgroundColor,
         }}
       >
         {imageUrl ? (

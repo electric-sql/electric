@@ -93,7 +93,7 @@ Instructing LLMs means sending an instruction to an LLM. Agentic memory is where
 
 There's obviously a lot of work involved in putting those aspects together to create a working agentic product. Memory compaction, finding the right context, the right control flow. Balancing structure and autonomy. These are all hard, fascinating design and engineering challenges.
 
-However, from an *infra* point of view, there's nothing there that doesn't [pattern match to a database](https://www.hytradboi.com/2025), some processes and real-time sync.
+However, from an _infra_ point of view, there's nothing there that doesn't [pattern match to a database](https://www.hytradboi.com/2025), some processes and real-time sync.
 
 <figure>
   <img src="/img/blog/bringing-agents-back-down-to-earth/agents-are-database-state.jpg"
@@ -314,7 +314,7 @@ export const eventCollection = createCollection(
       url: relativeUrl('/sync/events'),
       ...baseShapeOptions,
     },
-    schema: eventSchema
+    schema: eventSchema,
   })
 )
 
@@ -325,7 +325,7 @@ export const userCollection = createCollection(
       url: relativeUrl('/sync/users'),
       ...baseShapeOptions,
     },
-    schema: userSchema
+    schema: userSchema,
   })
 )
 ```
@@ -433,7 +433,7 @@ Here's everything that happened so far:
 What's the next step?
 ```
 
-This retrieval and rendering process *is* the context engineering behind the system. It's all just a functional representation of database state.
+This retrieval and rendering process _is_ the context engineering behind the system. It's all just a functional representation of database state.
 
 <figure>
   <div class="embed-container" style="padding-bottom: 56.25%">

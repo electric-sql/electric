@@ -6,7 +6,7 @@ import { authClient, authStateCollection } from "@/lib/auth-client"
 import { useLiveQuery } from "@tanstack/react-db"
 import { projectCollection } from "@/lib/collections"
 
-export const Route = createFileRoute("/_authenticated")({
+export const Route = createFileRoute(`/_authenticated`)({
   ssr: false, // Disable SSR - run beforeLoad only on client
   component: AuthenticatedLayout,
   beforeLoad: async () => {
@@ -58,7 +58,7 @@ function AuthenticatedLayout() {
   const { data: session, isPending } = authClient.useSession()
   const navigate = useNavigate()
   const [showNewProjectForm, setShowNewProjectForm] = useState(false)
-  const [newProjectName, setNewProjectName] = useState("")
+  const [newProjectName, setNewProjectName] = useState(``)
 
   const { data: projects, isLoading } = useLiveQuery((q) =>
     q.from({ projectCollection })
@@ -71,8 +71,8 @@ function AuthenticatedLayout() {
       if (!hasProject) {
         projectCollection.insert({
           id: Math.floor(Math.random() * 100000),
-          name: "Default",
-          description: "Default project",
+          name: `Default`,
+          description: `Default project`,
           owner_id: session.user.id,
           shared_user_ids: [],
           created_at: new Date(),
@@ -83,7 +83,7 @@ function AuthenticatedLayout() {
 
   const handleLogout = async () => {
     await authClient.signOut()
-    navigate({ to: "/login" })
+    navigate({ to: `/login` })
   }
 
   const handleCreateProject = () => {
@@ -91,12 +91,12 @@ function AuthenticatedLayout() {
       projectCollection.insert({
         id: Math.floor(Math.random() * 100000),
         name: newProjectName.trim(),
-        description: "",
+        description: ``,
         owner_id: session.user.id,
         shared_user_ids: [],
         created_at: new Date(),
       })
-      setNewProjectName("")
+      setNewProjectName(``)
       setShowNewProjectForm(false)
     }
   }
@@ -164,7 +164,7 @@ function AuthenticatedLayout() {
                   type="text"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
+                  onKeyDown={(e) => e.key === `Enter` && handleCreateProject()}
                   placeholder="Project name"
                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                 />

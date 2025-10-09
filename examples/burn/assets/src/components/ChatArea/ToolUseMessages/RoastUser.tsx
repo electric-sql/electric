@@ -29,7 +29,8 @@ function RoastUser({ event }: Props) {
 
   return (
     <>
-      <span style={{ color: 'rgb(125, 184, 255)' }}>@{subjectUser.name}</span>{' '}
+      <span style={{ color: `rgb(125, 184, 255)` }}>@{subjectUser.name}</span>
+      {` `}
       {formattedRoast}
     </>
   )

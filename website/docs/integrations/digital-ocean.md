@@ -94,7 +94,7 @@ services:
   electric:
     image: electricsql/electric:latest
     environment:
-      DATABASE_URL: "postgresql://..."
+      DATABASE_URL: 'postgresql://...'
     ports:
       - 80:3000
     restart: always

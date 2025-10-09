@@ -69,7 +69,7 @@ function Comments({ issue }: CommentsProps) {
         ${issue.id},
         ${newCommentBody},
         ${new Date()},
-        ${'testuser'}
+        ${`testuser`}
       )
     `
 

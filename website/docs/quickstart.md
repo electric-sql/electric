@@ -163,7 +163,7 @@ npm install @electric-sql/react
 Replace the contents of `src/App.tsx` with the following. Note that we're requesting the same shape as before:
 
 ```tsx
-import { useShape } from "@electric-sql/react"
+import { useShape } from '@electric-sql/react'
 
 function Component() {
   const { data } = useShape({

@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 import TopFilter from '../../components/TopFilter'
 import IssueBoard from './IssueBoard'

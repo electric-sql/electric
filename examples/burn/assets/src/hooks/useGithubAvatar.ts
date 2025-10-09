@@ -29,7 +29,7 @@ export function useGithubAvatar(username: string) {
     return () => {
       clearTimeout(timeoutId)
 
-      img.src = ''
+      img.src = ``
     }
   }, [username])
 

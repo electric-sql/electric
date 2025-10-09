@@ -1,2 +1,2 @@
-import config from "../.shared/playwright.config"
+import config from '../.shared/playwright.config'
 export default config

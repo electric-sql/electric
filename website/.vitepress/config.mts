@@ -6,24 +6,30 @@ import llmstxt from 'vitepress-plugin-llms'
 import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
 
-const demoPaths = fs.readdirSync('demos').filter(x => x.endsWith('.md')).map(x => `demos/${x}`)
+const demoPaths = fs
+  .readdirSync('demos')
+  .filter((x) => x.endsWith('.md'))
+  .map((x) => `demos/${x}`)
 const { demos, examples } = await demosData.load(demoPaths)
 
-const demoSidebarItems = await demos.map(demo => ({
+const demoSidebarItems = await demos.map((demo) => ({
   text: demo.title,
-  link: demo.link
+  link: demo.link,
 }))
-const exampleSidebarItems = await examples.map(example => ({
+const exampleSidebarItems = await examples.map((example) => ({
   text: example.title,
-  link: example.link
+  link: example.link,
 }))
 
-const postPaths = fs.readdirSync('blog/posts').filter(x => x.endsWith('.md')).map(x => `blog/posts/${x}`)
+const postPaths = fs
+  .readdirSync('blog/posts')
+  .filter((x) => x.endsWith('.md'))
+  .map((x) => `blog/posts/${x}`)
 const posts = await postsData.load(postPaths)
 
-const blogSidebarItems = await posts.map(post => ({
+const blogSidebarItems = await posts.map((post) => ({
   text: post.title,
-  link: post.path
+  link: post.path,
 }))
 
 // https://vitepress.dev/reference/site-config
@@ -53,37 +59,50 @@ export default defineConfig({
           'blog/posts/2024-03-*',
           'blog/posts/2024-04-*',
           'blog/posts/2024-05-*',
-          'blog/posts/2024-06-*'
-        ]
-      })
-    ]
+          'blog/posts/2024-06-*',
+        ],
+      }),
+    ],
   },
   lang: 'en',
-  title: "ElectricSQL",
-  description: "Electric is a Postgres sync engine. It solves the hard problems of sync so that you don't have to.",
+  title: 'ElectricSQL',
+  description:
+    "Electric is a Postgres sync engine. It solves the hard problems of sync so that you don't have to.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
   head: [
-    ['link', {
-      rel: 'icon',
-      type: 'image/png',
-      href: '/img/brand/favicon.png'
-    }],
-    ['link', {
-      rel: 'icon',
-      type: 'image/svg+xml',
-      href: '/img/brand/favicon.svg'
-    }],
-    ['link', {
-      rel: 'prerender',
-      href: 'https://airtable.com/embed/appDitPIpjlAxK7CL/pagrWjq3qw5Fp68Wa/form'
-    }],
-    ['script', {
-      defer: 'defer',
-      'data-domain': 'electric-sql.com',
-      src: 'https://plausible.io/js/script.js',
-    }]
+    [
+      'link',
+      {
+        rel: 'icon',
+        type: 'image/png',
+        href: '/img/brand/favicon.png',
+      },
+    ],
+    [
+      'link',
+      {
+        rel: 'icon',
+        type: 'image/svg+xml',
+        href: '/img/brand/favicon.svg',
+      },
+    ],
+    [
+      'link',
+      {
+        rel: 'prerender',
+        href: 'https://airtable.com/embed/appDitPIpjlAxK7CL/pagrWjq3qw5Fp68Wa/form',
+      },
+    ],
+    [
+      'script',
+      {
+        defer: 'defer',
+        'data-domain': 'electric-sql.com',
+        src: 'https://plausible.io/js/script.js',
+      },
+    ],
   ],
   ignoreDeadLinks: 'localhostLinks',
   markdown: {
@@ -98,11 +117,11 @@ export default defineConfig({
       'shellscript',
       'sql',
       'tsx',
-      'typescript'
+      'typescript',
     ],
     config(md) {
       md.use(tabsMarkdownPlugin)
-    }
+    },
   },
   rewrites(id) {
     if (id.startsWith('blog/posts')) {
@@ -114,7 +133,7 @@ export default defineConfig({
     }
   },
   sitemap: {
-    hostname: 'https://electric-sql.com'
+    hostname: 'https://electric-sql.com',
   },
   // https://vitepress.dev/reference/default-theme-config
   themeConfig: {
@@ -125,15 +144,19 @@ export default defineConfig({
     logo: '/img/brand/logo.svg',
     nav: [
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      { text: 'Use cases', link: '/use-cases/data-sync', activeMatch: '/use-cases/' },
-      { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
-      { text: 'Demos', link: '/demos', activeMatch: '/demos'},
-      { text: 'Blog', link: '/blog', activeMatch: '/blog'},
-      { text: 'About', link: '/about/community', activeMatch: '/about/'},
-      { component: 'NavSignupButton' }
+      {
+        text: 'Use cases',
+        link: '/use-cases/data-sync',
+        activeMatch: '/use-cases/',
+      },
+      { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
+      { text: 'Demos', link: '/demos', activeMatch: '/demos' },
+      { text: 'Blog', link: '/blog', activeMatch: '/blog' },
+      { text: 'About', link: '/about/community', activeMatch: '/about/' },
+      { component: 'NavSignupButton' },
     ],
     search: {
-      provider: 'local'
+      provider: 'local',
     },
     sidebar: {
       '/product': [
@@ -143,8 +166,8 @@ export default defineConfig({
             { text: 'Electric', link: '/product/electric' },
             { text: 'Cloud', link: '/product/cloud' },
             { text: 'PGlite', link: '/product/pglite' },
-          ]
-        }
+          ],
+        },
       ],
       '/use-cases': [
         {
@@ -152,11 +175,11 @@ export default defineConfig({
           items: [
             {
               text: 'Replace data fetching with data sync',
-              link: '/use-cases/data-sync'
+              link: '/use-cases/data-sync',
             },
             {
               text: 'Build resilient software that works offline',
-              link: '/use-cases/local-first-software'
+              link: '/use-cases/local-first-software',
             },
             // {
             //   text: 'Provision data into dev and test environments',
@@ -168,7 +191,7 @@ export default defineConfig({
             //},
             {
               text: 'Automate cache invalidation',
-              link: '/use-cases/cache-invalidation'
+              link: '/use-cases/cache-invalidation',
             },
             //{
             //  text: 'Hydrating edge workers',
@@ -180,14 +203,14 @@ export default defineConfig({
             //},
             {
               text: 'Retrieve data for local AI',
-              link: '/use-cases/local-ai'
+              link: '/use-cases/local-ai',
             },
             {
               text: 'Reduce your cloud costs',
-              link: '/use-cases/cloud-costs'
-            }
-          ]
-        }
+              link: '/use-cases/cloud-costs',
+            },
+          ],
+        },
       ],
       '/docs': [
         {
@@ -198,7 +221,7 @@ export default defineConfig({
             { text: 'Quickstart', link: '/docs/quickstart' },
             { text: 'Stacks', link: '/docs/stacks' },
             { text: 'AGENTS.md', link: '/docs/agents' },
-          ]
+          ],
         },
         {
           text: 'Guides',
@@ -211,8 +234,11 @@ export default defineConfig({
             { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
-            { text: 'Client development', link: '/docs/guides/client-development' },
-          ]
+            {
+              text: 'Client development',
+              link: '/docs/guides/client-development',
+            },
+          ],
         },
         {
           text: 'API',
@@ -225,10 +251,10 @@ export default defineConfig({
                 { text: 'TypeScript', link: '/docs/api/clients/typescript' },
                 { text: 'Elixir', link: '/docs/api/clients/elixir' },
               ],
-              collapsed: false
+              collapsed: false,
             },
-            { text: 'Config', link: '/docs/api/config' }
-          ]
+            { text: 'Config', link: '/docs/api/config' },
+          ],
         },
         {
           text: 'Integrations',
@@ -253,17 +279,20 @@ export default defineConfig({
                 { text: 'AWS', link: '/docs/integrations/aws' },
                 { text: 'Cloudflare', link: '/docs/integrations/cloudflare' },
                 { text: 'Crunchy', link: '/docs/integrations/crunchy' },
-                { text: 'Digital Ocean', link: '/docs/integrations/digital-ocean' },
+                {
+                  text: 'Digital Ocean',
+                  link: '/docs/integrations/digital-ocean',
+                },
                 { text: 'Expo', link: '/docs/integrations/expo' },
                 { text: 'Fly.io', link: '/docs/integrations/fly' },
                 { text: 'GCP', link: '/docs/integrations/gcp' },
                 { text: 'Neon', link: '/docs/integrations/neon' },
                 { text: 'Netlify', link: '/docs/integrations/netlify' },
                 { text: 'Render', link: '/docs/integrations/render' },
-                { text: 'Supabase', link: '/docs/integrations/supabase' }
-              ]
-            }
-          ]
+                { text: 'Supabase', link: '/docs/integrations/supabase' },
+              ],
+            },
+          ],
         },
         {
           text: 'Reference',
@@ -273,25 +302,25 @@ export default defineConfig({
             { text: 'Benchmarks', link: '/docs/reference/benchmarks' },
             { text: 'Literature', link: '/docs/reference/literature' },
             { text: 'Telemetry', link: '/docs/reference/telemetry' },
-          ]
+          ],
         },
       ],
       '/demos': [
         {
           text: 'Demos',
           collapsed: false,
-          items: demoSidebarItems
+          items: demoSidebarItems,
         },
         {
           text: 'Examples',
           collapsed: false,
           items: exampleSidebarItems,
-        }
+        },
       ],
       '/blog': [
         {
           text: 'Blog',
-          items: blogSidebarItems
+          items: blogSidebarItems,
         },
       ],
       '/about': [
@@ -304,9 +333,12 @@ export default defineConfig({
               text: 'Jobs',
               link: '/about/jobs',
               items: [
-                { text: 'PGlite Engineer', link: '/about/jobs/pglite-engineer' }
+                {
+                  text: 'PGlite Engineer',
+                  link: '/about/jobs/pglite-engineer',
+                },
               ],
-              collapsed: false
+              collapsed: false,
             },
             {
               text: 'Legal',
@@ -315,12 +347,12 @@ export default defineConfig({
                 { text: 'Privacy', link: '/about/legal/privacy' },
                 { text: 'Cookies', link: '/about/legal/cookies' },
               ],
-              collapsed: false
+              collapsed: false,
             },
-            { text: 'Contact', link: '/about/contact' }
-          ]
+            { text: 'Contact', link: '/about/contact' },
+          ],
         },
-      ]
+      ],
     },
     siteTitle: false,
     socialLinks: [
@@ -328,8 +360,8 @@ export default defineConfig({
       { icon: 'pglite', link: 'https://pglite.dev' },
       { icon: 'x', link: 'https://x.com/ElectricSQL' },
       { icon: 'discord', link: 'https://discord.electric-sql.com' },
-      { icon: 'github', link: 'https://github.com/electric-sql/electric' }
-    ]
+      { icon: 'github', link: 'https://github.com/electric-sql/electric' },
+    ],
   },
   transformHead: ({ pageData, siteData }) => {
     const fm = pageData.frontmatter
@@ -339,7 +371,10 @@ export default defineConfig({
     const description = fm.description || siteData.description
     const image = `https://electric-sql.com${fm.image || '/img/meta/sync-solved.jpg'}`
 
-    head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
+    head.push([
+      'meta',
+      { name: 'twitter:card', content: 'summary_large_image' },
+    ])
     head.push(['meta', { name: 'twitter:image', content: image }])
     head.push(['meta', { property: 'og:title', content: title }])
     head.push(['meta', { property: 'og:description', content: description }])
@@ -349,5 +384,5 @@ export default defineConfig({
   },
   transformPageData(pageData) {
     pageData.frontmatter.editLink = pageData.relativePath.startsWith('docs')
-  }
+  },
 })

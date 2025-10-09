@@ -2,7 +2,7 @@
 title: AGENTS.md
 description: >-
   Documentation for guiding coding agents to develop apps with Electric.
-outline: [2,3]
+outline: [2, 3]
 ---
 
 <img src="/img/icons/llms.svg" class="product-icon"
@@ -11,11 +11,11 @@ outline: [2,3]
 
 # AGENTS.md
 
-Load our [`AGENTS.md`](/AGENTS.md){target="_self"} file to use Electric with AI coding agents.
+Load our [`AGENTS.md`](/AGENTS.md){target="\_self"} file to use Electric with AI coding agents.
 
 ## Using Electric with coding agents
 
-Electric provides an AGENTS.md at [https://electric-sql.com/AGENTS.md](/AGENTS.md){target="_self"}.
+Electric provides an AGENTS.md at [https://electric-sql.com/AGENTS.md](/AGENTS.md){target="\_self"}.
 
 AGENTS.md is a [simple open format](https://agents.md) for guiding coding agents. It contains instructions for AI coding agents, formatted in a way they can easily digest.
 
@@ -27,7 +27,7 @@ claude "Read AGENTS.md. Build an app with Electric and TanStack DB."
 
 ## File contents
 
-Copy our [`AGENTS.md`](/AGENTS.md){target="_self"} file to the root of your repo or package. Edit it and / or combine with your other project-specific instructions, as you see fit.
+Copy our [`AGENTS.md`](/AGENTS.md){target="\_self"} file to the root of your repo or package. Edit it and / or combine with your other project-specific instructions, as you see fit.
 
 <<< @/../AGENTS.md
 

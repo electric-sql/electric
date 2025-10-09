@@ -1,5 +1,5 @@
 ---
-title: "The evolution of state transfer"
+title: 'The evolution of state transfer'
 description: >-
   Web development has been progressing through an evolution of state transfer. Hybrid local-first architecture is the natural endgame for this progression.
 excerpt: >-
@@ -142,7 +142,7 @@ Ultimately, with GraphQL, the concerns of the state transfer layer find their wa
 
 With local-first, developers code directly against a local, embedded database. Reads and writes are instant. Users can still share data and collaborate but the state transfer happens in the background, with reads and writes made against the local database and then synced in the background to the server.
 
-Just as with GraphQL, you define rules for what data can be synced and you bind data declaratively to your components. However, unlike GraphQL, you don't need to wait on the network to confirm your writes or configure fetch policy semantics. As a web developer, you can craft realtime, multi-user apps *without thinking about or coding around the network*.
+Just as with GraphQL, you define rules for what data can be synced and you bind data declaratively to your components. However, unlike GraphQL, you don't need to wait on the network to confirm your writes or configure fetch policy semantics. As a web developer, you can craft realtime, multi-user apps _without thinking about or coding around the network_.
 
 For example, with ElectricSQL, you swap out the GraphQL `useQuery` hook for `useElectricQuery` and the results are automatically kept in sync, no matter who edits the `items` table, anywhere in the world. Because SQL is a declarative language and you're querying an embedded SQLite database, you don't need the graph abstraction, or the additional resolver layer mapping from relational tables to the GraphQL schema.
 
@@ -165,7 +165,7 @@ Importantly, the results that the system keep in sync come from the local databa
 
 When local-first is done right, developers can create reactive, realtime, multi-user apps without having to worry about the network and its various failure modes. It's entirely up-to the database replication system how and when to transfer data. As a result, local-first brings state transfer fully into the domain of the database. With all of the associated rigour around [consistency and integrity](https://legacy.electric-sql.com/docs/reference/consistency) that you easily lose when working with the data in your application code.
 
-With the [right system and concurrency semantics](/blog/2022/05/03/introducing-rich-crdts), you can also write locally with *finality* as opposed to *tentativity*. I.e.: with the certainty that your writes will not be rejected once they've been accepted locally <sup>[1]</sup>. Instead of having to implement both the `updater` and `optimisticUpdater` callbacks of the GraphQL `commitMutation` API we saw above, you simply write to the local database and if your write succeeds locally, you're done.
+With the [right system and concurrency semantics](/blog/2022/05/03/introducing-rich-crdts), you can also write locally with _finality_ as opposed to _tentativity_. I.e.: with the certainty that your writes will not be rejected once they've been accepted locally <sup>[1]</sup>. Instead of having to implement both the `updater` and `optimisticUpdater` callbacks of the GraphQL `commitMutation` API we saw above, you simply write to the local database and if your write succeeds locally, you're done.
 
 > <span class="text-small">[1]</span> See the [Highly Available Transactions](https://doi.org/10.14778/2732232.2732237) and [Cure](https://doi.org/10.1109/ICDCS.2016.98) papers, both listed on our [literature&nbsp;page](/docs/reference/literature).
 
@@ -187,13 +187,12 @@ This hybrid architecture has a number of layers, from central cloud to the end u
 
 Managing the placement and movement of data across these layers, [from cloud to edge to local devices](https://dl.acm.org/doi/abs/10.1145/3464298.3493405), is complex. Too complex to be optimised by hand. It needs to be managed and optimised by the system. I.e.: rather than imperatively placing data onto locations in your cloud architecture, you need to declare your requirements and optimisation parameters and have the cloud handle the rest.
 
-> "As cloud programming matures, it seems inevitable that it will depart from traditional sequential programming. The cloud is a massive, globe-spanning distributed computer. Parallelism abounds at all scales. Creative programmers are held back by legacy programming models. [What's needed] is a separation of distributed programs into program semantics, availablity, consistency and targets of optimization.<br />
-> &mdash; [New Directions in Cloud Programming, Joe Hellerstein, et al.](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf)
+> "As cloud programming matures, it seems inevitable that it will depart from traditional sequential programming. The cloud is a massive, globe-spanning distributed computer. Parallelism abounds at all scales. Creative programmers are held back by legacy programming models. [What's needed] is a separation of distributed programs into program semantics, availablity, consistency and targets of optimization.<br /> > &mdash; [New Directions in Cloud Programming, Joe Hellerstein, et al.](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper16.pdf)
 
-This is the endgame of state transfer: where the combination of static programme analysis and AI not only optimises the *transfer* of data from point to point, but also the *placement* of data and where the *points* and *layers* are in the first place.
+This is the endgame of state transfer: where the combination of static programme analysis and AI not only optimises the _transfer_ of data from point to point, but also the _placement_ of data and where the _points_ and _layers_ are in the first place.
 
 ### Inspiration for ElectricSQL
 
-Web development has been progressing through an evolution of state transfer from manual, imperative data transfer towards automated, declarative systems. Hybrid local-first architecture is the natural endgame for this progression. That's what we're building with Electric. A framework where you can declare what data *can* sync and what data your components *need* and the system takes care of the rest.
+Web development has been progressing through an evolution of state transfer from manual, imperative data transfer towards automated, declarative systems. Hybrid local-first architecture is the natural endgame for this progression. That's what we're building with Electric. A framework where you can declare what data _can_ sync and what data your components _need_ and the system takes care of the rest.
 
 Where state transfer is fully abstracted into the database layer. Where it can be optimised for consistency, integrity, placement and latency and you never have to write a rollback handler or inspect an HTTP status code, ever again.

@@ -136,9 +136,7 @@ const MyComponent = () => {
     fetchItems()
   }, [])
 
-  return (
-    <List items="items" />
-  )
+  return <List items="items" />
 }
 ```
 
@@ -151,13 +149,11 @@ const MyComponent = () => {
   const { data } = useShape({
     url: `https://electric.example.com/v1/shape`,
     params: {
-      table: 'items'
-    }
+      table: 'items',
+    },
   })
 
-  return (
-    <List items="data" />
-  )
+  return <List items="data" />
 }
 ```
 
@@ -166,7 +162,7 @@ For example:
 - [Trigger.dev](https://trigger.dev/) started out with Electric by syncing status data from their background jobs platform into their [Realtime dashboard](https://trigger.dev/launchweek/0/realtime)
 - [Otto](https://ottogrid.ai) swapped out the way they loaded data into their [AI spreadsheet](https://ottogrid.ai)
 
-You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this *incrementally* as and when you need to.
+You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this _incrementally_ as and when you need to.
 
 #### Read-path
 
@@ -260,26 +256,26 @@ For example, [Authzed](https://authzed.com) is a low-latency, distributed author
 import jwt from 'jsonwebtoken'
 import { v1 } from '@authzed/authzed-node'
 
-const AUTH_SECRET = Deno.env.get("AUTH_SECRET") || "NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY"
-const ELECTRIC_URL = Deno.env.get("ELECTRIC_URL") || "http://localhost:3000"
+const AUTH_SECRET =
+  Deno.env.get('AUTH_SECRET') || 'NFL5*0Bc#9U6E@tnmC&E7SUN6GwHfLmY'
+const ELECTRIC_URL = Deno.env.get('ELECTRIC_URL') || 'http://localhost:3000'
 
 const HAS_PERMISSION = v1.CheckPermissionResponse_Permissionship.HAS_PERMISSION
 
 function verifyAuthHeader(headers: Headers) {
-  const auth_header = headers.get("Authorization")
+  const auth_header = headers.get('Authorization')
 
   if (auth_header === null) {
     return [false, null]
   }
 
-  const token = auth_header.split("Bearer ")[1]
+  const token = auth_header.split('Bearer ')[1]
 
   try {
-    const claims = jwt.verify(token, AUTH_SECRET, {algorithms: ["HS256"]})
+    const claims = jwt.verify(token, AUTH_SECRET, { algorithms: ['HS256'] })
 
     return [true, claims]
-  }
-  catch (err) {
+  } catch (err) {
     console.warn(err)
 
     return [false, null]
@@ -291,7 +287,7 @@ Deno.serve(async (req) => {
 
   const [isValidJWT, claims] = verifyAuthHeader(req.headers)
   if (!isValidJWT) {
-    return new Response("Unauthorized", {status: 401})
+    return new Response('Unauthorized', { status: 401 })
   }
 
   // See https://github.com/authzed/authzed-node and
@@ -301,38 +297,37 @@ Deno.serve(async (req) => {
 
   const resource = v1.ObjectReference.create({
     objectType: `example/table`,
-    objectId: claims.table
+    objectId: claims.table,
   })
 
   const user = v1.ObjectReference.create({
-    objectType: "example/user",
-    objectId: claims.user_id
+    objectType: 'example/user',
+    objectId: claims.user_id,
   })
 
   const subject = v1.SubjectReference.create({
-    object: user
+    object: user,
   })
 
   const permissionRequest = v1.CheckPermissionRequest.create({
     permission: 'read',
     resource,
-    subject
+    subject,
   })
 
-  const checkResult = await new Promise(
-    (resolve, reject) => {
-      client.checkPermission(
-        permissionRequest,
-        (err, response) => err ? reject(err) : resolve(response)
-      )
-    }
-  )
+  const checkResult = await new Promise((resolve, reject) => {
+    client.checkPermission(permissionRequest, (err, response) =>
+      err ? reject(err) : resolve(response)
+    )
+  })
 
   if (checkResult.permissionship !== HAS_PERMISSION) {
-    return new Response("Forbidden", {status: 403})
+    return new Response('Forbidden', { status: 403 })
   }
 
-  return fetch(`${ELECTRIC_URL}/v1/shape${url.search}`, {headers: req.headers})
+  return fetch(`${ELECTRIC_URL}/v1/shape${url.search}`, {
+    headers: req.headers,
+  })
 })
 ```
 
@@ -437,8 +432,8 @@ Again, to emphasise, this allows you to develop local-first apps, without having
 
 Electric syncs ciphertext as well as it syncs plaintext. You can encrypt data on and off the local client, i.e.:
 
-- *encrypt* it before it leaves the client
-- *decrypt* it when it comes into the client from the replication stream
+- _encrypt_ it before it leaves the client
+- _decrypt_ it when it comes into the client from the replication stream
 
 You can see an example of this in the [encryption example](/demos/encryption):
 
@@ -457,11 +452,9 @@ const stream = new ShapeStream({
   url: `${ELECTRIC_URL}/v1/shape`,
   params: {
     table: 'tenants',
-    columns: [
-      'keys'
-    ],
-    where: `id in ('${user.tenant_ids.join(`', '`)}')`
-  }
+    columns: ['keys'],
+    where: `id in ('${user.tenant_ids.join(`', '`)}')`,
+  },
 })
 ```
 

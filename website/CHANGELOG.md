@@ -19,9 +19,9 @@
 
   ```typescript
   const stream = new ShapeStream({
-    url: "http://localhost:3000/v1/shape",
+    url: 'http://localhost:3000/v1/shape',
     params: {
-      table: "items",
+      table: 'items',
       userId: () => getCurrentUserId(),
       filter: async () => await getUserPreferences(),
     },
@@ -64,9 +64,9 @@
 
   ```typescript
   const stream = new ShapeStream({
-    url: "http://localhost:3000/v1/shape",
+    url: 'http://localhost:3000/v1/shape',
     params: {
-      table: "items",
+      table: 'items',
       userId: () => getCurrentUserId(),
       filter: async () => await getUserPreferences(),
     },

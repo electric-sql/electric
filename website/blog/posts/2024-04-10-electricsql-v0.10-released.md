@@ -35,11 +35,11 @@ The [`sync()` API](/docs/api/clients/typescript#sync) remains the same. For exam
 ```typescript
 const shape = await db.projects.sync({
   where: {
-    id: "abcd",
+    id: 'abcd',
   },
   include: {
-    issues: true
-  }
+    issues: true,
+  },
 })
 
 await shape.synced
@@ -51,7 +51,7 @@ In addition, it's now also possible to pass an SQL string as the `where` clause 
 
 ```javascript
 const { synced } = await electric.db.issues.sync({
-  where: "this.project_id in [7, 42]"
+  where: 'this.project_id in [7, 42]',
 })
 ```
 
@@ -61,9 +61,9 @@ Full details of the SQL syntax permitted in a where clause can be found in the [
 
 ### Status — experimental
 
-Shapes as released in v0.10 are still experimental. You **can** now use them to filter the content synced onto the local device. However, key aspects, including controlling sync *off* the device and unsubscribing are still not yet implemented.
+Shapes as released in v0.10 are still experimental. You **can** now use them to filter the content synced onto the local device. However, key aspects, including controlling sync _off_ the device and unsubscribing are still not yet implemented.
 
-You should also be aware that there *is* still some oversync (of many-to-one relations, in order to maintain referential integrity). See the [limitations](https://legacy.electric-sql.com/docs/usage/data-access/shapes#limitations-and-issues) listed in the Shapes docs for more information.
+You should also be aware that there _is_ still some oversync (of many-to-one relations, in order to maintain referential integrity). See the [limitations](https://legacy.electric-sql.com/docs/usage/data-access/shapes#limitations-and-issues) listed in the Shapes docs for more information.
 
 :::caution Breaking changes
 

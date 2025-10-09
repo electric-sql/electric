@@ -46,9 +46,9 @@ const pgPromise = createPGlite()
 
 let syncStarted = false
 pgPromise.then(async (pg) => {
-  console.log('PGlite worker started')
+  console.log(`PGlite worker started`)
   pg.onLeaderChange(() => {
-    console.log('Leader changed, isLeader:', pg.isLeader)
+    console.log(`Leader changed, isLeader:`, pg.isLeader)
     if (pg.isLeader && !syncStarted) {
       syncStarted = true
       startSync(pg)
@@ -84,8 +84,8 @@ async function boardIssueListLoader({ request }: { request: Request }) {
   for (const status of Object.values(Status)) {
     const colFilterState: FilterState = {
       ...filterState,
-      orderBy: 'kanbanorder',
-      orderDirection: 'asc',
+      orderBy: `kanbanorder`,
+      orderDirection: `asc`,
       status: [status],
     }
     const { sql: colSql, sqlParams: colSqlParams } =
@@ -159,7 +159,7 @@ const LoadingScreen = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="h-screen w-screen flex flex-col items-center justify-center gap-4">
       <ImSpinner8 className="w-8 h-8 animate-spin text-blue-500" />
-      <div className="text-gray-600 text-center" style={{ minHeight: '100px' }}>
+      <div className="text-gray-600 text-center" style={{ minHeight: `100px` }}>
         {children}
       </div>
     </div>
@@ -183,7 +183,7 @@ const App = () => {
 
   if (!pgForProvider) return <LoadingScreen>Starting PGlite...</LoadingScreen>
 
-  if (syncStatus === 'initial-sync')
+  if (syncStatus === `initial-sync`)
     return (
       <LoadingScreen>
         Performing initial sync...

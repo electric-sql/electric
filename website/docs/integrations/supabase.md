@@ -48,7 +48,6 @@ When connecting to a Supabase Postgres, you either need to make sure Electric an
 > [!Tip] Need somewhere to host Electric?
 > If you need to deploy Electric, then [Supabase works great](https://supabase.com/blog/postgres-on-fly-by-supabase) with [Fly.io](./fly#deploy-electric).
 
-
 ### Sync into Edge Function
 
 You can also use Electric to sync data into a Supabase [Edge Function](https://supabase.com/docs/guides/functions).
@@ -94,16 +93,15 @@ Deno.serve(async (req) => {
   const stream = new ShapeStream({
     url: '[YOUR_ELECTRIC_URL]/v1/shape',
     params: {
-      table: 'items'
-    }
+      table: 'items',
+    },
   })
   const shape = new Shape(stream)
-  const items = [...await shape.value]
+  const items = [...(await shape.value)]
 
-  return new Response(
-    JSON.stringify(items),
-    { headers: { "Content-Type": "application/json" } },
-  )
+  return new Response(JSON.stringify(items), {
+    headers: { 'Content-Type': 'application/json' },
+  })
 })
 ```
 
