@@ -37,38 +37,35 @@ defmodule Electric.Postgres.Configuration do
   """
   @spec check_publication_status!(Postgrex.conn(), String.t()) :: :ok
   def check_publication_status!(conn, publication_name) do
-    case Postgrex.query!(
-           conn,
-           "SELECT pubinsert, pubupdate, pubdelete, pubtruncate FROM pg_publication WHERE pubname = $1",
-           [publication_name]
-         ) do
-      %{num_rows: 1, rows: [[true, true, true, true]]} ->
-        case Postgrex.query!(
-               conn,
-               """
-                 SELECT
-                   pg_get_userbyid(p.pubowner) = current_role
-                 FROM
-                   pg_publication p
-                 WHERE
-                   p.pubname = $1;
-               """,
-               [publication_name]
-             ) do
-          %{rows: [[true]]} ->
-            :ok
+    query =
+      """
+      SELECT
+        pubinsert AND pubupdate AND pubdelete AND pubtruncate as all_operations,
+        pg_get_userbyid(p.pubowner) = current_role as is_owned
+      FROM pg_publication as p WHERE pubname = $1
+      """
 
-          %{rows: [[false]]} ->
-            raise Electric.DbConfigurationError.publication_not_owned(publication_name)
-        end
+    Postgrex.query!(conn, query, [publication_name])
+    |> one_or_nil()
+    |> case do
+      %{"all_operations" => true, "is_owned" => true} ->
+        :ok
 
-      %{num_rows: 1} ->
+      %{"is_owned" => false} ->
+        raise Electric.DbConfigurationError.publication_not_owned(publication_name)
+
+      %{"all_operations" => false} ->
         raise Electric.DbConfigurationError.publication_missing_operations(publication_name)
 
-      %{num_rows: 0} ->
+      _ ->
         raise Electric.DbConfigurationError.publication_missing(publication_name)
     end
   end
+
+  defp one_or_nil(%Postgrex.Result{rows: [row], columns: cols}),
+    do: Enum.zip(cols, row) |> Map.new()
+
+  defp one_or_nil(_), do: nil
 
   @doc """
   Check whether the state of the publication relations in the database matches the sets of
