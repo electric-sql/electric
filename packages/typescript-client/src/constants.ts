@@ -13,7 +13,11 @@ export const TABLE_QUERY_PARAM = `table`
 export const WHERE_QUERY_PARAM = `where`
 export const REPLICA_PARAM = `replica`
 export const WHERE_PARAMS_PARAM = `params`
+/**
+ * @deprecated Use {@link LIVE_SSE_QUERY_PARAM} instead.
+ */
 export const EXPERIMENTAL_LIVE_SSE_QUERY_PARAM = `experimental_live_sse`
+export const LIVE_SSE_QUERY_PARAM = `live_sse`
 export const FORCE_DISCONNECT_AND_REFRESH = `force-disconnect-and-refresh`
 export const PAUSE_STREAM = `pause-stream`
 export const LOG_MODE_QUERY_PARAM = `log`

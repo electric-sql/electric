@@ -44,6 +44,7 @@ import {
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
+  LIVE_SSE_QUERY_PARAM,
   ELECTRIC_PROTOCOL_QUERY_PARAMS,
   LOG_MODE_QUERY_PARAM,
   SUBSET_PARAM_WHERE,
@@ -273,9 +274,14 @@ export interface ShapeStreamOptions<T = never> {
   subscribe?: boolean
 
   /**
-   * Experimental support for Server-Sent Events (SSE) for live updates.
+   * @deprecated No longer experimental, use {@link liveSse} instead.
    */
   experimentalLiveSse?: boolean
+
+  /**
+   * Use Server-Sent Events (SSE) for live updates.
+   */
+  liveSse?: boolean
 
   /**
    * Initial data loading mode
@@ -372,7 +378,7 @@ function canonicalShapeKey(url: URL): string {
  * ```
  * const stream = new ShapeStream({
  *   url: `http://localhost:3000/v1/shape`,
- *   experimentalLiveSse: true
+ *   liveSse: true
  * })
  * ```
  *
@@ -815,13 +821,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
     resumingFromPause?: boolean
   }): Promise<void> {
+    const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
     if (
       this.#isUpToDate &&
-      this.options.experimentalLiveSse &&
+      useSse &&
       !this.#isRefreshing &&
       !opts.resumingFromPause
     ) {
       opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
+      opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
       return this.#requestShapeSSE(opts)
     }
 
