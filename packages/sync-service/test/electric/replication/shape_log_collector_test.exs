@@ -57,7 +57,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
 
+    parent = self()
+
     Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      send(parent, :shape_log_collector_ready)
       :ok
     end)
 
@@ -77,6 +80,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       ]
 
     shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
+
+    assert_receive :shape_log_collector_ready
 
     %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
   end

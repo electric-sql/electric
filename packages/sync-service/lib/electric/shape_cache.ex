@@ -242,10 +242,15 @@ defmodule Electric.ShapeCache do
       snapshot_timeout_to_first_data: opts.snapshot_timeout_to_first_data
     }
 
+    {:ok, state, {:continue, {:recover_shapes, opts.recover_shape_timeout}}}
+  end
+
+  @impl GenServer
+  def handle_continue({:recover_shapes, recover_shape_timeout}, state) do
     start_time = System.monotonic_time()
 
     {last_processed_lsn, total_recovered, total_failed_to_recover} =
-      recover_shapes(state, opts.recover_shape_timeout)
+      recover_shapes(state, recover_shape_timeout)
 
     duration = System.monotonic_time() - start_time
 
@@ -259,13 +264,6 @@ defmodule Electric.ShapeCache do
       %{stack_id: state.stack_id}
     )
 
-    # Let ShapeLogCollector that it can start processing after finishing this function so that
-    # we're subscribed to the producer before it starts forwarding its demand.
-    {:ok, state, {:continue, {:consumers_ready, last_processed_lsn}}}
-  end
-
-  @impl GenServer
-  def handle_continue({:consumers_ready, last_processed_lsn}, state) do
     ShapeLogCollector.set_last_processed_lsn(state.log_producer, last_processed_lsn)
 
     {:noreply, state}
