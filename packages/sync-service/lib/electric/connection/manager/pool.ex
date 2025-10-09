@@ -209,7 +209,7 @@ defmodule Electric.Connection.Manager.Pool do
         state.last_connection_error
       end
 
-    {:stop, error, state}
+    {:stop, {:shutdown, error}, state}
   end
 
   def handle_info({:EXIT, pid, reason}, %{pool_pid: pid} = state) do

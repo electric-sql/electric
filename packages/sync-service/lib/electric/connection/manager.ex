@@ -984,6 +984,7 @@ defmodule Electric.Connection.Manager do
   defp shutdown_or_reconnect(error, pid_type, state) do
     error =
       error
+      |> strip_shutdown_exit_reason()
       |> strip_exit_signal_stacktrace()
       |> DbConnectionError.from_error()
 
@@ -1221,6 +1222,11 @@ defmodule Electric.Connection.Manager do
         error
     end
   end
+
+  # If the reason is of the form {:shutdown, reason}, we strip the :shutdown tuple
+  # wrapper to get to the actual reason.
+  defp strip_shutdown_exit_reason({:shutdown, reason}), do: reason
+  defp strip_shutdown_exit_reason(reason), do: reason
 
   defp stacktrace?(val) do
     try do
