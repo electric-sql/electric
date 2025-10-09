@@ -43,8 +43,9 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     Process.flag(:trap_exit, true)
 
     Process.set_label({:connection_resolver, stack_id})
-    Logger.metadata(stack_id: stack_id, is_connection_process?: true)
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
+    metadata = [is_connection_process?: true, stack_id: stack_id]
+    Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
 
     {_m, _f, _a} =
       connection_mod =

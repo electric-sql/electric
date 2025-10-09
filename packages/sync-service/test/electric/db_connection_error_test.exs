@@ -373,6 +373,27 @@ defmodule Electric.DbConnectionErrorTest do
       end
     end
 
+    test "with a compute node unreachable error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :internal_error,
+          message: "Couldn't connect to compute node",
+          severity: "ERROR",
+          pg_code: "XX000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: error.postgres.message,
+               type: :compute_node_unreachable,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with a connection refused error" do
       error = %DBConnection.ConnectionError{
         message: "tcp connect (localhost:54321): connection refused - :econnrefused",

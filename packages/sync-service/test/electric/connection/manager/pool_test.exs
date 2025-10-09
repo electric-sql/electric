@@ -131,7 +131,7 @@ defmodule Electric.Connection.Manager.PoolTest do
     state = pool_state(stack_id)
     Process.exit(state.pool_pid, :kill)
 
-    assert_receive {:DOWN, ^mon, :process, ^pool_pid, %DbConnectionError{} = reason}
+    assert_receive {:DOWN, ^mon, :process, ^pool_pid, {:shutdown, %DbConnectionError{} = reason}}
 
     assert reason.type == :connection_pool_failed_to_populate
     assert reason.original_error == :killed
@@ -162,7 +162,7 @@ defmodule Electric.Connection.Manager.PoolTest do
     mon = Process.monitor(pool_pid)
     Process.exit(state.pool_pid, :kill)
 
-    assert_receive {:DOWN, ^mon, :process, ^pool_pid, ^expected_error}
+    assert_receive {:DOWN, ^mon, :process, ^pool_pid, {:shutdown, ^expected_error}}
   end
 
   test "configure_pool_conn sends :pool_conn_started and returns opts", ctx do

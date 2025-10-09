@@ -309,6 +309,7 @@ defmodule Electric.DbConnectionError do
       maybe_data_transfer_quota_exceeded(error) ||
       maybe_password_authentication_failed(error) ||
       maybe_pooler_login_error(error) ||
+      maybe_cannot_connect_to_compute_node(error) ||
       unknown_error(error)
   end
 
@@ -458,6 +459,21 @@ defmodule Electric.DbConnectionError do
           type: :nxdomain,
           original_error: error,
           retry_may_fix?: false
+        }
+
+      _ ->
+        nil
+    end
+  end
+
+  defp maybe_cannot_connect_to_compute_node(error) do
+    case error.postgres.message do
+      "Couldn't connect to compute node" ->
+        %DbConnectionError{
+          message: error.postgres.message,
+          type: :compute_node_unreachable,
+          original_error: error,
+          retry_may_fix?: true
         }
 
       _ ->
