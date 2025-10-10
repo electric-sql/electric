@@ -1,5 +1,5 @@
 <script setup>
-const { demo } = defineProps(['demo'])
+  const { demo } = defineProps(['demo'])
 </script>
 
 <template>
@@ -11,15 +11,14 @@ const { demo } = defineProps(['demo'])
       <figcaption>
         See the {{ demo.example ? 'example' : 'demo' }} running at
         <a :href="demo.deployed_url" target="_blank" class="no-wrap-sm">
-          {{ demo.deployed_url.split('://').at(1) }}</a
-        >
+          {{ demo.deployed_url.split('://').at(1) }}</a>
       </figcaption>
     </figure>
   </div>
   <div v-if="demo.deployed_url && !demo.image">
     See the demo running at
     <a :href="demo.deployed_url" target="_blank">
-      {{ demo.deployed_url.split('://').at(1) }}</a
-    >
+      {{ demo.deployed_url.split('://').at(1) }}</a>
+
   </div>
 </template>

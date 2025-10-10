@@ -1,5 +1,5 @@
 ---
-title: 'Electric 1.1: new storage engine with 100x faster writes'
+title: "Electric 1.1: new storage engine with 100x faster writes"
 description: >-
   How we built a new storage engine for Electric, why we did it now, and how it delivers lower latency, higher throughput, and zero‑downtime deploys.
 excerpt: >-

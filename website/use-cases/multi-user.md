@@ -1,5 +1,5 @@
 ---
-title: 'Multi-user collaboration'
+title: "Multi-user collaboration"
 description: >-
   Replace ad-hoc sockets and broadcast channels with
   highly-scalable, low-latency fanout and sync.
@@ -12,5 +12,6 @@ benefits:
 ---
 
 ## Add realtime multi-user collaboration to your application
+
 
 ...

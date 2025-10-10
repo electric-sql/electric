@@ -15,7 +15,7 @@ post: true
 > [!WARNING]
 > This post describes a release of an old version of Electric that's no longer active. See the [Electric Next](/blog/2024/07/17/electric-next) post for context.
 
-Here at Electric, we are thrilled to have published version 0.7 of ElectricSQL, which includes the new migration proxy and extended type support. This release lays the groundwork for many of the new features we are currently working on, and which will be available in future versions. Version 0.6, released in September, was the largest release of Electric since we began, and the culmination of six months of hard work; you can read about the [previous release here](/blog/2023/09/20/introducing-electricsql-v0.6).
+Here at Electric, we are thrilled to have published version 0.7 of ElectricSQL, which includes the new migration proxy and extended type support. This release lays the groundwork for many of the new features we are currently working on, and which will be available in future versions. Version 0.6, released in September, was the largest release of Electric since we began, and the culmination of six months of hard work;  you can read about the [previous release here](/blog/2023/09/20/introducing-electricsql-v0.6).
 
 This new version builds on 0.6 by adding a number of key new features:
 
@@ -28,7 +28,7 @@ You can learn more about these below.
 
 ## Postgres Proxy
 
-A major new feature in Electric is the Postgres Proxy; this is a proxy provided by the Electric sync service, of use when applying migrations to your database. This first version of the proxy interprets our DDLX rules, running the required operations on your database; it enables the `ALTER TABLE issue ENABLE ELECTRIC;` syntax, and it is the precursor to having the full DDLX and permissions in future versions.
+A major new feature in Electric is the Postgres Proxy; this is a proxy provided by the Electric sync service, of use when applying migrations to your database. This first version of the proxy interprets our DDLX rules,  running the required operations on your database; it enables the  `ALTER TABLE issue ENABLE ELECTRIC;` syntax, and it is the precursor to having the full DDLX and permissions in future versions.
 
 The proxy is also the starting point for addressing deployment to hosted Postgres providers with no superuser permissions. We still have a few things to address here, however this is the groundwork required to enable the solution in a future version.
 

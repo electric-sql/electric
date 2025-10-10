@@ -111,7 +111,7 @@ describe(`Postgres array parser`, () => {
     expect(pgArrayParser(`{}`, nullableDefaultParser.json)).toEqual([])
     expect(pgArrayParser(`{"{}"}`, nullableDefaultParser.json)).toEqual([{}])
     expect(pgArrayParser(`{null}`, nullableDefaultParser.json)).toEqual([null])
-
+    // eslint-disable-next-line no-useless-escape -- The backslashes are not useless, they are required in Postgres wire format
     expect(
       pgArrayParser(`{"{\\"a\\":null}"}`, nullableDefaultParser.json)
     ).toEqual([{ a: null }])
@@ -158,6 +158,7 @@ describe(`Postgres array parser`, () => {
     ])
     expect(
       pgArrayParser(
+        // eslint-disable-next-line no-useless-escape -- The backslashes are not useless, they are required in Postgres wire format
         `{"{\\\"a\\\":null}", "{\\\"b\\\":null}"}`,
         nullableDefaultParser.json
       )

@@ -1,5 +1,5 @@
-version: '3.3'
-name: 'electric_expo_db_quickstart'
+version: "3.3"
+name: "electric_expo_db_quickstart"
 
 services:
   postgres:
@@ -27,6 +27,6 @@ services:
       # See https://electric-sql.com/docs/guides/security
       ELECTRIC_INSECURE: true
     ports:
-      - '3000:3000'
+      - "3000:3000"
     depends_on:
       - postgres

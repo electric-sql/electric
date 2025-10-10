@@ -34,7 +34,7 @@ Always proxy Electric requests through your backend API for production applicati
 
 ```tsx
 // ✅ Recommended: Clean API pattern
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 const MyComponent = () => {
   const { isLoading, data } = useShape<{ title: string }>({
@@ -67,13 +67,13 @@ For development, you can connect directly to Electric:
 
 ```tsx
 // ⚠️ Development only - exposes database structure
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 const MyComponent = () => {
   const { isLoading, data } = useShape<{ title: string }>({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: 'items',
+      table: "items",
     },
   })
 
@@ -98,9 +98,9 @@ const MyFilteredComponent = () => {
   const { isLoading, data } = useShape<{ id: number; title: string }>({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: 'items',
+      table: "items",
       where: "status = 'active'",
-      columns: ['id', 'title'],
+      columns: ["id", "title"],
     },
   })
   // ...
@@ -156,7 +156,7 @@ export const devLoader = async () => {
   return await preloadShape({
     url: `http://localhost:3000/v1/shape`,
     params: {
-      table: 'items',
+      table: "items",
     },
   })
 }

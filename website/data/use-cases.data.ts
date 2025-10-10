@@ -3,15 +3,15 @@ import path from 'node:path'
 import { parse } from 'yaml'
 
 export default {
-  watch: [`../use-cases/*.md`],
+  watch: ["../use-cases/*.md"],
 
   load(files) {
     return files
       .map((file) => {
-        const slug = path.basename(file, `.md`)
+        const slug = path.basename(file, '.md')
 
-        const contents = fs.readFileSync(file, `utf-8`)
-        const frontmatter = contents.split(`---\n`)[1]
+        const contents = fs.readFileSync(file, 'utf-8')
+        const frontmatter = contents.split('---\n')[1]
 
         const data = parse(frontmatter)
         data.link = `/use-cases/${slug}`

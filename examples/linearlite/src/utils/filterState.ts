@@ -83,13 +83,13 @@ export function filterStateToSql(filterState: FilterState) {
   const sqlParams = []
   if (filterState.status?.length) {
     sqlWhere.push(
-      `status IN (${filterState.status.map(() => `$${i++}`).join(` ,`)})`
+      `status IN (${filterState.status.map(() => `$${i++}`).join(' ,')})`
     )
     sqlParams.push(...filterState.status)
   }
   if (filterState.priority?.length) {
     sqlWhere.push(
-      `priority IN (${filterState.priority.map(() => `$${i++}`).join(` ,`)})`
+      `priority IN (${filterState.priority.map(() => `$${i++}`).join(' ,')})`
     )
     sqlParams.push(...filterState.priority)
   }
@@ -105,7 +105,7 @@ export function filterStateToSql(filterState: FilterState) {
     SELECT id, title, priority, status, modified, created, kanbanorder, username, synced
     FROM issue
     WHERE
-      ${sqlWhere.length ? `${sqlWhere.join(` AND `)} AND ` : ``}
+      ${sqlWhere.length ? `${sqlWhere.join(' AND ')} AND ` : ''}
       deleted = false
     ORDER BY
       ${filterState.orderBy} ${filterState.orderDirection},

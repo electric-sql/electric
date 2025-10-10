@@ -72,7 +72,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: ELECTRIC_STORAGE_DIR
-        value: '/var/electric'
+        value: "/var/electric"
   - type: web
     runtime: static
     name: app

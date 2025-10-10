@@ -23,12 +23,11 @@ function AboutSection() {
       <Text size="2" as="p" className={classes.para}>
         Burn is a multi-user, multi-agent "roast-me" demo app from
         {` `}
-        <a href="https://electric-sql.com">ElectricSQL</a>.{` `}
+        <a href="https://electric-sql.com">ElectricSQL</a>.
+        {` `}
         See the
         {` `}
-        <a href="https://electric-sql.com/blog/2025/08/12/bringing-agents-back-down-to-earth">
-          blog post
-        </a>
+        <a href="https://electric-sql.com/blog/2025/08/12/bringing-agents-back-down-to-earth">blog post</a>
         {` `}
         for more&nbsp;info.
       </Text>
@@ -44,8 +43,8 @@ function AboutSection() {
       </Heading>
       <Text size="2" as="p" className={classes.para}>
         As you play the game, you'll see facts and events build up in the
-        "Computer" on the right hand side. The app UI and LLM context are both
-        just functions of this state.
+        "Computer" on the right hand side. The app UI and LLM context are
+        both just functions of this state.
       </Text>
     </Box>
   )

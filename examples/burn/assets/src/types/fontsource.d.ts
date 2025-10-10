@@ -1,2 +1,1 @@
-declare
-module`@fontsource/open-sauce-one`
+declare module '@fontsource/open-sauce-one'

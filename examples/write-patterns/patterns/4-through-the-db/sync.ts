@@ -16,7 +16,7 @@ type Change = {
   transaction_id: string
 }
 
-type SendResult = `accepted` | `rejected` | `retry`
+type SendResult = 'accepted' | 'rejected' | 'retry'
 
 /*
  * Minimal, naive synchronization utility, just to illustrate the pattern of
@@ -28,7 +28,7 @@ export default class ChangeLogSynchronizer {
 
   #hasChangedWhileProcessing: boolean = false
   #shouldContinue: boolean = true
-  #status: `idle` | `processing` = `idle`
+  #status: 'idle' | 'processing' = 'idle'
 
   #abortController?: AbortController
   #unsubscribe?: () => Promise<void>
@@ -43,7 +43,7 @@ export default class ChangeLogSynchronizer {
    */
   async start(): Promise<void> {
     this.#abortController = new AbortController()
-    this.#unsubscribe = await this.#db.listen(`changes`, this.handle.bind(this))
+    this.#unsubscribe = await this.#db.listen('changes', this.handle.bind(this))
 
     this.process()
   }
@@ -53,13 +53,13 @@ export default class ChangeLogSynchronizer {
    * so we can process them straightaway on the next loop.
    */
   async handle(): Promise<void> {
-    if (this.#status === `processing`) {
+    if (this.#status === 'processing') {
       this.#hasChangedWhileProcessing = true
 
       return
     }
 
-    this.#status = `processing`
+    this.#status = 'processing'
 
     this.process()
   }
@@ -75,17 +75,17 @@ export default class ChangeLogSynchronizer {
       const result: SendResult = await this.send(changes)
 
       switch (result) {
-        case `accepted`:
+        case 'accepted':
           await this.proceed(position)
 
           break
 
-        case `rejected`:
+        case 'rejected':
           await this.rollback()
 
           break
 
-        case `retry`:
+        case 'retry':
           this.#hasChangedWhileProcessing = true
 
           break
@@ -96,7 +96,7 @@ export default class ChangeLogSynchronizer {
       return await this.process()
     }
 
-    this.#status = `idle`
+    this.#status = 'idle'
   }
 
   /*
@@ -121,7 +121,7 @@ export default class ChangeLogSynchronizer {
    * Send the current batch of changes to the server, grouped by transaction.
    */
   async send(changes: Change[]): Promise<SendResult> {
-    const path = `/changes`
+    const path = '/changes'
 
     const groups = Object.groupBy(changes, (x) => x.transaction_id)
     const sorted = Object.entries(groups).sort((a, b) =>
@@ -138,20 +138,20 @@ export default class ChangeLogSynchronizer {
 
     let response: Response | undefined
     try {
-      response = await api.request(path, `POST`, transactions, signal)
+      response = await api.request(path, 'POST', transactions, signal)
     } catch (_err) {
-      return `retry`
+      return 'retry'
     }
 
     if (response === undefined) {
-      return `retry`
+      return 'retry'
     }
 
     if (response.ok) {
-      return `accepted`
+      return 'accepted'
     }
 
-    return response.status < 500 ? `rejected` : `retry`
+    return response.status < 500 ? 'rejected' : 'retry'
   }
 
   /*

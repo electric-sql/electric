@@ -21,28 +21,27 @@ function AskUserAboutThemselves({ event }: Props) {
   // Figure out whether this is the first question asked of this user in
   // this thread. If it is, we prefix the question test with "Hi, ".
   const { data: previousEvents } = useLiveQuery(
-    (query) =>
+    (query) => (
       query
         .from({ event: eventCollection })
         .select(({ event }) => ({
-          id: event.id,
+          id: event.id
         }))
-        .orderBy(({ event }) => event.inserted_at, `asc`)
+        .orderBy(({ event }) => event.inserted_at, 'asc')
         .limit(1)
         .where(({ event }) => eq(event.thread_id, threadId))
-        .where(({ event }) => eq(event.type, `tool_use`))
+        .where(({ event }) => eq(event.type, 'tool_use'))
         .where(({ event }) => lt(event.inserted_at!, insertedAt))
         .fn.where(({ event }) => {
           const { input, name } = event.data
 
-          return (
-            name === `ask_user_about_themselves` && input.subject === subject
-          )
-        }),
+          return name === 'ask_user_about_themselves' && input.subject === subject
+        })
+    ),
     [insertedAt, subject, threadId]
   )
   const isFirstQuestion = previousEvents.length === 0
-  const prefix = isFirstQuestion ? `Hi ` : ``
+  const prefix = isFirstQuestion ? 'Hi ' : ''
 
   const { data: users } = useLiveQuery(
     (query) =>
@@ -61,8 +60,8 @@ function AskUserAboutThemselves({ event }: Props) {
   return (
     <>
       {prefix}
-      <span style={{ color: `rgb(125, 184, 255)` }}>@{subjectUser.name}</span>
-      {prefix ? `, ` : ` `}
+      <span style={{ color: 'rgb(125, 184, 255)' }}>@{subjectUser.name}</span>
+      {prefix ? ', ' : ' '}
       {formattedQuestion}
     </>
   )

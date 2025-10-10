@@ -28,7 +28,6 @@ We're a [small, technical team](/about/team) that's passionate about our work, o
 ## Active roles
 
 > [!Tip] We're hiring!
->
 > <ul><li v-for="job in activeJobs"><a :href="job.link">{{ job.title }}</a></li></ul>
 
 </div>

@@ -174,7 +174,7 @@ npm i @electric-sql/client
 Instantiate a `ShapeStream` and materialise into a `Shape`:
 
 ```ts
-import { ShapeStream, Shape } from '@electric-sql/client'
+import { ShapeStream, Shape } from "@electric-sql/client"
 
 const stream = new ShapeStream({
   url: `http://localhost:3000/v1/shape`,

@@ -1,10 +1,10 @@
 # Yjs example
 
-This example showcases a multiplayer [Codemirror](https://codemirror.net/) editor with [YJS](https://github.com/yjs/yjs) and [ElectricSQL](https://electric-sql.com/). All data is synchronized through [Postgres](https://www.postgresql.org/), eliminating the need for additional real-time infrastructure.
+This example showcases a multiplayer [Codemirror](https://codemirror.net/) editor with [YJS](https://github.com/yjs/yjs) and [ElectricSQL](https://electric-sql.com/). All data is synchronized through [Postgres](https://www.postgresql.org/), eliminating the need for additional real-time infrastructure. 
 
 Y-Electric is a [YJS connection provider](https://docs.yjs.dev/ecosystem/connection-provider) that comes with offline support, integrates with [database providers](https://docs.yjs.dev/ecosystem/database-provider) and handles Awareness. It works with the entire YJS ecosystem and with your existing apps too!
 
-Check the Y-Electric [package](https://github.com/electric-sql/electric/tree/main/packages/y-electric) to learn more.
+Check the Y-Electric [package](https://github.com/electric-sql/electric/tree/main/packages/y-electric) to learn more. 
 
 ## Setup
 

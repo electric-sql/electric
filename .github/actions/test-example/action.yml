@@ -1,16 +1,16 @@
 name: Test Example
-description: 'Test a deployed example'
+description: "Test a deployed example"
 
 inputs:
   example_url:
-    description: 'URL of the deployed example'
+    description: "URL of the deployed example"
     required: true
   test_folder:
-    description: 'Folder containing the tests to run'
+    description: "Folder containing the tests to run"
     required: true
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Checkout repository
       if: inputs.example_url != ''
@@ -20,7 +20,7 @@ runs:
     - uses: actions/setup-node@v4
       if: inputs.example_url != ''
       with:
-        node-version-file: '.tool-versions'
+        node-version-file: ".tool-versions"
         cache: pnpm
     - shell: bash
       if: inputs.example_url != ''

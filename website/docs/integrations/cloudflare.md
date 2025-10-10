@@ -42,27 +42,27 @@ export default {
 
     const headers = request.headers
     const authHeader = request.headers.get('Authorization')
-    const isValid = (header) => {
-      /* ... e.g.: verify JWT ... */
-    }
+    const isValid = (header) => { /* ... e.g.: verify JWT ... */ }
     if (!isValid(authHeader)) {
-      return new Response('Forbidden', { status: 403 })
+      return new Response('Forbidden', {status: 403})
     }
 
     if (request.method != `GET`) {
-      return new Response('Method Not Allowed', { status: 405 })
+      return new Response('Method Not Allowed', {status: 405})
     }
 
     const url = new URL(request.url)
     const shapeUrl = `${ELECTRIC_URL}${url.pathname}${url.search}`
     const clonedHeaders = new Headers(new Request(request).headers)
 
-    return await fetch(shapeUrl, {
-      headers: clonedHeaders,
-      cf: { cacheEverything: true },
-    })
+    return await fetch(
+      shapeUrl, {
+        headers: clonedHeaders,
+        cf: { cacheEverything: true }
+      }
+    )
   },
-} satisfies ExportedHandler
+} satisfies ExportedHandler;
 ```
 
 #### Syncing data into the worker
@@ -79,22 +79,22 @@ export default {
     const stream = new ShapeStream({
       url: `${ELECTRIC_URL}/v1/shape`,
       params: {
-        table: 'routes',
-      },
+        table: 'routes'
+      }
     })
     const shape = new Shape(stream)
     const routes = await shape.value
 
     const url = new URL(request.url)
-    const match = routes.find((x) => x.path == url.pathname)
+    const match = routes.find(x => x.path == url.pathname)
 
     if (!match) {
-      return new Response('Not Found', { status: 404 })
+      return new Response('Not Found', {status: 404})
     }
 
     return Response.redirect(match.redirect, 301)
   },
-} satisfies ExportedHandler
+} satisfies ExportedHandler;
 ```
 
 ### Durable Objects
@@ -112,7 +112,7 @@ You can see a demo of this pattern, using SQLite to persist the Shape data, at [
 />
 
 > [!Tip] Combining CDN and Durable Objects
-> Note that if you sync data into a Durable Object (or a Worker) [from Cloudflare's CDN](#cdn) it can be _extremely fast_ &mdash; with high bandwidth and low network latency.
+> Note that if you sync data into a Durable Object (or a Worker) [from Cloudflare's CDN](#cdn) it can be *extremely fast* &mdash; with high bandwidth and low network latency.
 
 <HelpWanted issue="1884">
   example apps using Cloudflare and/or wrap up the code samples above into a library.

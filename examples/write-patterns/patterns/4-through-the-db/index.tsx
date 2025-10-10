@@ -71,14 +71,14 @@ export default function Wrapper() {
 
 function ThroughTheDB() {
   const db = usePGlite()
-  const results = useLiveQuery<Todo>(`SELECT * FROM todos ORDER BY created_at`)
+  const results = useLiveQuery<Todo>('SELECT * FROM todos ORDER BY created_at')
 
   async function createTodo(event: React.FormEvent) {
     event.preventDefault()
 
     const form = event.target as HTMLFormElement
     const formData = new FormData(form)
-    const title = formData.get(`todo`) as string
+    const title = formData.get('todo') as string
 
     await db.sql`
       INSERT INTO todos (
@@ -140,7 +140,7 @@ function ThroughTheDB() {
               <input type="checkbox" checked={todo.completed}
                   onChange={() => updateTodo(todo)}
               />
-              <span className={`title ${ todo.completed ? `completed` : `` }`}>
+              <span className={`title ${ todo.completed ? 'completed' : '' }`}>
                 { todo.title }
               </span>
             </label>

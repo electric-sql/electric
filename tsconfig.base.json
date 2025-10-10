@@ -3,7 +3,9 @@
     "incremental": false,
     "baseUrl": "./",
     "target": "es2016",
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "jsx": "preserve",
     "noEmit": true,
     "module": "esnext",

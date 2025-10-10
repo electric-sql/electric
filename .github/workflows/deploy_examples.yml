@@ -2,9 +2,9 @@ name: Deploy Examples
 
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
   pull_request:
-    paths: ['examples/*/**']
+    paths: ["examples/*/**"]
 
 concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
@@ -21,7 +21,7 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c
         with:
-          path: 'examples'
+          path: "examples"
           diff_relative: true
           dir_names: true
           dir_names_max_depth: 1
@@ -89,7 +89,7 @@ jobs:
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
       PULUMI_LOG_LEVEL: debug
-      SST_DEBUG: '1'
+      SST_DEBUG: "1"
       SHARED_INFRA_VPC_ID: ${{ vars.SHARED_INFRA_VPC_ID }}
       SHARED_INFRA_CLUSTER_ARN: ${{ vars.SHARED_INFRA_CLUSTER_ARN }}
       SHARED_EXAMPLES_DATABASE_URI: ${{ secrets.SHARED_EXAMPLES_DATABASE_URI }}
@@ -114,8 +114,8 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: '.tool-versions'
-          cache: 'pnpm'
+          node-version-file: ".tool-versions"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -179,7 +179,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.react || '' }}
 
       - name: Test phoenix liveview example
@@ -203,7 +203,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.yjs || '' }}
 
       - name: Test linearlite read-only example
@@ -211,7 +211,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.linearlite-read-only || '' }}
 
       - name: Test write patterns example
@@ -219,7 +219,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.write-patterns || '' }}
 
       - name: Test todo-app example
@@ -227,7 +227,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: '.shared'
+          test_folder: ".shared"
           example_url: ${{ needs.deploy.outputs.todo-app || '' }}
 
       - name: Report test failures

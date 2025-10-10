@@ -1,5 +1,5 @@
 ---
-title: 'Welcome Andrei and Oleksii!'
+title: "Welcome Andrei and Oleksii!"
 description: >-
   Welcoming new team members Andrei Miulescu and Oleksii Sholik to ElectricSQL.
 excerpt: >-

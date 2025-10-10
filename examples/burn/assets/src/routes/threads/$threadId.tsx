@@ -27,26 +27,26 @@ const useClasses = makeStyles({
     width: `100%`,
   },
   header: {
-    display: `flex`,
-    alignItems: `center`,
-    padding: `12px 16px`,
-    borderBottom: `1px solid var(--border-color)`,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px 16px',
+    borderBottom: '1px solid var(--border-color)',
     flexShrink: 0,
-    height: `56px`,
-    position: `sticky`,
+    height: '56px',
+    position: 'sticky',
     top: 0,
     zIndex: 10,
   },
   leftToggle: {
-    display: `inline-flex`,
+    display: 'inline-flex',
     '@media (min-width: 970px)': {
-      display: `none`,
+      display: 'none',
     },
   },
   rightToggle: {
-    display: `inline-flex`,
+    display: 'inline-flex',
     '@media (min-width: 700px)': {
-      display: `none`,
+      display: 'none',
     },
   },
 })
@@ -56,7 +56,7 @@ function ThreadPage() {
   const navigate = useNavigate()
 
   const { currentUserId, isAuthenticated } = useAuth()
-  const { threadId } = useParams({ from: `/threads/$threadId` })
+  const { threadId } = useParams({ from: '/threads/$threadId' })
   const { toggleLeftSidebar, toggleRightSidebar } = useSidebar()
 
   const { data: threads } = useLiveQuery(
@@ -116,7 +116,7 @@ function ThreadPage() {
               </Flex>
             </Flex>
           </Box>
-          <Box style={{ flex: 1, overflow: `hidden` }}>
+          <Box style={{ flex: 1, overflow: 'hidden' }}>
             <MainThread threadId={activeThread.id} />
           </Box>
         </Flex>

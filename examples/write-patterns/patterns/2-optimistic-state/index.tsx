@@ -17,7 +17,7 @@ type PartialTodo = Partial<Todo> & {
 }
 
 type Write = {
-  operation: `insert` | `update` | `delete`
+  operation: 'insert' | 'update' | 'delete'
   value: PartialTodo
 }
 
@@ -46,17 +46,17 @@ export default function OptimisticState() {
     sorted,
     (synced: Todo[], { operation, value }: Write) => {
       switch (operation) {
-        case `insert`:
+        case 'insert':
           return synced.some((todo) => todo.id === value.id)
             ? synced
             : [...synced, value as Todo]
 
-        case `update`:
+        case 'update':
           return synced.map((todo) =>
             todo.id === value.id ? { ...todo, ...value } : todo
           )
 
-        case `delete`:
+        case 'delete':
           return synced.filter((todo) => todo.id !== value.id)
       }
     }
@@ -79,9 +79,9 @@ export default function OptimisticState() {
 
     const form = event.target as HTMLFormElement
     const formData = new FormData(form)
-    const title = formData.get(`todo`) as string
+    const title = formData.get('todo') as string
 
-    const path = `/todos`
+    const path = '/todos'
     const data = {
       id: uuidv4(),
       title: title,
@@ -90,13 +90,13 @@ export default function OptimisticState() {
     }
 
     startTransition(async () => {
-      addOptimisticState({ operation: `insert`, value: data })
+      addOptimisticState({ operation: 'insert', value: data })
 
-      const fetchPromise = api.request(path, `POST`, data)
+      const fetchPromise = api.request(path, 'POST', data)
       const syncPromise = matchStream(
         stream,
-        [`insert`],
-        matchBy(`id`, data.id)
+        ['insert'],
+        matchBy('id', data.id)
       )
 
       await Promise.all([fetchPromise, syncPromise])
@@ -115,10 +115,10 @@ export default function OptimisticState() {
     }
 
     startTransition(async () => {
-      addOptimisticState({ operation: `update`, value: data })
+      addOptimisticState({ operation: 'update', value: data })
 
-      const fetchPromise = api.request(path, `PUT`, data)
-      const syncPromise = matchStream(stream, [`update`], matchBy(`id`, id))
+      const fetchPromise = api.request(path, 'PUT', data)
+      const syncPromise = matchStream(stream, ['update'], matchBy('id', id))
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -132,10 +132,10 @@ export default function OptimisticState() {
     const path = `/todos/${id}`
 
     startTransition(async () => {
-      addOptimisticState({ operation: `delete`, value: { id } })
+      addOptimisticState({ operation: 'delete', value: { id } })
 
-      const fetchPromise = api.request(path, `DELETE`)
-      const syncPromise = matchStream(stream, [`delete`], matchBy(`id`, id))
+      const fetchPromise = api.request(path, 'DELETE')
+      const syncPromise = matchStream(stream, ['delete'], matchBy('id', id))
 
       await Promise.all([fetchPromise, syncPromise])
     })
@@ -154,7 +154,7 @@ export default function OptimisticState() {
         <span className="title">
           2. Optimistic state
         </span>
-        <span className={isPending ? `pending` : `pending hidden`} />
+        <span className={isPending ? 'pending' : 'pending hidden'} />
       </h3>
       <ul>
         {todos.map((todo) => (
@@ -163,7 +163,7 @@ export default function OptimisticState() {
               <input type="checkbox" checked={todo.completed}
                   onChange={() => updateTodo(todo)}
               />
-              <span className={`title ${ todo.completed ? `completed` : `` }`}>
+              <span className={`title ${ todo.completed ? 'completed' : '' }`}>
                 { todo.title }
               </span>
             </label>

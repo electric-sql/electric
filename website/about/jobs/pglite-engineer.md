@@ -18,14 +18,14 @@ active: false
 
 # PGlite Engineer
 
-|               |                                                             |
-| ------------- | ----------------------------------------------------------- |
-| **Basis**     | Contract or full time                                       |
-| **Salary**    | Flexible, depends on basis, full-time ~€80-100k             |
-| **Location**  | Remote in Europe or eastern US                              |
+| | |
+| ----- | -------- |
+| **Basis** | Contract or full time |
+| **Salary** | Flexible, depends on basis, full-time ~€80-100k |
+| **Location** | Remote in Europe or eastern US |
 | **Sponsored** | Sponsored and co-funded by [Supabase](https://supabase.com) |
-| **Published** | 1st October 2024                                            |
-| **Deadline**  | 21st October 2024                                           |
+| **Published** | 1st October 2024 |
+| **Deadline**  | 21st October 2024 |
 
 We're looking for a generalist web and systems engineer to join the core PGlite team at ElectricSQL, working mainly in Typescript, Rust and C++.
 
@@ -46,7 +46,7 @@ You'll work as part of the PGlite team at [ElectricSQL](https://electric-sql.com
 
 You need great communication skills and ideally experience of building open source. Technically, you need strong Typescript and systems programming experience, ideally in C++ and Rust. It would be great if (but is not essential that) you're familiar with some aspects of database internals, filesystems and WASM.
 
-Current priorities include developing a libpglite version of PGlite that can be embedded in native apps, creating an HTTP/S3 VFS, multi-connection, robustness and stability improvements. Example tasks that you might pick up include things like:
+Current priorities include developing a libpglite version of PGlite that can be embedded in native apps, creating an HTTP/S3 VFS, multi-connection, robustness and stability improvements.  Example tasks that you might pick up include things like:
 
 - write a HTTP VFS for PGlite (in Typescript) that allows an instance to load a database from a HTTP or S3 end point, using HTTP range requests
 - improve the OPFS VFS so that it works in Safari, this probably involves creating a mini-filesystem (using b-trees) that maps multiple files to a single file

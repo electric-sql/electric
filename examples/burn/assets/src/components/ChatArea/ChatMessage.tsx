@@ -20,8 +20,8 @@ interface Props {
 function ChatMessage({ event }: Props) {
   const { currentUserId } = useAuth()
 
-  const userName = event.user_id === currentUserId ? `you` : event.user_name
-  const userBadgeColor = event.user_type === `human` ? `blue` : `purple`
+  const userName = event.user_id === currentUserId ? 'you' : event.user_name
+  const userBadgeColor = event.user_type === 'human' ? 'blue' : 'purple'
 
   const MessageComponent = messageComponents[event.type]!
 

@@ -75,13 +75,13 @@ paths:
             type: string
           examples:
             initial_sync:
-              value: '-1'
+              value: "-1"
               summary: sync the shape from the start
             ongoing_sync:
-              value: '26800584_4'
+              value: "26800584_4"
               summary: continue syncing from offset `26800584_4`
             skip_historical:
-              value: 'now'
+              value: "now"
               summary: skip all historical data and start from the current point
           required: true
           description: |-
@@ -129,7 +129,7 @@ paths:
           in: query
           schema:
             type: string
-          example: '3833821-1721812114261'
+          example: "3833821-1721812114261"
           description: |-
             The shape handle returned by the initial shape request.
 
@@ -194,7 +194,7 @@ paths:
             you must quote it in the `columns` parameter as well.
           examples:
             select_columns:
-              value: 'id,title,status'
+              value: "id,title,status"
               summary: Only include the id, title, and status columns.
             select_columns_special:
               value: 'id,"Status-Check"'
@@ -229,10 +229,10 @@ paths:
             default: full
           examples:
             full_snapshot:
-              value: 'full'
+              value: "full"
               summary: Load complete historical data (default)
             changes_only:
-              value: 'changes_only'
+              value: "changes_only"
               summary: Skip historical data, only receive real-time changes
           description: |-
             Controls the initial data loading mode for the shape.
@@ -331,10 +331,10 @@ paths:
             type: string
           examples:
             by_created:
-              value: 'created_at DESC'
+              value: "created_at DESC"
               summary: Order by creation date, newest first
             by_priority:
-              value: 'priority ASC, created_at DESC NULLS LAST'
+              value: "priority ASC, created_at DESC NULLS LAST"
               summary: Order by priority ascending, then by date descending
           description: |-
             ORDER BY clause for the subset snapshot, determining the row ordering. Uses
@@ -345,8 +345,8 @@ paths:
 
             This becomes required when using `subset__limit` or `subset__offset`.
 
-        - $ref: '#/components/parameters/secret'
-        - $ref: '#/components/parameters/api_secret'
+        - $ref: "#/components/parameters/secret"
+        - $ref: "#/components/parameters/api_secret"
         # Headers
         - name: If-None-Match
           in: header
@@ -355,13 +355,13 @@ paths:
           # TODO: is this description below correct?
           description: Re-validate the shape if the etag doesn't match.
       responses:
-        '200':
+        "200":
           description: The shape request was successful.
           headers:
             cache-control:
               schema:
                 type: string
-              example: 'public, max-age=60, stale-while-revalidate=300'
+              example: "public, max-age=60, stale-while-revalidate=300"
               description: |-
                 Cache control header as a string of comma separated directives.
 
@@ -369,7 +369,7 @@ paths:
             etag:
               schema:
                 type: string
-              example: '3833821-1721812114261:26800584_4:26800584_4'
+              example: "3833821-1721812114261:26800584_4:26800584_4"
               description: |-
                 Etag header specifying the shape handle and offset for efficient caching.
 
@@ -377,7 +377,7 @@ paths:
             electric-cursor:
               schema:
                 type: string
-              example: '1674440'
+              example: "1674440"
               description: |-
                 If present, provides a cursor to use as the value of the `cursor`
                 parameter in the next `live` mode long polling request.
@@ -387,7 +387,7 @@ paths:
             electric-offset:
               schema:
                 type: string
-              example: '26800584_4'
+              example: "26800584_4"
               description: |-
                 The latest offset in the batch of data you have received.
 
@@ -399,7 +399,7 @@ paths:
             electric-handle:
               schema:
                 type: string
-              example: '3833821-1721812114261'
+              example: "3833821-1721812114261"
               description: |-
                 The shape handle.
 
@@ -677,7 +677,7 @@ paths:
                       - headers:
                           operation: insert
                           snapshot_mark: 42
-                          txids: ['1020']
+                          txids: ["1020"]
                         key: issue-3
                         value:
                           id: issue-3
@@ -686,23 +686,23 @@ paths:
                       - headers:
                           operation: insert
                           snapshot_mark: 42
-                          txids: ['1020']
+                          txids: ["1020"]
                         key: issue-5
                         value:
                           id: issue-5
                           title: Another High Priority
                           status: todo
                     metadata:
-                      xmin: '1000'
-                      xmax: '1050'
-                      xip_list: ['1025', '1030']
+                      xmin: "1000"
+                      xmax: "1050"
+                      xip_list: ["1025", "1030"]
                       snapshot_mark: 42
-                      database_lsn: '0/16B3F70'
-        '400':
+                      database_lsn: "0/16B3F70"
+        "400":
           description: Bad request.
-        '404':
+        "404":
           description: Database not found.
-        '409':
+        "409":
           description:
             The requested offset for the given shape no longer exists.
             Client should resync the shape using the new shape handle if provided, or
@@ -744,13 +744,13 @@ paths:
                         `electric-handle` header of the response.
                       properties:
                         control:
-                          type: 'string'
+                          type: "string"
                           enum:
                             - must-refetch
                 example:
                   - headers:
                       control: must-refetch
-        '429':
+        "429":
           description:
             Too many requests. The server is busy with other requests, potentially
             because of high contention on the underlying database. Retry after a little time.
@@ -763,7 +763,7 @@ paths:
                     type: string
                     description: Error message
                 example:
-                  message: 'Could not establish connection to database - try again later'
+                  message: "Could not establish connection to database - try again later"
 
     delete:
       summary: Delete Shape
@@ -803,18 +803,18 @@ paths:
           in: query
           schema:
             type: string
-          example: '3833821-1721812114261'
+          example: "3833821-1721812114261"
           description:
             Optional, deletes the current shape if it matches the `handle` provided.
             If not provided, deletes the current shape.
-        - $ref: '#/components/parameters/secret'
-        - $ref: '#/components/parameters/api_secret'
+        - $ref: "#/components/parameters/secret"
+        - $ref: "#/components/parameters/api_secret"
       responses:
-        '202':
+        "202":
           description: |-
             Accepted. The shape has been deleted (or to be more precise: the shape handle
             has been invalidated and the storage will be cleaned up eventually).
-        '400':
+        "400":
           description: Bad request.
-        '404':
+        "404":
           description: Database or shape not found (or shape deletion is not enabled).

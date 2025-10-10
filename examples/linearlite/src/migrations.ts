@@ -14,7 +14,7 @@ export async function migrate(pg: PGlite) {
 
 export async function postInitialSync(pg: PGliteInterface) {
   const commands = postInitialSyncIndexes
-    .split(`\n`)
+    .split('\n')
     .map((c) => c.trim())
     .filter((c) => c.length > 0)
   for (const command of commands) {

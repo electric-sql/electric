@@ -58,7 +58,7 @@ During development, you may want to clear this state. However, just restarting E
 
 ##### Solution &mdash; clear shape logs
 
-You can remove [`STORAGE_DIR`](https://electric-sql.com/docs/api/config#storage-dir) to delete all shape logs. This will ensure that following shape requests will be re-synced from scratch.
+You can remove [```STORAGE_DIR```](https://electric-sql.com/docs/api/config#storage-dir) to delete all shape logs. This will ensure that following shape requests will be re-synced from scratch.
 
 ###### Using docker
 
@@ -103,15 +103,15 @@ The problem will resolve itself as client/proxy caches empty. You can force this
 
 ### WAL growth &mdash; why is my Postgres database storage filling up?
 
-Electric creates a durable replication slot in Postgres to prevent data loss during downtime.
+Electric creates a durable replication slot in Postgres to prevent data loss during downtime. 
 
 During normal execution, Electric consumes the WAL file and keeps advancing `confirmed_flush_lsn`. However, if Electric is disconnected, the WAL file accumulates the changes that haven't been delivered to Electric.
 
 ##### Solution &mdash; Remove replication slot after Electric is gone
 
-If you're stopping Electric for the weekend, we recommend removing the `electric_slot_default` replication slot to prevent unbounded WAL growth. When Electric restarts, if it doesn't find the replication slot at resume point, it will recreate the replication slot and drop all shape logs.
+If you're stopping Electric for the weekend, we recommend removing the ```electric_slot_default``` replication slot to prevent unbounded WAL growth. When Electric restarts, if it doesn't find the replication slot at resume point, it will recreate the replication slot and drop all shape logs.
 
-You can also control the size of the WAL with [`wal_keep_size`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-KEEP-SIZE). On restart, Electric will detect if the WAL is past the resume point too.
+You can also control the size of the WAL with [```wal_keep_size```](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-KEEP-SIZE). On restart, Electric will detect if the WAL is past the resume point too.
 
 ## IPv6 support
 
@@ -122,7 +122,6 @@ If Electric or Postgres are running behind an IPv6 network, you might have to pe
 In order for Electric to connect to Postgres over IPv6, you need to set [`ELECTRIC_DATABASE_USE_IPV6`](/docs/api/config#database-use-ipv6) to `true`.
 
 #### Local development
-
 If you're running Electric on your own computer, check if you have IPv6 support by opening [test-ipv6.com](https://test-ipv6.com). If you see "No IPv6 address detected" on that page, consider `ssh`ing into another machine or using a VPN service that works with IPv6 networks.
 
 When running Electric in a Docker container, there's an additional hurdle in that Docker does not enable IPv6 out-of-the-box. Follow the [official guide](https://docs.docker.com/config/daemon/ipv6/#use-ipv6-for-the-default-bridge-network) to configure your Docker daemon for IPv6.

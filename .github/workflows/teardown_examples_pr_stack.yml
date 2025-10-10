@@ -2,7 +2,7 @@ name: Teardown Examples PR stack
 
 on:
   pull_request:
-    paths: ['examples/*/**']
+    paths: ["examples/*/**"]
     types: [closed]
 
 concurrency:
@@ -18,17 +18,17 @@ jobs:
       matrix:
         example:
           [
-            'yjs',
-            'linearlite-read-only',
-            'write-patterns',
-            'nextjs',
-            'todo-app',
-            'proxy-auth',
-            'phoenix-liveview',
-            'tanstack',
-            'remix',
-            'react',
-            'burn',
+            "yjs",
+            "linearlite-read-only",
+            "write-patterns",
+            "nextjs",
+            "todo-app",
+            "proxy-auth",
+            "phoenix-liveview",
+            "tanstack",
+            "remix",
+            "react",
+            "burn",
           ]
 
     env:
@@ -48,8 +48,8 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: '.tool-versions'
-          cache: 'pnpm'
+          node-version-file: ".tool-versions"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -32,16 +32,16 @@ export default function OnlineWrites() {
 
     const form = event.target as HTMLFormElement
     const formData = new FormData(form)
-    const title = formData.get(`todo`) as string
+    const title = formData.get('todo') as string
 
-    const path = `/todos`
+    const path = '/todos'
     const data = {
       id: uuidv4(),
       title: title,
       created_at: new Date(),
     }
 
-    await api.request(path, `POST`, data)
+    await api.request(path, 'POST', data)
 
     form.reset()
   }
@@ -53,7 +53,7 @@ export default function OnlineWrites() {
       completed: !todo.completed,
     }
 
-    await api.request(path, `PUT`, data)
+    await api.request(path, 'PUT', data)
   }
 
   async function deleteTodo(event: React.MouseEvent, todo: Todo) {
@@ -61,7 +61,7 @@ export default function OnlineWrites() {
 
     const path = `/todos/${todo.id}`
 
-    await api.request(path, `DELETE`)
+    await api.request(path, 'DELETE')
   }
 
   if (isLoading) {
@@ -79,7 +79,7 @@ export default function OnlineWrites() {
               <input type="checkbox" checked={todo.completed}
                   onChange={() => updateTodo(todo)}
               />
-              <span className={`title ${ todo.completed ? `completed` : `` }`}>
+              <span className={`title ${ todo.completed ? 'completed' : '' }`}>
                 { todo.title }
               </span>
             </label>
