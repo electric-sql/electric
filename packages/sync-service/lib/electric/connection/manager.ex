@@ -290,9 +290,11 @@ defmodule Electric.Connection.Manager do
     # process alive and able to correct those errors, it has to trap exits.
     Process.flag(:trap_exit, true)
 
-    Process.set_label({:connection_manager, opts[:stack_id]})
-    Logger.metadata(stack_id: opts[:stack_id])
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts[:stack_id])
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    Process.set_label({:connection_manager, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
     timeline_opts = Keyword.fetch!(opts, :timeline_opts)
@@ -309,7 +311,7 @@ defmodule Electric.Connection.Manager do
         timeline_opts: timeline_opts,
         shape_cache_opts: shape_cache_opts,
         connection_backoff: {connection_backoff, nil},
-        stack_id: Keyword.fetch!(opts, :stack_id),
+        stack_id: stack_id,
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
@@ -501,7 +503,12 @@ defmodule Electric.Connection.Manager do
       ) == :timeline_changed
 
     if timeline_changed? or state.purge_all_shapes? do
+      # Before starting the replication supervisor, clean up the on-disk storage from all shapes.
       Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+
+      # The ShapeStatusOwner process lives independently of connection or replication
+      # supervisor. Purge all shapes from it before starting the replication supervisor.
+      Electric.ShapeCache.ShapeStatus.reset(state.stack_id)
     end
 
     if timeline_changed? do
@@ -522,21 +529,23 @@ defmodule Electric.Connection.Manager do
       )
     end
 
+    repl_sup_opts = [
+      stack_id: state.stack_id,
+      shape_cache_opts: state.shape_cache_opts,
+      pool_opts: state.pool_opts,
+      replication_opts: state.replication_opts,
+      tweaks: state.tweaks,
+      can_alter_publication?: state.can_alter_publication?,
+      manual_table_publishing?: state.manual_table_publishing?,
+      persistent_kv: state.persistent_kv,
+      max_shapes: state.max_shapes,
+      expiry_batch_size: state.expiry_batch_size
+    ]
+
     start_time = System.monotonic_time()
 
     with {:error, reason} <-
-           Electric.Connection.Manager.Supervisor.start_replication_supervisor(
-             stack_id: state.stack_id,
-             shape_cache_opts: state.shape_cache_opts,
-             pool_opts: state.pool_opts,
-             replication_opts: state.replication_opts,
-             tweaks: state.tweaks,
-             can_alter_publication?: state.can_alter_publication?,
-             manual_table_publishing?: state.manual_table_publishing?,
-             persistent_kv: state.persistent_kv,
-             max_shapes: state.max_shapes,
-             expiry_batch_size: state.expiry_batch_size
-           ) do
+           Electric.Connection.Manager.Supervisor.start_replication_supervisor(repl_sup_opts) do
       Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
       exit(reason)
     end
@@ -677,6 +686,24 @@ defmodule Electric.Connection.Manager do
   # down. We don't need to react to this signal coming from any of our linked processes, just
   # ignore it.
   def handle_info({:EXIT, _pid, :shutdown}, state), do: {:noreply, state}
+
+  # The replication client exited because it hasn't streamed any new transactions for a while.
+  # This is a signal for all database connections to close and transition Electric into a
+  # scaled down mode.
+  def handle_info(
+        {:EXIT, pid, {:shutdown, {:connection_idle, time}}},
+        %State{replication_client_pid: pid, current_phase: :running} = state
+      ) do
+    time_s = System.convert_time_unit(time, :millisecond, :second)
+
+    Logger.notice(
+      "Closing all database connections after the replication stream has been idle for #{time_s} seconds"
+    )
+
+    Electric.Connection.Restarter.stop_connection_subsystem(state.stack_id)
+
+    {:noreply, state}
+  end
 
   # A process exited as it was trying to open a database connection or while it was connected.
   def handle_info({:EXIT, pid, reason}, state) do
@@ -883,6 +910,8 @@ defmodule Electric.Connection.Manager do
       self(),
       {:replication_liveness_check, state.replication_client_pid}
     )
+
+    Logger.debug("Replication client started streaming")
 
     state = %{state | current_step: :streaming}
     {:noreply, state}

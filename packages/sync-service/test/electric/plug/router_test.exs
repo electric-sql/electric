@@ -42,7 +42,7 @@ defmodule Electric.Plug.RouterTest do
     setup :with_complete_stack
 
     setup(ctx) do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
       %{opts: Router.init(build_router_opts(ctx))}
     end
 
@@ -62,7 +62,7 @@ defmodule Electric.Plug.RouterTest do
     setup :with_complete_stack
 
     setup(ctx) do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
       %{opts: Router.init(build_router_opts(ctx))}
     end
 
@@ -1935,7 +1935,7 @@ defmodule Electric.Plug.RouterTest do
     setup :with_complete_stack
 
     setup(ctx) do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
       %{opts: Router.init(build_router_opts(ctx))}
     end
 
@@ -2401,7 +2401,7 @@ defmodule Electric.Plug.RouterTest do
     setup :with_complete_stack
 
     setup(ctx) do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
       %{opts: Router.init(build_router_opts(ctx))}
     end
 
@@ -2543,7 +2543,7 @@ defmodule Electric.Plug.RouterTest do
     setup(ctx, do: %{opts: Router.init(build_router_opts(ctx))})
 
     setup(ctx) do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
 
       %{
         api_opts:

@@ -48,6 +48,8 @@ defmodule Electric.Config do
     replication_slot_temporary?: false,
     replication_slot_temporary_random_name?: false,
     max_txn_size: 250 * 1024 * 1024,
+    # Scaling down on idle is disabled by default
+    replication_idle_timeout: 0,
     manual_table_publishing?: false,
     ## HTTP API
     # set enable_http_api: false to turn off the HTTP server totally
@@ -149,6 +151,20 @@ defmodule Electric.Config do
       {:error, :not_found} -> raise "Electric's installation_id not set"
     end
   end
+
+  @doc """
+  The minimum allowed time before Electric can close database connections due to the
+  replication stream inactivity.
+
+  This is to prevent churn where connection and replication supervisors would restart too frequently.
+
+  The scale-to-zero feature of managed providers like Neon takes on the order of minutes before
+  deciding that an idle database can be scaled down.
+  """
+  @spec min_replication_idle_timeout() :: pos_integer
+  def min_replication_idle_timeout, do: 30_000
+
+  def min_replication_idle_timeout_in_seconds, do: div(min_replication_idle_timeout(), 1000)
 
   @spec get_env(Application.key()) :: Application.value()
   def get_env(key) do

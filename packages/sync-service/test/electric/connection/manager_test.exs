@@ -14,7 +14,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
     :with_persistent_kv,
     :with_inspector,
     :with_slot_name_and_stream_id,
-    :with_in_memory_storage
+    :with_in_memory_storage,
+    :with_shape_status
   ]
 
   defp start_connection_manager(%{stack_id: stack_id} = ctx) do
@@ -82,7 +83,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     setup [:start_connection_manager]
 
     test "reports status=waiting initially", %{stack_id: stack_id} do
-      assert StatusMonitor.status(stack_id) == :waiting
+      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :starting}
     end
 
     test "reports status=starting once the exclusive connection lock is acquired", %{
@@ -91,7 +92,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       assert_receive {:stack_status, _, :waiting_for_connection_lock}
       assert_receive {:stack_status, _, :connection_lock_acquired}
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-      assert StatusMonitor.status(stack_id) == :starting
+      assert StatusMonitor.status(stack_id) == %{conn: :starting, shape: :starting}
     end
 
     test "reports status=active when all connection processes are running", %{stack_id: stack_id} do
@@ -108,7 +109,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
       assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
+      status = StatusMonitor.status(stack_id)
+      assert status.conn in [:waiting_on_lock, :starting]
     end
 
     test "resets the status when connection manager goes down", %{stack_id: stack_id} = ctx do
@@ -141,7 +143,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      assert StatusMonitor.status(stack_id) == :waiting
+      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :up}
     end
 
     test "backtracks the status when the shape log collector goes down", %{stack_id: stack_id} do
@@ -151,7 +153,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
+      status = StatusMonitor.status(stack_id)
+      assert status.shape == :starting
     end
 
     test "backtracks the status when the shape cache goes down", %{stack_id: stack_id} do
@@ -171,7 +174,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
+      status = StatusMonitor.status(stack_id)
+      assert status.shape == :starting
     end
 
     test "backtracks the status when the canary goes down", %{stack_id: stack_id} do
@@ -191,7 +195,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      assert StatusMonitor.status(stack_id) in [:waiting, :starting]
+      status = StatusMonitor.status(stack_id)
+      assert status.shape == :starting
     end
   end
 
@@ -386,7 +391,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       start_connection_manager(ctx)
 
-      StatusMonitor.wait_until_active(stack_id, 1000)
+      StatusMonitor.wait_until_active(stack_id, timeout: 1000)
 
       assert_receive {:validate, ^pooled_conn_opts}
       assert_receive {:validate, ^repl_opts}
@@ -428,8 +433,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
     assert_receive {:stack_status, _, :waiting_for_connection_lock}
     assert_receive {:stack_status, _, :connection_lock_acquired}
     assert_receive {:stack_status, _, :ready}
-    StatusMonitor.wait_until_active(stack_id, 1000)
-    assert StatusMonitor.status(stack_id) == :active
+    StatusMonitor.wait_until_active(stack_id, timeout: 1000)
+    assert StatusMonitor.status(stack_id) == %{conn: :up, shape: :up}
   end
 
   defp monitor_replication_client(stack_id) do

@@ -46,12 +46,8 @@ defmodule Electric.Connection.Manager.Supervisor do
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(shape_cache_opts, :inspector)
-    storage = Keyword.fetch!(shape_cache_opts, :storage)
     persistent_kv = Keyword.fetch!(opts, :persistent_kv)
     tweaks = Keyword.fetch!(opts, :tweaks)
-
-    shape_status_owner_spec =
-      {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]}
 
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
@@ -90,7 +86,6 @@ defmodule Electric.Connection.Manager.Supervisor do
         {
           Electric.Replication.Supervisor,
           stack_id: stack_id,
-          shape_status_owner: shape_status_owner_spec,
           consumer_supervisor: consumer_supervisor_spec,
           shape_cleaner: shape_cleaner_spec,
           shape_cache: shape_cache_spec,
@@ -104,5 +99,21 @@ defmodule Electric.Connection.Manager.Supervisor do
       )
 
     Supervisor.start_child(name(opts), child_spec)
+  end
+
+  # Stopping the Connection.Manager causes all database connections to close, letting the
+  # database server scale itself down to zero if it supports that.
+  #
+  # The replication supervisor keeps running.
+  def stop_connection_manager(opts) do
+    Supervisor.terminate_child(name(opts), Electric.Connection.Manager)
+  end
+
+  # Stopping the Connection.Manager.Supervisor causes the Connection.Supervisor to restart it
+  # from a clean state. The end result is the Connection.Manager is back up and the
+  # Replication.Supervisor has the opportunity to purge shapes if the need for this is
+  # communicated by Connection.Manager.
+  def restart(opts) do
+    Supervisor.stop(name(opts))
   end
 end

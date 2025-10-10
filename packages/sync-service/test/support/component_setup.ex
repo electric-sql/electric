@@ -225,9 +225,10 @@ defmodule Support.ComponentSetup do
     }
   end
 
-  def with_lsn_tracker(ctx) do
-    Electric.LsnTracker.init(Electric.Postgres.Lsn.from_integer(0), ctx.stack_id)
-    %{}
+  def with_lsn_tracker(%{stack_id: stack_id}) do
+    Electric.LsnTracker.create_table(stack_id)
+    Electric.LsnTracker.set_last_processed_lsn(Electric.Postgres.Lsn.from_integer(0), stack_id)
+    :ok
   end
 
   def with_shape_log_collector(ctx) do
@@ -278,7 +279,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_status_monitor(ctx) do
-    start_link_supervised!({Electric.StatusMonitor, ctx.stack_id})
+    start_link_supervised!({Electric.StatusMonitor, stack_id: ctx.stack_id})
     %{}
   end
 

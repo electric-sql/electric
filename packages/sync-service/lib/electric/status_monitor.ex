@@ -2,7 +2,10 @@ defmodule Electric.StatusMonitor do
   @moduledoc false
   use GenServer
 
-  @type status() :: :waiting | :starting | :active
+  @type status() :: %{
+          conn: :waiting_on_lock | :starting | :up | :sleeping,
+          shape: :starting | :up
+        }
 
   @conditions [
     :pg_lock_acquired,
@@ -15,7 +18,10 @@ defmodule Electric.StatusMonitor do
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
 
-  def start_link(stack_id) do
+  @db_state_key :db_state
+
+  def start_link(opts) do
+    stack_id = Keyword.fetch!(opts, :stack_id)
     GenServer.start_link(__MODULE__, stack_id, name: name(stack_id))
   end
 
@@ -25,27 +31,51 @@ defmodule Electric.StatusMonitor do
 
     :ets.new(ets_table(stack_id), [:named_table, :protected])
 
-    {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
+    {:ok, %{stack_id: stack_id, waiters: MapSet.new(), conn_waiters: []}}
   end
 
   @spec status(String.t()) :: status()
   def status(stack_id) do
-    case results(stack_id) do
-      %{pg_lock_acquired: {false, _}} ->
-        :waiting
+    table = ets_table(stack_id)
 
-      %{
-        replication_client_ready: {true, _},
-        admin_connection_pool_ready: {true, _},
-        snapshot_connection_pool_ready: {true, _},
-        shape_log_collector_ready: {true, _},
-        supervisor_processes_ready: {true, _}
-      } ->
-        :active
+    results = results(table)
 
-      _ ->
-        :starting
-    end
+    conn_status =
+      case db_state(table) do
+        :up -> conn_status_from_results(results)
+        :sleeping -> :sleeping
+      end
+
+    shape_status = shape_status_from_results(results)
+
+    %{conn: conn_status, shape: shape_status}
+  end
+
+  defp conn_status_from_results(%{pg_lock_acquired: {false, _}}), do: :waiting_on_lock
+
+  defp conn_status_from_results(%{
+         replication_client_ready: {true, _},
+         admin_connection_pool_ready: {true, _},
+         snapshot_connection_pool_ready: {true, _}
+       }),
+       do: :up
+
+  defp conn_status_from_results(_), do: :starting
+
+  defp shape_status_from_results(%{
+         shape_log_collector_ready: {true, _},
+         supervisor_processes_ready: {true, _}
+       }),
+       do: :up
+
+  defp shape_status_from_results(_), do: :starting
+
+  def database_connections_going_to_sleep(stack_id) do
+    GenServer.cast(name(stack_id), :database_connections_going_to_sleep)
+  end
+
+  def database_connections_waking_up(stack_id) do
+    GenServer.cast(name(stack_id), :database_connections_waking_up)
   end
 
   def mark_pg_lock_acquired(stack_id, lock_pid) do
@@ -96,55 +126,90 @@ defmodule Electric.StatusMonitor do
     GenServer.cast(name(stack_id), {:condition_met, condition, process})
   end
 
-  def wait_until_active(stack_id, timeout) do
-    if status(stack_id) == :active do
-      :ok
-    else
-      try do
-        stack_id
-        |> name()
-        |> GenServer.whereis()
-        |> case do
-          nil ->
-            # Either the status monitor has not started yet, or the stack has
-            # been terminated in some permanent way
-            maybe_retry_wait_until_active(
-              stack_id,
-              timeout,
-              "Status monitor not found for stack ID: #{stack_id}"
-            )
+  def wait_until_active(stack_id, opts \\ []) do
+    case status(stack_id) do
+      %{conn: :up, shape: :up} ->
+        :ok
 
-          pid when is_pid(pid) ->
-            GenServer.call(pid, {:wait_until_active, timeout}, :infinity)
+      %{conn: :sleeping} ->
+        if Keyword.get(opts, :block_on_conn_sleeping, false) do
+          do_wait_until_active(stack_id, opts)
+        else
+          :conn_sleeping
         end
-      rescue
-        ArgumentError ->
-          # This happens when the Process Registry has not been created yet
+
+      _ ->
+        do_wait_until_active(stack_id, opts)
+    end
+  end
+
+  defp do_wait_until_active(stack_id, opts) do
+    timeout = Keyword.fetch!(opts, :timeout)
+
+    try do
+      status_monitor_pid = stack_id |> name() |> GenServer.whereis()
+
+      case status_monitor_pid do
+        nil ->
+          # Either the status monitor has not started yet, or the stack has
+          # been terminated in some permanent way
           maybe_retry_wait_until_active(
             stack_id,
+            opts,
             timeout,
-            "Stack ID not recognised: #{stack_id}"
+            "Status monitor not found for stack ID: #{stack_id}"
           )
-      catch
-        :exit, _reason ->
-          maybe_retry_wait_until_active(
-            stack_id,
-            timeout,
-            "Stack #{inspect(stack_id)} has terminated"
-          )
+
+        pid when is_pid(pid) ->
+          GenServer.call(pid, {:wait_until_active, timeout}, :infinity)
       end
+    rescue
+      ArgumentError ->
+        # This happens when the Process Registry has not been created yet
+        maybe_retry_wait_until_active(
+          stack_id,
+          opts,
+          timeout,
+          "Stack ID not recognised: #{stack_id}"
+        )
+    catch
+      :exit, _reason ->
+        maybe_retry_wait_until_active(
+          stack_id,
+          opts,
+          timeout,
+          "Stack #{inspect(stack_id)} has terminated"
+        )
     end
   end
 
   @retry_time 10
-  defp maybe_retry_wait_until_active(_stack_id, timeout, last_error)
+  defp maybe_retry_wait_until_active(_stack_id, _opts, timeout, last_error)
        when timeout <= @retry_time do
     {:error, last_error}
   end
 
-  defp maybe_retry_wait_until_active(stack_id, timeout, _) do
+  defp maybe_retry_wait_until_active(stack_id, opts, timeout, _) do
     Process.sleep(@retry_time)
-    wait_until_active(stack_id, timeout - @retry_time)
+    wait_until_active(stack_id, Keyword.put(opts, :timeout, timeout - @retry_time))
+  end
+
+  @doc """
+  Just like `wait_until_active/2` but non-blocking.
+
+  This function basically subscribes to status updates to get notified by StatusMonitor when
+  the status transitions to `%{conn: :up, shape: :up}`.
+
+  Returns a ref that will then be passed in the notification message as `{<ref>, <reply from StatusMonitor>}`.
+  """
+  @spec wait_until_conn_up_async(String.t()) :: reference()
+  def wait_until_conn_up_async(stack_id) do
+    pid = stack_id |> name() |> GenServer.whereis()
+    call_ref = make_ref()
+
+    send(pid, {:"$gen_call", {self(), call_ref}, :wait_until_conn_up})
+
+    call_ref
   end
 
   # Only used in tests
@@ -164,12 +229,36 @@ defmodule Electric.StatusMonitor do
     {:noreply, state}
   end
 
+  def handle_cast(:database_connections_going_to_sleep, state) do
+    :ets.insert(ets_table(state.stack_id), {@db_state_key, :sleeping})
+    {:noreply, state}
+  end
+
+  def handle_cast(:database_connections_waking_up, state) do
+    # Only update the ETS table on the first request. Subsequent requests will just wait for the stack to become active.
+    case :ets.lookup_element(ets_table(state.stack_id), @db_state_key, 2) do
+      :sleeping -> :ets.insert(ets_table(state.stack_id), {@db_state_key, :up})
+      :up -> :noop
+    end
+
+    {:noreply, state}
+  end
+
   def handle_call({:wait_until_active, timeout}, from, %{waiters: waiters} = state) do
-    if status(state.stack_id) == :active do
-      {:reply, :ok, state}
-    else
-      Process.send_after(self(), {:timeout_waiter, from}, timeout)
-      {:noreply, %{state | waiters: MapSet.put(waiters, from)}}
+    case status(state.stack_id) do
+      %{conn: :up, shape: :up} ->
+        {:reply, :ok, state}
+
+      _ ->
+        Process.send_after(self(), {:timeout_waiter, from}, timeout)
+        {:noreply, %{state | waiters: MapSet.put(waiters, from)}}
+    end
+  end
+
+  def handle_call(:wait_until_conn_up, from, %{conn_waiters: conn_waiters} = state) do
+    case status(state.stack_id) do
+      %{conn: :up} -> {:reply, :ok, state}
+      _ -> {:noreply, %{state | conn_waiters: [from | conn_waiters]}}
     end
   end
 
@@ -192,29 +281,41 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  defp maybe_reply_to_waiters(%{waiters: waiters} = state) when map_size(waiters) == 0, do: state
+  defp maybe_reply_to_waiters(%{waiters: waiters, conn_waiters: conn_waiters} = state)
+       when map_size(waiters) == 0 and conn_waiters == [],
+       do: state
 
-  defp maybe_reply_to_waiters(%{waiters: waiters} = state) do
-    case status(state.stack_id) do
-      :active ->
-        Enum.each(waiters, fn waiter ->
-          GenServer.reply(waiter, :ok)
-        end)
+  defp maybe_reply_to_waiters(state) do
+    status = status(state.stack_id)
 
-        %{state | waiters: MapSet.new()}
+    waiters =
+      if status.conn == :up and status.shape == :up do
+        Enum.each(state.waiters, &GenServer.reply(&1, :ok))
+        MapSet.new()
+      end
 
-      _ ->
-        state
-    end
+    conn_waiters =
+      if status.conn == :up do
+        Enum.each(state.conn_waiters, &GenServer.reply(&1, :ok))
+        []
+      end
+
+    state
+    |> Map.update!(:waiters, &(waiters || &1))
+    |> Map.update!(:conn_waiters, &(conn_waiters || &1))
   end
 
-  defp results(stack_id) do
-    results =
-      stack_id
-      |> ets_table()
-      |> :ets.tab2list()
-      |> Map.new()
+  defp db_state(table) do
+    :ets.lookup_element(table, @db_state_key, 2, :up)
+  rescue
+    ArgumentError ->
+      # This happens when the table is not found, which means the
+      # process has not been started yet
+      :up
+  end
 
+  defp results(table) do
+    results = table |> :ets.tab2list() |> Map.new()
     Map.merge(@default_results, results)
   rescue
     ArgumentError ->
@@ -224,7 +325,7 @@ defmodule Electric.StatusMonitor do
   end
 
   def timeout_message(stack_id) do
-    case results(stack_id) do
+    case stack_id |> ets_table() |> results() do
       %{timeout_message: message} when is_binary(message) ->
         message
 
@@ -263,7 +364,5 @@ defmodule Electric.StatusMonitor do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  defp ets_table(stack_id) do
-    :"#{stack_id}:status_monitor"
-  end
+  defp ets_table(stack_id), do: :"#{stack_id}:status_monitor"
 end

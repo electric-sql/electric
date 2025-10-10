@@ -179,7 +179,9 @@
 
     ??[info] Starting ElectricSQL
 
-    !{:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack"))
+    !if is_nil(System.get_env("DO_NOT_START_CONN_MAN_PING")) do \
+      {:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack")) \
+     end
 [endmacro]
 
 [macro start_electric_script shell_name port env]
@@ -253,4 +255,13 @@
 [macro shape_get table handle offset]
   # strip ANSI codes from response for easier matching
   !curl -i "http://localhost:3000/v1/shape?table=$table&handle=$handle&offset=$offset" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+[endmacro]
+
+# Prevent curl from outputing download progress, output response headers nd sort the keys in the response JSON body.
+[macro curl_shape url]
+  !curl --no-progress-meter -i "$url" | awk '\
+    BEGIN {reading_headers=1} \
+    reading_headers && /^\s*$/ {reading_headers=0; print ""; next} \
+    reading_headers {print} \
+    !reading_headers {print | "jq --sort-keys --compact-output --monochrome-output"}'
 [endmacro]

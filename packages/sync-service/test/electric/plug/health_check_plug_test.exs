@@ -24,7 +24,7 @@ defmodule Electric.Plug.HealthCheckPlugTest do
   end
 
   describe "HealthCheckPlug" do
-    @tag connection_status: :waiting
+    @tag connection_status: %{conn: :waiting_on_lock, shape: :starting}
     test "has appropriate content and cache headers", ctx do
       conn =
         conn(ctx)
@@ -37,8 +37,8 @@ defmodule Electric.Plug.HealthCheckPlugTest do
              ]
     end
 
-    @tag connection_status: :waiting
-    test "returns 202 when in waiting mode", ctx do
+    @tag connection_status: %{conn: :waiting_on_lock, shape: :starting}
+    test "returns 202 when waiting on the lock", ctx do
       conn =
         conn(ctx)
         |> HealthCheckPlug.call([])
@@ -47,8 +47,8 @@ defmodule Electric.Plug.HealthCheckPlugTest do
       assert Jason.decode!(conn.resp_body) == %{"status" => "waiting"}
     end
 
-    @tag connection_status: :starting
-    test "returns 202 when in starting mode", ctx do
+    @tag connection_status: %{conn: :starting, shape: :starting}
+    test "returns 202 when conn is starting", ctx do
       conn =
         conn(ctx)
         |> HealthCheckPlug.call([])
@@ -57,8 +57,28 @@ defmodule Electric.Plug.HealthCheckPlugTest do
       assert Jason.decode!(conn.resp_body) == %{"status" => "starting"}
     end
 
-    @tag connection_status: :active
+    @tag connection_status: %{conn: :up, shape: :starting}
+    test "returns 202 when shape is starting", ctx do
+      conn =
+        conn(ctx)
+        |> HealthCheckPlug.call([])
+
+      assert conn.status == 202
+      assert Jason.decode!(conn.resp_body) == %{"status" => "starting"}
+    end
+
+    @tag connection_status: %{conn: :up, shape: :up}
     test "returns 200 when in active mode", ctx do
+      conn =
+        conn(ctx)
+        |> HealthCheckPlug.call([])
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == %{"status" => "active"}
+    end
+
+    @tag connection_status: %{conn: :sleeping, shape: :up}
+    test "returns 200 when in scaled-down mode", ctx do
       conn =
         conn(ctx)
         |> HealthCheckPlug.call([])

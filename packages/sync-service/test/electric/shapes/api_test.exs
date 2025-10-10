@@ -8,7 +8,7 @@ defmodule Electric.Shapes.ApiTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1, set_status_to_errored: 2]
+  import Support.TestUtils, only: [set_status_to_active: 1]
   import Mox
 
   @inspector Support.StubInspector.new(
@@ -63,7 +63,8 @@ defmodule Electric.Shapes.ApiTest do
     {:via, _, {registry_name, registry_key}} = Electric.Replication.Supervisor.name(ctx)
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
-    Electric.LsnTracker.init(Lsn.from_integer(0), ctx.stack_id)
+    Electric.LsnTracker.create_table(ctx.stack_id)
+    Electric.LsnTracker.set_last_processed_lsn(Lsn.from_integer(0), ctx.stack_id)
     set_status_to_active(ctx)
   end
 
@@ -1178,7 +1179,7 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     @tag long_poll_timeout: 100
-    test "sends an error response after a timeout if stack has failed", ctx do
+    test "returns the latest lsn after the long poll timeout even if stack has failed", ctx do
       Mock.ShapeCache
       |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
       |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
@@ -1193,30 +1194,29 @@ defmodule Electric.Shapes.ApiTest do
         []
       end)
 
-      error_message = "stack failed"
+      lsn = Lsn.from_integer(:rand.uniform(1_000_000))
+      Electric.LsnTracker.set_last_processed_lsn(lsn, ctx.stack_id)
 
-      task =
-        Task.async(fn ->
-          assert {:ok, request} =
-                   Api.validate(
-                     ctx.api,
-                     %{
-                       table: "public.users",
-                       offset: "#{@test_offset}",
-                       handle: @test_shape_handle,
-                       live: true
-                     }
-                   )
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@test_offset}",
+                   handle: @test_shape_handle,
+                   live: true
+                 }
+               )
 
-          set_status_to_errored(ctx, error_message)
-          Api.serve_shape_response(request)
-        end)
+      response = Api.serve_shape_response(request)
+      assert response.status == 200
 
-      assert response = Task.await(task)
-      assert response.status == 503
-
-      assert %{message: message} = response_body(response)
-      assert message == "Timeout waiting for Postgres lock acquisition: #{error_message}"
+      assert [
+               %{
+                 headers: %{control: "up-to-date", global_last_seen_lsn: "#{Lsn.to_integer(lsn)}"}
+               }
+             ] ==
+               response_body(response)
     end
   end
 

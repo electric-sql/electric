@@ -71,7 +71,7 @@ defmodule Electric.Plug.LowPrivilegeRouterTest do
   end
 
   defp with_router(ctx) do
-    :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, 1000)
+    :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
     %{opts: Router.init(build_router_opts(ctx))}
   end
 

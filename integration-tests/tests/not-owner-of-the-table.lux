@@ -10,9 +10,11 @@
 ## Start a Postgres cluster with a role that does not own the user table
 [invoke setup_pg_with_shell_name \
   "pg" \
-  "-e LOW_PRIVILEGE_TEST_INIT_SQL='GRANT CREATE ON DATABASE electric TO low_privilege'" \
+  "-e INIT_DB_SQL=\"\
+    CREATE ROLE low_privilege LOGIN PASSWORD 'password' REPLICATION;\
+    GRANT CREATE ON DATABASE electric TO low_privilege\"" \
   "" \
-  "-v $(realpath ../scripts/low_privilege_db.sh):/docker-entrypoint-initdb.d/initdb-low_privilege_db.sh"]
+  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
 
 ## Start the sync service
 [invoke setup_electric_with_env "ELECTRIC_TWEAKS_PUBLICATION_REFRESH_PERIOD=2s"]

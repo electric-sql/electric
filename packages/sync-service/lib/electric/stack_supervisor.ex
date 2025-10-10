@@ -76,6 +76,10 @@ defmodule Electric.StackSupervisor do
                      slot_temporary?: [type: :boolean, default: false],
                      try_creating_publication?: [type: :boolean, default: true],
                      max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil],
+                     replication_idle_timeout: [
+                       type: :non_neg_integer,
+                       default: Electric.Config.default(:replication_idle_timeout)
+                     ],
                      stream_id: [type: :string, required: false]
                    ]
                  ],
@@ -369,6 +373,7 @@ defmodule Electric.StackSupervisor do
              Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},
+          {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
           {Electric.Connection.Supervisor, new_connection_manager_opts}
         ]
 

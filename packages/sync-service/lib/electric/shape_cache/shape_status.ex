@@ -33,6 +33,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback mark_snapshot_started(stack_ref(), shape_handle()) :: :ok
   @callback snapshot_started?(stack_ref(), shape_handle()) :: boolean()
   @callback remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
+  @callback reset(stack_ref()) :: :ok
 
   @callback set_shape_storage_state(stack_ref(), shape_handle(), term()) :: :ok
   @callback consume_shape_storage_state(stack_ref(), shape_handle()) :: term() | nil
@@ -203,6 +204,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
       ArgumentError ->
         {:error, "No shape matching #{inspect(shape_handle)}"}
     end
+  end
+
+  @impl true
+  def reset(stack_ref) do
+    :ets.delete_all_objects(shape_meta_table(stack_ref))
+    :ets.delete_all_objects(shape_last_used_table(stack_ref))
+    :ok
   end
 
   @impl true
