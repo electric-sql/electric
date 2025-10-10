@@ -14,7 +14,7 @@
     "format": "eslint . --fix",
     "preview": "vite preview",
     "start": "remix-serve ./build/server/index.js",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "stylecheck": "eslint . --report-unused-disable-directives --max-warnings 0",
     "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
