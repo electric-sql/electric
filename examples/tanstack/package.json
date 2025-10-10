@@ -14,7 +14,7 @@
     "start": "node src/server/app.js",
     "format": "eslint . --fix",
     "preview": "vite preview",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "stylecheck": "eslint . --report-unused-disable-directives --max-warnings 0",
     "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },

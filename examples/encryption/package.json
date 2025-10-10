@@ -11,8 +11,8 @@
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
     "dev": "concurrently \"vite\" \"node backend/api.js\"",
     "build": "vite build",
-    "format": "eslint . --ext ts,tsx --fix",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "format": "eslint . --fix",
+    "stylecheck": "eslint . --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

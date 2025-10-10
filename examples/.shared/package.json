@@ -7,9 +7,9 @@
   "type": "module",
   "scripts": {
     "deploy": "sst deploy --stage shared",
-    "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "prepare": "sst install",
-    "stylecheck": "eslint . --ext js,ts,tsx --quiet",
+    "stylecheck": "eslint . --quiet",
     "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
