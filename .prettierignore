@@ -15,3 +15,6 @@ sst.config.ts
 
 # Ignore website markdown files to prevent underscore escaping issues
 website/**/*.md
+
+# Ignore CSS file with unstable Prettier formatting
+website/.vitepress/theme/custom.css
