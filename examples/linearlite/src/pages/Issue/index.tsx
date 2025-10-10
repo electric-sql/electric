@@ -1,4 +1,3 @@
-/* eslint-disable react-compiler/react-compiler */
 import { useNavigate, useLoaderData } from 'react-router-dom'
 import { useState, useRef, useCallback } from 'react'
 import { BsCloudCheck as SyncedIcon } from 'react-icons/bs'
@@ -33,7 +32,6 @@ function IssuePage() {
   const [dirtyDescription, setDirtyDescription] = useState<string | null>(null)
   const descriptionIsDirty = useRef(false)
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleTitleChangeDebounced = useCallback(
     debounce(async (title: string) => {
       console.log(`handleTitleChangeDebounced`, title)
@@ -48,7 +46,6 @@ function IssuePage() {
     [pg]
   )
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleDescriptionChangeDebounced = useCallback(
     debounce(async (description: string) => {
       pg.sql`

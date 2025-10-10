@@ -88,7 +88,6 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
   useEffect(() => {
     if (isOpen && !timeoutRef.current) {
-      // eslint-disable-next-line @eslint-react/web-api/no-leaked-timeout
       timeoutRef.current = setTimeout(() => {
         ref.current?.focus()
         timeoutRef.current = undefined

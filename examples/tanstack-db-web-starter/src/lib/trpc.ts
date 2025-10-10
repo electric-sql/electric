@@ -31,7 +31,8 @@ export const authedProcedure = procedure.use(isAuthed)
 // Helper function to generate transaction ID for Electric sync
 export async function generateTxId(
   tx: Parameters<
-    Parameters<typeof import(`@/db/connection`).db.transaction>[0]
+    // eslint-disable-next-line quotes
+    Parameters<typeof import("@/db/connection").db.transaction>[0]
   >[0]
 ): Promise<number> {
   // The ::xid cast strips off the epoch, giving you the raw 32-bit value

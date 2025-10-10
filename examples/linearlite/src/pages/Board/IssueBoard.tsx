@@ -27,15 +27,12 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
 
   useEffect(() => {
     // Reset moved issues when issues change
-    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
     setMovedIssues({})
   }, [columnsLiveIssues])
 
   const issuesByStatus: Record<string, Issue[]> = {}
   const issuesResByStatus: Record<string, LiveQueryResults<Issue>> = {}
   Object.entries(columnsLiveIssues).forEach(([status, liveQuery]) => {
-    // eslint-disable-next-line react-compiler/react-compiler
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     const issuesRes = useLiveQuery(liveQuery)
     issuesResByStatus[status] = issuesRes
     issuesRes.rows.forEach((issue) => {
