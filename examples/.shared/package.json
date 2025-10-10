@@ -9,7 +9,7 @@
     "deploy": "sst deploy --stage shared",
     "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
     "prepare": "sst install",
-    "stylecheck": "eslint . --quiet",
+    "stylecheck": "eslint . --ext js,ts,tsx --quiet",
     "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },
