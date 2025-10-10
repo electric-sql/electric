@@ -9,6 +9,7 @@ const BASE_URL = inject(`baseUrl`)
 
 describe(`matchStream`, () => {
   it(`should match`, async ({ insertIssues, issuesTableUrl }) => {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-nocheck
     const stream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,

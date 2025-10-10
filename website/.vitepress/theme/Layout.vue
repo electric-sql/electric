@@ -1,20 +1,20 @@
 <script setup>
-import { watch, onMounted } from 'vue'
-import { useData, useRouter } from 'vitepress'
-import { posthog } from 'posthog-js'
-import { useSidebar } from 'vitepress/theme'
+import { watch, onMounted } from "vue"
+import { useData, useRouter } from "vitepress"
+import { posthog } from "posthog-js"
+import { useSidebar } from "vitepress/theme"
 
-import DefaultTheme from 'vitepress/theme-without-fonts'
+import DefaultTheme from "vitepress/theme-without-fonts"
 
-import BlogPostHeader from '../../src/components/BlogPostHeader.vue'
-import NavSignupButton from '../../src/components/NavSignupButton.vue'
-import SiteFooter from '../../src/components/SiteFooter.vue'
-import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
+import BlogPostHeader from "../../src/components/BlogPostHeader.vue"
+import NavSignupButton from "../../src/components/NavSignupButton.vue"
+import SiteFooter from "../../src/components/SiteFooter.vue"
+import UseCaseHeader from "../../src/components/UseCaseHeader.vue"
 
-import ReleaseBanner from '../../src/components/home/ReleaseBanner.vue'
+import ReleaseBanner from "../../src/components/home/ReleaseBanner.vue"
 
-import HomeFeaturesAfter from '../../src/partials/home-features-after.md'
-import HomeFeaturesBefore from '../../src/partials/home-features-before.md'
+import HomeFeaturesAfter from "../../src/partials/home-features-after.md"
+import HomeFeaturesBefore from "../../src/partials/home-features-before.md"
 
 // Posthog analytics
 const router = useRouter()
@@ -24,9 +24,9 @@ onMounted(() => {
     watch(
       () => router.route.data.relativePath,
       (path) => {
-        posthog.init('phc_o4xENyuuSCdNPG2CWtfdqzYYXs6v8SbmVDzm3CP0Qwn', {
+        posthog.init("phc_o4xENyuuSCdNPG2CWtfdqzYYXs6v8SbmVDzm3CP0Qwn", {
           api_host: `https://admin.electric-sql.cloud/api/ph`,
-          ui_host: 'https://us.i.posthog.com',
+          ui_host: "https://us.i.posthog.com",
         })
         posthog.capture(`$pageview`, {
           $current_url: window.location.href,

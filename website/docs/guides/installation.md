@@ -48,6 +48,7 @@ docker run \
 
 You can use any Postgres (new or existing) that has [logical replication](https://www.postgresql.org/docs/current/logical-replication-config.html) enabled. You also need to connect as a database user that has the [`REPLICATION`](https://www.postgresql.org/docs/current/logical-replication-security.html) role.
 
+
 ## Advanced
 
 You can also choose to build and run Electric [from source](https://github.com/electric-sql/electric) as an [Elixir](https://elixir-lang.org) application.

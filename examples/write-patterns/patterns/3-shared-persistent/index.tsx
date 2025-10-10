@@ -10,7 +10,7 @@ import { useShape } from '@electric-sql/react'
 import api from '../../shared/app/client'
 import { TODOS_URL } from '../../shared/app/config'
 
-const KEY = `electric-sql/examples/write-patterns/shared-persistent`
+const KEY = 'electric-sql/examples/write-patterns/shared-persistent'
 
 type Todo = {
   id: string
@@ -30,7 +30,7 @@ type LocalWrite = {
 
 // Define a shared, persistent, reactive store for local optimistic state.
 const optimisticState = proxyMap<string, LocalWrite>(
-  JSON.parse(localStorage.getItem(KEY) || `[]`)
+  JSON.parse(localStorage.getItem(KEY) || '[]')
 )
 subscribe(optimisticState, () => {
   localStorage.setItem(KEY, JSON.stringify([...optimisticState]))
@@ -64,9 +64,9 @@ async function matchWrite(
   const { operation, value } = write
 
   const matchFn =
-    operation === `delete`
-      ? matchBy(`id`, value.id)
-      : matchBy(`write_id`, write.id)
+    operation === 'delete'
+      ? matchBy('id', value.id)
+      : matchBy('write_id', write.id)
 
   try {
     await matchStream(stream, [operation], matchFn)
@@ -127,13 +127,13 @@ export default function SharedPersistent() {
     return writes.reduce(
       (synced: Todo[], { operation, value }: LocalWrite): Todo[] => {
         switch (operation) {
-          case `insert`:
+          case 'insert':
             return [...synced, value as Todo]
-          case `update`:
+          case 'update':
             return synced.map((todo) =>
               todo.id === value.id ? { ...todo, ...value } : todo
             )
-          case `delete`:
+          case 'delete':
             return synced.filter((todo) => todo.id !== value.id)
           default:
             return synced
@@ -153,9 +153,9 @@ export default function SharedPersistent() {
 
     const form = event.target as HTMLFormElement
     const formData = new FormData(form)
-    const title = formData.get(`todo`) as string
+    const title = formData.get('todo') as string
 
-    const path = `/todos`
+    const path = '/todos'
     const data = {
       id: uuidv4(),
       title: title,
@@ -164,8 +164,8 @@ export default function SharedPersistent() {
     }
 
     startTransition(async () => {
-      const write = addLocalWrite(`insert`, data)
-      const fetchPromise = sendRequest(path, `POST`, write)
+      const write = addLocalWrite('insert', data)
+      const fetchPromise = sendRequest(path, 'POST', write)
       const syncPromise = matchWrite(stream, write)
 
       await Promise.all([fetchPromise, syncPromise])
@@ -184,8 +184,8 @@ export default function SharedPersistent() {
     }
 
     startTransition(async () => {
-      const write = addLocalWrite(`update`, data)
-      const fetchPromise = sendRequest(path, `PUT`, write)
+      const write = addLocalWrite('update', data)
+      const fetchPromise = sendRequest(path, 'PUT', write)
       const syncPromise = matchWrite(stream, write)
 
       await Promise.all([fetchPromise, syncPromise])
@@ -203,8 +203,8 @@ export default function SharedPersistent() {
     }
 
     startTransition(async () => {
-      const write = addLocalWrite(`delete`, data)
-      const fetchPromise = sendRequest(path, `DELETE`, write)
+      const write = addLocalWrite('delete', data)
+      const fetchPromise = sendRequest(path, 'DELETE', write)
       const syncPromise = matchWrite(stream, write)
 
       await Promise.all([fetchPromise, syncPromise])
@@ -224,7 +224,7 @@ export default function SharedPersistent() {
         <span className="title">
           3. Shared persistent
         </span>
-        <span className={isPending ? `pending` : `pending hidden`} />
+        <span className={isPending ? 'pending' : 'pending hidden'} />
       </h3>
       <ul>
         {todos.map((todo) => (
@@ -233,7 +233,7 @@ export default function SharedPersistent() {
               <input type="checkbox" checked={todo.completed}
                   onChange={() => updateTodo(todo)}
               />
-              <span className={`title ${ todo.completed ? `completed` : `` }`}>
+              <span className={`title ${ todo.completed ? 'completed' : '' }`}>
                 { todo.title }
               </span>
             </label>

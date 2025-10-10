@@ -2,7 +2,7 @@
 title: Sync stacks
 description: >-
   Electric provides composable sync primitives that allow you to add real-time sync to your existing stack, without imposing technology choices, code changes or data silos.
-outline: [2, 3]
+outline: [2,3]
 image: /img/tutorials/sync-busters.jpg
 ---
 
@@ -364,7 +364,7 @@ npm install @electric-sql/pglite
 import { PGlite } from '@electric-sql/pglite'
 
 const db = new PGlite()
-```
+````
 
 ### Database in the sandbox
 

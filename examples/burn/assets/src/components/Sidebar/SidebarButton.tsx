@@ -4,25 +4,25 @@ import { makeStyles, mergeClasses } from '@griffel/react'
 
 const useClasses = makeStyles({
   button: {
-    justifyContent: `flex-start`,
-    height: `auto`,
-    padding: `var(--space-2) !important`,
-    margin: `0 calc(-1 * var(--space-1)) 0 calc(-1 * var(--space-3))`,
-    overflow: `hidden`,
-    color: `var(--black)`,
+    justifyContent: 'flex-start',
+    height: 'auto',
+    padding: 'var(--space-2) !important',
+    margin: '0 calc(-1 * var(--space-1)) 0 calc(-1 * var(--space-3))',
+    overflow: 'hidden',
+    color: 'var(--black)',
   },
   buttonActive: {
-    backgroundColor: `var(--gray-5)`,
+    backgroundColor: 'var(--gray-5)',
   },
   buttonText: {
-    maxWidth: `100%`,
-    overflow: `hidden`,
-    textOverflow: `ellipsis`,
-    whiteSpace: `nowrap`,
-    color: `var(--gray-12)`,
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    color: 'var(--gray-12)',
   },
   buttonIcon: {
-    marginRight: `var(--space-1)`,
+    marginRight: 'var(--space-1)',
   },
 })
 

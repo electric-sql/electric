@@ -10,7 +10,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy ${{ matrix.example.name }} example
-    environment: 'Production'
+    environment: "Production"
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
@@ -37,7 +37,7 @@ jobs:
             path: examples/burn
 
     env:
-      DEPLOY_ENV: 'production'
+      DEPLOY_ENV: "production"
       SHARED_INFRA_VPC_ID: ${{ vars.SHARED_INFRA_VPC_ID }}
       SHARED_INFRA_CLUSTER_ARN: ${{ vars.SHARED_INFRA_CLUSTER_ARN }}
       SHARED_EXAMPLES_DATABASE_URI: ${{ secrets.SHARED_EXAMPLES_DATABASE_URI }}
@@ -61,8 +61,8 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version-file: '.tool-versions'
-          cache: 'pnpm'
+          node-version-file: ".tool-versions"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

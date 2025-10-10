@@ -11,7 +11,7 @@ import ChatArea from './ChatArea'
 const useClasses = makeStyles({
   content: {
     flex: 1,
-    overflow: `hidden`,
+    overflow: 'hidden',
   },
 })
 

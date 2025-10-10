@@ -8,7 +8,7 @@ agent:
   gcp: true
 
 steps:
-  - label: '🐤 Build & publish the canary image to Docker Hub'
+  - label: "🐤 Build & publish the canary image to Docker Hub"
     if: build.branch == "main"
     command:
       - git fetch --tags
@@ -24,7 +24,7 @@ steps:
         -t $${ELECTRIC_CANARY_IMAGE_NAME}:latest
         .
   - wait
-  - label: '🚀 Build & publish the release image to Docker Hub'
+  - label: "🚀 Build & publish the release image to Docker Hub"
     if: build.tag =~ /@core\/sync-service@/
     command:
       - export ELECTRIC_IMAGE_NAME="${DOCKERHUB_ORG}/${DOCKERHUB_REPO}"

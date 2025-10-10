@@ -1,5 +1,5 @@
 ---
-title: 'Welcome Sam Willis!'
+title: "Welcome Sam Willis!"
 description: >-
   Welcoming new team member Sam Willis to ElectricSQL.
 excerpt: >-

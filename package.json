@@ -16,26 +16,10 @@
     "example-backend:down": "dotenv  -e .env.dev -- docker compose -f .support/docker-compose.yml down --volumes",
     "example-backend:just_up": "dotenv -e .env.dev -- docker compose -f ./.support/docker-compose.yml up -d",
     "example-backend:up": "pnpm example-backend:down && pnpm example-backend:just_up",
-    "format": "eslint --fix . && prettier --write .",
-    "format:check": "prettier --check .",
-    "stylecheck-all": "pnpm --if-present --recursive run stylecheck",
-    "prepare": "husky"
+    "stylecheck-all": "pnpm --if-present --recursive run stylecheck"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^8.46.0",
-    "@typescript-eslint/parser": "^8.46.0",
-    "eslint": "^9.37.0",
-    "glob": "^10.3.10",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.2.3",
-    "prettier": "^3.6.2"
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,css,md,yml,yaml}": "prettier --write"
+    "glob": "^10.3.10"
   },
   "pnpm": {
     "patchedDependencies": {

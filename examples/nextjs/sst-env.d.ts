@@ -6,9 +6,9 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
-    nextjs: {
-      type: "sst.aws.Nextjs"
-      url: string
+    "nextjs": {
+      "type": "sst.aws.Nextjs"
+      "url": string
     }
   }
 }

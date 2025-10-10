@@ -4,8 +4,8 @@ title: 'ElectricSQL'
 titleTemplate: 'Postgres sync engine'
 description: 'Sync little subsets of your Postgres data into local apps and services.'
 hero:
-  name: 'Realtime sync'
-  text: 'for Postgres'
+  name: "Realtime sync"
+  text: "for Postgres"
   tagline: >-
     Sync is the best way of building modern&nbsp;apps.
     Electric&nbsp;solves sync so&nbsp;that&nbsp;you don't have to.
@@ -22,7 +22,7 @@ hero:
       text: Quickstart
       link: /docs/quickstart
     - theme: alt
-      text: '​'
+      text: "​"
       target: '_blank'
       link: https://github.com/electric-sql/electric
     - theme: alt
@@ -178,9 +178,9 @@ onMounted(async () => {
 
 See the kind of applications you can build with Electric
 <span class="no-wrap-sm">
-and what they
-<span class="no-wrap">
-feel like to use</span></span>.
+  and what they
+  <span class="no-wrap">
+    feel like to use</span></span>.
 
 </div>
 <div class="demos-grid homepage">

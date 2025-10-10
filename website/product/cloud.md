@@ -115,8 +115,8 @@ import { ShapeStream } from '@electric-sql/client'
 const stream = new ShapeStream({
   url: `https://your-api-or-proxy.example.com/v1/shape`,
   params: {
-    table: `items`,
-  },
+    table: `items`
+  }
 })
 ```
 

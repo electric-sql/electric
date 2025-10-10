@@ -14,18 +14,18 @@ type EncryptedItem = {
   iv: string
 }
 
-const API_URL = import.meta.env.API_URL || `http://localhost:3001`
+const API_URL = import.meta.env.API_URL || 'http://localhost:3001'
 
 // For this example, we hardcode a deterministic key that works across page loads.
 // In a real app, you would implement a key management strategy. Electric is great
 // at syncing keys between users :)
 const rawKey = new Uint8Array(16)
 const key = await crypto.subtle.importKey(
-  `raw`,
+  'raw',
   rawKey as BufferSource,
-  `AES-GCM`,
+  'AES-GCM',
   true,
-  [`encrypt`, `decrypt`]
+  ['encrypt', 'decrypt']
 )
 
 /*
@@ -41,7 +41,7 @@ async function encrypt(item: Item): Promise<EncryptedItem> {
   const encrypted = await crypto.subtle.encrypt(
     {
       iv: iv as BufferSource,
-      name: `AES-GCM`,
+      name: 'AES-GCM',
     },
     key,
     encoded as BufferSource
@@ -69,7 +69,7 @@ async function decrypt(item: EncryptedItem): Promise<Item> {
   const decrypted = await crypto.subtle.decrypt(
     {
       iv: iv as BufferSource,
-      name: `AES-GCM`,
+      name: 'AES-GCM',
     },
     key,
     encrypted as BufferSource
@@ -116,7 +116,7 @@ export const Example = () => {
 
     const form = event.target as HTMLFormElement
     const formData = new FormData(form)
-    const title = formData.get(`title`) as string
+    const title = formData.get('title') as string
 
     const id = crypto.randomUUID()
     const item = {
@@ -128,10 +128,10 @@ export const Example = () => {
 
     const url = `${API_URL}/items`
     const options = {
-      method: `POST`,
+      method: 'POST',
       body: JSON.stringify(data),
       headers: {
-        'Content-Type': `application/json`,
+        'Content-Type': 'application/json',
       },
     }
 

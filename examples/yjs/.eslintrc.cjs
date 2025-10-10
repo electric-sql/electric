@@ -39,4 +39,4 @@ module.exports = {
     `.eslintrc.js`,
     `**/*.css`,
   ],
-}
+};

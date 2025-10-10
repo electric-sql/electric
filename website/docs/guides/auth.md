@@ -113,7 +113,7 @@ export default function ExampleComponent() {
 Then for the `/api/shapes/users` route:
 
 ```tsx
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -177,15 +177,15 @@ The example above uses simple string-based WHERE clauses, which works well for s
 **Drizzle** — fully type-safe operators with schema inference:
 
 ```tsx
-import { QueryBuilder } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
-import { users } from './schema' // Your Drizzle schema definition
+import { QueryBuilder } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+import { users } from "./schema" // Your Drizzle schema definition
 
 export async function GET(request: Request) {
   // ... setup code ...
 
-  const user = await loadUser(request.headers.get('authorization'))
-  if (!user || user.roles.includes('admin')) {
+  const user = await loadUser(request.headers.get("authorization"))
+  if (!user || user.roles.includes("admin")) {
     // admins see everything
   } else {
     // Build type-safe WHERE expression using column.name for unqualified column names
@@ -201,8 +201,8 @@ export async function GET(request: Request) {
       .toSQL()
 
     // Extract just the WHERE clause fragment
-    const fragment = query.replace(/^SELECT .* FROM .* WHERE\s+/i, '')
-    originUrl.searchParams.set('where', fragment)
+    const fragment = query.replace(/^SELECT .* FROM .* WHERE\s+/i, "")
+    originUrl.searchParams.set("where", fragment)
 
     // Add params as individual query parameters: params[1]=value, params[2]=value, etc.
     params.forEach((value, index) => {
@@ -217,23 +217,23 @@ export async function GET(request: Request) {
 **Kysely** — type-safe expression builder with generated schema:
 
 ```tsx
-import { db } from './db' // Your Kysely instance with generated types
+import { db } from "./db" // Your Kysely instance with generated types
 
 export async function GET(request: Request) {
   // ... setup code ...
 
-  if (!user.roles.includes('admin')) {
+  if (!user.roles.includes("admin")) {
     // TypeScript will error if you reference invalid columns
     const query = db
-      .selectFrom('users')
+      .selectFrom("users")
       .selectAll()
-      .where('org_id', '=', user.org_id)
-      .where('status', '=', 'active')
+      .where("org_id", "=", user.org_id)
+      .where("status", "=", "active")
 
     const { sql: query, parameters } = query.compile()
-    const fragment = query.replace(/^SELECT .* FROM .* WHERE\s+/i, '')
-    fragment = fragment.replace(/\b\w+\./g, '') // Remove table prefixes
-    originUrl.searchParams.set('where', fragment)
+    const fragment = query.replace(/^SELECT .* FROM .* WHERE\s+/i, "")
+    fragment = fragment.replace(/\b\w+\./g, "") // Remove table prefixes
+    originUrl.searchParams.set("where", fragment)
 
     // Add params as individual query parameters: params[1]=value, params[2]=value, etc.
     parameters.forEach((value, index) => {
@@ -329,7 +329,7 @@ The TypeScript client supports function-based options for headers and params, ma
 
 ```typescript
 const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
+  url: "http://localhost:3000/v1/shape",
   headers: {
     // Token will be refreshed on each request
     Authorization: async () => `Bearer ${await getAccessToken()}`,
@@ -380,7 +380,7 @@ export async function GET(request: Request) {
   const headers = new Headers(response.headers)
 
   // Add Vary header for Authorization-based auth
-  headers.set('Vary', 'Authorization')
+  headers.set("Vary", "Authorization")
 
   return new Response(response.body, {
     status: response.status,
@@ -400,7 +400,7 @@ export async function GET(request: Request) {
   const headers = new Headers(response.headers)
 
   // Add Vary header for cookie-based auth
-  headers.set('Vary', 'Cookie')
+  headers.set("Vary", "Cookie")
 
   return new Response(response.body, {
     status: response.status,
@@ -416,7 +416,7 @@ If you support multiple authentication methods:
 
 ```tsx
 // For both Authorization header and Cookie support
-headers.set('Vary', 'Authorization, Cookie')
+headers.set("Vary", "Authorization, Cookie")
 ```
 
 ### How It Works

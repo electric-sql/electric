@@ -8,11 +8,11 @@ import type { EventResult } from '../../types'
 
 const useStyles = makeStyles({
   eventsList: {
-    display: `flex`,
-    flexDirection: `column`,
-    gap: `var(--space-2)`,
-    paddingTop: `var(--space-1)`,
-    paddingBottom: `var(--space-1)`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-2)',
+    paddingTop: 'var(--space-1)',
+    paddingBottom: 'var(--space-1)',
   },
 })
 
@@ -25,11 +25,11 @@ function matchesFilter(
   }
 
   const type_str =
-    type === `system`
-      ? `system action`
-      : type === `text`
-        ? `text message`
-        : type.replace(`_`, ` `)
+    type === 'system'
+      ? 'system action'
+      : type === 'text'
+        ? 'text message'
+        : type.replace('_', ' ')
 
   if (type_str.includes(text)) {
     return true
@@ -52,7 +52,7 @@ function EventsList({ threadId, filter }: Props) {
 
   // First filter the events by threadId.
   const { collection: eventResults } = useLiveQuery(
-    (query) =>
+    (query) => (
       query
         .from({ event: eventCollection })
         .innerJoin({ user: userCollection }, ({ event, user }) =>
@@ -70,15 +70,19 @@ function EventsList({ threadId, filter }: Props) {
           user_type: user.type,
         }))
         .where(({ event }) => eq(event.thread_id, threadId))
-        .fn.where(({ event }) => {
-          if (!filterOutDoNothings) {
-            return true
-          }
+        .fn.where(
+          ({ event }) => {
+            if (!filterOutDoNothings) {
+              return true
+            }
 
-          return !(
-            event.type === `tool_use` && event.data?.name === `do_nothing`
-          )
-        }),
+            return !(
+              event.type === 'tool_use' &&
+              event.data?.name === 'do_nothing'
+            )
+          }
+        )
+    ),
     [filterOutDoNothings, threadId]
   )
 
@@ -88,8 +92,8 @@ function EventsList({ threadId, filter }: Props) {
       const baseQuery = query
         .from({ result: eventResults })
         .orderBy(({ result }) => result.inserted_at, {
-          direction: `asc`,
-          nulls: `last`,
+          direction: 'asc',
+          nulls: 'last',
         })
 
       return filterText

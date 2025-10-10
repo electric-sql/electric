@@ -1,5 +1,5 @@
 ---
-title: 'Data sync'
+title: "Data sync"
 description: >-
   Replace APIs, data fetching and network error handling with
   data sync.
@@ -8,7 +8,7 @@ outline: deep
 case: true
 homepage: true
 homepage_order: 10
-solves: 'state transfer'
+solves: "state transfer"
 benefits:
   - Simplifies your code
   - No loading spinners

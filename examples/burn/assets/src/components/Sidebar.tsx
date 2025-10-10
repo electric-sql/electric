@@ -15,9 +15,9 @@ function Sidebar({ threadId }: Props) {
   const classes = useClasses()
   const sidebarClassName = mergeClasses(
     classes.sidebar,
-    `sidebar`,
+    'sidebar',
     isLeftSidebarOpen && classes.sidebarOpen,
-    isLeftSidebarOpen && `sidebarOpen`
+    isLeftSidebarOpen && 'sidebarOpen'
   )
 
   const overlayClasses = useOverlayClasses()
@@ -48,31 +48,31 @@ function Sidebar({ threadId }: Props) {
 
 const useClasses = makeStyles({
   sidebar: {
-    backgroundColor: `var(--sidebar-bg) !important`,
-    borderRight: `1px solid var(--border-color)`,
-    display: `flex`,
-    flexDirection: `column`,
-    height: `100%`,
+    backgroundColor: 'var(--sidebar-bg) !important',
+    borderRight: '1px solid var(--border-color)',
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
     zIndex: 100,
-    '--sidebar-width': `280px`,
-    width: `var(--sidebar-width)`,
+    '--sidebar-width': '280px',
+    width: 'var(--sidebar-width)',
     '@media (max-width: 969px)': {
-      position: `fixed`,
+      position: 'fixed',
       top: 0,
       left: 0,
-      width: `280px !important`,
-      transform: `translateX(-100%)`,
-      transition: `transform 0.3s ease-in-out`,
-      height: `100dvh`,
+      width: '280px !important',
+      transform: 'translateX(-100%)',
+      transition: 'transform 0.3s ease-in-out',
+      height: '100dvh',
     },
     '@media (min-width: 970px)': {
-      position: `relative`,
-      transform: `none`,
+      position: 'relative',
+      transform: 'none',
     },
   },
   sidebarOpen: {
     '@media (max-width: 969px)': {
-      transform: `translateX(0)`,
+      transform: 'translateX(0)',
     },
   },
   scrollArea: {
@@ -83,22 +83,22 @@ const useClasses = makeStyles({
 const useOverlayClasses = makeStyles({
   overlay: {
     '@media (max-width: 969px)': {
-      position: `fixed`,
+      position: 'fixed',
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: `rgba(0, 0, 0, 0.5)`,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
       zIndex: 90,
       opacity: 0,
-      pointerEvents: `none`,
-      transition: `opacity 0.3s ease-in-out`,
+      pointerEvents: 'none',
+      transition: 'opacity 0.3s ease-in-out',
     },
   },
   overlayOpen: {
     '@media (max-width: 969px)': {
       opacity: 1,
-      pointerEvents: `auto`,
+      pointerEvents: 'auto',
     },
   },
 })

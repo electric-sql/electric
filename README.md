@@ -77,7 +77,7 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&offset=-1'
 Or use one of the clients or integrations, such as the [`useShape`](https://electric-sql.com/docs/api/integrations/react) React hook:
 
 ```jsx
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react"
 
 function Component() {
   const { data } = useShape({

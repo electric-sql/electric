@@ -5,7 +5,7 @@ const serve = ({ request }: { request: Request }) => {
   return auth.handler(request)
 }
 
-export const Route = createFileRoute(`/api/auth`)({
+export const Route = createFileRoute("/api/auth")({
   server: {
     handlers: {
       GET: serve,
@@ -15,6 +15,6 @@ export const Route = createFileRoute(`/api/auth`)({
       PATCH: serve,
       OPTIONS: serve,
       HEAD: serve,
-    },
-  },
+    }
+  }
 })

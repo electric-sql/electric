@@ -6,11 +6,11 @@ export default defineConfig({
     typecheck: { enabled: true },
     fileParallelism: false,
     coverage: {
-      provider: `istanbul`,
-      reporter: [`text`, `json`, `html`, `lcov`],
-      include: [`**/src/**`],
+      provider: 'istanbul',
+      reporter: ['text', 'json', 'html', 'lcov'],
+      include: ['**/src/**'],
     },
-    reporters: [`default`, `junit`],
-    outputFile: `./junit/test-report.junit.xml`,
+    reporters: ['default', 'junit'],
+    outputFile: './junit/test-report.junit.xml',
   },
 })

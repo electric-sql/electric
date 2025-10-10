@@ -13,16 +13,16 @@ import SidebarButton from './SidebarButton'
 
 const useClasses = makeStyles({
   threadButton: {
-    paddingLeft: `0px`,
+    paddingLeft: '0px',
   },
   threadsContainer: {
-    paddingLeft: `var(--space-2)`,
+    paddingLeft: 'var(--space-2)',
   },
   newThreadButton: {
-    width: `100%`,
-    display: `flex`,
-    alignItems: `center`,
-    justifyContent: `center`,
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })
 
@@ -37,7 +37,7 @@ function SidebarThreads({ threadId }: Props) {
   const navigate = useNavigate()
 
   const { collection: threadResults } = useLiveQuery(
-    (query) =>
+    (query) => (
       query
         .from({ thread: threadCollection })
         .innerJoin(
@@ -47,24 +47,26 @@ function SidebarThreads({ threadId }: Props) {
         .select(({ thread }) => ({
           id: thread.id,
           name: thread.name,
-          inserted_at: thread.inserted_at!,
+          inserted_at: thread.inserted_at!
         }))
-        .where(({ membership }) => eq(membership.user_id, currentUserId)),
+        .where(({ membership }) => eq(membership.user_id, currentUserId))
+    ),
     [currentUserId]
   )
 
   const { data: threads } = useLiveQuery(
-    (query) =>
+    (query) => (
       query
         .from({ result: threadResults })
         .orderBy(({ result }) => result.inserted_at, {
-          direction: `desc`,
-          nulls: `first`,
+          direction: 'desc',
+          nulls: 'first',
         })
         .select(({ result }) => ({
           id: result.id,
           name: result.name,
-        })),
+        }))
+    ),
     [threadResults]
   )
 
@@ -78,11 +80,11 @@ function SidebarThreads({ threadId }: Props) {
       threadCollection.insert({
         id: newThreadId,
         name: `Untitled thread ${numThreads + 1}`,
-        status: `started`,
+        status: 'started',
       })
       membershipCollection.insert({
         id: crypto.randomUUID(),
-        role: `owner`,
+        role: 'owner',
         thread_id: newThreadId,
         user_id: userId,
       })

@@ -82,7 +82,7 @@ As an alternative, the ideal local-first AI architecture for RAG would be:
 
 - a local, on-device, vector embedding model
 - a local vector database, ideally integrated into your main on-device datastore
-- a local language model for generation text (or other multi-modal)
+- a local language model for generation text (or other multi-modal) 
 
 [![](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/local-rag.png)](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/local-rag.jpg)
 
@@ -184,3 +184,4 @@ The final full architecture diagram of the project is shown here:
 There's more to do to productionise this demo and integrate into the primary ElectricSQL stack. We also want to dive into the parallel route with the sqlite-vss in the browser. If you're interested in getting involved, building a local AI app or collaborating on local AI development, [let us know on Discord](https://discord.electric-sql.com).
 
 Tauri is also expanding to cover more deployment targets, including mobile apps, so we'll look at compiling for those too. Keep an eye on the developments with the Tauri project via [their Discord here](https://discord.com/invite/tauri).
+

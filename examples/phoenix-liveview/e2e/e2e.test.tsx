@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from "@playwright/test"
 
 const BASE_URL = process.env.BASE_URL
 
@@ -28,7 +28,7 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   const timestamp1 = Date.now()
   const todoItem1 = `New todo item ${timestamp1}`
   await page1.fill(`#todo_text`, todoItem1)
-  await page1.press(`#todo_text`, `Enter`)
+  await page1.press(`#todo_text`, "Enter")
 
   // Give some time for the new entry to be synced
   await page1.waitForTimeout(1000)
@@ -60,7 +60,7 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   const timestamp2 = Date.now()
   const todoItem2 = `Another todo item ${timestamp2}`
   await page2.fill(`#todo_text`, todoItem2)
-  await page2.press(`#todo_text`, `Enter`)
+  await page2.press(`#todo_text`, "Enter")
 
   // Wait for synchronization
   await page1.waitForTimeout(1000)

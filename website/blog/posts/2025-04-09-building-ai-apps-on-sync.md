@@ -104,11 +104,11 @@ This pattern is fiddly to wire up yourself (message delivery is a [distributed s
 This is usually abstracted away at a [higher-level](/docs/api/clients/typescript), e.g.:
 
 ```tsx
-import { ShapeStream } from '@electric-sql/client'
+import { ShapeStream } from "@electric-sql/client"
 
 const tokenStream = new ShapeStream({
   params: {
-    table: 'tokens',
+    table: "tokens",
   },
 })
 
@@ -191,9 +191,9 @@ Filtering just the content you need using where clauses:
 ```tsx
 const tokenStream = new ShapeStream({
   params: {
-    table: 'tokens',
+    table: "tokens",
     // Just sync the tokens for a given session.
-    where: 'session_id = 1234',
+    where: "session_id = 1234",
   },
 })
 ```
@@ -231,7 +231,7 @@ const stream = await openai.chat.completions.create({
 
 // Into Postgres
 for await (const event of stream) {
-  pg.insert('INSERT INTO tokens value ($1)', [event.message])
+  pg.insert("INSERT INTO tokens value ($1)", [event.message])
 }
 
 // Until interrupted
@@ -276,7 +276,7 @@ For example, this is the Electric code for the agents to monitor and react to th
 const listItemsStream = new ShapeStream({
   url: `${ELECTRIC_API_URL}/v1/shape`,
   params: {
-    table: 'todo_items',
+    table: "todo_items",
     where: `list_id = '${listId}'`,
   },
 })
@@ -311,7 +311,7 @@ function TodoListItems() {
   const { data: todoListItems } = useShape({
     url: `${ELECTRIC_API_URL}/v1/shape`,
     params: {
-      table: 'todo_lists_items',
+      table: "todo_lists_items",
     },
   })
 

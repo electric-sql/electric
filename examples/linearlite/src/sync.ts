@@ -15,7 +15,7 @@ const ELECTRIC_SOURCE_ID = import.meta.env.VITE_ELECTRIC_SOURCE_ID
 const ELECTRIC_SOURCE_SECRET = import.meta.env.VITE_ELECTRIC_SOURCE_SECRET
 const APPLY_CHANGES_URL = `${WRITE_SERVER_URL}/apply-changes`
 
-type SyncStatus = `initial-sync` | `done`
+type SyncStatus = 'initial-sync' | 'done'
 
 type PGliteWithExtensions = PGliteWithLive & PGliteWithSync
 
@@ -34,7 +34,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
   let postInitialSyncDone = false
 
   if (!hasIssuesAtStart && !postInitialSyncDone) {
-    updateSyncStatus(`initial-sync`, `Downloading shape data...`)
+    updateSyncStatus('initial-sync', 'Downloading shape data...')
   }
 
   let postInitialSyncDoneResolver: () => void
@@ -50,7 +50,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
       !postInitialSyncDone
     ) {
       postInitialSyncDone = true
-      updateSyncStatus(`initial-sync`, `Creating indexes...`)
+      updateSyncStatus('initial-sync', 'Creating indexes...')
       await postInitialSync(pg)
       postInitialSyncDoneResolver()
     }
@@ -58,7 +58,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
 
   const issueUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
   if (ELECTRIC_SOURCE_SECRET) {
-    issueUrl.searchParams.set(`secret`, ELECTRIC_SOURCE_SECRET)
+    issueUrl.searchParams.set('secret', ELECTRIC_SOURCE_SECRET)
   }
 
   // Issues Sync
@@ -66,14 +66,14 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
     shape: {
       url: issueUrl.toString(),
       params: {
-        table: `issue`,
+        table: 'issue',
         source_id: ELECTRIC_SOURCE_ID,
       },
     },
-    table: `issue`,
-    primaryKey: [`id`],
-    shapeKey: `issues`,
-    commitGranularity: `up-to-date`,
+    table: 'issue',
+    primaryKey: ['id'],
+    shapeKey: 'issues',
+    commitGranularity: 'up-to-date',
     useCopy: true,
     onInitialSync: async () => {
       issueShapeInitialSyncDone = true
@@ -84,17 +84,17 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
   issuesSync.subscribe(
     () => {
       if (!hasIssuesAtStart && !postInitialSyncDone) {
-        updateSyncStatus(`initial-sync`, `Inserting issues...`)
+        updateSyncStatus('initial-sync', 'Inserting issues...')
       }
     },
     (error) => {
-      console.error(`issuesSync error`, error)
+      console.error('issuesSync error', error)
     }
   )
 
   const commentUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
   if (ELECTRIC_SOURCE_SECRET) {
-    commentUrl.searchParams.set(`secret`, ELECTRIC_SOURCE_SECRET)
+    commentUrl.searchParams.set('secret', ELECTRIC_SOURCE_SECRET)
   }
 
   // Comments Sync
@@ -102,14 +102,14 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
     shape: {
       url: commentUrl.toString(),
       params: {
-        table: `comment`,
+        table: 'comment',
         source_id: ELECTRIC_SOURCE_ID,
       },
     },
-    table: `comment`,
-    primaryKey: [`id`],
-    shapeKey: `comments`,
-    commitGranularity: `up-to-date`,
+    table: 'comment',
+    primaryKey: ['id'],
+    shapeKey: 'comments',
+    commitGranularity: 'up-to-date',
     useCopy: true,
     onInitialSync: async () => {
       commentShapeInitialSyncDone = true
@@ -120,11 +120,11 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
   commentsSync.subscribe(
     () => {
       if (!hasIssuesAtStart && !postInitialSyncDone) {
-        updateSyncStatus(`initial-sync`, `Inserting comments...`)
+        updateSyncStatus('initial-sync', 'Inserting comments...')
       }
     },
     (error) => {
-      console.error(`commentsSync error`, error)
+      console.error('commentsSync error', error)
     }
   )
 
@@ -132,7 +132,7 @@ async function startSyncToDatabase(pg: PGliteWithExtensions) {
     await postInitialSyncDonePromise
     await pg.query(`SELECT 1;`) // Do a query to ensure PGlite is idle
   }
-  updateSyncStatus(`done`)
+  updateSyncStatus('done')
 }
 
 const syncMutex = new Mutex()
@@ -207,22 +207,22 @@ async function doSyncToServer(pg: PGliteWithExtensions) {
     comments: commentChanges!,
   }
   const response = await fetch(APPLY_CHANGES_URL, {
-    method: `POST`,
+    method: 'POST',
     headers: {
-      'Content-Type': `application/json`,
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify(changeSet),
   })
   if (!response.ok) {
     // In a real app you would want to check which changes have failed and save that
     // information to the database, maybe in a `sync_errors` column on the row effected.
-    throw new Error(`Failed to apply changes`)
+    throw new Error('Failed to apply changes')
   }
   await pg.transaction(async (tx) => {
     // Mark all changes as sent to server, but check that the modified timestamp
     // has not changed in the meantime
 
-    tx.exec(`SET LOCAL electric.bypass_triggers = true`)
+    tx.exec('SET LOCAL electric.bypass_triggers = true')
 
     for (const issue of issueChanges!) {
       await tx.query(
@@ -249,36 +249,36 @@ async function doSyncToServer(pg: PGliteWithExtensions) {
 }
 
 export function updateSyncStatus(newStatus: SyncStatus, message?: string) {
-  localStorage.setItem(`syncStatus`, JSON.stringify([newStatus, message]))
+  localStorage.setItem('syncStatus', JSON.stringify([newStatus, message]))
   // Fire a storage event on this tab as this doesn't happen automatically
   window.dispatchEvent(
-    new StorageEvent(`storage`, {
-      key: `syncStatus`,
+    new StorageEvent('storage', {
+      key: 'syncStatus',
       newValue: JSON.stringify([newStatus, message]),
     })
   )
 }
 
 export function useSyncStatus() {
-  const currentSyncStatusJson = localStorage.getItem(`syncStatus`)
+  const currentSyncStatusJson = localStorage.getItem('syncStatus')
   const currentSyncStatus: [SyncStatus, string] = currentSyncStatusJson
     ? JSON.parse(currentSyncStatusJson)
-    : [`initial-sync`, `Starting sync...`]
+    : ['initial-sync', 'Starting sync...']
   const [syncStatus, setSyncStatus] =
     useState<[SyncStatus, string]>(currentSyncStatus)
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `syncStatus` && e.newValue) {
+      if (e.key === 'syncStatus' && e.newValue) {
         const [newStatus, message] = JSON.parse(e.newValue)
         setSyncStatus([newStatus, message])
       }
     }
 
-    window.addEventListener(`storage`, handleStorageChange)
+    window.addEventListener('storage', handleStorageChange)
 
     return () => {
-      window.removeEventListener(`storage`, handleStorageChange)
+      window.removeEventListener('storage', handleStorageChange)
     }
   }, [])
 
@@ -294,10 +294,10 @@ export function waitForInitialSyncDone() {
       return
     }
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `syncStatus` && e.newValue) {
+      if (e.key === 'syncStatus' && e.newValue) {
         const [newStatus] = JSON.parse(e.newValue)
-        if (newStatus === `done`) {
-          window.removeEventListener(`storage`, handleStorageChange)
+        if (newStatus === 'done') {
+          window.removeEventListener('storage', handleStorageChange)
           initialSyncDone = true
           resolve()
         }
@@ -305,16 +305,16 @@ export function waitForInitialSyncDone() {
     }
 
     // Check current status first
-    const currentSyncStatusJson = localStorage.getItem(`syncStatus`)
+    const currentSyncStatusJson = localStorage.getItem('syncStatus')
     const [currentStatus] = currentSyncStatusJson
       ? JSON.parse(currentSyncStatusJson)
-      : [`initial-sync`]
+      : ['initial-sync']
 
-    if (currentStatus === `done`) {
+    if (currentStatus === 'done') {
       initialSyncDone = true
       resolve()
     } else {
-      window.addEventListener(`storage`, handleStorageChange)
+      window.addEventListener('storage', handleStorageChange)
     }
   })
 }

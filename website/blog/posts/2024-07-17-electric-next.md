@@ -104,6 +104,7 @@ Gabriel contrasts "Worse is Better" with a make the "Right Thing" approach that 
 
 So, hopefully now our motivation is clear. We needed to find a way to simplify Electric and make it more loosely coupled. To pare it back to it's core and iterate on solid foundations.
 
+
 ## What's changed?
 
 Electric Next is a [sync engine](/product/electric), not a local-first software platform.
@@ -137,19 +138,19 @@ We now see Electric as a sync engine that does partial replication on top of Pos
 
 The diagramme above and table below summarise what we see as core and what we've pushed out of scope.
 
-| Aspect                                              | Is it core? | Who should/can provide?                                                                                                                                                                                                                      |
-| --------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Syncing data                                        | yes         | Electric                                                                                                                                                                                                                                     |
-| Partial replication ([Shapes](/docs/guides/shapes)) | yes         | Electric                                                                                                                                                                                                                                     |
-| Schema management / propagation / matching          | partial     | Application specific. In some cases it may be useful or necessary to replicate and validate schema information. In others, it can be the responsibility of the client to connect with the correct schema.                                    |
-| Type safety in the client                           | partial     | Important in many cases for DX and can be assisted by the sync service (e.g.: by providing an endpoint to query types for a shape). But use of types is optional and in many cases types can be provided by ORMs and other client-libraries. |
-| Permissions / authorization                         | no          | There are many valid patterns here. Auth middleware, proxies, rule systems. Authorize at connect, per shape, per row/operation. A sync engine may provide some hooks and options but should not prescribe a solution.                        |
-| Client-side data access library                     | no          | There are many ways of mapping a replication stream to objects, graphs or databases in the client. For example using existing ORMs like Drizzle and Prisma, or reactivity frameworks like LiveStore and TinyBase.                            |
-| Client-side reactivity                              | no          | Client specific. Can be provided by reactivity frameworks.                                                                                                                                                                                   |
-| Connection management                               | no          | Client specific.                                                                                                                                                                                                                             |
-| Database adapters                                   | no          | Client specific. Can be provided by ORMs and reactivity frameworks.                                                                                                                                                                          |
-| Framework integrations                              | no          | Client specific. Can be provided by reactivity frameworks.                                                                                                                                                                                   |
-| Client-side debug tooling                           | no          | Client specific.                                                                                                                                                                                                                             |
+| Aspect | Is it core? | Who should/can provide? |
+| --- | --- | --- |
+| Syncing data | yes | Electric |
+| Partial replication ([Shapes](/docs/guides/shapes)) | yes | Electric |
+| Schema management / propagation / matching | partial | Application specific. In some cases it may be useful or necessary to replicate and validate schema information. In others, it can be the responsibility of the client to connect with the correct schema. |
+| Type safety in the client | partial | Important in many cases for DX and can be assisted by the sync service (e.g.: by providing an endpoint to query types for a shape). But use of types is optional and in many cases types can be provided by ORMs and other client-libraries. |
+| Permissions / authorization | no | There are many valid patterns here. Auth middleware, proxies, rule systems. Authorize at connect, per shape, per row/operation. A sync engine may provide some hooks and options but should not prescribe a solution. |
+| Client-side data access library | no | There are many ways of mapping a replication stream to objects, graphs or databases in the client. For example using existing ORMs like Drizzle and Prisma, or reactivity frameworks like LiveStore and TinyBase. |
+| Client-side reactivity | no | Client specific. Can be provided by reactivity frameworks. |
+| Connection management | no | Client specific. |
+| Database adapters | no | Client specific. Can be provided by ORMs and reactivity frameworks. |
+| Framework integrations | no | Client specific. Can be provided by reactivity frameworks. |
+| Client-side debug tooling | no | Client specific. |
 
 ### HTTP Protocol
 
@@ -250,6 +251,7 @@ You can sync data into:
   </figcaption>
 </figure>
 
+
 ## What's the status?
 
 ### Previous system
@@ -278,7 +280,7 @@ However, even just with the first release of Electric Next you can already sync 
 
 You can track development on [Discord](https://discord.electric-sql.com) and via the [GitHub Issues milestones](https://github.com/electric-sql/archived-electric-next/milestones).
 
----
+***
 
 ## Next steps
 

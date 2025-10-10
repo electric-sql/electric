@@ -1,5 +1,5 @@
-version: '3.8'
-name: 'electric_dev'
+version: "3.8"
+name: "electric_dev"
 
 services:
   postgres:
@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - '54321:5432'
+      - "54321:5432"
     volumes:
       - ./postgres.conf:/etc/postgresql.conf:ro
       - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
@@ -28,7 +28,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - '54322:5433'
+      - "54322:5433"
     volumes:
       - ./postgres2.conf:/etc/postgresql.conf:ro
       - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
@@ -44,23 +44,23 @@ services:
     image: bitnamilegacy/pgbouncer:latest
     environment:
       PGBOUNCER_AUTH_TYPE: trust
-      PGBOUNCER_DATABASE: '*'
+      PGBOUNCER_DATABASE: "*"
       PGBOUNCER_POOL_MODE: transaction
       POSTGRESQL_HOST: postgres
       POSTGRESQL_DATABASE: electric
       POSTGRESQL_USERNAME: postgres
       POSTGRESQL_PASSWORD: password
     ports:
-      - '65432:6432'
+      - "65432:6432"
     depends_on:
       - postgres
   nginx:
     image: nginx:latest
     ports:
-      - '3002:3002'
+      - "3002:3002"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
     extra_hosts:
-      - 'host.docker.internal:host-gateway'
+      - "host.docker.internal:host-gateway"
     depends_on:
       - postgres

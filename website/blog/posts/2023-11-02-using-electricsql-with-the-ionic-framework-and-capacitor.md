@@ -89,19 +89,14 @@ async function initCapacitorSQLite(dbName: string, config: ElectricConfig) {
     '@capacitor-community/sqlite'
   )
   const sqliteConnection = new SQLiteConnection(CapacitorSQLite)
-  const conn = await sqliteConnection.createConnection(
-    dbName,
-    false,
-    '',
-    1,
-    false
-  )
+  const conn = await sqliteConnection.createConnection(dbName, false, '', 1, false,)
   await conn.open()
   return await electrify(conn, schema, config)
 }
 ```
 
 There are more details of how to [initialise an Electric client database in the documentation](https://electric-sql.com/docs/api/clients/typescript#instantiation).
+
 
 ## Conclusion
 

@@ -5,19 +5,19 @@ const { frontmatter } = useData()
 </script>
 
 <style scoped>
-.use-case-illustration {
-  width: calc(100px + 50vw);
-  max-width: 420px;
-  min-width: 240px;
-  margin-top: -20px !important;
-  margin-left: -24px !important;
-}
-@media (max-width: 559px) {
   .use-case-illustration {
-    margin-top: -14px !important;
-    margin-left: -16px !important;
+    width: calc(100px + 50vw);
+    max-width: 420px;
+    min-width: 240px;
+    margin-top: -20px !important;
+    margin-left: -24px !important;
   }
-}
+  @media (max-width: 559px) {
+    .use-case-illustration {
+      margin-top: -14px !important;
+      margin-left: -16px !important;
+    }
+  }
 </style>
 
 <template>

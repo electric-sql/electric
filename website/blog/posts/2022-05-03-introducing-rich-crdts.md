@@ -106,7 +106,10 @@ For example:
   "attributes": {
     "location": "Lisbon"
   },
-  "history": ["bought-fish", "grilled-fish"]
+  "history": [
+    "bought-fish",
+    "grilled-fish"
+  ]
 }
 ```
 

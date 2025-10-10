@@ -13,10 +13,10 @@ Electric provides telemetry data — such as traces, logs, and metrics — for r
 
 Metrics are reported in StatsD and Prometheus formats. To configure Electric to expose metric information in those formats use the following environment variables.
 
-| VARIABLE                 | Description                      |
-| ------------------------ | -------------------------------- |
+| VARIABLE        | Description |
+|-----------------|-------------|
 | ELECTRIC_STATSD_HOST     | The address of the StatsD server |
-| ELECTRIC_PROMETHEUS_PORT | The scrape port for Prometheus   |
+| ELECTRIC_PROMETHEUS_PORT | The scrape port for Prometheus |
 
 You can get the current status of the service by calling the `http://electric-hostname:PROMETHUES_PORT/metrics` endpoint.
 
@@ -24,11 +24,11 @@ You can get the current status of the service by calling the `http://electric-ho
 
 Traces are exported using the OpenTelemetry Protocol (OTLP). You can configure the OpenTelemetry Exporter for Electric using the following environment variables.
 
-| VARIABLE               | Type      | Description                                                  |
-| ---------------------- | --------- | ------------------------------------------------------------ |
-| ELECTRIC_OTLP_ENDPOINT | `URL`     | An OpenTelemetry collector endpoint url.                     |
-| ELECTRIC_HNY_API_KEY   | `string`  | API key for exporting to Honeycomb.io.                       |
-| ELECTRIC_HNY_DATASET   | `string`  | Dataset name for Honeycomb.io.                               |
+| VARIABLE      | Type      | Description     |
+|---------------|-----------|-----------------|
+| ELECTRIC_OTLP_ENDPOINT | `URL`     | An OpenTelemetry collector endpoint url. |
+| ELECTRIC_HNY_API_KEY   | `string`  | API key for exporting to Honeycomb.io. |
+| ELECTRIC_HNY_DATASET   | `string`  | Dataset name for Honeycomb.io. |
 | ELECTRIC_OTEL_DEBUG    | `boolean` | Enable or disable debug logging of telemetry data to stdout. |
 
 Electric enables export of telemetry data when it is configured with an `ELECTRIC_OTLP_ENDPOINT`.

@@ -6,7 +6,7 @@ on:
       pr:
         type: number
         required: true
-        description: 'PR for which the benchmark ran'
+        description: "PR for which the benchmark ran"
       benchmark_info:
         type: string
         required: true

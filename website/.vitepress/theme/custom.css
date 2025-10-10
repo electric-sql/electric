@@ -71,29 +71,27 @@
   src: url('./fonts/SourceCodePro-Regular.woff2') format('woff2');
 }
 
-:root,
-.dark {
-  --vp-c-indigo-1: #d0bcff;
-  --vp-c-indigo-2: #998fe7;
-  --vp-c-indigo-3: #7e78db;
+
+:root, .dark {
+  --vp-c-indigo-1: #D0BCFF;
+  --vp-c-indigo-2: #998FE7;
+  --vp-c-indigo-3: #7E78DB;
 
   --vp-nav-logo-height: 30px;
 
   --vp-c-text-1: rgba(255, 255, 245, 0.92);
-  --vp-c-text-2: rgba(235, 235, 245, 0.8);
+  --vp-c-text-2: rgba(235, 235, 245, 0.80);
   --vp-c-text-3: rgba(235, 235, 245, 0.68);
 
-  --electric-color: #00d2a0;
-  --ddn-color: #d0bcff;
-  --pglite-color: #f6f95c;
+  --electric-color: #00D2A0;
+  --ddn-color: #D0BCFF;
+  --pglite-color: #F6F95C;
 
   --vp-code-bg: var(--vp-c-bg-elv);
-  --vp-code-color: #9ecbff;
+  --vp-code-color: #9ECBFF;
   --vp-code-font-size: 0.875em;
-  --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif,
-    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas,
-    'Liberation Mono', 'Courier New', monospace;
+  --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .Layout {
@@ -128,7 +126,7 @@
 .feature-cta a:hover {
   border-color: var(--vp-button-alt-hover-border);
   color: var(--vp-button-alt-hover-text);
-  background-color: var(--vp-button-alt-hover-bg);
+  background-color: var(--vp-button-alt-hover-bg)
 }
 .action a,
 .cloud-cta a {
@@ -201,29 +199,26 @@ span.no-visual {
   color: var(--vp-c-text-1);
 }
 @media (max-width: 959px) {
-  :root,
-  .dark {
+  :root, .dark {
     --vp-code-font-size: 0.875em;
   }
 }
 @media (max-width: 759px) {
-  :root,
-  .dark {
+  :root, .dark {
     --vp-code-font-size: 0.85em;
   }
 }
 @media (max-width: 559px) {
-  :root,
-  .dark {
+  :root, .dark {
     --vp-code-font-size: 0.835em;
   }
 }
 @media (max-width: 459px) {
-  :root,
-  .dark {
+  :root, .dark {
     --vp-code-font-size: 0.825em;
   }
 }
+
 
 .highlight {
   color: var(--vp-home-hero-name-color);
@@ -393,7 +388,7 @@ span.no-visual {
     width: 1px;
     height: 24px;
     background-color: var(--vp-c-divider);
-    content: '';
+    content: "";
   }
 }
 @media (min-width: 1200px) {
@@ -510,7 +505,7 @@ span.no-visual {
 @media (min-width: 960px) {
   .features-content {
     margin: 64px 64px 32px;
-    /*    text-align: left;*/
+/*    text-align: left;*/
   }
 }
 .vp-doc .features-content h2 {
@@ -576,10 +571,7 @@ span.no-visual {
   text-align: center;
   font-weight: 600;
   white-space: nowrap;
-  transition:
-    color 0.25s,
-    border-color 0.25s,
-    background-color 0.25s !important;
+  transition: color 0.25s, border-color 0.25s, background-color 0.25s !important;
 }
 .VPButton.brand {
   background-color: var(--vp-button-brand-bg);
@@ -742,10 +734,10 @@ iframe {
 .VPFeature h2.title {
   font-size: 20px;
 }
-.VPFeature.link[href='/product/electric']:hover {
+.VPFeature.link[href="/product/electric"]:hover {
   border-color: var(--electric-color);
 }
-.VPFeature.link[href='/product/pglite']:hover {
+.VPFeature.link[href="/product/pglite"]:hover {
   border-color: var(--pglite-color);
 }
 
@@ -809,7 +801,7 @@ pre {
 ul.benefits {
   color: var(--vp-c-text-1) !important;
 
-  list-style-type: '→ ';
+  list-style-type: "→ ";
   list-style-position: inside;
   padding: 0;
 }
@@ -854,7 +846,7 @@ ul.benefits {
   margin: 40px 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 24px
 }
 @media (max-width: 559px) {
   .side-by-side-videos {
