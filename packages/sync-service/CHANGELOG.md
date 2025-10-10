@@ -1,5 +1,20 @@
 # @core/sync-service
 
+## 1.1.15
+
+### Patch Changes
+
+- 1585136: Validate connection options for lock breaker connection.
+- bec7bfd: Stop reporting disk usage in StackTelemetry, it's too expensive for a regular measurement.
+- fa2660b: Reduce memory footprint of shape consumer processes by avoiding repeating the same path prefix multiple times and calculating shape-specific storage fields on the fly instead.
+- d539102: Add a new configuration option ELECTRIC_REPLICATION_IDLE_TIMEOUT that allows Electric to close database connections automatically when the replication stream is idle. This enables the database server to scale-to-zero on supported providers.
+- 6fa0258: Simplify connection status error handling for runtime failures
+- 519b936: Parse more DB errors as retryable (`ssl connect: closed` and `connection_refused` with PG code 08006).
+- 1c1f59c: Ensure publication update failures only affect relevant shapes
+- 8f38a11: Parse compute node unreachable database errors as retryable.
+- 4f7aef1: Ensure the lock breaker connection is not linked to the connection manager to avoid unnecessary crashes.
+- 8f38a11: Ensure pool shutdown does not log independent exit error
+
 ## 1.1.14
 
 ### Patch Changes
