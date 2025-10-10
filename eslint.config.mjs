@@ -16,7 +16,6 @@ export default [
       `**/.vitepress/dist/**`,
       `**/sst-env.d.ts`,
       `**/sst.config.ts`,
-      `examples/**`,
     ],
   },
   {
@@ -39,6 +38,15 @@ export default [
     },
     rules: {
       quotes: [`error`, `backtick`],
+      'no-unused-vars': `off`,
+      '@typescript-eslint/no-unused-vars': [
+        `error`,
+        {
+          argsIgnorePattern: `^_`,
+          varsIgnorePattern: `^_`,
+          caughtErrorsIgnorePattern: `^_`,
+        },
+      ],
     },
   },
   {
