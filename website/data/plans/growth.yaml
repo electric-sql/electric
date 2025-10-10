@@ -1,0 +1,29 @@
+name: Growth
+order: 30
+type: tier
+
+price: 349
+priceQualifier: "/ month"
+
+# Hero card display
+who: "scale-ups building large apps and platforms"
+featuresTitle: "Pro features +"
+features:
+  - "Role-based access control"
+  - "Network security controls"
+  - "Priority support"
+
+# Comparison table metrics
+monthlyActiveUsers: "~200K"
+writesPerMinute: "~6K"
+operations: 200000000
+shapes: 2000000
+sources: 100
+gbProcessed: 2000
+shapeRetention: "4 weeks"
+
+# CTA
+ctaText: "Get started"
+ctaTextSmall: "Choose"
+ctaHref: "https://dashboard.electric-sql.cloud?plan=growth"
+ctaTheme: "brand"

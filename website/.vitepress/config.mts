@@ -125,7 +125,7 @@ export default defineConfig({
     logo: '/img/brand/logo.svg',
     nav: [
       { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      { text: 'Use cases', link: '/use-cases/data-sync', activeMatch: '/use-cases/' },
+      { text: 'Pricing', link: '/pricing', activeMatch: '/pricing' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/'},
       { text: 'Demos', link: '/demos', activeMatch: '/demos'},
       { text: 'Blog', link: '/blog', activeMatch: '/blog'},
@@ -143,49 +143,6 @@ export default defineConfig({
             { text: 'Electric', link: '/product/electric' },
             { text: 'Cloud', link: '/product/cloud' },
             { text: 'PGlite', link: '/product/pglite' },
-          ]
-        }
-      ],
-      '/use-cases': [
-        {
-          text: 'Use cases',
-          items: [
-            {
-              text: 'Replace data fetching with data sync',
-              link: '/use-cases/data-sync'
-            },
-            {
-              text: 'Build resilient software that works offline',
-              link: '/use-cases/local-first-software'
-            },
-            // {
-            //   text: 'Provision data into dev and test environments',
-            //   link: '/use-cases/dev-and-test'
-            // },
-            //{
-            //  text: 'Add multi-user collaboration to your apps',
-            //  link: '/use-cases/multi-user'
-            //},
-            {
-              text: 'Automate cache invalidation',
-              link: '/use-cases/cache-invalidation'
-            },
-            //{
-            //  text: 'Hydrating edge workers',
-            //  link: '/use-cases/edge-workers'
-            //},
-            //{
-            //  text: 'Partial replicas for distributed cloud services',
-            //  link: '/use-cases/cloud-services'
-            //},
-            {
-              text: 'Retrieve data for local AI',
-              link: '/use-cases/local-ai'
-            },
-            {
-              text: 'Reduce your cloud costs',
-              link: '/use-cases/cloud-costs'
-            }
           ]
         }
       ],

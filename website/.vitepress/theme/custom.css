@@ -80,6 +80,7 @@
   --vp-nav-logo-height: 30px;
 
   --vp-c-text-1: rgba(255, 255, 245, 0.92);
+  --vp-c-text-1-5: rgba(255, 255, 245, 0.86);
   --vp-c-text-2: rgba(235, 235, 245, 0.80);
   --vp-c-text-3: rgba(235, 235, 245, 0.68);
 
@@ -604,10 +605,10 @@ span.no-visual {
   color: var(--vp-c-bg);
 }
 .VPButton.small {
-  border-radius: 16px;
-  padding: 0 16px;
-  line-height: 34px;
-  font-size: 13.5px;
+  border-radius: 15px;
+  padding: 0 15px;
+  line-height: 30px;
+  font-size: 13px;
 }
 .VPButton.vspace {
   margin-top: 6px;
