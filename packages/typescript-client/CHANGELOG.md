@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.0.15
+
+### Patch Changes
+
+- a328418: Ensure `FetchBackoffAbortError` is emitted even if aborting while request body is being streamed.
+
 ## 1.0.14
 
 ### Patch Changes
