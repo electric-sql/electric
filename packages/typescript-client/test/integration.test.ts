@@ -18,10 +18,7 @@ import * as h from './support/test-helpers'
 
 const BASE_URL = inject(`baseUrl`)
 
-const fetchAndSse = [
-  { experimentalLiveSse: false },
-  { experimentalLiveSse: true },
-]
+const fetchAndSse = [{ liveSse: false }, { liveSse: true }]
 
 it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
   const result = await dbClient.query(`SELECT * FROM ${issuesTableSql}`)
@@ -31,8 +28,8 @@ it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
 
 describe(`HTTP Sync`, () => {
   it.for(fetchAndSse)(
-    `should work with empty shape/table (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    `should work with empty shape/table (liveSSE=$liveSse)`,
+    async ({ liveSse }, { issuesTableUrl, aborter }) => {
       // Get initial data
       const shapeData = new Map()
       const issueStream = new ShapeStream({
@@ -42,7 +39,7 @@ describe(`HTTP Sync`, () => {
         },
         subscribe: false,
         signal: aborter.signal,
-        experimentalLiveSse,
+        liveSse,
       })
 
       await new Promise<void>((resolve, reject) => {
@@ -65,11 +62,11 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should wait properly for updates on an empty shape/table (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { issuesTableUrl, aborter }) => {
+    `should wait properly for updates on an empty shape/table (liveSSE=$liveSse)`,
+    async ({ liveSse }, { issuesTableUrl, aborter }) => {
       const urlsRequested: URL[] = []
       const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-        //console.log('fetch sse', experimentalLiveSse)
+        //console.log('fetch sse', liveSse)
         const url = new URL(args[0] instanceof Request ? args[0].url : args[0])
         //console.log("url", url)
         urlsRequested.push(url)
@@ -87,7 +84,7 @@ describe(`HTTP Sync`, () => {
         },
         signal: aborter.signal,
         fetchClient: fetchWrapper,
-        experimentalLiveSse,
+        liveSse,
       })
 
       let upToDateMessageCount = 0
@@ -98,7 +95,7 @@ describe(`HTTP Sync`, () => {
 
       await new Promise<void>((resolve, reject) => {
         issueStream.subscribe((messages) => {
-          //console.log("sse", experimentalLiveSse)
+          //console.log("sse", liveSse)
           //console.log("messages", messages)
           messages.forEach((message) => {
             if (isChangeMessage(message)) {
@@ -122,7 +119,7 @@ describe(`HTTP Sync`, () => {
       const numRequests = urlsRequested.length
       //console.log("urlsRequested", urlsRequested)
 
-      if (experimentalLiveSse) {
+      if (liveSse) {
         // We expect 3 requests: 2 requests for the initial fetch and the live request (which is 1 request streaming all updates)
         expect(numRequests).toBe(3)
       } else {
@@ -171,11 +168,8 @@ describe(`HTTP Sync`, () => {
   })
 
   it.for(fetchAndSse)(
-    `should get initial data (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { insertIssues, issuesTableUrl, aborter }
-    ) => {
+    `should get initial data (liveSSE=$liveSse)`,
+    async ({ liveSse }, { insertIssues, issuesTableUrl, aborter }) => {
       // Add an initial row.
       const uuid = uuidv4()
       await insertIssues({ id: uuid, title: `foo + ${uuid}` })
@@ -188,7 +182,7 @@ describe(`HTTP Sync`, () => {
           table: issuesTableUrl,
         },
         signal: aborter.signal,
-        experimentalLiveSse,
+        liveSse,
       })
 
       await new Promise<void>((resolve) => {
@@ -211,11 +205,8 @@ describe(`HTTP Sync`, () => {
   )
 
   mit.for(fetchAndSse)(
-    `should parse incoming data (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { dbClient, aborter, tableSql, tableUrl }
-    ) => {
+    `should parse incoming data (liveSSE=$liveSse)`,
+    async ({ liveSse }, { dbClient, aborter, tableSql, tableUrl }) => {
       // Create a table with data we want to be parsed
       await dbClient.query(
         `
@@ -271,7 +262,7 @@ describe(`HTTP Sync`, () => {
           table: tableUrl,
         },
         signal: aborter.signal,
-        experimentalLiveSse,
+        liveSse,
       })
       const client = new Shape(issueStream)
       const rows = await client.rows
@@ -388,9 +379,9 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should get initial data and then receive updates (liveSSE=$experimentalLiveSse)`,
+    `should get initial data and then receive updates (liveSSE=$liveSse)`,
     async (
-      { experimentalLiveSse },
+      { liveSse },
       {
         aborter,
         issuesTableUrl,
@@ -412,7 +403,7 @@ describe(`HTTP Sync`, () => {
           table: issuesTableUrl,
         },
         signal: aborter.signal,
-        experimentalLiveSse,
+        liveSse,
       })
       let secondRowId = ``
       await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
@@ -446,9 +437,9 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should wait for processing before advancing stream (liveSSE=$experimentalLiveSse)`,
+    `should wait for processing before advancing stream (liveSSE=$liveSse)`,
     async (
-      { experimentalLiveSse },
+      { liveSse },
       { aborter, issuesTableUrl, insertIssues, waitForIssues }
     ) => {
       // With initial data
@@ -468,7 +459,7 @@ describe(`HTTP Sync`, () => {
         },
         signal: aborter.signal,
         fetchClient: fetchWrapper,
-        experimentalLiveSse,
+        liveSse,
       })
 
       let numFetchCalls = 0
@@ -498,11 +489,8 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `multiple clients can get the same data in parallel (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { issuesTableUrl, updateIssue, insertIssues }
-    ) => {
+    `multiple clients can get the same data in parallel (liveSSE=$liveSse)`,
+    async ({ liveSse }, { issuesTableUrl, updateIssue, insertIssues }) => {
       const rowId = uuidv4(),
         rowId2 = uuidv4()
       await insertIssues(
@@ -518,7 +506,7 @@ describe(`HTTP Sync`, () => {
           table: issuesTableUrl,
         },
         signal: aborter1.signal,
-        experimentalLiveSse,
+        liveSse,
       })
 
       const shapeData2 = new Map()
@@ -529,7 +517,7 @@ describe(`HTTP Sync`, () => {
           table: issuesTableUrl,
         },
         signal: aborter2.signal,
-        experimentalLiveSse,
+        liveSse,
       })
 
       const p1 = h.forEachMessage(issueStream1, aborter1, (res, msg, nth) => {
@@ -559,9 +547,9 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `can go offline and then catchup (liveSSE=$experimentalLiveSse)`,
+    `can go offline and then catchup (liveSSE=$liveSse)`,
     async (
-      { experimentalLiveSse },
+      { liveSse },
       { aborter, issuesTableUrl, insertIssues, waitForIssues }
     ) => {
       // initialize storage for the cases where persisted shape streams are tested
@@ -596,7 +584,7 @@ describe(`HTTP Sync`, () => {
         signal: aborter.signal,
         offset: streamState.offset,
         handle: streamState.handle,
-        experimentalLiveSse,
+        liveSse,
       })
 
       await h.forEachMessage(newIssueStream, aborter, (res, msg, nth) => {
@@ -731,9 +719,9 @@ describe(`HTTP Sync`, () => {
   })
 
   it.for(fetchAndSse)(
-    `should correctly use a where clause for initial sync and updates (liveSSE=$experimentalLiveSse)`,
+    `should correctly use a where clause for initial sync and updates (liveSSE=$liveSse)`,
     async (
-      { experimentalLiveSse },
+      { liveSse },
       {
         insertIssues,
         updateIssue,
@@ -758,7 +746,7 @@ describe(`HTTP Sync`, () => {
           where: `title LIKE 'foo%'`,
         },
         signal: aborter.signal,
-        experimentalLiveSse,
+        liveSse,
       })
 
       await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
@@ -782,11 +770,8 @@ describe(`HTTP Sync`, () => {
   )
 
   mit.for(fetchAndSse)(
-    `should correctly select columns for initial sync and updates (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { dbClient, aborter, tableSql, tableUrl }
-    ) => {
+    `should correctly select columns for initial sync and updates (liveSSE=$liveSse)`,
+    async ({ liveSse }, { dbClient, aborter, tableSql, tableUrl }) => {
       await dbClient.query(
         `INSERT INTO ${tableSql} (txt, i2, i4, i8) VALUES ($1, $2, $3, $4)`,
         [`test1`, 1, 10, 100]
@@ -801,7 +786,7 @@ describe(`HTTP Sync`, () => {
           columns: [`txt`, `i2`, `i4`],
         },
         signal: aborter.signal,
-        experimentalLiveSse,
+        liveSse,
       })
       await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
         if (!isChangeMessage(msg)) return
@@ -897,11 +882,8 @@ describe(`HTTP Sync`, () => {
   })
 
   it.for(fetchAndSse)(
-    `should handle invalid requests by terminating stream (liveSSE=$experimentalLiveSse)`,
-    async (
-      { experimentalLiveSse },
-      { expect, issuesTableUrl, aborter, waitForIssues }
-    ) => {
+    `should handle invalid requests by terminating stream (liveSSE=$liveSse)`,
+    async ({ liveSse }, { expect, issuesTableUrl, aborter, waitForIssues }) => {
       const streamState = await waitForIssues({ numChangesExpected: 0 })
 
       let error: Error
@@ -916,7 +898,7 @@ describe(`HTTP Sync`, () => {
         onError: (err) => {
           error = err
         },
-        experimentalLiveSse,
+        liveSse,
       })
 
       const errorSubscriberPromise = new Promise((_, reject) =>
@@ -937,8 +919,8 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should handle invalid requests by terminating stream (liveSSE=$experimentalLiveSse)`,
-    async ({ experimentalLiveSse }, { expect, issuesTableUrl, aborter }) => {
+    `should handle invalid requests by terminating stream (liveSSE=$liveSse)`,
+    async ({ liveSse }, { expect, issuesTableUrl, aborter }) => {
       let error: Error
       const invalidIssueStream = new ShapeStream<IssueRow>({
         url: `${BASE_URL}/v1/shape`,
@@ -956,7 +938,7 @@ describe(`HTTP Sync`, () => {
           await res.text()
           return res
         },
-        experimentalLiveSse,
+        liveSse,
       })
 
       const errorSubscriberPromise = new Promise((_, reject) =>
@@ -973,9 +955,9 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should detect shape deprecation and restart syncing (liveSSE=$experimentalLiveSse)`,
+    `should detect shape deprecation and restart syncing (liveSSE=$liveSse)`,
     async (
-      { experimentalLiveSse },
+      { liveSse },
       { expect, insertIssues, issuesTableUrl, aborter, clearIssuesShape }
     ) => {
       // With initial data
@@ -1012,7 +994,7 @@ describe(`HTTP Sync`, () => {
         subscribe: true,
         signal: aborter.signal,
         fetchClient: fetchWrapper,
-        experimentalLiveSse,
+        liveSse,
       })
 
       expect.assertions(12)

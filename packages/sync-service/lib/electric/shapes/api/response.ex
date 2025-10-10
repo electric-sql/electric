@@ -295,7 +295,7 @@ defmodule Electric.Shapes.Api.Response do
   # For live SSE requests we want to cache for just under the
   # sse_timeout, in order to enable request collapsing.
   defp put_cache_headers(conn, %__MODULE__{
-         params: %{live: true, experimental_live_sse: true},
+         params: %{live: true, live_sse: true},
          api: api
        }) do
     conn
@@ -385,7 +385,7 @@ defmodule Electric.Shapes.Api.Response do
     :ok
   end
 
-  defp put_sse_headers(conn, %__MODULE__{params: %{live: true, experimental_live_sse: true}}) do
+  defp put_sse_headers(conn, %__MODULE__{params: %{live: true, live_sse: true}}) do
     conn
     |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
     |> Plug.Conn.put_resp_header("connection", "keep-alive")

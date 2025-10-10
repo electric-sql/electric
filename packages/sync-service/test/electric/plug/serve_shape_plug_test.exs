@@ -818,7 +818,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       :ok
     end
 
-    test "returns proper SSE format response when experimental_live_sse=true and live=true",
+    test "returns proper SSE format response when live_sse=true and live=true",
          ctx do
       Mock.ShapeCache
       |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
@@ -840,7 +840,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> conn(
           :get,
           %{"table" => "public.users"},
-          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true&experimental_live_sse=true"
+          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true&live_sse=true"
         )
         |> call_serve_shape_plug(ctx)
 
@@ -866,13 +866,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.state == :chunked
     end
 
-    test "returns 400 when experimental_live_sse=true but live=false", ctx do
+    test "returns 400 when live_sse=true but live=false", ctx do
       conn =
         ctx
         |> conn(
           :get,
           %{"table" => "public.users"},
-          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&experimental_live_sse=true"
+          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live_sse=true"
         )
         |> call_serve_shape_plug(ctx)
 
@@ -881,7 +881,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert Jason.decode!(conn.resp_body) == %{
                "message" => "Invalid request",
                "errors" => %{
-                 "experimental_live_sse" => ["can't be true unless live is also true"]
+                 "live_sse" => ["can't be true unless live is also true"]
                }
              }
     end
@@ -909,7 +909,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> conn(
           :get,
           %{"table" => "public.users"},
-          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true&experimental_live_sse=true"
+          "?offset=#{@test_offset}&handle=#{@test_shape_handle}&live=true&live_sse=true"
         )
         |> call_serve_shape_plug(ctx)
 
