@@ -599,6 +599,21 @@ defmodule Electric.Shapes.ShapeTest do
   end
 
   describe "JSON" do
+    setup do
+      [
+        inspector:
+          Support.StubInspector.new(
+            tables: ["the_table", "another_table"],
+            columns: [
+              %{name: "id", type: "int8", pk_position: 0},
+              %{name: "value", type: "int8", pk_position: nil},
+              %{name: "size", type: "int8", pk_position: nil},
+              %{name: "created_at", type: "timestamp", pk_position: nil}
+            ]
+          )
+      ]
+    end
+
     test "should serialize shape with complex columns" do
       shape = %Shape{
         root_table: {"public", "foo"},
@@ -652,6 +667,20 @@ defmodule Electric.Shapes.ShapeTest do
       assert {:ok, shape_old_decoded} = Shape.from_json_safe(shape_old_json)
 
       assert shape_old_decoded == shape_v1
+    end
+
+    test "should serialize shape with subquery", %{inspector: inspector} do
+      shape =
+        Shape.new!("the_table",
+          where: "id IN (SELECT id FROM another_table WHERE value > 10)",
+          inspector: inspector
+        )
+
+      assert {:ok, json} = Jason.encode(shape)
+      assert {:ok, decoded} = Jason.decode!(json) |> Shape.from_json_safe()
+
+      # Locations change between serialization and deserialization, but that shouldn't affect equality
+      assert Shape.comparable(shape) == Shape.comparable(decoded)
     end
   end
 

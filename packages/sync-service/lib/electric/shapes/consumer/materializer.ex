@@ -70,6 +70,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     %{stack_id: stack_id, shape_handle: shape_handle} = opts
 
     Process.set_label({:materializer, shape_handle})
+    Process.flag(:trap_exit, true)
     metadata = [stack_id: stack_id, shape_handle: shape_handle]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
@@ -92,6 +93,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
   def handle_continue({:start_materializer, storage}, state) do
     _ = Consumer.await_snapshot_start(state)
     Consumer.subscribe_materializer(state)
+
+    Process.monitor(GenServer.whereis(Consumer.name(state)),
+      tag: {:consumer_down, state.shape_handle}
+    )
 
     {:noreply, state, {:continue, {:read_stream, storage}}}
   end
@@ -169,6 +174,22 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Process.monitor(pid)
 
     {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
+  end
+
+  def handle_info({:EXIT, _, reason}, state) do
+    {:stop, reason, state}
+  end
+
+  def handle_info({{:consumer_down, _}, _ref, :process, _pid, {:shutdown, :cleanup}}, state) do
+    for pid <- state.subscribers do
+      send(pid, {:materializer_shape_invalidated, state.shape_handle})
+    end
+
+    {:noreply, state}
+  end
+
+  def handle_info({{:consumer_down, _}, _ref, :process, _pid, _reason}, state) do
+    {:noreply, state}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
