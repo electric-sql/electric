@@ -22,10 +22,32 @@ defmodule Electric.Connection.Restarter do
 
   def name(opts), do: name(opts[:stack_id])
 
+  @doc """
+  Stop the connection subsystem, closing all database connections.
+
+  This lets the database server scale its compute to zero if it supports this feature and has
+  no other sessions.
+
+  Inside Electric, the shape subsystem keeps running.
+
+  ## Implementation notes
+
+  Currently, this function stops only the Connection.Manager process which shuts down all types
+  of database connections linked to it. When a new shape request arrives, it will immediately
+  stop the Replication.Supervisor and restart the Connection.Manager, which then in turn starts
+  a fresh Replication.Supervisor again.
+  """
   def stop_connection_subsystem(stack_id) do
     GenServer.cast(name(stack_id), :stop_connection_subsystem)
   end
 
+  @doc """
+  Restore the connection subsystem after it had been stopped by `stop_connection_subsystem/1`.
+
+  The "restart" in the name is related to the fact that the Replication.Supervisor is stopped
+  first before getting restarted by the Connection.Manager later. The Connection.Manager itself
+  is started via a `Supervisor.restart_child()` call.
+  """
   def restart_connection_subsystem(stack_id) do
     with %{conn: :sleeping} <- StatusMonitor.status(stack_id) do
       GenServer.cast(name(stack_id), :restart_connection_subsystem)
