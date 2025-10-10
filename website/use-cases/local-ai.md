@@ -1,5 +1,5 @@
 ---
-title: "Local AI"
+title: 'Local AI'
 description: >-
   Sync data for local AI from your existing business systems.
   For zero latency retrieval and zero inference cost.

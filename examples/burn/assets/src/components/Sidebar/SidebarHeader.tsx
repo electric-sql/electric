@@ -41,7 +41,7 @@ function SidebarHeader() {
       <IconButton
         size="1"
         variant="ghost"
-        className={mergeClasses(classes.closeButton, 'closeButton')}
+        className={mergeClasses(classes.closeButton, `closeButton`)}
         onClick={() => setLeftSidebarOpen(false)}
       >
         ✕

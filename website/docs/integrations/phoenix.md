@@ -126,29 +126,29 @@ This allows you to define and personalise the shape definition at runtime using 
 You can sync _into_ any client in any language that [speaks HTTP and JSON](/docs/api/http). For example, using the Electric [Typescript client](/docs/api/clients/typescript):
 
 ```typescript
-import { Shape, ShapeStream } from "@electric-sql/client";
+import { Shape, ShapeStream } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: `/shapes/todos`,
-});
-const shape = new Shape(stream);
+})
+const shape = new Shape(stream)
 
 // The callback runs every time the data changes.
-shape.subscribe((data) => console.log(data));
+shape.subscribe((data) => console.log(data))
 ```
 
 Or binding a shape to a component using the [React bindings](/docs/integrations/react):
 
 ```tsx
-import { useShape } from "@electric-sql/react";
+import { useShape } from '@electric-sql/react'
 
 const MyComponent = () => {
   const { data } = useShape({
     url: `shapes/todos`,
-  });
+  })
 
-  return <List todos={data} />;
-};
+  return <List todos={data} />
+}
 ```
 
 See the Electric [demos](/demos) and [documentation](/docs/intro) for more client-side usage examples.
@@ -327,4 +327,3 @@ There's an `#elixir` channel in the [Electric Discord](https://discord.electric-
 <HelpWanted issue="1878">
   an equivalent integration for other server-side frameworks, such as Rails, Laravel, Django, etc.
 </HelpWanted>
-

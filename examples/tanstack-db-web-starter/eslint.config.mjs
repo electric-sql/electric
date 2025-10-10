@@ -8,12 +8,12 @@ import globals from "globals"
 import { includeIgnoreFile } from "@eslint/compat"
 import { fileURLToPath } from "url"
 
-const gitignorePath = fileURLToPath(new URL(".gitignore", import.meta.url))
+const gitignorePath = fileURLToPath(new URL(`.gitignore`, import.meta.url))
 
 export default [
-  includeIgnoreFile(gitignorePath, "Imported .gitignore patterns"),
+  includeIgnoreFile(gitignorePath, `Imported .gitignore patterns`),
   {
-    files: ["src/**/*.{js,jsx,ts,tsx,mjs}"],
+    files: [`src/**/*.{js,jsx,ts,tsx,mjs}`],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: `module`,
@@ -48,7 +48,7 @@ export default [
       "react/react-in-jsx-scope": `off`,
       "react/jsx-uses-react": `off`,
       "no-undef": `off`,
-      "@typescript-eslint/no-undef": "off",
+      "@typescript-eslint/no-undef": `off`,
       "@typescript-eslint/no-unused-vars": [
         `error`,
         {

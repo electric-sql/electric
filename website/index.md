@@ -16,7 +16,7 @@ hero:
       text: Quickstart
       link: /docs/quickstart
     - theme: alt
-      text: "​"
+      text: '​'
       target: '_blank'
       link: https://github.com/electric-sql/electric
     - theme: alt
@@ -81,8 +81,8 @@ function Component({ project }) {
   const { data } = useShape({
     params: {
       table: 'issues',
-      where: `project_id = ${project.id}`
-    }
+      where: `project_id = ${project.id}`,
+    },
   })
 
   return <List issues={data} />

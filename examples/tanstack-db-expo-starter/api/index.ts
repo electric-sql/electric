@@ -1,12 +1,12 @@
-import express from "express"
-import cors from "cors"
-import { db } from "../src/db"
-import { todos } from "../src/db/schema"
-import { validateInsertTodo, validateUpdateTodo } from "../src/db/schema"
-import { sql, eq } from "drizzle-orm"
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
-import { Readable } from "stream"
-import { pipeline } from "stream/promises"
+import express from 'express'
+import cors from 'cors'
+import { db } from '../src/db'
+import { todos } from '../src/db/schema'
+import { validateInsertTodo, validateUpdateTodo } from '../src/db/schema'
+import { sql, eq } from 'drizzle-orm'
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
 
 // Create Express app
 const app = express()
@@ -120,7 +120,7 @@ app.delete(`/api/todos/:id`, async (req, res) => {
 // GET proxy Electric shape requests for todos
 app.get(`/api/todos`, async (req, res) => {
   try {
-    const ELECTRIC_URL = process.env.ELECTRIC_URL || "http://localhost:3000"
+    const ELECTRIC_URL = process.env.ELECTRIC_URL || `http://localhost:3000`
 
     const electricUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
 
@@ -132,14 +132,14 @@ app.get(`/api/todos`, async (req, res) => {
     })
 
     // Set the table server-side
-    electricUrl.searchParams.set("table", "todos")
+    electricUrl.searchParams.set(`table`, `todos`)
 
     // Inner try for fetch
     const response = await fetch(electricUrl)
 
     if (!response.ok) {
       const errorText = await response.text()
-      res.writeHead(response.status, { "Content-Type": "application/json" })
+      res.writeHead(response.status, { 'Content-Type': `application/json` })
       res.end(JSON.stringify({ error: `Electric error: ${response.status}` }))
       return
     }
@@ -148,8 +148,8 @@ app.get(`/api/todos`, async (req, res) => {
     const headers = {}
     response.headers.forEach((value, key) => {
       if (
-        key.toLowerCase() !== "content-encoding" &&
-        key.toLowerCase() !== "content-length"
+        key.toLowerCase() !== `content-encoding` &&
+        key.toLowerCase() !== `content-length`
       ) {
         headers[key] = value
       }
@@ -162,27 +162,25 @@ app.get(`/api/todos`, async (req, res) => {
     const nodeStream = Readable.fromWeb(response.body)
 
     // Handle stream errors gracefully
-    nodeStream.on("error", (err) => {
-      console.error("Stream error:", err)
+    nodeStream.on(`error`, (err) => {
+      console.error(`Stream error:`, err)
       if (!res.headersSent) {
         res.writeHead(500)
       }
       res.end()
     })
 
-    res.on("close", () => {
+    res.on(`close`, () => {
       nodeStream.destroy()
     })
 
     await pipeline(nodeStream, res)
   } catch (outerError) {
     if (!res.headersSent) {
-      res
-        .status(500)
-        .json({
-          error: "Internal server error",
-          details: (outerError as any).message,
-        })
+      res.status(500).json({
+        error: `Internal server error`,
+        details: (outerError as any).message,
+      })
     }
   }
 })

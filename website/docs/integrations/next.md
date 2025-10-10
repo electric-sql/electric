@@ -36,7 +36,7 @@ See the [Getting Started guide here](https://github.com/LeonAlvarez/ElectroDrizz
 
 #### SSR
 
-Next.js supports SSR. We are currently [experimenting with patterns](https://github.com/electric-sql/electric/pull/1596) to use Electric with SSR in a way that supports server rendering *and* client-side components seamlessly moving into realtime sync.
+Next.js supports SSR. We are currently [experimenting with patterns](https://github.com/electric-sql/electric/pull/1596) to use Electric with SSR in a way that supports server rendering _and_ client-side components seamlessly moving into realtime sync.
 
 <HelpWanted issue="1596">
   <template v-slot:thing>

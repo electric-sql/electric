@@ -15,11 +15,11 @@ import IssueItem, { itemHeight } from './IssueItem'
 import { Issue } from '../../types/types'
 
 // Type-fixed components to work around React 18/19 JSX strictness
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const DroppableFixed = Droppable as any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const DraggableFixed = Draggable as any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const ListFixed = List as any
 
 interface Props {
@@ -49,7 +49,6 @@ function IssueCol({ title, status, issues = [] }: Props) {
         key={status}
         type="category"
         mode="virtual"
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         renderClone={(provided: any, snapshot: any, rubric: any) => {
           const issue = issues[rubric.source.index]
           return (

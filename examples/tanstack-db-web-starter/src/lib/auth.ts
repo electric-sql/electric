@@ -6,13 +6,13 @@ import { networkInterfaces } from "os"
 
 // Get network IP for trusted origins
 const nets = networkInterfaces()
-let networkIP = "192.168.1.1" // fallback
+let networkIP = `192.168.1.1` // fallback
 
 for (const name of Object.keys(nets)) {
   const netInterfaces = nets[name]
   if (netInterfaces) {
     for (const net of netInterfaces) {
-      if (net.family === "IPv4" && !net.internal) {
+      if (net.family === `IPv4` && !net.internal) {
         networkIP = net.address
         break
       }
@@ -22,7 +22,7 @@ for (const name of Object.keys(nets)) {
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
-    provider: "pg",
+    provider: `pg`,
     usePlural: true,
     schema,
     // debugLogs: true,
@@ -30,12 +30,12 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     // Disable signup in production, allow in dev
-    disableSignUp: process.env.NODE_ENV === "production",
-    minPasswordLength: process.env.NODE_ENV === "production" ? 8 : 1,
+    disableSignUp: process.env.NODE_ENV === `production`,
+    minPasswordLength: process.env.NODE_ENV === `production` ? 8 : 1,
   },
   trustedOrigins: [
-    "https://tanstack-start-db-electric-starter.localhost",
+    `https://tanstack-start-db-electric-starter.localhost`,
     `https://${networkIP}`,
-    "http://localhost:5173", // fallback for direct Vite access
+    `http://localhost:5173`, // fallback for direct Vite access
   ],
 })

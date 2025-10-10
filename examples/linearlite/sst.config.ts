@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./.sst/platform/config.d.ts" />
 
 import { execSync } from 'child_process'
@@ -41,10 +40,10 @@ export default $config({
         throw new Error(`ELECTRIC_API environment variable is required`)
       }
 
-      const website = new sst.aws.StaticSite('linearlite-website', {
+      const website = new sst.aws.StaticSite(`linearlite-website`, {
         build: {
-          command: 'npm run build',
-          output: 'dist',
+          command: `npm run build`,
+          output: `dist`,
         },
         environment: {
           VITE_ELECTRIC_URL: process.env.ELECTRIC_API,
@@ -56,7 +55,7 @@ export default $config({
           dns: sst.cloudflare.dns(),
         },
         dev: {
-          command: 'npm run vite',
+          command: `npm run vite`,
         },
       })
 
@@ -88,7 +87,7 @@ async function addDatabaseToElectric(
   const result = await fetch(`${adminApi}/v1/sources`, {
     method: `PUT`,
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': `application/json`,
       Authorization: `Bearer ${adminApiAuthToken}`,
     },
     body: JSON.stringify({

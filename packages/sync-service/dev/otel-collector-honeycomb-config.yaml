@@ -10,16 +10,16 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: "0.0.0.0:4317"
+        endpoint: '0.0.0.0:4317'
       http:
-        endpoint: "0.0.0.0:4318"
+        endpoint: '0.0.0.0:4318'
   prometheus:
     config:
       scrape_configs:
         - job_name: otel-prometheus
           scrape_interval: 5s
           static_configs:
-            - targets: ["${env:PROMETHEUS_SCRAPE_ENDPOINT}"]
+            - targets: ['${env:PROMETHEUS_SCRAPE_ENDPOINT}']
 processors:
   resourcedetection:
     detectors:

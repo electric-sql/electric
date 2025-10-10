@@ -16,7 +16,7 @@ export const middleware = t.middleware
 
 export const isAuthed = middleware(async ({ ctx, next }) => {
   if (!ctx.session?.user) {
-    throw new TRPCError({ code: "UNAUTHORIZED" })
+    throw new TRPCError({ code: `UNAUTHORIZED` })
   }
   return next({
     ctx: {
@@ -31,7 +31,7 @@ export const authedProcedure = procedure.use(isAuthed)
 // Helper function to generate transaction ID for Electric sync
 export async function generateTxId(
   tx: Parameters<
-    Parameters<typeof import("@/db/connection").db.transaction>[0]
+    Parameters<typeof import(`@/db/connection`).db.transaction>[0]
   >[0]
 ): Promise<number> {
   // The ::xid cast strips off the epoch, giving you the raw 32-bit value

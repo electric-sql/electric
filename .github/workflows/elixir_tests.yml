@@ -2,21 +2,21 @@ name: Electric CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ['main']
     paths-ignore:
-      - "website/**"
-      - "**/README.md"
+      - 'website/**'
+      - '**/README.md'
   pull_request:
     paths-ignore:
-      - "website/**"
-      - "**/README.md"
+      - 'website/**'
+      - '**/README.md'
 
 permissions:
   contents: read
 
 jobs:
   build_and_test:
-    name: "Build and test sync-service, Postgres ${{ matrix.postgres_version }}"
+    name: 'Build and test sync-service, Postgres ${{ matrix.postgres_version }}'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,10 +27,10 @@ jobs:
         postgres_version: [14, 15, 17, 18]
     env:
       MIX_ENV: test
-      POSTGRES_VERSION: "${{ matrix.postgres_version }}0000"
+      POSTGRES_VERSION: '${{ matrix.postgres_version }}0000'
     services:
       postgres:
-        image: "postgres:${{ matrix.postgres_version }}-alpine"
+        image: 'postgres:${{ matrix.postgres_version }}-alpine'
         env:
           POSTGRES_PASSWORD: password
         options: >-
@@ -45,7 +45,7 @@ jobs:
         image: bitnamilegacy/pgbouncer:latest
         env:
           PGBOUNCER_AUTH_TYPE: trust
-          PGBOUNCER_DATABASE: "*"
+          PGBOUNCER_DATABASE: '*'
           PGBOUNCER_POOL_MODE: transaction
           POSTGRESQL_HOST: postgres
           POSTGRESQL_DATABASE: electric
@@ -69,7 +69,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
-          version-file: ".tool-versions"
+          version-file: '.tool-versions'
 
       - name: Cache dependencies
         uses: actions/cache@v4
@@ -87,7 +87,7 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}"
+          key: '${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}'
           restore-keys: |
             ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
             ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-
@@ -149,7 +149,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
-          version-file: ".tool-versions"
+          version-file: '.tool-versions'
 
       - name: Restore dependencies cache
         uses: actions/cache/restore@v4

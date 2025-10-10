@@ -1,5 +1,5 @@
-version: "3.3"
-name: "electric_example-${PROJECT_NAME:-default}"
+version: '3.3'
+name: 'electric_example-${PROJECT_NAME:-default}'
 
 services:
   postgres:

@@ -9,12 +9,12 @@ import type {
   UtilsRecord,
 } from '@tanstack/react-db'
 
-type MutationData = Omit<PendingMutation, 'collection'>
+type MutationData = Omit<PendingMutation, `collection`>
 
 const ONE_HOUR = 60 * 60 * 1_000
 
 function isElectricUtils(utils: UtilsRecord): utils is ElectricCollectionUtils {
-  return 'awaitTxId' in utils && typeof (utils as any).awaitTxId === 'function'
+  return `awaitTxId` in utils && typeof (utils as any).awaitTxId === `function`
 }
 
 function patchRelationMetadata(
@@ -23,8 +23,8 @@ function patchRelationMetadata(
 ): MutationData {
   // Set the sync metadata from the collection id, because the default
   // implementation looks for a `table` param which we don't use.
-  const parts = collection.id.split(':')
-  const relation = parts.length === 2 ? parts : ['public', parts[0]]
+  const parts = collection.id.split(`:`)
+  const relation = parts.length === 2 ? parts : [`public`, parts[0]]
 
   result.syncMetadata = { relation }
   return result
@@ -34,7 +34,7 @@ function buildPayload(tx: Transaction) {
   const mutations = tx.mutations.map((mutation: PendingMutation) => {
     const { collection, ...result } = mutation
 
-    return mutation.type === 'insert'
+    return mutation.type === `insert`
       ? patchRelationMetadata(result, collection)
       : result
   })

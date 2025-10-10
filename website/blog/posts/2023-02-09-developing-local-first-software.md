@@ -1,5 +1,5 @@
 ---
-title: "Developing local-first software"
+title: 'Developing local-first software'
 description: >-
   Exploring the key differences and trade-offs between building local-first vs cloud-first apps.
 excerpt: >-
@@ -19,7 +19,6 @@ post: true
 There's a [range of local-first tooling](/docs/reference/alternatives) now emerging. Not just [Electric](https://electric-sql.com) but also projects like [Evolu](https://github.com/evoluhq/evolu), [Homebase](https://homebase.io), [Instant](https://www.instantdb.com), [lo-fi](https://github.com/a-type/lo-fi), [Replicache](https://replicache.dev), [sqlite_crdt](https://github.com/cachapa/sqlite_crdt) and [Vlcn](https://vlcn.io). With these, and others, local-first is becoming more accessible. However, it's still a fundamentally different paradigm. You code directly against a local, embedded database. Your data access code runs in an untrusted environment. You have to work within the limitations of what you can store and sync onto the device &mdash; and what your users allow you to sync off it.
 
 This post aims to walk through the key differences and trade-offs, from working directly against a local database to the challenges of concurrent writes, partitioning and partial replication.
-
 
 ## Cloud-first vs local-first
 
@@ -68,7 +67,7 @@ CREATE ROLE admin;
 GRANT ALL ON items TO admin;
 ```
 
-This is an example of transposing auth logic into security rules. But, actually, row-level security is typically *not* what you need for local-first applications. Because with standard RLS the user is set by the database connection string and the rules are scoped to tables. Instead, what you need is to connect the rules to the end-user of the application and to the context in which the data is being loaded through.
+This is an example of transposing auth logic into security rules. But, actually, row-level security is typically _not_ what you need for local-first applications. Because with standard RLS the user is set by the database connection string and the rules are scoped to tables. Instead, what you need is to connect the rules to the end-user of the application and to the context in which the data is being loaded through.
 
 For example, [Supabase extends RLS](https://supabase.com/docs/guides/auth/row-level-security) with an `auth` context. This allows rules to be connected to the end-user of the application, rather than the user in the database connection string:
 
@@ -184,7 +183,7 @@ This impacts your ability to query data. Because you can't query data that isn't
 
 ### What you can sync
 
-Local devices (computers, laptops and mobile phones) have limited storage space, memory, compute and battery power. There are databases that you *can* fully store and sync onto the device. For example, the database for a shared family shopping list application. However, many real world applications have large databases that you *can't* fit onto the device.
+Local devices (computers, laptops and mobile phones) have limited storage space, memory, compute and battery power. There are databases that you _can_ fully store and sync onto the device. For example, the database for a shared family shopping list application. However, many real world applications have large databases that you _can't_ fit onto the device.
 
 Depending on data size and network connectivity, it can take a lot of time to transfer data. You have the "cold start" sync time, when you first run an application and sync initial data in from the cloud. You also often need to resume and restart replication when devices come back online. Over time, you need to remove data as well as add it. For example, imagine you have a weather application that always syncs the latest weather. At some point, you probably want to remove weather from the past, to avoid filling up the hard drive.
 
@@ -208,13 +207,13 @@ The cloud database checks its index (or does a sequence scan) and returns the qu
 
 With local-first, you run your queries on the device. As we saw above, you often can't sync the whole `projects` table onto the local device. Plus there are access considerations. Different projects belong to different accounts. As a user, you should only be able to see the projects you have access to. So you can't have the whole projects table synced onto your device.
 
-Which raises the question, how *do* you make a local first app where you can query across projects? The answer lies in the solution your sync system provides for dynamic partial replication.
+Which raises the question, how _do_ you make a local first app where you can query across projects? The answer lies in the solution your sync system provides for dynamic partial replication.
 
 ### Dynamic partial replication
 
-As we've seen in the security rules section above, data replication should be controlled and filtered by security rules, runtime parameters and client connection state. If you need to load just the public information that's required to see project listings you should be able to do that. That's *partial* replication.
+As we've seen in the security rules section above, data replication should be controlled and filtered by security rules, runtime parameters and client connection state. If you need to load just the public information that's required to see project listings you should be able to do that. That's _partial_ replication.
 
-If you need to be able to "open up" and sync in a project, you need to be able to add it to the set of data that's synced onto your local device. That's *dynamic* partial replication: where the shape of the partially replicated set of data changes over time. Some systems, like Postgres logical replication, require explicit rule changes to update what syncs:
+If you need to be able to "open up" and sync in a project, you need to be able to add it to the set of data that's synced onto your local device. That's _dynamic_ partial replication: where the shape of the partially replicated set of data changes over time. Some systems, like Postgres logical replication, require explicit rule changes to update what syncs:
 
 ```sql
 ALTER PUBLICATION example
@@ -230,19 +229,19 @@ ElectricSQL has an expressive [Shape-based system](https://legacy.electric-sql.c
 ```tsx
 const shape = await db.projects.sync({
   where: {
-    owner_id: user_id
+    owner_id: user_id,
   },
   include: {
     issues: {
       include: {
         comments: {
           include: {
-            author: true
-          }
-        }
-      }
-    }
-  }
+            author: true,
+          },
+        },
+      },
+    },
+  },
 })
 ```
 
@@ -262,7 +261,7 @@ const ExampleComponent = () => {
 }
 ```
 
-You need to keep the `results` in sync with the underlying database. That way, when the data changes, your components re-render in realtime. This means that instead of binding the results of a static query to your component, you bind a *live query* that automatically updates the `results` whenever the underlying data changes.
+You need to keep the `results` in sync with the underlying database. That way, when the data changes, your components re-render in realtime. This means that instead of binding the results of a static query to your component, you bind a _live query_ that automatically updates the `results` whenever the underlying data changes.
 
 For example, [Evolu](https://github.com/evoluhq/evolu) provides a React `useQuery` hook. In this case, `rows` is a React state variable that's kept in sync by the local-first client library with and changes made to the underlying database:
 
@@ -281,7 +280,7 @@ ElectricSQL provides a similar [live query abstraction](https://legacy.electric-
 ```tsx
 const ExampleComponent = () => {
   const { db } = useElectric()!
-  
+
   const { results } = useLiveQuery(
     db.projects.liveMany({
       where: {
@@ -306,10 +305,9 @@ Distributed systems tend to be framed in terms of the [CAP Theorem](https://en.w
 
 The good news is that [recent advances in the research base](/docs/reference/literature) have strengthened the guarantees that AP systems can provide. Specifically, it's now possible to build systems that provide transactional atomicity, causal consistency and conflict free merge semantics using [CRDTs](https://crdt.tech). This provides a much stronger programming model that weak eventual consistency. With Electric, we build on it to also provide referential integrity and constraints using [Rich-CRDTs](/blog/2022/05/03/introducing-rich-crdts).
 
-However, application developers still need to accept that writes can be made concurrently and that data may therefore "move around" underneath you. There are different approaches to this. You can reject conflicting writes, leading to rollbacks. Or you can always merge writes in. This allows you to write with *finality* and avoid rollbacks but updates may still be "built on" by concurrent writes made elsewhere.
+However, application developers still need to accept that writes can be made concurrently and that data may therefore "move around" underneath you. There are different approaches to this. You can reject conflicting writes, leading to rollbacks. Or you can always merge writes in. This allows you to write with _finality_ and avoid rollbacks but updates may still be "built on" by concurrent writes made elsewhere.
 
 This can result in data states that are unexpected if you're used to thinking about strongly consistent systems with a total order. So it's important to adopt the mindset of [causal consistency](https://legacy.electric-sql.com/docs/reference/consistency) in what is essentially a [relativistic universe](/blog/2022/05/20/relativity-causal-consistency).
-
 
 ## Putting it all together
 

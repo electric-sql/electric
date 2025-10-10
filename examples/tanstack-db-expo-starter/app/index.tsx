@@ -1,5 +1,5 @@
-import "react-native-random-uuid"
-import React, { useState } from "react"
+import 'react-native-random-uuid'
+import React, { useState } from 'react'
 import {
   View,
   Text,
@@ -8,18 +8,18 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-} from "react-native"
-import { useLiveQuery } from "@tanstack/react-db"
-import { StatusBar } from "expo-status-bar"
-import { apiClient, hostname } from "../src/utils/api-client"
-import { selectTodoSchema } from "../src/db/schema"
-import { electricCollectionOptions } from "@tanstack/electric-db-collection"
-import { createCollection } from "@tanstack/react-db"
-import { parseISO } from "date-fns"
+} from 'react-native'
+import { useLiveQuery } from '@tanstack/react-db'
+import { StatusBar } from 'expo-status-bar'
+import { apiClient, hostname } from '../src/utils/api-client'
+import { selectTodoSchema } from '../src/db/schema'
+import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { createCollection } from '@tanstack/react-db'
+import { parseISO } from 'date-fns'
 
 const todoCollection = createCollection(
   electricCollectionOptions({
-    id: "todos",
+    id: `todos`,
     schema: selectTodoSchema,
     // Electric syncs data using "shapes". These are filtered views
     // on database tables that Electric keeps in sync for you.
@@ -59,7 +59,7 @@ const todoCollection = createCollection(
 )
 
 export default function HomeScreen() {
-  const [newTodoText, setNewTodoText] = useState("")
+  const [newTodoText, setNewTodoText] = useState(``)
 
   // Query todos from the collection
   const { data: todos } = useLiveQuery((q) => q.from({ todoCollection }))
@@ -88,7 +88,7 @@ export default function HomeScreen() {
                 created_at: new Date(),
                 updated_at: new Date(),
               })
-              setNewTodoText("")
+              setNewTodoText(``)
             }
           }}
         />
@@ -136,57 +136,57 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: `#fff`,
   },
   title: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: `bold`,
     marginTop: 40,
     marginBottom: 20,
-    textAlign: "center",
+    textAlign: `center`,
   },
   inputContainer: {
-    flexDirection: "row",
+    flexDirection: `row`,
     marginBottom: 20,
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: `#ddd`,
     padding: 10,
     marginRight: 10,
     borderRadius: 4,
   },
   todoItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: `row`,
+    alignItems: `center`,
     padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: `#eee`,
   },
   todoCheckbox: {
     width: 44,
     height: 44,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: `#ddd`,
     borderRadius: 4,
     marginRight: 10,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: `center`,
+    justifyContent: `center`,
   },
   checkmark: {
-    color: "#0080ff",
+    color: `#0080ff`,
   },
   todoText: {
     flex: 1,
   },
   completedTodoText: {
-    textDecorationLine: "line-through",
-    color: "#aaa",
+    textDecorationLine: `line-through`,
+    color: `#aaa`,
   },
   deleteButton: {
-    color: "#ff3b30",
-    fontWeight: "bold",
+    color: `#ff3b30`,
+    fontWeight: `bold`,
     fontSize: 16,
   },
 })

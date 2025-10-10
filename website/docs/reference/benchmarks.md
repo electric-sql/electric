@@ -122,6 +122,7 @@ This benchmark evaluates the time it takes for a write operation to reach a clie
 Each shape in this benchmark is independent, ensuring that a write operation affects only one shape at a time.
 
 The two graphs differ based on the type of where clause used for the shapes:
+
 - **Top Graph:** The where clause is in the form `field = constant`, where each shape is assigned a unique constant. These types of where clause, along with
   [other patterns](/docs/guides/shapes#optimised-where-clauses),
   are optimised for high performance regardless of the number of shapes — analogous to having an index on the field. As shown in the graph, the latency remains consistently
@@ -233,7 +234,7 @@ The top graph shows throughput for Postgres 14. You can see throughput is the ro
 140k row changes per second per shape.
 
 The bottom graph shows throughput for Postgres 15. Postgres 15 has the ability to filter the replication stream based on a where clause,
-so we use this to filter out writes that don't affect any shapes. So for writes that affect shapes, we get the same  140k row changes per second per shape as Postgres 14,
+so we use this to filter out writes that don't affect any shapes. So for writes that affect shapes, we get the same 140k row changes per second per shape as Postgres 14,
 but for writes that don't affect shapes, we get 1400k row changes per second per shape.
 
 ## PGlite

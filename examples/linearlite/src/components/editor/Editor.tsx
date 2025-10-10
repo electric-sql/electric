@@ -35,7 +35,6 @@ const Editor = ({
   const markdownValue = useRef<string | null>(null)
 
   const extensions: Extensions = [
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     StarterKit as any,
     Markdown,
     Table,
@@ -49,7 +48,6 @@ const Editor = ({
     editorProps,
     content: value || undefined,
     onUpdate: ({ editor }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       markdownValue.current = (editor.storage as any).markdown.getMarkdown()
       onChange(markdownValue.current || ``)
     },

@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import { useLiveQuery, eq, not } from '@tanstack/react-db'
-import { Box, Flex, Text, TextField, Button, IconButton } from '@radix-ui/themes'
+import {
+  Box,
+  Flex,
+  Text,
+  TextField,
+  Button,
+  IconButton,
+} from '@radix-ui/themes'
 import { X as CloseIcon } from 'lucide-react'
 import { makeStyles, mergeClasses } from '@griffel/react'
 import { useAuth } from '../../db/auth'
@@ -8,33 +15,32 @@ import { copyInviteLink, getJoinUrl } from '../../utils/clipboard'
 import UserAvatar from '../UserAvatar'
 import ThreadRemoveUserModal from './ThreadRemoveUserModal'
 
-import { membershipCollection, threadCollection, userCollection } from '../../db/collections'
+import {
+  membershipCollection,
+  threadCollection,
+  userCollection,
+} from '../../db/collections'
 import type { Membership, User } from '../../db/schema'
 
 const useClasses = makeStyles({
   listItem: {
-    borderRadius: 'var(--radius-2)',
-    padding: 'var(--space-2)',
-    marginLeft: 'calc(-1 * var(--space-2))',
-    marginRight: 'calc(-1 * var(--space-2))',
-    transition: 'background-color 0.15s ease',
+    borderRadius: `var(--radius-2)`,
+    padding: `var(--space-2)`,
+    marginLeft: `calc(-1 * var(--space-2))`,
+    marginRight: `calc(-1 * var(--space-2))`,
+    transition: `background-color 0.15s ease`,
   },
   clickableRow: {
-    cursor: 'pointer',
+    cursor: `pointer`,
     ':hover': {
-      backgroundColor: 'var(--gray-3)',
+      backgroundColor: `var(--gray-3)`,
     },
   },
 })
 
-type UserResult = Pick<
-  User,
-  | 'id'
-  | 'name'
-  | 'avatar_url'
-> & {
-  membership_id: Membership['id'],
-  membership_role: Membership['role']
+type UserResult = Pick<User, `id` | `name` | `avatar_url`> & {
+  membership_id: Membership[`id`]
+  membership_role: Membership[`role`]
 }
 
 type Props = {
@@ -65,7 +71,7 @@ function ThreadEditForm({ threadId }: Props) {
   // All the users and agents in the thread.
 
   const { collection: memberResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ user: userCollection })
         .innerJoin(
@@ -80,44 +86,39 @@ function ThreadEditForm({ threadId }: Props) {
           membership_id: membership.id,
           membership_role: membership.role,
         }))
-        .where(({ membership }) => eq(membership.thread_id, threadId))
-    ),
+        .where(({ membership }) => eq(membership.thread_id, threadId)),
     [threadId]
   )
 
   // Just the humans.
 
   const { collection: userResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: memberResults })
-        .where(({ result }) => eq(result.type, 'human'))
-    ),
+        .where(({ result }) => eq(result.type, `human`)),
     [memberResults]
   )
   const { data: ownerUsers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: userResults })
-        .where(({ result }) => eq(result.membership_role, 'owner'))
-    ),
+        .where(({ result }) => eq(result.membership_role, `owner`)),
     [userResults]
   )
   const { data: currentUsers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: userResults })
-        .where(({ result }) => eq(result.id, currentUserId))
-    ),
+        .where(({ result }) => eq(result.id, currentUserId)),
     [userResults, currentUserId]
   )
   const { data: otherUsers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: userResults })
-        .orderBy(({ result }) => result.name, 'asc')
-        .where(({ result }) => not(eq(result.id, currentUserId)))
-    ),
+        .orderBy(({ result }) => result.name, `asc`)
+        .where(({ result }) => not(eq(result.id, currentUserId))),
     [userResults, currentUserId]
   )
   const currentUser = currentUsers[0]!
@@ -129,29 +130,26 @@ function ThreadEditForm({ threadId }: Props) {
   // Just the agents.
 
   const { collection: agentResults } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: memberResults })
-        .where(({ result }) => eq(result.type, 'agent'))
-    ),
+        .where(({ result }) => eq(result.type, `agent`)),
     [memberResults]
   )
   const { data: producers } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: agentResults })
-        .orderBy(({ result }) => result.name, 'asc')
-        .where(({ result }) => eq(result.membership_role, 'producer'))
-    ),
+        .orderBy(({ result }) => result.name, `asc`)
+        .where(({ result }) => eq(result.membership_role, `producer`)),
     [agentResults]
   )
   const { data: comedians } = useLiveQuery(
-    (query) => (
+    (query) =>
       query
         .from({ result: agentResults })
-        .orderBy(({ result }) => result.name, 'asc')
-        .where(({ result }) => eq(result.membership_role, 'comedian'))
-    ),
+        .orderBy(({ result }) => result.name, `asc`)
+        .where(({ result }) => eq(result.membership_role, `comedian`)),
     [agentResults]
   )
   const threadAgents = [...producers, ...comedians]
@@ -204,7 +202,7 @@ function ThreadEditForm({ threadId }: Props) {
 
   return (
     <>
-      <Box p="4" pt="0" height="100%" style={{ overflowY: 'auto' }}>
+      <Box p="4" pt="0" height="100%" style={{ overflowY: `auto` }}>
         {/* Edit thread name */}
         <Box mb="6">
           <form onSubmit={handleSaveThreadName}>
@@ -222,7 +220,7 @@ function ThreadEditForm({ threadId }: Props) {
                 />
               </Box>
               <Button type="submit" size="2" color="iris" variant="soft">
-                {threadNameSaved ? 'Saved!' : 'Save'}
+                {threadNameSaved ? `Saved!` : `Save`}
               </Button>
             </Flex>
           </form>
@@ -248,7 +246,11 @@ function ThreadEditForm({ threadId }: Props) {
                 onClick={() => handleUserRowClick(user)}
               >
                 <Flex align="center" gap="2">
-                  <UserAvatar username={user.name} imageUrl={user.avatar_url} size="medium" />
+                  <UserAvatar
+                    username={user.name}
+                    imageUrl={user.avatar_url}
+                    size="medium"
+                  />
                   <Text size="2">{user.name}</Text>
                   {index === 0 && (
                     <Text size="1" color="gray">
@@ -292,7 +294,7 @@ function ThreadEditForm({ threadId }: Props) {
                 variant="soft"
                 onClick={handleCopyInvite}
               >
-                {inviteCopied ? 'Copied!' : 'Copy'}
+                {inviteCopied ? `Copied!` : `Copy`}
               </Button>
             </Flex>
           </Box>
@@ -317,13 +319,17 @@ function ThreadEditForm({ threadId }: Props) {
                 onClick={() => handleUserRowClick(agent)}
               >
                 <Flex align="center" gap="2">
-                  <UserAvatar username={agent.name} imageUrl={agent.avatar_url} size="medium" />
+                  <UserAvatar
+                    username={agent.name}
+                    imageUrl={agent.avatar_url}
+                    size="medium"
+                  />
                   <Text size="2">{agent.name}</Text>
                   <Text size="1" color="gray">
                     ({agent.membership_role})
                   </Text>
                 </Flex>
-                {agent.membership_role !== 'producer' && isOwner && (
+                {agent.membership_role !== `producer` && isOwner && (
                   <IconButton
                     variant="ghost"
                     size="1"
@@ -343,7 +349,7 @@ function ThreadEditForm({ threadId }: Props) {
       </Box>
       <ThreadRemoveUserModal
         isOpen={showRemoveModal}
-        userName={userToRemove?.name || ''}
+        userName={userToRemove?.name || ``}
         onConfirm={confirmRemoveUser}
         onCancel={cancelRemoveUser}
       />

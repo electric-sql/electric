@@ -10,7 +10,7 @@ import IssueRow from './IssueRow'
 import { Issue } from '../../types/types'
 
 // Type-fixed component to work around React 18/19 JSX strictness
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const ListFixed = List as any
 
 export interface IssueListProps {
@@ -52,7 +52,7 @@ const VirtualIssueRow = memo(
     const issue = issues[index]
     return (
       <IssueRow
-        key={`issue-${issue?.id ?? 'index' + index}`}
+        key={`issue-${issue?.id ?? `index` + index}`}
         issue={issue}
         style={style}
       />
