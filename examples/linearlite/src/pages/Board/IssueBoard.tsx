@@ -27,15 +27,12 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
 
   useEffect(() => {
     // Reset moved issues when issues change
-    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
     setMovedIssues({})
   }, [columnsLiveIssues])
 
   const issuesByStatus: Record<string, Issue[]> = {}
   const issuesResByStatus: Record<string, LiveQueryResults<Issue>> = {}
   Object.entries(columnsLiveIssues).forEach(([status, liveQuery]) => {
-    // eslint-disable-next-line react-compiler/react-compiler
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     const issuesRes = useLiveQuery(liveQuery)
     issuesResByStatus[status] = issuesRes
     issuesRes.rows.forEach((issue) => {
@@ -167,7 +164,7 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
    */
   const getNewKanbanOrder = (issueBefore: Issue, issueAfter: Issue) => {
     const prevKanbanOrder = issueBefore?.kanbanorder
-    // eslint-disable-next-line prefer-const
+
     let nextKanbanOrder = issueAfter?.kanbanorder
     // if (nextKanbanOrder && nextKanbanOrder === prevKanbanOrder) {
     //   // If the next issue has the same kanbanorder as the previous issue,
@@ -209,43 +206,40 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
     }
   }
 
-  return (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createElement(
-      DragDropContext as any,
-      { onDragEnd },
-      <div className="flex flex-1 pt-6 pl-8 overflow-scroll bg-gray-100">
-        <IssueCol
-          title={StatusDisplay[Status.BACKLOG]}
-          status={Status.BACKLOG}
-          issues={issuesByStatus[Status.BACKLOG]}
-          liveQuery={columnsLiveIssues[Status.BACKLOG]}
-        />
-        <IssueCol
-          title={StatusDisplay[Status.TODO]}
-          status={Status.TODO}
-          issues={issuesByStatus[Status.TODO]}
-          liveQuery={columnsLiveIssues[Status.TODO]}
-        />
-        <IssueCol
-          title={StatusDisplay[Status.IN_PROGRESS]}
-          status={Status.IN_PROGRESS}
-          issues={issuesByStatus[Status.IN_PROGRESS]}
-          liveQuery={columnsLiveIssues[Status.IN_PROGRESS]}
-        />
-        <IssueCol
-          title={StatusDisplay[Status.DONE]}
-          status={Status.DONE}
-          issues={issuesByStatus[Status.DONE]}
-          liveQuery={columnsLiveIssues[Status.DONE]}
-        />
-        <IssueCol
-          title={StatusDisplay[Status.CANCELED]}
-          status={Status.CANCELED}
-          issues={issuesByStatus[Status.CANCELED]}
-          liveQuery={columnsLiveIssues[Status.CANCELED]}
-        />
-      </div>
-    )
+  return createElement(
+    DragDropContext as any,
+    { onDragEnd },
+    <div className="flex flex-1 pt-6 pl-8 overflow-scroll bg-gray-100">
+      <IssueCol
+        title={StatusDisplay[Status.BACKLOG]}
+        status={Status.BACKLOG}
+        issues={issuesByStatus[Status.BACKLOG]}
+        liveQuery={columnsLiveIssues[Status.BACKLOG]}
+      />
+      <IssueCol
+        title={StatusDisplay[Status.TODO]}
+        status={Status.TODO}
+        issues={issuesByStatus[Status.TODO]}
+        liveQuery={columnsLiveIssues[Status.TODO]}
+      />
+      <IssueCol
+        title={StatusDisplay[Status.IN_PROGRESS]}
+        status={Status.IN_PROGRESS}
+        issues={issuesByStatus[Status.IN_PROGRESS]}
+        liveQuery={columnsLiveIssues[Status.IN_PROGRESS]}
+      />
+      <IssueCol
+        title={StatusDisplay[Status.DONE]}
+        status={Status.DONE}
+        issues={issuesByStatus[Status.DONE]}
+        liveQuery={columnsLiveIssues[Status.DONE]}
+      />
+      <IssueCol
+        title={StatusDisplay[Status.CANCELED]}
+        status={Status.CANCELED}
+        issues={issuesByStatus[Status.CANCELED]}
+        liveQuery={columnsLiveIssues[Status.CANCELED]}
+      />
+    </div>
   )
 }

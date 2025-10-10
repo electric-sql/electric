@@ -2,14 +2,14 @@ name: Electric Docker Image Smoke Test
 
 on:
   push:
-    branches: ["main"]
+    branches: ['main']
     paths-ignore:
-      - "website/**"
-      - "**/README.md"
+      - 'website/**'
+      - '**/README.md'
   pull_request:
     paths-ignore:
-      - "website/**"
-      - "**/README.md"
+      - 'website/**'
+      - '**/README.md'
 
 jobs:
   docker_image_smoketest:
@@ -17,14 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: "postgres:17-alpine"
+        image: 'postgres:17-alpine'
         env:
           POSTGRES_PASSWORD: password
         ports:
           - 5432:5432
 
     steps:
-      - name: "Set PG settings"
+      - name: 'Set PG settings'
         run: |
           docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
           docker restart ${{ job.services.postgres.id }}
@@ -38,11 +38,11 @@ jobs:
           context: packages/sync-service
           push: false
           load: true
-          tags: "electric-test-image"
+          tags: 'electric-test-image'
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: "Run the built image"
+      - name: 'Run the built image'
         run: |
           docker run \
             --rm \

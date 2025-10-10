@@ -38,13 +38,13 @@ function IssueModal({ isOpen, onDismiss }: Props) {
   const pg = usePGlite()
 
   const handleSubmit = async () => {
-    if (title === '') {
-      showWarning('Please enter a title before submitting', 'Title required')
+    if (title === ``) {
+      showWarning(`Please enter a title before submitting`, `Title required`)
       return
     }
 
     if (config.readonly) {
-      showWarning('This is a read-only demo', 'Read-only')
+      showWarning(`This is a read-only demo`, `Read-only`)
       if (onDismiss) onDismiss()
       reset()
       return
@@ -62,7 +62,7 @@ function IssueModal({ isOpen, onDismiss }: Props) {
     const date = new Date()
     await pg.sql`
       INSERT INTO issue (id, title, username, priority, status, description, modified, created, kanbanorder)
-      VALUES (${crypto.randomUUID()}, ${title}, ${'testuser'}, ${priority}, ${status}, ${description ?? ''}, ${date}, ${date}, ${kanbanorder})
+      VALUES (${crypto.randomUUID()}, ${title}, ${`testuser`}, ${priority}, ${status}, ${description ?? ``}, ${date}, ${date}, ${kanbanorder})
     `
 
     if (onDismiss) onDismiss()
@@ -88,7 +88,6 @@ function IssueModal({ isOpen, onDismiss }: Props) {
 
   useEffect(() => {
     if (isOpen && !timeoutRef.current) {
-      // eslint-disable-next-line @eslint-react/web-api/no-leaked-timeout
       timeoutRef.current = setTimeout(() => {
         ref.current?.focus()
         timeoutRef.current = undefined

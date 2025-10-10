@@ -1,4 +1,3 @@
-/* eslint-disable no-empty-pattern */
 import { v4 as uuidv4 } from 'uuid'
 import { Client, QueryResult } from 'pg'
 import { inject, test } from 'vitest'

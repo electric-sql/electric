@@ -36,17 +36,15 @@ export default function HomeScreen() {
   const { isLoading, data } = useShape({
     url: `${ELECTRIC_URL}/v1/shape`,
     params: {
-      table: 'items'
-    }
+      table: 'items',
+    },
   })
 
   if (isLoading) {
     return null
   }
 
-  return (
-    <Text>{ JSON.stringify(data, null, 4) }</Text>
-  )
+  return <Text>{JSON.stringify(data, null, 4)}</Text>
 }
 ```
 
@@ -66,6 +64,6 @@ If there's data in the `items` table of your Postgres, you should see it syncing
 
 ## PGlite
 
-[PGlite](https://pglite.dev) doesn't *yet* work in React Native.
+[PGlite](https://pglite.dev) doesn't _yet_ work in React Native.
 
 We have an [open issue tracking support for it](https://github.com/electric-sql/pglite/issues/87). When it does, we hope to work with the Expo team to get an official `expo-pglite` package published.

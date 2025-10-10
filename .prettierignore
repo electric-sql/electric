@@ -1,0 +1,20 @@
+node_modules
+.vscode
+dist
+build
+coverage
+.next
+.sst
+.nitro
+.output
+*.min.js
+*.min.css
+pnpm-lock.yaml
+sst-env.d.ts
+sst.config.ts
+
+# Ignore website markdown files to prevent underscore escaping issues
+website/**/*.md
+
+# Ignore CSS file with unstable Prettier formatting
+website/.vitepress/theme/custom.css

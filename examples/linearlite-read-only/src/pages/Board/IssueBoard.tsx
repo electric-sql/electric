@@ -8,7 +8,7 @@ import { Issue, Status, StatusDisplay } from '../../types/types'
 import IssueCol from './IssueCol'
 
 // Type-fixed component to work around React 18/19 JSX strictness
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const DragDropContextFixed = DragDropContext as any
 
 export interface IssueBoardProps {

@@ -1,4 +1,3 @@
-/* eslint-disable react-compiler/react-compiler */
 import TopFilter from '../../components/TopFilter'
 import IssueBoard from './IssueBoard'
 import { FilterState } from '../../utils/filterState'
@@ -17,7 +16,6 @@ function Board() {
 
   const totalIssuesCount = Object.values(columnsLiveIssues).reduce(
     (total, liveQuery) => {
-      // eslint-disable-next-line react-hooks/rules-of-hooks
       const issuesRes = useLiveQuery(liveQuery)
       return total + (issuesRes?.totalCount ?? 0)
     },

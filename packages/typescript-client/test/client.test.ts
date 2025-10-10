@@ -1231,7 +1231,7 @@ describe(`Shape - SSE`, () => {
               let message
               try {
                 message = JSON.parse(data)
-              } catch (parseError) {
+              } catch (_parseError) {
                 // Ignore JSON parse errors for non-JSON lines
               }
 

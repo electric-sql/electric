@@ -7,11 +7,11 @@ import type { FactResult } from '../../types'
 
 const useStyles = makeStyles({
   factsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--space-2)',
-    paddingTop: 'var(--space-1)',
-    paddingBottom: 'var(--space-1)',
+    display: `flex`,
+    flexDirection: `column`,
+    gap: `var(--space-2)`,
+    paddingTop: `var(--space-1)`,
+    paddingBottom: `var(--space-1)`,
   },
 })
 
@@ -64,8 +64,8 @@ function FactsList({ threadId, filter }: Props) {
       const baseQuery = query
         .from({ result: factResults })
         .orderBy(({ result }) => result.inserted_at, {
-          direction: 'asc',
-          nulls: 'last',
+          direction: `asc`,
+          nulls: `last`,
         })
 
       return filterText

@@ -13,10 +13,10 @@ interface CaddyPluginOptions {
 
 export function caddyPlugin(options: CaddyPluginOptions = {}): Plugin {
   const {
-    host = "localhost",
+    host = `localhost`,
     encoding = true,
     autoStart = true,
-    configPath = "Caddyfile",
+    configPath = `Caddyfile`,
   } = options
 
   let caddyProcess: ChildProcess | null = null
@@ -26,13 +26,13 @@ export function caddyPlugin(options: CaddyPluginOptions = {}): Plugin {
   const generateCaddyfile = (projectName: string, vitePort: number) => {
     // Get network IP for network access
     const nets = networkInterfaces()
-    let networkIP = "192.168.1.1" // fallback
+    let networkIP = `192.168.1.1` // fallback
 
     for (const name of Object.keys(nets)) {
       const netInterfaces = nets[name]
       if (netInterfaces) {
         for (const net of netInterfaces) {
-          if (net.family === "IPv4" && !net.internal) {
+          if (net.family === `IPv4` && !net.internal) {
             networkIP = net.address
             break
           }
@@ -47,7 +47,7 @@ export function caddyPlugin(options: CaddyPluginOptions = {}): Plugin {
   encode {
     gzip
   }`
-      : ""
+      : ``
   }
 }
 
@@ -59,7 +59,7 @@ ${networkIP} {
   encode {
     gzip
   }`
-      : ""
+      : ``
   }
 }
 `
@@ -71,16 +71,16 @@ ${networkIP} {
       return
     }
 
-    caddyProcess = spawn("caddy", ["run", "--config", configPath], {
+    caddyProcess = spawn(`caddy`, [`run`, `--config`, configPath], {
       // stdio: "inherit",
       // shell: true,
     })
 
-    caddyProcess.on("error", (error) => {
-      console.error("Failed to start Caddy:", error.message)
+    caddyProcess.on(`error`, (error) => {
+      console.error(`Failed to start Caddy:`, error.message)
     })
 
-    caddyProcess.on("exit", (code) => {
+    caddyProcess.on(`exit`, (code) => {
       if (code !== 0 && code !== null) {
         console.error(`Caddy exited with code ${code}`)
       }
@@ -90,11 +90,11 @@ ${networkIP} {
     // Handle process cleanup
     const cleanup = () => {
       if (caddyProcess && !caddyProcess.killed) {
-        caddyProcess.kill("SIGTERM")
+        caddyProcess.kill(`SIGTERM`)
         // Force kill if it doesn't terminate gracefully
         setTimeout(() => {
           if (caddyProcess && !caddyProcess.killed) {
-            caddyProcess.kill("SIGKILL")
+            caddyProcess.kill(`SIGKILL`)
             process.exit()
           } else {
             process.exit()
@@ -103,18 +103,18 @@ ${networkIP} {
       }
     }
 
-    process.on("SIGINT", cleanup)
-    process.on("SIGTERM", cleanup)
-    process.on("exit", cleanup)
+    process.on(`SIGINT`, cleanup)
+    process.on(`SIGTERM`, cleanup)
+    process.on(`exit`, cleanup)
   }
 
   const stopCaddy = () => {
     if (caddyProcess && !caddyProcess.killed) {
-      caddyProcess.kill("SIGTERM")
+      caddyProcess.kill(`SIGTERM`)
       // Force kill if it doesn't terminate gracefully
       setTimeout(() => {
         if (caddyProcess && !caddyProcess.killed) {
-          caddyProcess.kill("SIGKILL")
+          caddyProcess.kill(`SIGKILL`)
         }
       }, 3000)
       caddyProcess = null
@@ -133,21 +133,21 @@ ${networkIP} {
   }
 
   return {
-    name: "vite-plugin-caddy",
+    name: `vite-plugin-caddy`,
     configureServer(server) {
-      let projectName = "app"
+      let projectName = `app`
 
       // Get project name from package.json
       try {
         const packageJsonContent = readFileSync(
-          process.cwd() + "/package.json",
-          "utf8"
+          process.cwd() + `/package.json`,
+          `utf8`
         )
         const packageJson = JSON.parse(packageJsonContent)
-        projectName = packageJson.name || "app"
+        projectName = packageJson.name || `app`
       } catch (_error) {
         console.warn(
-          'Could not read package.json for project name, using "app"'
+          `Could not read package.json for project name, using "app"`
         )
       }
 
@@ -155,13 +155,13 @@ ${networkIP} {
       server.printUrls = function () {
         // Get network IP
         const nets = networkInterfaces()
-        let networkIP = "192.168.1.1" // fallback
+        let networkIP = `192.168.1.1` // fallback
 
         for (const name of Object.keys(nets)) {
           const netInterfaces = nets[name]
           if (netInterfaces) {
             for (const net of netInterfaces) {
-              if (net.family === "IPv4" && !net.internal) {
+              if (net.family === `IPv4` && !net.internal) {
                 networkIP = net.address
                 break
               }
@@ -193,7 +193,7 @@ ${networkIP} {
         const result = originalListen.call(this, port, ...args)
 
         // Try to start Caddy after server is listening
-        if (result && typeof result.then === "function") {
+        if (result && typeof result.then === `function`) {
           result.then(() => {
             // Check if we now have a port from the server
             if (!vitePort && server.config.server.port) {

@@ -1,5 +1,5 @@
 ---
-title: "Electric Cloud public BETA: Sync in 30 seconds"
+title: 'Electric Cloud public BETA: Sync in 30 seconds'
 description: >-
   Electric Cloud is now in public BETA!
   This means it's open to everyone for immediate access.
@@ -7,7 +7,7 @@ excerpt: >-
   Electric Cloud is now in public BETA!
   This means it's open to everyone for immediate access.
 authors: [kyle, thruflo]
-image: "/img/blog/electric-cloud-public-beta-release/header.jpg"
+image: '/img/blog/electric-cloud-public-beta-release/header.jpg'
 tags: [release]
 outline: [2, 3]
 post: true
@@ -84,11 +84,11 @@ With Electric, you don't need to write imperative state transfer code. You don't
 
 Instead, you get:
 
-* **Dead-simple integration**: Sync data directly from your Postgres database
-* **Instant responsiveness**: Data is locally available, making your app lightning fast
-* **Offline support**: local data reads should keep working regardless of connectivity
-* **Real-time by default**: Changes propagate automatically to all connected clients
-* **Reduced cloud costs**: Move data and compute to the client, lowering your server load
+- **Dead-simple integration**: Sync data directly from your Postgres database
+- **Instant responsiveness**: Data is locally available, making your app lightning fast
+- **Offline support**: local data reads should keep working regardless of connectivity
+- **Real-time by default**: Changes propagate automatically to all connected clients
+- **Reduced cloud costs**: Move data and compute to the client, lowering your server load
 
 We released the 1.0 of the open-source Electric sync engine a few weeks ago.
 
@@ -114,5 +114,4 @@ We can't wait to see what you build with it 🚀
 
 ---
 
-*Have questions? Join our[ Discord community](https://discord.gg/electric), check out our[ documentation](https://electric-sql.com/docs), or find us on[ GitHub](https://github.com/electric-sql/electric).*
-
+_Have questions? Join our[ Discord community](https://discord.gg/electric), check out our[ documentation](https://electric-sql.com/docs), or find us on[ GitHub](https://github.com/electric-sql/electric)._

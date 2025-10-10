@@ -5,34 +5,34 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 
 const useStyles = makeStyles({
   header: {
-    cursor: 'pointer',
-    userSelect: 'none',
-    width: '100%',
-    borderBottom: '1px solid var(--border-color)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 'var(--space-3)',
+    cursor: `pointer`,
+    userSelect: `none`,
+    width: `100%`,
+    borderBottom: `1px solid var(--border-color)`,
+    display: `flex`,
+    alignItems: `center`,
+    justifyContent: `space-between`,
+    padding: `var(--space-3)`,
   },
   headerEnabled: {
     '&:hover': {
-      backgroundColor: 'var(--gray-3)',
+      backgroundColor: `var(--gray-3)`,
     },
   },
   headerDisabled: {
-    cursor: 'not-allowed',
+    cursor: `not-allowed`,
     opacity: 0.5,
   },
   content: {
-    paddingLeft: 'var(--space-1)',
-    paddingRight: 'var(--space-1)',
-    paddingBottom: 'var(--space-2)',
-    paddingTop: 'var(--space-2)',
-    borderBottom: '1px solid var(--border-color)',
+    paddingLeft: `var(--space-1)`,
+    paddingRight: `var(--space-1)`,
+    paddingBottom: `var(--space-2)`,
+    paddingTop: `var(--space-2)`,
+    borderBottom: `1px solid var(--border-color)`,
   },
   inner: {
-    marginLeft: 'var(--space-1)',
-    marginRight: 'var(--space-1)',
+    marginLeft: `var(--space-1)`,
+    marginRight: `var(--space-1)`,
   },
 })
 

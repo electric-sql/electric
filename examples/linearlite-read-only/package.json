@@ -13,7 +13,7 @@
     "dev": "vite",
     "preview": "vite preview",
     "process-data": "node ./db/process_data.js",
-    "stylecheck": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "stylecheck": "eslint . --report-unused-disable-directives --max-warnings 0",
     "test:browser": "playwright install && playwright test ./e2e/",
     "typecheck": "tsc --noEmit"
   },

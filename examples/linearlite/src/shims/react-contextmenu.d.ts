@@ -1,5 +1,4 @@
 // Copied here from the unreleased master branch of github.com/firefox-devtools/react-contextmenu
-/* eslint-disable */
 
 declare module '@firefox-devtools/react-contextmenu' {
   import * as React from 'react'

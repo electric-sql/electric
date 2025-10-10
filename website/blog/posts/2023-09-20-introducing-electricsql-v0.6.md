@@ -58,7 +58,7 @@ Electric is built on [standard open-source Postgres](https://legacy.electric-sql
 
 ### Hasura for local first
 
-Electric is designed to work with *existing Postgres data models*. This means it works for both greenfield and brownfield applications. The aim is to be able to drop Electric onto Postgres for instant local-first, in the same way you can drop [Hasura](https://hasura.io/) or [PostgREST](https://postgrest.org) on for instant GraphQL or REST APIs.
+Electric is designed to work with _existing Postgres data models_. This means it works for both greenfield and brownfield applications. The aim is to be able to drop Electric onto Postgres for instant local-first, in the same way you can drop [Hasura](https://hasura.io/) or [PostgREST](https://postgrest.org) on for instant GraphQL or REST APIs.
 
 :::info
 In fact, one way of understanding ElectricSQL is "GraphQL in SQL". Because why would you need an additional declarative query language to [manage state transfer](/blog/2022/12/16/evolution-state-transfer) when you're already using SQL in a Postgres-backed system?
@@ -118,11 +118,10 @@ import { schema, Project } from './generated/client'
 const { db } = await electrify(conn, schema, config)
 const projects: Project[] = db.projects.findMany({
   where: {
-    owner_id: auth.user_id
-  }
+    owner_id: auth.user_id,
+  },
 })
 ```
-
 
 ## Dynamic partial replication
 
@@ -162,19 +161,19 @@ You can sync wide, shallow shapes, such as a small set of columns from all rows 
 ```tsx
 await db.projects.sync({
   where: {
-    id: 'abcd'
+    id: 'abcd',
   },
   include: {
     issues: {
       include: {
         comments: {
           include: {
-            author: true
-          }
-        }
-      }
-    }
-  }
+            author: true,
+          },
+        },
+      },
+    },
+  },
 })
 ```
 
@@ -212,16 +211,15 @@ And [write directly to the local database](https://legacy.electric-sql.com/docs/
 ```tsx
 await db.projects.update({
   data: {
-    status: 'completed'
+    status: 'completed',
   },
   where: {
-    id: project.id
-  }
+    id: project.id,
+  },
 })
 ```
 
 Components automatically re-render when necessary. Data is automatically replicated using the shape subscriptions you've established. In many cases, there's no need for an additional state-management library. Just use the database as a unified store for data and UI state.
-
 
 ## Modern, local-first apps
 

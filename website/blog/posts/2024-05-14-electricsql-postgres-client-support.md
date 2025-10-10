@@ -33,10 +33,9 @@ To demonstrate Postgres on the client we have updated both our basic web example
 
 ### Continued Support for SQLite
 
-SQLite support is not going away - it's the most widely used and trusted  database in the world. It's estimated there are [over *one trillion* SQLite databases in active use](https://www.sqlite.org/mostdeployed.html). Being able to sync from Postgres on your server to SQLite on a user's device is a core part of our mission.
+SQLite support is not going away - it's the most widely used and trusted database in the world. It's estimated there are [over _one trillion_ SQLite databases in active use](https://www.sqlite.org/mostdeployed.html). Being able to sync from Postgres on your server to SQLite on a user's device is a core part of our mission.
 
 While this support for Postgres in the client unlocks use cases that may be difficult to support on SQLite, SQLite is always going to be a popular database for embedded applications due to being lightweight, universally trusted and ubiquitous.
-
 
 ### Introducing PGlite
 
@@ -83,12 +82,12 @@ import { electrify } from 'electric-sql/pglite'
 import { schema } from './generated/client'
 
 // Create the PGlite database connection.
-// In the browser use a `idb://` prefixed path to store your 
+// In the browser use a `idb://` prefixed path to store your
 // database in IndexedDB.
-// In Node use a path to a directory on the file system where 
+// In Node use a path to a directory on the file system where
 // you would like the pgdata directory.
 const conn = new PGlite('idb://electric.db', {
-  // You can optionally use the relaxed durability mode to 
+  // You can optionally use the relaxed durability mode to
   // improve responsiveness.
   // This schedules a flush to indexedDB for after a query has
   // returned.
@@ -97,7 +96,7 @@ const conn = new PGlite('idb://electric.db', {
 
 // Instantiate your Electric client.
 const electric = await electrify(conn, schema, {
-  url: 'https://example.com:5133'
+  url: 'https://example.com:5133',
 })
 ```
 
@@ -111,7 +110,7 @@ First, add node-postgres as a dependency to your project:
 npm install pg
 ```
 
-Then create a node postgres client and electrify it: 
+Then create a node postgres client and electrify it:
 
 ```ts
 // Import the node-postgres database client.

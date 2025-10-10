@@ -30,18 +30,18 @@ function ExtractFacts({ event }: Props) {
 
   return (
     <>
-      extracted{' '}
+      extracted{` `}
       {results.map(({ subject, count }, index) => {
         const [countStr, label] =
-          count > 1 ? [`${count}`, 'facts'] : ['a', 'fact']
+          count > 1 ? [`${count}`, `facts`] : [`a`, `fact`]
 
         const divider =
-          index === lastEntry ? '' : index === secondLastEntry ? ' and ' : ', '
+          index === lastEntry ? `` : index === secondLastEntry ? ` and ` : `, `
 
         return (
           <span key={subject}>
-            {countStr} {label} about{' '}
-            <span style={{ color: 'rgb(125, 184, 255)' }}>@{subject}</span>
+            {countStr} {label} about{` `}
+            <span style={{ color: `rgb(125, 184, 255)` }}>@{subject}</span>
             {divider}
           </span>
         )

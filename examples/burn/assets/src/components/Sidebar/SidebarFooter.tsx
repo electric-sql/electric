@@ -66,9 +66,9 @@ function SidebarFooter() {
     authSignOut()
 
     navigate({
-      to: '/welcome',
+      to: `/welcome`,
       search: { next: undefined },
-      reloadDocument: true
+      reloadDocument: true,
     })
   }
 

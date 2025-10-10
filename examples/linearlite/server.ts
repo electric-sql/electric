@@ -11,7 +11,7 @@ import { serve } from '@hono/node-server'
 
 const DATABASE_URL =
   process.env.DATABASE_URL ??
-  'postgresql://postgres:password@localhost:54321/linearlite'
+  `postgresql://postgres:password@localhost:54321/linearlite`
 
 // Create postgres connection
 const sql = postgres(DATABASE_URL)
@@ -19,17 +19,17 @@ const sql = postgres(DATABASE_URL)
 const app = new Hono()
 
 // Middleware
-app.use('/*', cors())
+app.use(`/*`, cors())
 
 // Routes
-app.get('/', async (c) => {
+app.get(`/`, async (c) => {
   const result = await sql`
     SELECT 'ok' as status, version() as postgres_version, now() as server_time
   `
   return c.json(result[0])
 })
 
-app.post('/apply-changes', async (c) => {
+app.post(`/apply-changes`, async (c) => {
   const content = await c.req.json()
   let parsedChanges: ChangeSet
   try {
@@ -37,7 +37,7 @@ app.post('/apply-changes', async (c) => {
     // Any additional validation of the changes can be done here!
   } catch (error) {
     console.error(error)
-    return c.json({ error: 'Invalid changes' }, 400)
+    return c.json({ error: `Invalid changes` }, 400)
   }
   try {
     await applyChanges(parsedChanges)
@@ -45,7 +45,7 @@ app.post('/apply-changes', async (c) => {
     // In a real app you would want to check which changes have failed and save that
     // and return that information to the client.
     console.error(error)
-    return c.json({ error: 'Failed to apply changes' }, 500)
+    return c.json({ error: `Failed to apply changes` }, 500)
   }
   return c.json({ success: true })
 })
@@ -63,16 +63,16 @@ async function applyChanges(changes: ChangeSet) {
   const { issues, comments } = changes
   await sql.begin(async (sql) => {
     for (const issue of issues) {
-      await applyTableChange('issue', issue, sql)
+      await applyTableChange(`issue`, issue, sql)
     }
     for (const comment of comments) {
-      await applyTableChange('comment', comment, sql)
+      await applyTableChange(`comment`, comment, sql)
     }
   })
 }
 
 async function applyTableChange(
-  tableName: 'issue' | 'comment',
+  tableName: `issue` | `comment`,
   change: IssueChange | CommentChange,
   sql: postgres.TransactionSql
 ): Promise<void> {
@@ -90,7 +90,7 @@ async function applyTableChange(
     `
   } else if (isNew) {
     await sql`
-      INSERT INTO ${sql(tableName)} ${sql(change, 'id', ...modified_columns)}
+      INSERT INTO ${sql(tableName)} ${sql(change, `id`, ...modified_columns)}
     `
   } else {
     await sql`

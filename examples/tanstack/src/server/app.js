@@ -65,16 +65,10 @@ const server = http.createServer(async (req, res) => {
 
       // Add source credentials if available
       if (process.env.ELECTRIC_SOURCE_ID) {
-        originUrl.searchParams.set(
-          `source_id`,
-          process.env.ELECTRIC_SOURCE_ID
-        )
+        originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
       }
       if (process.env.ELECTRIC_SOURCE_SECRET) {
-        originUrl.searchParams.set(
-          `secret`,
-          process.env.ELECTRIC_SOURCE_SECRET
-        )
+        originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
       }
 
       try {
@@ -103,15 +97,15 @@ const server = http.createServer(async (req, res) => {
         return
       } catch (error) {
         // Ignore premature close errors - these happen when clients disconnect early
-        if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
+        if (error.code === `ERR_STREAM_PREMATURE_CLOSE`) {
           return
         }
 
-        console.error("Error proxying to Electric:", error)
+        console.error(`Error proxying to Electric:`, error)
         // Only write headers if they haven't been sent yet
         if (!res.headersSent) {
           res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
-          res.end(JSON.stringify({ error: "Internal server error" }))
+          res.end(JSON.stringify({ error: `Internal server error` }))
         }
         return
       }
@@ -138,7 +132,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404, { ...JSON_HEADERS, ...CORS_HEADERS })
     res.end(JSON.stringify({ error: `Not Found` }))
   } catch (error) {
-    console.error("Error handling request:", error)
+    console.error(`Error handling request:`, error)
     res.writeHead(500, { ...JSON_HEADERS, ...CORS_HEADERS })
     res.end(JSON.stringify({ error: `Something went wrong` }))
   }

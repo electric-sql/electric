@@ -13,6 +13,7 @@ import { routeTree } from './routeTree.gen'
 const router = createRouter({ routeTree })
 
 // Register the router instance for type safety
+// eslint-disable-next-line quotes
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router
@@ -20,7 +21,7 @@ declare module '@tanstack/react-router' {
 }
 
 // Render the app
-const rootElement = document.getElementById('root')!
+const rootElement = document.getElementById(`root`)!
 ReactDOM.createRoot(rootElement).render(
   <StrictMode>
     <RouterProvider router={router} />

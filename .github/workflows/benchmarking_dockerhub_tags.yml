@@ -6,7 +6,7 @@ on:
       tag:
         type: string
         required: true
-        description: "Must be a tag of electricsql/electric image on DockerHub"
+        description: 'Must be a tag of electricsql/electric image on DockerHub'
 
 defaults:
   run:

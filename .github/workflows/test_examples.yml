@@ -2,7 +2,7 @@ name: Test Examples
 
 on:
   schedule:
-    - cron: "0 9 * * *" # Runs daily at 9 AM UTC
+    - cron: '0 9 * * *' # Runs daily at 9 AM UTC
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -57,7 +57,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://react.examples.electric-sql.com
 
       - name: Test linearlite example
@@ -65,7 +65,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://linearlite.examples.electric-sql.com
 
       - name: Test linearlite read-only example
@@ -73,7 +73,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://linearlite-read-only.examples.electric-sql.com
 
       - name: Test proxy-auth example
@@ -81,7 +81,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://proxy-auth.examples.electric-sql.com/?org_id=1
 
       - name: Test write-patterns example
@@ -89,7 +89,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://write-patterns.examples.electric-sql.com
 
       - name: Test yjs example
@@ -97,7 +97,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://yjs.examples.electric-sql.com
 
       - name: Test todo-app example
@@ -105,7 +105,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://todo-app.examples.electric-sql.com
 
       - name: Test notes example
@@ -113,7 +113,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://notes.examples.electric-sql.com
 
       - name: Test pixel art example
@@ -121,7 +121,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://pixel-art.examples.electric-sql.com
 
       - name: Test ai chat example
@@ -129,7 +129,7 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/test-example
         with:
-          test_folder: ".shared"
+          test_folder: '.shared'
           example_url: https://electric-ai-chat.examples.electric-sql.com
 
       - name: Report test failures

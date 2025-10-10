@@ -17,8 +17,8 @@ function ComputerAccordion({ threadId }: Props) {
     agents: false,
   })
 
-  const [factsFilter, setFactsFilter] = useState('')
-  const [eventsFilter, setEventsFilter] = useState('')
+  const [factsFilter, setFactsFilter] = useState(``)
+  const [eventsFilter, setEventsFilter] = useState(``)
 
   const toggleSection = (section: keyof typeof openSections) => {
     setOpenSections((prev) => ({
@@ -33,7 +33,7 @@ function ComputerAccordion({ threadId }: Props) {
         title="Memory"
         isOpen={openSections.memory}
         isDisabled={false}
-        onToggle={() => toggleSection('memory')}
+        onToggle={() => toggleSection(`memory`)}
       >
         <>
           <FilterInput
@@ -48,7 +48,7 @@ function ComputerAccordion({ threadId }: Props) {
         title="Context"
         isOpen={openSections.context}
         isDisabled={false}
-        onToggle={() => toggleSection('context')}
+        onToggle={() => toggleSection(`context`)}
       >
         <>
           <FilterInput
@@ -63,7 +63,7 @@ function ComputerAccordion({ threadId }: Props) {
         title="Processes"
         isOpen={openSections.agents}
         isDisabled={true}
-        onToggle={() => toggleSection('agents')}
+        onToggle={() => toggleSection(`agents`)}
       />
     </Flex>
   )

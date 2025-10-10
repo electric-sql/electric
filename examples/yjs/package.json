@@ -9,7 +9,7 @@
     "backend:up": "PROJECT_NAME=yjs pnpm -C ../../ run example-backend:up && pnpm db:migrate",
     "backend:down": "PROJECT_NAME=yjs pnpm -C ../../ run example-backend:down",
     "db:migrate": "dotenv -e ../../.env.dev -- pnpm exec pg-migrations apply --directory ./db/migrations",
-    "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "stylecheck": "eslint . --quiet",
     "typecheck": "tsc --noEmit",
     "dev:server": "tsx watch src/server/server.ts",

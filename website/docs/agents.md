@@ -2,7 +2,7 @@
 title: AGENTS.md
 description: >-
   Documentation for guiding coding agents to develop apps with Electric.
-outline: [2,3]
+outline: [2, 3]
 ---
 
 <img src="/img/icons/llms.svg" class="product-icon"

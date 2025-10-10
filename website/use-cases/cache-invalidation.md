@@ -1,5 +1,5 @@
 ---
-title: "Cache invalidation"
+title: 'Cache invalidation'
 description: >-
   Replace ttls and expiry policies with
   realtime sync and
@@ -9,7 +9,7 @@ outline: deep
 case: true
 homepage: true
 homepage_order: 20
-solves: "cache invalidation"
+solves: 'cache invalidation'
 benefits:
   - Simplifies your stack
   - No more stale data
