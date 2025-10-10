@@ -104,7 +104,10 @@ export default defineConfig({
       },
     ],
   ],
-  ignoreDeadLinks: 'localhostLinks',
+  ignoreDeadLinks: [
+    /localhost/,
+    /^\/AGENTS(\.md)?$/,
+  ],
   markdown: {
     theme: 'github-dark',
     languages: [

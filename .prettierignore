@@ -12,3 +12,6 @@ coverage
 pnpm-lock.yaml
 sst-env.d.ts
 sst.config.ts
+
+# Ignore website markdown files to prevent underscore escaping issues
+website/**/*.md
