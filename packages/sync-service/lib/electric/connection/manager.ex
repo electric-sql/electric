@@ -146,6 +146,8 @@ defmodule Electric.Connection.Manager do
   # the same reconnection period rather than a new one.
   @replication_liveness_confirmation_duration 5_000
 
+  @validated_conn_opts_config_key {__MODULE__, :validated_connection_opts}
+
   def child_spec(init_arg) do
     %{
       id: __MODULE__,
@@ -179,6 +181,12 @@ defmodule Electric.Connection.Manager do
 
   def pool_name(opts) do
     pool_name(Access.fetch!(opts, :stack_id), Access.fetch!(opts, :role))
+  end
+
+  def validated_connection_opts(stack_id, type) do
+    stack_id
+    |> Electric.StackConfig.lookup!(@validated_conn_opts_config_key)
+    |> Map.fetch!(type)
   end
 
   def drop_replication_slot_on_stop(manager) do
@@ -291,14 +299,15 @@ defmodule Electric.Connection.Manager do
         manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
         max_shapes: Keyword.fetch!(opts, :max_shapes)
       }
-      |> initialize_connection_opts(opts)
+      |> init_connection_opts(opts)
+      |> init_validated_connection_opts()
 
     # Wait for the connection resolver to start before continuing with
     # connection setup.
     {:ok, state}
   end
 
-  defp initialize_connection_opts(state, opts) do
+  defp init_connection_opts(state, opts) do
     connection_opts = Keyword.fetch!(opts, :connection_opts)
 
     replication_opts =
@@ -310,14 +319,28 @@ defmodule Electric.Connection.Manager do
     %{state | connection_opts: connection_opts, replication_opts: replication_opts}
   end
 
+  defp init_validated_connection_opts(%{stack_id: stack_id} = state) do
+    stack_validated_connection_opts =
+      Electric.StackConfig.lookup(stack_id, @validated_conn_opts_config_key)
+
+    Map.update!(state, :validated_connection_opts, fn map ->
+      Map.new(map, fn {type, nil} -> {type, stack_validated_connection_opts[type]} end)
+    end)
+  end
+
+  defp update_validated_connection_opts(%{stack_id: stack_id} = state, type, validated_opts) do
+    validated_connection_opts = Map.put(state.validated_connection_opts, type, validated_opts)
+    Electric.StackConfig.put(stack_id, @validated_conn_opts_config_key, validated_connection_opts)
+    %{state | validated_connection_opts: validated_connection_opts}
+  end
+
   defp validate_connection(conn_opts, type, state) do
-    if opts = state.validated_connection_opts[type] do
+    if opts = Map.get(state.validated_connection_opts, type) do
       {:ok, opts, state}
     else
       try do
         with {:ok, validated_opts} <- ConnectionResolver.validate(state.stack_id, conn_opts) do
-          {:ok, validated_opts,
-           Map.update!(state, :validated_connection_opts, &Map.put(&1, type, validated_opts))}
+          {:ok, validated_opts, update_validated_connection_opts(state, type, validated_opts)}
         end
       catch
         :exit, {:killed, _} -> {:error, :killed}
