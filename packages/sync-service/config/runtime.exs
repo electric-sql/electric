@@ -126,7 +126,9 @@ storage_spec =
           {Electric.ShapeCache.InMemoryStorage, []}
 
         legacy_file when legacy_file in ["file", "legacy_file"] ->
-          {Electric.ShapeCache.FileStorage, storage_dir: shape_path}
+          raise RuntimeError,
+            message:
+              "#{inspect(legacy_file)} storage is deprecated. Please change to \"fast_file\""
 
         "fast_file" ->
           {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
