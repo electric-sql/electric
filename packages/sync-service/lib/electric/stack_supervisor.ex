@@ -136,7 +136,15 @@ defmodule Electric.StackSupervisor do
                        type: :pos_integer,
                        default: Electric.Config.default(:conn_max_requests)
                      ],
-                     process_spawn_opts: [type: :map, default: %{}]
+                     process_spawn_opts: [type: :map, default: %{}],
+                     idle_wal_size_check_period: [
+                       type: :integer,
+                       default: Electric.Config.default(:idle_wal_size_check_period)
+                     ],
+                     idle_wal_size_threshold: [
+                       type: :integer,
+                       default: Electric.Config.default(:idle_wal_size_threshold)
+                     ]
                    ]
                  ],
                  manual_table_publishing?: [
