@@ -19,12 +19,13 @@ You can use Electric with [PlanetScale for Postgres](https://planetscale.com/doc
 
 ## Setup Overview
 
-Setting up Electric with PlanetScale requires attention to four key areas:
+PlanetScale has several unique characteristics that require special attention:
 
-1. **Enable logical replication** - Not enabled by default, must configure cluster parameters
-2. **Connection limits** - PlanetScale's default limits may be too low
-3. **Replication role** - Standard PlanetScale roles don't include replication privileges
-4. **Table ownership** - Electric needs to own tables to manage snapshots
+1. **Logical replication** - Not enabled by default, must configure cluster parameters
+2. **Connection limits** - Default of 25 is too low for Electric's pool of 20
+3. **Failover requirements** - Replication slots must support failover
+
+For general PostgreSQL user and permission setup, see the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions).
 
 ## Deploy Postgres
 
@@ -32,30 +33,27 @@ Setting up Electric with PlanetScale requires attention to four key areas:
 
 ### Enable Logical Replication
 
-Logical replication is **not enabled by default** on PlanetScale. You must configure it before using Electric.
+Logical replication is **not enabled by default** on PlanetScale.
 
-#### In the PlanetScale Console
-
-1. Go to your database
-2. Navigate to **Cluster configuration → Parameters** tab
-3. Configure the following parameters:
+**Configure in PlanetScale Console:**
+1. Go to your database → **Cluster configuration → Parameters**
+2. Set these parameters:
    - `wal_level` = `logical`
    - `max_replication_slots` = `10` (or higher)
    - `max_wal_senders` = `10` (or higher)
    - `max_slot_wal_keep_size` = `4096` (4GB minimum)
+   - `sync_replication_slots` = `on` (for failover support)
+   - `hot_standby_feedback` = `on` (for failover support)
 
-4. Apply the changes (may require a cluster restart)
+3. Apply changes (may require cluster restart)
 
-#### Verify Configuration
-
-After applying changes, connect to your database and verify:
-
+**Verify:**
 ```sql
 SHOW wal_level; -- Should return 'logical'
 ```
 
-> [!Important] Failover Configuration
-> PlanetScale requires replication slots to be created with `failover = true` for production use. Electric will create the replication slot automatically, but ensure your cluster has `sync_replication_slots = on` enabled.
+> [!Important] Failover Requirement
+> PlanetScale requires replication slots to support failover. Electric creates failover-enabled slots automatically, but your cluster must have `sync_replication_slots = on` configured.
 
 ### Increase Connection Limits
 
@@ -71,173 +69,68 @@ PlanetScale's default connection limit is **25 connections**, but Electric needs
 > **Recommendation:** Increase your connection limit to at least **50 connections** or higher depending on your needs.
 
 To increase connection limits in PlanetScale:
-
 1. Go to your database settings
-2. Find the "Connection Limits" or "max_connections" setting
+2. Find "Connection Limits" or "max_connections"
 3. Increase to 50 or more
 
-Alternatively, reduce Electric's pool size if you have limited connections:
-
+Alternatively, reduce Electric's pool size:
 ```shell
 ELECTRIC_DB_POOL_SIZE=10
 ```
 
 ## Create Replication User
 
-PlanetScale's default user roles don't include the `REPLICATION` privilege required by Electric. You must create a custom role.
+Follow the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions) to set up the Electric user with proper permissions.
 
-### Step 1: Create Role with REPLICATION
-
-Connect to your PlanetScale database as a superuser and run:
-
-```sql
--- Create user with REPLICATION privilege
-CREATE ROLE electric WITH LOGIN PASSWORD 'secure_password' REPLICATION;
-
--- Grant database privileges
-GRANT CONNECT ON DATABASE postgres TO electric;
-GRANT USAGE, CREATE ON SCHEMA public TO electric;
-GRANT CREATE ON DATABASE postgres TO electric;
-
--- Grant table privileges
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO electric;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric;
-```
-
-### Step 2: Transfer Table Ownership
-
-Electric requires table ownership to create initial snapshots and set `REPLICA IDENTITY FULL`.
-
-> [!Important] Same User for Migrations
-> The Electric user should be the same user you use for database migrations. If Electric doesn't own the tables, it cannot create snapshots.
-
-Transfer ownership of all tables:
-
-```sql
--- Transfer ownership of all existing tables
-DO $$
-DECLARE
-  r RECORD;
-BEGIN
-  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
-  LOOP
-    EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' OWNER TO electric';
-  END LOOP;
-END$$;
-
--- Ensure future tables are also owned by electric
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT ALL PRIVILEGES ON TABLES TO electric;
-```
-
-Alternatively, if you can't transfer ownership, see the [Manual Publication Management](#manual-publication-management) section below.
+> [!Important] PlanetScale-Specific Note
+> PlanetScale's default user roles don't include the `REPLICATION` privilege. You must create a custom role as shown in the permissions guide.
 
 ## Connect Electric
 
-Get your connection string from PlanetScale. Make sure to:
-- Use the **direct connection** (port 5432), not the PgBouncer pooled connection (port 6432)
-- Include `sslmode=require` (PlanetScale requires SSL/TLS)
+Get your connection string from PlanetScale:
+
+> [!Important] Connection String Requirements
+> - Use the **direct connection** (port 5432), not PgBouncer (port 6432)
+> - Include `sslmode=require` (PlanetScale requires SSL/TLS)
 
 ```shell
 docker run -it \
     -e "DATABASE_URL=postgresql://electric:secure_password@aws-us-east-1.connect.psdb.cloud:5432/your_db?sslmode=require" \
-    -e "ELECTRIC_DB_POOL_SIZE=20" \
     -p 3000:3000 \
     electricsql/electric:latest
-```
-
-## Manual Publication Management
-
-If you cannot transfer table ownership to the Electric user, you can use manual publication management.
-
-### Step 1: Create Publication
-
-```sql
--- Create publication for specific tables
-CREATE PUBLICATION electric_publication_default FOR TABLE
-  public.users,
-  public.posts,
-  public.comments;
-
--- Set replica identity on each table
-ALTER TABLE public.users REPLICA IDENTITY FULL;
-ALTER TABLE public.posts REPLICA IDENTITY FULL;
-ALTER TABLE public.comments REPLICA IDENTITY FULL;
-
--- Transfer publication ownership to Electric user
-ALTER PUBLICATION electric_publication_default OWNER TO electric;
 ```
 
 > [!Note] FOR ALL TABLES Limitation
-> Some sources suggest PlanetScale doesn't support `CREATE PUBLICATION ... FOR ALL TABLES`. If you encounter issues, explicitly list tables as shown above.
-
-### Step 2: Grant Minimal Permissions
-
-```sql
--- Electric only needs SELECT for manual publication management
-GRANT SELECT ON public.users TO electric;
-GRANT SELECT ON public.posts TO electric;
-GRANT SELECT ON public.comments TO electric;
-```
-
-### Step 3: Configure Electric
-
-Enable manual table publishing mode:
-
-```shell
-docker run -it \
-    -e "DATABASE_URL=postgresql://electric:secure_password@aws-us-east-1.connect.psdb.cloud:5432/your_db?sslmode=require" \
-    -e "ELECTRIC_MANUAL_TABLE_PUBLISHING=true" \
-    -p 3000:3000 \
-    electricsql/electric:latest
-```
+> Some sources suggest PlanetScale doesn't support `CREATE PUBLICATION ... FOR ALL TABLES`. If you encounter this issue, explicitly list tables in your publication. See [Manual Publication Management](/docs/guides/postgres-permissions#manual-configuration-steps) in the PostgreSQL Permissions guide.
 
 ## Troubleshooting
 
-### Error: "too many connections"
+For general PostgreSQL permission and configuration errors, see the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions#troubleshooting).
 
-**Cause:** Electric's connection pool (default 20) plus other connections exceed PlanetScale's limit (default 25).
+### PlanetScale-Specific Issues
 
-**Solution:** Either increase PlanetScale's max_connections or reduce Electric's pool size:
+#### Error: "too many connections"
 
-```shell
-ELECTRIC_DB_POOL_SIZE=10
-```
+**Cause:** Electric's connection pool plus other connections exceed PlanetScale's limit.
 
-### Error: "permission denied for schema public"
+**Solution:** [Increase PlanetScale's max_connections](#increase-connection-limits) to 50+ or reduce `ELECTRIC_DB_POOL_SIZE`.
 
-**Cause:** The Electric user doesn't have proper schema privileges.
-
-**Solution:** Grant schema privileges:
-
-```sql
-GRANT USAGE, CREATE ON SCHEMA public TO electric;
-```
-
-### Error: "must be owner of table"
-
-**Cause:** Electric needs table ownership to create snapshots.
-
-**Solution:** Either:
-1. Transfer table ownership to the Electric user (recommended)
-2. Use manual publication management mode
-
-See [Create Replication User](#create-replication-user) above.
-
-### Error: "replication slot does not support failover"
+#### Error: "replication slot does not support failover"
 
 **Cause:** PlanetScale requires failover-enabled replication slots.
 
-**Solution:** Ensure your cluster has `sync_replication_slots = on` configured. Electric will create failover-enabled slots automatically.
+**Solution:** Ensure your cluster has `sync_replication_slots = on` and `hot_standby_feedback = on` configured. Electric creates failover-enabled slots automatically.
 
 ## Best Practices
 
-1. **Use dedicated user** - Create a separate `electric` role rather than using your default user
-2. **Match migration user** - Use the same user for Electric and database migrations
-3. **Monitor connections** - Track connection usage to avoid hitting limits
-4. **Plan for growth** - Set max_connections higher than current needs
-5. **Enable monitoring** - Use PlanetScale's monitoring to track WAL usage and replication lag
+1. **Plan connection capacity** - Set max_connections to at least 3x Electric's pool size
+2. **Monitor connections** - Track connection usage in PlanetScale dashboard
+3. **Use direct connections** - Port 5432 (direct), not 6432 (PgBouncer) for replication
+4. **Enable monitoring** - Track WAL usage and replication lag in PlanetScale
+
+For general PostgreSQL and Electric best practices, see:
+- [PostgreSQL Permissions guide](/docs/guides/postgres-permissions)
+- [Deployment guide](/docs/guides/deployment)
 
 ## Additional Resources
 
