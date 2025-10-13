@@ -33,9 +33,14 @@ For general PostgreSQL user and permission setup, see the [PostgreSQL Permission
 
 ### Enable Logical Replication
 
-Logical replication is **not enabled by default** on PlanetScale. See the [PlanetScale Logical Replication guide](https://planetscale.com/docs/postgres/integrations/logical-cdc) for detailed background.
+Logical replication **may not be enabled** on your cluster. Verify and configure as needed. See the [PlanetScale Logical Replication guide](https://planetscale.com/docs/postgres/integrations/logical-cdc) for detailed background.
 
-**Configure in PlanetScale Console:**
+**Verify current configuration:**
+```sql
+SHOW wal_level; -- Should return 'logical'
+```
+
+**If not enabled, configure in PlanetScale Console:**
 1. Go to your database → [**Settings → Cluster configuration → Parameters**](https://planetscale.com/docs/postgres/settings)
 2. Set these parameters:
    - `wal_level` = `logical`
@@ -47,33 +52,28 @@ Logical replication is **not enabled by default** on PlanetScale. See the [Plane
 
 3. Apply changes (may require cluster restart)
 
-**Verify:**
-```sql
-SHOW wal_level; -- Should return 'logical'
-```
-
 > [!Important] Failover Requirement
 > PlanetScale requires replication slots to support failover. Electric creates failover-enabled slots automatically, but your cluster must have `sync_replication_slots = on` configured.
 
 ### Increase Connection Limits
 
-PlanetScale's default connection limit is **25 connections**, but Electric needs **20 connections** for its connection pool by default (configurable via [`ELECTRIC_DB_POOL_SIZE`](/docs/api/config#electric-db-pool-size)).
+Small PlanetScale clusters may start with a low `max_connections` limit. Electric uses **20 connections** for its connection pool by default (configurable via [`ELECTRIC_DB_POOL_SIZE`](/docs/api/config#electric-db-pool-size)).
 
 > [!Warning] Connection Limit Issue
-> With only 25 total connections, you'll have just 5 connections remaining for:
+> With a low connection limit, you may have limited headroom remaining for:
 > - Your application
 > - Database migrations
 > - Admin tools
 > - Connection poolers (Cloudflare, etc.)
 >
-> **Recommendation:** Increase your connection limit to at least **50 connections** or higher depending on your needs.
+> **Recommendation:** Plan connection capacity for your expected concurrent database work. A good rule of thumb is **≥ 3× Electric's pool size** to ensure adequate headroom (e.g., if Electric uses 20 connections, set `max_connections` to at least 60).
 
 To increase connection limits in PlanetScale:
 1. Go to your database → [**Settings → Cluster configuration → Parameters**](https://planetscale.com/docs/postgres/settings)
 2. Find `max_connections` parameter
-3. Increase to 50 or more
+3. Increase based on your expected concurrent work (Electric pool size + application + admin tools + buffer)
 
-Alternatively, reduce Electric's pool size:
+Alternatively, reduce Electric's pool size if you have limited connections:
 ```shell
 ELECTRIC_DB_POOL_SIZE=10
 ```
@@ -83,7 +83,7 @@ ELECTRIC_DB_POOL_SIZE=10
 Follow the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions) to set up the Electric user with proper permissions.
 
 > [!Important] PlanetScale-Specific Note
-> PlanetScale's default user roles don't include the `REPLICATION` privilege. You must create a custom role as shown in the permissions guide.
+> PlanetScale's default `postgres` role includes the `REPLICATION` attribute. You can use it directly, or create a dedicated replication role for least-privilege access per your organization's security policy.
 
 ## Connect Electric
 
