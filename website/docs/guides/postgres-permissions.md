@@ -164,24 +164,11 @@ GRANT USAGE ON SCHEMA public TO electric_user;
 -- Grant SELECT only on specific tables
 GRANT SELECT ON public.users TO electric_user;
 GRANT SELECT ON public.posts TO electric_user;
-
--- Create and configure the publication manually (as superuser or database owner)
-CREATE PUBLICATION electric_publication_default;
-
--- Add tables to the publication
-ALTER PUBLICATION electric_publication_default ADD TABLE public.users;
-ALTER PUBLICATION electric_publication_default ADD TABLE public.posts;
-
--- Set REPLICA IDENTITY FULL on each table
-ALTER TABLE public.users REPLICA IDENTITY FULL;
-ALTER TABLE public.posts REPLICA IDENTITY FULL;
-
--- Make the Electric user the owner of the publication
--- (or the user who created it must be the same user Electric connects as)
-ALTER PUBLICATION electric_publication_default OWNER TO electric_user;
 ```
 
-Then configure Electric with:
+Then, as a superuser or database owner, follow the [Manual Configuration Steps](#manual-configuration-steps) below to create the publication, add tables, and configure replica identity.
+
+Configure Electric with:
 
 ```shell
 DATABASE_URL=postgresql://electric_user:secure_password@localhost:5432/mydb
@@ -227,7 +214,15 @@ ALTER TABLE public.comments REPLICA IDENTITY FULL;
 
 This tells Postgres to include all column values in the replication stream, which Electric requires for accurate change tracking.
 
-### 4. Verify the Configuration
+### 4. Set Publication Ownership
+
+Make the Electric user the owner of the publication (or ensure the publication was created by the same user Electric connects as):
+
+```sql
+ALTER PUBLICATION electric_publication_default OWNER TO electric_user;
+```
+
+### 5. Verify the Configuration
 
 Check that your publication is correctly configured:
 
@@ -296,16 +291,6 @@ GRANT SELECT ON schema.tablename TO electric_user;
 **Solution:** Either:
 - Make Electric user the table owner: `ALTER TABLE schema.tablename OWNER TO electric_user;`
 - Or grant full privileges: `GRANT ALL PRIVILEGES ON schema.tablename TO electric_user;`
-
-## Security Best Practices
-
-1. **Use strong passwords** - Generate random passwords for the Electric user
-2. **Limit network access** - Use PostgreSQL's `pg_hba.conf` to restrict connections
-3. **Use SSL/TLS** - Configure `DATABASE_URL` with `sslmode=require` or `sslmode=verify-full`
-4. **Grant minimum necessary privileges** - Use table-scoped or manual publication management in production
-5. **Rotate credentials** - Regularly update the Electric user's password
-6. **Monitor replication slots** - Ensure replication slots don't cause WAL buildup (see [troubleshooting guide](/docs/guides/troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up))
-7. **Separate concerns** - Consider using different users for writes vs. Electric's read/replication access
 
 ## Next Steps
 
