@@ -32,6 +32,9 @@ GRANT DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
 
+-- Grant CREATE on schema (required for ownership transfer)
+GRANT CREATE ON SCHEMA public TO electric_user;
+
 -- Transfer ownership of all tables to enable REPLICA IDENTITY management
 -- Note: This requires running as a superuser or the current table owner
 DO $$
@@ -68,7 +71,7 @@ Electric needs specific PostgreSQL permissions to:
 | `CREATE` on database | Create publications | Automatic publication management |
 | `SELECT` on tables | Read table data | Initial shape snapshots |
 | Table ownership | Set replica identity | Configuring `REPLICA IDENTITY FULL` |
-| Publication ownership | Modify publications | Adding/removing tables from publication |
+| Publication ownership | Modify publications | Adding/removing tables from publication; you must also own each table you add to the publication |
 
 ## Automatic vs Manual Publication Management
 
@@ -306,11 +309,12 @@ GRANT SELECT ON schema.tablename TO electric_user;
 
 ### Error: "must be owner of table"
 
-**Cause:** Creating initial snapshots requires being the table owner or having sufficient privileges.
+**Cause:** You attempted an operation that requires ownership (e.g., `ALTER TABLE ... REPLICA IDENTITY FULL` or adding the table to a publication).
 
-**Solution:** Either:
-- Make Electric user the table owner: `ALTER TABLE schema.tablename OWNER TO electric_user;`
-- Or grant full privileges: `GRANT ALL PRIVILEGES ON schema.tablename TO electric_user;`
+**Solution:** Run as the table owner (or superuser), or transfer ownership:
+```sql
+ALTER TABLE schema.tablename OWNER TO electric_user;
+```
 
 ## Next Steps
 
