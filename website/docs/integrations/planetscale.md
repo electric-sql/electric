@@ -19,11 +19,12 @@ You can use Electric with [PlanetScale for Postgres](https://planetscale.com/doc
 
 ## Setup Overview
 
-Setting up Electric with PlanetScale requires attention to three key areas:
+Setting up Electric with PlanetScale requires attention to four key areas:
 
-1. **Connection limits** - PlanetScale's default limits may be too low
-2. **Replication role** - Standard PlanetScale roles don't include replication privileges
-3. **Table ownership** - Electric needs to own tables to manage snapshots
+1. **Enable logical replication** - Not enabled by default, must configure cluster parameters
+2. **Connection limits** - PlanetScale's default limits may be too low
+3. **Replication role** - Standard PlanetScale roles don't include replication privileges
+4. **Table ownership** - Electric needs to own tables to manage snapshots
 
 ## Deploy Postgres
 
@@ -31,16 +32,26 @@ Setting up Electric with PlanetScale requires attention to three key areas:
 
 ### Enable Logical Replication
 
-PlanetScale Postgres requires logical replication to be enabled. Configure the following settings:
+Logical replication is **not enabled by default** on PlanetScale. You must configure it before using Electric.
+
+#### In the PlanetScale Console
+
+1. Go to your database
+2. Navigate to **Cluster configuration → Parameters** tab
+3. Configure the following parameters:
+   - `wal_level` = `logical`
+   - `max_replication_slots` = `10` (or higher)
+   - `max_wal_senders` = `10` (or higher)
+   - `max_slot_wal_keep_size` = `4096` (4GB minimum)
+
+4. Apply the changes (may require a cluster restart)
+
+#### Verify Configuration
+
+After applying changes, connect to your database and verify:
 
 ```sql
--- Check current WAL level
-SHOW wal_level; -- Should be 'logical'
-
--- If not already set, configure these parameters:
--- wal_level = logical
--- max_replication_slots >= 1
--- max_wal_senders >= 2
+SHOW wal_level; -- Should return 'logical'
 ```
 
 > [!Important] Failover Configuration
