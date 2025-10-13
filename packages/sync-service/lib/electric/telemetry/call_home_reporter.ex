@@ -26,21 +26,19 @@ with_telemetry Telemetry.Metrics do
       reporter_fn = Keyword.get(opts, :reporter_fn, &report_home/1)
       stack_id = Keyword.get(opts, :stack_id)
 
-      if stack_id = Keyword.get(opts, :stack_id),
-        do:
-          GenServer.start_link(
-            __MODULE__,
-            %{
-              metrics: metrics,
-              first_report_in: first_report_in,
-              reporting_period: reporting_period,
-              name: name,
-              static_info: static_info,
-              reporter_fn: reporter_fn,
-              stack_id: stack_id
-            },
-            name: name
-          )
+      GenServer.start_link(
+        __MODULE__,
+        %{
+          metrics: metrics,
+          first_report_in: first_report_in,
+          reporting_period: reporting_period,
+          name: name,
+          static_info: static_info,
+          reporter_fn: reporter_fn,
+          stack_id: stack_id
+        },
+        name: name
+      )
     end
 
     def report_home(results) do
@@ -74,7 +72,7 @@ with_telemetry Telemetry.Metrics do
       Process.flag(:trap_exit, true)
       Process.set_label({:call_home_reporter, name})
 
-      if not is_nil(stack_id) do
+      if stack_id do
         Logger.metadata(stack_id: stack_id)
         Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
       end
