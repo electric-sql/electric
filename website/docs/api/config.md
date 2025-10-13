@@ -128,6 +128,29 @@ Suffix for the logical replication publication and slot name.
 
 </EnvVarConfig>
 
+### ELECTRIC_REPLICATION_IDLE_TIMEOUT
+
+<EnvVarConfig
+    name="ELECTRIC_REPLICATION_IDLE_TIMEOUT"
+    defaultValue="0"
+    example="5min">
+
+After seeing no activity on the logical replication stream for this long, Electric will close all of its database connections. This allows the database server to scale-to-zero on supported providers.
+
+While Electric is in the scaled-down mode, an incoming shape request will cause it to reopen database connections and restart the logical replication stream. The request itself will be held until it can be processed as usual to return a proper response.
+
+The default value is 0, meaning the connection scaling down is disabled and Electric will keep its database connections open permanently.
+
+**Important note on WAL growth**
+
+Avoid setting this timeout if your database sees constant or frequent writes.
+
+When Electric isn't streaming from the database, its replication slot is inactive. Postgres will continue to retain WAL files needed for the slot, since they are required to resume replication later. Over time, this can cause storage growth proportional to the volume of writes on the primary database, regardless of whether those writes target tables for which Electric has active shapes or not.
+
+Once Electric reconnects and replication catches up, Postgres will automatically discard the no-longer-needed WAL segments. However, if the inactivity period is too long, the accumulated WAL may exceed available disk space, potentially interrupting database operations.
+
+</EnvVarConfig>
+
 ### ELECTRIC_MANUAL_TABLE_PUBLISHING
 
 <EnvVarConfig
