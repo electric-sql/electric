@@ -37,6 +37,8 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
 
     def init(opts) do
       Process.set_label({:stack_telemetry_supervisor, opts.stack_id})
+      Logger.metadata(stack_id: opts.stack_id)
+      Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
       [telemetry_poller_child_spec(opts) | exporter_child_specs(opts)]
       |> Supervisor.init(strategy: :one_for_one)
