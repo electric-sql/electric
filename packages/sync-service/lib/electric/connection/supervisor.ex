@@ -61,7 +61,8 @@ defmodule Electric.Connection.Supervisor do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     children = [
-      {Electric.Connection.Restarter, stack_id: stack_id},
+      {Electric.Connection.Restarter,
+       stack_id: stack_id, stack_events_registry: Keyword.fetch!(opts, :stack_events_registry)},
       {Electric.Connection.Manager.Supervisor, opts}
     ]
 

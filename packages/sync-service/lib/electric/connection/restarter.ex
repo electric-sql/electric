@@ -69,17 +69,28 @@ defmodule Electric.Connection.Restarter do
   end
 
   def init(opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
-
     # pending_db_state is used as an exclusion mechanism when the database connections are
     # sleeping: multiple concurrent shape requests will only trigger DB connection wakeup once
     # because they will all be serialized through this Restarter process.
-    {:ok, %{stack_id: stack_id, pending_db_state: nil, status_monitor_ref: nil}}
+    {:ok,
+     %{
+       stack_id: Keyword.fetch!(opts, :stack_id),
+       stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
+       pending_db_state: nil,
+       status_monitor_ref: nil
+     }}
   end
 
   def handle_cast(:stop_connection_subsystem, state) do
     StatusMonitor.database_connections_going_to_sleep(state.stack_id)
     Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: state.stack_id)
+
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      :scaled_down_database_connections
+    )
+
     {:noreply, state}
   end
 
