@@ -1,0 +1,336 @@
+---
+title: PostgreSQL Permissions - Guide
+description: >-
+  How to create and configure PostgreSQL users with the necessary permissions for Electric.
+outline: [2, 3]
+---
+
+# PostgreSQL Permissions
+
+This guide explains how to create PostgreSQL users with the necessary permissions for Electric to work correctly. Electric requires specific database privileges to enable logical replication and manage publications.
+
+## Quick Start
+
+For most use cases, you can create a dedicated Electric user with full permissions on your database:
+
+```sql
+-- Create a user with REPLICATION privileges
+CREATE ROLE electric_user WITH LOGIN PASSWORD 'your_secure_password' REPLICATION;
+
+-- Grant necessary database privileges
+GRANT CONNECT ON DATABASE your_database TO electric_user;
+GRANT USAGE ON SCHEMA public TO electric_user;
+GRANT CREATE ON DATABASE your_database TO electric_user;
+
+-- Grant permissions on all existing tables
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO electric_user;
+GRANT UPDATE ON ALL TABLES IN SCHEMA public TO electric_user;
+GRANT INSERT ON ALL TABLES IN SCHEMA public TO electric_user;
+GRANT DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
+
+-- Grant permissions on all future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
+
+-- Grant permission to alter tables (needed for REPLICA IDENTITY)
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO electric_user;
+```
+
+Then connect Electric using:
+
+```shell
+DATABASE_URL=postgresql://electric_user:your_secure_password@localhost:5432/your_database
+```
+
+## Understanding Electric's Requirements
+
+Electric needs specific PostgreSQL permissions to:
+
+1. **Create and manage logical replication** - Stream changes from Postgres
+2. **Create and manage publications** - Define which tables to replicate
+3. **Configure tables** - Set `REPLICA IDENTITY FULL` on synced tables
+4. **Read table data** - Create initial snapshots of table contents
+
+### Core Permission Requirements
+
+| Permission | Purpose | Required For |
+|------------|---------|--------------|
+| `REPLICATION` | Enable logical replication streaming | Creating replication slots and consuming the WAL |
+| `CREATE` on database | Create publications | Automatic publication management |
+| `SELECT` on tables | Read table data | Initial shape snapshots |
+| `ALTER TABLE` | Set replica identity | Configuring `REPLICA IDENTITY FULL` |
+| Publication ownership | Modify publications | Adding/removing tables from publication |
+
+## Automatic vs Manual Publication Management
+
+Electric can operate in two modes:
+
+### 1. Automatic Mode (Recommended)
+
+In this mode, Electric automatically creates the publication and adds tables to it as shapes are requested.
+
+**Required permissions:**
+- `REPLICATION` role attribute
+- `CREATE` privilege on the database
+- `SELECT` privilege on tables
+- Ability to `ALTER TABLE` to set `REPLICA IDENTITY FULL`
+
+### 2. Manual Mode
+
+In this mode, you manually manage the publication and Electric only validates the configuration. Enable this with [`ELECTRIC_MANUAL_TABLE_PUBLISHING=true`](/docs/api/config#electric-manual-table-publishing).
+
+**Required permissions:**
+- `REPLICATION` role attribute
+- `SELECT` privilege on tables
+- Publication must exist and contain the required tables
+- Tables must have `REPLICA IDENTITY FULL` set
+
+**When to use manual mode:**
+- When Electric's database user doesn't have `CREATE` privileges
+- When you want explicit control over which tables are replicated
+- In security-sensitive environments with strict privilege separation
+
+## Setup Examples
+
+### Global Setup (Full Database Access)
+
+This setup gives Electric full control over all tables in the database. This is the simplest approach and works well for most applications.
+
+```sql
+-- Create the Electric user with REPLICATION
+CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password' REPLICATION;
+
+-- Grant database-level privileges
+GRANT CONNECT ON DATABASE mydb TO electric_user;
+GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
+GRANT CREATE ON DATABASE mydb TO electric_user;
+
+-- Grant privileges on all existing tables
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO electric_user;
+
+-- Grant privileges on all future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL PRIVILEGES ON TABLES TO electric_user;
+
+-- Grant privileges on sequences (for generated IDs)
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO electric_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL PRIVILEGES ON SEQUENCES TO electric_user;
+```
+
+### Table-Scoped Setup (Restricted Access)
+
+This setup limits Electric's access to specific tables. This is useful when you want to sync only a subset of your database.
+
+```sql
+-- Create the Electric user with REPLICATION
+CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password' REPLICATION;
+
+-- Grant database-level privileges
+GRANT CONNECT ON DATABASE mydb TO electric_user;
+GRANT USAGE ON SCHEMA public TO electric_user;
+GRANT CREATE ON DATABASE mydb TO electric_user;
+
+-- Grant privileges only on specific tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO electric_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.posts TO electric_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.comments TO electric_user;
+
+-- Allow ALTER TABLE on these specific tables (for REPLICA IDENTITY)
+-- Note: This requires being a table owner or superuser
+-- Alternative: Set REPLICA IDENTITY manually (see Manual Configuration below)
+ALTER TABLE public.users OWNER TO electric_user;
+ALTER TABLE public.posts OWNER TO electric_user;
+ALTER TABLE public.comments OWNER TO electric_user;
+
+-- Or if you can't change ownership, set REPLICA IDENTITY manually
+-- ALTER TABLE public.users REPLICA IDENTITY FULL;
+-- ALTER TABLE public.posts REPLICA IDENTITY FULL;
+-- ALTER TABLE public.comments REPLICA IDENTITY FULL;
+```
+
+### Minimum Privilege Setup (Manual Publication Management)
+
+For environments with strict security requirements, you can use manual publication management to minimize Electric's privileges.
+
+```sql
+-- Create the Electric user with REPLICATION (but minimal other privileges)
+CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password' REPLICATION;
+
+-- Grant only connection and usage privileges
+GRANT CONNECT ON DATABASE mydb TO electric_user;
+GRANT USAGE ON SCHEMA public TO electric_user;
+
+-- Grant SELECT only on specific tables
+GRANT SELECT ON public.users TO electric_user;
+GRANT SELECT ON public.posts TO electric_user;
+
+-- Create and configure the publication manually (as superuser or database owner)
+CREATE PUBLICATION electric_publication_default;
+
+-- Add tables to the publication
+ALTER PUBLICATION electric_publication_default ADD TABLE public.users;
+ALTER PUBLICATION electric_publication_default ADD TABLE public.posts;
+
+-- Set REPLICA IDENTITY FULL on each table
+ALTER TABLE public.users REPLICA IDENTITY FULL;
+ALTER TABLE public.posts REPLICA IDENTITY FULL;
+
+-- Make the Electric user the owner of the publication
+-- (or the user who created it must be the same user Electric connects as)
+ALTER PUBLICATION electric_publication_default OWNER TO electric_user;
+```
+
+Then configure Electric with:
+
+```shell
+DATABASE_URL=postgresql://electric_user:secure_password@localhost:5432/mydb
+ELECTRIC_MANUAL_TABLE_PUBLISHING=true
+```
+
+## AWS RDS and Aurora
+
+AWS RDS and Aurora require special handling for replication permissions:
+
+```sql
+-- Create user
+CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password';
+
+-- Grant RDS replication role (equivalent to REPLICATION)
+GRANT rds_replication TO electric_user;
+
+-- Grant other necessary privileges
+GRANT CONNECT ON DATABASE mydb TO electric_user;
+GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
+GRANT CREATE ON DATABASE mydb TO electric_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO electric_user;
+```
+
+You also need to enable logical replication in RDS/Aurora:
+1. Create a [custom parameter group](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithParamGroups.html)
+2. Set `rds.logical_replication = 1`
+3. Reboot the instance
+
+See the [AWS integration guide](/docs/integrations/aws) for more details.
+
+## Manual Configuration Steps
+
+If you need to manually configure the publication and replica identity (for use with `ELECTRIC_MANUAL_TABLE_PUBLISHING=true`):
+
+### 1. Create the Publication
+
+```sql
+-- Create an empty publication
+CREATE PUBLICATION electric_publication_default;
+
+-- Or with a custom name (configure with ELECTRIC_REPLICATION_STREAM_ID)
+CREATE PUBLICATION my_custom_publication;
+```
+
+### 2. Add Tables to the Publication
+
+```sql
+-- Add specific tables
+ALTER PUBLICATION electric_publication_default ADD TABLE public.users;
+ALTER PUBLICATION electric_publication_default ADD TABLE public.posts;
+ALTER PUBLICATION electric_publication_default ADD TABLE public.comments;
+```
+
+### 3. Configure Replica Identity
+
+For each table you want to sync, you must set the replica identity to `FULL`:
+
+```sql
+ALTER TABLE public.users REPLICA IDENTITY FULL;
+ALTER TABLE public.posts REPLICA IDENTITY FULL;
+ALTER TABLE public.comments REPLICA IDENTITY FULL;
+```
+
+This tells Postgres to include all column values in the replication stream, which Electric requires for accurate change tracking.
+
+### 4. Verify the Configuration
+
+Check that your publication is correctly configured:
+
+```sql
+-- List all publications
+SELECT * FROM pg_publication;
+
+-- Check publication settings
+SELECT pubname, pubinsert, pubupdate, pubdelete, pubtruncate
+FROM pg_publication
+WHERE pubname = 'electric_publication_default';
+
+-- List tables in the publication
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'electric_publication_default';
+
+-- Check replica identity for tables
+SELECT schemaname, tablename, relreplident
+FROM pg_class
+JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+WHERE relreplident = 'f';  -- 'f' means FULL
+```
+
+## Troubleshooting
+
+### Error: "insufficient privilege to create publication"
+
+**Cause:** The user doesn't have `CREATE` privilege on the database.
+
+**Solution:** Either:
+- Grant `CREATE` privilege: `GRANT CREATE ON DATABASE mydb TO electric_user;`
+- Or use manual publication management (create the publication as a superuser and set `ELECTRIC_MANUAL_TABLE_PUBLISHING=true`)
+
+### Error: "publication not owned by the provided user"
+
+**Cause:** The publication exists but is owned by a different user.
+
+**Solution:** Change the publication owner:
+```sql
+ALTER PUBLICATION electric_publication_default OWNER TO electric_user;
+```
+
+### Error: "table does not have its replica identity set to FULL"
+
+**Cause:** The table hasn't been configured with `REPLICA IDENTITY FULL`.
+
+**Solution:** Set replica identity manually:
+```sql
+ALTER TABLE schema.tablename REPLICA IDENTITY FULL;
+```
+
+### Error: "permission denied for table"
+
+**Cause:** The Electric user doesn't have `SELECT` permission on the table.
+
+**Solution:** Grant appropriate permissions:
+```sql
+GRANT SELECT ON schema.tablename TO electric_user;
+```
+
+### Error: "must be owner of table"
+
+**Cause:** Creating initial snapshots requires being the table owner or having sufficient privileges.
+
+**Solution:** Either:
+- Make Electric user the table owner: `ALTER TABLE schema.tablename OWNER TO electric_user;`
+- Or grant full privileges: `GRANT ALL PRIVILEGES ON schema.tablename TO electric_user;`
+
+## Security Best Practices
+
+1. **Use strong passwords** - Generate random passwords for the Electric user
+2. **Limit network access** - Use PostgreSQL's `pg_hba.conf` to restrict connections
+3. **Use SSL/TLS** - Configure `DATABASE_URL` with `sslmode=require` or `sslmode=verify-full`
+4. **Grant minimum necessary privileges** - Use table-scoped or manual publication management in production
+5. **Rotate credentials** - Regularly update the Electric user's password
+6. **Monitor replication slots** - Ensure replication slots don't cause WAL buildup (see [troubleshooting guide](/docs/guides/troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up))
+7. **Separate concerns** - Consider using different users for writes vs. Electric's read/replication access
+
+## Next Steps
+
+- Review the [Deployment guide](/docs/guides/deployment) for production setup
+- Learn about [Security](/docs/guides/security) best practices
+- See [Troubleshooting](/docs/guides/troubleshooting) for common issues
+- Check the [Configuration reference](/docs/api/config) for all available options
