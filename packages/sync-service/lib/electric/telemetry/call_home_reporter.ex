@@ -24,12 +24,23 @@ with_telemetry Telemetry.Metrics do
       first_report_in = cast_time_to_ms(Keyword.fetch!(opts, :first_report_in))
       reporting_period = cast_time_to_ms(Keyword.fetch!(opts, :reporting_period))
       reporter_fn = Keyword.get(opts, :reporter_fn, &report_home/1)
+      stack_id = Keyword.get(opts, :stack_id)
 
-      GenServer.start_link(
-        __MODULE__,
-        {metrics, first_report_in, reporting_period, name, static_info, reporter_fn},
-        name: name
-      )
+      if stack_id = Keyword.get(opts, :stack_id),
+        do:
+          GenServer.start_link(
+            __MODULE__,
+            %{
+              metrics: metrics,
+              first_report_in: first_report_in,
+              reporting_period: reporting_period,
+              name: name,
+              static_info: static_info,
+              reporter_fn: reporter_fn,
+              stack_id: stack_id
+            },
+            name: name
+          )
     end
 
     def report_home(results) do
@@ -47,11 +58,22 @@ with_telemetry Telemetry.Metrics do
     defp cast_time_to_ms({time, :second}), do: time * 1000
 
     @impl GenServer
-    def init({metrics, first_report_in, reporting_period, name, static_info, reporter_fn}) do
+    def init(opts) do
+      %{
+        metrics: metrics,
+        first_report_in: first_report_in,
+        reporting_period: reporting_period,
+        name: name,
+        static_info: static_info,
+        reporter_fn: reporter_fn,
+        stack_id: stack_id
+      } = opts
+
       # We need to trap exits here so that `terminate/2` callback has more chances to run
       # and send data before crash/shutdown
       Process.flag(:trap_exit, true)
       Process.set_label({:call_home_reporter, name})
+      Logger.metadata(stack_id: stack_id)
 
       Logger.notice(
         "Starting telemetry reporter. Electric will send anonymous usage data to #{telemetry_url()}. " <>
