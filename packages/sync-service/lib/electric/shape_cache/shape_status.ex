@@ -395,6 +395,24 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert(meta_table, meta_tuples)
       :ets.insert(last_used_table, last_used_tuples)
 
+      shapes
+      |> Enum.filter(fn {_, shape} ->
+        Shape.has_dependencies?(shape) and not Shape.deps_known?(shape)
+      end)
+      |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
+        handles = Enum.map(deps, &get_existing_shape(meta_table, &1))
+
+        if not Enum.any?(handles, &is_nil/1) do
+          handles = Enum.map(handles, &elem(&1, 0))
+          shape = %Shape{shape | shape_dependencies_handles: handles}
+
+          :ets.update_element(meta_table, {@shape_meta_data, handle}, {2, shape})
+        else
+          Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")
+          remove_shape(meta_table, handle)
+        end
+      end)
+
       :ok
     end
   end
