@@ -2,7 +2,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: false
 
   import Support.ComponentSetup,
-    only: [with_stack_id_from_test: 1, with_status_monitor: 1, with_slot_name_and_stream_id: 1]
+    only: [with_stack_id_from_test: 1, with_status_monitor: 1, with_slot_name: 1]
 
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
@@ -87,7 +87,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   setup :with_stack_id_from_test
-  setup :with_slot_name_and_stream_id
+  setup :with_slot_name
 
   describe "ReplicationClient init" do
     setup [:with_unique_db, :with_basic_tables, :with_status_monitor]

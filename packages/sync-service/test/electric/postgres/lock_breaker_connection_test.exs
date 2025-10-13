@@ -6,7 +6,7 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
   alias Electric.Postgres.LockBreakerConnection
   alias Electric.Postgres.LockConnection
 
-  setup [:with_unique_db, :with_stack_id_from_test, :with_slot_name_and_stream_id]
+  setup [:with_unique_db, :with_stack_id_from_test, :with_slot_name]
 
   test "should break an abandoned lock if slot is inactive", %{
     db_config: config,
