@@ -29,14 +29,14 @@ For general PostgreSQL user and permission setup, see the [PostgreSQL Permission
 
 ## Deploy Postgres
 
-[Sign up to PlanetScale](https://planetscale.com) and create a Postgres database.
+[Sign up to PlanetScale](https://planetscale.com) and [create a Postgres database](https://planetscale.com/docs/postgres/tutorials/planetscale-postgres-quickstart).
 
 ### Enable Logical Replication
 
-Logical replication is **not enabled by default** on PlanetScale.
+Logical replication is **not enabled by default** on PlanetScale. See the [PlanetScale Logical Replication guide](https://planetscale.com/docs/postgres/integrations/logical-cdc) for detailed background.
 
 **Configure in PlanetScale Console:**
-1. Go to your database → **Cluster configuration → Parameters**
+1. Go to your database → [**Settings → Cluster configuration → Parameters**](https://planetscale.com/docs/postgres/settings)
 2. Set these parameters:
    - `wal_level` = `logical`
    - `max_replication_slots` = `10` (or higher)
@@ -69,8 +69,8 @@ PlanetScale's default connection limit is **25 connections**, but Electric needs
 > **Recommendation:** Increase your connection limit to at least **50 connections** or higher depending on your needs.
 
 To increase connection limits in PlanetScale:
-1. Go to your database settings
-2. Find "Connection Limits" or "max_connections"
+1. Go to your database → [**Settings → Cluster configuration → Parameters**](https://planetscale.com/docs/postgres/settings)
+2. Find `max_connections` parameter
 3. Increase to 50 or more
 
 Alternatively, reduce Electric's pool size:
@@ -87,11 +87,12 @@ Follow the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions) to 
 
 ## Connect Electric
 
-Get your connection string from PlanetScale:
+Get your [connection string from PlanetScale](https://planetscale.com/docs/postgres/connection-strings):
 
 > [!Important] Connection String Requirements
 > - Use the **direct connection** (port 5432), not PgBouncer (port 6432)
 > - Include `sslmode=require` (PlanetScale requires SSL/TLS)
+> - See [PlanetScale connection strings documentation](https://planetscale.com/docs/postgres/connection-strings)
 
 ```shell
 docker run -it \
@@ -134,7 +135,13 @@ For general PostgreSQL and Electric best practices, see:
 
 ## Additional Resources
 
-- [PlanetScale Postgres Documentation](https://planetscale.com/docs/postgres)
-- [PlanetScale Logical Replication Guide](https://planetscale.com/docs/postgres/integrations/logical-cdc)
+**PlanetScale Documentation:**
+- [PlanetScale for Postgres Quickstart](https://planetscale.com/docs/postgres/tutorials/planetscale-postgres-quickstart)
+- [Logical Replication and CDC](https://planetscale.com/docs/postgres/integrations/logical-cdc)
+- [Database Settings and Parameters](https://planetscale.com/docs/postgres/settings)
+- [Connection Strings](https://planetscale.com/docs/postgres/connection-strings)
+- [High Availability with CDC](https://planetscale.com/blog/postgres-ha-with-cdc)
+
+**Electric Documentation:**
 - [PostgreSQL Permissions Guide](/docs/guides/postgres-permissions)
 - [Electric Deployment Guide](/docs/guides/deployment)
