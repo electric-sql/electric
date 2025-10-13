@@ -137,7 +137,7 @@ Suffix for the logical replication publication and slot name.
 
 After seeing no activity on the logical replication stream for this long, Electric will close all of its database connections. This allows the database server to scale-to-zero on supported providers.
 
-While Electric is in the scaled-down mode, an incoming shape request will cause is to reopen database connections and restart the logical replication stream. The request itself will be held until it can be processed as usual to return a proper response.
+While Electric is in the scaled-down mode, an incoming shape request will cause it to reopen database connections and restart the logical replication stream. The request itself will be held until it can be processed as usual to return a proper response.
 
 The default value is 0, meaning the connection scaling down is disabled and Electric will keep its database connections open permanently.
 
