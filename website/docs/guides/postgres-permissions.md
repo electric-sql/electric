@@ -32,8 +32,17 @@ GRANT DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
 
--- Grant permission to alter tables (needed for REPLICA IDENTITY)
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO electric_user;
+-- Transfer ownership of all tables to enable REPLICA IDENTITY management
+-- Note: This requires running as a superuser or the current table owner
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  LOOP
+    EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' OWNER TO electric_user';
+  END LOOP;
+END$$;
 ```
 
 Then connect Electric using:
@@ -58,7 +67,7 @@ Electric needs specific PostgreSQL permissions to:
 | `REPLICATION` | Enable logical replication streaming | Creating replication slots and consuming the WAL |
 | `CREATE` on database | Create publications | Automatic publication management |
 | `SELECT` on tables | Read table data | Initial shape snapshots |
-| `ALTER TABLE` | Set replica identity | Configuring `REPLICA IDENTITY FULL` |
+| Table ownership | Set replica identity | Configuring `REPLICA IDENTITY FULL` |
 | Publication ownership | Modify publications | Adding/removing tables from publication |
 
 ## Automatic vs Manual Publication Management
@@ -73,7 +82,7 @@ In this mode, Electric automatically creates the publication and adds tables to 
 - `REPLICATION` role attribute
 - `CREATE` privilege on the database
 - `SELECT` privilege on tables
-- Ability to `ALTER TABLE` to set `REPLICA IDENTITY FULL`
+- Table ownership (to set `REPLICA IDENTITY FULL`)
 
 ### 2. Manual Mode
 
@@ -116,6 +125,17 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO electric_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT ALL PRIVILEGES ON SEQUENCES TO electric_user;
+
+-- Transfer ownership of all tables to enable REPLICA IDENTITY management
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  LOOP
+    EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' OWNER TO electric_user';
+  END LOOP;
+END$$;
 ```
 
 ### Table-Scoped Setup (Restricted Access)
