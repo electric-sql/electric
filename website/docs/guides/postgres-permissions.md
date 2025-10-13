@@ -190,28 +190,7 @@ ELECTRIC_MANUAL_TABLE_PUBLISHING=true
 
 ## AWS RDS and Aurora
 
-AWS RDS and Aurora require special handling for replication permissions:
-
-```sql
--- Create user
-CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password';
-
--- Grant RDS replication role (equivalent to REPLICATION)
-GRANT rds_replication TO electric_user;
-
--- Grant other necessary privileges
-GRANT CONNECT ON DATABASE mydb TO electric_user;
-GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
-GRANT CREATE ON DATABASE mydb TO electric_user;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO electric_user;
-```
-
-You also need to enable logical replication in RDS/Aurora:
-1. Create a [custom parameter group](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithParamGroups.html)
-2. Set `rds.logical_replication = 1`
-3. Reboot the instance
-
-See the [AWS integration guide](/docs/integrations/aws) for more details.
+AWS RDS and Aurora require special handling for replication permissions. See the [AWS integration guide](/docs/integrations/aws) for details on enabling logical replication and granting the `rds_replication` role.
 
 ## Manual Configuration Steps
 
