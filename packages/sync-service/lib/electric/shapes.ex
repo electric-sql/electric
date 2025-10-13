@@ -23,7 +23,7 @@ defmodule Electric.Shapes do
     else
       # If we have a shape handle, but no shape, it means the shape was deleted. Send a 409
       # and expect the client to retry - if the state of the world allows, it'll get a new handle.
-      {:error, Electric.Shapes.Api.Error.must_refetch(opts)}
+      {:error, Electric.Shapes.Api.Error.must_refetch()}
     end
   end
 

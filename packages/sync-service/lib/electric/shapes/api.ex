@@ -355,9 +355,7 @@ defmodule Electric.Shapes.Api do
 
     # TODO: discuss returning a 307 redirect rather than a 409, the client
     # will have to detect this and throw out old data
-
-    %{params: %{live_sse: in_sse?}} = request
-    error = Api.Error.must_refetch(live_sse: in_sse?)
+    error = Api.Error.must_refetch()
 
     {:error,
      Response.error(request, error.message,
@@ -654,11 +652,11 @@ defmodule Electric.Shapes.Api do
       {:error, :unknown} ->
         # the shape has been deleted between the request validation and the attempt
         # to return the log stream
-        error = Api.Error.must_refetch(live_sse: in_sse?)
+        error = Api.Error.must_refetch()
         Response.error(request, error.message, status: error.status)
 
       {:error, %SnapshotError{type: :schema_changed}} ->
-        error = Api.Error.must_refetch(live_sse: in_sse?)
+        error = Api.Error.must_refetch()
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
@@ -748,7 +746,6 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      params: %{live_sse: in_sse?},
       api: %{long_poll_timeout: long_poll_timeout}
     } = request
 
@@ -764,7 +761,7 @@ defmodule Electric.Shapes.Api do
         |> do_serve_shape_log()
 
       {^ref, :shape_rotation, new_handle} ->
-        error = Api.Error.must_refetch(live_sse: in_sse?)
+        error = Api.Error.must_refetch()
 
         Response.error(request, error.message,
           handle: new_handle,
@@ -772,7 +769,7 @@ defmodule Electric.Shapes.Api do
         )
 
       {^ref, :shape_rotation} ->
-        error = Api.Error.must_refetch(live_sse: in_sse?)
+        error = Api.Error.must_refetch()
         Response.error(request, error.message, status: error.status)
     after
       # If we timeout, return an up-to-date message
@@ -854,14 +851,12 @@ defmodule Electric.Shapes.Api do
         # as per `determine_log_chunk_offset/1`.
         end_offset = updated_request.chunk_end_offset
 
-        in_sse? = true
-
         case Shapes.get_merged_log_stream(
                updated_request.api,
                shape_handle,
                since: since_offset,
                up_to: end_offset,
-               live_sse: in_sse?
+               live_sse: true
              ) do
           {:ok, log} ->
             Process.cancel_timer(keepalive_ref)
@@ -890,10 +885,7 @@ defmodule Electric.Shapes.Api do
         end
 
       {^ref, :shape_rotation} ->
-        must_refetch = Api.Error.must_refetch(live_sse: true)
-        message = encode_message(request, must_refetch.message)
-
-        {message, %{state | mode: :done}}
+        {[], %{state | mode: :done}}
 
       {:sse_keepalive, ^ref} ->
         current_time = System.monotonic_time(:millisecond)
