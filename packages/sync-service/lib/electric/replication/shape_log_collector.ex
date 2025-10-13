@@ -443,6 +443,6 @@ defmodule Electric.Replication.ShapeLogCollector do
       Support.TestUtils.activate_mocked_functions_for_module(__MODULE__)
     end
   else
-    def test_callback_hook, do: :noop
+    def activate_mocked_functions_from_test_process, do: :noop
   end
 end
