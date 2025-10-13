@@ -231,6 +231,10 @@ export default defineConfig({
             { text: 'Shapes', link: '/docs/guides/shapes' },
             { text: 'Writes', link: '/docs/guides/writes' },
             { text: 'Installation', link: '/docs/guides/installation' },
+            {
+              text: 'PostgreSQL Permissions',
+              link: '/docs/guides/postgres-permissions',
+            },
             { text: 'Deployment', link: '/docs/guides/deployment' },
             { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
