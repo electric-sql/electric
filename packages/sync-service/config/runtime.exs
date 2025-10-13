@@ -272,7 +272,14 @@ config :electric,
       "ELECTRIC_REPLICATION_IDLE_TIMEOUT",
       &Electric.Config.parse_human_readable_time!/1,
       nil
-    )
+    ),
+  idle_wal_size_check_period:
+    env!(
+      "ELECTRIC_IDLE_WAL_SIZE_CHECK_PERIOD",
+      &Electric.Config.parse_human_readable_time!/1,
+      nil
+    ),
+  idle_wal_size_threshold: env!("ELECTRIC_IDLE_WAL_SIZE_THRESHOLD", :integer, nil)
 
 if Electric.telemetry_enabled?() do
   config :sentry,

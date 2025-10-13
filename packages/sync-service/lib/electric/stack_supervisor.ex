@@ -118,6 +118,14 @@ defmodule Electric.StackSupervisor do
                      shape_hibernate_after: [
                        type: :integer,
                        default: Electric.Config.default(:shape_hibernate_after)
+                     ],
+                     idle_wal_size_check_period: [
+                       type: :integer,
+                       default: Electric.Config.default(:idle_wal_size_check_period)
+                     ],
+                     idle_wal_size_threshold: [
+                       type: :integer,
+                       default: Electric.Config.default(:idle_wal_size_threshold)
                      ]
                    ]
                  ],

@@ -10,6 +10,10 @@ defmodule Electric.Connection.Restarter do
     - publication manager
     - schema reconciler
 
+  Once the connection subsystem is scaled down, Restarter starts a timer to check the retained
+  WAL size periodically. If the size exceeds the configured threshold, Restart will restart the
+  connection subsystem. Both the period and the size threshold are passed to `start_link/1`.
+
   """
 
   use GenServer
@@ -69,30 +73,39 @@ defmodule Electric.Connection.Restarter do
      %{
        stack_id: Keyword.fetch!(opts, :stack_id),
        stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
-       wait_until_conn_up_ref: nil
+       wal_size_check_period: Keyword.get(opts, :wal_size_check_period, 0),
+       wal_size_threshold: Keyword.get(opts, :wal_size_threshold, 1),
+       wait_until_conn_up_ref: nil,
+       wal_size_check_timer: nil
      }}
   end
 
-  def handle_cast(:stop_connection_subsystem, state) do
-    StatusMonitor.database_connections_going_to_sleep(state.stack_id)
-    Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: state.stack_id)
+  def handle_cast(:stop_connection_subsystem, %{stack_id: stack_id} = state) do
+    StatusMonitor.database_connections_going_to_sleep(stack_id)
+    Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: stack_id)
 
     Electric.StackSupervisor.dispatch_stack_event(
       state.stack_events_registry,
-      state.stack_id,
+      stack_id,
       :scaled_down_database_connections
     )
+
+    state = schedule_wal_size_check(state)
 
     {:noreply, state}
   end
 
   def handle_cast(:restart_connection_subsystem, %{wait_until_conn_up_ref: nil} = state) do
-    StatusMonitor.database_connections_waking_up(state.stack_id)
-    Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
+    %{stack_id: stack_id} = state
 
-    ref = StatusMonitor.wait_until_conn_up_async(state.stack_id)
+    StatusMonitor.database_connections_waking_up(stack_id)
+    Electric.Connection.Manager.Supervisor.restart(stack_id: stack_id)
 
-    {:noreply, %{state | wait_until_conn_up_ref: ref}}
+    ref = StatusMonitor.wait_until_conn_up_async(stack_id)
+
+    if timer = state.wal_size_check_timer, do: Process.cancel_timer(timer)
+
+    {:noreply, %{state | wait_until_conn_up_ref: ref, wal_size_check_timer: nil}}
   end
 
   def handle_cast(:restart_connection_subsystem, state) do
@@ -103,5 +116,41 @@ defmodule Electric.Connection.Restarter do
 
   def handle_info({ref, :ok}, %{wait_until_conn_up_ref: ref} = state) do
     {:noreply, %{state | wait_until_conn_up_ref: nil}}
+  end
+
+  # The timer has already been cancelled and reset, ignore this message.
+  def handle_info(:check_wal_size, %{wal_size_check_timer: nil} = state) do
+    {:noreply, state}
+  end
+
+  def handle_info(:check_wal_size, state) do
+    state = %{state | wal_size_check_timer: nil}
+
+    wal_size = query_retained_wal_size(state)
+
+    state =
+      if wal_size >= state.wal_size_threshold do
+        :ok = restart_connection_subsystem(state.stack_id)
+        state
+      else
+        schedule_wal_size_check(state)
+      end
+
+    {:noreply, state}
+  end
+
+  defp schedule_wal_size_check(
+         %{wal_size_check_timer: nil, wal_size_check_period: period} = state
+       )
+       when is_integer(period) and period > 0 do
+    timer = Process.send_after(self(), :check_wal_size, period)
+    %{state | wal_size_check_timer: timer}
+  end
+
+  defp schedule_wal_size_check(state), do: state
+
+  defp query_retained_wal_size(_state) do
+    # FIXME: placeholder
+    0
   end
 end

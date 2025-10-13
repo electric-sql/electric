@@ -144,7 +144,9 @@ defmodule Electric.Application do
         publication_refresh_period: get_env(opts, :publication_refresh_period),
         schema_reconciler_period: get_env(opts, :schema_reconciler_period),
         cleanup_interval_ms: get_env(opts, :cleanup_interval_ms),
-        shape_hibernate_after: get_env(opts, :shape_hibernate_after)
+        shape_hibernate_after: get_env(opts, :shape_hibernate_after),
+        idle_wal_size_check_period: get_env(opts, :idle_wal_size_check_period),
+        idle_wal_size_threshold: get_env(opts, :idle_wal_size_threshold)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )

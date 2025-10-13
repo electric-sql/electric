@@ -121,11 +121,12 @@ defmodule Electric.AsyncDeleter do
   end
 
   def trash_dir!(stack_id) do
-    Electric.StackConfig.lookup(stack_id, {__MODULE__, :trash_dir})
-  rescue
-    ArgumentError ->
+    if trash_dir = Electric.StackConfig.get(stack_id, {__MODULE__, :trash_dir}) do
+      trash_dir
+    else
       raise RuntimeError,
         message: "#{inspect(__MODULE__)} config is missing for stack #{stack_id}"
+    end
   end
 
   def trash_dir(storage_dir, stack_id), do: Path.join([storage_dir, @trash_dir_base, stack_id])

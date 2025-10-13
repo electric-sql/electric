@@ -320,14 +320,15 @@ defmodule Electric.Connection.Manager do
         max_shapes: Keyword.fetch!(opts, :max_shapes),
         expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size)
       }
-      |> initialize_connection_opts(opts)
+      |> init_connection_opts(opts)
+      |> init_validated_connection_opts()
 
     # Wait for the connection resolver to start before continuing with
     # connection setup.
     {:ok, state}
   end
 
-  defp initialize_connection_opts(state, opts) do
+  defp init_connection_opts(state, opts) do
     connection_opts = Keyword.fetch!(opts, :connection_opts)
 
     replication_opts =
@@ -339,12 +340,28 @@ defmodule Electric.Connection.Manager do
     %{state | connection_opts: connection_opts, replication_opts: replication_opts}
   end
 
+  defp init_validated_connection_opts(%{stack_id: stack_id} = state) do
+    Map.update!(state, :validated_connection_opts, fn map ->
+      Map.new(map, fn {type, nil} ->
+        {type, Electric.StackConfig.get(stack_id, validated_conn_opts_config_key(type))}
+      end)
+    end)
+  end
+
   defp validate_connection(conn_opts, type, state) do
-    if opts = state.validated_connection_opts[type] do
+    config_key = validated_conn_opts_config_key(type)
+
+    opts =
+      Map.get(state.validated_connection_opts, type) ||
+        Electric.StackConfig.get(state.stack_id, config_key)
+
+    if opts do
       {:ok, opts, state}
     else
       try do
         with {:ok, validated_opts} <- ConnectionResolver.validate(state.stack_id, conn_opts) do
+          Electric.StackConfig.put(state.stack_id, config_key, validated_opts)
+
           {:ok, validated_opts,
            Map.update!(state, :validated_connection_opts, &Map.put(&1, type, validated_opts))}
         end
@@ -1293,4 +1310,6 @@ defmodule Electric.Connection.Manager do
     do: %{state | replication_client_timer: nil}
 
   defp nillify_timer(state, _tref), do: state
+
+  defp validated_conn_opts_config_key(type), do: {__MODULE__, {:validated_connection_opts, type}}
 end

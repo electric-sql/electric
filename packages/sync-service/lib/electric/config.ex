@@ -50,6 +50,13 @@ defmodule Electric.Config do
     max_txn_size: 250 * 1024 * 1024,
     # Scaling down on idle is disabled by default
     replication_idle_timeout: 0,
+    # If the database provider scales down after 5 min and provided that the
+    # replication_idle_timeout is about a minute or less, checking WAL size once an hour
+    # ends up using about 10% of the compute on an otherwise idle database.
+    idle_wal_size_check_period: 3_600_000,
+    # We want to wake up and process any transactions that have accumulated in the WAL, hence
+    # the low threshold.
+    idle_wal_size_threshold: 1_000,
     manual_table_publishing?: false,
     ## HTTP API
     # set enable_http_api: false to turn off the HTTP server totally
@@ -418,7 +425,7 @@ defmodule Electric.Config do
     end
   end
 
-  @time_units ~w[ms msec s sec m min]
+  @time_units ~w[ms msec s sec m min h hr]
 
   @spec parse_human_readable_time(binary | nil) :: {:ok, pos_integer} | {:error, binary}
 
@@ -437,6 +444,7 @@ defmodule Electric.Config do
   defp time_multiplier(millisecond) when millisecond in ["ms", "msec"], do: 1
   defp time_multiplier(second) when second in ["s", "sec"], do: 1000
   defp time_multiplier(minute) when minute in ["m", "min"], do: 1000 * 60
+  defp time_multiplier(hour) when hour in ["h", "hr"], do: 1000 * 60 * 60
 
   def parse_human_readable_time!(str) do
     case parse_human_readable_time(str) do

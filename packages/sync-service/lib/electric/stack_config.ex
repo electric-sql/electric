@@ -5,8 +5,12 @@ defmodule Electric.StackConfig do
     :ets.insert(table(stack_id), {key, val})
   end
 
-  def lookup(stack_id, key) do
+  def fetch!(stack_id, key) do
     :ets.lookup_element(table(stack_id), key, 2)
+  end
+
+  def get(stack_id, key) do
+    :ets.lookup_element(table(stack_id), key, 2, nil)
   end
 
   ###
