@@ -73,7 +73,11 @@ with_telemetry Telemetry.Metrics do
       # and send data before crash/shutdown
       Process.flag(:trap_exit, true)
       Process.set_label({:call_home_reporter, name})
-      Logger.metadata(stack_id: stack_id)
+
+      if not is_nil(stack_id) do
+        Logger.metadata(stack_id: stack_id)
+        Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
+      end
 
       Logger.notice(
         "Starting telemetry reporter. Electric will send anonymous usage data to #{telemetry_url()}. " <>
