@@ -37,6 +37,8 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
 
     def init(opts) do
       Process.set_label({:stack_telemetry_supervisor, opts.stack_id})
+      Logger.metadata(stack_id: opts.stack_id)
+      Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
       [telemetry_poller_child_spec(opts) | exporter_child_specs(opts)]
       |> Supervisor.init(strategy: :one_for_one)
@@ -79,6 +81,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     defp call_home_reporter_child_spec(%{call_home_telemetry?: true} = opts) do
       {Electric.Telemetry.CallHomeReporter,
        name: :"stack_call_home_telemetry_#{opts.stack_id}",
+       stack_id: opts.stack_id,
        static_info: static_info(opts),
        metrics: call_home_metrics(opts),
        first_report_in: {2, :minute},
