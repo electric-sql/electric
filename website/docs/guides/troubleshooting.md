@@ -123,7 +123,52 @@ See the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions) for de
 - Quick start setup for development and production
 - Different permission levels (superuser, dedicated user, least-privilege)
 - How to handle `REPLICA IDENTITY FULL` requirements
-- Common permission errors and their solutions
+
+##### Common permission errors
+
+**Error: "insufficient privilege to create publication"**
+
+**Cause:** The user doesn't have `CREATE` privilege on the database.
+
+**Solution:** Either:
+- Grant `CREATE` privilege: `GRANT CREATE ON DATABASE mydb TO electric_user;`
+- Or use manual publication management (create the publication as a superuser and set `ELECTRIC_MANUAL_TABLE_PUBLISHING=true`)
+
+**Error: "publication not owned by the provided user"**
+
+**Cause:** The publication exists but is owned by a different user.
+
+**Solution:** Change the publication owner:
+```sql
+ALTER PUBLICATION electric_publication_default OWNER TO electric_user;
+```
+
+**Error: "table does not have its replica identity set to FULL"**
+
+**Cause:** The table hasn't been configured with `REPLICA IDENTITY FULL`.
+
+**Solution:** Set replica identity manually:
+```sql
+ALTER TABLE schema.tablename REPLICA IDENTITY FULL;
+```
+
+**Error: "permission denied for table"**
+
+**Cause:** The Electric user doesn't have `SELECT` permission on the table.
+
+**Solution:** Grant appropriate permissions:
+```sql
+GRANT SELECT ON schema.tablename TO electric_user;
+```
+
+**Error: "must be owner of table"**
+
+**Cause:** You attempted an operation that requires ownership (e.g., `ALTER TABLE ... REPLICA IDENTITY FULL` or adding the table to a publication).
+
+**Solution:** Run as the table owner (or superuser), or transfer ownership:
+```sql
+ALTER TABLE schema.tablename OWNER TO electric_user;
+```
 
 ## IPv6 support
 
