@@ -68,10 +68,11 @@ defmodule Electric.ShapeCache.ExpiryManager do
   end
 
   defp expire_shapes(shape_count, state) do
-    shapes_to_expire = least_recently_used(state, state.expiry_batch_size)
+    number_to_expire = shape_count - state.max_shapes
+    shapes_to_expire = least_recently_used(state, number_to_expire)
 
     Logger.info(
-      "Expiring #{length(shapes_to_expire)} shapes as the number of shapes " <>
+      "Expiring #{number_to_expire} shapes as the number of shapes " <>
         "has exceeded the limit (#{state.max_shapes})"
     )
 
@@ -80,7 +81,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
       [
         max_shapes: state.max_shapes,
         shape_count: shape_count,
-        number_to_expire: state.expiry_batch_size
+        number_to_expire: number_to_expire
       ],
       fn -> Enum.each(shapes_to_expire, &expire_shape(&1, state)) end
     )
