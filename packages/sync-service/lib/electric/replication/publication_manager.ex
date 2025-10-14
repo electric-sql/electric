@@ -23,6 +23,7 @@ defmodule Electric.Replication.PublicationManager do
   @callback name(binary() | Keyword.t()) :: term()
   @callback add_shape(shape_handle(), Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(shape_handle(), Keyword.t()) :: :ok
+  @callback wait_for_restore(Keyword.t()) :: :ok
 
   defstruct [
     :stack_id,
@@ -32,13 +33,16 @@ defmodule Electric.Replication.PublicationManager do
     :can_alter_publication?,
     :manual_table_publishing?,
     :publication_refresh_period,
+    :restore_retry_timeout,
     relation_ref_counts: %{},
     prepared_relation_filters: MapSet.new(),
     committed_relation_filters: MapSet.new(),
     tracked_shape_handles: %{},
     waiters: %{},
     scheduled_updated_ref: nil,
-    next_update_forced?: false
+    next_update_forced?: false,
+    restore_waiters: [],
+    restore_complete?: false
   ]
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
@@ -56,7 +60,10 @@ defmodule Electric.Replication.PublicationManager do
            can_alter_publication?: boolean(),
            manual_table_publishing?: boolean(),
            publication_refresh_period: non_neg_integer(),
-           next_update_forced?: boolean()
+           next_update_forced?: boolean(),
+           restore_waiters: [GenServer.from()],
+           restore_complete?: boolean(),
+           restore_retry_timeout: non_neg_integer()
          }
 
   # The default debounce timeout is 0, which means that the publication update
@@ -64,6 +71,9 @@ defmodule Electric.Replication.PublicationManager do
   # mailbox, but we are leaving this configurable in case we want larger
   # windows to aggregate shape filter updates
   @default_debounce_timeout 0
+
+  # The default retry timeout in case of failed restore attempts
+  @default_restore_retry_timeout 1_000
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
@@ -76,7 +86,12 @@ defmodule Electric.Replication.PublicationManager do
             manual_table_publishing?: [type: :boolean, required: false, default: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             server: [type: :any, required: false],
-            refresh_period: [type: :pos_integer, required: false, default: 60_000]
+            refresh_period: [type: :pos_integer, required: false, default: 60_000],
+            restore_retry_timeout: [
+              type: :pos_integer,
+              required: false,
+              default: @default_restore_retry_timeout
+            ]
           )
 
   @behaviour __MODULE__
@@ -112,6 +127,14 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
+  @impl __MODULE__
+  def wait_for_restore(opts \\ []) do
+    server = Access.get(opts, :server, name(opts))
+
+    GenServer.call(server, :wait_for_restore, Keyword.get(opts, :timeout, :infinity))
+    :ok
+  end
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       stack_id = Keyword.fetch!(opts, :stack_id)
@@ -142,7 +165,8 @@ defmodule Electric.Replication.PublicationManager do
       db_pool: opts.db_pool,
       can_alter_publication?: opts.can_alter_publication?,
       manual_table_publishing?: opts.manual_table_publishing?,
-      publication_refresh_period: opts.refresh_period
+      publication_refresh_period: opts.refresh_period,
+      restore_retry_timeout: opts.restore_retry_timeout
     }
 
     {:ok, state, {:continue, :restore_relations}}
@@ -166,7 +190,12 @@ defmodule Electric.Replication.PublicationManager do
             end
           )
 
-        {:noreply, %{state | next_update_forced?: true}, {:continue, :update_publication}}
+        if update_needed?(state) do
+          {:noreply, %{state | next_update_forced?: true}, {:continue, :update_publication}}
+        else
+          state = mark_restore_complete(state)
+          {:noreply, state, refresh_timeout(state)}
+        end
       end
     )
   end
@@ -179,16 +208,20 @@ defmodule Electric.Replication.PublicationManager do
     state =
       OpenTelemetry.with_span(
         "publication_manager.update_publication",
-        [],
+        [
+          is_restore: not state.restore_complete?
+        ],
         state.stack_id,
         fn ->
           case check_publication_status(state) do
             {:ok, state} ->
               case configure_publication(state) do
                 {:ok, state} ->
+                  state = mark_restore_complete(state)
                   reply_to_all_waiters(:ok, state)
 
                 {:ok, relations_configured, state} ->
+                  state = mark_restore_complete(state)
                   handle_publication_update_result(relations_configured, state)
 
                 {:error, err, state} ->
@@ -204,7 +237,7 @@ defmodule Electric.Replication.PublicationManager do
 
     # Schedule a forced refresh to happen periodically unless there's an explicit call to
     # update the publication that happens sooner.
-    {:noreply, state, state.publication_refresh_period}
+    {:noreply, state, refresh_timeout(state)}
   end
 
   @impl true
@@ -214,9 +247,9 @@ defmodule Electric.Replication.PublicationManager do
 
     if not relation_tracked?(oid_rel, state) do
       state = add_waiter(from, oid_rel, state)
-      {:noreply, state}
+      {:noreply, state, refresh_timeout(state)}
     else
-      {:reply, :ok, state, state.publication_refresh_period}
+      {:reply, :ok, state, refresh_timeout(state)}
     end
   end
 
@@ -228,7 +261,16 @@ defmodule Electric.Replication.PublicationManager do
     # reconcile the publication, otherwise you run into issues where only the last
     # removal fails and all others succeed. No removal guarantees anything about
     # the state of the publication.
-    {:reply, :ok, state, state.publication_refresh_period}
+    {:reply, :ok, state, refresh_timeout(state)}
+  end
+
+  def handle_call(:wait_for_restore, from, state) do
+    if state.restore_complete? do
+      {:reply, :ok, state, refresh_timeout(state)}
+    else
+      state = %{state | restore_waiters: [from | state.restore_waiters]}
+      {:noreply, state, refresh_timeout(state)}
+    end
   end
 
   @impl true
@@ -396,6 +438,13 @@ defmodule Electric.Replication.PublicationManager do
        ),
        do: %{state | next_update_forced?: forced? or state.next_update_forced?}
 
+  defp mark_restore_complete(%{restore_complete?: true} = state), do: state
+
+  defp mark_restore_complete(state) do
+    for waiter <- state.restore_waiters, do: GenServer.reply(waiter, :ok)
+    %{state | restore_complete?: true, restore_waiters: []}
+  end
+
   defp relation_tracked?(oid_rel, %__MODULE__{committed_relation_filters: committed}) do
     MapSet.member?(committed, oid_rel)
   end
@@ -413,6 +462,9 @@ defmodule Electric.Replication.PublicationManager do
        }) do
     can_alter and not manual
   end
+
+  defp refresh_timeout(%{restore_complete?: false, restore_retry_timeout: timeout}), do: timeout
+  defp refresh_timeout(%{publication_refresh_period: period}), do: period
 
   defguardp is_tracking_shape_handle?(shape_handle, state)
             when is_map_key(state.tracked_shape_handles, shape_handle)

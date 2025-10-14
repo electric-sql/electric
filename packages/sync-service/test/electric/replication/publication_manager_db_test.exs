@@ -24,6 +24,8 @@ defmodule Electric.Replication.PublicationManagerDbTest do
 
   setup [
     :with_stack_id_from_test,
+    :with_in_memory_storage,
+    :with_shape_status,
     :with_unique_db,
     :with_sql_execute,
     :with_publication_name,
