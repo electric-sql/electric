@@ -70,8 +70,6 @@ defmodule Electric.ShapeCacheTest do
     end
   end
 
-  # setup :verify_on_exit!
-
   setup do
     %{inspector: @stub_inspector, pool: nil}
   end
