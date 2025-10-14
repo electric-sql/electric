@@ -27,7 +27,8 @@ function formatPrice(p) {
           {{ plan.featuresTitle }}
         </div>
         <div v-for="feature in plan.features" :key="feature" class="feature-item">
-          {{ feature }}
+          <a v-if="feature === 'Higher usage limits'" href="#details">{{ feature }}</a>
+          <span v-else>{{ feature }}</span>
         </div>
       </div>
     </div>
