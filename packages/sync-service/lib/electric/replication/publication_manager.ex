@@ -1,5 +1,13 @@
 defmodule Electric.Replication.PublicationManager do
-  @moduledoc false
+  @moduledoc """
+  Manages a PostgreSQL publication for a given Electric stack, tracking shapes
+  and ensuring that the publication configuration matches the required set of
+  relations that need to be published for the shapes to function correctly.
+
+  Includes periodic checks of the publication to ensure that it remains valid,
+  and expires any shapes that are no longer valid due to schema changes or
+  permission issues.
+  """
   use GenServer
 
   alias Electric.Postgres.Configuration
@@ -143,7 +151,7 @@ defmodule Electric.Replication.PublicationManager do
   @impl true
   def handle_continue(:restore_relations, state) do
     OpenTelemetry.with_span(
-      "publication_manager.restore_shapes",
+      "publication_manager.restore_relations",
       [],
       state.stack_id,
       fn ->
@@ -158,19 +166,45 @@ defmodule Electric.Replication.PublicationManager do
             end
           )
 
-        case check_publication_status(state) do
-          {:ok, state} ->
-            {:ok, relations_configured, state} = do_configure_publication!(state)
-            handle_publication_update_result(relations_configured, state)
-
-          {:error, err, state} ->
-            Logger.warning("Failed to confirm publication status: #{inspect(err)}")
-            raise err
-        end
-
-        {:noreply, state, state.publication_refresh_period}
+        {:noreply, %{state | next_update_forced?: true}, {:continue, :update_publication}}
       end
     )
+  end
+
+  def handle_continue(:update_publication, state) do
+    # Clear out the timer ref
+    if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
+    state = %{state | scheduled_updated_ref: nil}
+
+    state =
+      OpenTelemetry.with_span(
+        "publication_manager.update_publication",
+        [],
+        state.stack_id,
+        fn ->
+          case check_publication_status(state) do
+            {:ok, state} ->
+              case configure_publication(state) do
+                {:ok, state} ->
+                  reply_to_all_waiters(:ok, state)
+
+                {:ok, relations_configured, state} ->
+                  handle_publication_update_result(relations_configured, state)
+
+                {:error, err, state} ->
+                  reply_to_all_waiters({:error, err}, state)
+              end
+
+            {:error, err, state} ->
+              Logger.warning("Failed to confirm publication status: #{inspect(err)}")
+              reply_to_all_waiters({:error, err}, state)
+          end
+        end
+      )
+
+    # Schedule a forced refresh to happen periodically unless there's an explicit call to
+    # update the publication that happens sooner.
+    {:noreply, state, state.publication_refresh_period}
   end
 
   @impl true
@@ -198,39 +232,14 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @impl true
-  def handle_info(:update_publication, state) do
-    # Clear out the timer ref
-    if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
-    state = %{state | scheduled_updated_ref: nil}
-
-    state =
-      case check_publication_status(state) do
-        {:ok, state} ->
-          case configure_publication(state) do
-            {:ok, state} ->
-              reply_to_all_waiters(:ok, state)
-
-            {:ok, relations_configured, state} ->
-              handle_publication_update_result(relations_configured, state)
-
-            {:error, err, state} ->
-              reply_to_all_waiters({:error, err}, state)
-          end
-
-        {:error, err, state} ->
-          Logger.warning("Failed to confirm publication status: #{inspect(err)}")
-          reply_to_all_waiters({:error, err}, state)
-      end
-
-    # Schedule a forced refresh to happen periodically unless there's an explicit call to
-    # update the publication that happens sooner.
-    {:noreply, state, state.publication_refresh_period}
+  def handle_info(:do_update_publication, state) do
+    {:noreply, state, {:continue, :update_publication}}
   end
 
   def handle_info(:timeout, state) do
     case Electric.StatusMonitor.status(state.stack_id) do
       %{conn: :up} ->
-        handle_info(:update_publication, %{state | next_update_forced?: true})
+        {:noreply, %{state | next_update_forced?: true}, {:continue, :update_publication}}
 
       status ->
         Logger.debug("Publication update skipped due to inactive stack: #{inspect(status)}")
@@ -376,7 +385,7 @@ defmodule Electric.Replication.PublicationManager do
          forced?,
          %__MODULE__{scheduled_updated_ref: nil} = state
        ) do
-    ref = Process.send_after(self(), :update_publication, timeout)
+    ref = Process.send_after(self(), :do_update_publication, timeout)
     %{state | scheduled_updated_ref: ref, next_update_forced?: forced?}
   end
 
