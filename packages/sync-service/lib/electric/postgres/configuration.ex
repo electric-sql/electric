@@ -168,17 +168,24 @@ defmodule Electric.Postgres.Configuration do
       )
     end
 
-    drop_results =
-      Enum.map(to_drop, &{&1, drop_table_from_publication(conn, publication_name, &1)})
-
-    # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
-    # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
-    # deadlock if the order is reversed.
-    # Even when serialising all publication updates in a single process, it seems this deadlock can still occur,
-    # potentially because DDL operations do not offer as strong guarantees as DML operations do.
-    add_results =
-      to_add
-      |> Enum.map(&{&1, add_table_to_publication(conn, publication_name, &1)})
+    # Notes on avoiding deadlocks
+    # - `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
+    #   but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
+    #   deadlock if the order is reversed, and we've seen this happen even within the context of a single process perhaps
+    #   across multiple calls from separate deployments or timing issues.
+    # - It is important for all table operations to also occur in the same order to avoid deadlocks due to
+    #   lock ordering issues, so despite splitting drop and add operations we sort them and process them together
+    #   in a sorted single pass
+    results =
+      Enum.concat(
+        Enum.map(to_drop, &{&1, :drop}),
+        Enum.map(to_add, &{&1, :add})
+      )
+      |> Enum.sort(&(elem(&1, 0) <= elem(&2, 0)))
+      |> Enum.map(fn
+        {rel, :drop} -> {rel, drop_table_from_publication(conn, publication_name, rel)}
+        {rel, :add} -> {rel, add_table_to_publication(conn, publication_name, rel)}
+      end)
       |> Enum.map(fn
         {rel, {:ok, :added}} ->
           with {:ok, :configured} <- set_table_replica_identity_full(conn, rel) do
@@ -190,8 +197,7 @@ defmodule Electric.Postgres.Configuration do
       end)
 
     configuration_result =
-      drop_results
-      |> Enum.concat(add_results)
+      results
       |> Enum.concat(Enum.map(to_preserve, &{&1, {:ok, :validated}}))
       |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
       |> Map.new()
