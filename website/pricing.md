@@ -62,10 +62,7 @@ onMounted(() => {
     <a href="/product/cloud">Electric Cloud</a>
     has a generous free tier,
     <span class="inline hidden-md">
-      fixed plans with</span>
-    <span class="no-wrap electric-green">
-      unlimited data delivery</span>
-    and
+      fixed plans with</span> <a class="no-wrap" href="#details">unlimited data delivery</a> and
     <span class="no-wrap-lg">
       <span class="inline hidden-sm">
         additional</span>
@@ -166,8 +163,10 @@ onMounted(() => {
 </div>
 
 <Section :actions="[]">
-  <template #title>
-    Compare plans
+  <template #override-title>
+    <h1 id="details">
+      Compare plans
+    </h1>
   </template>
   <template #tagline>
     Dive into the details to see
