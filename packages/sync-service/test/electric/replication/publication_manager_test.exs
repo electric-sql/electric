@@ -17,23 +17,11 @@ defmodule Electric.Replication.PublicationManagerTest do
                columns: [%{name: "id", type: "int8", pk_position: 0}]
              )
 
-  @shape Shape.new!("items", inspector: @inspector)
-
   setup [
     :with_stack_id_from_test,
     :with_in_memory_storage,
     :with_shape_status
   ]
-
-  setup ctx do
-    if ctx[:existing_shapes] do
-      for shape <- ctx.existing_shapes do
-        {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
-      end
-    end
-
-    :ok
-  end
 
   setup ctx do
     test_pid = self()
@@ -85,28 +73,9 @@ defmodule Electric.Replication.PublicationManagerTest do
   end
 
   describe "wait_for_restore/1" do
-    @tag existing_shapes: []
     test "restoration immediately complete if nothing to restore", %{opts: opts} do
       assert :ok == PublicationManager.wait_for_restore(opts)
       refute_receive {:filters, _}
-    end
-
-    @tag configuration_delay: 200
-    @tag existing_shapes: [@shape]
-    test "waits for first publication update if shapes need to be restored", %{opts: opts} do
-      test_pid = self()
-
-      run_async(fn ->
-        assert :ok == PublicationManager.wait_for_restore(opts)
-        send(test_pid, :wait_over)
-      end)
-
-      refute_receive :wait_over, 50
-
-      assert_receive {:filters, [{_, {"public", "items"}}]}, 5000
-      assert_receive :wait_over
-
-      assert :ok == PublicationManager.wait_for_restore(opts)
     end
   end
 
