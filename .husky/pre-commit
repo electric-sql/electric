@@ -1,1 +1,9 @@
-pnpm exec lint-staged
+#!/bin/sh
+
+# Quick check if any staged files match lint-staged patterns
+# Patterns from package.json: *.{js,jsx,ts,tsx,json,css,md,yml,yaml}
+if git diff --cached --name-only --diff-filter=ACMR | grep -qE '\.(js|jsx|ts|tsx|json|css|md|yml|yaml)$'; then
+  pnpm exec lint-staged
+else
+  echo "No files matching lint-staged patterns, skipping..."
+fi
