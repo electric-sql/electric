@@ -7,7 +7,7 @@ outline: [2, 3]
 
 # PostgreSQL Permissions
 
-This guide explains how to create PostgreSQL users with the necessary permissions for Electric to work correctly. Electric requires specific database privileges to enable logical replication and manage publications.
+This guide explains how to create PostgreSQL users with the necessary permissions for Electric to work correctly. Electric requires specific database privileges to enable [logical replication](https://www.postgresql.org/docs/current/logical-replication.html) and manage publications.
 
 ## Quick Start
 
@@ -36,11 +36,11 @@ Electric needs the following PostgreSQL permissions:
 
 | Permission | Purpose | Required For |
 |------------|---------|--------------|
-| `REPLICATION` | Enable logical replication streaming | Creating replication slots and consuming the WAL |
-| `CREATE` on database | Create publications | Automatic publication management |
-| `SELECT` on tables | Read table data | Initial shape snapshots |
-| Table ownership | Set replica identity | Configuring `REPLICA IDENTITY FULL` |
-| Publication ownership | Modify publications | Adding/removing tables from publication; you must also own each table you add to the publication |
+| [`REPLICATION`](https://www.postgresql.org/docs/current/sql-createrole.html) | Enable logical replication streaming | Creating [replication slots](https://www.postgresql.org/docs/current/warm-standby.html#STREAMING-REPLICATION-SLOTS) and consuming the [WAL](https://www.postgresql.org/docs/current/wal-intro.html) |
+| [`CREATE`](https://www.postgresql.org/docs/current/ddl-priv.html) on database | Create publications | Automatic publication management |
+| [`SELECT`](https://www.postgresql.org/docs/current/sql-grant.html) on tables | Read table data | Initial shape snapshots |
+| [Table ownership](https://www.postgresql.org/docs/current/ddl-priv.html) | Set replica identity | Configuring [`REPLICA IDENTITY FULL`](https://www.postgresql.org/docs/current/sql-altertable.html) |
+| [Publication ownership](https://www.postgresql.org/docs/current/sql-createpublication.html) | Modify publications | Adding/removing tables from publication; you must also own each table you add to the publication |
 
 ## Automatic vs Manual Publication Management
 
@@ -87,6 +87,8 @@ GRANT CREATE ON DATABASE mydb TO electric_user;
 -- Grant SELECT on tables (Electric is read-only, only needs to read data)
 -- For all tables:
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO electric_user;
+
+-- Grant SELECT on future tables automatically (https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html)
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT ON TABLES TO electric_user;
 
@@ -166,7 +168,7 @@ AWS RDS and Aurora require special handling for replication permissions. See the
 
 If you need to manually configure the publication and replica identity (for use with `ELECTRIC_MANUAL_TABLE_PUBLISHING=true`):
 
-### 1. Create the Publication
+### 1. [Create the Publication](https://www.postgresql.org/docs/current/sql-createpublication.html)
 
 ```sql
 -- Create an empty publication
@@ -176,7 +178,7 @@ CREATE PUBLICATION electric_publication_default;
 CREATE PUBLICATION my_custom_publication;
 ```
 
-### 2. Add Tables to the Publication
+### 2. [Add Tables to the Publication](https://www.postgresql.org/docs/current/sql-alterpublication.html)
 
 ```sql
 -- Add specific tables
@@ -185,7 +187,7 @@ ALTER PUBLICATION electric_publication_default ADD TABLE public.posts;
 ALTER PUBLICATION electric_publication_default ADD TABLE public.comments;
 ```
 
-### 3. Configure Replica Identity
+### 3. [Configure Replica Identity](https://www.postgresql.org/docs/current/sql-altertable.html)
 
 For each table you want to sync, you must set the replica identity to `FULL`:
 
