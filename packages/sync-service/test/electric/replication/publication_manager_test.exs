@@ -26,6 +26,16 @@ defmodule Electric.Replication.PublicationManagerTest do
   ]
 
   setup ctx do
+    if ctx[:existing_shapes] do
+      for shape <- ctx.existing_shapes do
+        {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
+      end
+    end
+
+    :ok
+  end
+
+  setup ctx do
     test_pid = self()
 
     Repatch.patch(
@@ -75,16 +85,6 @@ defmodule Electric.Replication.PublicationManagerTest do
   end
 
   describe "wait_for_restore/1" do
-    setup ctx do
-      if ctx[:existing_shapes] do
-        for shape <- ctx.existing_shapes do
-          {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
-        end
-      end
-
-      :ok
-    end
-
     @tag existing_shapes: []
     test "restoration immediately complete if nothing to restore", %{opts: opts} do
       assert :ok == PublicationManager.wait_for_restore(opts)
@@ -103,7 +103,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       refute_receive :wait_over, 50
 
-      assert_receive {:filters, [{_, {"public", "items"}}]}
+      assert_receive {:filters, [{_, {"public", "items"}}]}, 5000
       assert_receive :wait_over
 
       assert :ok == PublicationManager.wait_for_restore(opts)

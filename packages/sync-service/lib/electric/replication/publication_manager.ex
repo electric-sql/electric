@@ -190,17 +190,51 @@ defmodule Electric.Replication.PublicationManager do
             end
           )
 
-        if update_needed?(state) do
-          {:noreply, %{state | next_update_forced?: true}, {:continue, :update_publication}}
-        else
-          state = mark_restore_complete(state)
-          {:noreply, state, refresh_timeout(state)}
-        end
+        state =
+          if update_needed?(state),
+            do: schedule_update_publication(0, true, state),
+            else: mark_restore_complete(state)
+
+        {:noreply, state, refresh_timeout(state)}
       end
     )
   end
 
-  def handle_continue(:update_publication, state) do
+  @impl true
+  def handle_call({:add_shape, shape_handle, oid_rel}, from, state) do
+    state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
+    state = schedule_update_if_necessary(state)
+
+    if not relation_tracked?(oid_rel, state) do
+      state = add_waiter(from, oid_rel, state)
+      {:noreply, state, refresh_timeout(state)}
+    else
+      {:reply, :ok, state, refresh_timeout(state)}
+    end
+  end
+
+  def handle_call({:remove_shape, shape_handle}, _from, state) do
+    state = remove_shape_from_relation_filters(shape_handle, state)
+    state = schedule_update_if_necessary(state)
+
+    # never wait for removals - reply immediately and let publication manager
+    # reconcile the publication, otherwise you run into issues where only the last
+    # removal fails and all others succeed. No removal guarantees anything about
+    # the state of the publication.
+    {:reply, :ok, state, refresh_timeout(state)}
+  end
+
+  def handle_call(:wait_for_restore, from, state) do
+    if state.restore_complete? do
+      {:reply, :ok, state, refresh_timeout(state)}
+    else
+      state = %{state | restore_waiters: [from | state.restore_waiters]}
+      {:noreply, state, refresh_timeout(state)}
+    end
+  end
+
+  @impl true
+  def handle_info(:update_publication, state) do
     # Clear out the timer ref
     if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
     state = %{state | scheduled_updated_ref: nil}
@@ -238,44 +272,6 @@ defmodule Electric.Replication.PublicationManager do
     # Schedule a forced refresh to happen periodically unless there's an explicit call to
     # update the publication that happens sooner.
     {:noreply, state, refresh_timeout(state)}
-  end
-
-  @impl true
-  def handle_call({:add_shape, shape_handle, oid_rel}, from, state) do
-    state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
-    state = schedule_update_if_necessary(state)
-
-    if not relation_tracked?(oid_rel, state) do
-      state = add_waiter(from, oid_rel, state)
-      {:noreply, state, refresh_timeout(state)}
-    else
-      {:reply, :ok, state, refresh_timeout(state)}
-    end
-  end
-
-  def handle_call({:remove_shape, shape_handle}, _from, state) do
-    state = remove_shape_from_relation_filters(shape_handle, state)
-    state = schedule_update_if_necessary(state)
-
-    # never wait for removals - reply immediately and let publication manager
-    # reconcile the publication, otherwise you run into issues where only the last
-    # removal fails and all others succeed. No removal guarantees anything about
-    # the state of the publication.
-    {:reply, :ok, state, refresh_timeout(state)}
-  end
-
-  def handle_call(:wait_for_restore, from, state) do
-    if state.restore_complete? do
-      {:reply, :ok, state, refresh_timeout(state)}
-    else
-      state = %{state | restore_waiters: [from | state.restore_waiters]}
-      {:noreply, state, refresh_timeout(state)}
-    end
-  end
-
-  @impl true
-  def handle_info(:do_update_publication, state) do
-    {:noreply, state, {:continue, :update_publication}}
   end
 
   def handle_info(:timeout, state) do
@@ -427,7 +423,7 @@ defmodule Electric.Replication.PublicationManager do
          forced?,
          %__MODULE__{scheduled_updated_ref: nil} = state
        ) do
-    ref = Process.send_after(self(), :do_update_publication, timeout)
+    ref = Process.send_after(self(), :update_publication, timeout)
     %{state | scheduled_updated_ref: ref, next_update_forced?: forced?}
   end
 
