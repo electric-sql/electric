@@ -174,6 +174,8 @@ defmodule Electric.Postgres.Configuration do
     # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
     # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
     # deadlock if the order is reversed.
+    # Even when serialising all publication updates in a single process, it seems this deadlock can still occur,
+    # potentially because DDL operations do not offer as strong guarantees as DML operations do.
     add_results =
       to_add
       |> Enum.map(&{&1, add_table_to_publication(conn, publication_name, &1)})
