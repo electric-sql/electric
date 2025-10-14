@@ -84,19 +84,14 @@ GRANT CONNECT ON DATABASE mydb TO electric_user;
 GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
 GRANT CREATE ON DATABASE mydb TO electric_user;
 
--- Grant privileges on tables
+-- Grant SELECT on tables (Electric is read-only, only needs to read data)
 -- For all tables:
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO electric_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
+  GRANT SELECT ON TABLES TO electric_user;
 
 -- For specific tables only:
--- GRANT SELECT, INSERT, UPDATE, DELETE ON public.users, public.posts TO electric_user;
-
--- Grant privileges on sequences (for generated IDs)
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO electric_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT ALL PRIVILEGES ON SEQUENCES TO electric_user;
+-- GRANT SELECT ON public.users, public.posts TO electric_user;
 ```
 
 **Handling REPLICA IDENTITY FULL - Choose one option:**
