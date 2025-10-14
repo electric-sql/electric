@@ -56,10 +56,16 @@ defmodule Electric.ShapeCacheTest do
   @moduletag :tmp_dir
 
   defmodule TempPubManager do
+    @behaviour Electric.Replication.PublicationManager
+    def name(_opts), do: :temp_pub_manager
+
     def add_shape(_handle, _, opts) do
       send(opts[:test_pid], {:called, :prepare_tables_fn})
       :ok
     end
+
+    def remove_shape(_handle, _opts), do: :ok
+    def wait_for_restore(_opts), do: :ok
   end
 
   setup :verify_on_exit!
@@ -928,16 +934,22 @@ defmodule Electric.ShapeCacheTest do
     end
 
     defmodule SlowPublicationManager do
+      @behaviour Electric.Replication.PublicationManager
+
       use GenServer
 
+      def name(opts), do: Keyword.fetch!(opts, :name)
+
       def start_link(opts),
-        do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
+        do: GenServer.start_link(__MODULE__, opts, name: name(opts))
 
       def init(opts), do: {:ok, opts}
 
       def remove_shape(_, opts), do: GenServer.call(opts[:server], :remove_shape, 0)
 
       def add_shape(_, _, opts), do: GenServer.call(opts[:server], :add_shape, 0)
+
+      def wait_for_restore(_opts), do: :ok
 
       def handle_call(_request, _from, state) do
         Process.sleep(10)

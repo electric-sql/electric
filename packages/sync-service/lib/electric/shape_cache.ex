@@ -239,6 +239,9 @@ defmodule Electric.ShapeCache do
         {:consumers_ready, last_processed_lsn, total_recovered, total_failed_to_recover},
         state
       ) do
+    {pub_man, pub_man_opts} = state.publication_manager
+    pub_man.wait_for_restore(pub_man_opts)
+
     ShapeLogCollector.set_last_processed_lsn(state.stack_id, last_processed_lsn)
 
     Electric.Connection.Manager.consumers_ready(

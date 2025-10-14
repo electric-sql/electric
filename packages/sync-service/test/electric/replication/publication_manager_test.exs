@@ -91,7 +91,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       refute_receive {:filters, _}
     end
 
-    @tag configuration_delay: 100
+    @tag configuration_delay: 200
     @tag existing_shapes: [@shape]
     test "waits for first publication update if shapes need to be restored", %{opts: opts} do
       test_pid = self()
