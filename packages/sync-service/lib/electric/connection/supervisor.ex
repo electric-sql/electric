@@ -64,7 +64,8 @@ defmodule Electric.Connection.Supervisor do
 
     children = [
       {Electric.StatusMonitor, stack_id: stack_id},
-      {Electric.Connection.Restarter, stack_id: stack_id},
+      {Electric.Connection.Restarter,
+       stack_id: stack_id, stack_events_registry: Keyword.fetch!(opts, :stack_events_registry)},
       {Electric.Connection.Manager.Supervisor, opts}
     ]
 

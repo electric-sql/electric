@@ -13,7 +13,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     :with_stack_id_from_test,
     :with_persistent_kv,
     :with_inspector,
-    :with_slot_name_and_stream_id,
+    :with_slot_name,
     :with_in_memory_storage,
     :with_shape_status
   ]

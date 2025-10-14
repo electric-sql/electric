@@ -79,8 +79,7 @@ defmodule Electric.StackSupervisor do
                      replication_idle_timeout: [
                        type: :non_neg_integer,
                        default: Electric.Config.default(:replication_idle_timeout)
-                     ],
-                     stream_id: [type: :string, required: false]
+                     ]
                    ]
                  ],
                  pool_opts: [
