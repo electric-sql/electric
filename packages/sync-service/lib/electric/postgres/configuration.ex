@@ -211,9 +211,9 @@ defmodule Electric.Postgres.Configuration do
 
   @spec exec_alter_publication_for_table(Postgrex.conn(), String.t(), :add | :drop, String.t()) ::
           :ok | {:error, term()}
-  defp exec_alter_publication_for_table(conn, publication_name, op, table) do
+  defp exec_alter_publication_for_table(conn, publication_name, op_atom, table) do
     op =
-      case op do
+      case op_atom do
         :add -> "ADD"
         :drop -> "DROP"
       end
@@ -233,9 +233,10 @@ defmodule Electric.Postgres.Configuration do
         Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
 
         case reason do
-          # Duplicate object error is raised if we're trying to add a table
-          # to the publication when it's already there.
-          %{postgres: %{code: :undefined_table}} -> :ok
+          # undefined table can happen when removing a table that was already removed
+          %{postgres: %{code: :undefined_object}} when op_atom == :drop -> :ok
+          # duplicate object can happen when adding a table that was already added
+          %{postgres: %{code: :duplicate_object}} when op_atom == :add -> :ok
           _ -> {:error, reason}
         end
     end
