@@ -113,6 +113,18 @@ If you're stopping Electric for the weekend, we recommend removing the `electric
 
 You can also control the size of the WAL with [`wal_keep_size`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-KEEP-SIZE). On restart, Electric will detect if the WAL is past the resume point too.
 
+### Database permissions &mdash; how do I configure PostgreSQL users for Electric?
+
+Electric requires specific PostgreSQL permissions to function correctly, including the `REPLICATION` role and appropriate table permissions.
+
+##### Solution &mdash; see the PostgreSQL Permissions guide
+
+See the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions) for detailed instructions on:
+- Quick start setup for development and production
+- Different permission levels (superuser, dedicated user, least-privilege)
+- How to handle `REPLICA IDENTITY FULL` requirements
+- Common permission errors and their solutions
+
 ## IPv6 support
 
 If Electric or Postgres are running behind an IPv6 network, you might have to perform additional configurations on your network.

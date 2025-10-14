@@ -11,32 +11,67 @@ This guide explains how to create PostgreSQL users with the necessary permission
 
 ## Quick Start
 
-For most use cases, you can create a dedicated Electric user with full permissions on your database:
+### For Development / Simple Setup
+
+In many cases you can start with the built-in default `postgres` user or another superuser role:
+
+```shell
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/your_database
+```
+
+Electric will automatically create the publication and configure tables as needed. This approach works well for development and is often fine for production too.
+
+### For Least-Privilege Production Setup
+
+If you need a dedicated, least-privilege Electric user, you have two options for handling the required `REPLICA IDENTITY FULL` configuration:
+
+#### Option A: Pre-configure as DBA (Recommended)
+
+Have your DBA or a superuser pre-configure tables, keeping ownership with your application:
 
 ```sql
--- Create a user with REPLICATION privileges
+-- As superuser/DBA, set REPLICA IDENTITY FULL on tables that will be synced
+ALTER TABLE public.users REPLICA IDENTITY FULL;
+ALTER TABLE public.posts REPLICA IDENTITY FULL;
+ALTER TABLE public.comments REPLICA IDENTITY FULL;
+
+-- Create the Electric user with REPLICATION
 CREATE ROLE electric_user WITH LOGIN PASSWORD 'your_secure_password' REPLICATION;
 
--- Grant necessary database privileges
+-- Grant database-level privileges
 GRANT CONNECT ON DATABASE your_database TO electric_user;
-GRANT USAGE ON SCHEMA public TO electric_user;
+GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
 GRANT CREATE ON DATABASE your_database TO electric_user;
 
--- Grant permissions on all existing tables
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO electric_user;
-GRANT UPDATE ON ALL TABLES IN SCHEMA public TO electric_user;
-GRANT INSERT ON ALL TABLES IN SCHEMA public TO electric_user;
-GRANT DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
+-- Grant table permissions
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
 
--- Grant permissions on all future tables
+-- Grant permissions on future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
+```
+
+#### Option B: Transfer Ownership to Electric User
+
+Alternatively, transfer table ownership to the Electric user so it can manage `REPLICA IDENTITY` automatically:
+
+```sql
+-- Create the Electric user with REPLICATION
+CREATE ROLE electric_user WITH LOGIN PASSWORD 'your_secure_password' REPLICATION;
+
+-- Grant database-level privileges
+GRANT CONNECT ON DATABASE your_database TO electric_user;
+GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
+GRANT CREATE ON DATABASE your_database TO electric_user;
+
+-- Grant table permissions
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
+
+-- Grant permissions on future tables
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
 
--- Grant CREATE on schema (required for ownership transfer)
-GRANT CREATE ON SCHEMA public TO electric_user;
-
--- Transfer ownership of all tables to enable REPLICA IDENTITY management
--- Note: This requires running as a superuser or the current table owner
+-- Transfer ownership of all tables (run as superuser or current table owner)
 DO $$
 DECLARE
   r RECORD;
@@ -48,7 +83,10 @@ BEGIN
 END$$;
 ```
 
-Then connect Electric using:
+> [!Warning] Ownership Transfer
+> Transferring table ownership removes ownership from the previous owner. If you prefer to keep table ownership with your application or DBA role, use Option A instead.
+
+Then connect Electric:
 
 ```shell
 DATABASE_URL=postgresql://electric_user:your_secure_password@localhost:5432/your_database
