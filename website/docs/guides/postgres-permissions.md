@@ -11,67 +11,112 @@ This guide explains how to create PostgreSQL users with the necessary permission
 
 ## Quick Start
 
-### For Development / Simple Setup
+Choose the approach that fits your needs:
 
-In many cases you can start with the built-in default `postgres` user or another superuser role:
+**For Development:**
+Use the default `postgres` superuser. Electric will automatically configure everything.
 
 ```shell
 DATABASE_URL=postgresql://postgres:your_password@localhost:5432/your_database
 ```
 
-Electric will automatically create the publication and configure tables as needed. This approach works well for development and is often fine for production too.
+This is often fine for production too. See [For Development](#for-development) below for details.
 
-### For Least-Privilege Production Setup
+**For Production (Automatic Mode):**
+Create a dedicated Electric user with automatic table configuration.
+→ See [Automatic Mode Setup](#automatic-mode-setup)
 
-If you need a dedicated, least-privilege Electric user, you have two options for handling the required `REPLICA IDENTITY FULL` configuration:
+**For Production (Manual Mode / Least-Privilege):**
+Pre-configure tables manually and use minimal Electric privileges.
+→ See [Manual Mode Setup](#manual-mode-setup)
 
-#### Option A: Pre-configure as DBA (Recommended)
+## Core Permission Requirements
 
-Have your DBA or a superuser pre-configure tables, keeping ownership with your application:
+Electric needs the following PostgreSQL permissions:
+
+| Permission | Purpose | Required For |
+|------------|---------|--------------|
+| `REPLICATION` | Enable logical replication streaming | Creating replication slots and consuming the WAL |
+| `CREATE` on database | Create publications | Automatic publication management |
+| `SELECT` on tables | Read table data | Initial shape snapshots |
+| Table ownership | Set replica identity | Configuring `REPLICA IDENTITY FULL` |
+| Publication ownership | Modify publications | Adding/removing tables from publication; you must also own each table you add to the publication |
+
+## Automatic vs Manual Publication Management
+
+Electric can operate in two modes:
+
+### 1. Automatic Mode (Recommended)
+
+Electric automatically creates the publication and adds tables to it as shapes are requested. Requires `CREATE` privilege on the database and either table ownership or pre-configured `REPLICA IDENTITY FULL` on tables.
+
+### 2. Manual Mode
+
+You manually manage the publication and Electric only validates the configuration. Enable this with [`ELECTRIC_MANUAL_TABLE_PUBLISHING=true`](/docs/api/config#electric-manual-table-publishing). Requires only `REPLICATION` and `SELECT` privileges, but you must pre-configure the publication and `REPLICA IDENTITY FULL`.
+
+**When to use manual mode:**
+- When Electric's database user doesn't have `CREATE` privileges
+- When you want explicit control over which tables are replicated
+- In security-sensitive environments with strict privilege separation
+
+## Setup Examples
+
+### For Development
+
+Use the default `postgres` superuser or another superuser role:
+
+```shell
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/your_database
+```
+
+Electric will automatically create publications, configure `REPLICA IDENTITY FULL`, and manage everything for you. This is often fine for production too, especially for smaller deployments.
+
+### Automatic Mode Setup
+
+Create a dedicated Electric user with automatic table configuration. Electric will create publications and add tables as shapes are requested.
 
 ```sql
--- As superuser/DBA, set REPLICA IDENTITY FULL on tables that will be synced
+-- Create the Electric user with REPLICATION
+CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password' REPLICATION;
+
+-- Grant database-level privileges
+GRANT CONNECT ON DATABASE mydb TO electric_user;
+GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
+GRANT CREATE ON DATABASE mydb TO electric_user;
+
+-- Grant privileges on tables
+-- For all tables:
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
+
+-- For specific tables only:
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON public.users, public.posts TO electric_user;
+
+-- Grant privileges on sequences (for generated IDs)
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO electric_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL PRIVILEGES ON SEQUENCES TO electric_user;
+```
+
+**Handling REPLICA IDENTITY FULL - Choose one option:**
+
+**Option A: Pre-configure as DBA (Recommended)**
+
+Have your DBA or a superuser set `REPLICA IDENTITY FULL` before Electric runs, keeping table ownership with your application:
+
+```sql
+-- As superuser/DBA, set REPLICA IDENTITY on tables that will be synced
 ALTER TABLE public.users REPLICA IDENTITY FULL;
 ALTER TABLE public.posts REPLICA IDENTITY FULL;
 ALTER TABLE public.comments REPLICA IDENTITY FULL;
-
--- Create the Electric user with REPLICATION
-CREATE ROLE electric_user WITH LOGIN PASSWORD 'your_secure_password' REPLICATION;
-
--- Grant database-level privileges
-GRANT CONNECT ON DATABASE your_database TO electric_user;
-GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
-GRANT CREATE ON DATABASE your_database TO electric_user;
-
--- Grant table permissions
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
-
--- Grant permissions on future tables
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
 ```
 
-#### Option B: Transfer Ownership to Electric User
+**Option B: Transfer Ownership to Electric**
 
-Alternatively, transfer table ownership to the Electric user so it can manage `REPLICA IDENTITY` automatically:
+Transfer table ownership so Electric can manage `REPLICA IDENTITY` automatically:
 
 ```sql
--- Create the Electric user with REPLICATION
-CREATE ROLE electric_user WITH LOGIN PASSWORD 'your_secure_password' REPLICATION;
-
--- Grant database-level privileges
-GRANT CONNECT ON DATABASE your_database TO electric_user;
-GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
-GRANT CREATE ON DATABASE your_database TO electric_user;
-
--- Grant table permissions
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO electric_user;
-
--- Grant permissions on future tables
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO electric_user;
-
--- Transfer ownership of all tables (run as superuser or current table owner)
 DO $$
 DECLARE
   r RECORD;
@@ -89,128 +134,10 @@ END$$;
 Then connect Electric:
 
 ```shell
-DATABASE_URL=postgresql://electric_user:your_secure_password@localhost:5432/your_database
+DATABASE_URL=postgresql://electric_user:secure_password@localhost:5432/mydb
 ```
 
-## Understanding Electric's Requirements
-
-Electric needs specific PostgreSQL permissions to:
-
-1. **Create and manage logical replication** - Stream changes from Postgres
-2. **Create and manage publications** - Define which tables to replicate
-3. **Configure tables** - Set `REPLICA IDENTITY FULL` on synced tables
-4. **Read table data** - Create initial snapshots of table contents
-
-### Core Permission Requirements
-
-| Permission | Purpose | Required For |
-|------------|---------|--------------|
-| `REPLICATION` | Enable logical replication streaming | Creating replication slots and consuming the WAL |
-| `CREATE` on database | Create publications | Automatic publication management |
-| `SELECT` on tables | Read table data | Initial shape snapshots |
-| Table ownership | Set replica identity | Configuring `REPLICA IDENTITY FULL` |
-| Publication ownership | Modify publications | Adding/removing tables from publication; you must also own each table you add to the publication |
-
-## Automatic vs Manual Publication Management
-
-Electric can operate in two modes:
-
-### 1. Automatic Mode (Recommended)
-
-In this mode, Electric automatically creates the publication and adds tables to it as shapes are requested.
-
-**Required permissions:**
-- `REPLICATION` role attribute
-- `CREATE` privilege on the database
-- `SELECT` privilege on tables
-- Table ownership (to set `REPLICA IDENTITY FULL`)
-
-### 2. Manual Mode
-
-In this mode, you manually manage the publication and Electric only validates the configuration. Enable this with [`ELECTRIC_MANUAL_TABLE_PUBLISHING=true`](/docs/api/config#electric-manual-table-publishing).
-
-**Required permissions:**
-- `REPLICATION` role attribute
-- `SELECT` privilege on tables
-- Publication must exist and contain the required tables
-- Tables must have `REPLICA IDENTITY FULL` set
-
-**When to use manual mode:**
-- When Electric's database user doesn't have `CREATE` privileges
-- When you want explicit control over which tables are replicated
-- In security-sensitive environments with strict privilege separation
-
-## Setup Examples
-
-### Global Setup (Full Database Access)
-
-This setup gives Electric full control over all tables in the database. This is the simplest approach and works well for most applications.
-
-```sql
--- Create the Electric user with REPLICATION
-CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password' REPLICATION;
-
--- Grant database-level privileges
-GRANT CONNECT ON DATABASE mydb TO electric_user;
-GRANT USAGE, CREATE ON SCHEMA public TO electric_user;
-GRANT CREATE ON DATABASE mydb TO electric_user;
-
--- Grant privileges on all existing tables
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO electric_user;
-
--- Grant privileges on all future tables
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT ALL PRIVILEGES ON TABLES TO electric_user;
-
--- Grant privileges on sequences (for generated IDs)
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO electric_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT ALL PRIVILEGES ON SEQUENCES TO electric_user;
-
--- Transfer ownership of all tables to enable REPLICA IDENTITY management
-DO $$
-DECLARE
-  r RECORD;
-BEGIN
-  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
-  LOOP
-    EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' OWNER TO electric_user';
-  END LOOP;
-END$$;
-```
-
-### Table-Scoped Setup (Restricted Access)
-
-This setup limits Electric's access to specific tables. This is useful when you want to sync only a subset of your database.
-
-```sql
--- Create the Electric user with REPLICATION
-CREATE ROLE electric_user WITH LOGIN PASSWORD 'secure_password' REPLICATION;
-
--- Grant database-level privileges
-GRANT CONNECT ON DATABASE mydb TO electric_user;
-GRANT USAGE ON SCHEMA public TO electric_user;
-GRANT CREATE ON DATABASE mydb TO electric_user;
-
--- Grant privileges only on specific tables
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO electric_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.posts TO electric_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.comments TO electric_user;
-
--- Allow ALTER TABLE on these specific tables (for REPLICA IDENTITY)
--- Note: This requires being a table owner or superuser
--- Alternative: Set REPLICA IDENTITY manually (see Manual Configuration below)
-ALTER TABLE public.users OWNER TO electric_user;
-ALTER TABLE public.posts OWNER TO electric_user;
-ALTER TABLE public.comments OWNER TO electric_user;
-
--- Or if you can't change ownership, set REPLICA IDENTITY manually
--- ALTER TABLE public.users REPLICA IDENTITY FULL;
--- ALTER TABLE public.posts REPLICA IDENTITY FULL;
--- ALTER TABLE public.comments REPLICA IDENTITY FULL;
-```
-
-### Minimum Privilege Setup (Manual Publication Management)
+### Manual Mode Setup
 
 For environments with strict security requirements, you can use manual publication management to minimize Electric's privileges.
 
