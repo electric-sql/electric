@@ -168,11 +168,28 @@ defmodule Electric.Postgres.Configuration do
       )
     end
 
+    drop_results =
+      Enum.map(to_drop, &{&1, drop_table_from_publication(conn, publication_name, &1)})
+
+    # `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
+    # but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
+    # deadlock if the order is reversed.
+    add_results =
+      to_add
+      |> Enum.map(&{&1, add_table_to_publication(conn, publication_name, &1)})
+      |> Enum.map(fn
+        {rel, {:ok, :added}} ->
+          with {:ok, :configured} <- set_table_replica_identity_full(conn, rel) do
+            {rel, {:ok, :added}}
+          end
+
+        res ->
+          res
+      end)
+
     configuration_result =
-      Enum.concat(
-        Enum.map(to_drop, &{&1, drop_table_from_publication(conn, publication_name, &1)}),
-        Enum.map(to_add, &{&1, add_table_to_publication(conn, publication_name, &1)})
-      )
+      drop_results
+      |> Enum.concat(add_results)
       |> Enum.concat(Enum.map(to_preserve, &{&1, {:ok, :validated}}))
       |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
       |> Map.new()
@@ -186,14 +203,23 @@ defmodule Electric.Postgres.Configuration do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
-    Logger.debug(
-      "Adding #{table} to publication #{publication_name} and " <>
-        "setting its replica identity to FULL"
-    )
+    Logger.debug("Adding #{table} to publication #{publication_name}")
 
-    with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table),
-         :ok <- exec_set_replica_identity_full(conn, table) do
+    with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table) do
       {:ok, :added}
+    end
+  end
+
+  @spec set_table_replica_identity_full(Postgrex.conn(), Electric.oid_relation()) ::
+          {:ok, :configured} | {:error, term()}
+  defp set_table_replica_identity_full(conn, oid_relation) do
+    {_oid, relation} = oid_relation
+    table = Utils.relation_to_sql(relation)
+
+    Logger.debug("Setting #{table} replica identity to FULL")
+
+    with :ok <- exec_set_replica_identity_full(conn, table) do
+      {:ok, :configured}
     end
   end
 
