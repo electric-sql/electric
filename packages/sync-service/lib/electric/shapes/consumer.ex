@@ -76,6 +76,8 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
+    {action, config} = Map.pop!(config, :action)
+
     state =
       Map.merge(config, %{
         snapshot_started: false,
@@ -91,11 +93,11 @@ defmodule Electric.Shapes.Consumer do
         shape_status_mod: Map.get(config, :shape_status_mod) || Electric.ShapeCache.ShapeStatus
       })
 
-    {:ok, state, {:continue, :init_storage}}
+    {:ok, state, {:continue, {:init_consumer, action}}}
   end
 
   @impl GenServer
-  def handle_continue(:init_storage, state) do
+  def handle_continue({:init_consumer, action}, state) do
     %{
       storage: storage,
       shape_status_mod: shape_status_mod
@@ -135,7 +137,7 @@ defmodule Electric.Shapes.Consumer do
       Materializer.subscribe(state.stack_id, shape_handle)
     end
 
-    ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape)
+    ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape, action)
 
     Logger.debug("Writer for #{state.shape_handle} initialized")
 

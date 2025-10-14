@@ -44,14 +44,25 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   @shape_handle "the-shape-handle"
 
   def setup_log_collector(ctx) do
+    %{stack_id: stack_id} = ctx
     # Start a test Registry
     registry_name = Module.concat(__MODULE__, Registry)
     start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
 
+    existing_shapes = Map.get(ctx, :restore_shapes, [])
+
+    Repatch.patch(Electric.ShapeCache.ShapeStatus, :list_shapes, [mode: :shared], fn ^stack_id ->
+      existing_shapes
+    end)
+
+    Support.TestUtils.activate_mocks_for_descendant_procs(ShapeLogCollector)
+
+    inspector = Map.get(ctx, :inspector, {Mock.Inspector, elem(@inspector, 1)})
+
     # Start the ShapeLogCollector process
     opts = [
-      stack_id: ctx.stack_id,
-      inspector: {Mock.Inspector, elem(@inspector, 1)},
+      stack_id: stack_id,
+      inspector: inspector,
       persistent_kv: ctx.persistent_kv
     ]
 
@@ -61,22 +72,58 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       :ok
     end)
 
-    Repatch.allow(self(), pid)
-
     shape_cache_opts =
       [
         storage: {Mock.Storage, []},
         chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
         inspector: {Mock.Inspector, elem(@inspector, 1)},
         publication_manager: ctx.publication_manager,
-        stack_id: ctx.stack_id,
-        consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(ctx.stack_id),
+        stack_id: stack_id,
+        consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
         registry: registry_name
       ]
 
     shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
 
     %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
+  end
+
+  describe "shape restoration" do
+    setup :setup_log_collector
+
+    @tag restore_shapes: [{@shape_handle, @shape}], inspector: @inspector
+    test "populates the filter, partitions and layers from the shape_status table", ctx do
+      parent = self()
+
+      xmin = 100
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      consumer =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           [
+             id: 1,
+             parent: parent,
+             producer: ctx.server,
+             shape: @shape,
+             shape_handle: @shape_handle,
+             action: :restore
+           ]}
+        )
+
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+
+      xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
+      assert xids == [xmin]
+    end
   end
 
   describe "store_transaction/2" do
