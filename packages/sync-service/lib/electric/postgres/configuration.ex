@@ -222,12 +222,32 @@ defmodule Electric.Postgres.Configuration do
           {:ok, :configured} | {:error, term()}
   defp set_table_replica_identity_full(conn, oid_relation) do
     {_oid, relation} = oid_relation
+    {schema, name} = relation
     table = Utils.relation_to_sql(relation)
 
-    Logger.debug("Setting #{table} replica identity to FULL")
+    case Postgrex.query(
+           conn,
+           """
+           SELECT c.relreplident
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = $1 AND c.relname = $2
+           """,
+           [schema, name]
+         ) do
+      {:ok, %Postgrex.Result{rows: [[<<"f">>]]}} ->
+        Logger.debug("Replica identity already FULL for #{table}, skipping")
+        {:ok, :configured}
 
-    with :ok <- exec_set_replica_identity_full(conn, table) do
-      {:ok, :configured}
+      {:ok, _} ->
+        Logger.debug("Setting #{table} replica identity to FULL")
+
+        with :ok <- exec_set_replica_identity_full(conn, table) do
+          {:ok, :configured}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
