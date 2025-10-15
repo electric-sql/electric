@@ -29,7 +29,7 @@ If you already run Postgres in AWS, potentially using RDS or Aurora, then it's a
 
 AWS provides Postgres hosting via RDS and Aurora. Electric works with either. You need to configure them to enable logical replication and connect with the right user.
 
-The default `wal_level` is `minimal` for RDS and `replica` for Aurora. It can be changed to `logical` by creating a [custom parameter group](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithParamGroups.html) for the RDS instance (or the Aurora DB cluster) and setting the value of the `rds.logical_replication` parameter to `1` and rebooting the instance.
+Enable logical replication by setting `rds.logical_replication=1` in your [custom parameter group](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithParamGroups.html) for the RDS instance (or the Aurora DB cluster) and rebooting the instance. This sets `wal_level` to `logical`. The PostgreSQL default `wal_level` is `replica`.
 
 The default `postgres` user has the `REPLICATION` role. If you need to add it to another user you can do so by granting the `rds_replication` role, e.g.:
 
