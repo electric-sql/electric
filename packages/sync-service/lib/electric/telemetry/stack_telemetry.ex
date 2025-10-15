@@ -41,8 +41,11 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
       Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
       [telemetry_poller_child_spec(opts) | exporter_child_specs(opts)]
+      |> Enum.reject(&is_nil/1)
       |> Supervisor.init(strategy: :one_for_one)
     end
+
+    defp telemetry_poller_child_spec(%{periodic_measurements: []} = _opts), do: nil
 
     defp telemetry_poller_child_spec(opts) do
       {:telemetry_poller,
@@ -273,14 +276,21 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
       ] ++ prometheus_metrics(opts)
     end
 
+    defp periodic_measurements(%{periodic_measurements: funcs} = opts) do
+      Enum.map(funcs, fn
+        probe when is_atom(probe) -> {__MODULE__, probe, [opts]}
+        {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) -> {m, f, [opts | a]}
+      end)
+    end
+
     defp periodic_measurements(opts) do
       [
-        {__MODULE__, :count_shapes, [opts.stack_id]},
-        {__MODULE__, :report_retained_wal_size, [opts.stack_id, opts.slot_name]}
+        {__MODULE__, :count_shapes, [opts]},
+        {__MODULE__, :report_retained_wal_size, [opts]}
       ]
     end
 
-    def count_shapes(stack_id) do
+    def count_shapes(%{stack_id: stack_id}) do
       # Telemetry is started before everything else in the stack, so we need to handle
       # the case where the shape cache is not started yet.
       case Electric.ShapeCache.count_shapes(stack_id: stack_id) do
@@ -314,8 +324,8 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     """
 
     @doc false
-    @spec report_retained_wal_size(atom() | binary(), any()) :: :ok
-    def report_retained_wal_size(stack_id, slot_name) do
+    @spec report_retained_wal_size(%{stack_id: binary(), slot_name: binary()}) :: :ok
+    def report_retained_wal_size(%{stack_id: stack_id, slot_name: slot_name}) do
       try do
         %Postgrex.Result{rows: [[wal_size]]} =
           Postgrex.query!(
