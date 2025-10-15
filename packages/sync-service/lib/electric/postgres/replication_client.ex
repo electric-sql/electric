@@ -26,6 +26,7 @@ defmodule Electric.Postgres.ReplicationClient do
           | :create_slot
           | :set_display_setting
           | :ready_to_stream
+          | :start_streaming
           | :streaming
 
   defmodule State do
