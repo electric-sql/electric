@@ -168,11 +168,36 @@ defmodule Electric.Postgres.Configuration do
       )
     end
 
-    configuration_result =
+    # Notes on avoiding deadlocks
+    # - `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
+    #   but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
+    #   deadlock if the order is reversed, and we've seen this happen even within the context of a single process perhaps
+    #   across multiple calls from separate deployments or timing issues.
+    # - It is important for all table operations to also occur in the same order to avoid deadlocks due to
+    #   lock ordering issues, so despite splitting drop and add operations we sort them and process them together
+    #   in a sorted single pass
+    results =
       Enum.concat(
-        Enum.map(to_drop, &{&1, drop_table_from_publication(conn, publication_name, &1)}),
-        Enum.map(to_add, &{&1, add_table_to_publication(conn, publication_name, &1)})
+        Enum.map(to_drop, &{&1, :drop}),
+        Enum.map(to_add, &{&1, :add})
       )
+      |> Enum.sort(&(elem(&1, 0) <= elem(&2, 0)))
+      |> Enum.map(fn
+        {rel, :drop} -> {rel, drop_table_from_publication(conn, publication_name, rel)}
+        {rel, :add} -> {rel, add_table_to_publication(conn, publication_name, rel)}
+      end)
+      |> Enum.map(fn
+        {rel, {:ok, :added}} ->
+          with {:ok, :configured} <- set_table_replica_identity_full(conn, rel) do
+            {rel, {:ok, :added}}
+          end
+
+        res ->
+          res
+      end)
+
+    configuration_result =
+      results
       |> Enum.concat(Enum.map(to_preserve, &{&1, {:ok, :validated}}))
       |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
       |> Map.new()
@@ -186,14 +211,43 @@ defmodule Electric.Postgres.Configuration do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
-    Logger.debug(
-      "Adding #{table} to publication #{publication_name} and " <>
-        "setting its replica identity to FULL"
-    )
+    Logger.debug("Adding #{table} to publication #{publication_name}")
 
-    with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table),
-         :ok <- exec_set_replica_identity_full(conn, table) do
+    with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table) do
       {:ok, :added}
+    end
+  end
+
+  @spec set_table_replica_identity_full(Postgrex.conn(), Electric.oid_relation()) ::
+          {:ok, :configured} | {:error, term()}
+  defp set_table_replica_identity_full(conn, oid_relation) do
+    {_oid, relation} = oid_relation
+    {schema, name} = relation
+    table = Utils.relation_to_sql(relation)
+
+    case Postgrex.query(
+           conn,
+           """
+           SELECT c.relreplident
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = $1 AND c.relname = $2
+           """,
+           [schema, name]
+         ) do
+      {:ok, %Postgrex.Result{rows: [[<<"f">>]]}} ->
+        Logger.debug("Replica identity already FULL for #{table}, skipping")
+        {:ok, :configured}
+
+      {:ok, _} ->
+        Logger.debug("Setting #{table} replica identity to FULL")
+
+        with :ok <- exec_set_replica_identity_full(conn, table) do
+          {:ok, :configured}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -211,9 +265,9 @@ defmodule Electric.Postgres.Configuration do
 
   @spec exec_alter_publication_for_table(Postgrex.conn(), String.t(), :add | :drop, String.t()) ::
           :ok | {:error, term()}
-  defp exec_alter_publication_for_table(conn, publication_name, op, table) do
+  defp exec_alter_publication_for_table(conn, publication_name, op_atom, table) do
     op =
-      case op do
+      case op_atom do
         :add -> "ADD"
         :drop -> "DROP"
       end
@@ -233,9 +287,10 @@ defmodule Electric.Postgres.Configuration do
         Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
 
         case reason do
-          # Duplicate object error is raised if we're trying to add a table
-          # to the publication when it's already there.
-          %{postgres: %{code: :undefined_table}} -> :ok
+          # undefined table can happen when removing a table that was already removed
+          %{postgres: %{code: :undefined_object}} when op_atom == :drop -> :ok
+          # duplicate object can happen when adding a table that was already added
+          %{postgres: %{code: :duplicate_object}} when op_atom == :add -> :ok
           _ -> {:error, reason}
         end
     end
