@@ -429,7 +429,7 @@ defmodule Electric.Replication.ShapeLogCollector do
           }
           |> log_subscription_status()
         else
-          Logger.error("Received unsubscribe from unknown consumer: #{inspect(shape_handle)}")
+          Logger.warning("Received unsubscribe from unknown consumer: #{inspect(shape_handle)}")
           state
         end
       end
