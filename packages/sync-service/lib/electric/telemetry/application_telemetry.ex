@@ -234,7 +234,6 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         # Our custom measurements:
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
-        {__MODULE__, :process_memory, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
       ]
@@ -246,6 +245,8 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       })
     end
 
+    # This is costly measurement that is not enabled by default. It needs to be explicitly
+    # passed in the list of `periodic_measurements` to be enabled.
     def process_memory(%{top_process_count: process_count}) do
       for %{type: type, memory: memory} <-
             Electric.Debug.Process.top_memory_by_type(process_count) do
