@@ -1,0 +1,169 @@
+defmodule Electric.Shapes.ConsumerRegistry do
+  use GenServer
+
+  alias Electric.ShapeCache
+
+  require Logger
+  require Record
+
+  Record.defrecord(:registry_state, table: nil, stack_id: nil)
+
+  @count_key :consumer_count
+
+  @type stack_id() :: Electric.stack_id()
+  @type stack_ref() :: stack_id() | [stack_id: stack_id()] | %{stack_id: stack_id()}
+  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type registry_state() :: record(:registry_state, table: :ets.table(), stack_id: stack_id())
+
+  def name(stack_id) do
+    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  end
+
+  def start_link(args) do
+    with {:ok, stack_id} <- Keyword.fetch(args, :stack_id) do
+      GenServer.start_link(__MODULE__, args, name: name(stack_id))
+    end
+  end
+
+  @spec get_registry_state!(stack_id()) :: {:ok, registry_state()}
+  def get_registry_state(stack_id) when is_binary(stack_id) do
+    GenServer.call(name(stack_id), :registry_state)
+  end
+
+  @spec get_registry_state!(stack_id()) :: registry_state()
+  def get_registry_state!(stack_id) when is_binary(stack_id) do
+    case get_registry_state(stack_id) do
+      {:ok, state} -> state
+      _ -> raise RuntimeError, message: "Unable to get registry state"
+    end
+  end
+
+  @spec register_consumer(shape_handle(), pid(), registry_state()) :: :ok
+  def register_consumer(shape_handle, pid, registry_state(table: table)) do
+    true = :ets.insert_new(table, [{shape_handle, pid}])
+
+    table
+    |> :ets.update_counter(@count_key, 1)
+    |> tap(fn n ->
+      dbg(start: n)
+      Logger.debug("Started consumer #{n}")
+    end)
+
+    :ok
+  end
+
+  @spec publish([shape_handle()], term(), registry_state()) :: :ok
+  def publish(shape_handles, event, registry_state) do
+    registry_state(table: table) = registry_state
+
+    shape_handles
+    |> Enum.map(fn handle ->
+      consumer_pid(handle, table) || start_consumer!(handle, registry_state)
+    end)
+    |> broadcast(event)
+  end
+
+  @spec remove(shape_handle(), registry_state()) :: :ok
+  def remove(shape_handle, registry_state(table: table)) do
+    :ets.delete(table, shape_handle)
+
+    table
+    |> :ets.update_counter(@count_key, -1)
+    |> tap(fn n ->
+      dbg(stop: n)
+      Logger.debug("Stopped consumer. #{n} active consumers")
+    end)
+
+    :ok
+  end
+
+  @doc """
+  Calls many GenServers asynchronously with the same message and waits
+  for their responses before returning.
+
+  Returns `:ok` once all GenServers have responded or have died.
+
+  There is no timeout so if the GenServers do not respond or die, this
+  function will block indefinitely.
+  """
+  @spec broadcast([pid()], term()) :: :ok
+  def broadcast(pids, message) do
+    # Based on OTP GenServer.call, see:
+    # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
+    pids
+    |> Enum.map(fn pid ->
+      ref = Process.monitor(pid)
+      send(pid, {:"$gen_call", {self(), ref}, message})
+      ref
+    end)
+    |> Enum.each(fn ref ->
+      receive do
+        {^ref, _reply} ->
+          Process.demonitor(ref, [:flush])
+          :ok
+
+        {:DOWN, ^ref, _, _, _reason} ->
+          :ok
+      end
+    end)
+  end
+
+  @spec whereis(stack_ref(), shape_handle()) :: pid() | nil
+  def whereis(stack_ref, shape_handle) do
+    consumer_pid(shape_handle, ets_name(stack_ref))
+  end
+
+  defp consumer_pid(handle, table) do
+    try do
+      :ets.lookup_element(table, handle, 2)
+    rescue
+      _e in ArgumentError -> nil
+    end
+  end
+
+  defp start_consumer!(handle, registry_state(stack_id: stack_id) = state) do
+    Logger.info("Starting consumer for existing handle #{handle}")
+
+    case ShapeCache.start_consumer_for_handle(handle, stack_id: stack_id) do
+      {:ok, pid} ->
+        register_consumer(handle, pid, state)
+        pid
+
+      {:error, reason} ->
+        raise RuntimeError,
+          message:
+            "Stack #{stack_id} unable to start consumer process for shape handle #{handle}: #{inspect(reason)}"
+    end
+  end
+
+  @impl GenServer
+  def init(args) do
+    stack_id = Keyword.fetch!(args, :stack_id)
+
+    Process.set_label({:consumer_registry, stack_id})
+    metadata = [stack_id: stack_id]
+    Logger.metadata(metadata)
+    Electric.Telemetry.Sentry.set_tags_context(metadata)
+
+    table = :ets.new(ets_name(stack_id), [:public, :named_table, write_concurrency: :auto])
+
+    :ets.insert(table, {@count_key, 0})
+
+    state = registry_state(stack_id: stack_id, table: table)
+
+    {:ok, state}
+  end
+
+  @impl GenServer
+  def handle_call(:registry_state, _from, state) do
+    {:reply, {:ok, state}, state}
+  end
+
+  defp ets_name(opts) when is_list(opts) or is_map(opts) do
+    ets_name(Access.fetch!(opts, :stack_id))
+  end
+
+  defp ets_name(stack_id) when is_binary(stack_id) do
+    :"#{__MODULE__}-#{stack_id}"
+  end
+end
