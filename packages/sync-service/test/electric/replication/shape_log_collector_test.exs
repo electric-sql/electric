@@ -20,7 +20,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       with_shape_status: 1,
       with_stack_id_from_test: 1,
       with_noop_publication_manager: 1,
-      with_persistent_kv: 1
+      with_persistent_kv: 1,
+      with_consumer_registry: 1
     ]
 
   import Mox
@@ -32,7 +33,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     :with_in_memory_storage,
     :with_shape_status,
     :with_noop_publication_manager,
-    :with_persistent_kv
+    :with_persistent_kv,
+    :with_consumer_registry
   ]
 
   @inspector Support.StubInspector.new(
@@ -111,6 +113,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              action: :restore
            ]}
         )
+
+      # since we're starting the consumer manually we have to explictly register it
+      Electric.Shapes.ConsumerRegistry.register_consumer(@shape_handle, consumer, ctx.stack_id)
 
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
