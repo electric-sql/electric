@@ -32,14 +32,18 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
       [
         system_monitor_child_spec(opts),
-        telemetry_poller_child_spec(opts) | exporter_child_specs(opts)
+        telemetry_poller_child_spec(opts)
+        | exporter_child_specs(opts)
       ]
+      |> Enum.reject(&is_nil/1)
       |> Supervisor.init(strategy: :one_for_one)
     end
 
     defp system_monitor_child_spec(opts) do
       {Electric.Telemetry.SystemMonitor, opts}
     end
+
+    defp telemetry_poller_child_spec(%{periodic_measurements: []} = _opts), do: nil
 
     defp telemetry_poller_child_spec(opts) do
       {:telemetry_poller,
@@ -219,27 +223,36 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp memory_by_process_type_metrics(_), do: []
 
-    defp periodic_measurements(opts) do
-      [
-        # Measurements included with the telemetry_poller application.
-        #
-        # By default, The telemetry_poller application starts its own poller but we disable that
-        # and add its default measurements to the list of our custom ones.
-        #
-        # This allows for all periodic measurements to be defined in one place.
-        :memory,
-        :total_run_queue_lengths,
-        :system_counts,
+    # By default, The telemetry_poller application starts its own poller but we disable that
+    # and add its default measurements to the list of our custom ones.
+    #
+    # This allows for all Electric's default probes to be defined in one place.
+    @telemetry_poller_probes [
+      :memory,
+      :total_run_queue_lengths,
+      :system_counts
+    ]
 
-        # Our custom measurements:
-        {__MODULE__, :uptime_event, []},
-        {__MODULE__, :cpu_utilization, []},
-        {__MODULE__, :get_system_load_average, []},
-        {__MODULE__, :get_system_memory_usage, []}
-      ]
+    defp periodic_measurements(%{periodic_measurements: funcs} = opts) do
+      Enum.map(funcs, fn
+        probe when probe in @telemetry_poller_probes -> probe
+        probe when is_atom(probe) -> {__MODULE__, probe, [opts]}
+        {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) -> {m, f, [opts | a]}
+      end)
     end
 
-    def uptime_event do
+    # When custom probes aren't used,
+    defp periodic_measurements(opts) do
+      @telemetry_poller_probes ++
+        [
+          {__MODULE__, :uptime_event, [opts]},
+          {__MODULE__, :cpu_utilization, [opts]},
+          {__MODULE__, :get_system_load_average, [opts]},
+          {__MODULE__, :get_system_memory_usage, [opts]}
+        ]
+    end
+
+    def uptime_event(_) do
       :telemetry.execute([:vm, :uptime], %{
         total: :erlang.monotonic_time() - :erlang.system_info(:start_time)
       })
@@ -254,7 +267,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       end
     end
 
-    def cpu_utilization do
+    def cpu_utilization(_) do
       case :cpu_sup.util([:per_cpu]) do
         {:error, reason} ->
           Logger.debug("Failed to collect CPU utilization: #{inspect(reason)}")
@@ -277,7 +290,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       end
     end
 
-    def get_system_load_average do
+    def get_system_load_average(_) do
       case :erlang.system_info(:logical_processors) do
         cores when is_number(cores) and cores > 0 ->
           # > The load values are proportional to how long time a runnable Unix
@@ -333,7 +346,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     @required_system_memory_keys ~w[system_total_memory free_memory]a
 
-    def get_system_memory_usage() do
+    def get_system_memory_usage(_) do
       system_memory = Map.new(:memsup.get_system_memory_data())
 
       # Sanity-check that all the required keys are present before doing any arithmetic on them
