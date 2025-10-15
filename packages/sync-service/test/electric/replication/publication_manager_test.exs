@@ -6,16 +6,10 @@ defmodule Electric.Replication.PublicationManagerTest do
   import Support.TestUtils
 
   alias Electric.Replication.PublicationManager
-  alias Electric.Shapes.Shape
 
   @shape_handle_1 "shape_handle_1"
   @shape_handle_2 "shape_handle_2"
   @shape_handle_3 "shape_handle_3"
-
-  @inspector Support.StubInspector.new(
-               tables: [{1234, {"public", "items"}}],
-               columns: [%{name: "id", type: "int8", pk_position: 0}]
-             )
 
   setup [
     :with_stack_id_from_test,
