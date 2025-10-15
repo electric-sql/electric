@@ -15,6 +15,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
 
   alias Electric.Shapes.Monitor
   alias Electric.Shapes.ConsumerSupervisor
+  alias Electric.Replication.ShapeLogCollector
 
   require Logger
 
@@ -233,7 +234,10 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   def handle_call({:handle_writer_termination, shape_handle, consumer_pid}, _from, state) do
-    # only monitor if the consumer hasn't already registered via notify_reader_termination
+    ShapeLogCollector.unsubscribe(state.stack_id, shape_handle)
+
+    # only monitor if the consumer hasn't already registered via
+    # notify_reader_termination
     state =
       if !Map.has_key?(state.writers, shape_handle) do
         monitor_consumer_processes(state, consumer_pid, shape_handle)

@@ -8,7 +8,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin() :: non_neg_integer()
 
-  @type stack_id() :: String.t()
+  @type stack_id() :: Electric.stack_id()
 
   if Mix.env() == :test do
     @type stack_ref() ::
@@ -242,8 +242,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
            2,
            nil
          ) do
-      nil -> nil
-      shape_handle when is_binary(shape_handle) -> get_existing_shape(stack_ref, shape_handle)
+      nil ->
+        nil
+
+      shape_handle when is_binary(shape_handle) ->
+        get_existing_shape(stack_ref, shape_handle)
     end
   end
 
@@ -256,6 +259,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
          ) do
       nil -> nil
       offset -> {shape_handle, offset}
+    end
+  end
+
+  def get_shape_by_handle(stack_ref, shape_handle) do
+    case :ets.lookup_element(
+           shape_meta_table(stack_ref),
+           {@shape_meta_data, shape_handle},
+           @shape_meta_shape_pos,
+           nil
+         ) do
+      nil -> {:error, "no shape found for handle #{shape_handle}"}
+      shape -> {:ok, shape}
     end
   end
 

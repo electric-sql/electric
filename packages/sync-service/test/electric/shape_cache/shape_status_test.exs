@@ -173,6 +173,15 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     refute ShapeStatus.get_existing_shape(table, shape_handle)
   end
 
+  test "get_shape_by_handle/2", ctx do
+    shape = shape!()
+    table = table_name()
+    {:ok, _state, [shape_handle]} = new_state(ctx, table: table, shapes: [shape])
+
+    assert {:ok, ^shape} = ShapeStatus.get_shape_by_handle(table, shape_handle)
+    assert {:error, _msg} = ShapeStatus.get_shape_by_handle(table, "not-my-handle")
+  end
+
   test "latest_offset", ctx do
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
     assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
