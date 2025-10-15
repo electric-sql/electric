@@ -38,16 +38,23 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end
   end
 
+  @spec register_consumer(shape_handle(), pid(), stack_id()) :: :ok
+  def register_consumer(shape_handle, pid, stack_id) when is_binary(stack_id) do
+    register_consumer(shape_handle, pid, ets_name(stack_id))
+  end
+
   @spec register_consumer(shape_handle(), pid(), registry_state()) :: :ok
   def register_consumer(shape_handle, pid, registry_state(table: table)) do
+    register_consumer(shape_handle, pid, table)
+  end
+
+  @spec register_consumer(shape_handle(), pid(), :ets.table()) :: :ok
+  def register_consumer(shape_handle, pid, table) when is_atom(table) do
     true = :ets.insert_new(table, [{shape_handle, pid}])
 
     table
     |> :ets.update_counter(@count_key, 1)
-    |> tap(fn n ->
-      dbg(start: n)
-      Logger.debug("Started consumer #{n}")
-    end)
+    |> tap(fn n -> Logger.debug("Started consumer #{n}") end)
 
     :ok
   end
@@ -69,10 +76,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
     table
     |> :ets.update_counter(@count_key, -1)
-    |> tap(fn n ->
-      dbg(stop: n)
-      Logger.debug("Stopped consumer. #{n} active consumers")
-    end)
+    |> tap(fn n -> Logger.debug("Stopped consumer. #{n} active consumers") end)
 
     :ok
   end

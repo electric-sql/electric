@@ -38,6 +38,7 @@ defmodule Support.TransactionConsumer do
   end
 
   def init(opts) do
+    Process.flag(:trap_exit, true)
     {:ok, producer} = Keyword.fetch(opts, :producer)
     {:ok, parent} = Keyword.fetch(opts, :parent)
     {:ok, id} = Keyword.fetch(opts, :id)
@@ -47,11 +48,20 @@ defmodule Support.TransactionConsumer do
 
     Electric.Replication.ShapeLogCollector.subscribe(producer, shape_handle, shape, action)
 
-    {:ok, {id, parent}}
+    {:ok, %{id: id, producer: producer, parent: parent, shape_handle: shape_handle}}
   end
 
-  def handle_call({:handle_event, txn, _ctx}, _from, {id, parent}) do
-    send(parent, {__MODULE__, {id, self()}, [txn]})
-    {:reply, :ok, {id, parent}}
+  def handle_call({:handle_event, txn, _ctx}, _from, state) do
+    send(state.parent, {__MODULE__, {state.id, self()}, [txn]})
+    {:reply, :ok, state}
   end
+
+  # we no longer monitor consumer processes in the ShapeLogCollector
+  # so consumers must de-register themselves
+  def terminate(reason, %{producer: producer, shape_handle: shape_handle} = state) do
+    send(state.parent, {__MODULE__, {state.id, self()}, {:terminate, reason}})
+    Electric.Replication.ShapeLogCollector.unsubscribe(producer, shape_handle)
+  end
+
+  def handle_info(_msg, state), do: {:noreply, state}
 end
