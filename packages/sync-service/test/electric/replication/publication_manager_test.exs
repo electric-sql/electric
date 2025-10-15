@@ -6,25 +6,25 @@ defmodule Electric.Replication.PublicationManagerTest do
   import Support.TestUtils
 
   alias Electric.Replication.PublicationManager
+  alias Electric.Shapes.Shape
 
   @shape_handle_1 "shape_handle_1"
   @shape_handle_2 "shape_handle_2"
   @shape_handle_3 "shape_handle_3"
 
-  setup :with_stack_id_from_test
+  @inspector Support.StubInspector.new(
+               tables: [{1234, {"public", "items"}}],
+               columns: [%{name: "id", type: "int8", pk_position: 0}]
+             )
+
+  setup [
+    :with_stack_id_from_test,
+    :with_in_memory_storage,
+    :with_shape_status
+  ]
 
   setup ctx do
     test_pid = self()
-
-    %{publication_manager: {_, publication_manager_opts}} =
-      with_publication_manager(%{
-        module: ctx.module,
-        test: ctx.test,
-        stack_id: ctx.stack_id,
-        update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
-        publication_name: "pub_#{ctx.stack_id}",
-        pool: :no_pool
-      })
 
     Repatch.patch(
       Electric.Postgres.Configuration,
@@ -38,6 +38,8 @@ defmodule Electric.Replication.PublicationManagerTest do
       :configure_publication!,
       [mode: :shared],
       fn _, _, filters ->
+        if delay = ctx[:configuration_delay], do: Process.sleep(delay)
+
         # Only relations are relevant now
         send(test_pid, {:filters, MapSet.to_list(filters)})
 
@@ -55,9 +57,26 @@ defmodule Electric.Replication.PublicationManagerTest do
       end
     )
 
+    %{publication_manager: {_, publication_manager_opts}} =
+      with_publication_manager(%{
+        module: ctx.module,
+        test: ctx.test,
+        stack_id: ctx.stack_id,
+        update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
+        publication_name: "pub_#{ctx.stack_id}",
+        pool: :no_pool
+      })
+
     Repatch.allow(test_pid, publication_manager_opts[:server])
 
     %{opts: publication_manager_opts, ctx: ctx}
+  end
+
+  describe "wait_for_restore/1" do
+    test "restoration immediately complete if nothing to restore", %{opts: opts} do
+      assert :ok == PublicationManager.wait_for_restore(opts)
+      refute_receive {:filters, _}
+    end
   end
 
   describe "add_shape/3" do

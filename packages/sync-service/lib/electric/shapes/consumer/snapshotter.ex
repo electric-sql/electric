@@ -67,16 +67,16 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             stack_id,
             fn ->
               try do
-                OpenTelemetry.with_span(
-                  "shape_snapshot.prepare_tables",
-                  shape_attrs(shape_handle, shape),
-                  stack_id,
-                  fn ->
-                    publication_manager.add_shape(shape_handle, shape, publication_manager_opts)
-                  end
-                )
-
                 if not Storage.snapshot_started?(state.storage) do
+                  OpenTelemetry.with_span(
+                    "shape_snapshot.prepare_tables",
+                    shape_attrs(shape_handle, shape),
+                    stack_id,
+                    fn ->
+                      publication_manager.add_shape(shape_handle, shape, publication_manager_opts)
+                    end
+                  )
+
                   start_streaming_snapshot_from_db(
                     consumer,
                     shape_handle,

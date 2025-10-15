@@ -108,7 +108,8 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_shape_status,
       :with_persistent_kv,
       :with_status_monitor,
-      :with_shape_monitor
+      :with_shape_monitor,
+      :with_noop_publication_manager
     ]
 
     setup(ctx) do
@@ -153,12 +154,6 @@ defmodule Electric.Shapes.ConsumerTest do
           |> expect(:mark_snapshot_started, 1, fn _, ^shape_handle -> :ok end)
           |> allow(self(), fn -> Consumer.whereis(ctx.stack_id, shape_handle) end)
 
-          Mock.PublicationManager
-          |> expect(:add_shape, 1, fn _, _, _ -> :ok end)
-          |> allow(self(), fn ->
-            GenServer.whereis(Consumer.Snapshotter.name(ctx.stack_id, shape_handle))
-          end)
-
           {:ok, consumer} =
             start_supervised(
               {Shapes.ConsumerSupervisor,
@@ -169,7 +164,7 @@ defmodule Electric.Shapes.ConsumerTest do
                db_pool: Electric.Connection.Manager.snapshot_pool(ctx.stack_id),
                registry: registry_name,
                shape_status_mod: Mock.ShapeStatus,
-               publication_manager: {Mock.PublicationManager, []},
+               publication_manager: ctx.publication_manager,
                hibernate_after: 1_000,
                storage: storage,
                otel_ctx: nil,

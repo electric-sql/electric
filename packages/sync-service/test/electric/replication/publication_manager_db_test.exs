@@ -24,12 +24,27 @@ defmodule Electric.Replication.PublicationManagerDbTest do
 
   setup [
     :with_stack_id_from_test,
+    :with_in_memory_storage,
+    :with_shape_status,
     :with_unique_db,
     :with_sql_execute,
     :with_publication_name,
     :with_publication,
     :with_basic_tables
   ]
+
+  setup ctx do
+    if ctx[:existing_where_clauses] do
+      for where_clause <- ctx.existing_where_clauses do
+        relation = {"public", "items"}
+        relation_oid = lookup_relation_oid(ctx.pool, relation)
+        shape = generate_shape({relation_oid, relation}, where_clause)
+        {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
+      end
+    end
+
+    :ok
+  end
 
   setup ctx do
     %{publication_manager: {_, pub_mgr_opts}} =
@@ -68,6 +83,30 @@ defmodule Electric.Replication.PublicationManagerDbTest do
       relation_with_oid: {relation_oid, relation},
       config_notification: config_notification
     }
+  end
+
+  describe "wait_for_restore/1" do
+    @tag existing_where_clauses: []
+    test "restoration immediately complete if nothing to restore", %{pub_mgr_opts: opts} do
+      assert :ok == PublicationManager.wait_for_restore(opts)
+      refute_receive {:filters, _}
+    end
+
+    @tag existing_where_clauses: [@where_clause_1]
+    test "waits for first publication update if shapes need to be restored",
+         %{pub_mgr_opts: opts} = ctx do
+      test_pid = self()
+
+      Task.async(fn ->
+        assert :ok == PublicationManager.wait_for_restore(opts)
+        send(test_pid, :wait_over)
+      end)
+
+      assert_receive :wait_over
+      assert [ctx.relation] == fetch_pub_tables(ctx)
+
+      assert :ok == PublicationManager.wait_for_restore(opts ++ [timeout: 50])
+    end
   end
 
   describe "add_shape/3" do
