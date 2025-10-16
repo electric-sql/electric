@@ -469,7 +469,7 @@ defmodule Electric.Connection.Manager do
 
             %{
               state
-              | pool_pids: Map.update!(state.pool_pids, pool_role, fn _ -> {pool_pid, false} end)
+              | pool_pids: Map.put(state.pool_pids, pool_role, {pool_pid, false})
             }
           end)
 
