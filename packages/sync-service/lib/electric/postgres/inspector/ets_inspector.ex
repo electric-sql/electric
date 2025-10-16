@@ -33,7 +33,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       GenServer.start_link(
         __MODULE__,
         Map.new(opts)
-        |> Map.put_new(:pg_relation_table, relation_table(opts)),
+        |> Map.put_new(:pg_inspector_table, inspector_table(opts)),
         name: name(opts)
       )
 
@@ -103,13 +103,14 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
     # Name needs to be an atom but we don't want to dynamically create atoms.
     # Instead, we will use the reference to the table that is returned by `:ets.new`
-    pg_relation_table = :ets.new(opts.pg_relation_table, [:named_table, :protected, :ordered_set])
+    pg_inspector_table =
+      :ets.new(opts.pg_inspector_table, [:named_table, :protected, :ordered_set])
 
     persistence_key = "#{opts.stack_id}:ets_inspector_state"
 
     state =
       %{
-        pg_relation_table: pg_relation_table,
+        pg_inspector_table: pg_inspector_table,
         pg_pool: opts.pool,
         persistent_kv: opts.persistent_kv,
         persistence_key: persistence_key
@@ -277,15 +278,15 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @spec persist_data(map()) :: :ok
   defp persist_data(state) do
-    relations = :ets.tab2list(state.pg_relation_table)
-    PersistentKV.set(state.persistent_kv, state.persistence_key, version: 1, data: relations)
+    inspector_data = :ets.tab2list(state.pg_inspector_table)
+    PersistentKV.set(state.persistent_kv, state.persistence_key, version: 1, data: inspector_data)
   end
 
   @spec restore_persistent_state(map()) :: map()
   defp restore_persistent_state(state) do
     case PersistentKV.get(state.persistent_kv, state.persistence_key) do
-      {:ok, [version: 1, data: relations]} ->
-        :ets.insert(state.pg_relation_table, relations)
+      {:ok, [version: 1, data: data]} ->
+        :ets.insert(state.pg_inspector_table, data)
         state
 
       {:ok, {_info, _relations}} ->
@@ -311,11 +312,11 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   # @typep ets_value :: ets_value_1 | ets_value_2 | ets_value_3
 
   @doc false
-  def relation_table(%{pg_relation_table: ets_table}), do: ets_table
+  def inspector_table(%{pg_inspector_table: ets_table}), do: ets_table
 
-  def relation_table(opts) do
+  def inspector_table(opts) do
     stack_id = Access.fetch!(opts, :stack_id)
-    :"#{stack_id}:relation_table"
+    :"#{stack_id}:inspector_table"
   end
 
   defp relation_to_oid_key(rel), do: {:relation_to_oid, rel}
@@ -324,7 +325,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @spec store_relation_info(map(), Inspector.relation_info(), [Inspector.column_info()]) :: map()
   defp store_relation_info(state, %{relation: rel, relation_id: oid} = info, cols) do
-    :ets.insert(relation_table(state), [
+    :ets.insert(inspector_table(state), [
       {relation_to_oid_key(rel), oid},
       {oid_to_info_key(oid), info, cols}
     ])
@@ -334,7 +335,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   @spec store_supported_features(map(), Inspector.supported_features()) :: map()
   defp store_supported_features(state, supported_features) do
-    :ets.insert(relation_table(state), {@supported_features_key, supported_features})
+    :ets.insert(inspector_table(state), {@supported_features_key, supported_features})
     state
   end
 
@@ -345,7 +346,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
         state
 
       {:ok, %{relation: rel}} ->
-        :ets.select_delete(relation_table(state), [
+        :ets.select_delete(inspector_table(state), [
           {{relation_to_oid_key(rel), :_}, [], [true]},
           {{oid_to_info_key(oid), :_, :_}, [], [true]}
         ])
@@ -359,7 +360,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   defp fetch_normalized_relation_from_ets(relation, opts) do
     key = relation_to_oid_key(relation)
 
-    case :ets.lookup_element(relation_table(opts), key, 2, :not_in_cache) do
+    case :ets.lookup_element(inspector_table(opts), key, 2, :not_in_cache) do
       :not_in_cache -> :not_in_cache
       oid -> {:ok, {oid, relation}}
     end
@@ -370,7 +371,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   defp fetch_relation_info_from_ets(oid, opts) do
     key = oid_to_info_key(oid)
 
-    case :ets.lookup_element(relation_table(opts), key, 2, :not_in_cache) do
+    case :ets.lookup_element(inspector_table(opts), key, 2, :not_in_cache) do
       :not_in_cache -> :not_in_cache
       relation -> {:ok, relation}
     end
@@ -381,7 +382,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   defp fetch_column_info_from_ets(oid, opts) do
     key = oid_to_info_key(oid)
 
-    case :ets.lookup_element(relation_table(opts), key, 3, :not_in_cache) do
+    case :ets.lookup_element(inspector_table(opts), key, 3, :not_in_cache) do
       :not_in_cache -> :not_in_cache
       column_list -> {:ok, column_list}
     end
@@ -390,7 +391,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @spec fetch_supported_features_from_ets(opts :: term()) ::
           {:ok, Inspector.supported_features()} | :not_in_cache
   defp fetch_supported_features_from_ets(opts) do
-    case :ets.lookup_element(relation_table(opts), @supported_features_key, 2, :not_in_cache) do
+    case :ets.lookup_element(inspector_table(opts), @supported_features_key, 2, :not_in_cache) do
       :not_in_cache -> :not_in_cache
       features -> {:ok, features}
     end
@@ -404,7 +405,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
           }
         ]
   defp known_schema(opts) do
-    :ets.match(relation_table(opts), {oid_to_info_key(:_), :"$1", :"$2"})
+    :ets.match(inspector_table(opts), {oid_to_info_key(:_), :"$1", :"$2"})
     |> Enum.map(fn [%{relation: rel, relation_id: oid}, cols] ->
       %{relation: rel, relation_id: oid, columns: cols}
     end)

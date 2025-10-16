@@ -177,16 +177,16 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
     test "cleans up all information from ETS cache", %{
       inspector: {EtsInspector, opts},
-      pg_relation_table: pg_relation_table
+      pg_inspector_table: pg_inspector_table
     } do
-      assert :ets.tab2list(pg_relation_table) == []
+      assert :ets.tab2list(pg_inspector_table) == []
 
       assert {:ok, {oid, _}} =
                EtsInspector.load_relation_oid({"public", "items"}, opts)
 
-      refute :ets.tab2list(pg_relation_table) == []
+      refute :ets.tab2list(pg_inspector_table) == []
       assert EtsInspector.clean(oid, opts)
-      assert :ets.tab2list(pg_relation_table) == []
+      assert :ets.tab2list(pg_inspector_table) == []
     end
 
     @tag with_sql: [
@@ -194,18 +194,18 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
          ]
     test "cleans just the info for one relation", %{
       inspector: {EtsInspector, opts},
-      pg_relation_table: pg_relation_table
+      pg_inspector_table: pg_inspector_table
     } do
       assert {:ok, {oid1, _}} = EtsInspector.load_relation_oid({"public", "items"}, opts)
       assert {:ok, {oid2, _}} = EtsInspector.load_relation_oid({"public", "ITEMS"}, opts)
 
       assert EtsInspector.clean(oid1, opts)
 
-      assert :ets.lookup(pg_relation_table, {:relation_to_oid, {"public", "items"}}) == []
-      refute :ets.lookup(pg_relation_table, {:relation_to_oid, {"public", "ITEMS"}}) == []
+      assert :ets.lookup(pg_inspector_table, {:relation_to_oid, {"public", "items"}}) == []
+      refute :ets.lookup(pg_inspector_table, {:relation_to_oid, {"public", "ITEMS"}}) == []
 
-      assert :ets.lookup(pg_relation_table, {:oid_info, oid1}) == []
-      refute :ets.lookup(pg_relation_table, {:oid_info, oid2}) == []
+      assert :ets.lookup(pg_inspector_table, {:oid_info, oid1}) == []
+      refute :ets.lookup(pg_inspector_table, {:oid_info, oid2}) == []
     end
   end
 
@@ -501,7 +501,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
             {{relation, :table_to_relation}, relation_info},
             {{relation, :columns}, columns}
           ],
-          # pg_relation_table
+          # pg_inspector_table
           [
             {{relation_info, :relation_to_table}, relation},
             {{relation_info, :relation_to_table}, "items"}
