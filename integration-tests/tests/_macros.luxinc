@@ -205,7 +205,7 @@
 
 [macro add_tenant tenant_id electric_port]
   [shell $tenant_id]
-    !curl -X POST http://localhost:$electric_port/v1/admin/database \
+    !curl -X POST --silent http://localhost:$electric_port/v1/admin/database \
       -H "Content-Type: application/json" \
       -d "{\"database_id\":\"$tenant_id\",\"database_url\":\"$database_url\"}"
     ??"$tenant_id"
@@ -213,7 +213,7 @@
 
 [macro check_health_status expected_status]
   [shell electric-health]
-    [invoke wait-for "curl -X GET http://localhost:3000/v1/health" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
+    [invoke wait-for "curl --silent -X GET http://localhost:3000/v1/health" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
 [endmacro]
 
 [macro teardown_container container_name]
@@ -249,12 +249,12 @@
 
 [macro shape_get_snapshot table]
   # strip ANSI codes from response for easier matching
-  !curl -i "http://localhost:3000/v1/shape?table=$table&offset=-1" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  !curl --silent -i "http://localhost:3000/v1/shape?table=$table&offset=-1" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
 [endmacro]
 
 [macro shape_get table handle offset]
   # strip ANSI codes from response for easier matching
-  !curl -i "http://localhost:3000/v1/shape?table=$table&handle=$handle&offset=$offset" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  !curl --silent -i "http://localhost:3000/v1/shape?table=$table&handle=$handle&offset=$offset" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
 [endmacro]
 
 # Prevent curl from outputing download progress, output response headers nd sort the keys in the response JSON body.

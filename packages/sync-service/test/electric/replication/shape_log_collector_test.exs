@@ -20,7 +20,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       with_shape_status: 1,
       with_stack_id_from_test: 1,
       with_noop_publication_manager: 1,
-      with_persistent_kv: 1
+      with_persistent_kv: 1,
+      with_consumer_registry: 1
     ]
 
   import Mox
@@ -32,7 +33,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     :with_in_memory_storage,
     :with_shape_status,
     :with_noop_publication_manager,
-    :with_persistent_kv
+    :with_persistent_kv,
+    :with_consumer_registry
   ]
 
   @inspector Support.StubInspector.new(
@@ -63,12 +65,20 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     opts = [
       stack_id: stack_id,
       inspector: inspector,
-      persistent_kv: ctx.persistent_kv
+      persistent_kv: ctx.persistent_kv,
+      consumer_registry_opts:
+        Map.get(ctx, :consumer_registry_opts, [])
+        |> Keyword.replace_lazy(:start_consumer_fun, fn fun ->
+          fun.(ctx)
+        end)
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
 
+    parent = self()
+
     Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      send(parent, :shape_log_collector_ready)
       :ok
     end)
 
@@ -84,6 +94,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       ]
 
     shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
+
+    assert_receive :shape_log_collector_ready, 1000
 
     %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
   end
@@ -112,6 +124,9 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            ]}
         )
 
+      # since we're starting the consumer manually we have to explictly register it
+      Electric.Shapes.ConsumerRegistry.register_consumer(@shape_handle, consumer, ctx.stack_id)
+
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
@@ -123,6 +138,94 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
       assert xids == [xmin]
+    end
+  end
+
+  def start_transaction_consumer(ctx) do
+    # this is called in the setup_log_collector/1 fun by the test process
+    %{stack_id: stack_id} = ctx
+    test_pid = self()
+
+    fn shape_handle, stack_id: ^stack_id ->
+      # this is called by the shape log collector process
+      id = System.unique_integer([:positive, :monotonic])
+
+      with {:ok, pid} <-
+             DynamicSupervisor.start_child(ctx.supervisor, {
+               Support.TransactionConsumer,
+               id: id,
+               parent: test_pid,
+               producer: self(),
+               shape: @shape,
+               shape_handle: shape_handle,
+               action: :restore
+             }) do
+        send(test_pid, {:start_consumer, shape_handle, id, pid})
+        {:ok, pid}
+      end
+    end
+  end
+
+  describe "lazy consumer initialization" do
+    setup do
+      supervisor = start_link_supervised!({DynamicSupervisor, strategy: :one_for_one})
+      [supervisor: supervisor]
+    end
+
+    setup :setup_log_collector
+
+    @describetag restore_shapes: [{@shape_handle, @shape}],
+                 inspector: @inspector,
+                 consumer_registry_opts: [
+                   start_consumer_fun: &__MODULE__.start_transaction_consumer/1
+                 ]
+
+    test "consumers are started when receiving a transaction that matches their filter", ctx do
+      xmin = 100
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      assert_receive {:start_consumer, @shape_handle, id, pid}
+      xids = Support.TransactionConsumer.assert_consume([{id, pid}], [txn])
+      assert xids == [xmin]
+    end
+
+    test "consumer exits remove the filter mapping", ctx do
+      xmin = 100
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      Process.monitor(ctx.server)
+
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      assert_receive {:start_consumer, @shape_handle, id, consumer_pid}
+      ref = Process.monitor(consumer_pid)
+      xids = Support.TransactionConsumer.assert_consume([{id, consumer_pid}], [txn])
+      assert xids == [xmin]
+
+      Support.TransactionConsumer.stop(consumer_pid, :normal)
+
+      assert_receive {Support.TransactionConsumer, {^id, ^consumer_pid}, {:terminate, :normal}}
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _}
+
+      # the shape has been removed from the filters
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      refute_receive {:start_consumer, @shape_handle, _id, _consumer_pid}
     end
   end
 

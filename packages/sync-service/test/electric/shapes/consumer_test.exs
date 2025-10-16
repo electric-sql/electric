@@ -109,7 +109,8 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_persistent_kv,
       :with_status_monitor,
       :with_shape_monitor,
-      :with_noop_publication_manager
+      :with_noop_publication_manager,
+      :with_consumer_registry
     ]
 
     setup(ctx) do
