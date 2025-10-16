@@ -83,7 +83,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     {:ok, state, []} =
       new_state(ctx,
         stored_shapes: %{
-          shape_handle => shape
+          shape_handle => {shape, true}
         }
       )
 
@@ -93,6 +93,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              ShapeStatus.list_shape_handles_for_relations(state, [
                {shape.root_table_id, {"public", "other_table"}}
              ])
+
+    assert ShapeStatus.snapshot_started?(state, shape_handle)
   end
 
   test "can add shapes", ctx do
