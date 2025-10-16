@@ -56,7 +56,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     state = shape_status_opts(opts)
 
-    :ok = ShapeStatus.initialise(state, state.storage)
+    :ok = ShapeStatus.initialize_from_storage(state, state.storage)
 
     shapes = Keyword.get(opts, :shapes, [])
 
@@ -357,7 +357,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       state = shape_status_opts(table: table)
 
-      assert :ok = ShapeStatus.initialise(state, state.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
       shape = shape!()
       assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
@@ -383,7 +383,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       state2 = shape_status_opts(table: table)
 
-      assert :ok = ShapeStatus.initialise(state2, state2.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state2, state2.storage)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state2)
       # consuming backup directory should have removed it after load
       refute File.exists?(backup_file)
@@ -403,7 +403,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       state = shape_status_opts(table: table)
 
-      assert :ok = ShapeStatus.initialise(state, state.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
       shape = shape!()
       assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
@@ -425,7 +425,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       state2 = shape_status_opts(table: table)
 
-      assert :ok = ShapeStatus.initialise(state2, state2.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state2, state2.storage)
       # Shape from backup should NOT be present after failed integrity
       assert [] == ShapeStatus.list_shapes(state2)
       refute File.exists?(backup_file)

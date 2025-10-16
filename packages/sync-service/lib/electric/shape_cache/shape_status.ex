@@ -20,7 +20,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
     @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
   end
 
-  @callback initialise(stack_ref(), Storage.t()) :: :ok | {:error, term()}
+  @callback initialize_from_storage(stack_ref(), Storage.t()) :: :ok | {:error, term()}
   @callback terminate(stack_ref(), String.t()) :: :ok | {:error, term()}
   @callback list_shapes(stack_ref()) :: [{shape_handle(), Shape.t()}]
   @callback count_shapes(stack_ref()) :: non_neg_integer()
@@ -84,18 +84,25 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @snapshot_started :snapshot_started
 
   @impl true
-  def initialise(stack_ref, storage \\ nil) do
-    last_used_table = shape_last_used_table(stack_ref)
-    :ets.new(last_used_table, [:named_table, :public, :ordered_set])
-
+  def initialize_from_storage(stack_ref, storage \\ nil) do
+    last_used_table = create_last_used_table(stack_ref)
     meta_table = shape_meta_table(stack_ref)
 
-    if storage do
-      load_from_storage(stack_ref, storage)
-    else
-      :ets.new(meta_table, [:named_table, :public, :ordered_set])
-      :ok
+    case load_table_backup(meta_table, storage) do
+      {:ok, ^meta_table, path} ->
+        Logger.info("Loaded shape status from backup at #{path}")
+        :ok
+
+      _ ->
+        Logger.debug("No shape status backup loaded, creating new table #{meta_table}")
+        create_meta_table(stack_ref)
+        load(meta_table, last_used_table, storage)
     end
+  end
+
+  def initialize_empty(stack_ref) do
+    create_last_used_table(stack_ref)
+    create_meta_table(stack_ref)
   end
 
   @impl true
@@ -366,6 +373,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
     def shape_last_used_table(state) when is_map(state), do: state.shape_last_used_table
   end
 
+  defp create_last_used_table(stack_ref) do
+    last_used_table = shape_last_used_table(stack_ref)
+
+    :ets.new(last_used_table, [:named_table, :public, :ordered_set])
+    last_used_table
+  end
+
+  defp create_meta_table(stack_ref) do
+    meta_table = shape_meta_table(stack_ref)
+
+    :ets.new(meta_table, [:named_table, :public, :ordered_set])
+    meta_table
+  end
+
   defp load(meta_table, last_used_table, storage) do
     with {:ok, shapes} <- Storage.get_all_stored_shapes(storage) do
       now = System.monotonic_time()
@@ -409,22 +430,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
           sync: true,
           extended_info: [:object_count]
         )
-    end
-  end
-
-  defp load_from_storage(stack_ref, storage) do
-    last_used_table = shape_last_used_table(stack_ref)
-    meta_table = shape_meta_table(stack_ref)
-
-    case load_table_backup(meta_table, storage) do
-      {:ok, ^meta_table, path} ->
-        Logger.info("Loaded shape status from backup at #{path}")
-        :ok
-
-      _ ->
-        Logger.debug("No shape status backup loaded, creating new table #{meta_table}")
-        :ets.new(meta_table, [:named_table, :public, :ordered_set])
-        load(meta_table, last_used_table, storage)
     end
   end
 
