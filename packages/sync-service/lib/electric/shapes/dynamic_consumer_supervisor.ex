@@ -54,7 +54,7 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
     Process.set_label({:dynamic_consumer_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
-    Logger.debug(fn -> "Starting #{__MODULE__}" end)
+
     DynamicSupervisor.init(strategy: :one_for_one)
   end
 end
