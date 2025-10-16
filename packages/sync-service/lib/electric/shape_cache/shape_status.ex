@@ -84,7 +84,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @snapshot_started :snapshot_started
 
   @impl true
-  def initialize_from_storage(stack_ref, storage \\ nil) do
+  def initialize_from_storage(stack_ref, storage) do
     last_used_table = create_last_used_table(stack_ref)
     meta_table = shape_meta_table(stack_ref)
 
