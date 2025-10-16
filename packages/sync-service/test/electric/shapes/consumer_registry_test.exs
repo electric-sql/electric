@@ -3,6 +3,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
   alias Electric.Shapes.ConsumerRegistry
 
+  import Support.ComponentSetup
+
+  require Electric.Shapes.ConsumerRegistry
+
   defmodule TestSubscriber do
     use GenServer
 
@@ -20,9 +24,147 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     end
   end
 
+  setup :with_stack_id_from_test
+
+  setup(ctx) do
+    %{stack_id: stack_id} = ctx
+    parent = self()
+    table = ConsumerRegistry.registry_table(stack_id)
+
+    registry_state =
+      ConsumerRegistry.registry_state(
+        stack_id: stack_id,
+        table: table,
+        start_consumer_fun: fn handle, stack_id: ^stack_id ->
+          send(parent, {:start_consumer, handle})
+
+          TestSubscriber.start_link(fn message ->
+            send(parent, {:broadcast, handle, message})
+          end)
+        end
+      )
+
+    [registry_state: registry_state]
+  end
+
+  describe "publish/3" do
+    test "starts consumer when receiving a message", ctx do
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
+      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+
+      assert_receive {:start_consumer, "handle-1"}
+      assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+    end
+
+    test "uses existing consumer when already active", ctx do
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
+      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+
+      assert_receive {:start_consumer, "handle-1"}
+      assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+
+      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 2}}, ctx.registry_state)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+      assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 2}}}
+      refute_receive {:start_consumer, "handle-1"}, 10
+    end
+
+    test "starts any missing consumers", ctx do
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
+      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+
+      assert_receive {:start_consumer, "handle-1"}
+      assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+
+      :ok =
+        ConsumerRegistry.publish(["handle-1", "handle-2"], {:txn, %{lsn: 2}}, ctx.registry_state)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 2
+
+      assert_receive {:start_consumer, "handle-2"}, 10
+      assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 2}}}
+      assert_receive {:broadcast, "handle-2", {:txn, %{lsn: 2}}}
+    end
+  end
+
+  describe "register_consumer/3" do
+    test "adds consumer to table under given handle", ctx do
+      handle = "handle-1"
+      parent = self()
+
+      {:ok, pid} =
+        TestSubscriber.start_link(fn message ->
+          send(parent, {:broadcast, handle, message})
+        end)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
+
+      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+
+      :ok = ConsumerRegistry.publish([handle], {:txn, %{lsn: 1}}, ctx.registry_state)
+      assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
+      refute_receive {:start_consumer, ^handle}, 10
+    end
+  end
+
+  describe "whereis/2" do
+    test "returns the registered pid", ctx do
+      handle = "handle-1"
+      parent = self()
+
+      {:ok, pid} =
+        TestSubscriber.start_link(fn message ->
+          send(parent, {:broadcast, handle, message})
+        end)
+
+      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+
+      assert pid == ConsumerRegistry.whereis(ctx.stack_id, handle)
+    end
+  end
+
+  describe "remove_consumer/3" do
+    test "removes the process from the table", ctx do
+      handle = "handle-1"
+      parent = self()
+
+      {:ok, pid} =
+        TestSubscriber.start_link(fn message ->
+          send(parent, {:broadcast, handle, message})
+        end)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
+
+      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+
+      :ok = ConsumerRegistry.publish([handle], {:txn, %{lsn: 1}}, ctx.registry_state)
+      assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
+      refute_receive {:start_consumer, ^handle}, 10
+
+      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
+
+      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+
+      assert_receive {:start_consumer, "handle-1"}
+      assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+    end
+  end
+
   describe "broadcast/2" do
     test "sends message to all subscribers" do
       pid = self()
+
       {:ok, sub1} = TestSubscriber.start_link(fn message -> send(pid, {:sub1, message}) end)
       {:ok, sub2} = TestSubscriber.start_link(fn message -> send(pid, {:sub2, message}) end)
 
