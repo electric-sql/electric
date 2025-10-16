@@ -30,7 +30,6 @@ defmodule Electric.Replication.PublicationManager do
     :update_debounce_timeout,
     :publication_name,
     :db_pool,
-    :can_alter_publication?,
     :manual_table_publishing?,
     :publication_refresh_period,
     :restore_retry_timeout,
@@ -40,6 +39,7 @@ defmodule Electric.Replication.PublicationManager do
     tracked_shape_handles: %{},
     waiters: %{},
     scheduled_updated_ref: nil,
+    can_alter_publication?: true,
     next_update_forced?: false,
     restore_waiters: [],
     restore_complete?: false
@@ -82,7 +82,6 @@ defmodule Electric.Replication.PublicationManager do
             stack_id: [type: :string, required: true],
             publication_name: [type: :string, required: true],
             db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
-            can_alter_publication?: [type: :boolean, required: false, default: true],
             manual_table_publishing?: [type: :boolean, required: false, default: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             server: [type: :any, required: false],
@@ -163,7 +162,6 @@ defmodule Electric.Replication.PublicationManager do
       update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
       db_pool: opts.db_pool,
-      can_alter_publication?: opts.can_alter_publication?,
       manual_table_publishing?: opts.manual_table_publishing?,
       publication_refresh_period: opts.refresh_period,
       restore_retry_timeout: opts.restore_retry_timeout
