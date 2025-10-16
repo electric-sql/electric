@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
   use GenServer
 
   alias Electric.ShapeCache.ShapeStatus
+  alias Electric.StatusMonitor
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -60,10 +61,19 @@ defmodule Electric.ShapeCache.ExpiryManager do
   defp maybe_expire_shapes(%{max_shapes: nil}), do: :ok
 
   defp maybe_expire_shapes(%{max_shapes: max_shapes} = state) do
-    shape_count = shape_count(state)
+    case StatusMonitor.status(state.stack_id) do
+      %{shape: :up} ->
+        shape_count = shape_count(state)
 
-    if shape_count > max_shapes do
-      expire_shapes(shape_count, state)
+        if shape_count > max_shapes do
+          expire_shapes(shape_count, state)
+        end
+
+      status ->
+        # We do not expire shapes if the stack is not active since this may mean that
+        # shapes have not fully restored yet and we don't want to expire while restoring
+        # as this may cause race conditions.
+        Logger.debug("Expiry check skipped due to inactive stack: #{inspect(status)}")
     end
   end
 
