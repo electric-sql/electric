@@ -56,25 +56,23 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.lookup_element(ets_name(stack_id), @count_key, 2)
   end
 
-  @spec register_consumer(shape_handle(), pid(), stack_id()) :: :ok
+  @spec register_consumer(shape_handle(), pid(), stack_id()) :: {:ok, non_neg_integer()}
   def register_consumer(shape_handle, pid, stack_id) when is_binary(stack_id) do
     register_consumer(shape_handle, pid, ets_name(stack_id))
   end
 
-  @spec register_consumer(shape_handle(), pid(), registry_state()) :: :ok
+  @spec register_consumer(shape_handle(), pid(), registry_state()) :: {:ok, non_neg_integer()}
   def register_consumer(shape_handle, pid, %__MODULE__{table: table}) do
     register_consumer(shape_handle, pid, table)
   end
 
-  @spec register_consumer(shape_handle(), pid(), :ets.table()) :: :ok
+  @spec register_consumer(shape_handle(), pid(), :ets.table()) :: {:ok, non_neg_integer()}
   def register_consumer(shape_handle, pid, table) when is_atom(table) or is_reference(table) do
     true = :ets.insert_new(table, [{shape_handle, pid}])
 
-    table
-    |> :ets.update_counter(@count_key, 1)
-    |> tap(fn n -> Logger.debug("Started consumer #{n}") end)
+    n = :ets.update_counter(table, @count_key, 1)
 
-    :ok
+    {:ok, n}
   end
 
   @spec publish([shape_handle()], term(), registry_state()) :: :ok
@@ -144,13 +142,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   defp start_consumer!(handle, %__MODULE__{} = state) do
-    Logger.info("Starting consumer for existing handle #{handle}")
-
     %__MODULE__{stack_id: stack_id, start_consumer_fun: start_consumer_fun} = state
 
     case start_consumer_fun.(handle, stack_id: stack_id) do
       {:ok, pid} ->
-        register_consumer(handle, pid, state)
+        {:ok, n} = register_consumer(handle, pid, state)
+        Logger.info("Started consumer #{n} for existing handle #{handle}")
         pid
 
       {:error, reason} ->
