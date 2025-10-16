@@ -94,13 +94,18 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   end
 
   defp cleanup_shape_log_collector(stack_id, shape_handle) do
-    case Electric.Replication.ShapeLogCollector.remove_shape_sync(stack_id, shape_handle) do
-      :ok ->
-        Logger.debug("Removed shape #{shape_handle} from ShapeLogCollector")
+    perform_reporting_errors(
+      fn ->
+        case Electric.Replication.ShapeLogCollector.remove_shape_sync(stack_id, shape_handle) do
+          :ok ->
+            Logger.debug("Removed shape #{shape_handle} from ShapeLogCollector")
 
-      {:error, _reason} ->
-        Logger.debug(["Shape #{shape_handle} already removed from ShapeLogCollector"])
-    end
+          {:error, _reason} ->
+            Logger.debug(["Shape #{shape_handle} already removed from ShapeLogCollector"])
+        end
+      end,
+      "Failed to remove shape #{shape_handle} from ShapeLogCollector"
+    )
   end
 
   defp cleanup_storage(
