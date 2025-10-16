@@ -44,71 +44,84 @@ defmodule Electric.ShapeCleanerTest do
     :with_shape_cleaner
   ]
 
-  describe "remove_shape/2" do
-    setup [
-      :with_log_chunking,
-      :with_registry,
-      :with_shape_log_collector,
-      :with_noop_publication_manager
-    ]
+  for {cleanup_fn, suite_title} <- [
+        {&ShapeCleaner.remove_shape/2, "remove_shape/2"},
+        {&ShapeCleaner.remove_shape_async/2, "remove_shape_async/2"}
+      ] do
+    @cleanup_fn cleanup_fn
 
-    test "cleans up shape data and rotates the shape handle", ctx do
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
-        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
-        GenServer.cast(parent, {:snapshot_started, shape_handle})
-      end)
+    describe "#{suite_title}" do
+      setup [
+        :with_log_chunking,
+        :with_registry,
+        :with_shape_log_collector,
+        :with_noop_publication_manager
+      ]
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      test "cleans up shape data and rotates the shape handle", ctx do
+        Support.TestUtils.patch_snapshotter(fn parent,
+                                               shape_handle,
+                                               _shape,
+                                               %{storage: storage} ->
+          GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+          Storage.make_new_snapshot!([["test"]], storage)
+          GenServer.cast(parent, {:snapshot_started, shape_handle})
+        end)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+        %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
-      consumer_ref =
-        Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
-        |> Process.monitor()
+        {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+        assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
 
-      storage = Storage.for_shape(shape_handle, ctx.storage)
-      writer = Storage.init_writer!(storage, @shape)
+        consumer_ref =
+          Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+          |> Process.monitor()
 
-      Storage.append_to_log!(
-        changes_to_log_items([
-          %Electric.Replication.Changes.NewRecord{
-            relation: {"public", "items"},
-            record: %{"id" => "1", "value" => "Alice"},
-            log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
-          }
-        ]),
-        writer
-      )
+        storage = Storage.for_shape(shape_handle, ctx.storage)
+        writer = Storage.init_writer!(storage, @shape)
 
-      assert Storage.snapshot_started?(storage)
+        Storage.append_to_log!(
+          changes_to_log_items([
+            %Electric.Replication.Changes.NewRecord{
+              relation: {"public", "items"},
+              record: %{"id" => "1", "value" => "Alice"},
+              log_offset: LogOffset.new(Electric.Postgres.Lsn.from_integer(1000), 0)
+            }
+          ]),
+          writer
+        )
 
-      assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
-               1
+        assert Storage.snapshot_started?(storage)
 
-      :ok = ShapeCleaner.remove_shape(shape_handle, stack_id: ctx.stack_id)
+        assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
+                 1
 
-      assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
+        :ok = @cleanup_fn.(shape_handle, stack_id: ctx.stack_id)
 
-      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
-      assert shape_handle != shape_handle2
-    end
+        assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
 
-    test "remove_shape swallows error if no shape to clean up", ctx do
-      shape_handle = "foo"
+        {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+        assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
+        assert shape_handle != shape_handle2
+      end
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
-        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
-        GenServer.cast(parent, {:snapshot_started, shape_handle})
-      end)
+      test "remove_shape swallows error if no shape to clean up", ctx do
+        shape_handle = "foo"
 
-      %{shape_cache_opts: _opts} = with_shape_cache(ctx)
+        Support.TestUtils.patch_snapshotter(fn parent,
+                                               shape_handle,
+                                               _shape,
+                                               %{storage: storage} ->
+          GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
+          Storage.make_new_snapshot!([["test"]], storage)
+          GenServer.cast(parent, {:snapshot_started, shape_handle})
+        end)
 
-      {:ok, _} =
-        with_log(fn -> ShapeCleaner.remove_shape(shape_handle, stack_id: ctx.stack_id) end)
+        %{shape_cache_opts: _opts} = with_shape_cache(ctx)
+
+        {:ok, _} =
+          with_log(fn -> ShapeCleaner.remove_shape(shape_handle, stack_id: ctx.stack_id) end)
+      end
     end
   end
 

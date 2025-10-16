@@ -374,14 +374,22 @@ defmodule Electric.Shapes.ShapeTest do
     @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS gen_col_table (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
          ]
-    test "validates selected columns for generated columns", %{inspector: inspector} do
-      assert {:error,
-              {:columns,
-               [
-                 "The following columns are generated and cannot be included in the shape: id. " <>
-                   "You can exclude them from the shape by explicitly listing which columns to fetch in the 'columns' query param"
-               ]}} =
-               Shape.new("gen_col_table", inspector: inspector)
+    test "validates selected columns for generated columns", %{inspector: inspector} = ctx do
+      %{supports_generated_column_replication: supports_generated_column_replication} =
+        Support.TestUtils.fetch_supported_features(ctx.db_conn)
+
+      if not supports_generated_column_replication do
+        assert {:error,
+                {:columns,
+                 [
+                   "The following columns are generated and cannot be included in the shape: id. " <>
+                     "You can exclude them from the shape by explicitly listing which columns to fetch in the 'columns' query param"
+                 ]}} =
+                 Shape.new("gen_col_table", inspector: inspector)
+      else
+        assert {:ok, %Shape{selected_columns: ["id", "val"]}} =
+                 Shape.new("gen_col_table", inspector: inspector)
+      end
     end
 
     @tag with_sql: [

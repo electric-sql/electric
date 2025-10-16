@@ -26,6 +26,7 @@ defmodule Electric.Postgres.ReplicationClient do
           | :create_slot
           | :set_display_setting
           | :ready_to_stream
+          | :start_streaming
           | :streaming
 
   defmodule State do
@@ -39,6 +40,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :try_creating_publication?,
       :recreate_slot?,
       :start_streaming?,
+      :pg_version,
       :slot_name,
       :slot_temporary?,
       :display_settings,
@@ -70,6 +72,7 @@ defmodule Electric.Postgres.ReplicationClient do
             try_creating_publication?: boolean(),
             recreate_slot?: boolean(),
             start_streaming?: boolean(),
+            pg_version: non_neg_integer(),
             slot_name: String.t(),
             slot_temporary?: boolean(),
             display_settings: [String.t()],
@@ -216,9 +219,6 @@ defmodule Electric.Postgres.ReplicationClient do
 
     if current_step == :create_slot and extra_info == :created_new_slot,
       do: notify_created_new_slot(state)
-
-    if current_step == :create_publication and extra_info == :insufficient_privilege,
-      do: notify_insufficient_privilege(state)
 
     if next_step == :ready_to_stream,
       do: notify_ready_to_stream(state)
@@ -537,11 +537,6 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp notify_created_new_slot(%State{connection_manager: manager} = state) do
     :ok = Electric.Connection.Manager.replication_client_created_new_slot(manager)
-    state
-  end
-
-  defp notify_insufficient_privilege(%State{connection_manager: manager} = state) do
-    :ok = Electric.Connection.Manager.replication_client_has_insufficient_privilege(manager)
     state
   end
 

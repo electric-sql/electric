@@ -29,13 +29,16 @@ defmodule Electric.Postgres.ReplicationClient.Collector do
           max_tx_size: nil | non_neg_integer()
         }
 
+  @type txn_meta() :: %{byte_size: non_neg_integer()}
+
   @doc """
   Handle incoming logical replication message by either building up a transaction or
   returning a complete built up transaction.
   """
   @spec handle_message(LR.message(), t()) ::
           t()
-          | {Transaction.t() | Relation.t(), t()}
+          | {Transaction.t(), txn_meta(), t()}
+          | {Relation.t(), t()}
           | {:error, {:replica_not_full | :exceeded_max_tx_size, String.t()}, t()}
   def handle_message(%LR.Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
