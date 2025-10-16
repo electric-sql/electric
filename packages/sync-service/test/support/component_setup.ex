@@ -275,11 +275,11 @@ defmodule Support.ComponentSetup do
          stack_id: ctx.stack_id, pool: ctx.db_conn, persistent_kv: ctx.persistent_kv}
       )
 
-    pg_relation_table = EtsInspector.relation_table(stack_id: ctx.stack_id)
+    pg_inspector_table = EtsInspector.inspector_table(stack_id: ctx.stack_id)
 
     %{
       inspector: {EtsInspector, stack_id: ctx.stack_id, server: server},
-      pg_relation_table: pg_relation_table,
+      pg_inspector_table: pg_inspector_table,
       inspector_pid: server
     }
   end
