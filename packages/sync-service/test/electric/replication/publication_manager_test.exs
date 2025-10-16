@@ -24,7 +24,14 @@ defmodule Electric.Replication.PublicationManagerTest do
       Electric.Postgres.Configuration,
       :check_publication_status!,
       [mode: :shared],
-      fn _, _ -> ctx[:configuration_publication_status] || :ok end
+      fn _, _ ->
+        ctx[:configuration_publication_status] ||
+          %{
+            publishes_all_operations?: true,
+            can_alter_publication?: true,
+            publishes_generated_columns?: true
+          }
+      end
     )
 
     Repatch.patch(
@@ -76,6 +83,19 @@ defmodule Electric.Replication.PublicationManagerTest do
   describe "add_shape/3" do
     test "adds a single relation", %{opts: opts} do
       shape = generate_shape({"public", "items"})
+      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
+
+      assert_receive {:filters, [{_, {"public", "items"}}]}
+    end
+
+    test "accepts shape with generated columns", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+
+      shape = %Electric.Shapes.Shape{
+        shape
+        | flags: Map.put(shape.flags, :selects_generated_columns, true)
+      }
+
       assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, opts)
 
       assert_receive {:filters, [{_, {"public", "items"}}]}
@@ -183,6 +203,54 @@ defmodule Electric.Replication.PublicationManagerTest do
       # Remove one handle; relation should stay
       assert :ok == PublicationManager.remove_shape(@shape_handle_1, opts)
       refute_receive {:filters, _}, 500
+    end
+  end
+
+  describe "publication misconfiguration" do
+    @tag configuration_publication_status: :not_found
+    test "fails when publication is missing", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+
+      assert_raise Electric.DbConfigurationError,
+                   ~r/not found in the database/,
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape, opts)
+                   end
+    end
+
+    @tag configuration_publication_status: %{
+           publishes_all_operations?: false,
+           can_alter_publication?: true,
+           publishes_generated_columns?: false
+         }
+    test "fails when not all columns are published", %{opts: opts} do
+      shape = generate_shape({"public", "items"})
+
+      assert_raise Electric.DbConfigurationError,
+                   ~r/does not publish all required operations/,
+                   fn ->
+                     PublicationManager.add_shape(@shape_handle_1, shape, opts)
+                   end
+    end
+
+    @tag configuration_publication_status: %{
+           publishes_all_operations?: true,
+           can_alter_publication?: true,
+           publishes_generated_columns?: false
+         }
+    test "fails shapes that require generated columns when publication doesn't support them", %{
+      opts: opts
+    } do
+      shape = generate_shape({"public", "items"})
+
+      shape = %Electric.Shapes.Shape{
+        shape
+        | flags: Map.put(shape.flags, :selects_generated_columns, true)
+      }
+
+      assert_raise Electric.DbConfigurationError, ~r/does not publish generated columns/, fn ->
+        PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      end
     end
   end
 
