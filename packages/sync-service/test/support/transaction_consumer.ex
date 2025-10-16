@@ -68,7 +68,7 @@ defmodule Support.TransactionConsumer do
   # so consumers must de-register themselves
   def terminate(reason, %{producer: producer, shape_handle: shape_handle} = state) do
     send(state.parent, {__MODULE__, {state.id, self()}, {:terminate, reason}})
-    Electric.Replication.ShapeLogCollector.unsubscribe(producer, shape_handle)
+    Electric.Replication.ShapeLogCollector.remove_shape(producer, shape_handle)
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
