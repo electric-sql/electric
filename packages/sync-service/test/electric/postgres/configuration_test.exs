@@ -374,28 +374,22 @@ defmodule Electric.Postgres.ConfigurationTest do
   end
 
   describe "check_publication_status!/2" do
-    test "raises if publication is missing", %{pool: conn} do
-      assert_raise Electric.DbConfigurationError,
-                   "Publication \"nonexistent\" not found in the database",
-                   fn ->
-                     Configuration.check_publication_status!(conn, "nonexistent")
-                   end
+    test "detects if publication is missing", %{pool: conn} do
+      assert :not_found = Configuration.check_publication_status!(conn, "nonexistent")
     end
 
-    test "raises if publication doesn't publish all operations", %{
+    test "detects if publication doesn't publish all operations", %{
       pool: conn,
       publication_name: publication
     } do
       Postgrex.query!(conn, "ALTER PUBLICATION \"#{publication}\" SET (publish = 'insert')", [])
 
-      assert_raise Electric.DbConfigurationError,
-                   "Publication \"#{publication}\" does not publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE",
-                   fn ->
-                     Configuration.check_publication_status!(conn, publication)
-                   end
+      assert %{
+               publishes_all_operations?: false
+             } = Configuration.check_publication_status!(conn, publication)
     end
 
-    test "raises if publication isn't owned by the current user", %{
+    test "detects if publication isn't owned by the current user", %{
       pool: conn,
       publication_name: publication
     } do
@@ -403,16 +397,51 @@ defmodule Electric.Postgres.ConfigurationTest do
       Postgrex.query!(conn, "CREATE ROLE #{role_name} NOLOGIN", [])
       Postgrex.query!(conn, "ALTER PUBLICATION \"#{publication}\" OWNER TO #{role_name}", [])
 
-      assert_raise Electric.DbConfigurationError,
-                   "Publication \"#{publication}\" is not owned by the provided user",
-                   fn ->
-                     Configuration.check_publication_status!(conn, publication)
-                   end
+      assert %{
+               can_alter_publication?: false
+             } = Configuration.check_publication_status!(conn, publication)
     end
 
-    test "succeeds if publication exists, publishes all operations and is owned by the current user",
+    test "detects if publication supports generated columns", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      %{rows: [[pg_version]]} =
+        Postgrex.query!(conn, "SELECT current_setting('server_version_num')::int", [])
+
+      if pg_version < 180_000 do
+        assert %{
+                 publishes_generated_columns?: false
+               } = Configuration.check_publication_status!(conn, publication)
+      else
+        Postgrex.query!(
+          conn,
+          "ALTER PUBLICATION \"#{publication}\" SET (publish_generated_columns = 'none')",
+          []
+        )
+
+        assert %{
+                 publishes_generated_columns?: false
+               } = Configuration.check_publication_status!(conn, publication)
+
+        Postgrex.query!(
+          conn,
+          "ALTER PUBLICATION \"#{publication}\" SET (publish_generated_columns = 'stored')",
+          []
+        )
+
+        assert %{
+                 publishes_generated_columns?: true
+               } = Configuration.check_publication_status!(conn, publication)
+      end
+    end
+
+    test "detects if publication exists, publishes all operations and is owned by the current user",
          %{pool: conn, publication_name: publication} do
-      assert :ok = Configuration.check_publication_status!(conn, publication)
+      assert %{
+               can_alter_publication?: true,
+               publishes_all_operations?: true
+             } = Configuration.check_publication_status!(conn, publication)
     end
   end
 
