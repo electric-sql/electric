@@ -554,8 +554,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       consumers =
         Enum.map(1..3, fn id ->
-          handle = "#{@shape_handle}-#{id}"
-
           consumer =
             start_link_supervised!(%{
               id: {:consumer, id},
@@ -567,7 +565,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      parent: parent,
                      producer: ctx.server,
                      shape: @shape,
-                     shape_handle: handle
+                     shape_handle: "#{@shape_handle}-#{id}"
                    ]
                  ]},
               restart: :temporary
