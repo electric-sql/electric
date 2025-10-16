@@ -685,55 +685,156 @@ defmodule Electric.Plug.RouterTest do
     @tag with_sql: [
            "CREATE TABLE #{@generated_pk_table} (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
          ]
-    test "returns an error when trying to select a generated column", %{opts: opts} do
-      # When selecting all columns
-      conn = conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
-      assert %{status: 400} = conn
+    test "returns an error when trying to select a generated column in unsupported dbs",
+         %{opts: opts} = ctx do
+      %{supports_generated_column_replication: supports_generated_column_replication} =
+        Support.TestUtils.fetch_supported_features(ctx.pool)
 
-      assert Jason.decode!(conn.resp_body) ==
-               %{
-                 "errors" => %{
-                   "columns" => [
-                     "The following columns are generated and cannot be included in the shape: id. " <>
-                       "You can exclude them from the shape by explicitly listing which columns to fetch in the 'columns' query param"
-                   ]
+      if not supports_generated_column_replication do
+        # When selecting all columns
+        conn =
+          conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
+
+        assert %{status: 400} = conn
+
+        assert Jason.decode!(conn.resp_body) ==
+                 %{
+                   "errors" => %{
+                     "columns" => [
+                       "The following columns are generated and cannot be included in the shape: id. " <>
+                         "You can exclude them from the shape by explicitly listing which columns to fetch in the 'columns' query param"
+                     ]
+                   },
+                   "message" => "Invalid request"
+                 }
+
+        # When selecting a single column but PK is generated
+        conn =
+          conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=val")
+          |> Router.call(opts)
+
+        assert %{status: 400} = conn
+
+        assert Jason.decode!(conn.resp_body) ==
+                 %{
+                   "errors" => %{
+                     "columns" => [
+                       "The list of columns must include all primary key columns, missing: id"
+                     ]
+                   },
+                   "message" => "Invalid request"
+                 }
+
+        # When selecting a generated column explicitly
+        conn =
+          conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=id,val")
+          |> Router.call(opts)
+
+        assert %{status: 400} = conn
+
+        assert Jason.decode!(conn.resp_body) ==
+                 %{
+                   "errors" => %{
+                     "columns" => [
+                       "The following columns are generated and cannot be included in the shape: id"
+                     ]
+                   },
+                   "message" => "Invalid request"
+                 }
+      end
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE #{@generated_pk_table} (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
+         ]
+    test "returns an error when trying to select a generated column if not configured",
+         %{opts: opts} = ctx do
+      %{supports_generated_column_replication: supports_generated_column_replication} =
+        Support.TestUtils.fetch_supported_features(ctx.pool)
+
+      if supports_generated_column_replication do
+        # disable generated column replication
+        Postgrex.query!(
+          ctx.pool,
+          "ALTER PUBLICATION #{ctx.publication_name} SET (publish_generated_columns = 'none')",
+          []
+        )
+
+        conn =
+          conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
+
+        assert %{status: 400} = conn
+
+        assert Jason.decode!(conn.resp_body) ==
+                 %{
+                   "message" =>
+                     "Publication \"#{ctx.publication_name}\" does not publish generated columns." <>
+                       " This is a feature introduced in PostgreSQL 18 and requires setting the publication" <>
+                       " parameter 'publish_generated_columns' to 'stored'. Alternatively, you can exclude them" <>
+                       " from the shape by explicitly listing which columns to fetch in the 'columns' query param."
+                 }
+      end
+    end
+
+    @generated_uuid "00000000-0000-0000-0000-000000000001"
+    @tag with_sql: [
+           "CREATE TABLE #{@generated_pk_table} (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)",
+           "INSERT INTO #{@generated_pk_table} (val) VALUES ('{\"id\": \"#{@generated_uuid}\", \"other\": \"data\"}')"
+         ]
+    test "can sync generated columns when supported and enabled",
+         %{opts: opts} = ctx do
+      %{supports_generated_column_replication: supports_generated_column_replication} =
+        Support.TestUtils.fetch_supported_features(ctx.pool)
+
+      if supports_generated_column_replication do
+        # When selecting all columns
+        conn =
+          conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
+
+        assert %{status: 200} = conn
+        shape_handle = get_resp_shape_handle(conn)
+
+        assert [
+                 %{
+                   "headers" => %{"operation" => "insert"},
+                   "key" => "\"public\".\"generated_pk_table\"/\"#{@generated_uuid}\"" = key,
+                   "value" => %{
+                     "id" => "#{@generated_uuid}",
+                     "val" => "{\"id\": \"#{@generated_uuid}\", \"other\": \"data\"}"
+                   }
                  },
-                 "message" => "Invalid request"
-               }
+                 %{"headers" => %{"control" => "snapshot-end"}}
+               ] = Jason.decode!(conn.resp_body)
 
-      # When selecting a single column but PK is generated
-      conn =
-        conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=val")
-        |> Router.call(opts)
+        task =
+          Task.async(fn ->
+            conn(
+              "GET",
+              "/v1/shape?table=#{@generated_pk_table}&offset=0_0&handle=#{shape_handle}&live"
+            )
+            |> Router.call(opts)
+          end)
 
-      assert %{status: 400} = conn
+        Postgrex.query!(
+          ctx.pool,
+          "UPDATE #{@generated_pk_table} SET val = '{\"id\": \"#{@generated_uuid}\", \"other\": \"different\"}'::jsonb WHERE id = '#{@generated_uuid}'",
+          []
+        )
 
-      assert Jason.decode!(conn.resp_body) ==
-               %{
-                 "errors" => %{
-                   "columns" => [
-                     "The list of columns must include all primary key columns, missing: id"
-                   ]
+        assert %{status: 200} = conn = Task.await(task)
+
+        assert [
+                 %{
+                   "headers" => %{"operation" => "update"},
+                   "key" => ^key,
+                   "value" => %{
+                     "id" => "#{@generated_uuid}",
+                     "val" => "{\"id\": \"#{@generated_uuid}\", \"other\": \"different\"}"
+                   }
                  },
-                 "message" => "Invalid request"
-               }
-
-      # When selecting a generated column explicitly
-      conn =
-        conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1&columns=id,val")
-        |> Router.call(opts)
-
-      assert %{status: 400} = conn
-
-      assert Jason.decode!(conn.resp_body) ==
-               %{
-                 "errors" => %{
-                   "columns" => [
-                     "The following columns are generated and cannot be included in the shape: id"
-                   ]
-                 },
-                 "message" => "Invalid request"
-               }
+                 @up_to_date
+               ] = Jason.decode!(conn.resp_body)
+      end
     end
 
     @tag with_sql: [
