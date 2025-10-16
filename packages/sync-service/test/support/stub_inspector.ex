@@ -109,6 +109,13 @@ defmodule Support.StubInspector do
     {:ok, info[oid].relation}
   end
 
+  @impl true
+  def load_supported_features(:no_conn) do
+    {:error, :connection_not_available}
+  end
+
+  def load_supported_features(_), do: {:ok, %{supports_generated_column_replication: true}}
+
   # def load_relation(table, _opts) do
   #   with {:ok, rel} <- parse_relation(table) do
   #     {:ok, %{relation: rel, relation_id: :erlang.phash2(rel)}}

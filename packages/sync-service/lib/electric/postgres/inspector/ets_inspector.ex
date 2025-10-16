@@ -70,6 +70,13 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   @impl Inspector
+  @spec load_supported_features(opts :: term()) ::
+          {:ok, Map.t()} | {:error, String.t() | :connection_not_available}
+  def load_supported_features(opts) do
+    GenServer.call(opts[:server], :load_supported_features, :infinity)
+  end
+
+  @impl Inspector
   @spec clean(Electric.relation_id(), opts :: term()) :: :ok
   def clean(relation_id, opts) when is_relation_id(relation_id) do
     GenServer.call(opts[:server], {:clean, relation_id}, :infinity)
@@ -123,7 +130,6 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     {:reply, response, state}
   end
 
-  @impl GenServer
   def handle_call({:load_relation_info, oid}, _from, state) do
     response =
       with :not_in_cache <- fetch_relation_info_from_ets(oid, state),
@@ -134,7 +140,6 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     {:reply, response, state}
   end
 
-  @impl GenServer
   def handle_call({:load_column_info, oid}, _from, state) do
     response =
       with :not_in_cache <- fetch_column_info_from_ets(oid, state),
@@ -145,12 +150,22 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     {:reply, response, state}
   end
 
-  @impl GenServer
+  def handle_call(:load_supported_features, _from, state) do
+    response =
+      with :not_in_cache <- fetch_supported_features_from_ets(state),
+           {:ok, features} <-
+             wrap_in_db_errors(fn -> DirectInspector.load_supported_features(state.pg_pool) end) do
+        store_supported_features(state, features)
+        {:ok, features}
+      end
+
+    {:reply, response, state}
+  end
+
   def handle_call({:clean, oid}, _from, state) do
     {:reply, :ok, delete_relation_info(state, oid)}
   end
 
-  @impl GenServer
   def handle_call(:list_relations_with_stale_cache, _from, state) do
     known_schema = known_schema(state)
     known_schema_oids = known_schema |> Enum.map(& &1.relation_id)
@@ -197,7 +212,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       {:reply, :error, state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_info({:EXIT, _, reason}, state) do
     {:stop, reason, state}
   end
@@ -219,20 +234,27 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   defp fetch_from_db(rel_or_oid, state)
        when is_relation(rel_or_oid) or is_relation_id(rel_or_oid) do
-    Postgrex.transaction(state.pg_pool, fn conn ->
-      loader_fn =
-        if is_relation(rel_or_oid),
-          do: &DirectInspector.normalize_and_load_relation_info/2,
-          else: &DirectInspector.load_relation_info/2
+    wrap_in_db_errors(fn ->
+      Postgrex.transaction(state.pg_pool, fn conn ->
+        loader_fn =
+          if is_relation(rel_or_oid),
+            do: &DirectInspector.normalize_and_load_relation_info/2,
+            else: &DirectInspector.load_relation_info/2
 
-      with {:ok, rel} <- loader_fn.(rel_or_oid, conn),
-           {:ok, cols} <- DirectInspector.load_column_info(rel.relation_id, conn) do
-        {rel, cols}
-      else
-        {:error, err} -> Postgrex.rollback(conn, err)
-        :table_not_found -> :table_not_found
-      end
+        with {:ok, rel} <- loader_fn.(rel_or_oid, conn),
+             {:ok, cols} <- DirectInspector.load_column_info(rel.relation_id, conn) do
+          {rel, cols}
+        else
+          {:error, err} -> Postgrex.rollback(conn, err)
+          :table_not_found -> :table_not_found
+        end
+      end)
     end)
+  end
+
+  @spec wrap_in_db_errors((-> any())) :: {:error, :connection_not_available} | any()
+  defp wrap_in_db_errors(func) do
+    func.()
   rescue
     e in DBConnection.ConnectionError ->
       cond do
@@ -285,7 +307,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   # @typep ets_value_2 ::
   #          {{:oid_info, Electric.relation_id()}, Inspector.relation_info(),
   #           Inspector.column_info()}
-  # @typep ets_value :: ets_value_1 | ets_value_2
+  # @typep ets_value_3 :: {:supported_features, supported_features()}
+  # @typep ets_value :: ets_value_1 | ets_value_2 | ets_value_3
 
   @doc false
   def relation_table(%{pg_relation_table: ets_table}), do: ets_table
@@ -297,6 +320,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   defp relation_to_oid_key(rel), do: {:relation_to_oid, rel}
   defp oid_to_info_key(oid), do: {:oid_info, oid}
+  @supported_features_key :supported_features
 
   @spec store_relation_info(map(), Inspector.relation_info(), [Inspector.column_info()]) :: map()
   defp store_relation_info(state, %{relation: rel, relation_id: oid} = info, cols) do
@@ -305,6 +329,12 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       {oid_to_info_key(oid), info, cols}
     ])
 
+    state
+  end
+
+  @spec store_supported_features(map(), Inspector.supported_features()) :: map()
+  defp store_supported_features(state, supported_features) do
+    :ets.insert(relation_table(state), {@supported_features_key, supported_features})
     state
   end
 
@@ -354,6 +384,15 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     case :ets.lookup_element(relation_table(opts), key, 3, :not_in_cache) do
       :not_in_cache -> :not_in_cache
       column_list -> {:ok, column_list}
+    end
+  end
+
+  @spec fetch_supported_features_from_ets(opts :: term()) ::
+          {:ok, Inspector.supported_features()} | :not_in_cache
+  defp fetch_supported_features_from_ets(opts) do
+    case :ets.lookup_element(relation_table(opts), @supported_features_key, 2, :not_in_cache) do
+      :not_in_cache -> :not_in_cache
+      features -> {:ok, features}
     end
   end
 
