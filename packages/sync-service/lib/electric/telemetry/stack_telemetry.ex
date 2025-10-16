@@ -224,6 +224,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         last_value("electric.postgres.replication.wal_size", unit: :byte, keep: for_stack(opts)),
         last_value("electric.storage.used", unit: {:byte, :kilobyte}, keep: for_stack(opts)),
         last_value("electric.shapes.total_shapes.count", keep: for_stack(opts)),
+        last_value("electric.shapes.active_shapes.count", keep: for_stack(opts)),
         counter("electric.postgres.replication.transaction_received.count",
           keep: for_stack(opts)
         ),
@@ -275,6 +276,7 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
     defp periodic_measurements(opts) do
       [
         {__MODULE__, :count_shapes, [opts.stack_id]},
+        {__MODULE__, :count_active_shapes, [opts.stack_id]},
         {__MODULE__, :report_retained_wal_size, [opts.stack_id, opts.slot_name]}
       ]
     end
@@ -293,6 +295,14 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
             %{stack_id: stack_id}
           )
       end
+    end
+
+    def count_active_shapes(stack_id) do
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :shapes, :active_shapes],
+        %{count: Electric.Shapes.ConsumerRegistry.active_consumer_count(stack_id)},
+        %{stack_id: stack_id}
+      )
     end
 
     def for_stack(opts) do
