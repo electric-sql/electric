@@ -27,6 +27,8 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback count_shapes(stack_ref()) :: non_neg_integer()
   @callback get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
+  @callback get_shape_by_handle(stack_ref(), shape_handle()) ::
+              {:ok, Shape.t()} | {:error, term()}
   @callback add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   @callback initialise_shape(stack_ref(), shape_handle(), xmin(), LogOffset.t()) :: :ok
   @callback set_snapshot_xmin(stack_ref(), shape_handle(), xmin()) :: :ok
@@ -242,11 +244,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
            2,
            nil
          ) do
-      nil ->
-        nil
-
-      shape_handle when is_binary(shape_handle) ->
-        get_existing_shape(stack_ref, shape_handle)
+      nil -> nil
+      shape_handle when is_binary(shape_handle) -> get_existing_shape(stack_ref, shape_handle)
     end
   end
 
@@ -262,6 +261,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
+  @impl true
   def get_shape_by_handle(stack_ref, shape_handle) do
     case :ets.lookup_element(
            shape_meta_table(stack_ref),
