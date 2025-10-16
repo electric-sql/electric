@@ -40,7 +40,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ok = ShapeStatus.initialise(stack_id, config.storage)
+    :ok = ShapeStatus.initialize_from_storage(stack_id, config.storage)
 
     Electric.LsnTracker.create_table(stack_id)
 

@@ -24,7 +24,7 @@ defmodule Electric.Shapes.MonitorTest do
   defp start_stack_status(ctx) do
     Repatch.patch(Electric.Shapes.Shape, :generate_id, fn _shape -> {"hash", @shape_handle} end)
 
-    :ok = Electric.ShapeCache.ShapeStatus.initialise(ctx.stack_id, ctx.storage)
+    :ok = Electric.ShapeCache.ShapeStatus.initialize_from_storage(ctx.stack_id, ctx.storage)
 
     parent = self()
 

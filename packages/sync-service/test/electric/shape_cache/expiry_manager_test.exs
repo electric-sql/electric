@@ -19,7 +19,7 @@ defmodule Electric.ExpiryManagerTest do
   @max_shapes 10
 
   setup %{stack_id: stack_id} do
-    ShapeStatus.initialise(stack_id)
+    ShapeStatus.initialize_empty(stack_id)
 
     expiry_manager =
       start_supervised!(
