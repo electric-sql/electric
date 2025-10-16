@@ -122,8 +122,8 @@
   ??[debug] Query String: table=items&handle=$handle&offset=0_0&live
 
   ??[debug] Opening lock connection
-  ??[debug] Starting consumer for $handle
   ??[info] Starting replication from postgres
+  ??[debug] Starting consumer for $handle
 
   ??[debug] Chunked 200 in
 
