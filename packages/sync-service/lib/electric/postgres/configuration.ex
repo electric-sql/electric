@@ -21,6 +21,12 @@ defmodule Electric.Postgres.Configuration do
                | :misconfigured_replica_identity}
         }
 
+  @type publication_status :: %{
+          can_alter_publication?: boolean(),
+          publishes_all_operations?: boolean(),
+          publishes_generated_columns?: boolean()
+        }
+
   @typep changed_relation ::
            {
              Electric.relation_id(),
@@ -32,40 +38,40 @@ defmodule Electric.Postgres.Configuration do
   @typep publication_relation :: {Electric.relation_id(), Electric.relation(), <<_::8>>}
 
   @doc """
-  Check whether the publication with the given name exists, is configured to
-  publish all required operations, and is owned by the current user.
+  Check whether the publication with the given name exists, and return its status.
+  The status includes whether the publication is owned, whether it publishes all operations,
+  and whether it publishes generated columns (if supported by the Postgres version).
   """
-  @spec check_publication_status!(Postgrex.conn(), String.t()) :: :ok
+  @spec check_publication_status!(Postgrex.conn(), String.t()) ::
+          publication_status() | :not_found
   def check_publication_status!(conn, publication_name) do
     query =
       """
       SELECT
-        pubinsert AND pubupdate AND pubdelete AND pubtruncate as all_operations,
-        pg_get_userbyid(p.pubowner) = current_role as is_owned
-      FROM pg_publication as p WHERE pubname = $1
+        pg_get_userbyid(p.pubowner) = current_role as can_alter_publication,
+        pubinsert AND pubupdate AND pubdelete AND pubtruncate as publishes_all_operations,
+        CASE WHEN current_setting('server_version_num')::int >= 180000
+            THEN p.pubgencols = 's'
+            ELSE FALSE
+        END AS publishes_generated_columns
+      FROM pg_publication as p WHERE pubname = $1;
       """
 
     Postgrex.query!(conn, query, [publication_name])
-    |> one_or_nil()
     |> case do
-      %{"all_operations" => true, "is_owned" => true} ->
-        :ok
+      %Postgrex.Result{
+        rows: [[can_alter_publication, publishes_all_operations, publishes_generated_columns]]
+      } ->
+        %{
+          can_alter_publication?: can_alter_publication,
+          publishes_all_operations?: publishes_all_operations,
+          publishes_generated_columns?: publishes_generated_columns
+        }
 
-      %{"is_owned" => false} ->
-        raise Electric.DbConfigurationError.publication_not_owned(publication_name)
-
-      %{"all_operations" => false} ->
-        raise Electric.DbConfigurationError.publication_missing_operations(publication_name)
-
-      _ ->
-        raise Electric.DbConfigurationError.publication_missing(publication_name)
+      %Postgrex.Result{num_rows: 0} ->
+        :not_found
     end
   end
-
-  defp one_or_nil(%Postgrex.Result{rows: [row], columns: cols}),
-    do: Enum.zip(cols, row) |> Map.new()
-
-  defp one_or_nil(_), do: nil
 
   @doc """
   Check whether the state of the publication relations in the database matches the sets of
