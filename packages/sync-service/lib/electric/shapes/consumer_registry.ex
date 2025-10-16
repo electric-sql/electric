@@ -80,8 +80,8 @@ defmodule Electric.Shapes.ConsumerRegistry do
     %{table: table} = registry_state
 
     shape_handles
-    |> Enum.map(fn handle ->
-      consumer_pid(handle, table) || start_consumer!(handle, registry_state)
+    |> Enum.flat_map(fn handle ->
+      (consumer_pid(handle, table) || start_consumer!(handle, registry_state)) |> List.wrap()
     end)
     |> broadcast(event)
   end
@@ -149,6 +149,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
         {:ok, n} = register_consumer(handle, pid, state)
         Logger.info("Started consumer #{n} for existing handle #{handle}")
         pid
+
+      {:error, :no_shape} ->
+        nil
 
       {:error, reason} ->
         raise RuntimeError,
