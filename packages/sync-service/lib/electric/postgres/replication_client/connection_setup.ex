@@ -77,9 +77,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
     # if PG version is 18 or higher, we want to include generated columns in the publication
     query =
-      if state.pg_version >= @pg18_version do
-        query <> " WITH (publish_generated_columns = stored)"
-      end
+      if state.pg_version >= @pg18_version,
+        do: query <> " WITH (publish_generated_columns = stored)",
+        else: query
 
     {:query, query, state}
   end
