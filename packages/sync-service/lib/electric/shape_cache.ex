@@ -272,10 +272,20 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:start_consumer_for_handle, shape_handle}, _from, state) do
-    {:ok, shape} = ShapeStatus.get_shape_by_handle(state.stack_id, shape_handle)
-    # TODO: otel ctx from shape log collector?
-    {:ok, pid} = start_shape(shape_handle, shape, state, nil, :restore)
-    {:reply, {:ok, pid}, state}
+    # This is racy: it's possible for a shape to have been deleted while the
+    # ShapeLogCollector is processing a transaction that includes it
+    # In this case get_shape_by_handle returns an error. ConsumerRegistry
+    # basically ignores the {:error, :no_shape} result - excluding the shape handle
+    # from the broadcast
+    case ShapeStatus.get_shape_by_handle(state.stack_id, shape_handle) do
+      {:ok, shape} ->
+        # TODO: otel ctx from shape log collector?
+        {:ok, pid} = start_shape(shape_handle, shape, state, nil, :restore)
+        {:reply, {:ok, pid}, state}
+
+      {:error, _reason} ->
+        {:reply, {:error, :no_shape}, state}
+    end
   end
 
   defp recover_shapes(state) do
