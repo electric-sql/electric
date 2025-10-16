@@ -406,7 +406,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       pool: conn,
       publication_name: publication
     } do
-      pg_version = Support.TestUtils.fetch_pg_version(ctx.db_conn)
+      pg_version = Support.TestUtils.fetch_pg_version(conn)
 
       if pg_version < 180_000 do
         assert %{

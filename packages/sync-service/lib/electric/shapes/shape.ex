@@ -203,9 +203,9 @@ defmodule Electric.Shapes.Shape do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          opts = Map.new(opts),
          inspector = Map.fetch!(opts, :inspector),
-         {:ok, supported_features} <- Inspector.load_supported_features(inspector),
          {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
+         {:ok, supported_features} <- load_supported_features(inspector),
          {:ok, selected_columns, explicitly_selected_columns} <-
            validate_selected_columns(column_info, pk_cols, supported_features, opts),
          refs = Inspector.columns_to_expr(column_info),
@@ -446,6 +446,13 @@ defmodule Electric.Shapes.Shape do
         pk_cols = Inspector.get_pk_cols(column_info)
 
         {:ok, column_info, pk_cols}
+    end
+  end
+
+  defp load_supported_features(inspector) do
+    case Inspector.load_supported_features(inspector) do
+      {:ok, features} -> {:ok, features}
+      {:error, :connection_not_available} -> connection_not_available_error()
     end
   end
 

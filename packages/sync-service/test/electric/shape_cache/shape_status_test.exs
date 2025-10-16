@@ -467,4 +467,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   def load_relation_oid({"public", "other_table"}, _),
     do: {:ok, {1338, {"public", "other_table"}}}
+
+  def load_supported_features(_), do: {:ok, %{supports_generated_column_replication: true}}
 end
