@@ -406,8 +406,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       pool: conn,
       publication_name: publication
     } do
-      %{rows: [[pg_version]]} =
-        Postgrex.query!(conn, "SELECT current_setting('server_version_num')::int", [])
+      pg_version = Support.TestUtils.fetch_pg_version(ctx.db_conn)
 
       if pg_version < 180_000 do
         assert %{

@@ -203,10 +203,11 @@ defmodule Electric.Shapes.Shape do
     with {:ok, opts} <- NimbleOptions.validate(opts, @shape_schema),
          opts = Map.new(opts),
          inspector = Map.fetch!(opts, :inspector),
+         {:ok, supported_features} <- Inspector.load_supported_features(inspector),
          {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
          {:ok, selected_columns, explicitly_selected_columns} <-
-           validate_selected_columns(column_info, pk_cols, opts),
+           validate_selected_columns(column_info, pk_cols, supported_features, opts),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where, shape_dependencies} <-
            validate_where_clause(Map.get(opts, :where), opts, refs) do
@@ -335,6 +336,7 @@ defmodule Electric.Shapes.Shape do
   @spec validate_selected_columns(
           [Inspector.column_info()],
           [String.t()],
+          Inspector.supported_features(),
           map()
         ) ::
           {:ok, needed :: [String.t(), ...], selected :: [String.t(), ...]}
@@ -342,7 +344,12 @@ defmodule Electric.Shapes.Shape do
 
   # When an explicit list of columns was included in the shape request, make sure that they are
   # valid, they cover all the PK columns and none of them is a generated column.
-  defp validate_selected_columns(column_info, pk_cols, %{columns: columns_to_select} = opts)
+  defp validate_selected_columns(
+         column_info,
+         pk_cols,
+         %{supports_generated_column_replication: supports_generated_column_replication},
+         %{columns: columns_to_select} = opts
+       )
        when is_list(columns_to_select) do
     autofill_pk_select? = Map.fetch!(opts, :autofill_pk_select?)
 
@@ -359,7 +366,7 @@ defmodule Electric.Shapes.Shape do
         invalid_cols != [] ->
           "The following columns are not found on the table: " <> Enum.join(invalid_cols, ", ")
 
-        generated_cols != [] ->
+        generated_cols != [] and not supports_generated_column_replication ->
           "The following columns are generated and cannot be included in the shape: " <>
             (generated_cols |> Enum.map(& &1.name) |> Enum.join(", "))
 
@@ -381,10 +388,15 @@ defmodule Electric.Shapes.Shape do
 
   # No explicit column list was included in the shape request. Only check for the presence of
   # generated columns in the table schema.
-  defp validate_selected_columns(column_info, _pk_cols, _) do
+  defp validate_selected_columns(
+         column_info,
+         _pk_cols,
+         %{supports_generated_column_replication: supports_generated_column_replication},
+         _opts
+       ) do
     generated_cols = Enum.filter(column_info, & &1.is_generated)
 
-    if generated_cols == [] do
+    if generated_cols == [] or supports_generated_column_replication do
       all_columns = column_info |> Enum.map(& &1.name) |> Enum.sort()
       {:ok, all_columns, all_columns}
     else

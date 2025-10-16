@@ -231,5 +231,16 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   defp parse_type_kind("m"), do: :multirange
 
   @impl Electric.Postgres.Inspector
+  def load_supported_features(conn) do
+    with {:ok, %{rows: [[pg_version]]}} <-
+           Postgrex.query(conn, "SELECT current_setting('server_version_num')::int", []) do
+      {:ok,
+       %{
+         supports_generated_column_replication: pg_version >= 180_000
+       }}
+    end
+  end
+
+  @impl Electric.Postgres.Inspector
   def clean(_, _), do: :ok
 end

@@ -127,6 +127,18 @@ defmodule Support.TestUtils do
     for [schema_name, table_name] <- rows, do: {schema_name, table_name}
   end
 
+  def fetch_pg_version(conn) do
+    %Postgrex.Result{rows: [[version]]} =
+      Postgrex.query!(conn, "SELECT current_setting('server_version_num')::int")
+
+    version
+  end
+
+  def fetch_supported_features(conn) do
+    {:ok, features} = Electric.Postgres.Inspector.DirectInspector.load_supported_features(conn)
+    features
+  end
+
   def patch_snapshotter(fun) do
     Repatch.patch(
       Electric.Shapes.Consumer.Snapshotter,

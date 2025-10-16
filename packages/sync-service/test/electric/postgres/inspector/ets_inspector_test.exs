@@ -305,6 +305,45 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     end
   end
 
+  describe "load_supported_features/1" do
+    setup :with_shared_db
+    setup :in_transaction
+    setup :with_stack_id_from_test
+    setup [:with_persistent_kv, :with_inspector]
+    setup %{inspector: {EtsInspector, opts}}, do: %{opts: opts}
+
+    setup ctx do
+      %{pg_version: Support.TestUtils.fetch_pg_version(ctx.db_conn)}
+    end
+
+    test "returns supported features", %{opts: opts, pg_version: pg_version} do
+      assert {:ok, features} = EtsInspector.load_supported_features(opts)
+
+      if pg_version >= 180_000 do
+        assert %{supports_generated_column_replication: true} == features
+      else
+        assert %{supports_generated_column_replication: false} == features
+      end
+    end
+
+    test "concurrent calls load value exactly once", %{opts: opts} do
+      Repatch.spy(Postgrex)
+      Repatch.allow(self(), opts[:server])
+
+      task1 = Task.async(fn -> EtsInspector.load_supported_features(opts) end)
+      task2 = Task.async(fn -> EtsInspector.load_supported_features(opts) end)
+
+      assert {:ok, %{supports_generated_column_replication: _val} = features} = Task.await(task1)
+
+      assert {:ok, ^features} = Task.await(task2)
+
+      # Non-parallel call should return value from cache
+      assert {:ok, ^features} = EtsInspector.load_supported_features(opts)
+
+      assert Repatch.called?(Postgrex, :query, 3, by: opts[:server], exactly: 1)
+    end
+  end
+
   describe "list_relations_with_stale_cache/1" do
     setup :with_shared_db
     setup :in_transaction
@@ -419,6 +458,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
       assert {:ok, relation_info} = EtsInspector.load_relation_info(oid, opts)
       assert {:ok, columns} = EtsInspector.load_column_info(oid, opts)
+      assert {:ok, features} = EtsInspector.load_supported_features(opts)
       stop_supervised!(EtsInspector)
 
       # Change the underlying relation to ensure we get a cached result -
@@ -432,6 +472,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
       assert {:ok, ^relation_info} = EtsInspector.load_relation_info(oid, opts)
       assert {:ok, ^columns} = EtsInspector.load_column_info(oid, opts)
+      assert {:ok, ^features} = EtsInspector.load_supported_features(opts)
     end
 
     test "doesn't load back last seen state on a restart if the storage format is old",
@@ -494,6 +535,9 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
 
       assert {:error, :connection_not_available} =
                EtsInspector.load_column_info(1234, opts)
+
+      assert {:error, :connection_not_available} =
+               EtsInspector.load_supported_features(opts)
 
       assert :error = EtsInspector.list_relations_with_stale_cache(opts)
     end

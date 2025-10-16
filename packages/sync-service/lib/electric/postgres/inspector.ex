@@ -28,6 +28,10 @@ defmodule Electric.Postgres.Inspector do
           children: nil | [relation(), ...]
         }
 
+  @type supported_features :: %{
+          supports_generated_column_replication: boolean()
+        }
+
   @callback load_relation_oid(relation(), opts :: term()) ::
               {:ok, Electric.oid_relation()}
               | :table_not_found
@@ -41,6 +45,10 @@ defmodule Electric.Postgres.Inspector do
   @callback load_column_info(relation_id(), opts :: term()) ::
               {:ok, [column_info()]}
               | :table_not_found
+              | {:error, String.t() | :connection_not_available}
+
+  @callback load_supported_features(opts :: term()) ::
+              {:ok, supported_features()}
               | {:error, String.t() | :connection_not_available}
 
   @callback clean(relation_id(), opts :: term()) :: :ok
@@ -89,6 +97,15 @@ defmodule Electric.Postgres.Inspector do
           | {:error, String.t() | :connection_not_available}
   def load_column_info(relation_id, {module, opts}) when is_relation_id(relation_id) do
     module.load_column_info(relation_id, opts)
+  end
+
+  @doc """
+  Load the supported features on the target database using a provided inspector.
+  """
+  @spec load_supported_features(inspector()) ::
+          {:ok, supported_features()} | {:error, String.t() | :connection_not_available}
+  def load_supported_features({module, opts}) do
+    module.load_supported_features(opts)
   end
 
   @doc """
