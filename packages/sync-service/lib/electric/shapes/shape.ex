@@ -50,7 +50,8 @@ defmodule Electric.Shapes.Shape do
           compaction: :enabled | :disabled
         }
   @type log_mode() :: :changes_only | :full
-  @type flag() :: :selects_all_columns | :non_primitive_columns_in_where
+  @type flag() ::
+          :selects_all_columns | :selects_generated_columns | :non_primitive_columns_in_where
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
           root_table_id: Electric.relation_id(),
@@ -212,6 +213,9 @@ defmodule Electric.Shapes.Shape do
       flags =
         [
           if(is_nil(Map.get(opts, :columns)), do: :selects_all_columns),
+          if(any_columns_generated?(column_info, selected_columns),
+            do: :selects_generated_columns
+          ),
           if(any_columns_non_primitive?(column_info, where),
             do: :non_primitive_columns_in_where
           )
@@ -443,6 +447,15 @@ defmodule Electric.Shapes.Shape do
     |> Enum.filter(&(&1.name in unqualified_refs))
     |> Enum.any?(fn
       %{type_kind: kind} when kind in [:enum, :domain, :composite] -> true
+      _ -> false
+    end)
+  end
+
+  defp any_columns_generated?(column_info, selected_columns) when is_list(selected_columns) do
+    column_info
+    |> Enum.filter(&(&1.name in selected_columns))
+    |> Enum.any?(fn
+      %{is_generated: true} -> true
       _ -> false
     end)
   end
@@ -681,10 +694,15 @@ defmodule Electric.Shapes.Shape do
           Parser.validate_where_ast(where, params: Map.get(data, "params", %{}), refs: refs)
       end
 
+    actual_selected_columns = selected_columns || Enum.map(column_info, & &1.name)
+
     flags =
       Enum.reject(
         [
           if(is_nil(selected_columns), do: :selects_all_columns),
+          if(any_columns_generated?(column_info, actual_selected_columns),
+            do: :selects_generated_columns
+          ),
           if(any_columns_non_primitive?(column_info, where),
             do: :non_primitive_columns_in_where
           )
@@ -701,7 +719,7 @@ defmodule Electric.Shapes.Shape do
        root_column_count: length(column_info),
        flags: flags,
        where: where,
-       selected_columns: selected_columns || Enum.map(column_info, & &1.name),
+       selected_columns: actual_selected_columns,
        replica: String.to_atom(Map.get(data, "replica", "default")),
        storage: storage_config_from_json(Map.get(data, "storage"))
      }}
