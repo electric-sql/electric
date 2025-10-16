@@ -23,6 +23,12 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     GenServer.call(name(stack_id), {:remove_shape, shape_handle}, timeout)
   end
 
+  @spec remove_shape(shape_handle(), Keyword.t()) :: :ok
+  def remove_shape_async(shape_handle, opts) do
+    stack_id = Keyword.fetch!(opts, :stack_id)
+    GenServer.cast(name(stack_id), {:remove_shape, shape_handle})
+  end
+
   @spec remove_shapes_for_relations(list(Electric.oid_relation()), Keyword.t()) :: :ok
   def remove_shapes_for_relations(relations, opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -62,6 +68,11 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   @impl true
+  def handle_cast({:remove_shape, shape_handle}, state) do
+    :ok = stop_and_clean_shape(shape_handle, state)
+    {:noreply, state}
+  end
+
   def handle_cast({:clean_all_shapes_for_relations, relations}, state) do
     affected_shapes =
       ShapeStatus.list_shape_handles_for_relations(state.stack_id, relations)
