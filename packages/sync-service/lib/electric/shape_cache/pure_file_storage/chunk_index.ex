@@ -255,9 +255,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
   end
 
   defp fetch_chunk_with_positions(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
-    file = open!(chunk_file_path, [:read, :raw])
-
-    try do
+    open(chunk_file_path, [:read, :raw], fn file ->
       {:ok, size} = :file.position(file, :eof)
 
       file_complete? = rem(size, @full_record_width) == 0
@@ -269,16 +267,25 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
         nil ->
           if file_complete?,
-            do: :error,
+            do: :not_found,
             else: read_last_partial_chunk(file, size)
       end
-    after
-      File.close(file)
+    end)
+    |> case do
+      {:ok, :not_found} ->
+        :error
+
+      {:ok, result} ->
+        result
+
+      {:error, :enoent} ->
+        # The file not existing is ok - we expect that if no txns have been received for the shape
+        :error
+
+      {:error, reason} ->
+        raise Storage.Error,
+          message: "Could not open chunk index file #{chunk_file_path}: #{inspect(reason)}"
     end
-  rescue
-    err in [File.Error] ->
-      message = "Could not open chunk index file #{chunk_file_path}: #{inspect(err.reason)}"
-      reraise Storage.Error, [message: message], __STACKTRACE__
   end
 
   defp read_last_partial_chunk(file, size) do
