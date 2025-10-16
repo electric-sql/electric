@@ -412,7 +412,7 @@ defmodule Electric.Replication.ShapeLogCollector do
           dependency_layers =
             DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)
 
-          Electric.Shapes.ConsumerRegistry.remove(shape_handle, state.registry_state)
+          Electric.Shapes.ConsumerRegistry.remove_consumer(shape_handle, state.registry_state)
 
           OpenTelemetry.stop_and_save_intervals(
             total_attribute: "unsubscribe_shape.total_duration_µs"

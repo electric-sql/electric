@@ -6,7 +6,11 @@ defmodule Electric.Shapes.ConsumerRegistry do
   require Logger
   require Record
 
-  Record.defrecord(:registry_state, table: nil, stack_id: nil)
+  Record.defrecord(:registry_state,
+    table: nil,
+    stack_id: nil,
+    start_consumer_fun: &ShapeCache.start_consumer_for_handle/2
+  )
 
   @count_key :consumer_count
 
@@ -38,6 +42,11 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end
   end
 
+  @spec active_consumer_count(stack_id()) :: non_neg_integer()
+  def active_consumer_count(stack_id) when is_binary(stack_id) do
+    :ets.lookup_element(ets_name(stack_id), @count_key, 2)
+  end
+
   @spec register_consumer(shape_handle(), pid(), stack_id()) :: :ok
   def register_consumer(shape_handle, pid, stack_id) when is_binary(stack_id) do
     register_consumer(shape_handle, pid, ets_name(stack_id))
@@ -49,7 +58,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @spec register_consumer(shape_handle(), pid(), :ets.table()) :: :ok
-  def register_consumer(shape_handle, pid, table) when is_atom(table) do
+  def register_consumer(shape_handle, pid, table) when is_atom(table) or is_reference(table) do
     true = :ets.insert_new(table, [{shape_handle, pid}])
 
     table
@@ -70,8 +79,8 @@ defmodule Electric.Shapes.ConsumerRegistry do
     |> broadcast(event)
   end
 
-  @spec remove(shape_handle(), registry_state()) :: :ok
-  def remove(shape_handle, registry_state(table: table)) do
+  @spec remove_consumer(shape_handle(), registry_state()) :: :ok
+  def remove_consumer(shape_handle, registry_state(table: table)) do
     :ets.delete(table, shape_handle)
 
     table
@@ -125,10 +134,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end
   end
 
-  defp start_consumer!(handle, registry_state(stack_id: stack_id) = state) do
+  defp start_consumer!(handle, registry_state() = state) do
     Logger.info("Starting consumer for existing handle #{handle}")
 
-    case ShapeCache.start_consumer_for_handle(handle, stack_id: stack_id) do
+    registry_state(stack_id: stack_id, start_consumer_fun: start_consumer_fun) = state
+
+    case start_consumer_fun.(handle, stack_id: stack_id) do
       {:ok, pid} ->
         register_consumer(handle, pid, state)
         pid
@@ -140,6 +151,13 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end
   end
 
+  @doc false
+  def registry_table(stack_id) do
+    table = :ets.new(ets_name(stack_id), [:public, :named_table, write_concurrency: :auto])
+    :ets.insert(table, {@count_key, 0})
+    table
+  end
+
   @impl GenServer
   def init(args) do
     stack_id = Keyword.fetch!(args, :stack_id)
@@ -149,9 +167,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    table = :ets.new(ets_name(stack_id), [:public, :named_table, write_concurrency: :auto])
-
-    :ets.insert(table, {@count_key, 0})
+    table = registry_table(stack_id)
 
     state = registry_state(stack_id: stack_id, table: table)
 
