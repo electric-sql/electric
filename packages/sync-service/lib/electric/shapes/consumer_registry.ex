@@ -6,18 +6,21 @@ defmodule Electric.Shapes.ConsumerRegistry do
   require Logger
   require Record
 
-  Record.defrecord(:registry_state,
-    table: nil,
-    stack_id: nil,
-    start_consumer_fun: &ShapeCache.start_consumer_for_handle/2
-  )
+  defstruct table: nil,
+            stack_id: nil,
+            start_consumer_fun: &ShapeCache.start_consumer_for_handle/2
 
   @count_key :consumer_count
 
   @type stack_id() :: Electric.stack_id()
   @type stack_ref() :: stack_id() | [stack_id: stack_id()] | %{stack_id: stack_id()}
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type registry_state() :: record(:registry_state, table: :ets.table(), stack_id: stack_id())
+  @type start_consumer_fun() :: (shape_handle(), stack_ref() -> GenServer.on_start())
+  @type registry_state() :: %__MODULE__{
+          table: :ets.table(),
+          stack_id: stack_id(),
+          start_consumer_fun: start_consumer_fun()
+        }
 
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
@@ -29,14 +32,20 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end
   end
 
+  def registry_state(opts) do
+    struct(__MODULE__, opts)
+  end
+
   @spec get_registry_state!(stack_id()) :: {:ok, registry_state()}
-  def get_registry_state(stack_id) when is_binary(stack_id) do
-    GenServer.call(name(stack_id), :registry_state)
+  def get_registry_state(stack_id, opts \\ []) when is_binary(stack_id) do
+    with {:ok, state} <- GenServer.call(name(stack_id), :registry_state) do
+      {:ok, struct(state, opts)}
+    end
   end
 
   @spec get_registry_state!(stack_id()) :: registry_state()
-  def get_registry_state!(stack_id) when is_binary(stack_id) do
-    case get_registry_state(stack_id) do
+  def get_registry_state!(stack_id, opts \\ []) when is_binary(stack_id) do
+    case get_registry_state(stack_id, opts) do
       {:ok, state} -> state
       _ -> raise RuntimeError, message: "Unable to get registry state"
     end
@@ -53,7 +62,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @spec register_consumer(shape_handle(), pid(), registry_state()) :: :ok
-  def register_consumer(shape_handle, pid, registry_state(table: table)) do
+  def register_consumer(shape_handle, pid, %__MODULE__{table: table}) do
     register_consumer(shape_handle, pid, table)
   end
 
@@ -70,7 +79,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @spec publish([shape_handle()], term(), registry_state()) :: :ok
   def publish(shape_handles, event, registry_state) do
-    registry_state(table: table) = registry_state
+    %{table: table} = registry_state
 
     shape_handles
     |> Enum.map(fn handle ->
@@ -80,7 +89,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @spec remove_consumer(shape_handle(), registry_state()) :: :ok
-  def remove_consumer(shape_handle, registry_state(table: table)) do
+  def remove_consumer(shape_handle, %__MODULE__{table: table}) do
     :ets.delete(table, shape_handle)
 
     table
@@ -134,10 +143,10 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end
   end
 
-  defp start_consumer!(handle, registry_state() = state) do
+  defp start_consumer!(handle, %__MODULE__{} = state) do
     Logger.info("Starting consumer for existing handle #{handle}")
 
-    registry_state(stack_id: stack_id, start_consumer_fun: start_consumer_fun) = state
+    %__MODULE__{stack_id: stack_id, start_consumer_fun: start_consumer_fun} = state
 
     case start_consumer_fun.(handle, stack_id: stack_id) do
       {:ok, pid} ->
@@ -169,7 +178,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
     table = registry_table(stack_id)
 
-    state = registry_state(stack_id: stack_id, table: table)
+    state = %__MODULE__{stack_id: stack_id, table: table}
 
     {:ok, state}
   end

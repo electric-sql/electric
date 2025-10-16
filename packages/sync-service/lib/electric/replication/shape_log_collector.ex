@@ -28,7 +28,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
-            persistent_kv: [type: :any, required: true]
+            persistent_kv: [type: :any, required: true],
+            consumer_registry_opts: [type: :any]
           )
 
   defguardp is_ready_to_process(state)
@@ -141,7 +142,11 @@ defmodule Electric.Replication.ShapeLogCollector do
               end
             end
           ),
-        registry_state: ConsumerRegistry.get_registry_state!(stack_id)
+        registry_state:
+          ConsumerRegistry.get_registry_state!(
+            stack_id,
+            Map.get(opts, :consumer_registry_opts, [])
+          )
       })
 
     {:ok, state, {:continue, :restore_shapes}}

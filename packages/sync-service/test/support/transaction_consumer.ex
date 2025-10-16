@@ -1,5 +1,5 @@
 defmodule Support.TransactionConsumer do
-  use GenServer
+  use GenServer, restart: :temporary
 
   alias Electric.Replication.Changes.{Transaction, Relation}
 
@@ -37,6 +37,10 @@ defmodule Support.TransactionConsumer do
     end
   end
 
+  def stop(pid, reason) do
+    GenServer.cast(pid, {:stop, reason})
+  end
+
   def init(opts) do
     Process.flag(:trap_exit, true)
     {:ok, producer} = Keyword.fetch(opts, :producer)
@@ -54,6 +58,10 @@ defmodule Support.TransactionConsumer do
   def handle_call({:handle_event, txn, _ctx}, _from, state) do
     send(state.parent, {__MODULE__, {state.id, self()}, [txn]})
     {:reply, :ok, state}
+  end
+
+  def handle_cast({:stop, reason}, state) do
+    {:stop, reason, state}
   end
 
   # we no longer monitor consumer processes in the ShapeLogCollector
