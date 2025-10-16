@@ -1,8 +1,7 @@
-defmodule Electric.PublisherTest do
+defmodule Electric.Shapes.ConsumerRegistryTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Publisher
-  alias Electric.PublisherTest.TestSubscriber
+  alias Electric.Shapes.ConsumerRegistry
 
   defmodule TestSubscriber do
     use GenServer
@@ -21,13 +20,13 @@ defmodule Electric.PublisherTest do
     end
   end
 
-  describe "publish/2" do
+  describe "broadcast/2" do
     test "sends message to all subscribers" do
       pid = self()
       {:ok, sub1} = TestSubscriber.start_link(fn message -> send(pid, {:sub1, message}) end)
       {:ok, sub2} = TestSubscriber.start_link(fn message -> send(pid, {:sub2, message}) end)
 
-      Publisher.publish([sub1, sub2], :test_message)
+      ConsumerRegistry.broadcast([sub1, sub2], :test_message)
 
       assert_receive {:sub1, :test_message}
       assert_receive {:sub2, :test_message}
@@ -48,7 +47,7 @@ defmodule Electric.PublisherTest do
       {:ok, sub2} = TestSubscriber.start_link(on_message)
 
       Task.async(fn ->
-        Publisher.publish([sub1, sub2], :test_message)
+        ConsumerRegistry.broadcast([sub1, sub2], :test_message)
         send(pid, :publish_finished)
       end)
 
@@ -79,7 +78,7 @@ defmodule Electric.PublisherTest do
       pid = self()
 
       Task.async(fn ->
-        Publisher.publish([sub1, sub2], :test_message)
+        ConsumerRegistry.broadcast([sub1, sub2], :test_message)
         send(pid, :publish_finished)
       end)
 
