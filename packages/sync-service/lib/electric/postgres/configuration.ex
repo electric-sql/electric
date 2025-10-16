@@ -45,13 +45,15 @@ defmodule Electric.Postgres.Configuration do
   @spec check_publication_status!(Postgrex.conn(), String.t()) ::
           publication_status() | :not_found
   def check_publication_status!(conn, publication_name) do
+    # note: we could do a separate query to get the PG version, unsure which is more efficient
+    # but avoiding having to know the PG version in advance keeps things contained and simple
     query =
       """
       SELECT
         pg_get_userbyid(p.pubowner) = current_role as can_alter_publication,
         pubinsert AND pubupdate AND pubdelete AND pubtruncate as publishes_all_operations,
         CASE WHEN current_setting('server_version_num')::int >= 180000
-            THEN p.pubgencols = 's'
+            THEN (to_jsonb(p) ->> 'pubgencols') = 's'
             ELSE FALSE
         END AS publishes_generated_columns
       FROM pg_publication as p WHERE pubname = $1;
