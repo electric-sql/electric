@@ -10,6 +10,7 @@ defmodule Electric.ShapeCacheBehaviour do
 
   @callback get_shape(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
+  @callback get_shape_by_handle(shape_handle(), opts :: Access.t()) ::  {:ok, Shape.t()} | {:error, term()}
   @callback get_or_create_shape_handle(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
   @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}] | :error
@@ -102,6 +103,7 @@ defmodule Electric.ShapeCache do
     ShapeStatus.get_existing_shape(table, shape)
   end
 
+  @impl Electric.ShapeCacheBehaviour
   def get_shape_by_handle(handle, opts) do
     table = ShapeStatus.shape_meta_table(opts)
     ShapeStatus.get_shape_by_handle(table, handle)
