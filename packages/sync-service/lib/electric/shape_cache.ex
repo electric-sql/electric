@@ -279,7 +279,7 @@ defmodule Electric.ShapeCache do
     import Electric.Postgres.Lsn, only: [is_larger: 2]
 
     start_time = System.monotonic_time()
-    %{storage: storage} = state
+    %{stack_id: stack_id, storage: storage} = state
 
     all_handles_and_shapes = ShapeStatus.list_shapes(state.stack_id)
 
@@ -288,6 +288,12 @@ defmodule Electric.ShapeCache do
       |> Task.async_stream(
         fn {shape_handle, shape} ->
           shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
+
+          # the ets may not have been serialised before the snapshot status is recorded
+          # we used to rely on the consumer process to validate this but that doesn't
+          # work if we're not starting them
+          if Electric.ShapeCache.Storage.snapshot_started?(shape_storage),
+            do: ShapeStatus.mark_snapshot_started(stack_id, shape_handle)
 
           case Electric.ShapeCache.Storage.get_current_position(shape_storage) do
             {:ok, latest_offset, _pg_snapshot} ->
@@ -298,7 +304,7 @@ defmodule Electric.ShapeCache do
                 "shape #{inspect(shape)} (#{inspect(shape_handle)}) returned error from get_current_position: #{inspect(reason)}"
               )
 
-              ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
+              ShapeCleaner.remove_shape(shape_handle, stack_id: stack_id)
 
               {shape_handle, :error}
           end
