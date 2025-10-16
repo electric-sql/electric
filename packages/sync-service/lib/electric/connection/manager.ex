@@ -95,8 +95,6 @@ defmodule Electric.Connection.Manager do
       :lock_connection_pg_backend_pid,
       # Timer reference for the periodic lock status check
       :lock_connection_timer,
-      # PIDs of the database connection pools
-      :pool_pids,
       # Backoff term used for reconnection with exponential back-off
       :connection_backoff,
       # PostgreSQL server version
@@ -120,6 +118,8 @@ defmodule Electric.Connection.Manager do
       :expiry_batch_size,
       :persistent_kv,
       :purge_all_shapes?,
+      # PIDs of the database connection pools
+      pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
       drop_slot_requested: false
     ]
@@ -442,39 +442,38 @@ defmodule Electric.Connection.Manager do
         %State{
           current_phase: :connection_setup,
           current_step: {:start_connection_pool, _},
-          pool_pids: nil
+          pool_pids: pool_pids
         } = state
-      ) do
+      )
+      when is_nil(pool_pids.admin) or is_nil(pool_pids.snapshot) do
     Logger.debug("Starting connection pool for stack #{state.stack_id}")
 
     case validate_connection(pooled_connection_opts(state), :pool, state) do
       {:ok, conn_opts, state} ->
         pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
 
-        {:ok, snapshot_pool_pid} =
-          Electric.Connection.Manager.Pool.start_link(
-            stack_id: state.stack_id,
-            role: :snapshot,
-            connection_manager: self(),
-            pool_opts: Keyword.put(state.pool_opts, :pool_size, pool_sizes.snapshot),
-            conn_opts: conn_opts
-          )
+        state =
+          [:snapshot, :admin]
+          |> Enum.filter(fn role -> is_nil(state.pool_pids[role]) end)
+          |> Enum.reduce(state, fn pool_role, state ->
+            pool_size = Map.fetch!(pool_sizes, pool_role)
 
-        {:ok, admin_pool_pid} =
-          Electric.Connection.Manager.Pool.start_link(
-            stack_id: state.stack_id,
-            role: :admin,
-            connection_manager: self(),
-            pool_opts: Keyword.put(state.pool_opts, :pool_size, pool_sizes.admin),
-            conn_opts: conn_opts
-          )
+            {:ok, pool_pid} =
+              Electric.Connection.Manager.Pool.start_link(
+                stack_id: state.stack_id,
+                role: pool_role,
+                connection_manager: self(),
+                pool_opts: Keyword.put(state.pool_opts, :pool_size, pool_size),
+                conn_opts: conn_opts
+              )
 
-        state = %{
-          state
-          | pool_pids: %{admin: {admin_pool_pid, false}, snapshot: {snapshot_pool_pid, false}},
-            current_step: {:start_connection_pool, :connecting}
-        }
+            %{
+              state
+              | pool_pids: Map.put(state.pool_pids, pool_role, {pool_pid, false})
+            }
+          end)
 
+        state = %{state | current_step: {:start_connection_pool, :connecting}}
         {:noreply, state}
 
       # the ConnectionResolver process was killed, as part of the application
@@ -1019,7 +1018,7 @@ defmodule Electric.Connection.Manager do
 
     with false <- drop_slot_and_restart(error, state),
          false <- stop_if_fatal_error(error, state) do
-      if state.current_phase == :connection_setup do
+      if should_retry_connection?(state, pid_type) do
         state = schedule_reconnection_after_error(error, pid_type, state)
         {:noreply, state}
       else
@@ -1180,23 +1179,25 @@ defmodule Electric.Connection.Manager do
   defp schedule_reconnection(
          step,
          %State{
-           connection_backoff: {conn_backoff, _}
+           connection_backoff: {conn_backoff, tref}
          } = state
        ) do
     {time, conn_backoff} = ConnectionBackoff.fail(conn_backoff)
+    if is_reference(tref), do: :erlang.cancel_timer(tref)
     tref = :erlang.start_timer(time, self(), {:retry_connection, step})
     Logger.warning("Reconnecting in #{inspect(time)}ms")
     %{state | connection_backoff: {conn_backoff, tref}}
   end
 
   defp mark_connection_succeeded(%State{connection_backoff: {conn_backoff, tref}} = state) do
+    if is_reference(tref), do: :erlang.cancel_timer(tref)
     {total_retry_time, conn_backoff} = ConnectionBackoff.succeed(conn_backoff)
 
     if total_retry_time > 0 do
       Logger.info("Reconnection succeeded after #{inspect(total_retry_time)}ms")
     end
 
-    %{state | connection_backoff: {conn_backoff, tref}}
+    %{state | connection_backoff: {conn_backoff, nil}}
   end
 
   defp replication_connection_opts(state),
@@ -1273,6 +1274,36 @@ defmodule Electric.Connection.Manager do
       event
     )
   end
+
+  defp should_retry_connection?(
+         %State{
+           current_phase: :connection_setup,
+           current_step: {:start_lock_connection, _}
+         },
+         :lock_connection
+       ),
+       do: true
+
+  defp should_retry_connection?(
+         %State{
+           current_phase: :connection_setup,
+           current_step: {:start_replication_client, _}
+         },
+         :replication_client
+       ),
+       do: true
+
+  defp should_retry_connection?(
+         %State{
+           current_phase: :connection_setup,
+           current_step: {:start_connection_pool, _}
+         },
+         pid_type
+       )
+       when pid_type in [:pools, :admin_pool, :snapshot_pool],
+       do: true
+
+  defp should_retry_connection?(_state, _pid_type), do: false
 
   defp nillify_pid(%State{lock_connection_pid: pid} = state, pid),
     do: {:lock_connection, %{state | lock_connection_pid: nil}}
