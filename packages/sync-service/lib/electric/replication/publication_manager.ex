@@ -39,6 +39,10 @@ defmodule Electric.Replication.PublicationManager do
     tracked_shape_handles: %{},
     waiters: %{},
     scheduled_updated_ref: nil,
+    # start with optimistic assumption about what the
+    # publication supports (altering and generated columns)
+    # and rely on the first check to correct that
+    publishes_generated_columns?: true,
     can_alter_publication?: true,
     next_update_forced?: false,
     restore_waiters: [],
@@ -46,6 +50,7 @@ defmodule Electric.Replication.PublicationManager do
   ]
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
+  @typep publication_filter() :: {Electric.oid_relation(), with_generated_cols :: boolean()}
   @typep state() :: %__MODULE__{
            stack_id: Electric.stack_id(),
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
@@ -54,9 +59,10 @@ defmodule Electric.Replication.PublicationManager do
            update_debounce_timeout: timeout(),
            scheduled_updated_ref: nil | reference(),
            waiters: %{Electric.oid_relation() => [GenServer.from(), ...]},
-           tracked_shape_handles: %{shape_handle() => Electric.oid_relation()},
+           tracked_shape_handles: %{shape_handle() => publication_filter()},
            publication_name: String.t(),
            db_pool: term(),
+           publishes_generated_columns?: boolean(),
            can_alter_publication?: boolean(),
            manual_table_publishing?: boolean(),
            publication_refresh_period: non_neg_integer(),
@@ -108,9 +114,9 @@ defmodule Electric.Replication.PublicationManager do
   @impl __MODULE__
   def add_shape(shape_handle, shape, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
-    oid_relation = get_oid_relation_from_shape(shape)
+    pub_filter = get_publication_filter_from_shape(shape)
 
-    case GenServer.call(server, {:add_shape, shape_handle, oid_relation}) do
+    case GenServer.call(server, {:add_shape, shape_handle, pub_filter}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
@@ -183,8 +189,11 @@ defmodule Electric.Replication.PublicationManager do
           |> Enum.reduce(
             state,
             fn {shape_handle, shape}, state ->
-              rel_key = get_oid_relation_from_shape(shape)
-              do_update_relation_filters_with_shape(shape_handle, rel_key, :add, state)
+              add_shape_to_publication_filters(
+                shape_handle,
+                get_publication_filter_from_shape(shape),
+                state
+              )
             end
           )
 
@@ -199,20 +208,41 @@ defmodule Electric.Replication.PublicationManager do
   end
 
   @impl true
-  def handle_call({:add_shape, shape_handle, oid_rel}, from, state) do
-    state = add_shape_to_relation_filters(shape_handle, oid_rel, state)
+  def handle_call({:add_shape, shape_handle, publication_filter}, from, state) do
+    state = add_shape_to_publication_filters(shape_handle, publication_filter, state)
     state = schedule_update_if_necessary(state)
 
-    if not relation_tracked?(oid_rel, state) do
-      state = add_waiter(from, oid_rel, state)
-      {:noreply, state, refresh_timeout(state)}
-    else
-      {:reply, :ok, state, refresh_timeout(state)}
+    {oid_rel, with_gen_cols} = publication_filter
+
+    cond do
+      # if the publication doesn't support generated columns, fail any shapes
+      # that require them immediately
+      with_gen_cols and not state.publishes_generated_columns? ->
+        {
+          :reply,
+          {:error,
+           Electric.DbConfigurationError.publication_missing_generated_columns(
+             state.publication_name
+           )},
+          state,
+          refresh_timeout(state)
+        }
+
+      # if the relation is already part of the committed publication filters,
+      # we can reply immediately
+      MapSet.member?(state.committed_relation_filters, oid_rel) ->
+        {:reply, :ok, state, refresh_timeout(state)}
+
+      # otherwise, add the caller to the waiters list and reply when the
+      # publication is ready
+      true ->
+        state = add_waiter(from, shape_handle, publication_filter, state)
+        {:noreply, state, refresh_timeout(state)}
     end
   end
 
   def handle_call({:remove_shape, shape_handle}, _from, state) do
-    state = remove_shape_from_relation_filters(shape_handle, state)
+    state = remove_shape_from_publication_filters(shape_handle, state)
     state = schedule_update_if_necessary(state)
 
     # never wait for removals - reply immediately and let publication manager
@@ -286,23 +316,41 @@ defmodule Electric.Replication.PublicationManager do
 
   @spec check_publication_status(state()) :: {:ok, state()} | {:error, any(), state()}
   defp check_publication_status(state) do
-    Configuration.check_publication_status!(state.db_pool, state.publication_name)
-    {:ok, %{state | can_alter_publication?: true}}
+    case Configuration.check_publication_status!(state.db_pool, state.publication_name) do
+      %{publishes_all_operations?: false} ->
+        # TODO: notify connection manager about misconfiguration so that
+        # it can restart itself and set up the publication correctly, or
+        # configure them automatically in case it is owned
+        {:error,
+         Electric.DbConfigurationError.publication_missing_operations(state.publication_name),
+         state}
+
+      %{
+        can_alter_publication?: can_alter_publication?,
+        publishes_generated_columns?: publishes_generated_columns?
+      } ->
+        # if the publication has switched form being able to publish generated columns
+        # to not being able to publish them, we need to fail any shapes that depend on
+        # that feature
+        state =
+          if state.publishes_generated_columns? and not publishes_generated_columns?,
+            do: fail_generated_column_shapes(state),
+            else: state
+
+        {:ok,
+         %{
+           state
+           | can_alter_publication?: can_alter_publication?,
+             publishes_generated_columns?: publishes_generated_columns?
+         }}
+
+      :not_found ->
+        # TODO: notify connection manager about misconfiguration so that
+        # it can restart itself and set up the publication correctly
+        {:error, Electric.DbConfigurationError.publication_missing(state.publication_name), state}
+    end
   rescue
-    err in Electric.DbConfigurationError ->
-      case err.type do
-        :publication_not_owned ->
-          # if we can't alter the publication, we can still validate it
-          {:ok, %{state | can_alter_publication?: false}}
-
-        _ ->
-          # TODO: notify connection manager about misconfiguration so that
-          # it can restart itself and set up the publication correctly
-          {:error, err, state}
-      end
-
-    err ->
-      {:error, err, state}
+    err -> {:error, err, state}
   catch
     :exit, {_, {DBConnection.Holder, :checkout, _}} ->
       {:error, %RuntimeError{message: "Database connection not available"}, state}
@@ -440,10 +488,6 @@ defmodule Electric.Replication.PublicationManager do
     %{state | restore_complete?: true, restore_waiters: []}
   end
 
-  defp relation_tracked?(oid_rel, %__MODULE__{committed_relation_filters: committed}) do
-    MapSet.member?(committed, oid_rel)
-  end
-
   defp update_needed?(%__MODULE__{
          prepared_relation_filters: prepared,
          committed_relation_filters: committed
@@ -464,50 +508,47 @@ defmodule Electric.Replication.PublicationManager do
   defguardp is_tracking_shape_handle?(shape_handle, state)
             when is_map_key(state.tracked_shape_handles, shape_handle)
 
-  @spec add_shape_to_relation_filters(shape_handle(), Electric.oid_relation(), state()) :: state()
-  defp add_shape_to_relation_filters(shape_handle, _rel_key, state)
+  @spec add_shape_to_publication_filters(shape_handle(), publication_filter(), state()) :: state()
+  defp add_shape_to_publication_filters(shape_handle, _pub_filter, state)
        when is_tracking_shape_handle?(shape_handle, state) do
     Logger.debug("Shape handle already tracked: #{inspect(shape_handle)}")
     state
   end
 
-  defp add_shape_to_relation_filters(shape_handle, rel_key, state) do
-    do_update_relation_filters_with_shape(shape_handle, rel_key, :add, state)
+  defp add_shape_to_publication_filters(shape_handle, {rel_key, _} = pub_filter, state) do
+    state = track_shape_handle(shape_handle, pub_filter, state)
+    do_update_relation_filters(rel_key, :add, state)
   end
 
-  @spec remove_shape_from_relation_filters(shape_handle(), state()) :: state()
-  defp remove_shape_from_relation_filters(shape_handle, state)
+  @spec remove_shape_from_publication_filters(shape_handle(), state()) :: state()
+  defp remove_shape_from_publication_filters(shape_handle, state)
        when not is_tracking_shape_handle?(shape_handle, state) do
     Logger.debug("Shape handle already not tracked: #{inspect(shape_handle)}")
     state
   end
 
-  defp remove_shape_from_relation_filters(shape_handle, state) do
+  defp remove_shape_from_publication_filters(shape_handle, state) do
     rel_key = fetch_tracked_shape_relation!(shape_handle, state)
-    do_update_relation_filters_with_shape(shape_handle, rel_key, :remove, state)
+    state = untrack_shape_handle(shape_handle, state)
+    do_update_relation_filters(rel_key, :remove, state)
   end
 
-  @spec do_update_relation_filters_with_shape(
-          shape_handle(),
+  @spec do_update_relation_filters(
           Electric.oid_relation(),
           :add | :remove,
           state()
         ) :: state()
-  defp do_update_relation_filters_with_shape(
-         shape_handle,
+  defp do_update_relation_filters(
          {_oid, _rel} = rel_key,
          operation,
          %__MODULE__{prepared_relation_filters: prepared, relation_ref_counts: counts} = state
        ) do
     current = Map.get(counts, rel_key, 0)
 
-    {new_count, state} =
+    new_count =
       case operation do
-        :add ->
-          {current + 1, track_shape_handle(shape_handle, rel_key, state)}
-
-        :remove ->
-          {max(current - 1, 0), untrack_shape_handle(shape_handle, state)}
+        :add -> current + 1
+        :remove -> max(current - 1, 0)
       end
 
     # we could rederive the prepared filters from the keys of the counts map
@@ -539,15 +580,18 @@ defmodule Electric.Replication.PublicationManager do
     %{state | prepared_relation_filters: prepared, relation_ref_counts: counts}
   end
 
-  @spec add_waiter(GenServer.from(), Electric.oid_relation(), state()) :: state()
-  defp add_waiter(from, oid_rel, %__MODULE__{waiters: waiters} = state) do
-    %{state | waiters: Map.update(waiters, oid_rel, [from], &[from | &1])}
+  @spec add_waiter(GenServer.from(), shape_handle(), publication_filter(), state()) ::
+          state()
+  defp add_waiter(from, shape_handle, pub_filter, %__MODULE__{waiters: waiters} = state) do
+    {oid_rel, _} = pub_filter
+    from_tuple = {from, shape_handle}
+    %{state | waiters: Map.update(waiters, oid_rel, [from_tuple], &[from_tuple | &1])}
   end
 
   @spec reply_to_relation_waiters(Electric.oid_relation(), any(), state()) :: state()
   defp reply_to_relation_waiters(oid_rel, reply, %__MODULE__{waiters: waiters} = state) do
     rel_waiters = Map.get(waiters, oid_rel, [])
-    for from <- rel_waiters, do: GenServer.reply(from, reply)
+    for {from, _} <- rel_waiters, do: GenServer.reply(from, reply)
     %{state | waiters: Map.delete(waiters, oid_rel)}
   end
 
@@ -558,6 +602,48 @@ defmodule Electric.Replication.PublicationManager do
     end)
   end
 
+  # In case the publication switches from publishing to not publishing generated columns,
+  # we fail any shapes and waiters that depend on that feature. We use an inefficient O(n)
+  # scan through our tracked shapes to find those that depend on generated columns as this
+  # is only expected to happen in the rare cases of publication reconfiguration at runtime.
+  @spec fail_generated_column_shapes(state()) :: state()
+  defp fail_generated_column_shapes(state) do
+    missing_gen_col_error =
+      Electric.DbConfigurationError.publication_missing_generated_columns(state.publication_name)
+
+    to_fail =
+      state.tracked_shape_handles
+      |> Map.filter(fn {_handle, {_oid_rel, with_gen_cols}} -> with_gen_cols end)
+
+    # scan through and reply to any waiters for shapes that require generated columns
+    new_waiters =
+      to_fail
+      |> Enum.group_by(fn {_handle, {oid_rel, _}} -> oid_rel end, fn {handle, _} -> handle end)
+      |> Enum.reduce(state.waiters, fn {oid_rel, handles_to_fail}, waiters ->
+        if rel_waiters = Map.get(waiters, oid_rel) do
+          {to_fail, to_keep} =
+            rel_waiters |> Enum.split_with(fn {_from, handle} -> handle in handles_to_fail end)
+
+          for {from, _} <- to_fail,
+              do: GenServer.reply(from, {:error, missing_gen_col_error})
+
+          if to_keep == [],
+            do: Map.delete(waiters, oid_rel),
+            else: Map.put(waiters, oid_rel, to_keep)
+        else
+          waiters
+        end
+      end)
+
+    # schedule removals for any tracked shapes that require generated columns
+    for {handle, _} <- to_fail do
+      ShapeCleaner.remove_shape_async(handle, stack_id: state.stack_id)
+    end
+
+    %{state | waiters: new_waiters}
+  end
+
+  @spec fetch_tracked_shape_relation!(shape_handle(), state()) :: Electric.oid_relation()
   defp fetch_tracked_shape_relation!(
          shape_handle,
          %__MODULE__{
@@ -565,18 +651,21 @@ defmodule Electric.Replication.PublicationManager do
          } = state
        )
        when is_tracking_shape_handle?(shape_handle, state) do
-    Map.fetch!(tracked_shape_handles, shape_handle)
+    {oid_rel, _} = Map.fetch!(tracked_shape_handles, shape_handle)
+    oid_rel
   end
 
+  @spec track_shape_handle(shape_handle(), publication_filter(), state()) :: state()
   defp track_shape_handle(
          shape_handle,
-         relation,
+         pub_filter,
          %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
        )
        when not is_tracking_shape_handle?(shape_handle, state) do
-    %{state | tracked_shape_handles: Map.put_new(tracked_shape_handles, shape_handle, relation)}
+    %{state | tracked_shape_handles: Map.put_new(tracked_shape_handles, shape_handle, pub_filter)}
   end
 
+  @spec untrack_shape_handle(shape_handle(), state()) :: state()
   defp untrack_shape_handle(
          shape_handle,
          %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
@@ -585,8 +674,13 @@ defmodule Electric.Replication.PublicationManager do
     %{state | tracked_shape_handles: Map.delete(tracked_shape_handles, shape_handle)}
   end
 
-  defp get_oid_relation_from_shape(%Shape{root_table: relation, root_table_id: oid}),
-    do: {oid, relation}
+  @spec get_publication_filter_from_shape(Shape.t()) :: publication_filter()
+  defp get_publication_filter_from_shape(%Shape{
+         root_table: relation,
+         root_table_id: oid,
+         flags: flags
+       }),
+       do: {{oid, relation}, Map.get(flags, :selects_generated_columns, false)}
 
   defp publication_error(:relation_missing_from_publication, oid_rel, state) do
     tail =
