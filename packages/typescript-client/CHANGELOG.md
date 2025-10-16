@@ -1,5 +1,16 @@
 # @electric-sql/client
 
+## 1.1.0
+
+### Minor Changes
+
+- 37242f6: Deprecate `experimental_live_sse` and introduce proper `live_sse` flag for sending live updates as server sent events.
+
+### Patch Changes
+
+- 37242f6: Handle 409 must refetch message from both SSE and long poll fetches correctly.
+- a328418: Ensure `FetchBackoffAbortError` is emitted even if aborting while request body is being streamed.
+
 ## 1.0.14
 
 ### Patch Changes

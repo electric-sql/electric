@@ -1,5 +1,30 @@
 # @core/sync-service
 
+## 1.2.0
+
+### Minor Changes
+
+- e63c398: Remove old FileStorage implementation
+- 37242f6: Deprecate `experimental_live_sse` and introduce proper `live_sse` flag for sending live updates as server sent events.
+
+### Patch Changes
+
+- 02363fe: Add `stack_id` as logger metadata to telemetry reporter.
+- 1585136: Validate connection options for lock breaker connection.
+- bec7bfd: Stop reporting disk usage in StackTelemetry, it's too expensive for a regular measurement.
+- fa2660b: Reduce memory footprint of shape consumer processes by avoiding repeating the same path prefix multiple times and calculating shape-specific storage fields on the fly instead.
+- d539102: Add a new configuration option ELECTRIC_REPLICATION_IDLE_TIMEOUT that allows Electric to close database connections automatically when the replication stream is idle. This enables the database server to scale-to-zero on supported providers.
+- 6fa0258: Simplify connection status error handling for runtime failures
+- 8eb1071: Change expiry policy to expire the excess shapes (the number over MAX_SHAPES) every minute
+- a057f9c: Fix deadlock appearing during high concurrency publication updates.
+- 519b936: Parse more DB errors as retryable (`ssl connect: closed` and `connection_refused` with PG code 08006).
+- 1c1f59c: Ensure publication update failures only affect relevant shapes
+- 562d290: Restore ShapeLogCollector's state from the ShapeStatus ETS table at startup
+- 852ec59: Restore shapes in `PublicationManager` via the `ShapeStatus` ETS to avoid message congestion.
+- 8f38a11: Parse compute node unreachable database errors as retryable.
+- 4f7aef1: Ensure the lock breaker connection is not linked to the connection manager to avoid unnecessary crashes.
+- 8f38a11: Ensure pool shutdown does not log independent exit error
+
 ## 1.1.14
 
 ### Patch Changes
