@@ -103,7 +103,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+      {:ok, 1} = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
@@ -123,7 +123,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           send(parent, {:broadcast, handle, message})
         end)
 
-      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+      {:ok, 1} = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
 
       assert pid == ConsumerRegistry.whereis(ctx.stack_id, handle)
     end
@@ -141,7 +141,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+      {:ok, 1} = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
