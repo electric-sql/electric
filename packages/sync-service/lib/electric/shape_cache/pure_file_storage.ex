@@ -681,7 +681,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     metadata_dir = shape_metadata_dir(opts)
 
     path = Path.join(metadata_dir, "#{key}.bin.tmp")
-    File.write!(path, :erlang.term_to_binary(value), [:write, :raw])
+    write!(path, :erlang.term_to_binary(value), [:write, :raw])
 
     rename!(path, Path.join(metadata_dir, "#{key}.bin"))
   end
@@ -716,7 +716,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp write_shape_definition!(%__MODULE__{} = opts, shape_definition) do
-    File.write!(
+    write!(
       shape_metadata_path(opts, "shape_definition.json"),
       Jason.encode!(shape_definition),
       [:raw]
@@ -1170,6 +1170,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
       {:error, reason} ->
         raise Storage.Error, message: inspect(reason) <> " while renaming #{path1} to #{path2}"
     end
+  end
+
+  defp write!(path, value, opts) do
+    File.write!(path, value, opts)
   end
 
   @doc false

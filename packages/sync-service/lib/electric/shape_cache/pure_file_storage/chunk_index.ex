@@ -66,7 +66,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
   end
 
   defp read_complete_chunk(path, n) do
-    File.open!(path, [:read, :raw], fn file ->
+    open!(path, [:read, :raw], fn file ->
       {:ok,
        <<tx1::64, op1::64, start_pos::64, key_start_pos::64, tx2::64, op2::64, end_pos::64,
          key_end_pos::64>>} =
@@ -78,7 +78,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
   end
 
   defp read_incomplete_chunk(path, n) do
-    File.open!(path, [:read, :raw], fn file ->
+    open!(path, [:read, :raw], fn file ->
       {:ok, <<tx::64, op::64, start_pos::64, key_start_pos::64>>} =
         :file.pread(file, n * @full_record_width, @half_record_width)
 
@@ -104,7 +104,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
   def get_last_boundary(chunk_file_path, chunk_file_size)
       when rem(chunk_file_size, @full_record_width) == 0 do
-    File.open!(chunk_file_path, [:read, :raw], fn file ->
+    open!(chunk_file_path, [:read, :raw], fn file ->
       {:ok, <<_::64*4, tx::64, op::64, end_pos::64, key_file_end_pos::64>>} =
         :file.pread(file, chunk_file_size - @full_record_width, @full_record_width)
 
@@ -114,7 +114,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
   def get_last_boundary(chunk_file_path, chunk_file_size)
       when rem(chunk_file_size, @full_record_width) == @half_record_width do
-    File.open!(chunk_file_path, [:read, :raw], fn file ->
+    open!(chunk_file_path, [:read, :raw], fn file ->
       {:ok, <<tx::64, op::64, start_pos::64, key_file_start_pos::64>>} =
         :file.pread(file, chunk_file_size - @half_record_width, @half_record_width)
 
@@ -132,7 +132,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     full_chunks_to_read = min(n - incomplete_chunk, full_chunks)
     full_chunks_to_skip = full_chunks - full_chunks_to_read
 
-    File.open(chunk_file_path, [:read, :raw], fn file ->
+    open(chunk_file_path, [:read, :raw], fn file ->
       {:ok, [full_chunks_data, incomplete_chunk_data]} =
         :file.pread(
           file,
@@ -221,7 +221,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
       {:complete, ^last_persisted_offset, _, _} ->
         # We don't need to trim the chunk, but the search position must be from the start of this chunk
-        File.open!(chunk_file_path, [:read, :raw], fn file ->
+        open!(chunk_file_path, [:read, :raw], fn file ->
           {:ok, <<_::64*2, start_pos::64, key_start_pos::64, _::64*4>>} =
             :file.pread(file, file_size - @full_record_width, @full_record_width)
 
@@ -255,7 +255,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
   end
 
   defp fetch_chunk_with_positions(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
-    file = File.open!(chunk_file_path, [:read, :raw])
+    file = open!(chunk_file_path, [:read, :raw])
 
     try do
       {:ok, size} = :file.position(file, :eof)
@@ -335,7 +335,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
           | {{LogOffset.t(), nil}, {non_neg_integer(), nil}, {non_neg_integer(), nil}}
         ]
   def read_chunk_file(path) do
-    File.open!(path, [:read, :raw], fn file ->
+    open!(path, [:read, :raw], fn file ->
       Stream.unfold(file, fn file ->
         case :file.read(file, @full_record_width) do
           {:ok,
@@ -372,7 +372,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     Utils.stream_add_side_effect(
       stream,
       # agg is {file, write_position, key_file_write_pos, byte_count, last_seen_offset}
-      fn -> {File.open!(path, [:write, :raw]), 0, 0, 0, nil} end,
+      fn -> {open!(path, [:write, :raw]), 0, 0, 0, nil} end,
       fn {offset, _, _, _, _, json_size, _} = line,
          {file, write_position, key_file_write_pos, byte_count, last_seen_offset} ->
         # Start the chunk if there's no last offset
@@ -454,5 +454,17 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     end)
     |> Stream.into(File.stream!(target, [:delayed_write]))
     |> Stream.run()
+  end
+
+  defp open!(path, opts) do
+    File.open!(path, opts)
+  end
+
+  defp open!(path, opts, fun) do
+    File.open!(path, opts, fun)
+  end
+
+  defp open(path, opts, fun) do
+    File.open(path, opts, fun)
   end
 end
