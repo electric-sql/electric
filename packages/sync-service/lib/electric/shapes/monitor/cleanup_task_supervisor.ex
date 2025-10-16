@@ -47,17 +47,23 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
           task2 =
             Task.Supervisor.async(name(stack_id), fn ->
               set_task_metadata(stack_id, shape_handle)
-              cleanup_storage(storage_impl, shape_handle)
+              cleanup_shape_log_collector(stack_id, shape_handle)
             end)
 
           task3 =
+            Task.Supervisor.async(name(stack_id), fn ->
+              set_task_metadata(stack_id, shape_handle)
+              cleanup_storage(storage_impl, shape_handle)
+            end)
+
+          task4 =
             Task.Supervisor.async(name(stack_id), fn ->
               set_task_metadata(stack_id, shape_handle)
               cleanup_publication_manager(publication_manager_impl, shape_handle)
             end)
 
           try do
-            [task1, task2, task3]
+            [task1, task2, task3, task4]
             |> Task.await_many(@cleanup_timeout)
           catch
             :exit, {:timeout, _} ->
@@ -84,6 +90,16 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
         # this is actually quite likely as during normal shutdown the shape is removed asap
         # this path is just to make sure we do that in case of a crash
         Logger.debug(["Shape already de-registered #{shape_handle}"])
+    end
+  end
+
+  defp cleanup_shape_log_collector(stack_id, shape_handle) do
+    case Electric.Replication.ShapeLogCollector.remove_shape_sync(stack_id, shape_handle) do
+      :ok ->
+        Logger.debug("Removed shape #{shape_handle} from ShapeLogCollector")
+
+      {:error, _reason} ->
+        Logger.debug(["Shape #{shape_handle} already removed from ShapeLogCollector"])
     end
   end
 

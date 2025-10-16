@@ -234,7 +234,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   end
 
   def handle_call({:handle_writer_termination, shape_handle, consumer_pid}, _from, state) do
-    ShapeLogCollector.unsubscribe(state.stack_id, shape_handle)
+    ShapeLogCollector.remove_shape(state.stack_id, shape_handle)
 
     # only monitor if the consumer hasn't already registered via
     # notify_reader_termination

@@ -87,14 +87,18 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.call(server(server_ref), {:subscribe, shape_handle, shape})
   end
 
-  def unsubscribe(server_ref, shape_handle) do
+  def remove_shape(server_ref, shape_handle) do
     # This has to be async otherwise the system will deadlock -
     # - a consumer being cleanly shutdown may be waiting for a response from ShapeLogCollector
     #   while ShapeLogCollector is waiting for an ack from a transaction event, or
     # - a consumer that has crashed will be waiting in a terminate callback
     #   for a reply from the unsubscribe while the ShapeLogCollector is again
     #   waiting for a txn ack.
-    GenServer.cast(server(server_ref), {:unsubscribe, shape_handle})
+    GenServer.cast(server(server_ref), {:remove_shape, shape_handle})
+  end
+
+  def remove_shape_sync(server_ref, shape_handle) do
+    GenServer.call(server(server_ref), {:remove_shape, shape_handle})
   end
 
   def notify_flushed(server_ref, shape_handle, offset) do
@@ -263,14 +267,30 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, handle_relation(rel, from, state)}
   end
 
+  def handle_call({:remove_shape, shape_handle}, _from, state) do
+    case remove_subscription(state, shape_handle) do
+      {:ok, state} ->
+        {:reply, :ok, state}
+
+      {:error, _} = error ->
+        {:reply, error, state}
+    end
+  end
+
   def handle_cast({:writer_flushed, shape_id, offset}, state) do
     {:noreply,
      state
      |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
   end
 
-  def handle_cast({:unsubscribe, shape_handle}, state) do
-    {:noreply, remove_subscription(state, shape_handle)}
+  def handle_cast({:remove_shape, shape_handle}, state) do
+    state =
+      case remove_subscription(state, shape_handle) do
+        {:ok, state} -> state
+        {:error, _} -> state
+      end
+
+    {:noreply, state}
   end
 
   # If no-one is listening to the replication stream, then just return without
@@ -391,7 +411,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   defp remove_subscription(%{subscriptions: count} = state, shape_handle) do
     OpenTelemetry.with_span(
-      "shape_log_collector.unsubscribe",
+      "shape_log_collector.remove_shape",
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
@@ -423,19 +443,20 @@ defmodule Electric.Replication.ShapeLogCollector do
             total_attribute: "unsubscribe_shape.total_duration_µs"
           )
 
-          %{
-            state
-            | subscriptions: count - 1,
-              filter: filter,
-              partitions: partitions,
-              pids_by_shape_handle: pids_by_shape_handle,
-              dependency_layers: dependency_layers,
-              flush_tracker: flush_tracker
-          }
-          |> log_subscription_status()
+          {:ok,
+           %{
+             state
+             | subscriptions: count - 1,
+               filter: filter,
+               partitions: partitions,
+               pids_by_shape_handle: pids_by_shape_handle,
+               dependency_layers: dependency_layers,
+               flush_tracker: flush_tracker
+           }
+           |> log_subscription_status()}
         else
           Logger.warning("Received unsubscribe from unknown consumer: #{inspect(shape_handle)}")
-          state
+          {:error, "shape #{shape_handle} not registered"}
         end
       end
     )

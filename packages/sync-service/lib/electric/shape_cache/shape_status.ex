@@ -356,7 +356,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def snapshot_started?(stack_ref, shape_handle) do
     case :ets.lookup(shape_meta_table(stack_ref), {@snapshot_started, shape_handle}) do
       [] -> false
-      [{{@snapshot_started, ^shape_handle}, true}] -> true
+      [{{@snapshot_started, ^shape_handle}, state}] -> state
     end
   end
 
