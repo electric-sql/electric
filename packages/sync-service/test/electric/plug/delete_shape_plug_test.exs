@@ -37,6 +37,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   def load_relation_oid(tbl, _),
     do: {:ok, {:erlang.phash2(tbl), tbl}}
 
+  def load_supported_features(_), do: {:ok, %{supports_generated_column_replication: true}}
+
   def conn(_ctx, method, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string)
   end
