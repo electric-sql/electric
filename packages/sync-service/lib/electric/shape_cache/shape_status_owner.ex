@@ -45,11 +45,11 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     Electric.LsnTracker.create_table(stack_id)
 
     # Empirical evidence shows that after recovering 50K shapes ShapeStatusOwner and ShapeCache
-    # each take up 200+MB of memory. Explicitly running garbage collection for both immediately
-    # takes that down to 4-5MB.
-    :erlang.garbage_collect()
-
-    {:ok, %{stack_id: stack_id, backup_dir: ShapeStatus.backup_dir(config.storage)}}
+    # each take up 200+MB of memory. By hibernating the process after it has finished
+    # initialising, we force a garbage collection run and compaction of the process heap into
+    # the smallest possible contiguous area. As a result, the process is able to release ~95%
+    # of the memory back to the VM.
+    {:ok, %{stack_id: stack_id, backup_dir: ShapeStatus.backup_dir(config.storage)}, :hibernate}
   end
 
   @impl true

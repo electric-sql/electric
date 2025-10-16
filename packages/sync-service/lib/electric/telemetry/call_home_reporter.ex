@@ -121,6 +121,14 @@ with_telemetry Telemetry.Metrics do
 
       Process.send_after(self(), :report, first_report_in)
 
+      # Empirical evidence shows that CallHomeReporter's heap may grow up to 300MB during
+      # initialisation, most of which is garbage that keeps sitting in the heap for the
+      # remainder of the process lifetime.
+      #
+      # By hibernating the process once, we force a garbage collection run and compaction of
+      # the process heap into the smallest possible contiguous area. As a result, the process
+      # is able to release ~99% of the memory back to the VM.
+
       {:ok,
        Map.merge(context, %{
          handler_ids: handler_ids,
@@ -131,7 +139,7 @@ with_telemetry Telemetry.Metrics do
          persisted_paths: persisted_paths,
          reporter_fn: reporter_fn,
          last_reported: DateTime.utc_now()
-       })}
+       }), :hibernate}
     end
 
     @impl GenServer
