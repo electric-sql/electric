@@ -425,13 +425,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
       now = System.monotonic_time()
 
       {meta_tuples, last_used_tuples} =
-        Enum.flat_map_reduce(shapes, [], fn {shape_handle, shape}, last_used_tuples ->
+        Enum.flat_map_reduce(shapes, [], fn {shape_handle, {shape, snapshot_started?}},
+                                            last_used_tuples ->
           relations = Shape.list_relations(shape)
 
           meta_tuples =
             [
               {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
-              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()}
+              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()},
+              {{@snapshot_started, shape_handle}, snapshot_started?}
               | Enum.map(relations, fn {oid, _} ->
                   {{@shape_relation_lookup, oid, shape_handle}, true}
                 end)

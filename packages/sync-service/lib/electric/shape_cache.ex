@@ -10,7 +10,8 @@ defmodule Electric.ShapeCacheBehaviour do
 
   @callback get_shape(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
-  @callback get_shape_by_handle(shape_handle(), opts :: Access.t()) ::  {:ok, Shape.t()} | {:error, term()}
+  @callback get_shape_by_handle(shape_handle(), opts :: Access.t()) ::
+              {:ok, Shape.t()} | {:error, term()}
   @callback get_or_create_shape_handle(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
   @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}] | :error
@@ -290,12 +291,6 @@ defmodule Electric.ShapeCache do
       |> Task.async_stream(
         fn {shape_handle, shape} ->
           shape_storage = Electric.ShapeCache.Storage.for_shape(shape_handle, storage)
-
-          # the ets may not have been serialised before the snapshot status is recorded
-          # we used to rely on the consumer process to validate this but that doesn't
-          # work if we're not starting them
-          if Electric.ShapeCache.Storage.snapshot_started?(shape_storage),
-            do: ShapeStatus.mark_snapshot_started(stack_id, shape_handle)
 
           case Electric.ShapeCache.Storage.get_current_position(shape_storage) do
             {:ok, latest_offset, _pg_snapshot} ->
