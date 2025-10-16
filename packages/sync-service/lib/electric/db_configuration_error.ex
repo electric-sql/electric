@@ -23,8 +23,8 @@ defmodule Electric.DbConfigurationError do
       type: :publication_missing_generated_columns,
       message:
         "Publication #{Utils.quote_name(pub_name)} does not publish generated columns." <>
-          " This is a feature introduced in PostgreSQL 18 and requires setting the publication parameter" <>
-          " 'publish_generated_columns' to 'stored' when configuring the publication."
+          " This is a feature introduced in PostgreSQL 18 and requires setting the publication parameter 'publish_generated_columns' to 'stored'." <>
+          " Alternatively, you can exclude them from the shape by explicitly listing which columns to fetch in the 'columns' query param."
     }
   end
 
