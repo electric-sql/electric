@@ -597,8 +597,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     pg_wal = lsn_to_wal("0/10")
 
     assert {:noreply,
-            [<<?r, received_wal::64, flushed_wal::64, flushed_wal::64, _time::64, 0::8>>],
-            state} =
+            [<<?r, received_wal::64, flushed_wal::64, flushed_wal::64, _time::64, 0::8>>], state} =
              ReplicationClient.handle_data(<<?k, pg_wal::64, 0::64, 1::8>>, state)
 
     assert state.received_wal == pg_wal

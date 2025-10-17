@@ -28,8 +28,8 @@ defmodule Electric.ShapeCache.PureFileStorage.KeyIndex do
     File.open!(path, [:read, :raw, :read_ahead], fn file ->
       Stream.unfold({file, 0}, fn {file, pos} ->
         with <<total_size::32, _label::8, tx_offset::64, op_offset::64, op_type::8,
-               log_file_entry_start_pos::64,
-               json_size::64>> <- IO.binread(file, @key_index_full_size),
+               log_file_entry_start_pos::64, json_size::64>> <-
+               IO.binread(file, @key_index_full_size),
              <<key::binary-size(^total_size - @key_index_entry_size)>> <-
                IO.binread(file, total_size - @key_index_entry_size) do
           {{key, LogOffset.new(tx_offset, op_offset), op_type, log_file_entry_start_pos,
@@ -98,8 +98,8 @@ defmodule Electric.ShapeCache.PureFileStorage.KeyIndex do
       end,
       fn {file, pos} ->
         with <<total_size::32, label::8, tx_offset::64, op_offset::64, op_type::8,
-               log_file_entry_start_pos::64,
-               json_size::64>> <- IO.binread(file, @key_index_full_size),
+               log_file_entry_start_pos::64, json_size::64>> <-
+               IO.binread(file, @key_index_full_size),
              <<key::binary-size(^total_size - @key_index_entry_size)>> <-
                IO.binread(file, total_size - @key_index_entry_size) do
           {[
