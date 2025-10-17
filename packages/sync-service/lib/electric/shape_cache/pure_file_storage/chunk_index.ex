@@ -303,8 +303,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
     {:ok,
      <<min_tx::64, min_op::64, start_pos::64, key_start_pos::64, max_tx::64, max_op::64,
-       end_pos::64,
-       key_end_pos::64>>} =
+       end_pos::64, key_end_pos::64>>} =
       :file.pread(file, mid * @full_record_width, @full_record_width)
 
     max_offset = LogOffset.new(max_tx, max_op)
