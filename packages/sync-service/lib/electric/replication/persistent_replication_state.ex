@@ -1,7 +1,6 @@
 defmodule Electric.Replication.PersistentReplicationState do
   alias Electric.PersistentKV
   alias Electric.Replication.Changes
-  require Logger
 
   @type opts() :: [
           stack_id: String.t(),

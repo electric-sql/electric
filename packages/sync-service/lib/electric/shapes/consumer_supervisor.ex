@@ -1,8 +1,6 @@
 defmodule Electric.Shapes.ConsumerSupervisor do
   use Supervisor, restart: :transient
 
-  require Logger
-
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   # TODO: unify these with ShapeCache
   @schema NimbleOptions.new!(

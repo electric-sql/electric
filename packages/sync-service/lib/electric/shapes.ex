@@ -3,7 +3,6 @@ defmodule Electric.Shapes do
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
-  require Logger
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
 

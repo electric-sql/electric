@@ -30,7 +30,7 @@ defmodule Electric.ShapeCache.PureFileStorage.KeyIndex do
         with <<total_size::32, _label::8, tx_offset::64, op_offset::64, op_type::8,
                log_file_entry_start_pos::64,
                json_size::64>> <- IO.binread(file, @key_index_full_size),
-             <<key::binary-size(total_size - @key_index_entry_size)>> <-
+             <<key::binary-size(^total_size - @key_index_entry_size)>> <-
                IO.binread(file, total_size - @key_index_entry_size) do
           {{key, LogOffset.new(tx_offset, op_offset), op_type, log_file_entry_start_pos,
             json_size}, {file, pos + total_size + 4}}
@@ -68,7 +68,7 @@ defmodule Electric.ShapeCache.PureFileStorage.KeyIndex do
     Stream.unfold(search_start_pos, fn position ->
       with <<total_size::32, _::8, _::64, _::64, _::8, line_start_pos::64, json_size::64>> <-
              IO.binread(file, @key_index_full_size),
-           <<_::binary-size(total_size - @key_index_full_size)>> <-
+           <<_::binary-size(^total_size - @key_index_full_size)>> <-
              IO.binread(file, total_size - @key_index_full_size) do
         {
           LogFile.expected_position(
@@ -100,7 +100,7 @@ defmodule Electric.ShapeCache.PureFileStorage.KeyIndex do
         with <<total_size::32, label::8, tx_offset::64, op_offset::64, op_type::8,
                log_file_entry_start_pos::64,
                json_size::64>> <- IO.binread(file, @key_index_full_size),
-             <<key::binary-size(total_size - @key_index_entry_size)>> <-
+             <<key::binary-size(^total_size - @key_index_entry_size)>> <-
                IO.binread(file, total_size - @key_index_entry_size) do
           {[
              {{total_size - @key_index_entry_size, key}, label,
