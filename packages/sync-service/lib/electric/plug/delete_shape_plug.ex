@@ -3,8 +3,6 @@ defmodule Electric.Plug.DeleteShapePlug do
 
   alias Electric.Shapes.Api
 
-  require Logger
-
   plug :fetch_query_params
   plug :put_resp_content_type, "application/json"
 

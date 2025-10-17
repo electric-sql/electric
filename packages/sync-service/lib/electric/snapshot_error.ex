@@ -1,6 +1,4 @@
 defmodule Electric.SnapshotError do
-  require Logger
-
   alias Electric.SnapshotError
 
   defexception [:message, :type, :original_error]

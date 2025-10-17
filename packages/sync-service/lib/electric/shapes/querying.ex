@@ -4,8 +4,6 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
-  require Logger
-
   def query_subset(conn, shape, subset, mark) do
     # When querying a subset, we select same columns as the base shape
     table = Utils.relation_to_sql(shape.root_table)

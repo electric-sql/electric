@@ -598,10 +598,10 @@ defmodule Electric.Shapes.Api do
 
   defp do_serve_shape_log(%Request{params: %{offset: :now}} = request) do
     # For "now" offset, return an immediate up-to-date response with no log data
-    %{global_last_seen_lsn: global_last_seen_lsn} = request
+    %{response: %Response{} = response, global_last_seen_lsn: global_last_seen_lsn} = request
 
-    %Response{
-      request.response
+    %{
+      response
       | status: 200,
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)]),
         finalized?: true

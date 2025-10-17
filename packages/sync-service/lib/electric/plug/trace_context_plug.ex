@@ -2,9 +2,8 @@ defmodule Electric.Plug.TraceContextPlug do
   @moduledoc """
   A plug that extracts trace context from incoming HTTP headers and sets it as the parent span.
   """
-  @behaviour Plug
 
-  require Logger
+  @behaviour Plug
 
   def init(opts), do: opts
 

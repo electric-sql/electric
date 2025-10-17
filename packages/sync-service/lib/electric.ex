@@ -115,8 +115,6 @@ defmodule Electric do
     use a provided value as stack id, but nothing else.
   """
 
-  require Logger
-
   @doc false
   def connection_opts_schema do
     @connection_opts

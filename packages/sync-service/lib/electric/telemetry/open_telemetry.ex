@@ -29,9 +29,6 @@ defmodule Electric.Telemetry.OpenTelemetry do
   [2]: https://github.com/open-telemetry/opentelemetry-erlang
   """
 
-  require Logger
-  require OpenTelemetry.SemanticConventions.Trace
-
   alias Electric.Telemetry.Sampler
   alias Electric.Telemetry.IntervalTimer
 
