@@ -242,6 +242,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         {__MODULE__, :scheduler_utilization, []},
         {__MODULE__, :run_queue_lengths, [scheduler_ids]},
         {__MODULE__, :garbage_collection, [word_size]},
+        {__MODULE__, :reductions, []},
         {__MODULE__, :process_memory, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
@@ -336,6 +337,15 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       :telemetry.execute([:vm, :garbage_collection], %{
         total_runs: num_gc_runs,
         total_bytes_reclaimed: num_words_reclaimed * word_size
+      })
+    end
+
+    def reductions do
+      {total_reductions, reductions_since_last_call} = :erlang.statistics(:reductions)
+
+      :telemetry.execute([:vm, :reductions], %{
+        total: total_reductions,
+        delta: reductions_since_last_call
       })
     end
 
