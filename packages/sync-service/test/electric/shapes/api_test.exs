@@ -8,7 +8,7 @@ defmodule Electric.Shapes.ApiTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1]
+  import Support.TestUtils, only: [set_status_to_active: 1, set_status_to_errored: 2]
   import Mox
 
   @inspector Support.StubInspector.new(
@@ -1194,29 +1194,35 @@ defmodule Electric.Shapes.ApiTest do
         []
       end)
 
-      lsn = Lsn.from_integer(:rand.uniform(1_000_000))
-      Electric.LsnTracker.set_last_processed_lsn(lsn, ctx.stack_id)
+      test_pid = self()
 
-      assert {:ok, request} =
-               Api.validate(
-                 ctx.api,
-                 %{
-                   table: "public.users",
-                   offset: "#{@test_offset}",
-                   handle: @test_shape_handle,
-                   live: true
-                 }
-               )
+      req_task =
+        Task.async(fn ->
+          assert {:ok, request} =
+                   Api.validate(
+                     ctx.api,
+                     %{
+                       table: "public.users",
+                       offset: "#{@test_offset}",
+                       handle: @test_shape_handle,
+                       live: true
+                     }
+                   )
 
-      response = Api.serve_shape_response(request)
-      assert response.status == 200
+          send(test_pid, :request_validated)
+          res = Api.serve_shape_response(request)
+          {res, response_body(res)}
+        end)
 
-      assert [
-               %{
-                 headers: %{control: "up-to-date", global_last_seen_lsn: "#{Lsn.to_integer(lsn)}"}
-               }
-             ] ==
-               response_body(response)
+      receive do
+        :request_validated -> set_status_to_errored(ctx, "failed stack")
+      end
+
+      {response, body} = Task.await(req_task)
+
+      assert response.status == 503
+      assert [%{message: message}] = body
+      assert message =~ "failed stack"
     end
   end
 

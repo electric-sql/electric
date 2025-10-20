@@ -777,14 +777,15 @@ defmodule Electric.Shapes.Api do
       long_poll_timeout ->
         request = update_attrs(request, %{ot_is_long_poll_timeout: true})
 
-        case hold_until_stack_ready(api, timeout: 0) do
-          :ok ->
+        case Electric.StatusMonitor.status(api.stack_id) do
+          %{shape: :up, conn: :up} ->
             request
             |> determine_global_last_seen_lsn()
             |> no_change_response()
 
-          {:error, error} ->
-            Response.error(request, error.message, status: error.status)
+          _ ->
+            message = Electric.StatusMonitor.timeout_message(api.stack_id)
+            Response.error(request, message, status: 503)
         end
     end
   end
