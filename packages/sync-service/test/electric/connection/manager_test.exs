@@ -11,6 +11,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
   setup [
     :with_unique_db,
     :with_stack_id_from_test,
+    :with_status_monitor,
     :with_persistent_kv,
     :with_inspector,
     :with_slot_name_and_stream_id,

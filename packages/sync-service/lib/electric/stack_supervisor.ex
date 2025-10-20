@@ -310,7 +310,7 @@ defmodule Electric.StackSupervisor do
     shape_log_collector =
       Electric.Replication.ShapeLogCollector.name(stack_id)
 
-    new_connection_manager_opts = [
+    connection_manager_opts = [
       stack_id: stack_id,
       # Coming from the outside, need validation
       connection_opts: config.connection_opts,
@@ -374,7 +374,8 @@ defmodule Electric.StackSupervisor do
              Keyword.take(shape_cache_opts, [:publication_manager])
            ])},
           {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
-          {Electric.Connection.Supervisor, new_connection_manager_opts}
+          {Electric.MonitoredCoreSupervisor,
+           stack_id: stack_id, connection_manager_opts: connection_manager_opts}
         ]
 
     # Store the telemetry span attributes in the persistent term for this stack
