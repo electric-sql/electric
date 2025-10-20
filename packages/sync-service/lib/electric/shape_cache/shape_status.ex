@@ -456,7 +456,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   defp restore_dependency_handles(shapes, meta_table, storage) do
     shapes
-    |> Enum.filter(fn {_, shape} ->
+    |> Enum.filter(fn {_, {shape, _snapshot_started?}} ->
       Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
     end)
     |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->

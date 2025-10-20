@@ -293,7 +293,7 @@ defmodule Electric.ShapeCache do
     all_handles_and_shapes = ShapeStatus.list_shapes(state.stack_id)
 
     {max_lsn, total_recovered} =
-      all_handles
+      all_handles_and_shapes
       |> Task.async_stream(
         fn {shape_handle, shape} ->
           shape_storage = ShapeCache.Storage.for_shape(shape_handle, storage)
@@ -321,7 +321,7 @@ defmodule Electric.ShapeCache do
         _, {max, recovered} -> {max, recovered + 1}
       end)
 
-    total_failed_to_recover = length(all_handles) - total_recovered
+    total_failed_to_recover = length(all_handles_and_shapes) - total_recovered
 
     duration = System.monotonic_time() - start_time
 
