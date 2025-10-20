@@ -459,7 +459,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     |> Enum.filter(fn {_, {shape, _snapshot_started?}} ->
       Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
     end)
-    |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
+    |> Enum.each(fn {handle, {%Shape{shape_dependencies: deps} = shape, _snapshot_started?}} ->
       handles = Enum.map(deps, &get_existing_shape(meta_table, &1))
 
       if not Enum.any?(handles, &is_nil/1) do
