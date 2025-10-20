@@ -51,7 +51,7 @@ defmodule Electric.Shapes.Filter do
   """
   @spec add_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
   def add_shape(%Filter{} = filter, shape_id, shape) do
-    if is_map_key(filter.shapes, shape_id), do: raise("duplicate shape #{shape_id}")
+    if has_shape?(filter, shape_id), do: raise("duplicate shape #{shape_id}")
 
     %Filter{
       filter
