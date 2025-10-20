@@ -97,10 +97,6 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.cast(server(server_ref), {:remove_shape, shape_handle})
   end
 
-  def remove_shape_sync(server_ref, shape_handle) do
-    GenServer.call(server(server_ref), {:remove_shape, shape_handle})
-  end
-
   def notify_flushed(server_ref, shape_handle, offset) do
     GenServer.cast(server(server_ref), {:writer_flushed, shape_handle, offset})
   end
@@ -269,16 +265,6 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
 
     {:reply, :ok, handle_relation(rel, from, state)}
-  end
-
-  def handle_call({:remove_shape, shape_handle}, _from, state) do
-    case remove_subscription(state, shape_handle) do
-      {:ok, state} ->
-        {:reply, :ok, state}
-
-      {:error, _} = error ->
-        {:reply, error, state}
-    end
   end
 
   def handle_call(:active_shapes, _from, state) do
