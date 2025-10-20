@@ -22,8 +22,6 @@ defmodule Electric.Connection.Supervisor do
   whole OTP application shutting down.
   """
 
-  # This supervisor is meant to be a child of Electric.StackSupervisor.
-  #
   # The `restart: :transient, significant: true` combo allows for shutting the supervisor down
   # and signalling the parent supervisor to shut itself down as well if that one has
   # `:auto_shutdown` set to `:any_significant` or `:all_significant`.
@@ -63,15 +61,10 @@ defmodule Electric.Connection.Supervisor do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     children = [
-      {Electric.StatusMonitor, stack_id: stack_id},
       {Electric.Connection.Restarter, stack_id: stack_id},
       {Electric.Connection.Manager.Supervisor, opts}
     ]
 
-    # The :rest_for_one strategy is used here to ensure that if the StatusMonitor unexpectedly dies,
-    # all subsequent child processes are also restarted. Since the StatusMonitor keeps track of the
-    # statuses of the other children, losing it means losing that state. Restarting the other children
-    # ensures they re-notify the StatusMonitor, allowing it to rebuild its internal state correctly.
     Supervisor.init(children, strategy: :rest_for_one)
   end
 end
