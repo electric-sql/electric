@@ -829,7 +829,7 @@ defmodule Electric.Shapes.Api do
 
     response = %{request.response | chunked: true, body: sse_event_stream}
 
-    %{response | trace_attrs: Map.put(response.trace_attrs || %{}, :ot_is_sse_response, true)}
+    %{response | trace_attrs: Map.put(response.trace_attrs, :ot_is_sse_response, true)}
   end
 
   defp next_sse_event(%SseState{mode: :receive} = state) do

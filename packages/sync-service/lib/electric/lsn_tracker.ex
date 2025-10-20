@@ -19,6 +19,8 @@ defmodule Electric.LsnTracker do
     stack_id
     |> table()
     |> :ets.insert({:last_processed_lsn, lsn})
+
+    :ok
   end
 
   def set_last_processed_lsn(lsn, stack_id) when is_integer(lsn) do
