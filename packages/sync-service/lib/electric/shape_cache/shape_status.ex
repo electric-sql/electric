@@ -27,8 +27,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback count_shapes(stack_ref()) :: non_neg_integer()
   @callback get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
-  @callback get_shape_by_handle(stack_ref(), shape_handle()) ::
-              {:ok, Shape.t()} | {:error, term()}
+  @callback fetch_shape_by_handle(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | :error
   @callback add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   @callback initialise_shape(stack_ref(), shape_handle(), xmin(), LogOffset.t()) :: :ok
   @callback set_snapshot_xmin(stack_ref(), shape_handle(), xmin()) :: :ok
@@ -262,14 +261,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def get_shape_by_handle(stack_ref, shape_handle) do
+  def fetch_shape_by_handle(stack_ref, shape_handle) do
     case :ets.lookup_element(
            shape_meta_table(stack_ref),
            {@shape_meta_data, shape_handle},
            @shape_meta_shape_pos,
            nil
          ) do
-      nil -> {:error, "no shape found for handle #{shape_handle}"}
+      nil -> :error
       shape -> {:ok, shape}
     end
   end

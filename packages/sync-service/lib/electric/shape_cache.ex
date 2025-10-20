@@ -10,8 +10,7 @@ defmodule Electric.ShapeCacheBehaviour do
 
   @callback get_shape(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
-  @callback get_shape_by_handle(shape_handle(), opts :: Access.t()) ::
-              {:ok, Shape.t()} | {:error, term()}
+  @callback fetch_shape_by_handle(shape_handle(), opts :: Access.t()) :: {:ok, Shape.t()} | :error
   @callback get_or_create_shape_handle(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
   @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}] | :error
@@ -106,9 +105,9 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  def get_shape_by_handle(handle, opts) do
+  def fetch_shape_by_handle(handle, opts) do
     table = ShapeStatus.shape_meta_table(opts)
-    ShapeStatus.get_shape_by_handle(table, handle)
+    ShapeStatus.fetch_shape_by_handle(table, handle)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -204,9 +203,6 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  # this is race-condition free because it's only every called from the shape log collector
-  # which processes each transaction in serial
-  # and if it's calling this function then it knows that no consumer exists for the shape
   def start_consumer_for_handle(shape_handle, opts) when is_binary(shape_handle) do
     server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:start_consumer_for_handle, shape_handle}, @call_timeout)
@@ -274,16 +270,16 @@ defmodule Electric.ShapeCache do
   def handle_call({:start_consumer_for_handle, shape_handle}, _from, state) do
     # This is racy: it's possible for a shape to have been deleted while the
     # ShapeLogCollector is processing a transaction that includes it
-    # In this case get_shape_by_handle returns an error. ConsumerRegistry
+    # In this case fetch_shape_by_handle returns an error. ConsumerRegistry
     # basically ignores the {:error, :no_shape} result - excluding the shape handle
-    # from the broadcast
-    case ShapeStatus.get_shape_by_handle(state.stack_id, shape_handle) do
+    # from the broadcast.
+    case ShapeStatus.fetch_shape_by_handle(state.stack_id, shape_handle) do
       {:ok, shape} ->
         # TODO: otel ctx from shape log collector?
         {:ok, pid} = start_shape(shape_handle, shape, state, nil, :restore)
         {:reply, {:ok, pid}, state}
 
-      {:error, _reason} ->
+      :error ->
         {:reply, {:error, :no_shape}, state}
     end
   end
