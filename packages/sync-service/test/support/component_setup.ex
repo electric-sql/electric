@@ -45,14 +45,14 @@ defmodule Support.ComponentSetup do
 
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
-    registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
+    registry = start_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
     start_supervised!({Electric.StackConfig, stack_id: stack_id})
     %{stack_id: stack_id, process_registry: registry}
   end
 
   def with_registry(ctx) do
     registry_name = :"#{inspect(Registry.ShapeChanges)}:#{ctx.stack_id}"
-    start_link_supervised!({Registry, keys: :duplicate, name: registry_name})
+    start_supervised!({Registry, keys: :duplicate, name: registry_name})
 
     %{registry: registry_name}
   end
@@ -74,7 +74,7 @@ defmodule Support.ComponentSetup do
           "electric-trash-#{System.monotonic_time()}-#{System.unique_integer([:positive, :monotonic])}"
         )
 
-    start_link_supervised!(
+    start_supervised!(
       {Electric.AsyncDeleter,
        stack_id: ctx.stack_id, storage_dir: storage_dir, cleanup_interval_ms: 0}
     )
@@ -123,14 +123,14 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_cleaner(ctx) do
-    start_link_supervised!({Electric.ShapeCache.ShapeCleaner, stack_id: ctx.stack_id})
+    start_supervised!({Electric.ShapeCache.ShapeCleaner, stack_id: ctx.stack_id})
     :ok
   end
 
   def with_publication_manager(ctx) do
     server = :"publication_manager_#{full_test_name(ctx)}"
 
-    start_link_supervised!(%{
+    start_supervised!(%{
       id: server,
       start: {
         Electric.Replication.PublicationManager,
@@ -164,7 +164,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_status(ctx) do
-    start_link_supervised!(%{
+    start_supervised!(%{
       id: "shape_status_owner",
       start:
         {Electric.ShapeCache.ShapeStatusOwner, :start_link,
@@ -184,7 +184,7 @@ defmodule Support.ComponentSetup do
     server = :"shape_cache_#{full_test_name(ctx)}"
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
 
-    start_link_supervised!(
+    start_supervised!(
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(ctx.stack_id, Electric.StackTaskSupervisor)}
       |> Supervisor.child_spec(id: "shape_task_supervisor")
@@ -209,9 +209,9 @@ defmodule Support.ComponentSetup do
     {Electric.Shapes.DynamicConsumerSupervisor,
      [name: consumer_supervisor, stack_id: ctx.stack_id]}
     |> Supervisor.child_spec(id: consumer_supervisor, restart: :temporary)
-    |> start_link_supervised!()
+    |> start_supervised!()
 
-    start_link_supervised!(%{
+    start_supervised!(%{
       id: start_opts[:name],
       start: {ShapeCache, :start_link, [start_opts]},
       restart: :temporary
@@ -240,7 +240,7 @@ defmodule Support.ComponentSetup do
   def with_shape_log_collector(ctx) do
     name = ShapeLogCollector.name(ctx.stack_id)
 
-    start_link_supervised!(
+    start_supervised!(
       {ShapeLogCollector,
        [stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]},
       id: name,
@@ -270,7 +270,7 @@ defmodule Support.ComponentSetup do
 
   def with_inspector(ctx) do
     server =
-      start_link_supervised!(
+      start_supervised!(
         {EtsInspector,
          stack_id: ctx.stack_id, pool: ctx.db_conn, persistent_kv: ctx.persistent_kv}
       )
@@ -285,7 +285,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_status_monitor(ctx) do
-    start_link_supervised!({Electric.StatusMonitor, stack_id: ctx.stack_id})
+    start_supervised!({Electric.StatusMonitor, stack_id: ctx.stack_id})
     %{}
   end
 
@@ -321,7 +321,7 @@ defmodule Support.ComponentSetup do
         publication_manager
       end)
 
-    start_link_supervised!(
+    start_supervised!(
       {Electric.Shapes.Monitor,
        Keyword.merge(monitor_config(ctx),
          stack_id: ctx.stack_id,
