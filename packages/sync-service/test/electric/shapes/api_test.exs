@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.ApiTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
   use Support.Mock
 
   alias Electric.Postgres.Lsn
@@ -8,7 +9,7 @@ defmodule Electric.Shapes.ApiTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1, set_status_to_errored: 2]
+  import Support.TestUtils, only: [set_status_to_active: 1]
   import Mox
 
   @inspector Support.StubInspector.new(
@@ -1214,8 +1215,16 @@ defmodule Electric.Shapes.ApiTest do
           {res, response_body(res)}
         end)
 
+      stack_id = ctx.stack_id
+
       receive do
-        :request_validated -> set_status_to_errored(ctx, "failed stack")
+        :request_validated ->
+          Repatch.patch(
+            Electric.StatusMonitor,
+            :get_status,
+            fn ^stack_id -> %{shape: :down, conn: :down} end,
+            mode: :local
+          )
       end
 
       {response, body} = Task.await(req_task)

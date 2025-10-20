@@ -778,7 +778,7 @@ defmodule Electric.Shapes.Api do
         request = update_attrs(request, %{ot_is_long_poll_timeout: true})
 
         case Electric.StatusMonitor.status(api.stack_id) do
-          %{shape: :up, conn: :up} ->
+          %{shape: :up} ->
             request
             |> determine_global_last_seen_lsn()
             |> no_change_response()
