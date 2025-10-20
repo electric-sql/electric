@@ -10,6 +10,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   setup :verify_on_exit!
 
+  @inspector {__MODULE__, []}
+
   defp shape!, do: shape!("test")
 
   defp shape!(val) do
@@ -240,6 +242,24 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     assert ShapeStatus.snapshot_started?(state, shape_handle)
     assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_handle)
+  end
+
+  describe "list_shapes/2" do
+    test "returns shapes with dependencies in a topological order", ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      outer =
+        %{shape_dependencies: [inner]} =
+        Shape.new!("public.table",
+          where: "id IN (SELECT id FROM other_table)",
+          inspector: @inspector
+        )
+
+      {:ok, shape2} = ShapeStatus.add_shape(state, outer)
+      {:ok, shape1} = ShapeStatus.add_shape(state, inner)
+
+      assert [{^shape1, _}, {^shape2, _}] = ShapeStatus.list_shapes(state)
+    end
   end
 
   describe "least_recently_used/2" do

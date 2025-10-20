@@ -85,6 +85,7 @@ defmodule Electric.Shapes.Consumer do
         buffer: [],
         monitors: [],
         cleaned?: false,
+        terminating?: false,
         txn_offset_mapping: [],
         materializer_subscribed?: false,
         # The existing body of consumer tests made it impossible to replace this dynamic
@@ -128,27 +129,44 @@ defmodule Electric.Shapes.Consumer do
         normalized_latest_offset
       )
 
-    for shape_handle <- state.shape.shape_dependencies_handles do
-      # TODO: handle a case when materializer is down
-      Process.monitor(Materializer.whereis(state.stack_id, shape_handle),
-        tag: {:dependency_materializer_down, shape_handle}
+    all_materializers_alive? =
+      Enum.all?(state.shape.shape_dependencies_handles, fn shape_handle ->
+        name = Materializer.name(state.stack_id, shape_handle)
+
+        with pid when is_pid(pid) <- GenServer.whereis(name),
+             true <- Process.alive?(pid) do
+          Process.monitor(pid,
+            tag: {:dependency_materializer_down, shape_handle}
+          )
+
+          Materializer.subscribe(state.stack_id, shape_handle)
+
+          true
+        else
+          _ -> false
+        end
+      end)
+
+    if all_materializers_alive? do
+      ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape, action)
+
+      Logger.debug("Writer for #{state.shape_handle} initialized")
+
+      Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
+
+      {:noreply,
+       Map.merge(state, %{
+         latest_offset: normalized_latest_offset,
+         writer: writer,
+         pg_snapshot: pg_snapshot
+       }), state.hibernate_after}
+    else
+      Logger.warning(
+        "Materializers for dependencies of #{state.shape_handle} are not alive, invalidating shape"
       )
 
-      Materializer.subscribe(state.stack_id, shape_handle)
+      {:noreply, terminate_safely(state)}
     end
-
-    ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape, action)
-
-    Logger.debug("Writer for #{state.shape_handle} initialized")
-
-    Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
-
-    {:noreply,
-     Map.merge(state, %{
-       latest_offset: normalized_latest_offset,
-       writer: writer,
-       pg_snapshot: pg_snapshot
-     }), state.hibernate_after}
   end
 
   @impl GenServer
@@ -268,12 +286,22 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, terminate_safely(state)}
   end
 
+  def handle_info({:materializer_shape_invalidated, shape_handle}, state) do
+    Logger.warning("Materializer shape invalidated for #{shape_handle}")
+    {:noreply, terminate_safely(state)}
+  end
+
   def handle_info({{:dependency_materializer_down, handle}, _ref, :process, pid, reason}, state) do
     Logger.warning(
       "Materializer down for a dependency: #{handle} (#{inspect(pid)}) (#{inspect(reason)})"
     )
 
-    {:noreply, terminate_safely(state)}
+    case {reason, state.terminating?} do
+      {_, true} -> {:noreply, state}
+      {{:shutdown, _}, false} -> {:stop, reason, state}
+      {:shutdown, false} -> {:stop, reason, state}
+      _ -> {:noreply, terminate_safely(state)}
+    end
   end
 
   # We're trapping exists so that `terminate` is called to clean up the writer,
@@ -568,7 +596,13 @@ defmodule Electric.Shapes.Consumer do
   # 1. register that we want the shape data to be cleaned up.
   # 2. request a notification when all active shape data reads are complete
   # 3. exit the process when we receive that notification
-  defp terminate_safely(state, reason \\ {:shutdown, :cleanup}) do
+  defp terminate_safely(state, reason \\ {:shutdown, :cleanup})
+
+  defp terminate_safely(%{terminating?: true} = state, _reason) do
+    state
+  end
+
+  defp terminate_safely(state, reason) do
     %{
       stack_id: stack_id,
       shape_handle: shape_handle,
@@ -579,7 +613,7 @@ defmodule Electric.Shapes.Consumer do
 
     :ok = Electric.Shapes.Monitor.notify_reader_termination(stack_id, shape_handle, reason)
 
-    notify_shape_rotation(state)
+    notify_shape_rotation(%{state | terminating?: true})
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do

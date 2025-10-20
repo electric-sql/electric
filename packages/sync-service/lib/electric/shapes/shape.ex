@@ -101,6 +101,11 @@ defmodule Electric.Shapes.Shape do
      shape.replica}
   end
 
+  def has_dependencies?(%__MODULE__{} = shape), do: shape.shape_dependencies != []
+
+  def dependency_handles_known?(%__MODULE__{} = shape),
+    do: shape.shape_dependencies_handles != []
+
   def hash(%__MODULE__{} = shape),
     do: shape |> comparable() |> :erlang.phash2()
 
@@ -615,9 +620,13 @@ defmodule Electric.Shapes.Shape do
           "replica" => replica
         } = data
       ) do
-    with {:ok, where} <- if(where != nil, do: Expr.from_json_safe(where), else: {:ok, nil}),
-         {:ok, shape_dependencies} <-
-           Utils.map_while_ok(Map.get(data, "shape_dependencies", []), &from_json_safe/1) do
+    with {:ok, shape_dependencies} <-
+           Utils.map_while_ok(Map.get(data, "shape_dependencies", []), &from_json_safe/1),
+         {:ok, where} <-
+           if(where != nil,
+             do: Expr.from_json_safe(where, extract_sublink_queries(shape_dependencies)),
+             else: {:ok, nil}
+           ) do
       {:ok,
        %__MODULE__{
          root_table: {schema, name},
@@ -734,12 +743,15 @@ defimpl Inspect, for: Electric.Shapes.Shape do
       end
 
     kwlist =
-      case shape.shape_dependencies do
-        [] ->
+      case {shape.shape_dependencies, shape.shape_dependencies_handles} do
+        {[], _} ->
           kwlist
 
-        deps ->
+        {deps, []} ->
           [{:deps, deps} | kwlist]
+
+        {deps, handles} ->
+          [{:deps, Enum.zip(handles, deps)} | kwlist]
       end
 
     base =

@@ -141,13 +141,30 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def list_shapes(stack_ref) do
-    :ets.select(shape_meta_table(stack_ref), [
+    shape_meta_table(stack_ref)
+    |> :ets.select([
       {
         {{@shape_meta_data, :"$1"}, :"$2", :_, :_},
         [],
         [{{:"$1", :"$2"}}]
       }
     ])
+    |> topological_sort()
+  end
+
+  @spec topological_sort([{shape_handle(), Shape.t()}]) :: [{shape_handle(), Shape.t()}]
+  defp topological_sort(handles_and_shapes, acc \\ [], visited \\ MapSet.new())
+  defp topological_sort([], acc, _visited), do: Enum.reverse(acc) |> List.flatten()
+
+  defp topological_sort(handles_and_shapes, acc, visited) do
+    {appendable, missing_deps} =
+      Enum.split_with(handles_and_shapes, fn {_, shape} ->
+        Enum.all?(shape.shape_dependencies_handles, &MapSet.member?(visited, &1))
+      end)
+
+    visited = MapSet.new(appendable, &elem(&1, 0)) |> MapSet.union(visited)
+
+    topological_sort(missing_deps, [appendable | acc], visited)
   end
 
   @impl true
@@ -412,8 +429,31 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert(meta_table, meta_tuples)
       :ets.insert(last_used_table, last_used_tuples)
 
+      restore_dependency_handles(shapes, meta_table, storage)
+
       :ok
     end
+  end
+
+  defp restore_dependency_handles(shapes, meta_table, storage) do
+    shapes
+    |> Enum.filter(fn {_, shape} ->
+      Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
+    end)
+    |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
+      handles = Enum.map(deps, &get_existing_shape(meta_table, &1))
+
+      if not Enum.any?(handles, &is_nil/1) do
+        handles = Enum.map(handles, &elem(&1, 0))
+        shape = %Shape{shape | shape_dependencies_handles: handles}
+
+        :ets.update_element(meta_table, {@shape_meta_data, handle}, {2, shape})
+      else
+        Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")
+        remove_shape(meta_table, handle)
+        Storage.cleanup!(storage, handle)
+      end
+    end)
   end
 
   defp store_table_backup(meta_table, backup_dir) do
