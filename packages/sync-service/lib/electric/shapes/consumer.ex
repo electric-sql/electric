@@ -34,12 +34,16 @@ defmodule Electric.Shapes.Consumer do
     GenServer.call(consumer, :initial_state, 30_000)
   end
 
-  def await_snapshot_start(consumer) when is_pid(consumer) do
-    GenServer.call(consumer, :await_snapshot_start, 30_000)
+  @spec await_snapshot_start(pid() | map()) :: :started | {:error, any()}
+  @spec await_snapshot_start(pid() | map(), timeout()) :: :started | {:error, any()}
+  def await_snapshot_start(consumer, timeout \\ 30_000)
+
+  def await_snapshot_start(consumer, timeout) when is_pid(consumer) do
+    GenServer.call(consumer, :await_snapshot_start, timeout)
   end
 
-  def await_snapshot_start(consumer) do
-    GenServer.call(name(consumer), :await_snapshot_start, 30_000)
+  def await_snapshot_start(consumer, timeout) do
+    GenServer.call(name(consumer), :await_snapshot_start, timeout)
   end
 
   def subscribe_materializer(consumer) do

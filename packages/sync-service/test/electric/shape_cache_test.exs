@@ -822,6 +822,70 @@ defmodule Electric.ShapeCacheTest do
                "Shape terminated before snapshot was ready"
              ]
     end
+
+    test "should wait for consumer to come up", ctx do
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _, _ ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+
+      start_consumer_delay = 100
+
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_shape_consumer,
+        [mode: :shared],
+        fn a, b ->
+          Process.sleep(start_consumer_delay)
+          Repatch.real(Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(a, b))
+        end
+      )
+
+      Repatch.allow(self(), opts[:server])
+
+      creation_task = Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, opts) end)
+      Process.sleep(div(start_consumer_delay, 10))
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+
+      wait_task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+
+      # should delay in responding
+      refute Task.yield(wait_task, div(start_consumer_delay, 2))
+      Task.await(creation_task)
+      assert :started = Task.await(wait_task, start_consumer_delay)
+    end
+
+    test "should stop waiting for consumer to come up if shape tables missing", ctx do
+      Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
+      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_shape_consumer,
+        [mode: :shared],
+        fn _, _ -> Process.sleep(:infinity) end
+      )
+
+      Repatch.allow(self(), opts[:server])
+
+      start_supervised({Task, fn -> ShapeCache.get_or_create_shape_handle(@shape, opts) end})
+
+      Process.sleep(10)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+
+      wait_task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+
+      # should delay in responding
+      refute Task.yield(wait_task, 10)
+      stop_supervised(ctx[:shape_status_owner])
+
+      assert {:error, %RuntimeError{message: "Shape meta tables not found"}} =
+               Task.await(wait_task, 500)
+    end
   end
 
   describe "after restart" do
