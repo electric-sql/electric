@@ -223,6 +223,8 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
       num_schedulers = :erlang.system_info(:schedulers)
       scheduler_ids = Enum.map(1..num_schedulers, &:"normal_#{&1}") |> Enum.concat([:cpu, :io])
 
+      word_size = :erlang.system_info(:wordsize)
+
       [
         # Measurements included with the telemetry_poller application.
         #
@@ -239,6 +241,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         {__MODULE__, :cpu_utilization, []},
         {__MODULE__, :scheduler_utilization, []},
         {__MODULE__, :run_queue_lengths, [scheduler_ids]},
+        {__MODULE__, :garbage_collection, [word_size]},
         {__MODULE__, :process_memory, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
@@ -325,6 +328,15 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         |> Map.put(:total, :erlang.statistics(:total_run_queue_lengths))
 
       :telemetry.execute([:vm, :run_queue_lengths], measurements)
+    end
+
+    def garbage_collection(word_size) do
+      {num_gc_runs, num_words_reclaimed, 0} = :erlang.statistics(:garbage_collection)
+
+      :telemetry.execute([:vm, :garbage_collection], %{
+        total_runs: num_gc_runs,
+        total_bytes_reclaimed: num_words_reclaimed * word_size
+      })
     end
 
     def get_system_load_average do
