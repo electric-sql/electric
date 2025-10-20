@@ -220,6 +220,9 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     defp memory_by_process_type_metrics(_), do: []
 
     defp periodic_measurements(opts) do
+      num_schedulers = :erlang.system_info(:schedulers)
+      scheduler_ids = Enum.map(1..num_schedulers, &:"normal_#{&1}") |> Enum.concat([:cpu, :io])
+
       [
         # Measurements included with the telemetry_poller application.
         #
@@ -235,6 +238,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
         {__MODULE__, :scheduler_utilization, []},
+        {__MODULE__, :run_queue_lengths, [scheduler_ids]},
         {__MODULE__, :process_memory, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
@@ -310,6 +314,17 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         end)
 
       :telemetry.execute([:vm, :scheduler_utilization], utilization)
+    end
+
+    def run_queue_lengths(scheduler_ids) do
+      run_queue_lengths = :erlang.statistics(:run_queue_lengths)
+
+      measurements =
+        Enum.zip(scheduler_ids, run_queue_lengths)
+        |> Map.new()
+        |> Map.put(:total, :erlang.statistics(:total_run_queue_lengths))
+
+      :telemetry.execute([:vm, :run_queue_lengths], measurements)
     end
 
     def get_system_load_average do
