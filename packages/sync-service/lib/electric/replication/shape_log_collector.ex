@@ -105,6 +105,10 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.cast(server(server_ref), {:writer_flushed, shape_handle, offset})
   end
 
+  def active_shapes(server_ref) do
+    GenServer.call(server(server_ref), :active_shapes)
+  end
+
   def init(opts) do
     activate_mocked_functions_from_test_process()
 
@@ -275,6 +279,10 @@ defmodule Electric.Replication.ShapeLogCollector do
       {:error, _} = error ->
         {:reply, error, state}
     end
+  end
+
+  def handle_call(:active_shapes, _from, state) do
+    {:reply, Filter.active_shapes(state.filter), state}
   end
 
   def handle_cast({:writer_flushed, shape_id, offset}, state) do

@@ -33,8 +33,14 @@ defmodule Electric.Shapes.Filter do
     %Filter{refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)}
   end
 
+  @spec has_shape?(t(), shape_id()) :: boolean()
   def has_shape?(%Filter{} = filter, shape_handle) do
     is_map_key(filter.shapes, shape_handle)
+  end
+
+  @spec active_shapes(t()) :: [shape_id()]
+  def active_shapes(%Filter{} = filter) do
+    Map.keys(filter.shapes)
   end
 
   @doc """
