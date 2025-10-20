@@ -165,31 +165,54 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     end
 
     defp prometheus_metrics do
+      num_schedulers = :erlang.system_info(:schedulers)
+      schedulers_range = 1..num_schedulers
+
+      num_dirty_cpu_schedulers = :erlang.system_info(:dirty_cpu_schedulers)
+
+      dirty_cpu_schedulers_range =
+        (num_schedulers + 1)..(num_schedulers + num_dirty_cpu_schedulers)
+
       [
         last_value("process.memory.total", tags: [:process_type], unit: :byte),
         last_value("system.cpu.core_count"),
         last_value("system.cpu.utilization.total"),
-        last_value("vm.memory.processes_used", unit: :byte),
+        last_value("vm.garbage_collection.total_runs"),
+        last_value("vm.garbage_collection.total_bytes_reclaimed", unit: :byte),
+        last_value("vm.memory.atom", unit: :byte),
+        last_value("vm.memory.atom_used", unit: :byte),
         last_value("vm.memory.binary", unit: :byte),
+        last_value("vm.memory.code", unit: :byte),
         last_value("vm.memory.ets", unit: :byte),
-        last_value("vm.system_counts.process_count"),
+        last_value("vm.memory.processes", unit: :byte),
+        last_value("vm.memory.processes_used", unit: :byte),
+        last_value("vm.memory.system", unit: :byte),
+        last_value("vm.memory.total", unit: :byte),
+        last_value("vm.reductions.total"),
+        last_value("vm.reductions.delta"),
+        last_value("vm.run_queue_lengths.total"),
+        last_value("vm.scheduler_utilization.total"),
+        last_value("vm.scheduler_utilization.weighted"),
         last_value("vm.system_counts.atom_count"),
         last_value("vm.system_counts.port_count"),
+        last_value("vm.system_counts.process_count"),
         last_value("vm.total_run_queue_lengths.total"),
         last_value("vm.total_run_queue_lengths.cpu"),
         last_value("vm.total_run_queue_lengths.io"),
         last_value("vm.uptime.total",
           unit: :second,
           measurement: &:erlang.convert_time_unit(&1.total, :native, :second)
-        ),
-        last_value("vm.memory.total", unit: :byte)
+        )
       ] ++
         Enum.map(
           # Add "system.cpu.utilization.core_*" but since there's no wildcard support we
           # explicitly add the cores here.
           0..(:erlang.system_info(:logical_processors) - 1),
           &last_value("system.cpu.utilization.core_#{&1}")
-        )
+        ) ++
+        Enum.map(scheduler_ids(), &last_value("vm.run_queue_lengths.normal_#{&1}")) ++
+        Enum.map(schedulers_range, &last_value("vm.scheduler_utilization.normal_#{&1}")) ++
+        Enum.map(dirty_cpu_schedulers_range, last_value("vm.scheduler_utilization.cpu_#{&1}"))
     end
 
     defp otel_metrics(opts) do
@@ -219,10 +242,12 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp memory_by_process_type_metrics(_), do: []
 
-    defp periodic_measurements(opts) do
+    defp scheduler_ids do
       num_schedulers = :erlang.system_info(:schedulers)
-      scheduler_ids = Enum.map(1..num_schedulers, &:"normal_#{&1}") |> Enum.concat([:cpu, :io])
+      Enum.map(1..num_schedulers, &:"normal_#{&1}") |> Enum.concat([:cpu, :io])
+    end
 
+    defp periodic_measurements(opts) do
       word_size = :erlang.system_info(:wordsize)
 
       [
@@ -240,7 +265,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
         {__MODULE__, :scheduler_utilization, []},
-        {__MODULE__, :run_queue_lengths, [scheduler_ids]},
+        {__MODULE__, :run_queue_lengths, [scheduler_ids()]},
         {__MODULE__, :garbage_collection, [word_size]},
         {__MODULE__, :reductions, []},
         {__MODULE__, :process_memory, [opts]},
