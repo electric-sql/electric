@@ -134,11 +134,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   defp consumer_pid(handle, table) do
-    try do
-      :ets.lookup_element(table, handle, 2)
-    rescue
-      _e in ArgumentError -> nil
-    end
+    :ets.lookup_element(table, handle, 2, nil)
   end
 
   defp start_consumer!(handle, %__MODULE__{} = state) do
