@@ -237,24 +237,8 @@ defmodule Support.ComponentSetup do
     :ok
   end
 
-  def with_consumer_registry(ctx) do
-    case ctx do
-      %{consumer_registry: pid} when is_pid(pid) ->
-        ctx
-
-      ctx ->
-        name = Electric.Shapes.ConsumerRegistry.name(ctx.stack_id)
-
-        start_supervised!({Electric.Shapes.ConsumerRegistry, stack_id: ctx.stack_id}, id: name)
-
-        %{consumer_registry: name}
-    end
-  end
-
   def with_shape_log_collector(ctx) do
     name = ShapeLogCollector.name(ctx.stack_id)
-
-    %{consumer_registry: consumer_registry} = with_consumer_registry(ctx)
 
     start_supervised!(
       {ShapeLogCollector,
@@ -263,7 +247,7 @@ defmodule Support.ComponentSetup do
       restart: :temporary
     )
 
-    %{shape_log_collector: name, consumer_registry: consumer_registry}
+    %{shape_log_collector: name}
   end
 
   def with_slot_name(ctx) do

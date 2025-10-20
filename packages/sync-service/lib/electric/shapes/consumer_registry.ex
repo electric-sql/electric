@@ -1,6 +1,4 @@
 defmodule Electric.Shapes.ConsumerRegistry do
-  use GenServer
-
   alias Electric.ShapeCache
 
   require Logger
@@ -22,35 +20,6 @@ defmodule Electric.Shapes.ConsumerRegistry do
           stack_id: stack_id(),
           start_consumer_fun: start_consumer_fun()
         }
-
-  def name(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
-  end
-
-  def start_link(args) do
-    with {:ok, stack_id} <- Keyword.fetch(args, :stack_id) do
-      GenServer.start_link(__MODULE__, args, name: name(stack_id))
-    end
-  end
-
-  def registry_state(opts) do
-    struct(__MODULE__, opts)
-  end
-
-  @spec get_registry_state!(stack_id()) :: {:ok, registry_state()}
-  def get_registry_state(stack_id, opts \\ []) when is_binary(stack_id) do
-    with {:ok, state} <- GenServer.call(name(stack_id), :registry_state) do
-      {:ok, struct(state, opts)}
-    end
-  end
-
-  @spec get_registry_state!(stack_id()) :: registry_state()
-  def get_registry_state!(stack_id, opts \\ []) when is_binary(stack_id) do
-    case get_registry_state(stack_id, opts) do
-      {:ok, state} -> state
-      _ -> raise RuntimeError, message: "Unable to get registry state"
-    end
-  end
 
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
   def active_consumer_count(stack_id) when is_binary(stack_id) do
@@ -175,25 +144,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
     table
   end
 
-  @impl GenServer
-  def init(args) do
-    stack_id = Keyword.fetch!(args, :stack_id)
-
-    Process.set_label({:consumer_registry, stack_id})
-    metadata = [stack_id: stack_id]
-    Logger.metadata(metadata)
-    Electric.Telemetry.Sentry.set_tags_context(metadata)
-
+  def new(stack_id, opts \\ []) when is_binary(stack_id) do
     table = registry_table(stack_id)
 
-    state = %__MODULE__{stack_id: stack_id, table: table}
+    state = struct(__MODULE__, Keyword.merge(opts, stack_id: stack_id, table: table))
 
     {:ok, state}
-  end
-
-  @impl GenServer
-  def handle_call(:registry_state, _from, state) do
-    {:reply, {:ok, state}, state}
   end
 
   defp ets_name(opts) when is_list(opts) or is_map(opts) do

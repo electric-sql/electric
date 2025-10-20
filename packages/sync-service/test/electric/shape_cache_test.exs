@@ -1110,7 +1110,6 @@ defmodule Electric.ShapeCacheTest do
               ctx.consumer_supervisor,
               ctx.shape_log_collector,
               ctx.shape_status_owner,
-              ctx.consumer_registry,
               "shape_task_supervisor"
             ] do
         :ok = stop_supervised(name)

@@ -124,6 +124,9 @@ defmodule Electric.Replication.ShapeLogCollector do
       |> PersistentReplicationState.get_tracked_relations()
       |> AffectedColumns.init()
 
+    {:ok, registry_state} =
+      ConsumerRegistry.new(stack_id, Map.get(opts, :consumer_registry_opts, []))
+
     state =
       Map.merge(opts, %{
         subscriptions: 0,
@@ -146,11 +149,7 @@ defmodule Electric.Replication.ShapeLogCollector do
               end
             end
           ),
-        registry_state:
-          ConsumerRegistry.get_registry_state!(
-            stack_id,
-            Map.get(opts, :consumer_registry_opts, [])
-          )
+        registry_state: registry_state
       })
 
     {:ok, state, {:continue, :restore_shapes}}

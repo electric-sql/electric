@@ -29,12 +29,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
   setup(ctx) do
     %{stack_id: stack_id} = ctx
     parent = self()
-    table = ConsumerRegistry.registry_table(stack_id)
 
-    registry_state =
-      ConsumerRegistry.registry_state(
-        stack_id: stack_id,
-        table: table,
+    {:ok, registry_state} =
+      ConsumerRegistry.new(
+        stack_id,
         start_consumer_fun: fn handle, stack_id: ^stack_id ->
           send(parent, {:start_consumer, handle})
 

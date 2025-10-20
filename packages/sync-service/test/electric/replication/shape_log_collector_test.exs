@@ -20,8 +20,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       with_shape_status: 1,
       with_stack_id_from_test: 1,
       with_noop_publication_manager: 1,
-      with_persistent_kv: 1,
-      with_consumer_registry: 1
+      with_persistent_kv: 1
     ]
 
   import Mox
@@ -33,8 +32,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     :with_in_memory_storage,
     :with_shape_status,
     :with_noop_publication_manager,
-    :with_persistent_kv,
-    :with_consumer_registry
+    :with_persistent_kv
   ]
 
   @inspector Support.StubInspector.new(
