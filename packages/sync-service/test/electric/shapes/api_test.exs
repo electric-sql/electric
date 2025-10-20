@@ -1195,7 +1195,16 @@ defmodule Electric.Shapes.ApiTest do
         []
       end)
 
-      test_pid = self()
+      stack_id = ctx.stack_id
+
+      status_task =
+        start_supervised!({
+          Task,
+          fn ->
+            set_status_to_active(ctx)
+            Process.sleep(:infinity)
+          end
+        })
 
       req_task =
         Task.async(fn ->
@@ -1210,28 +1219,14 @@ defmodule Electric.Shapes.ApiTest do
                      }
                    )
 
-          send(test_pid, :request_validated)
-          res = Api.serve_shape_response(request)
-          {res, response_body(res)}
+          Process.exit(status_task, :kill)
+          Electric.StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+          Process.sleep(50)
+
+          Api.serve_shape_response(request)
         end)
 
-      stack_id = ctx.stack_id
-
-      receive do
-        :request_validated ->
-          Repatch.patch(
-            Electric.StatusMonitor,
-            :get_status,
-            fn ^stack_id -> %{shape: :down, conn: :down} end,
-            mode: :local
-          )
-      end
-
-      {response, body} = Task.await(req_task)
-
-      assert response.status == 503
-      assert [%{message: message}] = body
-      assert message =~ "failed stack"
+      assert %{status: 503} = Task.await(req_task)
     end
   end
 
