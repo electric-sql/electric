@@ -366,7 +366,7 @@ defmodule Electric.Shapes.Api do
 
   defp hold_until_stack_ready(%Api{} = api, opts \\ []) do
     stack_id = stack_id(api)
-    opts = [timeout: api.stack_ready_timeout] ++ opts
+    opts = Keyword.put_new(opts, :timeout, api.stack_ready_timeout)
 
     case Electric.StatusMonitor.wait_until_active(stack_id, opts) do
       :ok ->
@@ -384,7 +384,7 @@ defmodule Electric.Shapes.Api do
         hold_until_stack_ready(api, block_on_conn_sleeping: true)
 
       {:error, message} ->
-        Logger.warning("Stack not ready after #{api.stack_ready_timeout}ms. Reason: #{message}")
+        Logger.warning("Stack not ready after #{opts[:timeout]}ms. Reason: #{message}")
         {:error, Response.error(api, message, status: 503)}
     end
   end
@@ -746,7 +746,7 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      api: %{long_poll_timeout: long_poll_timeout}
+      api: %{long_poll_timeout: long_poll_timeout} = api
     } = request
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
@@ -772,12 +772,20 @@ defmodule Electric.Shapes.Api do
         error = Api.Error.must_refetch()
         Response.error(request, error.message, status: error.status)
     after
-      # If we timeout, return an up-to-date message
+      # If we timeout, check that the stack is still up and
+      # return an up-to-date message
       long_poll_timeout ->
-        request
-        |> update_attrs(%{ot_is_long_poll_timeout: true})
-        |> determine_global_last_seen_lsn()
-        |> no_change_response()
+        request = update_attrs(request, %{ot_is_long_poll_timeout: true})
+
+        case hold_until_stack_ready(api, timeout: 0) do
+          :ok ->
+            request
+            |> determine_global_last_seen_lsn()
+            |> no_change_response()
+
+          {:error, error} ->
+            Response.error(request, error.message, status: error.status)
+        end
     end
   end
 
