@@ -212,7 +212,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         ) ++
         Enum.map(scheduler_ids(), &last_value("vm.run_queue_lengths.normal_#{&1}")) ++
         Enum.map(schedulers_range, &last_value("vm.scheduler_utilization.normal_#{&1}")) ++
-        Enum.map(dirty_cpu_schedulers_range, last_value("vm.scheduler_utilization.cpu_#{&1}"))
+        Enum.map(dirty_cpu_schedulers_range, &last_value("vm.scheduler_utilization.cpu_#{&1}"))
     end
 
     defp otel_metrics(opts) do
