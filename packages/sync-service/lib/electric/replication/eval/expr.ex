@@ -76,7 +76,7 @@ defmodule Electric.Replication.Eval.Expr do
   defp type_from_json_safe(["row", types]), do: {:row, Enum.map(types, &type_from_json_safe/1)}
   defp type_from_json_safe(["internal", type]), do: {:internal, type_from_json_safe(type)}
   defp type_from_json_safe(["enum", type]), do: {:enum, type_from_json_safe(type)}
-  defp type_from_json_safe(type) when is_binary(type), do: String.to_atom(type)
+  defp type_from_json_safe(type) when is_binary(type), do: String.to_existing_atom(type)
 
   defimpl Electric.Shapes.Shape.Comparable do
     def comparable(%Electric.Replication.Eval.Expr{} = expr) do

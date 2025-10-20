@@ -421,6 +421,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp load(meta_table, last_used_table, storage) do
+    _ = Electric.Postgres.supported_types()
+
     with {:ok, shapes} <- Storage.get_all_stored_shapes(storage) do
       now = System.monotonic_time()
 

@@ -665,15 +665,15 @@ defmodule Electric.Shapes.Shape do
          root_table_id: root_table_id,
          root_pk: root_pks,
          root_column_count: root_column_count,
-         flags: Map.new(flags, fn {k, v} -> {String.to_atom(k), v} end),
+         flags: Map.new(flags, fn {k, v} -> {String.to_existing_atom(k), v} end),
          where: where,
          selected_columns: selected_columns,
          explicitly_selected_columns:
            Map.get(data, "explicitly_selected_columns", selected_columns),
          storage: storage_config_from_json(storage),
-         replica: String.to_atom(replica),
+         replica: String.to_existing_atom(replica),
          shape_dependencies: shape_dependencies,
-         log_mode: String.to_atom(Map.get(data, "log_mode", "full"))
+         log_mode: String.to_existing_atom(Map.get(data, "log_mode", "full"))
        }}
     end
   end
@@ -749,7 +749,7 @@ defmodule Electric.Shapes.Shape do
   defp storage_config_from_json(%{"compaction" => "disabled"}), do: %{compaction: :disabled}
 
   defp column_info_from_json({"type_id", [id, mod]}), do: {:type_id, {id, mod}}
-  defp column_info_from_json({"type_kind", kind}), do: {:type_kind, String.to_atom(kind)}
+  defp column_info_from_json({"type_kind", kind}), do: {:type_kind, String.to_existing_atom(kind)}
   defp column_info_from_json({"type", type}), do: {:type, String.to_atom(type)}
   defp column_info_from_json({key, value}), do: {String.to_atom(key), value}
 end
