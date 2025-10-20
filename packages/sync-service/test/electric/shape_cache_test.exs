@@ -1165,8 +1165,19 @@ defmodule Electric.ShapeCacheTest do
       refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)
       refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle)
 
+      refute GenServer.whereis(
+               Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
+             )
+
       assert {:ok, [{^shape_handle, _pid1}, {^dep_handle, _pid2}]} =
                ShapeCache.start_consumer_for_handle(shape_handle, opts)
+
+      # Materializer should be started
+      assert Process.alive?(
+               GenServer.whereis(
+                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
+               )
+             )
     end
   end
 
