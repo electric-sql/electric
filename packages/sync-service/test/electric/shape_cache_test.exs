@@ -831,13 +831,17 @@ defmodule Electric.ShapeCacheTest do
 
       %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
-      start_consumer_delay = 100
+      start_consumer_delay = 500
+
+      test_pid = self()
 
       Repatch.patch(
         Electric.Shapes.DynamicConsumerSupervisor,
         :start_shape_consumer,
         [mode: :shared],
         fn a, b ->
+          send(test_pid, :about_to_start_consumer)
+
           Process.sleep(start_consumer_delay)
           Repatch.real(Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(a, b))
         end
@@ -846,14 +850,16 @@ defmodule Electric.ShapeCacheTest do
       Repatch.allow(self(), opts[:server])
 
       creation_task = Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, opts) end)
-      Process.sleep(div(start_consumer_delay, 10))
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, _} =
+        receive do
+          :about_to_start_consumer -> ShapeCache.get_or_create_shape_handle(@shape, opts)
+        end
 
       wait_task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
 
       # should delay in responding
-      refute Task.yield(wait_task, div(start_consumer_delay, 2))
+      refute Task.yield(wait_task, 10)
       Task.await(creation_task)
       assert :started = Task.await(wait_task, start_consumer_delay)
     end
