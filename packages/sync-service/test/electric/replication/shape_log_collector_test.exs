@@ -161,7 +161,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                action: :restore
              }) do
         send(test_pid, {:start_consumer, shape_handle, id, pid})
-        {:ok, pid}
+        {:ok, [{shape_handle, pid}]}
       end
     end
   end

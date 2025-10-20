@@ -243,10 +243,11 @@ defmodule Support.ComponentSetup do
         ctx
 
       ctx ->
-        %{
-          consumer_registry:
-            start_link_supervised!({Electric.Shapes.ConsumerRegistry, stack_id: ctx.stack_id})
-        }
+        name = Electric.Shapes.ConsumerRegistry.name(ctx.stack_id)
+
+        start_supervised!({Electric.Shapes.ConsumerRegistry, stack_id: ctx.stack_id}, id: name)
+
+        %{consumer_registry: name}
     end
   end
 

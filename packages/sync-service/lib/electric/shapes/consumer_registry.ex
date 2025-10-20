@@ -15,7 +15,8 @@ defmodule Electric.Shapes.ConsumerRegistry do
   @type stack_id() :: Electric.stack_id()
   @type stack_ref() :: stack_id() | [stack_id: stack_id()] | %{stack_id: stack_id()}
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type start_consumer_fun() :: (shape_handle(), stack_ref() -> GenServer.on_start())
+  @type start_consumer_fun() :: (shape_handle(), stack_ref() ->
+                                   {:ok, [{shape_handle(), pid()}]} | {:error, term()})
   @type registry_state() :: %__MODULE__{
           table: :ets.table(),
           stack_id: stack_id(),
@@ -68,11 +69,14 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @spec register_consumer(shape_handle(), pid(), :ets.table()) :: {:ok, non_neg_integer()}
   def register_consumer(shape_handle, pid, table) when is_atom(table) or is_reference(table) do
+    n = register_consumer!(shape_handle, pid, table)
+    {:ok, n}
+  end
+
+  defp register_consumer!(shape_handle, pid, table) do
     true = :ets.insert_new(table, [{shape_handle, pid}])
 
-    n = :ets.update_counter(table, @count_key, 1)
-
-    {:ok, n}
+    :ets.update_counter(table, @count_key, 1)
   end
 
   @spec publish([shape_handle()], term(), registry_state()) :: :ok
@@ -138,12 +142,20 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   defp start_consumer!(handle, %__MODULE__{} = state) do
-    %__MODULE__{stack_id: stack_id, start_consumer_fun: start_consumer_fun} = state
+    %__MODULE__{stack_id: stack_id, start_consumer_fun: start_consumer_fun, table: table} = state
 
     case start_consumer_fun.(handle, stack_id: stack_id) do
-      {:ok, pid} ->
-        {:ok, n} = register_consumer(handle, pid, state)
+      {:ok, pid_handles} ->
+        {n, pid} =
+          Enum.reduce(pid_handles, {0, nil}, fn {inner_handle, pid}, {_, consumer_pid} ->
+            {
+              register_consumer!(inner_handle, pid, table),
+              if(handle == inner_handle, do: pid, else: consumer_pid)
+            }
+          end)
+
         Logger.info("Started consumer #{n} for existing handle #{handle}")
+
         pid
 
       {:error, :no_shape} ->

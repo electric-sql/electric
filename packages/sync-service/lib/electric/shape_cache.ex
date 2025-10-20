@@ -18,6 +18,8 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback await_snapshot_start(shape_handle(), opts :: Access.t()) ::
               :started | {:error, term()}
   @callback has_shape?(shape_handle(), Access.t()) :: boolean()
+  @callback start_consumer_for_handle(shape_handle(), Access.t()) ::
+              {:ok, [{shape_handle(), pid()}]} | {:error, :no_shape}
   @callback clean_shape(shape_handle(), Access.t()) :: :ok
 end
 
@@ -39,6 +41,7 @@ defmodule Electric.ShapeCache do
   @behaviour Electric.ShapeCacheBehaviour
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_def() :: Electric.ShapeCacheBehaviour.shape_def()
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
@@ -203,6 +206,7 @@ defmodule Electric.ShapeCache do
     end
   end
 
+  @impl Electric.ShapeCacheBehaviour
   def start_consumer_for_handle(shape_handle, opts) when is_binary(shape_handle) do
     server = Access.get(opts, :server, name(opts))
     GenServer.call(server, {:start_consumer_for_handle, shape_handle}, @call_timeout)
@@ -276,8 +280,11 @@ defmodule Electric.ShapeCache do
     case ShapeStatus.fetch_shape_by_handle(state.stack_id, shape_handle) do
       {:ok, shape} ->
         # TODO: otel ctx from shape log collector?
-        {:ok, pid} = start_shape(shape_handle, shape, state, nil, :restore)
-        {:reply, {:ok, pid}, state}
+        {
+          :reply,
+          restore_shape_and_dependencies(shape_handle, shape, state, nil),
+          state
+        }
 
       :error ->
         {:reply, {:error, :no_shape}, state}
@@ -406,18 +413,64 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @spec group_into_layers([{shape_handle(), Shape.t()}]) :: [[{shape_handle(), Shape.t()}], ...]
-  defp group_into_layers(handles_and_shapes, acc \\ [], visited \\ MapSet.new())
-  defp group_into_layers([], acc, _visited), do: Enum.reverse(acc)
+  # start_shape assumes that any dependent shapes already have running consumers
+  # so we need to start those. this may be something we can do lazily: i.e.
+  # only starting dependent shapes when they receive a write
+  defp restore_shape_and_dependencies(shape_handle, shape, state, otel_ctx) do
+    [{shape_handle, shape}]
+    |> build_shape_dependencies(MapSet.new())
+    |> elem(0)
+    |> Enum.reduce_while({:ok, []}, fn {handle, shape}, {:ok, acc} ->
+      case Electric.Shapes.ConsumerRegistry.whereis(state.stack_id, handle) do
+        nil ->
+          case start_shape(handle, shape, state, otel_ctx, :restore) do
+            {:ok, pid} ->
+              {:cont, {:ok, [{handle, pid} | acc]}}
 
-  defp group_into_layers(handles_and_shapes, acc, visited) do
-    {appendable, missing_deps} =
-      Enum.split_with(handles_and_shapes, fn {_, shape} ->
-        Enum.all?(shape.shape_dependencies_handles, &MapSet.member?(visited, &1))
-      end)
+            :error ->
+              {:halt, {:error, handle}}
+          end
 
-    visited = MapSet.new(appendable, &elem(&1, 0)) |> MapSet.union(visited)
+        pid when is_pid(pid) ->
+          {:cont, {:ok, acc}}
+      end
+    end)
+    |> case do
+      {:ok, handles} ->
+        {:ok, handles}
 
-    group_into_layers(missing_deps, [appendable | acc], visited)
+      {:error, failed_handle} ->
+        if failed_handle != shape_handle do
+          Logger.warning(
+            "Failed to start consumer for handle #{shape_handle}: error starting consumer for inner shape #{failed_handle}"
+          )
+
+          # If we got an error starting any of the dependent shapes then we
+          # remove the outer shape too
+          ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
+        end
+
+        {:error, "Failed to start consumer for #{shape_handle}"}
+    end
+  end
+
+  @spec build_shape_dependencies([{shape_handle(), shape_def()}], MapSet.t()) ::
+          {[
+             {shape_handle(), shape_def()}
+           ], MapSet.t()}
+
+  defp build_shape_dependencies([], known) do
+    {[], known}
+  end
+
+  defp build_shape_dependencies([{handle, shape} | rest], known) do
+    {siblings, known} = build_shape_dependencies(rest, MapSet.put(known, handle))
+
+    {descendents, known} =
+      Enum.zip(shape.shape_dependencies_handles, shape.shape_dependencies)
+      |> Enum.reject(fn {handle, _shape} -> MapSet.member?(known, handle) end)
+      |> build_shape_dependencies(known)
+
+    {descendents ++ [{handle, shape} | siblings], known}
   end
 end
