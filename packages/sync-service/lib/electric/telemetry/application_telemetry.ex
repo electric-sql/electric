@@ -234,6 +234,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         # Our custom measurements:
         {__MODULE__, :uptime_event, []},
         {__MODULE__, :cpu_utilization, []},
+        {__MODULE__, :scheduler_utilization, []},
         {__MODULE__, :process_memory, [opts]},
         {__MODULE__, :get_system_load_average, []},
         {__MODULE__, :get_system_memory_usage, []}
@@ -274,6 +275,41 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
           :telemetry.execute([:system, :cpu], %{core_count: length(bare_values)})
       end
+    end
+
+    # The Erlang docs do not specify a recommended value to use between two successive samples
+    # of scheduler utilization.
+    @scheduler_wall_time_measurement_duration 100
+
+    def scheduler_utilization do
+      # Perform the measurement in a task to ensure that the `scheduler_wall_time` flag does
+      # not remain enabled in case of unforeseen errors.
+      t =
+        Task.async(fn ->
+          :erlang.system_flag(:scheduler_wall_time, true)
+          s1 = :scheduler.get_sample()
+          Process.sleep(@scheduler_wall_time_measurement_duration)
+          s2 = :scheduler.get_sample()
+          {s1, s2}
+        end)
+
+      {s1, s2} = Task.await(t)
+
+      schedulers = :scheduler.utilization(s1, s2)
+
+      utilization =
+        Map.new(schedulers, fn
+          # Scheduler utilization of a normal scheduler with number scheduler_id
+          {:normal, scheduler_id, util, _percent} -> {:"normal_#{scheduler_id}", util * 100}
+          # Scheduler utilization of a dirty-cpu scheduler with number scheduler_id
+          {:cpu, scheduler_id, util, _percent} -> {:"cpu_#{scheduler_id}", util * 100}
+          # Total utilization of all normal and dirty-cpu schedulers
+          {:total, util, _percent} -> {:total, util * 100}
+          # Total utilization of all normal and dirty-cpu schedulers, weighted against maximum amount of available CPU time
+          {:weighted, util, _percent} -> {:weighted, util * 100}
+        end)
+
+      :telemetry.execute([:vm, :scheduler_utilization], utilization)
     end
 
     def get_system_load_average do
