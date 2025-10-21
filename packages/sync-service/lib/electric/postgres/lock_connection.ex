@@ -203,7 +203,7 @@ defmodule Electric.Postgres.LockConnection do
   end
 
   defp notify_system_identified(%State{connection_manager: manager}, info) do
-    Connection.Manager.pg_system_info_obtained(manager, info)
+    Connection.Manager.pg_system_identified(manager, info)
   end
 
   defp notify_lock_acquisition_error(error, %State{connection_manager: manager}) do
