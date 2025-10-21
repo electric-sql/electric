@@ -120,16 +120,23 @@ defmodule Electric.Connection.ConnectionManagerTest do
       new_stack_id = stack_id <> "_new"
       _registry = start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
 
-      lock_opts = [
-        connection_opts: ctx.connection_opts,
-        connection_manager: self(),
-        lock_name: Keyword.fetch!(ctx.replication_opts, :slot_name),
-        stack_id: new_stack_id
-      ]
+      test_pid = self()
 
-      start_supervised!(%{
-        id: :alt_lock,
-        start: {Electric.Postgres.LockConnection, :start_link, [lock_opts]}
+      start_supervised!({
+        Task,
+        fn ->
+          DBConnection.run(ctx.db_conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "SELECT pg_advisory_lock(hashtext('#{ctx.slot_name}'))",
+              []
+            )
+
+            send(test_pid, :test_lock_acquired)
+
+            Process.sleep(:infinity)
+          end)
+        end
       })
 
       monitor = monitor_replication_client(stack_id)
@@ -141,6 +148,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
         )
 
       assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
+      assert_receive :test_lock_acquired
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :up}
