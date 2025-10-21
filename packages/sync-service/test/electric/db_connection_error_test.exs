@@ -167,7 +167,7 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
-    test "with slot exceeded max size error <PG18" do
+    test "with slot exceeded max size error (only on <PG18)" do
       error = %Postgrex.Error{
         message: nil,
         postgres: %{
@@ -190,7 +190,7 @@ defmodule Electric.DbConnectionErrorTest do
              } = DbConnectionError.from_error(error)
     end
 
-    test "with slot exceeded max size error >=PG18" do
+    test "with slot invalidated and wal removed (max size exceeded >=PG18)" do
       error = %Postgrex.Error{
         message: nil,
         postgres: %{
@@ -206,7 +206,7 @@ defmodule Electric.DbConnectionErrorTest do
 
       assert %DbConnectionError{
                message: "Couldn't start replication: slot has been invalidated" <> _,
-               type: :database_slot_exceeded_max_size,
+               type: :database_slot_invalidated,
                original_error: ^error,
                retry_may_fix?: false,
                drop_slot_and_restart?: true

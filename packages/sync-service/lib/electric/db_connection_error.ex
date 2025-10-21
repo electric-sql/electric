@@ -103,14 +103,11 @@ defmodule Electric.DbConnectionError do
         %Postgrex.Error{
           postgres: %{
             code: :object_not_in_prerequisite_state,
-            detail: detail
+            detail:
+              "This slot has been invalidated because it exceeded the maximum reserved size."
           }
         } = error
-      )
-      when detail in [
-             "This slot has been invalidated because it exceeded the maximum reserved size.",
-             "This replication slot has been invalidated due to \"wal_removed\"."
-           ] do
+      ) do
     %DbConnectionError{
       message: """
       Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
@@ -120,6 +117,33 @@ defmodule Electric.DbConnectionError do
         or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
       """,
       type: :database_slot_exceeded_max_size,
+      original_error: error,
+      retry_may_fix?: false,
+      drop_slot_and_restart?: true
+    }
+  end
+
+  # From PostgreSQL 18 we no longer get the "exceeded the maximum reserved size" detail error
+  # but only a more generic "wal_removed" and that we can no longer access the replication slot.
+  # We can still hint that it is probably due to exceeding max size, but it's safer to not be
+  # so specific given the error deliberately obscures that.
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :object_not_in_prerequisite_state,
+            detail: "This replication slot has been invalidated due to \"wal_removed\"."
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message: """
+      Couldn't start replication: slot has been invalidated and can no longer be accessed.
+        In order to recover consistent replication, the slot will be dropped along with all existing shapes.
+        If you're seeing this message without having recently stopped Electric for a while,
+        it's possible either Electric is lagging behind and you might need to scale up,
+        or you might need to increase the `max_slot_wal_keep_size` parameter of the database.
+      """,
+      type: :database_slot_invalidated,
       original_error: error,
       retry_may_fix?: false,
       drop_slot_and_restart?: true
