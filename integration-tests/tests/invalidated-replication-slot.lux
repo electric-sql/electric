@@ -39,7 +39,7 @@
   -
 
   ??$invalidated_slot_error
-  ??Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.
+  ??Couldn't start replication: slot has been invalidated
   ??Purging all shapes.
   ??Starting replication from postgres
 
