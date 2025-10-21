@@ -22,10 +22,7 @@ defmodule Electric.ExpiryManagerTest do
     ShapeStatus.initialize_empty(stack_id)
 
     expiry_manager =
-      start_supervised!(
-        {ExpiryManager,
-         max_shapes: @max_shapes, expiry_batch_size: 1, period: 1, stack_id: stack_id}
-      )
+      start_supervised!({ExpiryManager, max_shapes: @max_shapes, period: 1, stack_id: stack_id})
 
     Repatch.patch(ShapeCleaner, :remove_shape, [mode: :shared], fn shape_handle,
                                                                    stack_id: stack_id ->
