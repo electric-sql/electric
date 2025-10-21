@@ -64,11 +64,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       stack_id: stack_id,
       inspector: inspector,
       persistent_kv: ctx.persistent_kv,
-      consumer_registry_opts:
-        Map.get(ctx, :consumer_registry_opts, [])
-        |> Keyword.replace_lazy(:start_consumer_fun, fn fun ->
-          fun.(ctx)
-        end)
+      consumer_registry_opts: Map.get(ctx, :consumer_registry_opts, [])
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
@@ -139,31 +135,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
-  def start_transaction_consumer(ctx) do
-    # this is called in the setup_log_collector/1 fun by the test process
-    %{stack_id: stack_id} = ctx
-    test_pid = self()
-
-    fn shape_handle, stack_id: ^stack_id ->
-      # this is called by the shape log collector process
-      id = System.unique_integer([:positive, :monotonic])
-
-      with {:ok, pid} <-
-             DynamicSupervisor.start_child(ctx.supervisor, {
-               Support.TransactionConsumer,
-               id: id,
-               parent: test_pid,
-               producer: self(),
-               shape: @shape,
-               shape_handle: shape_handle,
-               action: :restore
-             }) do
-        send(test_pid, {:start_consumer, shape_handle, id, pid})
-        {:ok, [{shape_handle, pid}]}
-      end
-    end
-  end
-
   describe "lazy consumer initialization" do
     setup do
       supervisor = start_link_supervised!({DynamicSupervisor, strategy: :one_for_one})
@@ -172,12 +143,38 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     setup :setup_log_collector
 
-    @describetag restore_shapes: [{@shape_handle, @shape}],
-                 inspector: @inspector,
-                 consumer_registry_opts: [
-                   start_consumer_fun: &__MODULE__.start_transaction_consumer/1
-                 ]
+    setup(ctx) do
+      %{stack_id: stack_id} = ctx
 
+      parent = self()
+
+      Repatch.patch(
+        Electric.ShapeCache,
+        :start_consumer_for_handle,
+        [mode: :shared],
+        fn shape_handle, stack_id: ^stack_id ->
+          id = System.unique_integer([:positive, :monotonic])
+
+          with {:ok, pid} <-
+                 DynamicSupervisor.start_child(ctx.supervisor, {
+                   Support.TransactionConsumer,
+                   id: id,
+                   parent: parent,
+                   producer: ctx.server,
+                   shape: @shape,
+                   shape_handle: shape_handle,
+                   action: :restore
+                 }) do
+            send(parent, {:start_consumer, shape_handle, id, pid})
+            {:ok, [{shape_handle, pid}]}
+          end
+        end
+      )
+
+      :ok
+    end
+
+    @describetag restore_shapes: [{@shape_handle, @shape}], inspector: @inspector
     test "consumers are started when receiving a transaction that matches their filter", ctx do
       xmin = 100
       lsn = Lsn.from_string("0/10")

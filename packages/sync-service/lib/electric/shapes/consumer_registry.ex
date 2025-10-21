@@ -1,24 +1,20 @@
 defmodule Electric.Shapes.ConsumerRegistry do
   alias Electric.ShapeCache
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
-  require Record
 
   defstruct table: nil,
-            stack_id: nil,
-            start_consumer_fun: &ShapeCache.start_consumer_for_handle/2
+            stack_id: nil
 
   @count_key :consumer_count
 
   @type stack_id() :: Electric.stack_id()
   @type stack_ref() :: stack_id() | [stack_id: stack_id()] | %{stack_id: stack_id()}
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type start_consumer_fun() :: (shape_handle(), stack_ref() ->
-                                   {:ok, [{shape_handle(), pid()}]} | {:error, term()})
-  @type registry_state() :: %__MODULE__{
+  @type t() :: %__MODULE__{
           table: :ets.table(),
-          stack_id: stack_id(),
-          start_consumer_fun: start_consumer_fun()
+          stack_id: stack_id()
         }
 
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
@@ -31,7 +27,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     register_consumer(shape_handle, pid, ets_name(stack_id))
   end
 
-  @spec register_consumer(shape_handle(), pid(), registry_state()) :: {:ok, non_neg_integer()}
+  @spec register_consumer(shape_handle(), pid(), t()) :: {:ok, non_neg_integer()}
   def register_consumer(shape_handle, pid, %__MODULE__{table: table}) do
     register_consumer(shape_handle, pid, table)
   end
@@ -48,7 +44,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.update_counter(table, @count_key, 1)
   end
 
-  @spec publish([shape_handle()], term(), registry_state()) :: :ok
+  @spec publish([shape_handle()], term(), t()) :: :ok
   def publish(shape_handles, event, registry_state) do
     %{table: table} = registry_state
 
@@ -59,7 +55,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     |> broadcast(event)
   end
 
-  @spec remove_consumer(shape_handle(), registry_state()) :: :ok
+  @spec remove_consumer(shape_handle(), t()) :: :ok
   def remove_consumer(shape_handle, %__MODULE__{table: table}) do
     :ets.delete(table, shape_handle)
 
@@ -111,30 +107,37 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   defp start_consumer!(handle, %__MODULE__{} = state) do
-    %__MODULE__{stack_id: stack_id, start_consumer_fun: start_consumer_fun, table: table} = state
+    %__MODULE__{stack_id: stack_id, table: table} = state
 
-    case start_consumer_fun.(handle, stack_id: stack_id) do
-      {:ok, pid_handles} ->
-        {n, pid} =
-          Enum.reduce(pid_handles, {0, nil}, fn {inner_handle, pid}, {_, consumer_pid} ->
-            {
-              register_consumer!(inner_handle, pid, table),
-              if(handle == inner_handle, do: pid, else: consumer_pid)
-            }
-          end)
+    OpenTelemetry.with_span(
+      "consumer_registry.start_consumer",
+      ["shape.handle": handle],
+      state.stack_id,
+      fn ->
+        case ShapeCache.start_consumer_for_handle(handle, stack_id: stack_id) do
+          {:ok, pid_handles} ->
+            {n, pid} =
+              Enum.reduce(pid_handles, {0, nil}, fn {inner_handle, pid}, {_, consumer_pid} ->
+                {
+                  register_consumer!(inner_handle, pid, table),
+                  if(handle == inner_handle, do: pid, else: consumer_pid)
+                }
+              end)
 
-        Logger.info("Started consumer #{n} for existing handle #{handle}")
+            Logger.info("Started consumer #{n} for existing handle #{handle}")
 
-        pid
+            pid
 
-      {:error, :no_shape} ->
-        nil
+          {:error, :no_shape} ->
+            nil
 
-      {:error, reason} ->
-        raise RuntimeError,
-          message:
-            "Stack #{stack_id} unable to start consumer process for shape handle #{handle}: #{inspect(reason)}"
-    end
+          {:error, reason} ->
+            raise RuntimeError,
+              message:
+                "Stack #{stack_id} unable to start consumer process for shape handle #{handle}: #{inspect(reason)}"
+        end
+      end
+    )
   end
 
   @doc false
@@ -157,6 +160,6 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   defp ets_name(stack_id) when is_binary(stack_id) do
-    :"#{__MODULE__}-#{stack_id}"
+    :"Electric.Shapes.ConsumerRegistry-#{stack_id}"
   end
 end

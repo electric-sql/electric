@@ -30,20 +30,22 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     %{stack_id: stack_id} = ctx
     parent = self()
 
-    {:ok, registry_state} =
-      ConsumerRegistry.new(
-        stack_id,
-        start_consumer_fun: fn handle, stack_id: ^stack_id ->
-          send(parent, {:start_consumer, handle})
+    {:ok, registry_state} = ConsumerRegistry.new(stack_id)
 
-          {:ok, pid} =
-            TestSubscriber.start_link(fn message ->
-              send(parent, {:broadcast, handle, message})
-            end)
+    Repatch.patch(
+      Electric.ShapeCache,
+      :start_consumer_for_handle,
+      fn handle, stack_id: ^stack_id ->
+        send(parent, {:start_consumer, handle})
 
-          {:ok, [{handle, pid}]}
-        end
-      )
+        {:ok, pid} =
+          TestSubscriber.start_link(fn message ->
+            send(parent, {:broadcast, handle, message})
+          end)
+
+        {:ok, [{handle, pid}]}
+      end
+    )
 
     [registry_state: registry_state]
   end
