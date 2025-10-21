@@ -32,7 +32,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       slot_name: ctx.slot_name,
       publication_name: publication_name,
       try_creating_publication?: true,
-      slot_temporary?: true,
+      slot_temporary?: Map.get(ctx, :slot_temporary?, true),
       transaction_received: nil,
       relation_received: nil
     ]
@@ -266,6 +266,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
   describe "cleanup procedure" do
     setup [:start_connection_manager]
 
+    @tag slot_temporary?: false
     test "handles dropping slot on termination", ctx do
       %{
         db_conn: db_conn,

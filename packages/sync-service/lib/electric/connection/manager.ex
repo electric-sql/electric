@@ -369,6 +369,11 @@ defmodule Electric.Connection.Manager do
 
         {:noreply, state}
 
+      # the ConnectionResolver process was killed, as part of the application
+      # shutdown in which case we'll be killed next so just return here
+      {:error, :killed} ->
+        {:noreply, state}
+
       {:error, reason} ->
         shutdown_or_reconnect(reason, :replication_client, state)
     end
@@ -1150,7 +1155,7 @@ defmodule Electric.Connection.Manager do
     slot_name = Keyword.fetch!(state.replication_opts, :slot_name)
     slot_temporary? = Keyword.fetch!(state.replication_opts, :slot_temporary?)
 
-    if !slot_temporary? do
+    if not slot_temporary? do
       execute_and_log_errors(pool, "SELECT pg_drop_replication_slot('#{slot_name}');")
     end
   end
