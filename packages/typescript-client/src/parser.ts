@@ -1,15 +1,15 @@
-import { ColumnInfo, GetExtensions, Row, Schema, Value } from './types'
-import { ParserNullValueError } from './error'
+import { ColumnInfo, GetExtensions, Row, Schema, Value } from "./types"
+import { ParserNullValueError } from "./error"
 
 type Token = string
 type NullableToken = Token | null
 export type ParseFunction<Extensions = never> = (
   value: Token,
-  additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
+  additionalInfo?: Omit<ColumnInfo, "type" | "dims">
 ) => Value<Extensions>
 type NullableParseFunction<Extensions = never> = (
   value: NullableToken,
-  additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
+  additionalInfo?: Omit<ColumnInfo, "type" | "dims">
 ) => Value<Extensions>
 /**
  * @typeParam Extensions - Additional types that can be parsed by this parser beyond the standard SQL types.
@@ -24,7 +24,7 @@ export type TransformFunction<Extensions = never> = (
 ) => Row<Extensions>
 
 const parseNumber = (value: string) => Number(value)
-const parseBool = (value: string) => value === `true` || value === `t`
+const parseBool = (value: string) => value === "true" || value === "t"
 const parseBigInt = (value: string) => BigInt(value)
 const parseJson = (value: string) => JSON.parse(value)
 const identityParser: ParseFunction = (v: string) => v
@@ -47,14 +47,14 @@ export function pgArrayParser<Extensions>(
 ): Value<Extensions> {
   let i = 0
   let char = null
-  let str = ``
+  let str = ""
   let quoted = false
   let last = 0
   let p: string | undefined = undefined
 
   function extractValue(x: Token, start: number, end: number) {
     let val: Token | null = x.slice(start, end)
-    val = val === `NULL` ? null : val
+    val = val === "NULL" ? null : val
     return parser ? parser(val) : val
   }
 
@@ -63,27 +63,27 @@ export function pgArrayParser<Extensions>(
     for (; i < x.length; i++) {
       char = x[i]
       if (quoted) {
-        if (char === `\\`) {
+        if (char === "\\") {
           str += x[++i]
-        } else if (char === `"`) {
+        } else if (char === "\"") {
           xs.push(parser ? parser(str) : str)
-          str = ``
-          quoted = x[i + 1] === `"`
+          str = ""
+          quoted = x[i + 1] === "\""
           last = i + 2
         } else {
           str += char
         }
-      } else if (char === `"`) {
+      } else if (char === "\"") {
         quoted = true
-      } else if (char === `{`) {
+      } else if (char === "{") {
         last = ++i
         xs.push(loop(x))
-      } else if (char === `}`) {
+      } else if (char === "}") {
         quoted = false
         last < i && xs.push(extractValue(x, last, i))
         last = i + 1
         break
-      } else if (char === `,` && p !== `}` && p !== `"`) {
+      } else if (char === "," && p !== "}" && p !== "\"") {
         xs.push(extractValue(x, last, i))
         last = i + 1
       }
@@ -118,8 +118,8 @@ export class MessageParser<T extends Row<unknown>> {
       // But `typeof null === 'object'` so we need to make an explicit check.
       // We also parse the `old_value`, which appears on updates when `replica=full`.
       if (
-        (key === `value` || key === `old_value`) &&
-        typeof value === `object` &&
+        (key === "value" || key === "old_value") &&
+        typeof value === "object" &&
         value !== null
       ) {
         // Parse the row values
@@ -182,7 +182,7 @@ function makeNullableParser<Extensions>(
   return (value: NullableToken) => {
     if (value === null) {
       if (!isNullable) {
-        throw new ParserNullValueError(columnName ?? `unknown`)
+        throw new ParserNullValueError(columnName ?? "unknown")
       }
       return null
     }

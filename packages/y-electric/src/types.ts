@@ -3,12 +3,12 @@ import {
   Offset,
   Row,
   ShapeStreamOptions,
-} from '@electric-sql/client'
-import * as decoding from 'lib0/decoding'
-import * as awarenessProtocol from 'y-protocols/awareness'
-import * as Y from 'yjs'
+} from "@electric-sql/client"
+import * as decoding from "lib0/decoding"
+import * as awarenessProtocol from "y-protocols/awareness"
+import * as Y from "yjs"
 
-export type ConnectivityStatus = `connected` | `disconnected` | `connecting`
+export type ConnectivityStatus = "connected" | "disconnected" | "connecting"
 
 /**
  * A function that handles send errors.
@@ -38,10 +38,10 @@ export type YProvider = {
   sync: (state: boolean) => void
   synced: (state: boolean) => void
   status: (status: {
-    status: `connecting` | `connected` | `disconnected`
+    status: "connecting" | "connected" | "disconnected"
   }) => void
-  // eslint-disable-next-line quotes
-  'connection-close': () => void
+   
+  "connection-close": () => void
 }
 
 /**

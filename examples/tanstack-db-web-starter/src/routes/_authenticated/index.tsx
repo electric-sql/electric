@@ -5,14 +5,14 @@ import { useEffect } from "react"
 import { projectCollection, todoCollection } from "@/lib/collections"
 import { authClient } from "@/lib/auth-client"
 
-export const Route = createFileRoute(`/_authenticated/`)({
+export const Route = createFileRoute("/_authenticated/")({
   component: IndexRedirect,
   ssr: false,
   beforeLoad: async () => {
     const res = await authClient.getSession()
     if (!res.data?.session) {
       throw redirect({
-        to: `/login`,
+        to: "/login",
         search: {
           // Use the current location to power a redirect after login
           // (Do not use `router.state.resolvedLocation` as it can
@@ -37,7 +37,7 @@ function IndexRedirect() {
     if (projects.length > 0) {
       const firstProject = projects[0]
       navigate({
-        to: `/project/$projectId`,
+        to: "/project/$projectId",
         params: { projectId: firstProject.id.toString() },
         replace: true,
       })

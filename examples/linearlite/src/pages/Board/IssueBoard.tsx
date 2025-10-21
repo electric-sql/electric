@@ -1,10 +1,10 @@
-import { DragDropContext, DropResult } from 'react-beautiful-dnd'
-import { useState, useEffect, createElement } from 'react'
-import { generateKeyBetween } from 'fractional-indexing'
-import { Issue, Status, StatusDisplay, StatusValue } from '../../types/types'
-import { useLiveQuery, usePGlite } from '@electric-sql/pglite-react'
-import IssueCol from './IssueCol'
-import { LiveQuery, LiveQueryResults } from '@electric-sql/pglite/live'
+import { DragDropContext, DropResult } from "react-beautiful-dnd"
+import { useState, useEffect, createElement } from "react"
+import { generateKeyBetween } from "fractional-indexing"
+import { Issue, Status, StatusDisplay, StatusValue } from "../../types/types"
+import { useLiveQuery, usePGlite } from "@electric-sql/pglite-react"
+import IssueCol from "./IssueCol"
+import { LiveQuery, LiveQueryResults } from "@electric-sql/pglite/live"
 
 export interface IssueBoardProps {
   columnsLiveIssues: Record<StatusValue, LiveQuery<Issue>>
@@ -102,9 +102,9 @@ export default function IssueBoard({ columnsLiveIssues }: IssueBoardProps) {
       prevIssue = columnIssues[index - 1]
       nextIssue = columnIssues[index]
     }
-    console.log(`sameColumn`, sameColumn)
-    console.log(`prevIssue`, prevIssue)
-    console.log(`nextIssue`, nextIssue)
+    console.log("sameColumn", sameColumn)
+    console.log("prevIssue", prevIssue)
+    console.log("nextIssue", nextIssue)
     return { prevIssue, nextIssue }
   }
 

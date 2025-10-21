@@ -1,32 +1,32 @@
-import { useEffect, useState } from 'react'
-import { SharedTimer } from '../utils/timer'
+import { useEffect, useState } from "react"
+import { SharedTimer } from "../utils/timer"
 
-const locale = `en`
+const locale = "en"
 const second = 1_000
 const minute = 60 * second
 
 type TimeOpts = {
-  hour: `2-digit`
-  minute: `2-digit`
+  hour: "2-digit"
+  minute: "2-digit"
   second: undefined
 }
 
 type DateOpts = TimeOpts & {
-  year: `numeric`
-  month: `short`
-  day: `numeric`
+  year: "numeric"
+  month: "short"
+  day: "numeric"
 }
 
 const timeOpts: TimeOpts = {
-  hour: `2-digit`,
-  minute: `2-digit`,
+  hour: "2-digit",
+  minute: "2-digit",
   second: undefined,
 }
 
 const dateOpts: DateOpts = {
-  year: `numeric`,
-  month: `short`,
-  day: `numeric`,
+  year: "numeric",
+  month: "short",
+  day: "numeric",
   ...timeOpts,
 }
 
@@ -45,7 +45,7 @@ function isYesterday(target: Date, now: Date): boolean {
 
 export function formatRelativeTime(target: Date | undefined): string {
   if (target === undefined) {
-    return `now`
+    return "now"
   }
 
   const now = new Date()
@@ -54,7 +54,7 @@ export function formatRelativeTime(target: Date | undefined): string {
 
   // Under a minute: 'now'
   if (absDiff < minute) {
-    return `now`
+    return "now"
   }
 
   if (isSameDay(target, now)) {

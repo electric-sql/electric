@@ -19,7 +19,7 @@ export type AwarenessUpdate = Update & {
 
 const connectionString =
   process.env.DATABASE_URL ||
-  `postgresql://postgres:password@localhost:54321/electric`
+  "postgresql://postgres:password@localhost:54321/electric"
 
 const pool = new pg.Pool({ connectionString })
 
@@ -27,15 +27,15 @@ const app = new Hono()
 app.use(logger())
 app.use(
   cors({
-    origin: `*`,
-    allowHeaders: [`Content-Type`, `Authorization`],
-    allowMethods: [`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`],
+    origin: "*",
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: [
-      `Content-Length`,
-      `electric-offset`,
-      `electric-handle`,
-      `electric-schema`,
-      `electric-cursor`,
+      "Content-Length",
+      "electric-offset",
+      "electric-handle",
+      "electric-schema",
+      "electric-cursor",
     ],
     credentials: true,
     maxAge: 600,
@@ -46,20 +46,20 @@ const parseRequest = async (
   c: Context
 ): Promise<ValidRequest | InvalidRequest> => {
   const url = new URL(c.req.url)
-  const room = url.searchParams.get(`room`)
+  const room = url.searchParams.get("room")
 
   if (!room) {
-    return { isValid: false, error: `Room is required` }
+    return { isValid: false, error: "Room is required" }
   }
 
-  const client_id = url.searchParams.get(`client_id`) ?? undefined
+  const client_id = url.searchParams.get("client_id") ?? undefined
 
   // Get update binary from request body
   const arrayBuffer = await c.req.arrayBuffer()
   const update = new Uint8Array(arrayBuffer)
 
   if (update.length === 0) {
-    return { isValid: false, error: `No update provided` }
+    return { isValid: false, error: "No update provided" }
   }
   if (client_id) {
     return { isValid: true, room, client_id, update }
@@ -68,14 +68,14 @@ const parseRequest = async (
   }
 }
 
-app.put(`/api/update`, async (c: Context) => {
+app.put("/api/update", async (c: Context) => {
   try {
     const requestParams = await parseRequest(c)
     if (!requestParams.isValid) {
       return c.json({ error: requestParams }, 400)
     }
 
-    if (`client_id` in requestParams) {
+    if ("client_id" in requestParams) {
       await upsertAwarenessUpdate(requestParams, pool)
     } else {
       await saveUpdate(requestParams, pool)
@@ -89,9 +89,9 @@ app.put(`/api/update`, async (c: Context) => {
 })
 
 // Shape proxy endpoint to forward requests to Electric and handle required headers
-app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
+app.get("/shape-proxy/v1/shape", async (c: Context) => {
   const url = new URL(c.req.url)
-  const electricUrl = process.env.ELECTRIC_URL || `http://localhost:3000`
+  const electricUrl = process.env.ELECTRIC_URL || "http://localhost:3000"
   const originUrl = new URL(`${electricUrl}/v1/shape/`)
 
   // Forward all query parameters
@@ -101,36 +101,36 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
 
   // Add Electric source ID and secret if available
   if (process.env.ELECTRIC_SOURCE_ID) {
-    originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
+    originUrl.searchParams.set("source_id", process.env.ELECTRIC_SOURCE_ID)
   }
 
   // Copy all headers from the original request to forward to Electric
   const headers = new Headers()
   c.req.raw.headers.forEach((value, key) => {
-    if (key !== `host`) {
+    if (key !== "host") {
       // Skip host header to avoid conflicts
       headers.set(key, value)
     }
   })
 
   if (process.env.ELECTRIC_SOURCE_SECRET) {
-    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+    originUrl.searchParams.set("secret", process.env.ELECTRIC_SOURCE_SECRET)
   }
 
   // Make the request to Electric
   try {
     const newRequest = new Request(originUrl.toString(), {
-      method: `GET`,
+      method: "GET",
       headers,
     })
 
     let resp = await fetch(newRequest)
 
     // Handle content-encoding issues
-    if (resp.headers.get(`content-encoding`)) {
+    if (resp.headers.get("content-encoding")) {
       const respHeaders = new Headers(resp.headers)
-      respHeaders.delete(`content-encoding`)
-      respHeaders.delete(`content-length`)
+      respHeaders.delete("content-encoding")
+      respHeaders.delete("content-length")
       resp = new Response(resp.body, {
         status: resp.status,
         statusText: resp.statusText,
@@ -149,10 +149,10 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
 
     // Ensure the Electric headers are explicitly included
     const electricHeaders = [
-      `electric-offset`,
-      `electric-handle`,
-      `electric-schema`,
-      `electric-total-count`,
+      "electric-offset",
+      "electric-handle",
+      "electric-schema",
+      "electric-total-count",
     ]
     for (const header of electricHeaders) {
       const value = resp.headers.get(header)
@@ -166,12 +166,12 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
       headers: responseHeaders,
     })
   } catch (error) {
-    console.error(`Error proxying to Electric:`, error)
-    return c.json({ error: `Failed to proxy request to Electric` }, 500)
+    console.error("Error proxying to Electric:", error)
+    return c.json({ error: "Failed to proxy request to Electric" }, 500)
   }
 })
 
-app.get(`/health`, (c: Context) => {
+app.get("/health", (c: Context) => {
   return c.body(null, 200)
 })
 
@@ -188,7 +188,7 @@ serve({
 })
 
 export async function saveUpdate({ room, update }: Update, pool: Pool) {
-  const q = `INSERT INTO ydoc_update (room, update) VALUES ($1, $2)`
+  const q = "INSERT INTO ydoc_update (room, update) VALUES ($1, $2)"
   const params = [room, update]
   await pool.query(q, params)
 }

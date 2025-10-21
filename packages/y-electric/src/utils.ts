@@ -1,10 +1,10 @@
-import * as decoding from 'lib0/decoding'
+import * as decoding from "lib0/decoding"
 
 /**
  * Convert a hex string from PostgreSQL's bytea format to a Uint8Array
  */
 const hexStringToUint8Array = (hexString: string) => {
-  const cleanHexString = hexString.startsWith(`\\x`)
+  const cleanHexString = hexString.startsWith("\\x")
     ? hexString.slice(2)
     : hexString
   return new Uint8Array(

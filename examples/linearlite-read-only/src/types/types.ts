@@ -1,16 +1,16 @@
-import type React from 'react'
+import type React from "react"
 
-import { ReactComponent as CancelIcon } from '../assets/icons/cancel.svg'
-import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
-import { ReactComponent as TodoIcon } from '../assets/icons/circle.svg'
-import { ReactComponent as DoneIcon } from '../assets/icons/done.svg'
-import { ReactComponent as InProgressIcon } from '../assets/icons/half-circle.svg'
+import { ReactComponent as CancelIcon } from "../assets/icons/cancel.svg"
+import { ReactComponent as BacklogIcon } from "../assets/icons/circle-dot.svg"
+import { ReactComponent as TodoIcon } from "../assets/icons/circle.svg"
+import { ReactComponent as DoneIcon } from "../assets/icons/done.svg"
+import { ReactComponent as InProgressIcon } from "../assets/icons/half-circle.svg"
 
-import { ReactComponent as HighPriorityIcon } from '../assets/icons/signal-strong.svg'
-import { ReactComponent as LowPriorityIcon } from '../assets/icons/signal-weak.svg'
-import { ReactComponent as MediumPriorityIcon } from '../assets/icons/signal-medium.svg'
-import { ReactComponent as NoPriorityIcon } from '../assets/icons/dots.svg'
-import { ReactComponent as UrgentPriorityIcon } from '../assets/icons/rounded-claim.svg'
+import { ReactComponent as HighPriorityIcon } from "../assets/icons/signal-strong.svg"
+import { ReactComponent as LowPriorityIcon } from "../assets/icons/signal-weak.svg"
+import { ReactComponent as MediumPriorityIcon } from "../assets/icons/signal-medium.svg"
+import { ReactComponent as NoPriorityIcon } from "../assets/icons/dots.svg"
+import { ReactComponent as UrgentPriorityIcon } from "../assets/icons/rounded-claim.svg"
 
 export type Issue = {
   id: string
@@ -33,19 +33,19 @@ export type Comment = {
 }
 
 export const Priority = {
-  NONE: `none`,
-  URGENT: `urgent`,
-  HIGH: `high`,
-  LOW: `low`,
-  MEDIUM: `medium`,
+  NONE: "none",
+  URGENT: "urgent",
+  HIGH: "high",
+  LOW: "low",
+  MEDIUM: "medium",
 }
 
 export const PriorityDisplay = {
-  [Priority.NONE]: `None`,
-  [Priority.URGENT]: `Urgent`,
-  [Priority.HIGH]: `High`,
-  [Priority.LOW]: `Low`,
-  [Priority.MEDIUM]: `Medium`,
+  [Priority.NONE]: "None",
+  [Priority.URGENT]: "Urgent",
+  [Priority.HIGH]: "High",
+  [Priority.LOW]: "Low",
+  [Priority.MEDIUM]: "Medium",
 }
 
 export const PriorityIcons = {
@@ -61,27 +61,27 @@ export const PriorityOptions: [
   string,
   (typeof Priority)[keyof typeof Priority],
 ][] = [
-  [PriorityIcons[Priority.NONE], Priority.NONE, `None`],
-  [PriorityIcons[Priority.URGENT], Priority.URGENT, `Urgent`],
-  [PriorityIcons[Priority.HIGH], Priority.HIGH, `High`],
-  [PriorityIcons[Priority.MEDIUM], Priority.MEDIUM, `Medium`],
-  [PriorityIcons[Priority.LOW], Priority.LOW, `Low`],
+  [PriorityIcons[Priority.NONE], Priority.NONE, "None"],
+  [PriorityIcons[Priority.URGENT], Priority.URGENT, "Urgent"],
+  [PriorityIcons[Priority.HIGH], Priority.HIGH, "High"],
+  [PriorityIcons[Priority.MEDIUM], Priority.MEDIUM, "Medium"],
+  [PriorityIcons[Priority.LOW], Priority.LOW, "Low"],
 ]
 
 export const Status = {
-  BACKLOG: `backlog`,
-  TODO: `todo`,
-  IN_PROGRESS: `in_progress`,
-  DONE: `done`,
-  CANCELED: `canceled`,
+  BACKLOG: "backlog",
+  TODO: "todo",
+  IN_PROGRESS: "in_progress",
+  DONE: "done",
+  CANCELED: "canceled",
 }
 
 export const StatusDisplay = {
-  [Status.BACKLOG]: `Backlog`,
-  [Status.TODO]: `To Do`,
-  [Status.IN_PROGRESS]: `In Progress`,
-  [Status.DONE]: `Done`,
-  [Status.CANCELED]: `Canceled`,
+  [Status.BACKLOG]: "Backlog",
+  [Status.TODO]: "To Do",
+  [Status.IN_PROGRESS]: "In Progress",
+  [Status.DONE]: "Done",
+  [Status.CANCELED]: "Canceled",
 }
 
 export const StatusIcons = {

@@ -1,17 +1,17 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { parse } from 'yaml'
+import fs from "node:fs"
+import path from "node:path"
+import { parse } from "yaml"
 
 export default {
-  watch: [`../demos/*.md`],
+  watch: ["../demos/*.md"],
 
   load(files) {
     const demos = files
       .map((file) => {
-        const slug = path.basename(file, `.md`)
+        const slug = path.basename(file, ".md")
 
-        const contents = fs.readFileSync(file, `utf-8`)
-        const frontmatter = contents.split(`---\n`)[1]
+        const contents = fs.readFileSync(file, "utf-8")
+        const frontmatter = contents.split("---\n")[1]
 
         const data = parse(frontmatter)
         data.link = `/demos/${slug}`
@@ -19,7 +19,7 @@ export default {
         return data
       })
       .sort((a, b) => {
-        return parseInt(a.order || `999`) - parseInt(b.order || `999`)
+        return parseInt(a.order || "999") - parseInt(b.order || "999")
       })
 
     return {

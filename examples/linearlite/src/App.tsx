@@ -1,28 +1,28 @@
-import 'animate.css/animate.min.css'
-import Board from './pages/Board'
-import { useState, createContext, useEffect, useMemo } from 'react'
+import "animate.css/animate.min.css"
+import Board from "./pages/Board"
+import { useState, createContext, useEffect, useMemo } from "react"
 import {
   createBrowserRouter,
   RouterProvider,
   type Params,
-} from 'react-router-dom'
-import 'react-toastify/dist/ReactToastify.css'
-import { live, LiveNamespace, LiveQuery } from '@electric-sql/pglite/live'
-import { PGliteWorker } from '@electric-sql/pglite/worker'
-import { PGliteProvider } from '@electric-sql/pglite-react'
-import PGWorker from './pglite-worker.js?worker'
-import List from './pages/List'
-import Root from './pages/root'
-import Issue from './pages/Issue'
+} from "react-router-dom"
+import "react-toastify/dist/ReactToastify.css"
+import { live, LiveNamespace, LiveQuery } from "@electric-sql/pglite/live"
+import { PGliteWorker } from "@electric-sql/pglite/worker"
+import { PGliteProvider } from "@electric-sql/pglite-react"
+import PGWorker from "./pglite-worker.js?worker"
+import List from "./pages/List"
+import Root from "./pages/root"
+import Issue from "./pages/Issue"
 import {
   getFilterStateFromSearchParams,
   filterStateToSql,
   FilterState,
-} from './utils/filterState'
-import { Issue as IssueType, Status, StatusValue } from './types/types'
-import { startSync, useSyncStatus, waitForInitialSyncDone } from './sync'
-import { electricSync } from '@electric-sql/pglite-sync'
-import { ImSpinner8 } from 'react-icons/im'
+} from "./utils/filterState"
+import { Issue as IssueType, Status, StatusValue } from "./types/types"
+import { startSync, useSyncStatus, waitForInitialSyncDone } from "./sync"
+import { electricSync } from "@electric-sql/pglite-sync"
+import { ImSpinner8 } from "react-icons/im"
 
 interface MenuContextInterface {
   showMenu: boolean
@@ -46,9 +46,9 @@ const pgPromise = createPGlite()
 
 let syncStarted = false
 pgPromise.then(async (pg) => {
-  console.log(`PGlite worker started`)
+  console.log("PGlite worker started")
   pg.onLeaderChange(() => {
-    console.log(`Leader changed, isLeader:`, pg.isLeader)
+    console.log("Leader changed, isLeader:", pg.isLeader)
     if (pg.isLeader && !syncStarted) {
       syncStarted = true
       startSync(pg)
@@ -84,8 +84,8 @@ async function boardIssueListLoader({ request }: { request: Request }) {
   for (const status of Object.values(Status)) {
     const colFilterState: FilterState = {
       ...filterState,
-      orderBy: `kanbanorder`,
-      orderDirection: `asc`,
+      orderBy: "kanbanorder",
+      orderDirection: "asc",
       status: [status],
     }
     const { sql: colSql, sqlParams: colSqlParams } =
@@ -119,7 +119,7 @@ async function issueLoader({
   await waitForInitialSyncDone()
   const pg = await pgPromise
   const liveIssue = await pg.live.query<IssueType>({
-    query: `SELECT * FROM issue WHERE id = $1`,
+    query: "SELECT * FROM issue WHERE id = $1",
     params: [params.id],
     signal: request.signal,
   })
@@ -128,26 +128,26 @@ async function issueLoader({
 
 const router = createBrowserRouter([
   {
-    path: `/`,
+    path: "/",
     element: <Root />,
     children: [
       {
-        path: `/`,
+        path: "/",
         element: <List />,
         loader: issueListLoader,
       },
       {
-        path: `/search`,
+        path: "/search",
         element: <List showSearch={true} />,
         loader: issueListLoader,
       },
       {
-        path: `/board`,
+        path: "/board",
         element: <Board />,
         loader: boardIssueListLoader,
       },
       {
-        path: `/issue/:id`,
+        path: "/issue/:id",
         element: <Issue />,
         loader: issueLoader,
       },
@@ -159,7 +159,7 @@ const LoadingScreen = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="h-screen w-screen flex flex-col items-center justify-center gap-4">
       <ImSpinner8 className="w-8 h-8 animate-spin text-blue-500" />
-      <div className="text-gray-600 text-center" style={{ minHeight: `100px` }}>
+      <div className="text-gray-600 text-center" style={{ minHeight: "100px" }}>
         {children}
       </div>
     </div>
@@ -183,7 +183,7 @@ const App = () => {
 
   if (!pgForProvider) return <LoadingScreen>Starting PGlite...</LoadingScreen>
 
-  if (syncStatus === `initial-sync`)
+  if (syncStatus === "initial-sync")
     return (
       <LoadingScreen>
         Performing initial sync...

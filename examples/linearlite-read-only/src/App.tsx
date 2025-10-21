@@ -1,13 +1,13 @@
-import 'animate.css/animate.min.css'
-import Board from './pages/Board'
-import { useState, createContext } from 'react'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import 'react-toastify/dist/ReactToastify.css'
-import List from './pages/List'
-import Root from './pages/root'
-import Issue from './pages/Issue'
-import { preloadShape } from '@electric-sql/react'
-import { issueShape } from './shapes'
+import "animate.css/animate.min.css"
+import Board from "./pages/Board"
+import { useState, createContext } from "react"
+import { createBrowserRouter, RouterProvider } from "react-router-dom"
+import "react-toastify/dist/ReactToastify.css"
+import List from "./pages/List"
+import Root from "./pages/root"
+import Issue from "./pages/Issue"
+import { preloadShape } from "@electric-sql/react"
+import { issueShape } from "./shapes"
 
 interface MenuContextInterface {
   showMenu: boolean
@@ -18,29 +18,29 @@ export const MenuContext = createContext(null as MenuContextInterface | null)
 
 const router = createBrowserRouter([
   {
-    path: `/`,
+    path: "/",
     element: <Root />,
     loader: async () => {
-      console.time(`preload`)
+      console.time("preload")
       await preloadShape(issueShape)
-      console.timeEnd(`preload`)
+      console.timeEnd("preload")
       return null
     },
     children: [
       {
-        path: `/`,
+        path: "/",
         element: <List />,
       },
       {
-        path: `/search`,
+        path: "/search",
         element: <List showSearch={true} />,
       },
       {
-        path: `/board`,
+        path: "/board",
         element: <Board />,
       },
       {
-        path: `/issue/:id`,
+        path: "/issue/:id",
         element: <Issue />,
       },
     ],

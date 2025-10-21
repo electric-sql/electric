@@ -1,11 +1,11 @@
-import './style.css'
+import "./style.css"
 
 import {
   OnlineWrites,
   OptimisticState,
   SharedPersistent,
   ThroughTheDB,
-} from '../../patterns'
+} from "../../patterns"
 
 const App = () => {
   return (

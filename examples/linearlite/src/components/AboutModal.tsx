@@ -1,4 +1,4 @@
-import Modal from './Modal'
+import Modal from "./Modal"
 
 interface Props {
   isOpen: boolean
@@ -10,7 +10,7 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
     <Modal title="About Linearlite" isOpen={isOpen} onDismiss={onDismiss}>
       <div className="flex flex-col w-full px-8 py-5 overflow-y-auto prose prose-sm">
         <p className="my-1">
-          This is an example of a team collaboration app such as{` `}
+          This is an example of a team collaboration app such as{" "}
           <a
             href="https://linear.app"
             target="_blank"
@@ -18,8 +18,8 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
           >
             Linear
           </a>
-          {` `}
-          built using{` `}
+          {" "}
+          built using{" "}
           <a
             href="http://electric-sql.com"
             target="_blank"
@@ -27,11 +27,11 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
           >
             ElectricSQL
           </a>
-          {` `}- the local-first sync layer for web and mobile apps.
+          {" "}- the local-first sync layer for web and mobile apps.
         </p>
         <p className="my-1">
           This example is built on top of the excellent clone of the Linear UI
-          built by{` `}
+          built by{" "}
           <a
             href="https://github.com/tuan3w"
             target="_blank"
@@ -42,7 +42,7 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
           .
         </p>
         <p className="my-1">
-          We have replaced the canned data with a stack running{` `}
+          We have replaced the canned data with a stack running{" "}
           <a
             href="https://github.com/electric-sql/electric"
             target="_blank"
@@ -50,7 +50,7 @@ export default function AboutModal({ isOpen, onDismiss }: Props) {
           >
             Electric
           </a>
-          {` `}
+          {" "}
           in Docker.
         </p>
       </div>

@@ -1,13 +1,13 @@
-import { CSSProperties } from 'react'
+import { CSSProperties } from "react"
 import {
   FixedSizeList as List,
   areEqual,
   type ListOnItemsRenderedProps,
-} from 'react-window'
-import { memo } from 'react'
-import AutoSizer from 'react-virtualized-auto-sizer'
-import IssueRow from './IssueRow'
-import { Issue } from '../../types/types'
+} from "react-window"
+import { memo } from "react"
+import AutoSizer from "react-virtualized-auto-sizer"
+import IssueRow from "./IssueRow"
+import { Issue } from "../../types/types"
 
 // Type-fixed component to work around React 18/19 JSX strictness
 
@@ -52,7 +52,7 @@ const VirtualIssueRow = memo(
     const issue = issues[index]
     return (
       <IssueRow
-        key={`issue-${issue?.id ?? `index` + index}`}
+        key={`issue-${issue?.id ?? `index${  index}`}`}
         issue={issue}
         style={style}
       />

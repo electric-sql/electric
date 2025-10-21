@@ -1,15 +1,15 @@
-import { makeStyles } from '@griffel/react'
-import { Box, Heading, Text } from '@radix-ui/themes'
+import { makeStyles } from "@griffel/react"
+import { Box, Heading, Text } from "@radix-ui/themes"
 
 const useClasses = makeStyles({
   box: {
-    padding: `32px 16px`,
-    maxWidth: `512px`,
+    padding: "32px 16px",
+    maxWidth: "512px",
   },
   para: {
-    color: `var(--gray-11)`,
-    lineHeight: `var(--line-height-3)`,
-    marginBottom: `var(--space-2)`,
+    color: "var(--gray-11)",
+    lineHeight: "var(--line-height-3)",
+    marginBottom: "var(--space-2)",
   },
 })
 
@@ -22,14 +22,14 @@ function AboutSection() {
       </Heading>
       <Text size="2" as="p" className={classes.para}>
         Burn is a multi-user, multi-agent "roast-me" demo app from
-        {` `}
-        <a href="https://electric-sql.com">ElectricSQL</a>.{` `}
+        {" "}
+        <a href="https://electric-sql.com">ElectricSQL</a>.{" "}
         See the
-        {` `}
+        {" "}
         <a href="https://electric-sql.com/blog/2025/08/12/bringing-agents-back-down-to-earth">
           blog post
         </a>
-        {` `}
+        {" "}
         for more&nbsp;info.
       </Text>
       <Heading size="3" mb="3" mt="5" align="left" weight="medium">

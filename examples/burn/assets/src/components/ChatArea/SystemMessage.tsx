@@ -1,36 +1,36 @@
-import type { ReactNode } from 'react'
-import type { EventResult, UserBadgeColor } from '../../types'
+import type { ReactNode } from "react"
+import type { EventResult, UserBadgeColor } from "../../types"
 
-import { Badge, Box, Flex, Text } from '@radix-ui/themes'
-import { makeStyles } from '@griffel/react'
+import { Badge, Box, Flex, Text } from "@radix-ui/themes"
+import { makeStyles } from "@griffel/react"
 
 const useStyles = makeStyles({
   message: {
-    display: `flex`,
-    gap: `var(--space-4)`,
-    marginBottom: `var(--space-4)`,
-    maxWidth: `100%`,
+    display: "flex",
+    gap: "var(--space-4)",
+    marginBottom: "var(--space-4)",
+    maxWidth: "100%",
   },
   messageInner: {
-    marginBottom: `var(--space-1)`,
-    marginLeft: `auto`,
-    marginRight: `auto`,
-    background: `var(--gray-3)`,
-    padding: `var(--space-1) var(--space-4)`,
-    borderRadius: `15px`,
+    marginBottom: "var(--space-1)",
+    marginLeft: "auto",
+    marginRight: "auto",
+    background: "var(--gray-3)",
+    padding: "var(--space-1) var(--space-4)",
+    borderRadius: "15px",
   },
   messageText: {
-    wordWrap: `break-word`,
-    whiteSpace: `pre-wrap`,
-    fontSize: `13px`,
+    wordWrap: "break-word",
+    whiteSpace: "pre-wrap",
+    fontSize: "13px",
   },
   userBadge: {
-    whiteSpace: `normal`,
-    wordBreak: `break-word`,
-    display: `inline`,
-    verticalAlign: `middle`,
-    paddingTop: `1.5px`,
-    paddingBottom: `2px`,
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+    display: "inline",
+    verticalAlign: "middle",
+    paddingTop: "1.5px",
+    paddingBottom: "2px",
   },
 })
 

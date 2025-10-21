@@ -1,8 +1,8 @@
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from "react-router-dom"
 
 export interface FilterState {
   orderBy: string
-  orderDirection: `asc` | `desc`
+  orderDirection: "asc" | "desc"
   status?: string[]
   priority?: string[]
   query?: string
@@ -11,18 +11,18 @@ export interface FilterState {
 export function getFilterStateFromSearchParams(
   searchParams: URLSearchParams
 ): FilterState {
-  const orderBy = searchParams.get(`orderBy`) ?? `created`
+  const orderBy = searchParams.get("orderBy") ?? "created"
   const orderDirection =
-    (searchParams.get(`orderDirection`) as `asc` | `desc`) ?? `desc`
+    (searchParams.get("orderDirection") as "asc" | "desc") ?? "desc"
   const status = searchParams
-    .getAll(`status`)
-    .map((status) => status.toLocaleLowerCase().split(`,`))
+    .getAll("status")
+    .map((status) => status.toLocaleLowerCase().split(","))
     .flat()
   const priority = searchParams
-    .getAll(`priority`)
-    .map((status) => status.toLocaleLowerCase().split(`,`))
+    .getAll("priority")
+    .map((status) => status.toLocaleLowerCase().split(","))
     .flat()
-  const query = searchParams.get(`query`)
+  const query = searchParams.get("query")
 
   const state = {
     orderBy,
@@ -46,29 +46,29 @@ export function useFilterState(): [
     const { orderBy, orderDirection, status, priority, query } = state
     setSearchParams((searchParams) => {
       if (orderBy) {
-        searchParams.set(`orderBy`, orderBy)
+        searchParams.set("orderBy", orderBy)
       } else {
-        searchParams.delete(`orderBy`)
+        searchParams.delete("orderBy")
       }
       if (orderDirection) {
-        searchParams.set(`orderDirection`, orderDirection)
+        searchParams.set("orderDirection", orderDirection)
       } else {
-        searchParams.delete(`orderDirection`)
+        searchParams.delete("orderDirection")
       }
       if (status && status.length > 0) {
-        searchParams.set(`status`, status.join(`,`))
+        searchParams.set("status", status.join(","))
       } else {
-        searchParams.delete(`status`)
+        searchParams.delete("status")
       }
       if (priority && priority.length > 0) {
-        searchParams.set(`priority`, priority.join(`,`))
+        searchParams.set("priority", priority.join(","))
       } else {
-        searchParams.delete(`priority`)
+        searchParams.delete("priority")
       }
       if (query) {
-        searchParams.set(`query`, query)
+        searchParams.set("query", query)
       } else {
-        searchParams.delete(`query`)
+        searchParams.delete("query")
       }
       return searchParams
     })
@@ -83,13 +83,13 @@ export function filterStateToSql(filterState: FilterState) {
   const sqlParams = []
   if (filterState.status?.length) {
     sqlWhere.push(
-      `status IN (${filterState.status.map(() => `$${i++}`).join(` ,`)})`
+      `status IN (${filterState.status.map(() => `$${i++}`).join(" ,")})`
     )
     sqlParams.push(...filterState.status)
   }
   if (filterState.priority?.length) {
     sqlWhere.push(
-      `priority IN (${filterState.priority.map(() => `$${i++}`).join(` ,`)})`
+      `priority IN (${filterState.priority.map(() => `$${i++}`).join(" ,")})`
     )
     sqlParams.push(...filterState.priority)
   }
@@ -105,7 +105,7 @@ export function filterStateToSql(filterState: FilterState) {
     SELECT id, title, priority, status, modified, created, kanbanorder, username, synced
     FROM issue
     WHERE
-      ${sqlWhere.length ? `${sqlWhere.join(` AND `)} AND ` : ``}
+      ${sqlWhere.length ? `${sqlWhere.join(" AND ")} AND ` : ""}
       deleted = false
     ORDER BY
       ${filterState.orderBy} ${filterState.orderDirection},

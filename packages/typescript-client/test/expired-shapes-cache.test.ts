@@ -1,10 +1,10 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { ShapeStream } from '../src'
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
+import { ShapeStream } from "../src"
 import {
   ExpiredShapesCache,
   expiredShapesCache,
-} from '../src/expired-shapes-cache'
-import { EXPIRED_HANDLE_QUERY_PARAM } from '../src/constants'
+} from "../src/expired-shapes-cache"
+import { EXPIRED_HANDLE_QUERY_PARAM } from "../src/constants"
 
 function waitForFetch(stream: ShapeStream): Promise<void> {
   let unsub = () => {}
@@ -16,9 +16,9 @@ function waitForFetch(stream: ShapeStream): Promise<void> {
   }).finally(() => unsub())
 }
 
-describe(`ExpiredShapesCache`, () => {
+describe("ExpiredShapesCache", () => {
   let cache: ExpiredShapesCache
-  const shapeUrl = `https://example.com/v1/shape`
+  const shapeUrl = "https://example.com/v1/shape"
   let aborter: AbortController
   let fetchMock: ReturnType<typeof vi.fn>
 
@@ -33,10 +33,10 @@ describe(`ExpiredShapesCache`, () => {
 
   afterEach(() => aborter.abort())
 
-  it(`should mark shapes as expired and check expiration status`, () => {
-    const shapeUrl1 = `https://example.com/v1/shape?table=test1`
-    const shapeUrl2 = `https://example.com/v1/shape?table=test2`
-    const handle1 = `handle-123`
+  it("should mark shapes as expired and check expiration status", () => {
+    const shapeUrl1 = "https://example.com/v1/shape?table=test1"
+    const shapeUrl2 = "https://example.com/v1/shape?table=test2"
+    const handle1 = "handle-123"
 
     // Initially, shape should not have expired handle
     expect(cache.getExpiredHandle(shapeUrl1)).toBe(null)
@@ -51,16 +51,16 @@ describe(`ExpiredShapesCache`, () => {
     expect(cache.getExpiredHandle(shapeUrl2)).toBe(null)
   })
 
-  it(`should persist expired shapes to localStorage`, () => {
-    const shapeUrl = `https://example.com/v1/shape?table=test`
-    const handle = `test-handle`
+  it("should persist expired shapes to localStorage", () => {
+    const shapeUrl = "https://example.com/v1/shape?table=test"
+    const handle = "test-handle"
 
     // Mark shape as expired
     cache.markExpired(shapeUrl, handle)
 
     // Check that localStorage was updated
     const storedData = JSON.parse(
-      localStorage.getItem(`electric_expired_shapes`) || `{}`
+      localStorage.getItem("electric_expired_shapes") || "{}"
     )
     expect(storedData[shapeUrl]).toEqual({
       expiredHandle: handle,
@@ -68,10 +68,10 @@ describe(`ExpiredShapesCache`, () => {
     })
   })
 
-  it(`should load expired shapes from localStorage on initialization`, () => {
-    const existingShapeUrl = `https://example.com/v1/shape?table=existing`
-    const nonExistentShapeUrl = `https://example.com/v1/shape?table=nonexistent`
-    const existingHandle = `existing-handle`
+  it("should load expired shapes from localStorage on initialization", () => {
+    const existingShapeUrl = "https://example.com/v1/shape?table=existing"
+    const nonExistentShapeUrl = "https://example.com/v1/shape?table=nonexistent"
+    const existingHandle = "existing-handle"
 
     // Pre-populate localStorage with expired shape data
     const existingData = {
@@ -81,7 +81,7 @@ describe(`ExpiredShapesCache`, () => {
       },
     }
     localStorage.setItem(
-      `electric_expired_shapes`,
+      "electric_expired_shapes",
       JSON.stringify(existingData)
     )
 
@@ -93,13 +93,13 @@ describe(`ExpiredShapesCache`, () => {
     expect(newCache.getExpiredHandle(nonExistentShapeUrl)).toBe(null)
   })
 
-  it(`should add cache buster parameter for expired shapes in URL construction`, async () => {
-    let capturedUrl: string = ``
+  it("should add cache buster parameter for expired shapes in URL construction", async () => {
+    let capturedUrl: string = ""
 
     const expectedShapeUrl = `${shapeUrl}?table=test`
 
     // Pre-mark the shape URL as expired using the singleton
-    const expiredHandle = `expired-handle-123`
+    const expiredHandle = "expired-handle-123"
     expiredShapesCache.markExpired(expectedShapeUrl, expiredHandle)
 
     fetchMock.mockImplementation((url: string) => {
@@ -109,10 +109,10 @@ describe(`ExpiredShapesCache`, () => {
         new Response(JSON.stringify([]), {
           status: 200,
           headers: {
-            'electric-handle': `test-handle-1`,
-            'electric-offset': `0`,
-            'electric-schema': `{}`,
-            'electric-cursor': `cursor-1`,
+            "electric-handle": "test-handle-1",
+            "electric-offset": "0",
+            "electric-schema": "{}",
+            "electric-cursor": "cursor-1",
           },
         })
       )
@@ -120,8 +120,8 @@ describe(`ExpiredShapesCache`, () => {
 
     const stream = new ShapeStream({
       url: shapeUrl,
-      params: { table: `test` },
-      handle: `test-handle-1`,
+      params: { table: "test" },
+      handle: "test-handle-1",
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
@@ -143,7 +143,7 @@ describe(`ExpiredShapesCache`, () => {
     )
   })
 
-  it(`should enforce LRU behavior with max cache size`, () => {
+  it("should enforce LRU behavior with max cache size", () => {
     // Mark 252 shapes as expired (exceeds max of 250)
     for (let i = 1; i <= 252; i++) {
       cache.markExpired(
@@ -154,22 +154,22 @@ describe(`ExpiredShapesCache`, () => {
 
     // The first two handles should have been evicted due to LRU
     expect(
-      cache.getExpiredHandle(`https://example.com/shape?table=table1`)
+      cache.getExpiredHandle("https://example.com/shape?table=table1")
     ).toBe(null)
     expect(
-      cache.getExpiredHandle(`https://example.com/shape?table=table2`)
+      cache.getExpiredHandle("https://example.com/shape?table=table2")
     ).toBe(null)
 
     // Recent handles should still be expired
     expect(
-      cache.getExpiredHandle(`https://example.com/shape?table=table251`)
-    ).toBe(`handle-251`)
+      cache.getExpiredHandle("https://example.com/shape?table=table251")
+    ).toBe("handle-251")
     expect(
-      cache.getExpiredHandle(`https://example.com/shape?table=table252`)
-    ).toBe(`handle-252`)
+      cache.getExpiredHandle("https://example.com/shape?table=table252")
+    ).toBe("handle-252")
   })
 
-  it(`should handle localStorage errors gracefully when localStorage is unavailable`, () => {
+  it("should handle localStorage errors gracefully when localStorage is unavailable", () => {
     const originalLocalStorage = global.localStorage
 
     // Remove localStorage to simulate unavailability
@@ -179,8 +179,8 @@ describe(`ExpiredShapesCache`, () => {
       // Should not throw when localStorage is unavailable
       expect(() => {
         const cacheWithoutStorage = new ExpiredShapesCache()
-        const testUrl = `https://example.com/shape?table=test`
-        const testHandle = `test-handle-1`
+        const testUrl = "https://example.com/shape?table=test"
+        const testHandle = "test-handle-1"
         cacheWithoutStorage.markExpired(testUrl, testHandle)
         expect(cacheWithoutStorage.getExpiredHandle(testUrl)).toBe(testHandle) // Should work in memory
       }).not.toThrow()
@@ -190,13 +190,13 @@ describe(`ExpiredShapesCache`, () => {
     }
   })
 
-  it(`should store expired shape when 409 response occurs`, async () => {
+  it("should store expired shape when 409 response occurs", async () => {
     fetchMock
       .mockResolvedValueOnce(
-        new Response(`[]`, {
+        new Response("[]", {
           status: 409,
           headers: {
-            'electric-handle': `new-handle`,
+            "electric-handle": "new-handle",
           },
         })
       )
@@ -204,18 +204,18 @@ describe(`ExpiredShapesCache`, () => {
         new Response(JSON.stringify([]), {
           status: 200,
           headers: {
-            'electric-handle': `new-handle`,
-            'electric-offset': `0`,
-            'electric-schema': `{}`,
-            'electric-cursor': `cursor-1`,
+            "electric-handle": "new-handle",
+            "electric-offset": "0",
+            "electric-schema": "{}",
+            "electric-cursor": "cursor-1",
           },
         })
       )
 
     const stream = new ShapeStream({
       url: shapeUrl,
-      params: { table: `test` },
-      handle: `original-handle`,
+      params: { table: "test" },
+      handle: "original-handle",
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
@@ -227,16 +227,16 @@ describe(`ExpiredShapesCache`, () => {
     // Verify localStorage was updated after 409
     const expectedShapeUrl = `${shapeUrl}?table=test`
     const storedData = JSON.parse(
-      localStorage.getItem(`electric_expired_shapes`) || `{}`
+      localStorage.getItem("electric_expired_shapes") || "{}"
     )
     expect(storedData[expectedShapeUrl]).toEqual({
-      expiredHandle: `original-handle`,
+      expiredHandle: "original-handle",
       lastUsed: expect.any(Number),
     })
 
     // Also verify using the singleton cache (tests persistence)
     expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(
-      `original-handle`
+      "original-handle"
     )
   })
 })

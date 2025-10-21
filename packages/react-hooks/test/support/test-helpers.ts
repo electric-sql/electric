@@ -1,14 +1,14 @@
-import { ShapeStream, Message, Row } from '@electric-sql/client'
-import { Client, ClientConfig } from 'pg'
+import { ShapeStream, Message, Row } from "@electric-sql/client"
+import { Client, ClientConfig } from "pg"
 
 export function makePgClient(overrides: ClientConfig = {}) {
   return new Client({
-    host: `localhost`,
+    host: "localhost",
     port: 54321,
-    password: `password`,
-    user: `postgres`,
-    database: `electric`,
-    options: `-csearch_path=electric_test`,
+    password: "password",
+    user: "postgres",
+    database: "electric",
+    options: "-csearch_path=electric_test",
     ...overrides,
   })
 }
@@ -36,7 +36,7 @@ export function forEachMessage<T extends Row>(
             message as Message<T>,
             messageIdx
           )
-          if (`operation` in message.headers) messageIdx++
+          if ("operation" in message.headers) messageIdx++
         } catch (e) {
           controller.abort()
           return reject(e)

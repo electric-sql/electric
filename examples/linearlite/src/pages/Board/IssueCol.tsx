@@ -1,5 +1,5 @@
-import { CSSProperties } from 'react'
-import StatusIcon from '../../components/StatusIcon'
+import { CSSProperties } from "react"
+import StatusIcon from "../../components/StatusIcon"
 import {
   Droppable,
   DroppableProvided,
@@ -7,14 +7,14 @@ import {
   Draggable,
   DraggableProvided,
   DraggableStateSnapshot,
-} from 'react-beautiful-dnd'
-import { FixedSizeList as List, ListOnItemsRenderedProps } from 'react-window'
-import AutoSizer from 'react-virtualized-auto-sizer'
-import IssueItem, { itemHeight } from './IssueItem'
-import { Issue } from '../../types/types'
+} from "react-beautiful-dnd"
+import { FixedSizeList as List, ListOnItemsRenderedProps } from "react-window"
+import AutoSizer from "react-virtualized-auto-sizer"
+import IssueItem, { itemHeight } from "./IssueItem"
+import { Issue } from "../../types/types"
 
-import { LiveQuery } from '@electric-sql/pglite/live'
-import { useLiveQuery } from '@electric-sql/pglite-react'
+import { LiveQuery } from "@electric-sql/pglite/live"
+import { useLiveQuery } from "@electric-sql/pglite-react"
 
 // Type-fixed components to work around React 18/19 JSX strictness
 

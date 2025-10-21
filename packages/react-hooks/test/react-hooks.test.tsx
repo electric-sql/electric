@@ -1,98 +1,98 @@
-import { renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, inject, it as bareIt } from 'vitest'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { testWithIssuesTable as it } from './support/test-context'
-import { useShape, sortedOptionsHash, UseShapeResult } from '../src/react-hooks'
-import { Shape, ShapeStream } from '@electric-sql/client'
+import { renderHook, waitFor } from "@testing-library/react"
+import { describe, expect, inject, it as bareIt } from "vitest"
+import { setTimeout as sleep } from "node:timers/promises"
+import { testWithIssuesTable as it } from "./support/test-context"
+import { useShape, sortedOptionsHash, UseShapeResult } from "../src/react-hooks"
+import { Shape, ShapeStream } from "@electric-sql/client"
 
-const BASE_URL = inject(`baseUrl`)
+const BASE_URL = inject("baseUrl")
 
-describe(`sortedOptionsHash`, () => {
+describe("sortedOptionsHash", () => {
   bareIt(
-    `should create the same hash from options sorted in different ways`,
+    "should create the same hash from options sorted in different ways",
     () => {
       const hash1 = sortedOptionsHash({
-        url: `http://whatever`,
+        url: "http://whatever",
         params: {
-          table: `foo`,
+          table: "foo",
         },
-        offset: `-1`,
+        offset: "-1",
       })
       const hash2 = sortedOptionsHash({
-        offset: `-1`,
+        offset: "-1",
         params: {
-          table: `foo`,
+          table: "foo",
         },
-        url: `http://whatever`,
+        url: "http://whatever",
       })
       expect(hash1).toEqual(hash2)
     }
   )
   bareIt(
-    `should create the different hashes from options with different params`,
+    "should create the different hashes from options with different params",
     () => {
       const hash1 = sortedOptionsHash({
-        url: `http://whatever`,
+        url: "http://whatever",
         params: {
-          table: `foo`,
-          where: `1=1`,
+          table: "foo",
+          where: "1=1",
         },
       })
       const hash2 = sortedOptionsHash({
         params: {
-          table: `foo`,
-          where: `2=2`,
+          table: "foo",
+          where: "2=2",
         },
-        url: `http://whatever`,
+        url: "http://whatever",
       })
       expect(hash1).not.toEqual(hash2)
     }
   )
-  bareIt(`should create same hash with identical transformer function`, () => {
+  bareIt("should create same hash with identical transformer function", () => {
     const hash1 = sortedOptionsHash({
-      url: `http://whatever`,
+      url: "http://whatever",
       params: {
-        table: `foo`,
+        table: "foo",
       },
-      offset: `-1`,
+      offset: "-1",
       transformer: (r) => ({ ...r, test: 1 }),
     })
     const hash2 = sortedOptionsHash({
-      offset: `-1`,
+      offset: "-1",
       params: {
-        table: `foo`,
+        table: "foo",
       },
       transformer: (r) => ({ ...r, test: 1 }),
-      url: `http://whatever`,
+      url: "http://whatever",
     })
     expect(hash1).toEqual(hash2)
   })
   bareIt(
-    `should create different hash with different transformer functions`,
+    "should create different hash with different transformer functions",
     () => {
       const hash1 = sortedOptionsHash({
-        url: `http://whatever`,
+        url: "http://whatever",
         params: {
-          table: `foo`,
+          table: "foo",
         },
-        offset: `-1`,
+        offset: "-1",
         transformer: (r) => ({ ...r, test: 1 }),
       })
       const hash2 = sortedOptionsHash({
-        offset: `-1`,
+        offset: "-1",
         params: {
-          table: `foo`,
+          table: "foo",
         },
         transformer: (r) => ({ ...r, test: 2 }),
-        url: `http://whatever`,
+        url: "http://whatever",
       })
       expect(hash1).not.toEqual(hash2)
     }
   )
 })
 
-describe(`useShape`, () => {
-  it(`should sync an empty shape`, async ({ aborter, issuesTableUrl }) => {
+describe("useShape", () => {
+  it("should sync an empty shape", async ({ aborter, issuesTableUrl }) => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
@@ -110,12 +110,12 @@ describe(`useShape`, () => {
     await waitFor(() => expect(result.current.shape).toBeInstanceOf(Shape))
   })
 
-  it(`should sync a shape`, async ({
+  it("should sync a shape", async ({
     aborter,
     issuesTableUrl,
     insertIssues,
   }) => {
-    const [id] = await insertIssues({ title: `test row` })
+    const [id] = await insertIssues({ title: "test row" })
 
     const { result } = renderHook(() =>
       useShape({
@@ -129,11 +129,11 @@ describe(`useShape`, () => {
     )
 
     await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+      expect(result.current.data).toEqual([{ id: id, title: "test row" }])
     )
   })
 
-  it(`should re-sync a shape after an interrupt`, async ({
+  it("should re-sync a shape after an interrupt", async ({
     aborter,
     issuesTableUrl,
     insertIssues,
@@ -152,7 +152,7 @@ describe(`useShape`, () => {
 
     manualAborter.abort()
 
-    const [id] = await insertIssues({ title: `test row` })
+    const [id] = await insertIssues({ title: "test row" })
 
     const { result } = renderHook(() =>
       useShape({
@@ -166,11 +166,11 @@ describe(`useShape`, () => {
     )
 
     await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+      expect(result.current.data).toEqual([{ id: id, title: "test row" }])
     )
   })
 
-  it(`should expose isLoading status`, async ({ issuesTableUrl, aborter }) => {
+  it("should expose isLoading status", async ({ issuesTableUrl, aborter }) => {
     const { result } = renderHook(() =>
       useShape({
         url: `${BASE_URL}/v1/shape`,
@@ -190,7 +190,7 @@ describe(`useShape`, () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
   })
 
-  it(`should expose time at which we last synced`, async ({
+  it("should expose time at which we last synced", async ({
     issuesTableUrl,
     aborter,
   }) => {
@@ -216,12 +216,12 @@ describe(`useShape`, () => {
     expect(result.current.lastSyncedAt).toBeGreaterThanOrEqual(now)
   })
 
-  it(`should keep the state value in sync`, async ({
+  it("should keep the state value in sync", async ({
     aborter,
     issuesTableUrl,
     insertIssues,
   }) => {
-    const [id] = await insertIssues({ title: `test row` })
+    const [id] = await insertIssues({ title: "test row" })
 
     const { result } = renderHook(() =>
       useShape({
@@ -237,25 +237,25 @@ describe(`useShape`, () => {
     await waitFor(() => expect(result.current.data).not.toEqual([]))
 
     // Add an item.
-    const [id2] = await insertIssues({ title: `other row` })
+    const [id2] = await insertIssues({ title: "other row" })
 
     await waitFor(
       () =>
         expect(result.current.data).toEqual([
-          { id: id, title: `test row` },
-          { id: id2, title: `other row` },
+          { id: id, title: "test row" },
+          { id: id2, title: "other row" },
         ]),
       { timeout: 4000 }
     )
   })
 
-  it(`should let you change the shape definition (and clear the internal cache between)`, async ({
+  it("should let you change the shape definition (and clear the internal cache between)", async ({
     aborter,
     issuesTableUrl,
     insertIssues,
   }) => {
-    const [id] = await insertIssues({ title: `test row` })
-    const [id2] = await insertIssues({ title: `test row2` })
+    const [id] = await insertIssues({ title: "test row" })
+    const [id2] = await insertIssues({ title: "test row2" })
 
     const { result, rerender } = renderHook((options) => useShape(options), {
       initialProps: {
@@ -270,7 +270,7 @@ describe(`useShape`, () => {
     })
 
     await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+      expect(result.current.data).toEqual([{ id: id, title: "test row" }])
     )
 
     rerender({
@@ -284,20 +284,20 @@ describe(`useShape`, () => {
     })
 
     await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: id2, title: `test row2` }])
+      expect(result.current.data).toEqual([{ id: id2, title: "test row2" }])
     )
   })
 
-  it(`should allow use of the "selector" api from useSyncExternalStoreWithSelector`, async ({
+  it("should allow use of the \"selector\" api from useSyncExternalStoreWithSelector", async ({
     aborter,
     issuesTableUrl,
     insertIssues,
   }) => {
-    const [id] = await insertIssues({ title: `test row` })
-    await insertIssues({ title: `test row2` })
+    const [id] = await insertIssues({ title: "test row" })
+    await insertIssues({ title: "test row2" })
 
     const selector = (result: UseShapeResult<{ title: string }>) => {
-      result.data = result.data.filter((row) => row?.title !== `test row2`)
+      result.data = result.data.filter((row) => row?.title !== "test row2")
       return result
     }
 
@@ -314,27 +314,27 @@ describe(`useShape`, () => {
     )
 
     await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: id, title: `test row` }])
+      expect(result.current.data).toEqual([{ id: id, title: "test row" }])
     )
 
     // Add an item.
-    const [id2] = await insertIssues({ title: `other row` })
+    const [id2] = await insertIssues({ title: "other row" })
 
     await waitFor(() =>
       expect(result.current.data).toEqual([
-        { id: id, title: `test row` },
-        { id: id2, title: `other row` },
+        { id: id, title: "test row" },
+        { id: id2, title: "other row" },
       ])
     )
   })
 
-  it(`should correctly reapply the selector to the data if it changes`, async ({
+  it("should correctly reapply the selector to the data if it changes", async ({
     aborter,
     issuesTableUrl,
     insertIssues,
   }) => {
-    const firstRow = `test row 1`
-    const secondRow = `test row 2`
+    const firstRow = "test row 1"
+    const secondRow = "test row 2"
     const [id1] = await insertIssues({ title: firstRow })
     const [id2] = await insertIssues({ title: secondRow })
 
@@ -371,12 +371,12 @@ describe(`useShape`, () => {
     )
   })
 
-  it(`should unmount cleanly`, async ({
+  it("should unmount cleanly", async ({
     aborter,
     issuesTableUrl,
     insertIssues,
   }) => {
-    await insertIssues({ title: `test row` })
+    await insertIssues({ title: "test row" })
 
     const { result, unmount } = renderHook(() =>
       useShape({
@@ -394,7 +394,7 @@ describe(`useShape`, () => {
     unmount()
 
     // Add another row to shape
-    const [_] = await insertIssues({ title: `other row` })
+    const [_] = await insertIssues({ title: "other row" })
 
     const parallelWaiterStream = new ShapeStream({
       url: `${BASE_URL}/v1/shape`,

@@ -1,7 +1,7 @@
-import type { EventResult } from '../../../types'
+import type { EventResult } from "../../../types"
 
-import { useLiveQuery, eq, lt } from '@tanstack/react-db'
-import { eventCollection, userCollection } from '../../../db/collections'
+import { useLiveQuery, eq, lt } from "@tanstack/react-db"
+import { eventCollection, userCollection } from "../../../db/collections"
 
 interface Props {
   event: EventResult
@@ -27,22 +27,22 @@ function AskUserAboutThemselves({ event }: Props) {
         .select(({ event }) => ({
           id: event.id,
         }))
-        .orderBy(({ event }) => event.inserted_at, `asc`)
+        .orderBy(({ event }) => event.inserted_at, "asc")
         .limit(1)
         .where(({ event }) => eq(event.thread_id, threadId))
-        .where(({ event }) => eq(event.type, `tool_use`))
+        .where(({ event }) => eq(event.type, "tool_use"))
         .where(({ event }) => lt(event.inserted_at!, insertedAt))
         .fn.where(({ event }) => {
           const { input, name } = event.data
 
           return (
-            name === `ask_user_about_themselves` && input.subject === subject
+            name === "ask_user_about_themselves" && input.subject === subject
           )
         }),
     [insertedAt, subject, threadId]
   )
   const isFirstQuestion = previousEvents.length === 0
-  const prefix = isFirstQuestion ? `Hi ` : ``
+  const prefix = isFirstQuestion ? "Hi " : ""
 
   const { data: users } = useLiveQuery(
     (query) =>
@@ -61,8 +61,8 @@ function AskUserAboutThemselves({ event }: Props) {
   return (
     <>
       {prefix}
-      <span style={{ color: `rgb(125, 184, 255)` }}>@{subjectUser.name}</span>
-      {prefix ? `, ` : ` `}
+      <span style={{ color: "rgb(125, 184, 255)" }}>@{subjectUser.name}</span>
+      {prefix ? ", " : " "}
       {formattedQuestion}
     </>
   )

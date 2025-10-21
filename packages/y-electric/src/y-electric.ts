@@ -1,9 +1,9 @@
-import * as encoding from 'lib0/encoding'
-import * as decoding from 'lib0/decoding'
-import * as awarenessProtocol from 'y-protocols/awareness'
-import { ObservableV2 } from 'lib0/observable'
-import * as env from 'lib0/environment'
-import * as Y from 'yjs'
+import * as encoding from "lib0/encoding"
+import * as decoding from "lib0/decoding"
+import * as awarenessProtocol from "y-protocols/awareness"
+import { ObservableV2 } from "lib0/observable"
+import * as env from "lib0/environment"
+import * as Y from "yjs"
 import {
   GetExtensions,
   isChangeMessage,
@@ -13,13 +13,13 @@ import {
   Row,
   ShapeStream,
   ShapeStreamOptions,
-} from '@electric-sql/client'
+} from "@electric-sql/client"
 import {
   YProvider,
   ResumeState,
   SendErrorRetryHandler,
   ElectricProviderOptions,
-} from './types'
+} from "./types"
 
 type AwarenessUpdate = {
   added: number[]
@@ -112,18 +112,18 @@ export class ElectricProvider<
     this.fetchClient = fetchClient
 
     this.exitHandler = () => {
-      if (env.isNode && typeof process !== `undefined`) {
-        process.on(`exit`, this.destroy.bind(this))
+      if (env.isNode && typeof process !== "undefined") {
+        process.on("exit", this.destroy.bind(this))
       }
     }
 
     this.documentUpdateHandler = this.doc.on(
-      `update`,
+      "update",
       this.applyDocumentUpdate.bind(this)
     )
     if (this.awarenessUpdates) {
       this.awarenessUpdateHandler = this.applyAwarenessUpdate.bind(this)
-      this.awarenessUpdates.protocol.on(`update`, this.awarenessUpdateHandler!)
+      this.awarenessUpdates.protocol.on("update", this.awarenessUpdateHandler!)
     }
 
     // enqueue unsynced changes from document if the
@@ -147,8 +147,8 @@ export class ElectricProvider<
   set synced(state) {
     if (this._synced !== state) {
       this._synced = state
-      this.emit(`synced`, [state])
-      this.emit(`sync`, [state])
+      this.emit("synced", [state])
+      this.emit("sync", [state])
     }
   }
 
@@ -158,7 +158,7 @@ export class ElectricProvider<
       if (state) {
         this.sendOperations()
       }
-      this.emit(`status`, [{ status: state ? `connected` : `disconnected` }])
+      this.emit("status", [{ status: state ? "connected" : "disconnected" }])
     }
   }
 
@@ -177,11 +177,11 @@ export class ElectricProvider<
   destroy() {
     this.disconnect()
 
-    this.doc.off(`update`, this.documentUpdateHandler)
-    this.awarenessUpdates?.protocol.off(`update`, this.awarenessUpdateHandler!)
+    this.doc.off("update", this.documentUpdateHandler)
+    this.awarenessUpdates?.protocol.off("update", this.awarenessUpdateHandler!)
 
-    if (env.isNode && typeof process !== `undefined`) {
-      process.off(`exit`, this.exitHandler!)
+    if (env.isNode && typeof process !== "undefined") {
+      process.off("exit", this.exitHandler!)
     }
     super.destroy()
   }
@@ -206,14 +206,14 @@ export class ElectricProvider<
       awarenessProtocol.removeAwarenessStates(
         this.awarenessUpdates.protocol,
         [this.awarenessUpdates.protocol.clientID],
-        `local`
+        "local"
       )
 
       this.awarenessUpdates.protocol.setLocalState({})
     }
 
     // TODO: await for events before closing
-    this.emit(`connection-close`, [])
+    this.emit("connection-close", [])
 
     this.pendingAwarenessUpdate = null
 
@@ -267,7 +267,7 @@ export class ElectricProvider<
       this.unsubscribeShapes = undefined
     }
 
-    this.emit(`status`, [{ status: `connecting` }])
+    this.emit("status", [{ status: "connecting" }])
   }
 
   private operationsShapeHandler(
@@ -280,11 +280,11 @@ export class ElectricProvider<
         const decoder = this.documentUpdates.getUpdateFromRow(message.value)
         while (decoder.pos !== decoder.arr.length) {
           const operation = decoding.readVarUint8Array(decoder)
-          Y.applyUpdate(this.doc, operation, `server`)
+          Y.applyUpdate(this.doc, operation, "server")
         }
       } else if (
         isControlMessage(message) &&
-        message.headers.control === `up-to-date`
+        message.headers.control === "up-to-date"
       ) {
         this.resumeState.document = {
           offset,
@@ -295,7 +295,7 @@ export class ElectricProvider<
           this.synced = true
           this.resumeState.stableStateVector = Y.encodeStateVector(this.doc)
         }
-        this.emit(`resumeState`, [this.resumeState])
+        this.emit("resumeState", [this.resumeState])
         this.connected = true
       }
     }
@@ -305,7 +305,7 @@ export class ElectricProvider<
   // before pushing to the server
   private async applyDocumentUpdate(update: Uint8Array, origin: unknown) {
     // don't re-send updates from electric
-    if (origin === `server`) {
+    if (origin === "server") {
       return
     }
 
@@ -344,7 +344,7 @@ export class ElectricProvider<
       }
       // no more pending changes, move stableStateVector forward
       this.resumeState.stableStateVector = Y.encodeStateVector(this.doc)
-      this.emit(`resumeState`, [this.resumeState])
+      this.emit("resumeState", [this.resumeState])
     } finally {
       this.sendingPendingChanges = false
     }
@@ -354,7 +354,7 @@ export class ElectricProvider<
     awarenessUpdate: AwarenessUpdate,
     origin: unknown
   ) {
-    if (origin !== `local` || !this.connected) {
+    if (origin !== "local" || !this.connected) {
       return
     }
 
@@ -404,11 +404,11 @@ export class ElectricProvider<
   ) {
     for (const message of messages) {
       if (isChangeMessage(message)) {
-        if (message.headers.operation === `delete`) {
+        if (message.headers.operation === "delete") {
           awarenessProtocol.removeAwarenessStates(
             this.awarenessUpdates!.protocol,
             [Number(message.value.client_id)],
-            `remote`
+            "remote"
           )
         } else {
           const decoder = this.awarenessUpdates!.getUpdateFromRow(message.value)
@@ -420,13 +420,13 @@ export class ElectricProvider<
         }
       } else if (
         isControlMessage(message) &&
-        message.headers.control === `up-to-date`
+        message.headers.control === "up-to-date"
       ) {
         this.resumeState.awareness = {
           offset: offset,
           handle: handle,
         }
-        this.emit(`resumeState`, [this.resumeState])
+        this.emit("resumeState", [this.resumeState])
       }
     }
   }
@@ -443,15 +443,15 @@ async function send(
 
   try {
     response = await fetchClient(endpoint!, {
-      method: `PUT`,
+      method: "PUT",
       headers: {
-        'Content-Type': `application/octet-stream`,
+        "Content-Type": "application/octet-stream",
       },
       body: op as BodyInit,
     })
 
     if (!response.ok) {
-      throw new Error(`Server did not return 2xx`)
+      throw new Error("Server did not return 2xx")
     }
 
     return true

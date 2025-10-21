@@ -1,27 +1,27 @@
-import { Flex, Text, IconButton } from '@radix-ui/themes'
-import { makeStyles, mergeClasses } from '@griffel/react'
-import { useSidebar } from '../Providers/SidebarProvider'
-import { Cpu } from 'lucide-react'
+import { Flex, Text, IconButton } from "@radix-ui/themes"
+import { makeStyles, mergeClasses } from "@griffel/react"
+import { useSidebar } from "../Providers/SidebarProvider"
+import { Cpu } from "lucide-react"
 
 const useClasses = makeStyles({
   header: {
-    height: `56px`,
-    borderBottom: `1px solid var(--gray-5)`,
-    position: `relative`,
+    height: "56px",
+    borderBottom: "1px solid var(--gray-5)",
+    position: "relative",
     flexShrink: 0,
   },
   title: {
-    paddingLeft: `4px`,
+    paddingLeft: "4px",
   },
   icon: {
-    marginRight: `var(--space-2)`,
+    marginRight: "var(--space-2)",
   },
   closeButton: {
-    position: `absolute`,
-    right: `12px`,
+    position: "absolute",
+    right: "12px",
     opacity: 0.8,
-    height: `28px`,
-    width: `28px`,
+    height: "28px",
+    width: "28px",
   },
 })
 
@@ -34,7 +34,7 @@ function RightSidebarHeader() {
       <IconButton
         size="1"
         variant="ghost"
-        className={mergeClasses(classes.closeButton, `closeButton`)}
+        className={mergeClasses(classes.closeButton, "closeButton")}
         onClick={() => setRightSidebarOpen(false)}
       >
         ✕

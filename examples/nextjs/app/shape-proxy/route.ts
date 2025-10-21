@@ -5,7 +5,7 @@ export async function GET(request: Request) {
   const originUrl = new URL(
     process.env.ELECTRIC_URL
       ? `${process.env.ELECTRIC_URL}/v1/shape`
-      : `http://localhost:3000/v1/shape`
+      : "http://localhost:3000/v1/shape"
   )
 
   // Only pass through Electric protocol parameters, not table name
@@ -16,19 +16,19 @@ export async function GET(request: Request) {
   })
 
   // Set the table server-side - not from client params
-  originUrl.searchParams.set(`table`, `items`)
+  originUrl.searchParams.set("table", "items")
 
   if (process.env.ELECTRIC_SOURCE_ID) {
-    originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
+    originUrl.searchParams.set("source_id", process.env.ELECTRIC_SOURCE_ID)
   }
 
   const headers = new Headers()
   if (process.env.ELECTRIC_SOURCE_SECRET) {
-    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+    originUrl.searchParams.set("secret", process.env.ELECTRIC_SOURCE_SECRET)
   }
 
   const newRequest = new Request(originUrl.toString(), {
-    method: `GET`,
+    method: "GET",
     headers,
   })
 
@@ -38,10 +38,10 @@ export async function GET(request: Request) {
   //
   // Similar-ish problem to https://github.com/wintercg/fetch/issues/23
   let resp = await fetch(newRequest)
-  if (resp.headers.get(`content-encoding`)) {
+  if (resp.headers.get("content-encoding")) {
     const headers = new Headers(resp.headers)
-    headers.delete(`content-encoding`)
-    headers.delete(`content-length`)
+    headers.delete("content-encoding")
+    headers.delete("content-length")
     resp = new Response(resp.body, {
       status: resp.status,
       statusText: resp.statusText,

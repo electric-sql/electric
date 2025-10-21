@@ -1,66 +1,66 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { Flex, IconButton, Tooltip } from '@radix-ui/themes'
-import { Edit, Plus, User as UserIcon, Bot } from 'lucide-react'
-import { makeStyles, mergeClasses } from '@griffel/react'
-import { membershipCollection, userCollection } from '../../db/collections'
-import { copyInviteLink } from '../../utils/clipboard'
-import UserAvatar from '../UserAvatar'
+import { useState, useCallback, useEffect, useRef } from "react"
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { Flex, IconButton, Tooltip } from "@radix-ui/themes"
+import { Edit, Plus, User as UserIcon, Bot } from "lucide-react"
+import { makeStyles, mergeClasses } from "@griffel/react"
+import { membershipCollection, userCollection } from "../../db/collections"
+import { copyInviteLink } from "../../utils/clipboard"
+import UserAvatar from "../UserAvatar"
 
 const useClasses = makeStyles({
   container: {
-    display: `flex`,
-    alignItems: `center`,
-    justifyContent: `space-between`,
-    padding: `var(--space-4) var(--space-4)`,
-    borderBottom: `1px solid var(--border-color)`,
-    backgroundColor: `var(--color-background)`,
-    containerType: `inline-size`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "var(--space-4) var(--space-4)",
+    borderBottom: "1px solid var(--border-color)",
+    backgroundColor: "var(--color-background)",
+    containerType: "inline-size",
   },
   sectionsContainer: {
-    display: `flex`,
+    display: "flex",
     flexGrow: 1,
-    overflow: `hidden`,
+    overflow: "hidden",
   },
   section: {
-    display: `flex`,
-    alignItems: `center`,
-    marginRight: `var(--space-5)`,
-    '@container (max-width: 376px)': {
-      marginRight: `var(--space-3)`,
+    display: "flex",
+    alignItems: "center",
+    marginRight: "var(--space-5)",
+    "@container (max-width: 376px)": {
+      marginRight: "var(--space-3)",
     },
   },
   usersList: {
-    display: `flex`,
-    alignItems: `center`,
+    display: "flex",
+    alignItems: "center",
     flexShrink: 0,
   },
   label: {
-    marginRight: `var(--space-2)`,
-    '@container (max-width: 376px)': {
-      display: `none`,
+    marginRight: "var(--space-2)",
+    "@container (max-width: 376px)": {
+      display: "none",
     },
   },
   inviteButton: {
-    width: `30px`,
-    height: `30px`,
-    borderRadius: `50%`,
-    display: `flex`,
-    alignItems: `center`,
-    justifyContent: `center`,
-    backgroundColor: `var(--gray-4)`,
-    color: `var(--gray-11)`,
-    cursor: `pointer`,
-    marginLeft: `4px`,
-    fontWeight: `bold`,
+    width: "30px",
+    height: "30px",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "var(--gray-4)",
+    color: "var(--gray-11)",
+    cursor: "pointer",
+    marginLeft: "4px",
+    fontWeight: "bold",
     flexShrink: 0,
   },
   editButton: {
     flexShrink: 0,
-    marginLeft: `var(--space-3)`,
+    marginLeft: "var(--space-3)",
   },
   clickable: {
-    cursor: `pointer`,
+    cursor: "pointer",
   },
 })
 
@@ -72,7 +72,7 @@ interface Props {
 function ThreadTopBar({ threadId, onEditClick }: Props) {
   const classes = useClasses()
 
-  const [tooltipText, setTooltipText] = useState(`Copy invitation link`)
+  const [tooltipText, setTooltipText] = useState("Copy invitation link")
   const [showTooltip, setShowTooltip] = useState(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -98,8 +98,8 @@ function ThreadTopBar({ threadId, onEditClick }: Props) {
     (query) =>
       query
         .from({ result: threadUsers })
-        .where(({ result }) => eq(result.type, `agent`))
-        .orderBy(({ result }) => result.name, `desc`),
+        .where(({ result }) => eq(result.type, "agent"))
+        .orderBy(({ result }) => result.name, "desc"),
     [threadUsers]
   )
 
@@ -107,8 +107,8 @@ function ThreadTopBar({ threadId, onEditClick }: Props) {
     (query) =>
       query
         .from({ result: threadUsers })
-        .where(({ result }) => eq(result.type, `human`))
-        .orderBy(({ result }) => result.name, `asc`),
+        .where(({ result }) => eq(result.type, "human"))
+        .orderBy(({ result }) => result.name, "asc"),
     [threadUsers]
   )
 
@@ -121,13 +121,13 @@ function ThreadTopBar({ threadId, onEditClick }: Props) {
     }
 
     // Force show tooltip
-    setTooltipText(`Invite link copied!`)
+    setTooltipText("Invite link copied!")
     setShowTooltip(true)
 
     // Hide tooltip and reset text after 2 seconds
     timeoutRef.current = setTimeout(() => {
       setShowTooltip(false)
-      setTooltipText(`Copy invitation link`)
+      setTooltipText("Copy invitation link")
       timeoutRef.current = null
     }, 2000)
   }, [threadId])
@@ -162,7 +162,7 @@ function ThreadTopBar({ threadId, onEditClick }: Props) {
             ))}
             <Tooltip content={tooltipText} open={showTooltip}>
               <div
-                className={mergeClasses(classes.inviteButton, `clickable`)}
+                className={mergeClasses(classes.inviteButton, "clickable")}
                 onClick={handleInviteClick}
               >
                 <Plus size={16} />
@@ -190,7 +190,7 @@ function ThreadTopBar({ threadId, onEditClick }: Props) {
       <IconButton
         variant="ghost"
         size="1"
-        className={mergeClasses(`clickable`, classes.editButton)}
+        className={mergeClasses("clickable", classes.editButton)}
         onClick={onEditClick}
       >
         <Edit size={16} />

@@ -2,8 +2,8 @@ import "./style.css"
 import "./App.css"
 
 export const metadata = {
-  title: `Electric Auth Example`,
-  description: `Example application showing how to do authentication and authorization with Electric.`,
+  title: "Electric Auth Example",
+  description: "Example application showing how to do authentication and authorization with Electric.",
 }
 
 export default function RootLayout({

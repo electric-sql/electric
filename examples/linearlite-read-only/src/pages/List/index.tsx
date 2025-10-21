@@ -1,9 +1,9 @@
-import TopFilter from '../../components/TopFilter'
-import IssueList from './IssueList'
-import { useFilterState } from '../../utils/filterState'
-import { useShape } from '@electric-sql/react'
-import { Issue } from '../../types/types'
-import { issueShape } from '../../shapes'
+import TopFilter from "../../components/TopFilter"
+import IssueList from "./IssueList"
+import { useFilterState } from "../../utils/filterState"
+import { useShape } from "@electric-sql/react"
+import { Issue } from "../../types/types"
+import { issueShape } from "../../shapes"
 
 function List({ showSearch = false }) {
   const [filterState] = useFilterState()
@@ -19,7 +19,7 @@ function List({ showSearch = false }) {
       tests.push(filterState.status.includes(issue.status))
     }
 
-    if (typeof filterState.query !== `undefined`) {
+    if (typeof filterState.query !== "undefined") {
       tests.push(issue.title.includes(filterState.query))
     }
 

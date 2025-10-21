@@ -14,8 +14,8 @@ export const projectsRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (input.owner_id !== ctx.session.user.id) {
         throw new TRPCError({
-          code: `FORBIDDEN`,
-          message: `You can only create projects you own`,
+          code: "FORBIDDEN",
+          message: "You can only create projects you own",
         })
       }
 
@@ -54,8 +54,8 @@ export const projectsRouter = router({
 
         if (!updatedItem) {
           throw new TRPCError({
-            code: `NOT_FOUND`,
-            message: `Project not found or you do not have permission to update it`,
+            code: "NOT_FOUND",
+            message: "Project not found or you do not have permission to update it",
           })
         }
 
@@ -82,8 +82,8 @@ export const projectsRouter = router({
 
         if (!deletedItem) {
           throw new TRPCError({
-            code: `NOT_FOUND`,
-            message: `Project not found or you do not have permission to delete it`,
+            code: "NOT_FOUND",
+            message: "Project not found or you do not have permission to delete it",
           })
         }
 

@@ -1,9 +1,9 @@
-import { CSSProperties } from 'react'
-import { FixedSizeList as List, areEqual } from 'react-window'
-import { memo } from 'react'
-import AutoSizer from 'react-virtualized-auto-sizer'
-import IssueRow from './IssueRow'
-import { Issue } from '../../types/types'
+import { CSSProperties } from "react"
+import { FixedSizeList as List, areEqual } from "react-window"
+import { memo } from "react"
+import AutoSizer from "react-virtualized-auto-sizer"
+import IssueRow from "./IssueRow"
+import { Issue } from "../../types/types"
 
 // Type-fixed component to work around React 18/19 JSX strictness
 

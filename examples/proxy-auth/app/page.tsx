@@ -16,19 +16,19 @@ interface UserAccumulator {
 }
 
 const usersShape = (): ShapeStreamOptions => {
-  if (typeof window !== `undefined`) {
+  if (typeof window !== "undefined") {
     const queryParams = new URLSearchParams(window.location.search)
-    const org_id = queryParams.get(`org_id`)
+    const org_id = queryParams.get("org_id")
     return {
       url: new URL(`/shape-proxy?org_id=${org_id}`, window.location.origin)
         .href,
       headers: {
-        Authorization: org_id || ``,
+        Authorization: org_id || "",
       },
     }
   } else {
     return {
-      url: new URL(`https://not-sure-how-this-works.com/shape-proxy`).href,
+      url: new URL("https://not-sure-how-this-works.com/shape-proxy").href,
     }
   }
 }
@@ -38,61 +38,61 @@ export default function Home() {
   const { data: users, isError, error } = useShape<User>(usersShape())
 
   const classFor = (org_id: string | null) => {
-    const orgSearchParam = searchParams.get(`org_id`)
-    return orgSearchParam === org_id ? `active-link` : `white-link`
+    const orgSearchParam = searchParams.get("org_id")
+    return orgSearchParam === org_id ? "active-link" : "white-link"
   }
 
   return (
     <div>
       <nav>
         <ul>
-          <li style={{ display: `inline` }}>
+          <li style={{ display: "inline" }}>
             <a
               href=""
               onClick={(e) => {
                 e.preventDefault()
-                window.location.search = ``
+                window.location.search = ""
               }}
               className={classFor(null)}
             >
               Not logged in
             </a>
           </li>
-          {` `}|{` `}
-          <li style={{ display: `inline` }}>
+          {" "}|{" "}
+          <li style={{ display: "inline" }}>
             <a
               href="?user=1"
               onClick={(e) => {
                 e.preventDefault()
-                window.location.search = `?org_id=1`
+                window.location.search = "?org_id=1"
               }}
-              className={classFor(`1`)}
+              className={classFor("1")}
             >
               Alice — org 1
             </a>
           </li>
-          {` `}|{` `}
-          <li style={{ display: `inline` }}>
+          {" "}|{" "}
+          <li style={{ display: "inline" }}>
             <a
               href="?user=4"
               onClick={(e) => {
                 e.preventDefault()
-                window.location.search = `?org_id=2`
+                window.location.search = "?org_id=2"
               }}
-              className={classFor(`2`)}
+              className={classFor("2")}
             >
               David — org 2
             </a>
           </li>
-          {` `}|{` `}
-          <li style={{ display: `inline` }}>
+          {" "}|{" "}
+          <li style={{ display: "inline" }}>
             <a
               href="?user=admin"
               onClick={(e) => {
                 e.preventDefault()
-                window.location.search = `?org_id=admin`
+                window.location.search = "?org_id=admin"
               }}
-              className={classFor(`admin`)}
+              className={classFor("admin")}
             >
               Admin
             </a>
@@ -103,7 +103,7 @@ export default function Home() {
       {isError ? (
         <div
           className="item"
-          style={{ border: `3px solid red`, width: 400, fontSize: `21px` }}
+          style={{ border: "3px solid red", width: 400, fontSize: "21px" }}
         >
           {error.toString()}
         </div>

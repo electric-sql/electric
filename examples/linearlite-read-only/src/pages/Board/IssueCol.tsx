@@ -1,6 +1,6 @@
-import { CSSProperties } from 'react'
-import StatusIcon from '../../components/StatusIcon'
-import { memo } from 'react'
+import { CSSProperties } from "react"
+import StatusIcon from "../../components/StatusIcon"
+import { memo } from "react"
 import {
   Droppable,
   DroppableProvided,
@@ -8,11 +8,11 @@ import {
   Draggable,
   DraggableProvided,
   DraggableStateSnapshot,
-} from 'react-beautiful-dnd'
-import { FixedSizeList as List, areEqual } from 'react-window'
-import AutoSizer from 'react-virtualized-auto-sizer'
-import IssueItem, { itemHeight } from './IssueItem'
-import { Issue } from '../../types/types'
+} from "react-beautiful-dnd"
+import { FixedSizeList as List, areEqual } from "react-window"
+import AutoSizer from "react-virtualized-auto-sizer"
+import IssueItem, { itemHeight } from "./IssueItem"
+import { Issue } from "../../types/types"
 
 // Type-fixed components to work around React 18/19 JSX strictness
 

@@ -1,14 +1,14 @@
-import type { Editor as TipTapEditor } from '@tiptap/react'
-import classNames from 'classnames'
+import type { Editor as TipTapEditor } from "@tiptap/react"
+import classNames from "classnames"
 
-import { BsTypeBold as BoldIcon } from 'react-icons/bs'
-import { BsTypeItalic as ItalicIcon } from 'react-icons/bs'
-import { BsTypeStrikethrough as StrikeIcon } from 'react-icons/bs'
-import { BsCode as CodeIcon } from 'react-icons/bs'
-import { BsListUl as BulletListIcon } from 'react-icons/bs'
-import { BsListOl as OrderedListIcon } from 'react-icons/bs'
-import { BsCodeSlash as CodeBlockIcon } from 'react-icons/bs'
-import { BsChatQuote as BlockquoteIcon } from 'react-icons/bs'
+import { BsTypeBold as BoldIcon } from "react-icons/bs"
+import { BsTypeItalic as ItalicIcon } from "react-icons/bs"
+import { BsTypeStrikethrough as StrikeIcon } from "react-icons/bs"
+import { BsCode as CodeIcon } from "react-icons/bs"
+import { BsListUl as BulletListIcon } from "react-icons/bs"
+import { BsListOl as OrderedListIcon } from "react-icons/bs"
+import { BsCodeSlash as CodeBlockIcon } from "react-icons/bs"
+import { BsChatQuote as BlockquoteIcon } from "react-icons/bs"
 
 export interface EditorMenuProps {
   editor: TipTapEditor
@@ -23,9 +23,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => (editor.chain().focus() as any).toggleBold().run()}
         disabled={!(editor.can().chain().focus() as any).toggleBold().run()}
         className={classNames(
-          `me-1 px-1 rounded color text-gray-500 hover:text-black`,
+          "me-1 px-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`bold`),
+            "bg-gray-100": editor.isActive("bold"),
           }
         )}
       >
@@ -36,9 +36,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => (editor.chain().focus() as any).toggleItalic().run()}
         disabled={!(editor.can().chain().focus() as any).toggleItalic().run()}
         className={classNames(
-          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
+          "me-1 px-1 py-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`italic`),
+            "bg-gray-100": editor.isActive("italic"),
           }
         )}
       >
@@ -49,9 +49,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => (editor.chain().focus() as any).toggleStrike().run()}
         disabled={!(editor.can().chain().focus() as any).toggleStrike().run()}
         className={classNames(
-          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
+          "me-1 px-1 py-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`strike`),
+            "bg-gray-100": editor.isActive("strike"),
           }
         )}
       >
@@ -62,9 +62,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         onClick={() => (editor.chain().focus() as any).toggleCode().run()}
         disabled={!(editor.can().chain().focus() as any).toggleCode().run()}
         className={classNames(
-          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
+          "me-1 px-1 py-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`code`),
+            "bg-gray-100": editor.isActive("code"),
           }
         )}
       >
@@ -75,9 +75,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         type="button"
         onClick={() => (editor.chain().focus() as any).toggleBulletList().run()}
         className={classNames(
-          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
+          "me-1 px-1 py-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`bulletList`),
+            "bg-gray-100": editor.isActive("bulletList"),
           }
         )}
       >
@@ -89,9 +89,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
           (editor.chain().focus() as any).toggleOrderedList().run()
         }
         className={classNames(
-          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
+          "me-1 px-1 py-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`orderedList`),
+            "bg-gray-100": editor.isActive("orderedList"),
           }
         )}
       >
@@ -101,9 +101,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         type="button"
         onClick={() => (editor.chain().focus() as any).toggleCodeBlock().run()}
         className={classNames(
-          `me-1 px-1 py-1 rounded color text-gray-500 hover:text-black`,
+          "me-1 px-1 py-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`codeBlock`),
+            "bg-gray-100": editor.isActive("codeBlock"),
           }
         )}
       >
@@ -113,9 +113,9 @@ const EditorMenu = ({ editor }: EditorMenuProps) => {
         type="button"
         onClick={() => (editor.chain().focus() as any).toggleBlockquote().run()}
         className={classNames(
-          `px-1 py-1 rounded color text-gray-500 hover:text-black`,
+          "px-1 py-1 rounded color text-gray-500 hover:text-black",
           {
-            'bg-gray-100': editor.isActive(`blockquote`),
+            "bg-gray-100": editor.isActive("blockquote"),
           }
         )}
       >

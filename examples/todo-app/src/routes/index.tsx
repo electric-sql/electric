@@ -30,13 +30,13 @@ export default function Index() {
   const [inputEnabled, setInputEnabled] = useState(false)
 
   const onTodoClicked = useCallback(async (todo: ToDo) => {
-    console.log(`completed`)
+    console.log("completed")
     await fetch(
       new URL(`${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`).href,
       {
-        method: `PUT`,
+        method: "PUT",
         headers: {
-          "Content-Type": `application/json`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           completed: !todo.completed,
@@ -46,11 +46,11 @@ export default function Index() {
   }, [])
 
   const onTodoDeleted = useCallback(async (todo: ToDo) => {
-    console.log(`deleted`)
+    console.log("deleted")
     await fetch(
       new URL(`${import.meta.env.VITE_SERVER_URL}/todos/${todo.id}`).href,
       {
-        method: `DELETE`,
+        method: "DELETE",
       }
     )
   }, [])
@@ -87,7 +87,7 @@ export default function Index() {
                       }}
                       variant="ghost"
                       ml="auto"
-                      style={{ cursor: `pointer` }}
+                      style={{ cursor: "pointer" }}
                     >
                       X
                     </Button>
@@ -98,7 +98,7 @@ export default function Index() {
           )}
         </Flex>
         <form
-          style={{ width: `100%` }}
+          style={{ width: "100%" }}
           onSubmit={async (event) => {
             event.preventDefault()
             if (!inputEnabled) return
@@ -110,9 +110,9 @@ export default function Index() {
             const res = await fetch(
               new URL(`${import.meta.env.VITE_SERVER_URL}/todos`).href,
               {
-                method: `POST`,
+                method: "POST",
                 headers: {
-                  "Content-Type": `application/json`,
+                  "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ id, title: formData.todo }),
               }
@@ -122,12 +122,12 @@ export default function Index() {
         >
           <Flex direction="row">
             <TextField.Root
-              onChange={(e) => setInputEnabled(e.currentTarget.value !== ``)}
+              onChange={(e) => setInputEnabled(e.currentTarget.value !== "")}
               type="text"
               name="todo"
               placeholder="New Todo"
               mr="1"
-              style={{ width: `100%` }}
+              style={{ width: "100%" }}
             />
             <Button type="submit" disabled={!inputEnabled}>
               Add

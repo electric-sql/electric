@@ -1,6 +1,6 @@
-import { isVisibleInSnapshot } from './helpers'
-import { Row, SnapshotMetadata } from './types'
-import { ChangeMessage } from './types'
+import { isVisibleInSnapshot } from "./helpers"
+import { Row, SnapshotMetadata } from "./types"
+import { ChangeMessage } from "./types"
 
 /**
  * Tracks active snapshots and filters out duplicate change messages that are already included in snapshots.

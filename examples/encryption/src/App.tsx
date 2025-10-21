@@ -1,8 +1,8 @@
-import logo from './assets/logo.svg'
-import './App.css'
-import './style.css'
+import logo from "./assets/logo.svg"
+import "./App.css"
+import "./style.css"
 
-import { Example } from './Example'
+import { Example } from "./Example"
 
 export default function App() {
   return (

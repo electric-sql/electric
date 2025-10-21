@@ -12,6 +12,6 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  await db.query(`DELETE FROM items;`)
-  return NextResponse.json(`ok`)
+  await db.query("DELETE FROM items;")
+  return NextResponse.json("ok")
 }

@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import Editor from '../../components/editor/Editor'
-import Avatar from '../../components/Avatar'
-import { formatDate } from '../../utils/date'
-import { showWarning } from '../../utils/notification'
-import { Comment, Issue } from '../../types/types'
-import { BsCloudCheck as SyncedIcon } from 'react-icons/bs'
-import { BsCloudSlash as UnsyncedIcon } from 'react-icons/bs'
-import { useLiveQuery, usePGlite } from '@electric-sql/pglite-react'
+import { useState } from "react"
+import ReactMarkdown from "react-markdown"
+import Editor from "../../components/editor/Editor"
+import Avatar from "../../components/Avatar"
+import { formatDate } from "../../utils/date"
+import { showWarning } from "../../utils/notification"
+import { Comment, Issue } from "../../types/types"
+import { BsCloudCheck as SyncedIcon } from "react-icons/bs"
+import { BsCloudSlash as UnsyncedIcon } from "react-icons/bs"
+import { useLiveQuery, usePGlite } from "@electric-sql/pglite-react"
 
 export interface CommentsProps {
   issue: Issue
@@ -15,7 +15,7 @@ export interface CommentsProps {
 
 function Comments({ issue }: CommentsProps) {
   const pg = usePGlite()
-  const [newCommentBody, setNewCommentBody] = useState<string>(``)
+  const [newCommentBody, setNewCommentBody] = useState<string>("")
   const commentsResults = useLiveQuery.sql<Comment>`
     SELECT * FROM comment WHERE issue_id = ${issue.id}
   `
@@ -56,8 +56,8 @@ function Comments({ issue }: CommentsProps) {
   const handlePost = () => {
     if (!newCommentBody) {
       showWarning(
-        `Please enter a comment before submitting`,
-        `Comment required`
+        "Please enter a comment before submitting",
+        "Comment required"
       )
       return
     }
@@ -69,11 +69,11 @@ function Comments({ issue }: CommentsProps) {
         ${issue.id},
         ${newCommentBody},
         ${new Date()},
-        ${`testuser`}
+        ${"testuser"}
       )
     `
 
-    setNewCommentBody(``)
+    setNewCommentBody("")
   }
 
   return (

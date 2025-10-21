@@ -1,11 +1,11 @@
-import { memo, type CSSProperties } from 'react'
-import classNames from 'classnames'
-import { useNavigate } from 'react-router-dom'
-import { DraggableProvided } from 'react-beautiful-dnd'
-import Avatar from '../../components/Avatar'
-import PriorityMenu from '../../components/contextmenu/PriorityMenu'
-import PriorityIcon from '../../components/PriorityIcon'
-import { Issue } from '../../types/types'
+import { memo, type CSSProperties } from "react"
+import classNames from "classnames"
+import { useNavigate } from "react-router-dom"
+import { DraggableProvided } from "react-beautiful-dnd"
+import Avatar from "../../components/Avatar"
+import PriorityMenu from "../../components/contextmenu/PriorityMenu"
+import PriorityIcon from "../../components/PriorityIcon"
+import { Issue } from "../../types/types"
 
 interface IssueProps {
   issue: Issue
@@ -52,9 +52,9 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
     <div
       ref={provided.innerRef}
       className={classNames(
-        `cursor-default flex flex-col w-full px-4 py-3 mb-2 bg-white rounded focus:outline-none`,
+        "cursor-default flex flex-col w-full px-4 py-3 mb-2 bg-white rounded focus:outline-none",
         {
-          'shadow-modal': isDragging,
+          "shadow-modal": isDragging,
         }
       )}
       {...provided.draggableProps}
@@ -75,7 +75,7 @@ const IssueItem = ({ issue, style, isDragging, provided }: IssueProps) => {
       <div className="mt-2.5 flex items-center">
         <PriorityMenu
           button={priorityIcon}
-          id={`priority-menu-` + issue.id}
+          id={`priority-menu-${  issue.id}`}
           filterKeyword={true}
           // TODO: onSelect={(p) => updatePriority(p)}
         />

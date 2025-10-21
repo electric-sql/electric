@@ -1,8 +1,8 @@
-import postgres from 'postgres'
-import { generateIssues } from './generate_data.js'
+import postgres from "postgres"
+import { generateIssues } from "./generate_data.js"
 
 if (!process.env.DATABASE_URL) {
-  throw new Error(`DATABASE_URL is not set`)
+  throw new Error("DATABASE_URL is not set")
 }
 
 const DATABASE_URL = process.env.DATABASE_URL
@@ -48,7 +48,7 @@ try {
       // Insert issues
       const issuesData = issueBatch.map(({ comments: _, ...rest }) => rest)
       const issueColumns = Object.keys(issuesData[0])
-      await batchInsert(sql, `issue`, issueColumns, issuesData, BATCH_SIZE)
+      await batchInsert(sql, "issue", issueColumns, issuesData, BATCH_SIZE)
 
       // Insert related comments
       const batchComments = issueBatch.flatMap((issue) => issue.comments)
@@ -56,7 +56,7 @@ try {
         const commentColumns = Object.keys(batchComments[0])
         await batchInsert(
           sql,
-          `comment`,
+          "comment",
           commentColumns,
           batchComments,
           BATCH_SIZE
@@ -75,7 +75,7 @@ try {
 
   console.info(`Loaded ${issueCount} issues with ${commentCount} comments.`)
 } catch (error) {
-  console.error(`Error loading data:`, error)
+  console.error("Error loading data:", error)
   throw error
 } finally {
   await sql.end()

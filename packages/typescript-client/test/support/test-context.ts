@@ -1,10 +1,10 @@
-import { v4 as uuidv4 } from 'uuid'
-import { Client, QueryResult } from 'pg'
-import { inject, test } from 'vitest'
-import { makePgClient, waitForTransaction } from './test-helpers'
-import { FetchError } from '../../src/error'
-import { SHAPE_HANDLE_QUERY_PARAM } from '../../src/constants'
-import { ShapeStreamOptions } from 'packages/typescript-client/src'
+import { v4 as uuidv4 } from "uuid"
+import { Client, QueryResult } from "pg"
+import { inject, test } from "vitest"
+import { makePgClient, waitForTransaction } from "./test-helpers"
+import { FetchError } from "../../src/error"
+import { SHAPE_HANDLE_QUERY_PARAM } from "../../src/constants"
+import { ShapeStreamOptions } from "packages/typescript-client/src"
 
 export type IssueRow = { id: string; title: string; priority?: string }
 export type GeneratedIssueRow = { id?: string; title: string }
@@ -19,7 +19,7 @@ export type ClearShapeFn = (
 export type WaitForIssuesFn = (opts: {
   numChangesExpected?: number
   shapeStreamOptions?: Partial<ShapeStreamOptions>
-}) => Promise<Pick<ShapeStreamOptions, `offset` | `handle`>>
+}) => Promise<Pick<ShapeStreamOptions, "offset" | "handle">>
 
 export const testWithDbClient = test.extend<{
   dbClient: Client
@@ -29,7 +29,7 @@ export const testWithDbClient = test.extend<{
   clearShape: ClearShapeFn
 }>({
   dbClient: async ({}, use) => {
-    const searchOption = `-csearch_path=${inject(`testPgSchema`)}`
+    const searchOption = `-csearch_path=${inject("testPgSchema")}`
     const client = makePgClient({ options: searchOption })
     await client.connect()
     await use(client)
@@ -38,10 +38,10 @@ export const testWithDbClient = test.extend<{
   aborter: async ({}, use) => {
     const controller = new AbortController()
     await use(controller)
-    controller.abort(`Test complete`)
+    controller.abort("Test complete")
   },
-  baseUrl: async ({}, use) => use(inject(`baseUrl`)),
-  pgSchema: async ({}, use) => use(inject(`testPgSchema`)),
+  baseUrl: async ({}, use) => use(inject("baseUrl")),
+  pgSchema: async ({}, use) => use(inject("testPgSchema")),
   clearShape: async ({}, use) => {
     await use(
       async (
@@ -50,15 +50,15 @@ export const testWithDbClient = test.extend<{
           handle?: string
         } = {}
       ) => {
-        const baseUrl = inject(`baseUrl`)
+        const baseUrl = inject("baseUrl")
         const url = new URL(`${baseUrl}/v1/shape`)
-        url.searchParams.set(`table`, table)
+        url.searchParams.set("table", table)
 
         if (options.handle) {
           url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, options.handle)
         }
 
-        const resp = await fetch(url.toString(), { method: `DELETE` })
+        const resp = await fetch(url.toString(), { method: "DELETE" })
 
         if (!resp.ok) {
           // if we've been passed a shape handle then we should expect this delete call to succeed.
@@ -89,7 +89,7 @@ export const testWithIssuesTable = testWithDbClient.extend<{
   waitForIssues: WaitForIssuesFn
 }>({
   issuesTableSql: async ({ dbClient, task }, use) => {
-    const tableName = `"issues for ${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
+    const tableName = `"issues for ${task.id}_${Math.random().toString(16).replace(".", "_")}"`
     await dbClient.query(`
     DROP TABLE IF EXISTS ${tableName};
     CREATE TABLE ${tableName} (
@@ -97,13 +97,13 @@ export const testWithIssuesTable = testWithDbClient.extend<{
       title TEXT NOT NULL,
       priority INTEGER NOT NULL
     );
-    COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name.replace(/'/g, `\``) ?? `unknown`} - ${task.name.replace(`'`, `\``)}';
+    COMMENT ON TABLE ${tableName} IS 'Created for ${task.file?.name.replace(/'/g, "`") ?? "unknown"} - ${task.name.replace("'", "`")}';
   `)
     await use(tableName)
     await dbClient.query(`DROP TABLE ${tableName}`)
   },
   issuesTableUrl: async ({ issuesTableSql, pgSchema, clearShape }, use) => {
-    const urlAppropriateTable = pgSchema + `.` + issuesTableSql
+    const urlAppropriateTable = `${pgSchema  }.${  issuesTableSql}`
     await use(urlAppropriateTable)
     try {
       await clearShape(urlAppropriateTable)
@@ -165,7 +165,7 @@ export const testWithMultitypeTable = testWithDbClient.extend<{
   tableUrl: string
 }>({
   tableSql: async ({ dbClient, task }, use) => {
-    const tableName = `"multitype table for ${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
+    const tableName = `"multitype table for ${task.id}_${Math.random().toString(16).replace(".", "_")}"`
 
     await dbClient.query(`
       DROP TABLE IF EXISTS ${tableName};
@@ -209,7 +209,7 @@ export const testWithMultitypeTable = testWithDbClient.extend<{
     `)
   },
   tableUrl: async ({ tableSql, clearShape, pgSchema }, use) => {
-    const urlAppropriateTable = pgSchema + `.` + tableSql
+    const urlAppropriateTable = `${pgSchema  }.${  tableSql}`
     await use(urlAppropriateTable)
     try {
       await clearShape(urlAppropriateTable)

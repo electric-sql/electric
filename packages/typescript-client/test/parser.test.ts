@@ -1,85 +1,85 @@
-import { describe, expect, it } from 'vitest'
-import { MessageParser, defaultParser, pgArrayParser } from '../src/parser'
+import { describe, expect, it } from "vitest"
+import { MessageParser, defaultParser, pgArrayParser } from "../src/parser"
 
-describe(`Default parser`, () => {
-  it(`should parse integers`, () => {
-    expect(defaultParser.int2(`0`)).toBe(0)
-    expect(defaultParser.int2(`-32768`)).toBe(-32768)
-    expect(defaultParser.int2(`32767`)).toBe(32767)
+describe("Default parser", () => {
+  it("should parse integers", () => {
+    expect(defaultParser.int2("0")).toBe(0)
+    expect(defaultParser.int2("-32768")).toBe(-32768)
+    expect(defaultParser.int2("32767")).toBe(32767)
 
-    expect(defaultParser.int4(`0`)).toBe(0)
-    expect(defaultParser.int4(`2147483647`)).toBe(2147483647)
-    expect(defaultParser.int4(`-2147483648`)).toBe(-2147483648)
+    expect(defaultParser.int4("0")).toBe(0)
+    expect(defaultParser.int4("2147483647")).toBe(2147483647)
+    expect(defaultParser.int4("-2147483648")).toBe(-2147483648)
   })
 
-  it(`should parse bigints`, () => {
-    expect(defaultParser.int8(`-9223372036854775808`)).toBe(
-      BigInt(`-9223372036854775808`)
+  it("should parse bigints", () => {
+    expect(defaultParser.int8("-9223372036854775808")).toBe(
+      BigInt("-9223372036854775808")
     )
-    expect(defaultParser.int8(`9223372036854775807`)).toBe(
-      BigInt(`9223372036854775807`)
+    expect(defaultParser.int8("9223372036854775807")).toBe(
+      BigInt("9223372036854775807")
     )
-    expect(defaultParser.int8(`0`)).toBe(BigInt(`0`))
+    expect(defaultParser.int8("0")).toBe(BigInt("0"))
   })
 
-  it(`should parse booleans`, () => {
-    expect(defaultParser.bool(`t`)).toBe(true)
-    expect(defaultParser.bool(`true`)).toBe(true)
-    expect(defaultParser.bool(`false`)).toBe(false)
+  it("should parse booleans", () => {
+    expect(defaultParser.bool("t")).toBe(true)
+    expect(defaultParser.bool("true")).toBe(true)
+    expect(defaultParser.bool("false")).toBe(false)
   })
 
-  it(`should parse float4`, () => {
-    expect(defaultParser.float4(`1.1754944e-38`)).toBe(1.1754944e-38)
-    expect(defaultParser.float4(`3.4028235e38`)).toBe(3.4028235e38)
-    expect(defaultParser.float4(`-3.4028235e38`)).toBe(-3.4028235e38)
-    expect(defaultParser.float4(`-1.1754944e-38`)).toBe(-1.1754944e-38)
-    expect(defaultParser.float4(`0`)).toBe(0)
-    expect(defaultParser.float4(`Infinity`)).toBe(Infinity)
-    expect(defaultParser.float4(`-Infinity`)).toBe(-Infinity)
-    expect(defaultParser.float4(`NaN`)).toBe(NaN)
+  it("should parse float4", () => {
+    expect(defaultParser.float4("1.1754944e-38")).toBe(1.1754944e-38)
+    expect(defaultParser.float4("3.4028235e38")).toBe(3.4028235e38)
+    expect(defaultParser.float4("-3.4028235e38")).toBe(-3.4028235e38)
+    expect(defaultParser.float4("-1.1754944e-38")).toBe(-1.1754944e-38)
+    expect(defaultParser.float4("0")).toBe(0)
+    expect(defaultParser.float4("Infinity")).toBe(Infinity)
+    expect(defaultParser.float4("-Infinity")).toBe(-Infinity)
+    expect(defaultParser.float4("NaN")).toBe(NaN)
   })
 
-  it(`should parse float8`, () => {
-    expect(defaultParser.float8(`1.797e308`)).toBe(1.797e308)
-    expect(defaultParser.float8(`-1.797e+308`)).toBe(-1.797e308)
-    expect(defaultParser.float8(`0`)).toBe(0)
-    expect(defaultParser.float8(`Infinity`)).toBe(Infinity)
-    expect(defaultParser.float8(`-Infinity`)).toBe(-Infinity)
-    expect(defaultParser.float8(`NaN`)).toBe(NaN)
+  it("should parse float8", () => {
+    expect(defaultParser.float8("1.797e308")).toBe(1.797e308)
+    expect(defaultParser.float8("-1.797e+308")).toBe(-1.797e308)
+    expect(defaultParser.float8("0")).toBe(0)
+    expect(defaultParser.float8("Infinity")).toBe(Infinity)
+    expect(defaultParser.float8("-Infinity")).toBe(-Infinity)
+    expect(defaultParser.float8("NaN")).toBe(NaN)
   })
 
-  it(`should parse json`, () => {
-    expect(defaultParser.json(`true`)).toEqual(true)
-    expect(defaultParser.json(`5`)).toEqual(5)
-    expect(defaultParser.json(`"foo"`)).toEqual(`foo`)
-    expect(defaultParser.json(`{}`)).toEqual({})
-    expect(defaultParser.json(`null`)).toEqual(null)
-    expect(defaultParser.json(`{"a":null}`)).toEqual({ a: null })
-    expect(defaultParser.json(`[]`)).toEqual([])
-    expect(defaultParser.json(`{"a":1}`)).toEqual({ a: 1 })
-    expect(defaultParser.json(`{"a":1,"b":2}`)).toEqual({ a: 1, b: 2 })
-    expect(defaultParser.json(`[{"a":1,"b":2},{"c": [{"d": 5}]}]`)).toEqual([
+  it("should parse json", () => {
+    expect(defaultParser.json("true")).toEqual(true)
+    expect(defaultParser.json("5")).toEqual(5)
+    expect(defaultParser.json("\"foo\"")).toEqual("foo")
+    expect(defaultParser.json("{}")).toEqual({})
+    expect(defaultParser.json("null")).toEqual(null)
+    expect(defaultParser.json("{\"a\":null}")).toEqual({ a: null })
+    expect(defaultParser.json("[]")).toEqual([])
+    expect(defaultParser.json("{\"a\":1}")).toEqual({ a: 1 })
+    expect(defaultParser.json("{\"a\":1,\"b\":2}")).toEqual({ a: 1, b: 2 })
+    expect(defaultParser.json("[{\"a\":1,\"b\":2},{\"c\": [{\"d\": 5}]}]")).toEqual([
       { a: 1, b: 2 },
       { c: [{ d: 5 }] },
     ])
 
-    expect(defaultParser.jsonb(`true`)).toEqual(true)
-    expect(defaultParser.jsonb(`5`)).toEqual(5)
-    expect(defaultParser.jsonb(`"foo"`)).toEqual(`foo`)
-    expect(defaultParser.jsonb(`{}`)).toEqual({})
-    expect(defaultParser.jsonb(`null`)).toEqual(null)
-    expect(defaultParser.json(`{"a":null}`)).toEqual({ a: null })
-    expect(defaultParser.jsonb(`[]`)).toEqual([])
-    expect(defaultParser.jsonb(`{"a":1}`)).toEqual({ a: 1 })
-    expect(defaultParser.jsonb(`{"a":1,"b":2}`)).toEqual({ a: 1, b: 2 })
-    expect(defaultParser.jsonb(`[{"a":1,"b":2},{"c": [{"d": 5}]}]`)).toEqual([
+    expect(defaultParser.jsonb("true")).toEqual(true)
+    expect(defaultParser.jsonb("5")).toEqual(5)
+    expect(defaultParser.jsonb("\"foo\"")).toEqual("foo")
+    expect(defaultParser.jsonb("{}")).toEqual({})
+    expect(defaultParser.jsonb("null")).toEqual(null)
+    expect(defaultParser.json("{\"a\":null}")).toEqual({ a: null })
+    expect(defaultParser.jsonb("[]")).toEqual([])
+    expect(defaultParser.jsonb("{\"a\":1}")).toEqual({ a: 1 })
+    expect(defaultParser.jsonb("{\"a\":1,\"b\":2}")).toEqual({ a: 1, b: 2 })
+    expect(defaultParser.jsonb("[{\"a\":1,\"b\":2},{\"c\": [{\"d\": 5}]}]")).toEqual([
       { a: 1, b: 2 },
       { c: [{ d: 5 }] },
     ])
   })
 })
 
-describe(`Postgres array parser`, () => {
+describe("Postgres array parser", () => {
   const nullableDefaultParser = Object.fromEntries(
     Object.entries(defaultParser).map(([key, parser]) => [
       key,
@@ -87,85 +87,85 @@ describe(`Postgres array parser`, () => {
     ])
   )
 
-  it(`should parse arrays and their values`, () => {
+  it("should parse arrays and their values", () => {
     expect(
-      pgArrayParser(`{1,2,3,4,5,NULL}`, nullableDefaultParser.int2)
+      pgArrayParser("{1,2,3,4,5,NULL}", nullableDefaultParser.int2)
     ).toEqual([1, 2, 3, 4, 5, null])
     expect(
-      pgArrayParser(`{1,2,3,4,5,NULL}`, nullableDefaultParser.int8)
+      pgArrayParser("{1,2,3,4,5,NULL}", nullableDefaultParser.int8)
     ).toEqual([BigInt(1), BigInt(2), BigInt(3), BigInt(4), BigInt(5), null])
-    expect(pgArrayParser(`{"foo","bar","NULL",NULL}`, (v) => v)).toEqual([
-      `foo`,
-      `bar`,
-      `NULL`,
+    expect(pgArrayParser("{\"foo\",\"bar\",\"NULL\",NULL}", (v) => v)).toEqual([
+      "foo",
+      "bar",
+      "NULL",
       null,
     ])
-    expect(pgArrayParser(`{foo,"}"}`, (v) => v)).toEqual([`foo`, `}`])
-    expect(pgArrayParser(`{t,f,f,NULL}`, nullableDefaultParser.bool)).toEqual([
+    expect(pgArrayParser("{foo,\"}\"}", (v) => v)).toEqual(["foo", "}"])
+    expect(pgArrayParser("{t,f,f,NULL}", nullableDefaultParser.bool)).toEqual([
       true,
       false,
       false,
       null,
     ])
 
-    expect(pgArrayParser(`{}`, nullableDefaultParser.json)).toEqual([])
-    expect(pgArrayParser(`{"{}"}`, nullableDefaultParser.json)).toEqual([{}])
-    expect(pgArrayParser(`{null}`, nullableDefaultParser.json)).toEqual([null])
+    expect(pgArrayParser("{}", nullableDefaultParser.json)).toEqual([])
+    expect(pgArrayParser("{\"{}\"}", nullableDefaultParser.json)).toEqual([{}])
+    expect(pgArrayParser("{null}", nullableDefaultParser.json)).toEqual([null])
 
     expect(
-      pgArrayParser(`{"{\\"a\\":null}"}`, nullableDefaultParser.json)
+      pgArrayParser("{\"{\\\"a\\\":null}\"}", nullableDefaultParser.json)
     ).toEqual([{ a: null }])
 
     expect(
       pgArrayParser(
-        `{Infinity,-Infinity,NaN,NULL}`,
+        "{Infinity,-Infinity,NaN,NULL}",
         nullableDefaultParser.float8
       )
     ).toEqual([Infinity, -Infinity, NaN, null])
   })
 
-  it(`should parse nested arrays`, () => {
-    expect(pgArrayParser(`{{1,2},{3,4}}`, nullableDefaultParser.int2)).toEqual([
+  it("should parse nested arrays", () => {
+    expect(pgArrayParser("{{1,2},{3,4}}", nullableDefaultParser.int2)).toEqual([
       [1, 2],
       [3, 4],
     ])
-    expect(pgArrayParser(`{{"foo"},{"bar"}}`, (v) => v)).toEqual([
-      [`foo`],
-      [`bar`],
+    expect(pgArrayParser("{{\"foo\"},{\"bar\"}}", (v) => v)).toEqual([
+      ["foo"],
+      ["bar"],
     ])
-    expect(pgArrayParser(`{{t,f}, {f,t}}`, nullableDefaultParser.bool)).toEqual(
+    expect(pgArrayParser("{{t,f}, {f,t}}", nullableDefaultParser.bool)).toEqual(
       [
         [true, false],
         [false, true],
       ]
     )
-    expect(pgArrayParser(`{{1,2},{3,4}}`, nullableDefaultParser.int8)).toEqual([
+    expect(pgArrayParser("{{1,2},{3,4}}", nullableDefaultParser.int8)).toEqual([
       [BigInt(1), BigInt(2)],
       [BigInt(3), BigInt(4)],
     ])
 
-    expect(pgArrayParser(`{{},{}}`, nullableDefaultParser.json)).toEqual([
+    expect(pgArrayParser("{{},{}}", nullableDefaultParser.json)).toEqual([
       [],
       [],
     ])
-    expect(pgArrayParser(`{"{}","{}"}`, nullableDefaultParser.json)).toEqual([
+    expect(pgArrayParser("{\"{}\",\"{}\"}", nullableDefaultParser.json)).toEqual([
       {},
       {},
     ])
-    expect(pgArrayParser(`{null,null}`, nullableDefaultParser.json)).toEqual([
+    expect(pgArrayParser("{null,null}", nullableDefaultParser.json)).toEqual([
       null,
       null,
     ])
     expect(
       pgArrayParser(
-        `{"{\\\"a\\\":null}", "{\\\"b\\\":null}"}`,
+        "{\"{\\\"a\\\":null}\", \"{\\\"b\\\":null}\"}",
         nullableDefaultParser.json
       )
     ).toEqual([{ a: null }, { b: null }])
 
     expect(
       pgArrayParser(
-        `{{Infinity,-Infinity,NaN},{NaN,Infinity,-Infinity}}`,
+        "{{Infinity,-Infinity,NaN},{NaN,Infinity,-Infinity}}",
         nullableDefaultParser.float8
       )
     ).toEqual([
@@ -175,11 +175,11 @@ describe(`Postgres array parser`, () => {
   })
 })
 
-describe(`Message parser`, () => {
+describe("Message parser", () => {
   const parser = new MessageParser()
 
-  it(`should parse null values`, () => {
-    const messages = `[ { "value": { "a": null } }, { "value": { "value": null } } ]`
+  it("should parse null values", () => {
+    const messages = "[ { \"value\": { \"a\": null } }, { \"value\": { \"value\": null } } ]"
     const expectedParsedMessages = [
       { value: { a: null } },
       { value: { value: null } },
@@ -195,76 +195,76 @@ describe(`Message parser`, () => {
     for (const dims of sampleDims) {
       // If it's not nullable it should throw
       expect(() =>
-        parser.parse(messages, { a: { type: `int2`, dims, not_null: true } })
-      ).toThrowError(`Column "a" does not allow NULL values`)
+        parser.parse(messages, { a: { type: "int2", dims, not_null: true } })
+      ).toThrowError("Column \"a\" does not allow NULL values")
 
       expect(() =>
         parser.parse(messages, {
-          value: { type: `int2`, dims, not_null: true },
+          value: { type: "int2", dims, not_null: true },
         })
-      ).toThrowError(`Column "value" does not allow NULL value`)
+      ).toThrowError("Column \"value\" does not allow NULL value")
 
       // Otherwise, it should parse as null
-      expect(parser.parse(messages, schema(`int2`, dims))).toEqual(
+      expect(parser.parse(messages, schema("int2", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`int4`, dims))).toEqual(
+      expect(parser.parse(messages, schema("int4", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`int8`, dims))).toEqual(
+      expect(parser.parse(messages, schema("int8", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`bool`, dims))).toEqual(
+      expect(parser.parse(messages, schema("bool", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`float4`, dims))).toEqual(
+      expect(parser.parse(messages, schema("float4", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`float8`, dims))).toEqual(
+      expect(parser.parse(messages, schema("float8", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`json`, dims))).toEqual(
+      expect(parser.parse(messages, schema("json", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`jsonb`, dims))).toEqual(
+      expect(parser.parse(messages, schema("jsonb", dims))).toEqual(
         expectedParsedMessages
       )
-      expect(parser.parse(messages, schema(`text`, dims))).toEqual(
+      expect(parser.parse(messages, schema("text", dims))).toEqual(
         expectedParsedMessages
       )
     }
   })
 
-  it(`should parse text values like "NULL" correctly`, () => {
+  it("should parse text values like \"NULL\" correctly", () => {
     expect(
-      parser.parse(`[ { "value": { "a": "NULL" } } ]`, {
-        a: { type: `text`, not_null: true },
+      parser.parse("[ { \"value\": { \"a\": \"NULL\" } } ]", {
+        a: { type: "text", not_null: true },
       })
-    ).toEqual([{ value: { a: `NULL` } }])
+    ).toEqual([{ value: { a: "NULL" } }])
 
-    const messagesNullStringAndReal = `[ { "value": { "a": "{\\"a\\",\\"NULL\\",NULL,\\"b\\"}" } } ]`
+    const messagesNullStringAndReal = "[ { \"value\": { \"a\": \"{\\\"a\\\",\\\"NULL\\\",NULL,\\\"b\\\"}\" } } ]"
 
     expect(
       parser.parse(messagesNullStringAndReal, {
-        a: { type: `text`, dims: 1 },
+        a: { type: "text", dims: 1 },
       })
-    ).toEqual([{ value: { a: [`a`, `NULL`, null, `b`] } }])
+    ).toEqual([{ value: { a: ["a", "NULL", null, "b"] } }])
 
     // should fail if the array contains null in a non null type
     expect(() =>
       parser.parse(messagesNullStringAndReal, {
-        a: { type: `text`, dims: 1, not_null: true },
+        a: { type: "text", dims: 1, not_null: true },
       })
-    ).toThrowError(`Column "a" does not allow NULL values`)
+    ).toThrowError("Column \"a\" does not allow NULL values")
   })
 
-  it(`should parse arrays including null values`, () => {
+  it("should parse arrays including null values", () => {
     const schema = {
-      a: { type: `int2`, dims: 1 },
+      a: { type: "int2", dims: 1 },
     }
 
     expect(
-      parser.parse(`[ { "value": { "a": "{1,2,NULL,4,5}" } } ]`, schema)
+      parser.parse("[ { \"value\": { \"a\": \"{1,2,NULL,4,5}\" } } ]", schema)
     ).toEqual([{ value: { a: [1, 2, null, 4, 5] } }])
   })
 })

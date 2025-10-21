@@ -10,12 +10,12 @@ import {
   SUBSET_PARAM_ORDER_BY,
   SUBSET_PARAM_WHERE,
   SUBSET_PARAM_WHERE_PARAMS,
-} from './constants'
+} from "./constants"
 import {
   FetchError,
   FetchBackoffAbortError,
   MissingHeadersError,
-} from './error'
+} from "./error"
 
 // Some specific 4xx and 5xx HTTP status codes that we definitely
 // want to retry
@@ -124,9 +124,9 @@ export function createFetchWithConsumedMessages(fetchClient: typeof fetch) {
         url.toString(),
         err instanceof Error
           ? err.message
-          : typeof err === `string`
+          : typeof err === "string"
             ? err
-            : `failed to read body`
+            : "failed to read body"
       )
     }
   }
@@ -188,13 +188,13 @@ export function createFetchWithChunkBuffer(
 }
 
 export const requiredElectricResponseHeaders = [
-  `electric-offset`,
-  `electric-handle`,
+  "electric-offset",
+  "electric-handle",
 ]
 
-export const requiredLiveResponseHeaders = [`electric-cursor`]
+export const requiredLiveResponseHeaders = ["electric-cursor"]
 
-export const requiredNonLiveResponseHeaders = [`electric-schema`]
+export const requiredNonLiveResponseHeaders = ["electric-schema"]
 
 export function createFetchWithResponseHeadersCheck(
   fetchClient: typeof fetch
@@ -227,13 +227,13 @@ export function createFetchWithResponseHeadersCheck(
       }
 
       addMissingHeaders(requiredElectricResponseHeaders)
-      if (url.searchParams.get(LIVE_QUERY_PARAM) === `true`) {
+      if (url.searchParams.get(LIVE_QUERY_PARAM) === "true") {
         addMissingHeaders(requiredLiveResponseHeaders)
       }
 
       if (
         !url.searchParams.has(LIVE_QUERY_PARAM) ||
-        url.searchParams.get(LIVE_QUERY_PARAM) === `false`
+        url.searchParams.get(LIVE_QUERY_PARAM) === "false"
       ) {
         addMissingHeaders(requiredNonLiveResponseHeaders)
       }
@@ -387,11 +387,11 @@ function chainAborter(
     // chain to source signal abort event, and add callback to unlink
     // the aborter to avoid memory leaks
     const abortParent = () => aborter.abort()
-    sourceSignal.addEventListener(`abort`, abortParent, {
+    sourceSignal.addEventListener("abort", abortParent, {
       once: true,
       signal: aborter.signal,
     })
-    cleanup = () => sourceSignal.removeEventListener(`abort`, abortParent)
+    cleanup = () => sourceSignal.removeEventListener("abort", abortParent)
   }
 
   return {

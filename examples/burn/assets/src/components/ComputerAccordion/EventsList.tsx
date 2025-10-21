@@ -1,18 +1,18 @@
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { Box } from '@radix-ui/themes'
-import { makeStyles } from '@griffel/react'
-import { extractSearchableText } from '../../utils/extract'
-import { eventCollection, userCollection } from '../../db/collections'
-import EventItem from './EventItem'
-import type { EventResult } from '../../types'
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { Box } from "@radix-ui/themes"
+import { makeStyles } from "@griffel/react"
+import { extractSearchableText } from "../../utils/extract"
+import { eventCollection, userCollection } from "../../db/collections"
+import EventItem from "./EventItem"
+import type { EventResult } from "../../types"
 
 const useStyles = makeStyles({
   eventsList: {
-    display: `flex`,
-    flexDirection: `column`,
-    gap: `var(--space-2)`,
-    paddingTop: `var(--space-1)`,
-    paddingBottom: `var(--space-1)`,
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-2)",
+    paddingTop: "var(--space-1)",
+    paddingBottom: "var(--space-1)",
   },
 })
 
@@ -25,11 +25,11 @@ function matchesFilter(
   }
 
   const type_str =
-    type === `system`
-      ? `system action`
-      : type === `text`
-        ? `text message`
-        : type.replace(`_`, ` `)
+    type === "system"
+      ? "system action"
+      : type === "text"
+        ? "text message"
+        : type.replace("_", " ")
 
   if (type_str.includes(text)) {
     return true
@@ -76,7 +76,7 @@ function EventsList({ threadId, filter }: Props) {
           }
 
           return !(
-            event.type === `tool_use` && event.data?.name === `do_nothing`
+            event.type === "tool_use" && event.data?.name === "do_nothing"
           )
         }),
     [filterOutDoNothings, threadId]
@@ -88,8 +88,8 @@ function EventsList({ threadId, filter }: Props) {
       const baseQuery = query
         .from({ result: eventResults })
         .orderBy(({ result }) => result.inserted_at, {
-          direction: `asc`,
-          nulls: `last`,
+          direction: "asc",
+          nulls: "last",
         })
 
       return filterText

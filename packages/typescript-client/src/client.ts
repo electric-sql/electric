@@ -7,9 +7,9 @@ import {
   GetExtensions,
   ChangeMessage,
   SnapshotMetadata,
-} from './types'
-import { MessageParser, Parser, TransformFunction } from './parser'
-import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
+} from "./types"
+import { MessageParser, Parser, TransformFunction } from "./parser"
+import { getOffset, isUpToDateMessage, isChangeMessage } from "./helpers"
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -17,7 +17,7 @@ import {
   InvalidSignalError,
   MissingShapeHandleError,
   ReservedParamError,
-} from './error'
+} from "./error"
 import {
   BackoffDefaults,
   BackoffOptions,
@@ -25,7 +25,7 @@ import {
   createFetchWithChunkBuffer,
   createFetchWithConsumedMessages,
   createFetchWithResponseHeadersCheck,
-} from './fetch'
+} from "./fetch"
 import {
   CHUNK_LAST_OFFSET_HEADER,
   LIVE_CACHE_BUSTER_HEADER,
@@ -52,13 +52,13 @@ import {
   SUBSET_PARAM_LIMIT,
   SUBSET_PARAM_OFFSET,
   SUBSET_PARAM_ORDER_BY,
-} from './constants'
+} from "./constants"
 import {
   EventSourceMessage,
   fetchEventSource,
-} from '@microsoft/fetch-event-source'
-import { expiredShapesCache } from './expired-shapes-cache'
-import { SnapshotTracker } from './snapshot-tracker'
+} from "@microsoft/fetch-event-source"
+import { expiredShapesCache } from "./expired-shapes-cache"
+import { SnapshotTracker } from "./snapshot-tracker"
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -67,8 +67,8 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   OFFSET_QUERY_PARAM,
 ])
 
-type Replica = `full` | `default`
-export type LogMode = `changes_only` | `full`
+type Replica = "full" | "default"
+export type LogMode = "changes_only" | "full"
 
 /**
  * PostgreSQL-specific shape parameters that can be provided externally
@@ -164,7 +164,7 @@ type InternalParamsRecord = {
 export async function resolveValue<T>(
   value: T | (() => T | Promise<T>)
 ): Promise<T> {
-  if (typeof value === `function`) {
+  if (typeof value === "function") {
     return (value as () => T | Promise<T>)()
   }
   return value
@@ -183,7 +183,7 @@ async function toInternalParams(
       const resolvedValue = await resolveValue(value)
       return [
         key,
-        Array.isArray(resolvedValue) ? resolvedValue.join(`,`) : resolvedValue,
+        Array.isArray(resolvedValue) ? resolvedValue.join(",") : resolvedValue,
       ]
     })
   )
@@ -400,8 +400,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   implements ShapeStreamInterface<T>
 {
   static readonly Replica = {
-    FULL: `full` as Replica,
-    DEFAULT: `default` as Replica,
+    FULL: "full" as Replica,
+    DEFAULT: "default" as Replica,
   }
 
   readonly options: ShapeStreamOptions<GetExtensions<T>>
@@ -420,7 +420,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #started = false
-  #state = `active` as `active` | `pause-requested` | `paused`
+  #state = "active" as "active" | "pause-requested" | "paused"
   #lastOffset: Offset
   #liveCacheBuster: string // Seconds since our Electric Epoch 😎
   #lastSyncedAt?: number // unix time
@@ -445,15 +445,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
     validateOptions(this.options)
-    this.#lastOffset = this.options.offset ?? `-1`
-    this.#liveCacheBuster = ``
+    this.#lastOffset = this.options.offset ?? "-1"
+    this.#liveCacheBuster = ""
     this.#shapeHandle = this.options.handle
     this.#messageParser = new MessageParser<T>(
       options.parser,
       options.transformer
     )
     this.#onError = this.options.onError
-    this.#mode = this.options.log ?? `full`
+    this.#mode = this.options.log ?? "full"
 
     const baseFetchClient =
       options.fetchClient ??
@@ -509,14 +509,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#error = err
       if (this.#onError) {
         const retryOpts = await this.#onError(err as Error)
-        if (typeof retryOpts === `object`) {
+        if (typeof retryOpts === "object") {
           this.#reset()
 
-          if (`params` in retryOpts) {
+          if ("params" in retryOpts) {
             this.options.params = retryOpts.params
           }
 
-          if (`headers` in retryOpts) {
+          if ("headers" in retryOpts) {
             this.options.headers = retryOpts.headers
           }
 
@@ -536,8 +536,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShape(): Promise<void> {
-    if (this.#state === `pause-requested`) {
-      this.#state = `paused`
+    if (this.#state === "pause-requested") {
+      this.#state = "paused"
 
       return
     }
@@ -549,8 +549,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return
     }
 
-    const resumingFromPause = this.#state === `paused`
-    this.#state = `active`
+    const resumingFromPause = this.#state === "paused"
+    this.#state = "active"
 
     const { url, signal } = this.options
     const { fetchUrl, requestHeaders } = await this.#constructUrl(
@@ -583,7 +583,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           requestAbortController.signal.aborted &&
           requestAbortController.signal.reason === PAUSE_STREAM
         ) {
-          this.#state = `paused`
+          this.#state = "paused"
         }
         return // interrupted
       }
@@ -623,7 +623,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     } finally {
       if (abortListener && signal) {
-        signal.removeEventListener(`abort`, abortListener)
+        signal.removeEventListener("abort", abortListener)
       }
       this.#requestAbortController = undefined
     }
@@ -695,7 +695,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // because it could be a long poll that holds for 20sec
       // and during all that time `isConnected` will be false
       if (!this.#isRefreshing && !resumingFromPause) {
-        fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
+        fetchUrl.searchParams.set(LIVE_QUERY_PARAM, "true")
       }
       fetchUrl.searchParams.set(
         LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -734,7 +734,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#requestAbortController?.abort(signal.reason)
       }
 
-      signal.addEventListener(`abort`, abortListener, { once: true })
+      signal.addEventListener("abort", abortListener, { once: true })
 
       if (signal.aborted) {
         // If the signal is already aborted, abort the request immediately
@@ -834,8 +834,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       !this.#isRefreshing &&
       !opts.resumingFromPause
     ) {
-      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
-      opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
+      opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, "true")
+      opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, "true")
       return this.#requestShapeSSE(opts)
     }
 
@@ -858,7 +858,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
-    const messages = res || `[]`
+    const messages = res || "[]"
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
 
     await this.#onMessages(batch)
@@ -920,14 +920,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   #pause() {
-    if (this.#started && this.#state === `active`) {
-      this.#state = `pause-requested`
+    if (this.#started && this.#state === "active") {
+      this.#state = "pause-requested"
       this.#requestAbortController?.abort(PAUSE_STREAM)
     }
   }
 
   #resume() {
-    if (this.#started && this.#state === `paused`) {
+    if (this.#started && this.#state === "paused") {
       this.#start()
     }
   }
@@ -976,7 +976,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   isPaused(): boolean {
-    return this.#state === `paused`
+    return this.#state === "paused"
   }
 
   /** Await the next tick of the request loop */
@@ -1061,9 +1061,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   #subscribeToVisibilityChanges() {
     if (
-      typeof document === `object` &&
-      typeof document.hidden === `boolean` &&
-      typeof document.addEventListener === `function`
+      typeof document === "object" &&
+      typeof document.hidden === "boolean" &&
+      typeof document.addEventListener === "function"
     ) {
       const visibilityHandler = () => {
         if (document.hidden) {
@@ -1073,7 +1073,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
       }
 
-      document.addEventListener(`visibilitychange`, visibilityHandler)
+      document.addEventListener("visibilitychange", visibilityHandler)
     }
   }
 
@@ -1082,8 +1082,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * shape handle
    */
   #reset(handle?: string) {
-    this.#lastOffset = `-1`
-    this.#liveCacheBuster = ``
+    this.#lastOffset = "-1"
+    this.#liveCacheBuster = ""
     this.#shapeHandle = handle
     this.#isUpToDate = false
     this.#isMidStream = true
@@ -1110,7 +1110,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
   }> {
-    if (this.#mode === `full`) {
+    if (this.#mode === "full") {
       throw new Error(
         `Snapshot requests are not supported in ${this.#mode} mode, as the consumer is guaranteed to observe all data`
       )
@@ -1143,7 +1143,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       )
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
-        { headers: { control: `snapshot-end`, ...metadata } },
+        { headers: { control: "snapshot-end", ...metadata } },
       ])
 
       this.#snapshotTracker.addSnapshot(
@@ -1216,8 +1216,8 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
 
   if (
     options.offset !== undefined &&
-    options.offset !== `-1` &&
-    options.offset !== `now` &&
+    options.offset !== "-1" &&
+    options.offset !== "now" &&
     !options.handle
   ) {
     throw new MissingShapeHandleError()
@@ -1236,9 +1236,9 @@ function setQueryParam(
 ): void {
   if (value === undefined || value == null) {
     return
-  } else if (typeof value === `string`) {
+  } else if (typeof value === "string") {
     url.searchParams.set(key, value)
-  } else if (typeof value === `object`) {
+  } else if (typeof value === "object") {
     for (const [k, v] of Object.entries(value)) {
       url.searchParams.set(`${key}[${k}]`, v)
     }

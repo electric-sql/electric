@@ -24,25 +24,25 @@ type UpdateTableSchema = {
   update: decoding.Decoder
 }
 
-const serverUrl = import.meta.env.VITE_SERVER_URL || `http://localhost:3002`
+const serverUrl = import.meta.env.VITE_SERVER_URL || "http://localhost:3002"
 
 const users = [
-  { color: `#30bced`, light: `#30bced33` },
-  { color: `#6eeb83`, light: `#6eeb8333` },
-  { color: `#ffbc42`, light: `#ffbc4233` },
-  { color: `#ecd444`, light: `#ecd44433` },
-  { color: `#ee6352`, light: `#ee635233` },
-  { color: `#9ac2c9`, light: `#9ac2c933` },
+  { color: "#30bced", light: "#30bced33" },
+  { color: "#6eeb83", light: "#6eeb8333" },
+  { color: "#ffbc42", light: "#ffbc4233" },
+  { color: "#ecd444", light: "#ecd44433" },
+  { color: "#ee6352", light: "#ee635233" },
+  { color: "#9ac2c9", light: "#9ac2c933" },
 ]
 const user = users[random.uint32() % users.length]
 
-const shapeUrl = new URL(`/shape-proxy/v1/shape`, serverUrl)
-const room = `electric-demo`
+const shapeUrl = new URL("/shape-proxy/v1/shape", serverUrl)
+const room = "electric-demo"
 
 const ydoc = new Y.Doc()
 const awareness = new Awareness(ydoc)
 
-awareness.setLocalStateField(`user`, {
+awareness.setLocalStateField("user", {
   name: user.color,
   color: user.color,
   colorLight: user.light,
@@ -57,7 +57,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
     shape: {
       url: shapeUrl.href,
       params: {
-        table: `ydoc_update`,
+        table: "ydoc_update",
         where: `room = '${room}'`,
       },
       parser: parseToDecoder,
@@ -69,7 +69,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
     shape: {
       url: shapeUrl.href,
       params: {
-        table: `ydoc_awareness`,
+        table: "ydoc_awareness",
         where: `room = '${room}'`,
       },
       parser: parseToDecoder,
@@ -92,19 +92,19 @@ function ElectricEditor({
   const editor = useRef(null)
   const provider = useRef<ElectricProvider | null>(null)
   const [connectivityStatus, setConnectivityStatus] = useState<
-    `connected` | `disconnected` | `connecting`
-  >(`disconnected`)
+    "connected" | "disconnected" | "connecting"
+  >("disconnected")
   const [docLoaded, setDocumentLoaded] = useState<boolean>(false)
   const editorViewRef = useRef<EditorView | null>(null)
 
   const statusHandler = (status: {
-    status: `connected` | `disconnected` | `connecting`
+    status: "connected" | "disconnected" | "connecting"
   }) => {
     setConnectivityStatus(status.status)
   }
 
   useEffect(() => {
-    databaseProvider.once(`synced`, () => setDocumentLoaded(true))
+    databaseProvider.once("synced", () => setDocumentLoaded(true))
 
     let resumeStateUnsubscribeHandler: (() => void) | undefined
     let view: EditorView | undefined
@@ -113,7 +113,7 @@ function ElectricEditor({
       provider.current = new ElectricProvider(options)
       resumeStateUnsubscribeHandler =
         resumeStateProvider.subscribeToResumeState(provider.current)
-      provider.current.on(`status`, statusHandler)
+      provider.current.on("status", statusHandler)
 
       if (editor.current) {
         const ytext = ydoc.getText(room)
@@ -136,7 +136,7 @@ function ElectricEditor({
 
     return () => {
       if (provider.current) {
-        provider.current.off(`status`, statusHandler)
+        provider.current.off("status", statusHandler)
         provider.current.destroy()
         provider.current = null
         if (resumeStateUnsubscribeHandler) {
@@ -154,7 +154,7 @@ function ElectricEditor({
   const toggleNetwork = () => {
     if (!provider.current) return
 
-    if (connectivityStatus === `connected`) {
+    if (connectivityStatus === "connected") {
       provider.current.disconnect()
     } else {
       provider.current.connect()
@@ -179,8 +179,8 @@ function ElectricEditor({
       </form>
       <p>
         This is a demo of <a href="https://github.com/yjs/yjs">Yjs</a> using
-        {` `}
-        {` `}
+        {" "}
+        {" "}
         <a href="https://github.com/electric-sql/electric">Electric</a> for
         syncing. User: {user.color}.
       </p>

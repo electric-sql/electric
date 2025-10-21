@@ -1,17 +1,17 @@
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { useNavigate } from '@tanstack/react-router'
-import { makeStyles } from '@griffel/react'
-import { Box, Flex, Text, IconButton, Tooltip } from '@radix-ui/themes'
-import { LogOut, Moon, Sun, Monitor } from 'lucide-react'
-import { signOut as authSignOut, useAuth } from '../../db/auth'
-import { userCollection } from '../../db/collections'
-import { useTheme } from '../Providers/ThemeProvider'
-import UserAvatar from '../UserAvatar'
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { useNavigate } from "@tanstack/react-router"
+import { makeStyles } from "@griffel/react"
+import { Box, Flex, Text, IconButton, Tooltip } from "@radix-ui/themes"
+import { LogOut, Moon, Sun, Monitor } from "lucide-react"
+import { signOut as authSignOut, useAuth } from "../../db/auth"
+import { userCollection } from "../../db/collections"
+import { useTheme } from "../Providers/ThemeProvider"
+import UserAvatar from "../UserAvatar"
 
 const useClasses = makeStyles({
   footer: {
-    marginTop: `auto`,
-    borderTop: `1px solid var(--gray-5)`,
+    marginTop: "auto",
+    borderTop: "1px solid var(--gray-5)",
   },
 })
 
@@ -35,38 +35,38 @@ function SidebarFooter() {
   const currentUser = users.length > 0 ? users[0] : undefined
 
   const themeLabel =
-    theme === `dark`
-      ? `Light mode`
-      : theme === `light`
-        ? `System mode`
-        : `Dark mode`
+    theme === "dark"
+      ? "Light mode"
+      : theme === "light"
+        ? "System mode"
+        : "Dark mode"
 
   const themeComponent =
-    theme === `dark` ? (
+    theme === "dark" ? (
       <Sun size={14} />
-    ) : theme === `light` ? (
+    ) : theme === "light" ? (
       <Monitor size={14} />
     ) : (
       <Moon size={14} />
     )
 
   const toggleTheme = () => {
-    if (theme === `dark`) {
-      return setTheme(`light`)
+    if (theme === "dark") {
+      return setTheme("light")
     }
 
-    if (theme === `light`) {
-      return setTheme(`system`)
+    if (theme === "light") {
+      return setTheme("system")
     }
 
-    return setTheme(`dark`)
+    return setTheme("dark")
   }
 
   function handleLogout() {
     authSignOut()
 
     navigate({
-      to: `/welcome`,
+      to: "/welcome",
       search: { next: undefined },
       reloadDocument: true,
     })

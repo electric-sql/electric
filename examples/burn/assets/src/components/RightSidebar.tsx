@@ -1,36 +1,36 @@
-import { Box, Flex, ScrollArea } from '@radix-ui/themes'
-import { makeStyles, mergeClasses } from '@griffel/react'
-import { useSidebar } from './Providers/SidebarProvider'
-import RightSidebarHeader from './RightSidebar/RightSidebarHeader'
-import ComputerAccordion from './ComputerAccordion'
+import { Box, Flex, ScrollArea } from "@radix-ui/themes"
+import { makeStyles, mergeClasses } from "@griffel/react"
+import { useSidebar } from "./Providers/SidebarProvider"
+import RightSidebarHeader from "./RightSidebar/RightSidebarHeader"
+import ComputerAccordion from "./ComputerAccordion"
 
 const useClasses = makeStyles({
   sidebar: {
-    backgroundColor: `var(--sidebar-bg) !important`,
-    borderLeft: `1px solid var(--border-color)`,
-    display: `flex`,
-    flexDirection: `column`,
-    height: `100%`,
+    backgroundColor: "var(--sidebar-bg) !important",
+    borderLeft: "1px solid var(--border-color)",
+    display: "flex",
+    flexDirection: "column",
+    height: "100%",
     zIndex: 100,
-    '--sidebar-width': `280px`,
-    width: `var(--sidebar-width)`,
-    '@media (max-width: 699px)': {
-      position: `fixed`,
+    "--sidebar-width": "280px",
+    width: "var(--sidebar-width)",
+    "@media (max-width: 699px)": {
+      position: "fixed",
       top: 0,
       right: 0,
-      width: `280px !important`,
-      transform: `translateX(100%)`,
-      transition: `transform 0.3s ease-in-out`,
-      height: `100dvh`,
+      width: "280px !important",
+      transform: "translateX(100%)",
+      transition: "transform 0.3s ease-in-out",
+      height: "100dvh",
     },
-    '@media (min-width: 700px)': {
-      position: `relative`,
-      transform: `none`,
+    "@media (min-width: 700px)": {
+      position: "relative",
+      transform: "none",
     },
   },
   sidebarOpen: {
-    '@media (max-width: 699px)': {
-      transform: `translateX(0)`,
+    "@media (max-width: 699px)": {
+      transform: "translateX(0)",
     },
   },
   scrollArea: {
@@ -40,23 +40,23 @@ const useClasses = makeStyles({
 
 const useOverlayClasses = makeStyles({
   overlay: {
-    '@media (max-width: 699px)': {
-      position: `fixed`,
+    "@media (max-width: 699px)": {
+      position: "fixed",
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: `rgba(0, 0, 0, 0.5)`,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
       zIndex: 90,
       opacity: 0,
-      pointerEvents: `none`,
-      transition: `opacity 0.3s ease-in-out`,
+      pointerEvents: "none",
+      transition: "opacity 0.3s ease-in-out",
     },
   },
   overlayOpen: {
-    '@media (max-width: 699px)': {
+    "@media (max-width: 699px)": {
       opacity: 1,
-      pointerEvents: `auto`,
+      pointerEvents: "auto",
     },
   },
 })
@@ -71,9 +71,9 @@ function RightSidebar({ threadId }: Props) {
   const classes = useClasses()
   const sidebarClassName = mergeClasses(
     classes.sidebar,
-    `right-sidebar`,
+    "right-sidebar",
     isRightSidebarOpen && classes.sidebarOpen,
-    isRightSidebarOpen && `sidebarOpen`
+    isRightSidebarOpen && "sidebarOpen"
   )
 
   const overlayClasses = useOverlayClasses()

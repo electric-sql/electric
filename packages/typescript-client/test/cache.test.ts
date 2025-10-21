@@ -1,10 +1,10 @@
-import { describe, expect, assert, inject } from 'vitest'
-import { exec } from 'child_process'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { testWithIssuesTable } from './support/test-context'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
-import { ShapeStream } from '../src'
-import { isUpToDateMessage } from '../src/helpers'
+import { describe, expect, assert, inject } from "vitest"
+import { exec } from "child_process"
+import { setTimeout as sleep } from "node:timers/promises"
+import { testWithIssuesTable } from "./support/test-context"
+import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from "../src/constants"
+import { ShapeStream } from "../src"
+import { isUpToDateMessage } from "../src/helpers"
 
 // FIXME: pull from environment?
 const maxAge = 1 // seconds
@@ -12,20 +12,20 @@ const staleAge = 3 // seconds
 
 // see https://blog.nginx.org/blog/nginx-caching-guide for details
 enum CacheStatus {
-  MISS = `MISS`, // item was not in the cache
-  BYPASS = `BYPASS`, // not used by us
-  EXPIRED = `EXPIRED`, // there was a cache entry but was expired, so we got a fresh response
-  STALE = `STALE`, // cache entry > max age but < stale-while-revalidate so we got a stale response
-  UPDATING = `UPDATING`, // same as STALE but indicates proxy is updating stale entry
-  REVALIDATED = `REVALIDATED`, // you this request revalidated at the server
-  HIT = `HIT`, // cache hit
+  MISS = "MISS", // item was not in the cache
+  BYPASS = "BYPASS", // not used by us
+  EXPIRED = "EXPIRED", // there was a cache entry but was expired, so we got a fresh response
+  STALE = "STALE", // cache entry > max age but < stale-while-revalidate so we got a stale response
+  UPDATING = "UPDATING", // same as STALE but indicates proxy is updating stale entry
+  REVALIDATED = "REVALIDATED", // you this request revalidated at the server
+  HIT = "HIT", // cache hit
 }
 
 /**
  * Retrieve the {@link CacheStatus} from the provided response
  */
 function getCacheStatus(res: Response): CacheStatus {
-  return res.headers.get(`X-Proxy-Cache`) as CacheStatus
+  return res.headers.get("X-Proxy-Cache") as CacheStatus
 }
 
 /**
@@ -52,21 +52,21 @@ const it = testWithIssuesTable.extend<{
 }>({
   proxyCacheBaseUrl: async ({ clearCache }, use) => {
     await clearCache()
-    use(inject(`proxyCacheBaseUrl`))
+    use(inject("proxyCacheBaseUrl"))
   },
   clearCache: async ({}, use) => {
     use(
       async () =>
         await clearProxyCache({
-          proxyCacheContainerName: inject(`proxyCacheContainerName`),
-          proxyCachePath: inject(`proxyCachePath`),
+          proxyCacheContainerName: inject("proxyCacheContainerName"),
+          proxyCachePath: inject("proxyCachePath"),
         })
     )
   },
 })
 
-describe(`HTTP Proxy Cache`, () => {
-  it(`should get a short max-age cache-conrol header in live mode`, async ({
+describe("HTTP Proxy Cache", () => {
+  it("should get a short max-age cache-conrol header in live mode", async ({
     insertIssues,
     proxyCacheBaseUrl,
     issuesTableUrl,
@@ -81,12 +81,12 @@ describe(`HTTP Proxy Cache`, () => {
     expect(getCacheStatus(initialRes)).toBe(CacheStatus.MISS)
 
     // add some data and follow with live request
-    await insertIssues({ title: `foo` })
+    await insertIssues({ title: "foo" })
     const searchParams = new URLSearchParams({
       table: issuesTableUrl,
-      handle: initialRes.headers.get(`electric-handle`)!,
-      offset: initialRes.headers.get(`electric-offset`)!,
-      live: `true`,
+      handle: initialRes.headers.get("electric-handle")!,
+      offset: initialRes.headers.get("electric-offset")!,
+      live: "true",
     })
 
     const liveRes = await fetch(
@@ -106,7 +106,7 @@ describe(`HTTP Proxy Cache`, () => {
     expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
   })
 
-  it(`should collapse requests in live mode`, async ({
+  it("should collapse requests in live mode", async ({
     insertIssues,
     proxyCacheBaseUrl,
     issuesTableUrl,
@@ -142,11 +142,11 @@ describe(`HTTP Proxy Cache`, () => {
         let ctr = 0
         const listener = () => {
           if (++ctr === numClients) {
-            eventTarget.removeEventListener(`up-to-date`, listener)
+            eventTarget.removeEventListener("up-to-date", listener)
             res()
           }
         }
-        eventTarget.addEventListener(`up-to-date`, listener)
+        eventTarget.addEventListener("up-to-date", listener)
       })
 
     for (let i = 0; i < numClients; i++) {
@@ -156,13 +156,13 @@ describe(`HTTP Proxy Cache`, () => {
         fetchClient,
         params: {
           table: issuesTableUrl,
-          foo: `cache-test`,
+          foo: "cache-test",
         },
       })
 
       stream.subscribe((messages) => {
         if (isUpToDateMessage(messages[messages.length - 1])) {
-          eventTarget.dispatchEvent(new Event(`up-to-date`))
+          eventTarget.dispatchEvent(new Event("up-to-date"))
         }
       })
     }
@@ -173,13 +173,13 @@ describe(`HTTP Proxy Cache`, () => {
     // add some data, should collapse requests and respond to
     // all of them but one with cache hits
     resetReqStats()
-    await insertIssues({ title: `foo` })
+    await insertIssues({ title: "foo" })
     await waitForClients()
     expect(reqStats.reqs).toBe(numClients)
     expect(reqStats.cacheHits).toBe(numClients - 1)
   })
 
-  it(`should get cached response on second request`, async ({
+  it("should get cached response on second request", async ({
     proxyCacheBaseUrl,
     issuesTableUrl,
   }) => {
@@ -202,7 +202,7 @@ describe(`HTTP Proxy Cache`, () => {
     expect(getCacheStatus(cachedRes)).toBe(CacheStatus.HIT)
   })
 
-  it(`should get stale response when max age is passed but cache is not yet revalidated`, async ({
+  it("should get stale response when max age is passed but cache is not yet revalidated", async ({
     proxyCacheBaseUrl,
     issuesTableUrl,
   }) => {
@@ -236,7 +236,7 @@ describe(`HTTP Proxy Cache`, () => {
     expect(getCacheStatus(staleRes)).toBe(CacheStatus.STALE)
   })
 
-  it(`should get fresh response when age is passed the stale age`, async ({
+  it("should get fresh response when age is passed the stale age", async ({
     proxyCacheBaseUrl,
     issuesTableUrl,
   }) => {
@@ -271,15 +271,15 @@ describe(`HTTP Proxy Cache`, () => {
   }, 10_000)
 })
 
-describe(`HTTP Initial Data Caching`, () => {
-  it(`tells client to resync when shape is out of scope`, async ({
+describe("HTTP Initial Data Caching", () => {
+  it("tells client to resync when shape is out of scope", async ({
     proxyCacheBaseUrl,
     issuesTableUrl,
     clearIssuesShape,
     insertIssues,
   }) => {
     // add some data
-    await insertIssues({ title: `foo1` }, { title: `foo2` })
+    await insertIssues({ title: "foo1" }, { title: "foo2" })
 
     // Make a client that fetches a shape
     // which forces the shape data to be cached
@@ -289,8 +289,8 @@ describe(`HTTP Initial Data Caching`, () => {
     )
     expect(client1Res.status).toBe(200)
     const originalShapeHandle =
-      client1Res.headers.get(`electric-handle`) ?? undefined
-    assert(originalShapeHandle, `Should have shape handle`)
+      client1Res.headers.get("electric-handle") ?? undefined
+    assert(originalShapeHandle, "Should have shape handle")
     expect(getCacheStatus(client1Res)).toBe(CacheStatus.MISS)
 
     // Make a 2nd client that fetches the shape
@@ -300,17 +300,17 @@ describe(`HTTP Initial Data Caching`, () => {
       {}
     )
     expect(client2Res.status).toBe(200)
-    const shapeHandle2 = client2Res.headers.get(`electric-handle`) ?? undefined
+    const shapeHandle2 = client2Res.headers.get("electric-handle") ?? undefined
 
     expect(
       originalShapeHandle,
-      `Shape handle changed but expected it to stay the same`
+      "Shape handle changed but expected it to stay the same"
     ).toBe(shapeHandle2)
 
     expect(getCacheStatus(client2Res)).toBe(CacheStatus.HIT)
 
-    const latestOffset = client2Res.headers.get(`electric-offset`)
-    assert(latestOffset, `latestOffset should be defined`)
+    const latestOffset = client2Res.headers.get("electric-offset")
+    assert(latestOffset, "latestOffset should be defined")
 
     // Now GC the shape
     await clearIssuesShape(originalShapeHandle)
@@ -349,7 +349,7 @@ describe(`HTTP Initial Data Caching`, () => {
     expect(getCacheStatus(newInitialSyncRes)).toBe(CacheStatus.HIT)
     expect(
       cachedShapeHandle,
-      `Got old shape handle that is out of scope`
+      "Got old shape handle that is out of scope"
     ).not.toBe(originalShapeHandle)
   })
 })

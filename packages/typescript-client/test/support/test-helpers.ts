@@ -2,20 +2,20 @@ import {
   ShapeStream,
   ShapeStreamInterface,
   ShapeStreamOptions,
-} from '../../src/client'
-import { Client, ClientConfig } from 'pg'
-import { Message, Row } from '../../src/types'
-import { isChangeMessage } from '../..//src'
-import { isUpToDateMessage } from '../../src/helpers'
+} from "../../src/client"
+import { Client, ClientConfig } from "pg"
+import { Message, Row } from "../../src/types"
+import { isChangeMessage } from "../..//src"
+import { isUpToDateMessage } from "../../src/helpers"
 
 export function makePgClient(overrides: ClientConfig = {}) {
   return new Client({
-    host: `localhost`,
+    host: "localhost",
     port: 54321,
-    password: `password`,
-    user: `postgres`,
-    database: `electric`,
-    options: `-csearch_path=electric_test`,
+    password: "password",
+    user: "postgres",
+    database: "electric",
+    options: "-csearch_path=electric_test",
     ...overrides,
   })
 }
@@ -66,10 +66,10 @@ export async function waitForTransaction({
   numChangesExpected?: number
   shapeStreamOptions?: Partial<ShapeStreamOptions>
   aborter?: AbortController
-}): Promise<Pick<ShapeStreamOptions, `offset` | `handle`>> {
+}): Promise<Pick<ShapeStreamOptions, "offset" | "handle">> {
   const waitAborter = new AbortController()
   if (aborter?.signal.aborted) waitAborter.abort()
-  else aborter?.signal.addEventListener(`abort`, () => waitAborter.abort())
+  else aborter?.signal.addEventListener("abort", () => waitAborter.abort())
   const issueStream = new ShapeStream({
     ...(shapeStreamOptions ?? {}),
     url: `${baseUrl}/v1/shape`,

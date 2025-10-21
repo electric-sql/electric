@@ -1,20 +1,20 @@
 // @ts-nocheck
-import { useParams, useNavigate } from 'react-router-dom'
-import { useState, useRef } from 'react'
-import { BsTrash3 as DeleteIcon } from 'react-icons/bs'
-import { BsXLg as CloseIcon } from 'react-icons/bs'
-import PriorityMenu from '../../components/contextmenu/PriorityMenu'
-import StatusMenu from '../../components/contextmenu/StatusMenu'
-import PriorityIcon from '../../components/PriorityIcon'
-import StatusIcon from '../../components/StatusIcon'
-import Avatar from '../../components/Avatar'
-import { Issue, PriorityDisplay, StatusDisplay } from '../../types/types'
-import Editor from '../../components/editor/Editor'
-import DeleteModal from './DeleteModal'
-import Comments from './Comments'
-import debounce from 'lodash.debounce'
-import { useShape } from '@electric-sql/react'
-import { issueShape } from '../../shapes'
+import { useParams, useNavigate } from "react-router-dom"
+import { useState, useRef } from "react"
+import { BsTrash3 as DeleteIcon } from "react-icons/bs"
+import { BsXLg as CloseIcon } from "react-icons/bs"
+import PriorityMenu from "../../components/contextmenu/PriorityMenu"
+import StatusMenu from "../../components/contextmenu/StatusMenu"
+import PriorityIcon from "../../components/PriorityIcon"
+import StatusIcon from "../../components/StatusIcon"
+import Avatar from "../../components/Avatar"
+import { Issue, PriorityDisplay, StatusDisplay } from "../../types/types"
+import Editor from "../../components/editor/Editor"
+import DeleteModal from "./DeleteModal"
+import Comments from "./Comments"
+import debounce from "lodash.debounce"
+import { useShape } from "@electric-sql/react"
+import { issueShape } from "../../shapes"
 
 const debounceTime = 500
 
@@ -138,11 +138,11 @@ function IssuePage() {
     if (window.history.length > 2) {
       navigate(-1)
     }
-    navigate(`/`)
+    navigate("/")
   }
 
   const shortId = () => {
-    if (issue.id.includes(`-`)) {
+    if (issue.id.includes("-")) {
       return issue.id.slice(issue.id.length - 8)
     } else {
       return issue.id
@@ -199,7 +199,7 @@ function IssuePage() {
                 </div>
                 <div className="flex flex-[3_0_0]">
                   <StatusMenu
-                    id={`issue-status-` + issue.id}
+                    id={`issue-status-${  issue.id}`}
                     button={
                       <button className="inline-flex items-center h-6 px-2 text-gray-500border-none rounded hover:bg-gray-100">
                         <StatusIcon status={issue.status} className="mr-1" />
@@ -216,7 +216,7 @@ function IssuePage() {
                 </div>
                 <div className="flex flex-[3_0_0]">
                   <PriorityMenu
-                    id={`issue-priority-` + issue.id}
+                    id={`issue-priority-${  issue.id}`}
                     button={
                       <button className="inline-flex items-center h-6 px-2 text-gray-500 border-none rounded hover:bg-gray-100 hover:text-gray-700">
                         <PriorityIcon
@@ -245,8 +245,8 @@ function IssuePage() {
                 className="prose font-normal appearance-none text-md rounded editor"
                 value={
                   descriptionIsDirty.current
-                    ? dirtyDescription || ``
-                    : issue.description || ``
+                    ? dirtyDescription || ""
+                    : issue.description || ""
                 }
                 onChange={(val) => handleDescriptionChange(val)}
                 placeholder="Add description..."

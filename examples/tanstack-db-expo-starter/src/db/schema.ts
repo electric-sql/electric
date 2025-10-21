@@ -1,24 +1,24 @@
-import { pgTable, serial, text, boolean, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core"
 import {
   createSelectSchema,
   createInsertSchema,
   createUpdateSchema,
-} from 'drizzle-zod'
-import { z } from 'zod'
+} from "drizzle-zod"
+import { z } from "zod"
 
 /**
  * Todos table schema definition
  *
  * Represents the core data structure for todo items in the application
  */
-export const todos = pgTable(`todos`, {
-  id: serial(`id`).primaryKey(),
-  text: text(`text`).notNull(),
-  completed: boolean(`completed`).notNull().default(false),
-  created_at: timestamp(`created_at`, { withTimezone: true })
+export const todos = pgTable("todos", {
+  id: serial("id").primaryKey(),
+  text: text("text").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  created_at: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  updated_at: timestamp(`updated_at`, { withTimezone: true })
+  updated_at: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 })

@@ -1,15 +1,15 @@
-import React, { useEffect, useState } from 'react'
-import { v4 as uuidv4 } from 'uuid'
+import React, { useEffect, useState } from "react"
+import { v4 as uuidv4 } from "uuid"
 
 import {
   PGliteProvider,
   useLiveQuery,
   usePGlite,
-} from '@electric-sql/pglite-react'
-import { type PGliteWithLive } from '@electric-sql/pglite/live'
+} from "@electric-sql/pglite-react"
+import { type PGliteWithLive } from "@electric-sql/pglite/live"
 
-import loadPGlite from './db'
-import ChangeLogSynchronizer from './sync'
+import loadPGlite from "./db"
+import ChangeLogSynchronizer from "./sync"
 
 type Todo = {
   id: string
@@ -71,14 +71,14 @@ export default function Wrapper() {
 
 function ThroughTheDB() {
   const db = usePGlite()
-  const results = useLiveQuery<Todo>(`SELECT * FROM todos ORDER BY created_at`)
+  const results = useLiveQuery<Todo>("SELECT * FROM todos ORDER BY created_at")
 
   async function createTodo(event: React.FormEvent) {
     event.preventDefault()
 
     const form = event.target as HTMLFormElement
     const formData = new FormData(form)
-    const title = formData.get(`todo`) as string
+    const title = formData.get("todo") as string
 
     await db.sql`
       INSERT INTO todos (
@@ -140,7 +140,7 @@ function ThroughTheDB() {
               <input type="checkbox" checked={todo.completed}
                   onChange={() => updateTodo(todo)}
               />
-              <span className={`title ${ todo.completed ? `completed` : `` }`}>
+              <span className={`title ${ todo.completed ? "completed" : "" }`}>
                 { todo.title }
               </span>
             </label>

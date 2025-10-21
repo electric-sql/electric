@@ -1,7 +1,7 @@
-import { ResumeState, ElectricResumeStateProvider } from './types'
-import { ObservableV2 } from 'lib0/observable.js'
-import { ElectricProvider } from './y-electric'
-import * as buffer from 'lib0/buffer'
+import { ResumeState, ElectricResumeStateProvider } from "./types"
+import { ObservableV2 } from "lib0/observable.js"
+import { ElectricProvider } from "./y-electric"
+import * as buffer from "lib0/buffer"
 
 /**
  * A ResumeStateProvider implementation using LocalStorage.
@@ -18,8 +18,8 @@ export class LocalStorageResumeStateProvider extends ObservableV2<ElectricResume
   }
 
   subscribeToResumeState(provider: ElectricProvider): () => void {
-    const resumeStateHandler = provider.on(`resumeState`, this.save.bind(this))
-    return () => provider.off(`resumeState`, resumeStateHandler)
+    const resumeStateHandler = provider.on("resumeState", this.save.bind(this))
+    return () => provider.off("resumeState", resumeStateHandler)
   }
 
   save(resumeState: ResumeState) {
@@ -45,7 +45,7 @@ export class LocalStorageResumeStateProvider extends ObservableV2<ElectricResume
 
     const jsonData = localStorage.getItem(this.key)
     if (!jsonData) {
-      this.emit(`synced`, [{}])
+      this.emit("synced", [{}])
     } else {
       this.resumeState = JSON.parse(jsonData)
 
@@ -54,7 +54,7 @@ export class LocalStorageResumeStateProvider extends ObservableV2<ElectricResume
         this.resumeState!.stableStateVector = buffer.fromBase64(vectorData)
       }
 
-      this.emit(`synced`, [this.resumeState!])
+      this.emit("synced", [this.resumeState!])
     }
 
     return this.resumeState!

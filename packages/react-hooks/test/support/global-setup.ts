@@ -1,17 +1,17 @@
-import type { GlobalSetupContext } from 'vitest/node'
-import { makePgClient } from './test-helpers'
+import type { GlobalSetupContext } from "vitest/node"
+import { makePgClient } from "./test-helpers"
 
-const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`
-const proxyUrl = process.env.ELECTRIC_PROXY_CACHE_URL ?? `http://localhost:3002`
+const url = process.env.ELECTRIC_URL ?? "http://localhost:3000"
+const proxyUrl = process.env.ELECTRIC_PROXY_CACHE_URL ?? "http://localhost:3002"
 
 // name of proxy cache container to execute commands against,
 // see docker-compose.yml that spins it up for details
-const proxyCacheContainerName = `electric_dev-nginx-1`
+const proxyCacheContainerName = "electric_dev-nginx-1"
 // path pattern for cache files inside proxy cache to clear
-const proxyCachePath = `/var/cache/nginx/*`
+const proxyCachePath = "/var/cache/nginx/*"
 
-// eslint-disable-next-line quotes -- eslint is acting dumb with enforce backtick quotes mode, and is trying to use it here where it's not allowed.
-declare module 'vitest' {
+ 
+declare module "vitest" {
   export interface ProvidedContext {
     baseUrl: string
     proxyCacheBaseUrl: string
@@ -24,7 +24,7 @@ declare module 'vitest' {
 function waitForElectric(url: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(
-      () => reject(`Timed out waiting for Electric to be active`),
+      () => reject("Timed out waiting for Electric to be active"),
       10000
     )
 
@@ -33,7 +33,7 @@ function waitForElectric(url: string): Promise<void> {
         .then(async (res): Promise<void> => {
           if (!res.ok) return tryHealth()
           const { status } = (await res.json()) as { status: string }
-          if (status !== `active`) return tryHealth()
+          if (status !== "active") return tryHealth()
           clearTimeout(timeout)
           resolve()
         })
@@ -55,16 +55,16 @@ export default async function ({ provide }: GlobalSetupContext) {
 
   const client = makePgClient()
   await client.connect()
-  await client.query(`CREATE SCHEMA IF NOT EXISTS electric_test`)
+  await client.query("CREATE SCHEMA IF NOT EXISTS electric_test")
 
-  provide(`baseUrl`, url)
-  provide(`testPgSchema`, `electric_test`)
-  provide(`proxyCacheBaseUrl`, proxyUrl)
-  provide(`proxyCacheContainerName`, proxyCacheContainerName)
-  provide(`proxyCachePath`, proxyCachePath)
+  provide("baseUrl", url)
+  provide("testPgSchema", "electric_test")
+  provide("proxyCacheBaseUrl", proxyUrl)
+  provide("proxyCacheContainerName", proxyCacheContainerName)
+  provide("proxyCachePath", proxyCachePath)
 
   return async () => {
-    await client.query(`DROP SCHEMA electric_test CASCADE`)
+    await client.query("DROP SCHEMA electric_test CASCADE")
     await client.end()
   }
 }

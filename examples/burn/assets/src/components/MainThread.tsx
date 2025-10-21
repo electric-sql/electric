@@ -1,17 +1,17 @@
-import { useState } from 'react'
-import { makeStyles } from '@griffel/react'
-import { Flex, Box } from '@radix-ui/themes'
+import { useState } from "react"
+import { makeStyles } from "@griffel/react"
+import { Flex, Box } from "@radix-ui/themes"
 
-import ThreadEditForm from './MainThread/ThreadEditForm'
-import ThreadEditTopBar from './MainThread/ThreadEditTopBar'
-import ThreadTopBar from './MainThread/ThreadTopBar'
+import ThreadEditForm from "./MainThread/ThreadEditForm"
+import ThreadEditTopBar from "./MainThread/ThreadEditTopBar"
+import ThreadTopBar from "./MainThread/ThreadTopBar"
 
-import ChatArea from './ChatArea'
+import ChatArea from "./ChatArea"
 
 const useClasses = makeStyles({
   content: {
     flex: 1,
-    overflow: `hidden`,
+    overflow: "hidden",
   },
 })
 

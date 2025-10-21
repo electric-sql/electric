@@ -8,9 +8,9 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
-declare module '*.css' {
+declare module "*.css" {
   const content: string
   export default content
 }
 
-declare module '@radix-ui/themes/styles.css'
+declare module "@radix-ui/themes/styles.css"

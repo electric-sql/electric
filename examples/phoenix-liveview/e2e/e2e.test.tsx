@@ -1,8 +1,8 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from "@playwright/test"
 
 const BASE_URL = process.env.BASE_URL
 
-test(`sync todo items between browsers`, async ({ browser }) => {
+test("sync todo items between browsers", async ({ browser }) => {
   expect(BASE_URL).toBeDefined()
 
   // Launch two separate browser contexts to simulate different browsers
@@ -19,24 +19,24 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   await page2.waitForTimeout(1000)
 
   // Get initial count of todo items
-  const initialItemsPage1 = await page1.$$(`.todo-item`)
-  const initialItemsPage2 = await page2.$$(`.todo-item`)
+  const initialItemsPage1 = await page1.$$(".todo-item")
+  const initialItemsPage2 = await page2.$$(".todo-item")
   const initialCount = initialItemsPage1.length
   expect(initialItemsPage2.length).toBe(initialCount)
 
   // Add a new todo item in first browser with timestamp
   const timestamp1 = Date.now()
   const todoItem1 = `New todo item ${timestamp1}`
-  await page1.fill(`#todo_text`, todoItem1)
-  await page1.press(`#todo_text`, `Enter`)
+  await page1.fill("#todo_text", todoItem1)
+  await page1.press("#todo_text", "Enter")
 
   // Give some time for the new entry to be synced
   await page1.waitForTimeout(1000)
   await page2.waitForTimeout(1000)
 
   // Verify both browsers have one more entry
-  const page1Items = await page1.$$(`.todo-item`)
-  const page2Items = await page2.$$(`.todo-item`)
+  const page1Items = await page1.$$(".todo-item")
+  const page2Items = await page2.$$(".todo-item")
   expect(page1Items.length).toBe(initialCount + 1)
   expect(page2Items.length).toBe(initialCount + 1)
 
@@ -59,16 +59,16 @@ test(`sync todo items between browsers`, async ({ browser }) => {
   // Add another todo item in second browser with timestamp
   const timestamp2 = Date.now()
   const todoItem2 = `Another todo item ${timestamp2}`
-  await page2.fill(`#todo_text`, todoItem2)
-  await page2.press(`#todo_text`, `Enter`)
+  await page2.fill("#todo_text", todoItem2)
+  await page2.press("#todo_text", "Enter")
 
   // Wait for synchronization
   await page1.waitForTimeout(1000)
   await page2.waitForTimeout(1000)
 
   // Verify both browsers have two more entries
-  const finalPage1Items = await page1.$$(`.todo-item`)
-  const finalPage2Items = await page2.$$(`.todo-item`)
+  const finalPage1Items = await page1.$$(".todo-item")
+  const finalPage2Items = await page2.$$(".todo-item")
   expect(finalPage1Items.length).toBe(initialCount + 2)
   expect(finalPage2Items.length).toBe(initialCount + 2)
 

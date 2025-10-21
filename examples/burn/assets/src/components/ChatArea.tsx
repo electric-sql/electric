@@ -1,27 +1,27 @@
-import { useRef, useEffect } from 'react'
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { Box, ScrollArea } from '@radix-ui/themes'
-import { makeStyles } from '@griffel/react'
+import { useRef, useEffect } from "react"
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { Box, ScrollArea } from "@radix-ui/themes"
+import { makeStyles } from "@griffel/react"
 
-import { eventCollection, userCollection } from '../db/collections'
+import { eventCollection, userCollection } from "../db/collections"
 
-import ChatInput from './ChatArea/ChatInput'
-import ChatMessage from './ChatArea/ChatMessage'
+import ChatInput from "./ChatArea/ChatInput"
+import ChatMessage from "./ChatArea/ChatMessage"
 
 const useStyles = makeStyles({
   container: {
-    display: `flex`,
-    flexDirection: `column`,
-    height: `100%`,
-    width: `100%`,
+    display: "flex",
+    flexDirection: "column",
+    height: "100%",
+    width: "100%",
   },
   messagesContainer: {
     flex: 1,
-    width: `100%`,
+    width: "100%",
   },
   messagesInner: {
-    padding: `var(--space-4)`,
-    width: `100%`,
+    padding: "var(--space-4)",
+    width: "100%",
   },
   inputWrapper: {
     flexShrink: 0,
@@ -44,8 +44,8 @@ function ChatArea({ threadId }: Props) {
           eq(user.id, event.user_id)
         )
         .orderBy(({ event }) => event.inserted_at, {
-          direction: `asc`,
-          nulls: `last`,
+          direction: "asc",
+          nulls: "last",
         })
         .select(({ event, user }) => ({
           data: event.data,
@@ -63,7 +63,7 @@ function ChatArea({ threadId }: Props) {
   )
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: `smooth` })
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [events])
 
   return (

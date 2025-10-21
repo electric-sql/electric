@@ -1,10 +1,10 @@
-import TopFilter from '../../components/TopFilter'
-import IssueBoard from './IssueBoard'
-import { FilterState } from '../../utils/filterState'
-import { Issue, StatusValue } from '../../types/types'
-import { useLiveQuery } from '@electric-sql/pglite-react'
-import { useLoaderData } from 'react-router-dom'
-import { LiveQuery } from '@electric-sql/pglite/live'
+import TopFilter from "../../components/TopFilter"
+import IssueBoard from "./IssueBoard"
+import { FilterState } from "../../utils/filterState"
+import { Issue, StatusValue } from "../../types/types"
+import { useLiveQuery } from "@electric-sql/pglite-react"
+import { useLoaderData } from "react-router-dom"
+import { LiveQuery } from "@electric-sql/pglite/live"
 
 export interface BoardLoaderData {
   filterState: FilterState

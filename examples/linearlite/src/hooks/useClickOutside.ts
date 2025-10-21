@@ -1,4 +1,4 @@
-import { RefObject, useCallback, useEffect } from 'react'
+import { RefObject, useCallback, useEffect } from "react"
 
 export const useClickOutside = (
   ref: RefObject<Element>,
@@ -17,12 +17,12 @@ export const useClickOutside = (
     [callback, ref, outerRef]
   )
   useEffect(() => {
-    document.addEventListener(`mousedown`, handleClick)
-    document.addEventListener(`touchstart`, handleClick)
+    document.addEventListener("mousedown", handleClick)
+    document.addEventListener("touchstart", handleClick)
 
     return () => {
-      document.removeEventListener(`mousedown`, handleClick)
-      document.removeEventListener(`touchstart`, handleClick)
+      document.removeEventListener("mousedown", handleClick)
+      document.removeEventListener("touchstart", handleClick)
     }
   })
 }

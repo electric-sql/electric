@@ -6,16 +6,16 @@ import {
   beforeEach,
   afterEach,
   MockInstance,
-} from 'vitest'
-import * as Y from 'yjs'
-import * as encoding from 'lib0/encoding'
-import * as decoding from 'lib0/decoding'
-import { ElectricProvider } from '../src/y-electric'
-import { createMockProvider, feedMessage } from './test-utils'
+} from "vitest"
+import * as Y from "yjs"
+import * as encoding from "lib0/encoding"
+import * as decoding from "lib0/decoding"
+import { ElectricProvider } from "../src/y-electric"
+import { createMockProvider, feedMessage } from "./test-utils"
 
-vi.stubGlobal(`fetch`, vi.fn())
+vi.stubGlobal("fetch", vi.fn())
 
-describe(`ElectricProvider upstream/downstream changes`, () => {
+describe("ElectricProvider upstream/downstream changes", () => {
   let doc: Y.Doc
   let provider: ElectricProvider
   // Use a simple type for the spy in tests
@@ -28,9 +28,9 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
       new Response(null, {
         status: 200,
         headers: {
-          'electric-offset': `123`,
-          'electric-handle': `test-handle`,
-          'electric-schema': `test-schema`,
+          "electric-offset": "123",
+          "electric-handle": "test-handle",
+          "electric-schema": "test-schema",
         },
       })
     )
@@ -39,7 +39,7 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
     provider = createMockProvider(doc)
 
     sendSpy = vi
-      .spyOn(global, `fetch`)
+      .spyOn(global, "fetch")
       .mockImplementation(() =>
         Promise.resolve(new Response(null, { status: 200 }))
       )
@@ -49,21 +49,21 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
     provider.destroy()
   })
 
-  it(`should call send when Y.Text is modified`, () => {
+  it("should call send when Y.Text is modified", () => {
     feedMessage([])
 
-    const ytext = doc.getText(`test-text`)
+    const ytext = doc.getText("test-text")
 
-    ytext.insert(0, `Hello, Electric!`)
+    ytext.insert(0, "Hello, Electric!")
 
-    expect(ytext.toString()).toBe(`Hello, Electric!`)
+    expect(ytext.toString()).toBe("Hello, Electric!")
     expect(sendSpy).toHaveBeenCalledTimes(1)
   })
 
-  it(`should apply remote updates to the document`, () => {
+  it("should apply remote updates to the document", () => {
     const sourceDoc = new Y.Doc()
-    sourceDoc.getText(`shared`).insert(0, `Hello Electric YJS!`)
-    const text = doc.getText(`shared`)
+    sourceDoc.getText("shared").insert(0, "Hello Electric YJS!")
+    const text = doc.getText("shared")
 
     const update = Y.encodeStateAsUpdate(sourceDoc)
     const encoder = encoding.createEncoder()
@@ -72,17 +72,17 @@ describe(`ElectricProvider upstream/downstream changes`, () => {
 
     feedMessage([
       {
-        headers: { operation: `insert` },
-        key: `id1`,
+        headers: { operation: "insert" },
+        key: "id1",
         value: { op: decoder },
       },
     ])
 
-    expect(text.toString()).toBe(`Hello Electric YJS!`)
+    expect(text.toString()).toBe("Hello Electric YJS!")
   })
 })
 
-describe(`ElectricProvider connectivity handling`, () => {
+describe("ElectricProvider connectivity handling", () => {
   let doc: Y.Doc
   let provider: ElectricProvider
   let mockFetch: ReturnType<typeof vi.fn>
@@ -97,14 +97,14 @@ describe(`ElectricProvider connectivity handling`, () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            id: `test-id`,
+            id: "test-id",
             body:
               requestBody instanceof Uint8Array
                 ? { data: Array.from(requestBody) }
                 : requestBody,
           }),
         status: 200,
-        text: () => Promise.resolve(``),
+        text: () => Promise.resolve(""),
       })
     })
 
@@ -117,11 +117,11 @@ describe(`ElectricProvider connectivity handling`, () => {
     provider.destroy()
   })
 
-  it(`should not send operations when disconnected`, async () => {
+  it("should not send operations when disconnected", async () => {
     expect(provider.connected).toBe(true)
 
-    const ytext = doc.getText(`test`)
-    ytext.insert(0, `hello`)
+    const ytext = doc.getText("test")
+    ytext.insert(0, "hello")
 
     expect(mockFetch).toHaveBeenCalled()
     mockFetch.mockClear()
@@ -129,24 +129,24 @@ describe(`ElectricProvider connectivity handling`, () => {
     provider.disconnect()
     expect(provider.connected).toBe(false)
 
-    ytext.insert(5, ` world`)
+    ytext.insert(5, " world")
 
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
-  it(`should merge operations while disconnected and send them when reconnected`, async () => {
+  it("should merge operations while disconnected and send them when reconnected", async () => {
     provider.disconnect()
     expect(provider.connected).toBe(false)
 
-    const ytext = doc.getText(`test`)
+    const ytext = doc.getText("test")
 
     const sendOperationSpy: ReturnType<typeof vi.spyOn> = vi.spyOn(
       provider as unknown as { sendOperations: () => Promise<void> },
-      `sendOperations`
+      "sendOperations"
     )
 
-    ytext.insert(0, `hello`)
-    ytext.insert(5, ` world`)
+    ytext.insert(0, "hello")
+    ytext.insert(5, " world")
 
     expect(sendOperationSpy).toHaveBeenCalledTimes(2)
 
@@ -165,44 +165,44 @@ describe(`ElectricProvider connectivity handling`, () => {
     const update = decoding.readVarUint8Array(decoder)
     Y.applyUpdate(newDoc, update)
 
-    expect(newDoc.getText(`test`).toString()).toBe(`hello world`)
+    expect(newDoc.getText("test").toString()).toBe("hello world")
   })
 
-  it(`should not apply external updates when disconnected`, async () => {
+  it("should not apply external updates when disconnected", async () => {
     const sourceDoc = new Y.Doc()
-    sourceDoc.getText(`test`).insert(0, `test content`)
+    sourceDoc.getText("test").insert(0, "test content")
     const update = Y.encodeStateAsUpdate(sourceDoc)
 
     const encoder = encoding.createEncoder()
     encoding.writeVarUint8Array(encoder, update)
     const decoder = decoding.createDecoder(encoding.toUint8Array(encoder))
 
-    const text = doc.getText(`test`)
-    expect(text.toString()).toBe(``)
+    const text = doc.getText("test")
+    expect(text.toString()).toBe("")
 
     provider.disconnect()
     expect(provider.connected).toBe(false)
 
     feedMessage([
       {
-        headers: { operation: `insert` },
-        key: `test-id`,
+        headers: { operation: "insert" },
+        key: "test-id",
         value: { op: decoder },
       },
     ])
 
-    expect(text.toString()).toBe(``)
+    expect(text.toString()).toBe("")
   })
 
-  it(`should remove all update handlers when disconnected`, () => {
+  it("should remove all update handlers when disconnected", () => {
     console.dir(doc._observers)
-    const initialUpdateHandlers = doc._observers.get(`update`)!.size
+    const initialUpdateHandlers = doc._observers.get("update")!.size
     expect(initialUpdateHandlers).toBeGreaterThan(0)
 
     provider.disconnect()
     provider.destroy()
 
-    const finalUpdateHandlers = doc._observers.get(`update`)
+    const finalUpdateHandlers = doc._observers.get("update")
     expect(finalUpdateHandlers).toBeUndefined()
   })
 })

@@ -29,8 +29,8 @@ const putSchema = z.object({
 })
 
 // GET /todos - proxy to Electric for syncing todos
-app.get(`/todos`, async (req, res) => {
-  const ELECTRIC_URL = process.env.ELECTRIC_URL || `http://localhost:3000`
+app.get("/todos", async (req, res) => {
+  const ELECTRIC_URL = process.env.ELECTRIC_URL || "http://localhost:3000"
   const electricUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
 
   // Only pass through Electric protocol parameters
@@ -41,14 +41,14 @@ app.get(`/todos`, async (req, res) => {
   })
 
   // Set the table server-side
-  electricUrl.searchParams.set(`table`, `todos`)
+  electricUrl.searchParams.set("table", "todos")
 
   // Add source credentials if available
   if (process.env.ELECTRIC_SOURCE_ID) {
-    electricUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
+    electricUrl.searchParams.set("source_id", process.env.ELECTRIC_SOURCE_ID)
   }
   if (process.env.ELECTRIC_SOURCE_SECRET) {
-    electricUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+    electricUrl.searchParams.set("secret", process.env.ELECTRIC_SOURCE_SECRET)
   }
 
   try {
@@ -58,8 +58,8 @@ app.get(`/todos`, async (req, res) => {
     const headers = {}
     response.headers.forEach((value, key) => {
       if (
-        key.toLowerCase() !== `content-encoding` &&
-        key.toLowerCase() !== `content-length`
+        key.toLowerCase() !== "content-encoding" &&
+        key.toLowerCase() !== "content-length"
       ) {
         headers[key] = value
       }
@@ -73,20 +73,20 @@ app.get(`/todos`, async (req, res) => {
     await pipeline(nodeStream, res)
   } catch (error) {
     // Ignore premature close errors - these happen when clients disconnect early
-    if (error.code === `ERR_STREAM_PREMATURE_CLOSE`) {
+    if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
       return
     }
 
-    console.error(`Error proxying to Electric:`, error)
+    console.error("Error proxying to Electric:", error)
     // Only write headers if they haven't been sent yet
     if (!res.headersSent) {
-      res.status(500).json({ error: `Internal server error` })
+      res.status(500).json({ error: "Internal server error" })
     }
   }
 })
 
-app.post(`/todos`, async (req, res) => {
-  console.log(`create`, req.body, req.body.title)
+app.post("/todos", async (req, res) => {
+  console.log("create", req.body, req.body.title)
   let parsedData
   try {
     parsedData = postSchema.parse(req.body)
@@ -97,46 +97,46 @@ app.post(`/todos`, async (req, res) => {
   }
   try {
     await pool.query(
-      `insert into todos (id, title, completed, created_at) VALUES($1, $2, false, $3)`,
+      "insert into todos (id, title, completed, created_at) VALUES($1, $2, false, $3)",
       [parsedData.id, parsedData.title, new Date()]
     )
   } catch (e) {
-    console.log(`insert error`, e)
+    console.log("insert error", e)
     return res.status(500).json({ errors: e })
   }
-  res.send(`ok`)
+  res.send("ok")
 })
 
-app.put(`/todos/:id`, async (req, res) => {
+app.put("/todos/:id", async (req, res) => {
   const todoId = idSchema.parse(req.params.id)
   const body = putSchema.parse(req.body)
-  console.log(`update`, todoId, body)
+  console.log("update", todoId, body)
   try {
-    const { query, values } = generateUpdateQuery(`todos`, body, {
+    const { query, values } = generateUpdateQuery("todos", body, {
       id: todoId,
     })
     console.log({ query, values })
     await pool.query(query, values)
   } catch (e) {
-    console.log(`insert error`, e)
+    console.log("insert error", e)
     return res.status(500).json({ errors: e })
   }
-  res.send(`ok`)
+  res.send("ok")
 })
 
-app.delete(`/todos/:id`, async (req, res) => {
+app.delete("/todos/:id", async (req, res) => {
   const todoId = idSchema.parse(req.params.id)
-  console.log(`delete`, todoId)
+  console.log("delete", todoId)
   try {
-    await pool.query(`DELETE from todos where id = $1`, [todoId])
+    await pool.query("DELETE from todos where id = $1", [todoId])
   } catch (e) {
-    console.log(`insert error`, e)
+    console.log("insert error", e)
     return res.status(500).json({ errors: e })
   }
-  res.send(`ok`)
+  res.send("ok")
 })
 
-app.get(`/health`, (_req, res) => {
+app.get("/health", (_req, res) => {
   return res.sendStatus(200)
 })
 
@@ -216,6 +216,6 @@ function generateUpdateQuery(table, updates, conditions) {
     index++
   }
 
-  const query = `UPDATE "${table}" SET ${setClauses.join(`, `)} WHERE ${conditionClauses.join(` AND `)}`
+  const query = `UPDATE "${table}" SET ${setClauses.join(", ")} WHERE ${conditionClauses.join(" AND ")}`
   return { query, values }
 }

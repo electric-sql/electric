@@ -3,16 +3,16 @@ import {
   EditorContent,
   BubbleMenu,
   type Extensions,
-} from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Placeholder from '@tiptap/extension-placeholder'
-import Table from '@tiptap/extension-table'
-import TableCell from '@tiptap/extension-table-cell'
-import TableHeader from '@tiptap/extension-table-header'
-import TableRow from '@tiptap/extension-table-row'
-import { Markdown } from 'tiptap-markdown'
-import EditorMenu from './EditorMenu'
-import { useEffect, useRef } from 'react'
+} from "@tiptap/react"
+import StarterKit from "@tiptap/starter-kit"
+import Placeholder from "@tiptap/extension-placeholder"
+import Table from "@tiptap/extension-table"
+import TableCell from "@tiptap/extension-table-cell"
+import TableHeader from "@tiptap/extension-table-header"
+import TableRow from "@tiptap/extension-table-row"
+import { Markdown } from "tiptap-markdown"
+import EditorMenu from "./EditorMenu"
+import { useEffect, useRef } from "react"
 
 interface EditorProps {
   value: string
@@ -24,7 +24,7 @@ interface EditorProps {
 const Editor = ({
   value,
   onChange,
-  className = ``,
+  className = "",
   placeholder,
 }: EditorProps) => {
   const editorProps = {
@@ -49,7 +49,7 @@ const Editor = ({
     content: value || undefined,
     onUpdate: ({ editor }) => {
       markdownValue.current = editor.storage.markdown.getMarkdown()
-      onChange(markdownValue.current || ``)
+      onChange(markdownValue.current || "")
     },
   })
 

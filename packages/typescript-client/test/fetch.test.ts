@@ -1,16 +1,16 @@
-import { describe, beforeEach, it, expect, vi, type Mock } from 'vitest'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { FetchError, FetchBackoffAbortError } from '../src/error'
+import { describe, beforeEach, it, expect, vi, type Mock } from "vitest"
+import { setTimeout as sleep } from "node:timers/promises"
+import { FetchError, FetchBackoffAbortError } from "../src/error"
 import {
   createFetchWithBackoff,
   BackoffDefaults,
   createFetchWithChunkBuffer,
   createFetchWithConsumedMessages,
-} from '../src/fetch'
-import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
-import { afterEach } from 'node:test'
+} from "../src/fetch"
+import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from "../src/constants"
+import { afterEach } from "node:test"
 
-describe(`createFetchWithBackoff`, () => {
+describe("createFetchWithBackoff", () => {
   const initialDelay = 10
   const maxDelay = 100
   let mockFetchClient: Mock<typeof fetch>
@@ -19,24 +19,24 @@ describe(`createFetchWithBackoff`, () => {
     mockFetchClient = vi.fn()
   })
 
-  it(`should return a successful response on the first attempt`, async () => {
-    const mockResponse = new Response(null, { status: 200, statusText: `OK` })
+  it("should return a successful response on the first attempt", async () => {
+    const mockResponse = new Response(null, { status: 200, statusText: "OK" })
     mockFetchClient.mockResolvedValue(mockResponse)
 
     const fetchWithBackoff = createFetchWithBackoff(mockFetchClient)
 
-    const result = await fetchWithBackoff(`https://example.com`)
+    const result = await fetchWithBackoff("https://example.com")
 
     expect(mockFetchClient).toHaveBeenCalledTimes(1)
     expect(result.ok).toBe(true)
     expect(result).toEqual(mockResponse)
   })
 
-  it(`should retry the request on a 500 response and succeed after a retry`, async () => {
+  it("should retry the request on a 500 response and succeed after a retry", async () => {
     const mockErrorResponse = new Response(null, { status: 500 })
     const mockSuccessResponse = new Response(null, {
       status: 200,
-      statusText: `OK`,
+      statusText: "OK",
     })
     mockFetchClient
       .mockResolvedValueOnce(mockErrorResponse)
@@ -47,17 +47,17 @@ describe(`createFetchWithBackoff`, () => {
       initialDelay,
     })
 
-    const result = await fetchWithBackoff(`https://example.com`)
+    const result = await fetchWithBackoff("https://example.com")
 
     expect(mockFetchClient).toHaveBeenCalledTimes(2)
     expect(result.ok).toBe(true)
   })
 
-  it(`should retry the request on a 429 response and succeed after a retry`, async () => {
+  it("should retry the request on a 429 response and succeed after a retry", async () => {
     const mockErrorResponse = new Response(null, { status: 429 })
     const mockSuccessResponse = new Response(null, {
       status: 200,
-      statusText: `OK`,
+      statusText: "OK",
     })
     mockFetchClient
       .mockResolvedValueOnce(mockErrorResponse)
@@ -68,17 +68,17 @@ describe(`createFetchWithBackoff`, () => {
       initialDelay,
     })
 
-    const result = await fetchWithBackoff(`https://example.com`)
+    const result = await fetchWithBackoff("https://example.com")
 
     expect(mockFetchClient).toHaveBeenCalledTimes(2)
     expect(result.ok).toBe(true)
   })
 
-  it(`should apply exponential backoff and retry until maxDelay is reached`, async () => {
+  it("should apply exponential backoff and retry until maxDelay is reached", async () => {
     const mockErrorResponse = new Response(null, { status: 500 })
     const mockSuccessResponse = new Response(null, {
       status: 200,
-      statusText: `OK`,
+      statusText: "OK",
     })
     mockFetchClient
       .mockResolvedValueOnce(mockErrorResponse)
@@ -94,28 +94,28 @@ describe(`createFetchWithBackoff`, () => {
       multiplier,
     })
 
-    const result = await fetchWithBackoff(`https://example.com`)
+    const result = await fetchWithBackoff("https://example.com")
 
     expect(mockFetchClient).toHaveBeenCalledTimes(4)
     expect(result.ok).toBe(true)
   })
 
-  it(`should stop retrying and throw an error on a 400 response`, async () => {
+  it("should stop retrying and throw an error on a 400 response", async () => {
     const mockErrorResponse = new Response(null, {
       status: 400,
-      statusText: `Bad Request`,
+      statusText: "Bad Request",
     })
     mockFetchClient.mockResolvedValue(mockErrorResponse)
 
     const fetchWithBackoff = createFetchWithBackoff(mockFetchClient)
 
-    await expect(fetchWithBackoff(`https://example.com`)).rejects.toThrow(
+    await expect(fetchWithBackoff("https://example.com")).rejects.toThrow(
       FetchError
     )
     expect(mockFetchClient).toHaveBeenCalledTimes(1)
   })
 
-  it(`should throw FetchBackoffAborted if the abort signal is triggered`, async () => {
+  it("should throw FetchBackoffAborted if the abort signal is triggered", async () => {
     const mockAbortController = new AbortController()
     const signal = mockAbortController.signal
     const mockErrorResponse = new Response(null, { status: 500 })
@@ -131,16 +131,16 @@ describe(`createFetchWithBackoff`, () => {
     setTimeout(() => mockAbortController.abort(), 5)
 
     await expect(
-      fetchWithBackoff(`https://example.com`, { signal })
+      fetchWithBackoff("https://example.com", { signal })
     ).rejects.toThrow(FetchBackoffAbortError)
 
     expect(mockFetchClient).toHaveBeenCalledTimes(1)
   })
 
-  it(`should not retry when a client error (4xx) occurs`, async () => {
+  it("should not retry when a client error (4xx) occurs", async () => {
     const mockErrorResponse = new Response(null, {
       status: 403,
-      statusText: `Forbidden`,
+      statusText: "Forbidden",
     })
     mockFetchClient.mockResolvedValue(mockErrorResponse)
 
@@ -149,7 +149,7 @@ describe(`createFetchWithBackoff`, () => {
       BackoffDefaults
     )
 
-    await expect(fetchWithBackoff(`https://example.com`)).rejects.toThrow(
+    await expect(fetchWithBackoff("https://example.com")).rejects.toThrow(
       FetchError
     )
     expect(mockFetchClient).toHaveBeenCalledTimes(1)
@@ -174,8 +174,8 @@ describe(`createFetchWithBackoff`, () => {
   // })
 })
 
-describe(`createFetchWithChunkBuffer`, () => {
-  const baseUrl = `https://example.com/v1/shape?table=foo`
+describe("createFetchWithChunkBuffer", () => {
+  const baseUrl = "https://example.com/v1/shape?table=foo"
   let mockFetch: Mock<typeof fetch>
   const responseHeaders = (headers: Record<string, string>) => {
     return new Headers(headers)
@@ -185,9 +185,9 @@ describe(`createFetchWithChunkBuffer`, () => {
     mockFetch = vi.fn()
   })
 
-  it(`should perform a basic fetch when no prefetch metadata is available`, async () => {
+  it("should perform a basic fetch when no prefetch metadata is available", async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
-    const mockResponse = new Response(`test response`, {
+    const mockResponse = new Response("test response", {
       status: 200,
     })
 
@@ -199,17 +199,17 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledWith(baseUrl)
   })
 
-  it(`should prefetch the next chunk when headers are present`, async () => {
+  it("should prefetch the next chunk when headers are present", async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
-    const initialResponse = new Response(`initial chunk`, {
+    const initialResponse = new Response("initial chunk", {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [SHAPE_HANDLE_HEADER]: "123",
+        [CHUNK_LAST_OFFSET_HEADER]: "456",
       }),
     })
 
-    const nextResponse = new Response(`next chunk`, {
+    const nextResponse = new Response("next chunk", {
       status: 200,
     })
 
@@ -224,7 +224,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
   })
 
-  it(`should stop and resume prefetching after reaching maxChunksToPrefetch`, async () => {
+  it("should stop and resume prefetching after reaching maxChunksToPrefetch", async () => {
     const maxPrefetchNum = 2
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
       maxChunksToPrefetch: maxPrefetchNum,
@@ -234,10 +234,10 @@ describe(`createFetchWithChunkBuffer`, () => {
       // initial + prefetched + next prefetch after one consumed
       { length: 1 + maxPrefetchNum + 1 },
       (_, idx) =>
-        new Response(`next chunk`, {
+        new Response("next chunk", {
           status: 200,
           headers: responseHeaders({
-            [SHAPE_HANDLE_HEADER]: `123`,
+            [SHAPE_HANDLE_HEADER]: "123",
             [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
           }),
         })
@@ -273,21 +273,21 @@ describe(`createFetchWithChunkBuffer`, () => {
     )
   })
 
-  it(`should stop prefetching as soon as responses are not advancing`, async () => {
+  it("should stop prefetching as soon as responses are not advancing", async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
-    const initialResponse = new Response(`initial chunk`, {
+    const initialResponse = new Response("initial chunk", {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [SHAPE_HANDLE_HEADER]: "123",
+        [CHUNK_LAST_OFFSET_HEADER]: "456",
       }),
     })
 
-    const nextResponse = new Response(`next chunk`, {
+    const nextResponse = new Response("next chunk", {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [SHAPE_HANDLE_HEADER]: "123",
+        [CHUNK_LAST_OFFSET_HEADER]: "456",
       }),
     })
 
@@ -308,9 +308,9 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
-  it(`should not prefetch if response is not ok`, async () => {
+  it("should not prefetch if response is not ok", async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
-    const mockErrorResponse = new Response(`error`, {
+    const mockErrorResponse = new Response("error", {
       status: 500,
     })
 
@@ -323,19 +323,19 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 
-  it(`should handle failed prefetch attempts gracefully`, async () => {
+  it("should handle failed prefetch attempts gracefully", async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
 
-    const initialResponse = new Response(`initial chunk`, {
+    const initialResponse = new Response("initial chunk", {
       status: 200,
       headers: responseHeaders({
-        [SHAPE_HANDLE_HEADER]: `123`,
-        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+        [SHAPE_HANDLE_HEADER]: "123",
+        [CHUNK_LAST_OFFSET_HEADER]: "456",
       }),
     })
 
     mockFetch.mockResolvedValueOnce(initialResponse)
-    mockFetch.mockRejectedValueOnce(new Error(`Prefetch failed`))
+    mockFetch.mockRejectedValueOnce(new Error("Prefetch failed"))
 
     const result = await fetchWrapper(baseUrl)
     expect(result).toBe(initialResponse)
@@ -349,7 +349,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
-  it(`should clear and abort prefetches on new entry`, async () => {
+  it("should clear and abort prefetches on new entry", async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
       maxChunksToPrefetch: 2,
     })
@@ -357,10 +357,10 @@ describe(`createFetchWithChunkBuffer`, () => {
     Array.from({ length: 10 }, (_, idx) =>
       mockFetch.mockImplementationOnce(async () => {
         await sleep()
-        return new Response(`chunk`, {
+        return new Response("chunk", {
           status: 200,
           headers: responseHeaders({
-            [SHAPE_HANDLE_HEADER]: `123`,
+            [SHAPE_HANDLE_HEADER]: "123",
             [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
           }),
         })
@@ -402,7 +402,7 @@ describe(`createFetchWithChunkBuffer`, () => {
     )
   })
 
-  it(`should respect wrapped client's aborter`, async () => {
+  it("should respect wrapped client's aborter", async () => {
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
       maxChunksToPrefetch: 2,
     })
@@ -410,10 +410,10 @@ describe(`createFetchWithChunkBuffer`, () => {
     Array.from({ length: 10 }, (_, idx) =>
       mockFetch.mockImplementationOnce(async () => {
         await sleep()
-        return new Response(`chunk`, {
+        return new Response("chunk", {
           status: 200,
           headers: responseHeaders({
-            [SHAPE_HANDLE_HEADER]: `123`,
+            [SHAPE_HANDLE_HEADER]: "123",
             [CHUNK_LAST_OFFSET_HEADER]: `${idx}`,
           }),
         })
@@ -433,14 +433,14 @@ describe(`createFetchWithChunkBuffer`, () => {
   })
 })
 
-describe(`createFetchWithConsumedMessages`, () => {
+describe("createFetchWithConsumedMessages", () => {
   const mockFetch = vi.fn()
 
   afterEach(() => {
     vi.resetAllMocks()
   })
 
-  it(`should return the original response for status codes < 200`, async () => {
+  it("should return the original response for status codes < 200", async () => {
     const mockResponse = {
       status: 199,
       text: vi.fn(),
@@ -449,13 +449,13 @@ describe(`createFetchWithConsumedMessages`, () => {
     mockFetch.mockResolvedValue(mockResponse)
 
     const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
-    const result = await enhancedFetch(`http://example.com`)
+    const result = await enhancedFetch("http://example.com")
 
     expect(result).toBe(mockResponse)
     expect(mockResponse.text).not.toHaveBeenCalled()
   })
 
-  it(`should return the original response for status codes with no body (201, 204, 205)`, async () => {
+  it("should return the original response for status codes with no body (201, 204, 205)", async () => {
     const mockResponse = {
       status: 204,
       text: vi.fn(),
@@ -464,15 +464,15 @@ describe(`createFetchWithConsumedMessages`, () => {
     mockFetch.mockResolvedValue(mockResponse)
 
     const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
-    const result = await enhancedFetch(`http://example.com`)
+    const result = await enhancedFetch("http://example.com")
 
     expect(result).toBe(mockResponse)
     expect(mockResponse.text).not.toHaveBeenCalled()
   })
 
-  it(`should consume the body and return a new Response for successful status codes`, async () => {
-    const mockText = `response body`
-    const mockHeaders = new Headers({ 'content-type': `text/plain` })
+  it("should consume the body and return a new Response for successful status codes", async () => {
+    const mockText = "response body"
+    const mockHeaders = new Headers({ "content-type": "text/plain" })
     const mockResponse = {
       status: 200,
       text: vi.fn().mockResolvedValue(mockText),
@@ -481,7 +481,7 @@ describe(`createFetchWithConsumedMessages`, () => {
     mockFetch.mockResolvedValue(mockResponse)
 
     const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
-    const result = await enhancedFetch(`http://example.com`)
+    const result = await enhancedFetch("http://example.com")
 
     expect(result).not.toBe(mockResponse)
     expect(result.status).toBe(200)
@@ -489,9 +489,9 @@ describe(`createFetchWithConsumedMessages`, () => {
     expect(mockResponse.text).toHaveBeenCalled()
   })
 
-  it(`should throw FetchError when reading body fails`, async () => {
-    const mockError = new Error(`Failed to read body`)
-    const mockHeaders = new Headers({ 'content-type': `text/plain` })
+  it("should throw FetchError when reading body fails", async () => {
+    const mockError = new Error("Failed to read body")
+    const mockHeaders = new Headers({ "content-type": "text/plain" })
     const mockResponse = {
       status: 200,
       text: vi.fn().mockRejectedValue(mockError),
@@ -500,7 +500,7 @@ describe(`createFetchWithConsumedMessages`, () => {
     mockFetch.mockResolvedValue(mockResponse)
 
     const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
-    const url = `http://example.com`
+    const url = "http://example.com"
 
     await expect(() => enhancedFetch(url)).rejects.toThrow(FetchError)
 
@@ -517,16 +517,16 @@ describe(`createFetchWithConsumedMessages`, () => {
     }
   })
 
-  it(`should handle non-Error rejection values when reading body`, async () => {
+  it("should handle non-Error rejection values when reading body", async () => {
     const mockResponse = {
       status: 200,
-      text: vi.fn().mockRejectedValue(`some error string`),
+      text: vi.fn().mockRejectedValue("some error string"),
       headers: new Headers(),
     }
     mockFetch.mockResolvedValue(mockResponse)
 
     const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
-    const url = `http://example.com`
+    const url = "http://example.com"
 
     await expect(() => enhancedFetch(url)).rejects.toThrow(FetchError)
 
@@ -535,21 +535,21 @@ describe(`createFetchWithConsumedMessages`, () => {
     } catch (error) {
       expect(error).toBeInstanceOf(FetchError)
       if (error instanceof FetchError) {
-        expect(error.message).toBe(`some error string`)
+        expect(error.message).toBe("some error string")
       }
     }
   })
 
-  it(`should handle unknown rejection values when reading body`, async () => {
+  it("should handle unknown rejection values when reading body", async () => {
     const mockResponse = {
       status: 200,
-      text: vi.fn().mockRejectedValue({ some: `object` }),
+      text: vi.fn().mockRejectedValue({ some: "object" }),
       headers: new Headers(),
     }
     mockFetch.mockResolvedValue(mockResponse)
 
     const enhancedFetch = createFetchWithConsumedMessages(mockFetch)
-    const url = `http://example.com`
+    const url = "http://example.com"
 
     await expect(() => enhancedFetch(url)).rejects.toThrow(FetchError)
 
@@ -558,7 +558,7 @@ describe(`createFetchWithConsumedMessages`, () => {
     } catch (error) {
       expect(error).toBeInstanceOf(FetchError)
       if (error instanceof FetchError) {
-        expect(error.message).toBe(`failed to read body`)
+        expect(error.message).toBe("failed to read body")
       }
     }
   })

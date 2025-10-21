@@ -1,12 +1,12 @@
-import type { FC } from 'react'
-import type { EventResult, UserBadgeColor } from '../../types'
+import type { FC } from "react"
+import type { EventResult, UserBadgeColor } from "../../types"
 
-import SystemMessage from './SystemMessage'
-import TextMessage from './TextMessage'
+import SystemMessage from "./SystemMessage"
+import TextMessage from "./TextMessage"
 
-import AskUserAboutThemselves from './ToolUseMessages/AskUserAboutThemselves'
-import ExtractFacts from './ToolUseMessages/ExtractFacts'
-import RoastUser from './ToolUseMessages/RoastUser'
+import AskUserAboutThemselves from "./ToolUseMessages/AskUserAboutThemselves"
+import ExtractFacts from "./ToolUseMessages/ExtractFacts"
+import RoastUser from "./ToolUseMessages/RoastUser"
 
 type ComponentProps = {
   event: EventResult

@@ -8,13 +8,13 @@ import { matchStream } from "./match-stream"
 import { ShapeStreamOptions } from "@electric-sql/client/*"
 
 const itemShape = (): ShapeStreamOptions => {
-  if (typeof window !== `undefined`) {
+  if (typeof window !== "undefined") {
     return {
-      url: new URL(`/shape-proxy`, window?.location.origin).href,
+      url: new URL("/shape-proxy", window?.location.origin).href,
     }
   } else {
     return {
-      url: new URL(`https://not-sure-how-this-works.com/shape-proxy`).href,
+      url: new URL("https://not-sure-how-this-works.com/shape-proxy").href,
     }
   }
 }
@@ -27,13 +27,13 @@ async function createItem(newId: string) {
   // Match the insert
   const findUpdatePromise = matchStream({
     stream: itemsStream,
-    operations: [`insert`],
+    operations: ["insert"],
     matchFn: ({ message }) => message.value.id === newId,
   })
 
   // Generate new UUID and post to backend
-  const fetchPromise = fetch(`/api/items`, {
-    method: `POST`,
+  const fetchPromise = fetch("/api/items", {
+    method: "POST",
     body: JSON.stringify({ uuid: newId }),
   })
 
@@ -45,13 +45,13 @@ async function clearItems() {
   // Match the delete
   const findUpdatePromise = matchStream({
     stream: itemsStream,
-    operations: [`delete`],
+    operations: ["delete"],
     // First delete will match
     matchFn: () => true,
   })
   // Post to backend to delete everything
-  const fetchPromise = fetch(`/api/items`, {
-    method: `DELETE`,
+  const fetchPromise = fetch("/api/items", {
+    method: "DELETE",
   })
 
   return await Promise.all([findUpdatePromise, fetchPromise])
@@ -85,12 +85,12 @@ export default function Home() {
     <div>
       <form
         action={async (formData: FormData) => {
-          const intent = formData.get(`intent`)
-          const newId = formData.get(`new-id`) as string
-          if (intent === `add`) {
+          const intent = formData.get("intent")
+          const newId = formData.get("new-id") as string
+          if (intent === "add") {
             updateOptimisticItems({ newId })
             await createItem(newId)
-          } else if (intent === `clear`) {
+          } else if (intent === "clear") {
             updateOptimisticItems({ isClear: true })
             await clearItems()
           }

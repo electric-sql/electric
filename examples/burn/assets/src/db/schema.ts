@@ -1,4 +1,4 @@
-import * as z from 'zod/v4'
+import * as z from "zod/v4"
 
 const timestamps = {
   inserted_at: z.date().optional(),
@@ -6,13 +6,13 @@ const timestamps = {
 }
 
 export const authSchema = z.object({
-  key: z.literal(`current`),
+  key: z.literal("current"),
   user_id: z.uuid(),
 })
 
 export const userSchema = z.object({
   id: z.uuid(),
-  type: z.enum([`human`, `agent`]),
+  type: z.enum(["human", "agent"]),
   name: z.string(),
   avatar_url: z.string().url(),
 
@@ -22,7 +22,7 @@ export const userSchema = z.object({
 export const threadSchema = z.object({
   id: z.uuid(),
   name: z.string(),
-  status: z.enum([`started`, `cancelled`, `completed`]),
+  status: z.enum(["started", "cancelled", "completed"]),
 
   ...timestamps,
 })
@@ -31,7 +31,7 @@ export const membershipSchema = z.object({
   id: z.uuid(),
   thread_id: z.uuid(),
   user_id: z.uuid(),
-  role: z.enum([`member`, `owner`, `producer`, `comedian`]),
+  role: z.enum(["member", "owner", "producer", "comedian"]),
 
   ...timestamps,
 })
@@ -41,7 +41,7 @@ export const eventSchema = z.object({
   thread_id: z.uuid(),
   user_id: z.uuid().optional(),
 
-  type: z.enum([`system`, `text`, `tool_use`, `tool_result`]),
+  type: z.enum(["system", "text", "tool_use", "tool_result"]),
   data: z.record(z.string(), z.any()),
 
   ...timestamps,

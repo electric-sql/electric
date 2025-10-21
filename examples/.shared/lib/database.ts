@@ -1,5 +1,5 @@
-import { execSync } from 'node:child_process'
-import { createNeonDb, getNeonConnectionString } from './neon'
+import { execSync } from "node:child_process"
+import { createNeonDb, getNeonConnectionString } from "./neon"
 
 function addDatabaseToElectric({
   dbUri,
@@ -12,13 +12,13 @@ function addDatabaseToElectric({
   const teamId = process.env.ELECTRIC_TEAM_ID
 
   if (!adminApi || !teamId) {
-    throw new Error(`ELECTRIC_ADMIN_API or ELECTRIC_TEAM_ID is not set`)
+    throw new Error("ELECTRIC_ADMIN_API or ELECTRIC_TEAM_ID is not set")
   }
 
   const adminApiAuthToken = process.env.ELECTRIC_ADMIN_API_AUTH_TOKEN
   if (!adminApiAuthToken) {
     throw new Error(
-      `ADMIN_API_TOKEN_CLIENT_ID or ADMIN_API_TOKEN_CLIENT_SECRET is not set`
+      "ADMIN_API_TOKEN_CLIENT_ID or ADMIN_API_TOKEN_CLIENT_SECRET is not set"
     )
   }
 
@@ -29,7 +29,7 @@ function addDatabaseToElectric({
 
   // TODO: replace with Pulumi Electric provider when available
   const electricSourceCommand = new command.local.Command(
-    `electric-create-source-command`,
+    "electric-create-source-command",
     {
       create: createCommand,
       update: createCommand,
@@ -49,21 +49,21 @@ function addDatabaseToElectric({
             db_pool_size: 5,
             ...(pooledDbUri ? { pooled_database_url: pooledDbUri } : {}),
           },
-          region: `us-east-1`,
+          region: "us-east-1",
           team_id: teamId,
         }),
       },
     }
   )
 
-  console.log(`[electric] Upserting Electric source via admin API`)
+  console.log("[electric] Upserting Electric source via admin API")
   return electricSourceCommand.stdout.apply((output) => {
     const parsedOutput = JSON.parse(output) as {
       id: string
       source_secret: string
     }
     console.log(
-      `Created Electric source:`,
+      "Created Electric source:",
       parsedOutput.id !== undefined ? parsedOutput.id : output
     )
     return parsedOutput
@@ -72,9 +72,9 @@ function addDatabaseToElectric({
 
 export function applyMigrations(
   dbUri: string,
-  migrationsDir: string = `./db/migrations`
+  migrationsDir: string = "./db/migrations"
 ) {
-  console.log(`[db] Applying migrations`, { directory: migrationsDir })
+  console.log("[db] Applying migrations", { directory: migrationsDir })
   execSync(`pnpm exec pg-migrations apply --directory ${migrationsDir}`, {
     env: {
       ...process.env,
@@ -90,34 +90,34 @@ export function createDatabaseForCloudElectric({
   dbName: string
   migrationsDirectory: string
 }) {
-  console.log(`[db] createDatabaseForCloudElectric start`, { dbName })
+  console.log("[db] createDatabaseForCloudElectric start", { dbName })
   const neonProjectId = process.env.NEON_PROJECT_ID
   if (!neonProjectId) {
-    throw new Error(`NEON_PROJECT_ID is not set`)
+    throw new Error("NEON_PROJECT_ID is not set")
   }
-  console.log(`[db] neon.getProjectOutput`, {
+  console.log("[db] neon.getProjectOutput", {
     neonProjectId: `${neonProjectId.slice(0, 6)}...`,
   })
 
   // Preflight Neon API to surface clear errors in CI logs
   try {
-    console.log(`[db] Preflight Neon API: GET project`)
+    console.log("[db] Preflight Neon API: GET project")
     const resp = execSync(
-      `curl -s -w "\\n%{http_code}" -H "Authorization: Bearer $NEON_API_KEY" ` +
+      "curl -s -w \"\\n%{http_code}\" -H \"Authorization: Bearer $NEON_API_KEY\" " +
         `https://console.neon.tech/api/v2/projects/${neonProjectId}`,
       { env: process.env }
     )
       .toString()
       .trim()
-    const status = resp.slice(resp.lastIndexOf(`\n`) + 1)
-    const body = resp.slice(0, resp.lastIndexOf(`\n`))
-    console.log(`[db] Neon API status`, { status })
-    if (status !== `200`) {
-      console.error(`[db] Neon API error body`, body)
+    const status = resp.slice(resp.lastIndexOf("\n") + 1)
+    const body = resp.slice(0, resp.lastIndexOf("\n"))
+    console.log("[db] Neon API status", { status })
+    if (status !== "200") {
+      console.error("[db] Neon API error body", body)
       throw new Error(`Neon API preflight failed with status ${status}`)
     }
   } catch (e) {
-    console.error(`[db] Neon API preflight failed`, (e as Error).message)
+    console.error("[db] Neon API preflight failed", (e as Error).message)
     throw e
   }
 
@@ -136,9 +136,9 @@ export function createDatabaseForCloudElectric({
     preflightJson?.project?.default_branch_id ||
     preflightJson?.default_branch_id
   if (!defaultBranchId) {
-    throw new Error(`Could not resolve Neon default branch id`)
+    throw new Error("Could not resolve Neon default branch id")
   }
-  console.log(`[db] Resolved Neon default branch`, { defaultBranchId })
+  console.log("[db] Resolved Neon default branch", { defaultBranchId })
 
   const { ownerName, dbName: resultingDbName } = createNeonDb({
     projectId: neonProjectId,
@@ -146,10 +146,10 @@ export function createDatabaseForCloudElectric({
     dbName,
   })
   resultingDbName.apply((name) =>
-    console.log(`[db] createNeonDb returned`, { dbName: name })
+    console.log("[db] createNeonDb returned", { dbName: name })
   )
   ownerName.apply((name) =>
-    console.log(`[db] createNeonDb owner`, { ownerName: name })
+    console.log("[db] createNeonDb owner", { ownerName: name })
   )
 
   const databaseUri = getNeonConnectionString({
@@ -166,9 +166,9 @@ export function createDatabaseForCloudElectric({
     databaseName: resultingDbName,
     pooled: true,
   })
-  databaseUri.apply(() => console.log(`[db] Resolved direct connection string`))
+  databaseUri.apply(() => console.log("[db] Resolved direct connection string"))
   pooledDatabaseUri.apply(() =>
-    console.log(`[db] Resolved pooled connection string`)
+    console.log("[db] Resolved pooled connection string")
   )
 
   const electricInfo = addDatabaseToElectric({
@@ -176,7 +176,7 @@ export function createDatabaseForCloudElectric({
     pooledDbUri: pooledDatabaseUri,
   })
   electricInfo.apply(({ id }) =>
-    console.log(`[electric] Created/updated source`, { id })
+    console.log("[electric] Created/updated source", { id })
   )
 
   const res = {

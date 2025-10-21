@@ -17,7 +17,7 @@ export type AppRouter = typeof appRouter
 
 const serve = ({ request }: { request: Request }) => {
   return fetchRequestHandler({
-    endpoint: `/api/trpc`,
+    endpoint: "/api/trpc",
     req: request,
     router: appRouter,
     createContext: async () => ({
@@ -27,7 +27,7 @@ const serve = ({ request }: { request: Request }) => {
   })
 }
 
-export const Route = createFileRoute(`/api/trpc/$`)({
+export const Route = createFileRoute("/api/trpc/$")({
   server: {
     handlers: {
       GET: serve,

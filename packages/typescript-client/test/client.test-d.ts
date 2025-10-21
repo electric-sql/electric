@@ -1,4 +1,4 @@
-import { describe, expectTypeOf, it } from 'vitest'
+import { describe, expectTypeOf, it } from "vitest"
 import {
   Row,
   ShapeStream,
@@ -7,14 +7,14 @@ import {
   isChangeMessage,
   ShapeData,
   ExternalParamsRecord,
-} from '../src'
+} from "../src"
 import {
   COLUMNS_QUERY_PARAM,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
-} from '../src/constants'
+} from "../src/constants"
 
 type CustomRow = {
   foo: number
@@ -23,13 +23,13 @@ type CustomRow = {
   ts: Date
 }
 
-describe(`client`, () => {
-  describe(`ShapeStream`, () => {
-    it(`should infer generic row return type when no type is provided`, () => {
+describe("client", () => {
+  describe("ShapeStream", () => {
+    it("should infer generic row return type when no type is provided", () => {
       const shapeStream = new ShapeStream({
-        url: ``,
+        url: "",
         params: {
-          table: ``,
+          table: "",
         },
       })
 
@@ -39,11 +39,11 @@ describe(`client`, () => {
       })
     })
 
-    it(`should infer correct return type when provided`, () => {
+    it("should infer correct return type when provided", () => {
       const shapeStream = new ShapeStream<CustomRow>({
-        url: ``,
+        url: "",
         params: {
-          table: ``,
+          table: "",
         },
         parser: {
           timestamptz: (date: string) => {
@@ -60,25 +60,25 @@ describe(`client`, () => {
       })
     })
 
-    describe(`params validation`, () => {
-      it(`should allow valid params`, () => {
+    describe("params validation", () => {
+      it("should allow valid params", () => {
         const validParams: ExternalParamsRecord = {
           // PostgreSQL params
-          table: `users`,
-          columns: [`id`, `name`],
-          where: `id > 0`,
-          replica: `full`,
+          table: "users",
+          columns: ["id", "name"],
+          where: "id > 0",
+          replica: "full",
 
           // Custom params
-          customParam: `value`,
-          customArrayParam: [`value1`, `value2`],
-          customFunctionParam: () => `value`,
-          customAsyncFunctionParam: async () => [`value1`, `value2`],
+          customParam: "value",
+          customArrayParam: ["value1", "value2"],
+          customFunctionParam: () => "value",
+          customAsyncFunctionParam: async () => ["value1", "value2"],
         }
         expectTypeOf(validParams).toEqualTypeOf<ExternalParamsRecord>()
       })
 
-      it(`should not allow reserved params`, () => {
+      it("should not allow reserved params", () => {
         // Test that reserved parameters are not allowed in ExternalParamsRecord
         type WithReservedParam1 = { [COLUMNS_QUERY_PARAM]: string }
         type WithReservedParam2 = { [LIVE_CACHE_BUSTER_QUERY_PARAM]: string }
@@ -96,12 +96,12 @@ describe(`client`, () => {
     })
   })
 
-  describe(`Shape`, () => {
-    it(`should infer generic row return type when no type is provided`, async () => {
+  describe("Shape", () => {
+    it("should infer generic row return type when no type is provided", async () => {
       const shapeStream = new ShapeStream({
-        url: ``,
+        url: "",
         params: {
-          table: ``,
+          table: "",
         },
       })
       const shape = new Shape(shapeStream)
@@ -117,11 +117,11 @@ describe(`client`, () => {
       expectTypeOf(data).toEqualTypeOf<ShapeData<Row>>()
     })
 
-    it(`should infer correct return type when provided`, async () => {
+    it("should infer correct return type when provided", async () => {
       const shapeStream = new ShapeStream<CustomRow>({
-        url: ``,
+        url: "",
         params: {
-          table: ``,
+          table: "",
         },
         parser: {
           timestamptz: (date: string) => {

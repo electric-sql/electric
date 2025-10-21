@@ -1,12 +1,12 @@
-import express from 'express'
-import cors from 'cors'
-import { db } from '../src/db'
-import { todos } from '../src/db/schema'
-import { validateInsertTodo, validateUpdateTodo } from '../src/db/schema'
-import { sql, eq } from 'drizzle-orm'
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
+import express from "express"
+import cors from "cors"
+import { db } from "../src/db"
+import { todos } from "../src/db/schema"
+import { validateInsertTodo, validateUpdateTodo } from "../src/db/schema"
+import { sql, eq } from "drizzle-orm"
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+import { Readable } from "stream"
+import { pipeline } from "stream/promises"
 
 // Create Express app
 const app = express()
@@ -17,8 +17,8 @@ app.use(cors())
 app.use(express.json())
 
 // Health check endpoint
-app.get(`/api/health`, (_req, res) => {
-  res.status(200).json({ status: `ok` })
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({ status: "ok" })
 })
 
 // Generate a transaction ID
@@ -31,7 +31,7 @@ async function generateTxId(tx: any): Promise<number> {
 // ===== TODOS API =====
 
 // POST create a new todo
-app.post(`/api/todos`, async (req, res) => {
+app.post("/api/todos", async (req, res) => {
   try {
     const todoData = validateInsertTodo(req.body)
 
@@ -43,16 +43,16 @@ app.post(`/api/todos`, async (req, res) => {
 
     res.status(201).json(result)
   } catch (error) {
-    console.error(`Error creating todo:`, error)
+    console.error("Error creating todo:", error)
     res.status(500).json({
-      error: `Failed to create todo`,
+      error: "Failed to create todo",
       details: error instanceof Error ? error.message : String(error),
     })
   }
 })
 
 // PUT update a todo
-app.put(`/api/todos/:id`, async (req, res) => {
+app.put("/api/todos/:id", async (req, res) => {
   try {
     const { id } = req.params
     const todoData = validateUpdateTodo(req.body)
@@ -66,27 +66,27 @@ app.put(`/api/todos/:id`, async (req, res) => {
         .returning()
 
       if (!updatedTodo) {
-        throw new Error(`Todo not found`)
+        throw new Error("Todo not found")
       }
       return { todo: updatedTodo, txid }
     })
 
     res.status(200).json(result)
   } catch (error) {
-    if (error instanceof Error && error.message === `Todo not found`) {
-      return res.status(404).json({ error: `Todo not found` })
+    if (error instanceof Error && error.message === "Todo not found") {
+      return res.status(404).json({ error: "Todo not found" })
     }
 
-    console.error(`Error updating todo:`, error)
+    console.error("Error updating todo:", error)
     res.status(500).json({
-      error: `Failed to update todo`,
+      error: "Failed to update todo",
       details: error instanceof Error ? error.message : String(error),
     })
   }
 })
 
 // DELETE a todo
-app.delete(`/api/todos/:id`, async (req, res) => {
+app.delete("/api/todos/:id", async (req, res) => {
   try {
     const { id } = req.params
 
@@ -98,29 +98,29 @@ app.delete(`/api/todos/:id`, async (req, res) => {
         .returning({ id: todos.id })
 
       if (!deleted) {
-        throw new Error(`Todo not found`)
+        throw new Error("Todo not found")
       }
       return { success: true, txid }
     })
 
     res.status(200).json(result)
   } catch (error) {
-    if (error instanceof Error && error.message === `Todo not found`) {
-      return res.status(404).json({ error: `Todo not found` })
+    if (error instanceof Error && error.message === "Todo not found") {
+      return res.status(404).json({ error: "Todo not found" })
     }
 
-    console.error(`Error deleting todo:`, error)
+    console.error("Error deleting todo:", error)
     res.status(500).json({
-      error: `Failed to delete todo`,
+      error: "Failed to delete todo",
       details: error instanceof Error ? error.message : String(error),
     })
   }
 })
 
 // GET proxy Electric shape requests for todos
-app.get(`/api/todos`, async (req, res) => {
+app.get("/api/todos", async (req, res) => {
   try {
-    const ELECTRIC_URL = process.env.ELECTRIC_URL || `http://localhost:3000`
+    const ELECTRIC_URL = process.env.ELECTRIC_URL || "http://localhost:3000"
 
     const electricUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
 
@@ -132,14 +132,14 @@ app.get(`/api/todos`, async (req, res) => {
     })
 
     // Set the table server-side
-    electricUrl.searchParams.set(`table`, `todos`)
+    electricUrl.searchParams.set("table", "todos")
 
     // Inner try for fetch
     const response = await fetch(electricUrl)
 
     if (!response.ok) {
-      const errorText = await response.text()
-      res.writeHead(response.status, { 'Content-Type': `application/json` })
+      const _errorText = await response.text()
+      res.writeHead(response.status, { "Content-Type": "application/json" })
       res.end(JSON.stringify({ error: `Electric error: ${response.status}` }))
       return
     }
@@ -148,8 +148,8 @@ app.get(`/api/todos`, async (req, res) => {
     const headers = {}
     response.headers.forEach((value, key) => {
       if (
-        key.toLowerCase() !== `content-encoding` &&
-        key.toLowerCase() !== `content-length`
+        key.toLowerCase() !== "content-encoding" &&
+        key.toLowerCase() !== "content-length"
       ) {
         headers[key] = value
       }
@@ -162,15 +162,15 @@ app.get(`/api/todos`, async (req, res) => {
     const nodeStream = Readable.fromWeb(response.body)
 
     // Handle stream errors gracefully
-    nodeStream.on(`error`, (err) => {
-      console.error(`Stream error:`, err)
+    nodeStream.on("error", (err) => {
+      console.error("Stream error:", err)
       if (!res.headersSent) {
         res.writeHead(500)
       }
       res.end()
     })
 
-    res.on(`close`, () => {
+    res.on("close", () => {
       nodeStream.destroy()
     })
 
@@ -178,7 +178,7 @@ app.get(`/api/todos`, async (req, res) => {
   } catch (outerError) {
     if (!res.headersSent) {
       res.status(500).json({
-        error: `Internal server error`,
+        error: "Internal server error",
         details: (outerError as any).message,
       })
     }

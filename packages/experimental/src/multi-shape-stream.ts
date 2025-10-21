@@ -1,9 +1,9 @@
-import { bigIntCompare, bigIntMax, bigIntMin } from './bigint-utils'
+import { bigIntCompare, bigIntMax, bigIntMin } from "./bigint-utils"
 import {
   ShapeStream,
   isChangeMessage,
   isControlMessage,
-} from '@electric-sql/client'
+} from "@electric-sql/client"
 import type {
   ChangeMessage,
   ControlMessage,
@@ -11,7 +11,7 @@ import type {
   MaybePromise,
   Row,
   ShapeStreamOptions,
-} from '@electric-sql/client'
+} from "@electric-sql/client"
 
 interface MultiShapeStreamOptions<
   TShapeRows extends {
@@ -165,7 +165,7 @@ export class MultiShapeStream<
   }
 
   #start() {
-    if (this.#started) throw new Error(`Cannot start multi-shape stream twice`)
+    if (this.#started) throw new Error("Cannot start multi-shape stream twice")
     for (const [key, shape] of this.#shapeEntries()) {
       if (shape.hasStarted()) {
         // The multi-shape stream needs to be started together as a whole, and so we
@@ -178,7 +178,7 @@ export class MultiShapeStream<
           const upToDateLsns = messages
             .filter(isControlMessage)
             .map(({ headers }) =>
-              typeof headers.global_last_seen_lsn === `string`
+              typeof headers.global_last_seen_lsn === "string"
                 ? BigInt(headers.global_last_seen_lsn)
                 : BigInt(0)
             )
@@ -194,7 +194,7 @@ export class MultiShapeStream<
           const dataLsns = messages
             .filter(isChangeMessage)
             .map(({ headers }) =>
-              typeof headers.lsn === `string` ? BigInt(headers.lsn) : BigInt(0)
+              typeof headers.lsn === "string" ? BigInt(headers.lsn) : BigInt(0)
             )
           if (dataLsns.length > 0) {
             const maxDataLsn = bigIntMax(dataLsns)
@@ -412,8 +412,8 @@ export class TransactionalMultiShapeStream<
           const { headers: aHeaders } = a
           const { headers: bHeaders } = b
           if (
-            typeof aHeaders.op_position !== `number` ||
-            typeof bHeaders.op_position !== `number`
+            typeof aHeaders.op_position !== "number" ||
+            typeof bHeaders.op_position !== "number"
           ) {
             return 0 // op_position is not present on the snapshot message
           }
@@ -437,14 +437,14 @@ export class TransactionalMultiShapeStream<
       if (isChangeMessage(message)) {
         // The snapshot message does not have an lsn, so we use 0
         const lsn =
-          typeof headers.lsn === `string` ? BigInt(headers.lsn) : BigInt(0)
+          typeof headers.lsn === "string" ? BigInt(headers.lsn) : BigInt(0)
         if (!this.#changeMessages.has(lsn)) {
           this.#changeMessages.set(lsn, [])
         }
         this.#changeMessages.get(lsn)?.push(message)
         if (
           isUpToDate && // All shapes must be up to date
-          typeof headers.last === `boolean` &&
+          typeof headers.last === "boolean" &&
           headers.last === true
         ) {
           this.#completeLsns[shape] = bigIntMax([
@@ -453,9 +453,9 @@ export class TransactionalMultiShapeStream<
           ])
         }
       } else if (isControlMessage(message)) {
-        if (headers.control === `up-to-date`) {
-          if (typeof headers.global_last_seen_lsn !== `string`) {
-            throw new Error(`global_last_seen_lsn is not a number`)
+        if (headers.control === "up-to-date") {
+          if (typeof headers.global_last_seen_lsn !== "string") {
+            throw new Error("global_last_seen_lsn is not a number")
           }
           this.#completeLsns[shape] = bigIntMax([
             this.#completeLsns[shape],

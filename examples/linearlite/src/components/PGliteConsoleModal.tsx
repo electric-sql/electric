@@ -1,6 +1,6 @@
-import { Repl } from '@electric-sql/pglite-repl'
-import Modal from './Modal'
-import { usePGlite } from '@electric-sql/pglite-react'
+import { Repl } from "@electric-sql/pglite-repl"
+import Modal from "./Modal"
+import { usePGlite } from "@electric-sql/pglite-react"
 
 interface Props {
   isOpen: boolean

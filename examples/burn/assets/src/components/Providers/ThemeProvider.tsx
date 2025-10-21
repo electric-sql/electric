@@ -1,20 +1,20 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from "react"
 import {
   ThemeProvider as NextThemeProvider,
   useTheme as useNextTheme,
-} from 'next-themes'
-import { Theme } from '@radix-ui/themes'
-import { useEffect, useState } from 'react'
-import '@radix-ui/themes/styles.css'
+} from "next-themes"
+import { Theme } from "@radix-ui/themes"
+import { useEffect, useState } from "react"
+import "@radix-ui/themes/styles.css"
 
 type ThemeProviderProps = {
   children: ReactNode
-  defaultTheme?: `light` | `dark` | `system`
+  defaultTheme?: "light" | "dark" | "system"
 }
 
 export function ThemeProvider({
   children,
-  defaultTheme = `system`,
+  defaultTheme = "system",
 }: ThemeProviderProps) {
   const [mounted, setMounted] = useState(false)
 
@@ -31,7 +31,7 @@ export function ThemeProvider({
       attribute="class"
       defaultTheme={defaultTheme}
       enableSystem
-      themes={[`light`, `dark`, `system`]}
+      themes={["light", "dark", "system"]}
     >
       <Theme appearance="inherit" accentColor="purple" grayColor="gray">
         {children}

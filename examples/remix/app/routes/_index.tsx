@@ -7,7 +7,7 @@ import { matchStream } from "../match-stream"
 
 const itemShape = () => {
   return {
-    url: new URL(`/shape-proxy`, window.location.origin).href,
+    url: new URL("/shape-proxy", window.location.origin).href,
   }
 }
 
@@ -22,32 +22,32 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 
   const itemsStream = getShapeStream<Item>(itemShape())
 
-  if (body.get(`intent`) === `add`) {
+  if (body.get("intent") === "add") {
     // Match the insert
     const findUpdatePromise = matchStream({
       stream: itemsStream,
-      operations: [`insert`],
-      matchFn: ({ message }) => message.value.id === body.get(`new-id`),
+      operations: ["insert"],
+      matchFn: ({ message }) => message.value.id === body.get("new-id"),
     })
 
     // Generate new UUID and post to backend
-    const fetchPromise = fetch(`/api/items`, {
-      method: `POST`,
-      body: JSON.stringify({ uuid: body.get(`new-id`) }),
+    const fetchPromise = fetch("/api/items", {
+      method: "POST",
+      body: JSON.stringify({ uuid: body.get("new-id") }),
     })
 
     return await Promise.all([findUpdatePromise, fetchPromise])
-  } else if (body.get(`intent`) === `clear`) {
+  } else if (body.get("intent") === "clear") {
     // Match the delete
     const findUpdatePromise = matchStream({
       stream: itemsStream,
-      operations: [`delete`],
+      operations: ["delete"],
       // First delete will match
       matchFn: () => true,
     })
     // Post to backend to delete everything
-    const fetchPromise = fetch(`/api/items`, {
-      method: `DELETE`,
+    const fetchPromise = fetch("/api/items", {
+      method: "DELETE",
     })
 
     return await Promise.all([findUpdatePromise, fetchPromise])
@@ -58,13 +58,13 @@ export default function Example() {
   const { data: items } = useShape<Item>(itemShape())
 
   const submissions = useFetchers()
-    .filter((fetcher) => fetcher.formData?.get(`intent`) === `add`)
+    .filter((fetcher) => fetcher.formData?.get("intent") === "add")
     .map((fetcher) => {
-      return { id: fetcher.formData?.get(`new-id`) } as Item
+      return { id: fetcher.formData?.get("new-id") } as Item
     })
 
   const isClearing = useFetchers().some(
-    (fetcher) => fetcher.formData?.get(`intent`) === `clear`
+    (fetcher) => fetcher.formData?.get("intent") === "clear"
   )
 
   // Merge data from shape & optimistic data from fetchers. This removes
@@ -86,7 +86,7 @@ export default function Example() {
         </button>
       </Form>
       {isClearing
-        ? ``
+        ? ""
         : [...itemsMap.values()].map((item: Item, index: number) => (
             <p key={index} className="item">
               <code>{item.id}</code>
@@ -97,5 +97,5 @@ export default function Example() {
 }
 
 export function HydrateFallback() {
-  return ``
+  return ""
 }

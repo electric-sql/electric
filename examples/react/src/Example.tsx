@@ -3,13 +3,13 @@ import "./Example.css"
 
 type Item = { id: string }
 
-const baseUrl = import.meta.env.VITE_ELECTRIC_URL ?? `http://localhost:3000`
+const baseUrl = import.meta.env.VITE_ELECTRIC_URL ?? "http://localhost:3000"
 
 export const Example = () => {
   const { data: items } = useShape<Item>({
     url: `${baseUrl}/v1/shape`,
     params: {
-      table: `items`,
+      table: "items",
       source_id: import.meta.env.VITE_ELECTRIC_SOURCE_ID,
       secret: import.meta.env.VITE_ELECTRIC_SOURCE_SECRET,
     },

@@ -1,18 +1,18 @@
-import { createClient } from 'redis'
-import { ShapeStream, Message, isChangeMessage } from '@electric-sql/client'
+import { createClient } from "redis"
+import { ShapeStream, Message, isChangeMessage } from "@electric-sql/client"
 
 // Create a Redis client
-const REDIS_HOST = `localhost`
+const REDIS_HOST = "localhost"
 const REDIS_PORT = 6379
 const client = createClient({
   url: `redis://${REDIS_HOST}:${REDIS_PORT}`,
 })
 
 client.connect().then(async () => {
-  console.log(`Connected to Redis server`)
+  console.log("Connected to Redis server")
 
   // Clear out old data on the hash.
-  client.del(`items`)
+  client.del("items")
 
   // Lua script for updating hash field. We need to merge in partial updates
   // from the shape log.
@@ -33,9 +33,9 @@ client.connect().then(async () => {
   const updateKeyScriptSha1 = await client.SCRIPT_LOAD(script)
 
   const itemsStream = new ShapeStream({
-    url: `http://localhost:3000/v1/shape`,
+    url: "http://localhost:3000/v1/shape",
     params: {
-      table: `items`,
+      table: "items",
     },
   })
   itemsStream.subscribe(async (messages: Message[]) => {
@@ -48,24 +48,24 @@ client.connect().then(async () => {
     // Loop through each message and make writes to the Redis hash for action messages
     messages.forEach((message) => {
       if (!isChangeMessage(message)) return
-      console.log(`message`, message)
+      console.log("message", message)
       // Upsert/delete
       switch (message.headers.operation) {
-        case `delete`:
-          pipeline.hDel(`items`, message.key)
+        case "delete":
+          pipeline.hDel("items", message.key)
           break
 
-        case `insert`:
+        case "insert":
           pipeline.hSet(
-            `items`,
+            "items",
             String(message.key),
             JSON.stringify(message.value)
           )
           break
 
-        case `update`: {
+        case "update": {
           pipeline.evalSha(updateKeyScriptSha1, {
-            keys: [`items`, String(message.key)],
+            keys: ["items", String(message.key)],
             arguments: [JSON.stringify(message.value)],
           })
           break
@@ -76,9 +76,9 @@ client.connect().then(async () => {
     // Execute all commands as a single transaction
     try {
       await pipeline.exec()
-      console.log(`Redis hash updated successfully with latest shape updates`)
+      console.log("Redis hash updated successfully with latest shape updates")
     } catch (error) {
-      console.error(`Error while updating hash:`, error)
+      console.error("Error while updating hash:", error)
     }
   })
 })

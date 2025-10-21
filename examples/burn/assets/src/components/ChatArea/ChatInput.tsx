@@ -1,32 +1,32 @@
-import { useState, useRef, useEffect } from 'react'
-import { Box, Flex, IconButton, TextArea } from '@radix-ui/themes'
-import { makeStyles } from '@griffel/react'
-import { Send } from 'lucide-react'
-import { useAuth } from '../../db/auth'
-import { eventCollection } from '../../db/collections'
+import { useState, useRef, useEffect } from "react"
+import { Box, Flex, IconButton, TextArea } from "@radix-ui/themes"
+import { makeStyles } from "@griffel/react"
+import { Send } from "lucide-react"
+import { useAuth } from "../../db/auth"
+import { eventCollection } from "../../db/collections"
 
 const useStyles = makeStyles({
   container: {
-    borderTop: `1px solid var(--border-color)`,
+    borderTop: "1px solid var(--border-color)",
     flexShrink: 0,
-    padding: `var(--space-4)`,
+    padding: "var(--space-4)",
   },
   textarea: {
-    resize: `none`,
-    minHeight: `40px`,
-    maxHeight: `20vh`,
-    paddingRight: `var(--space-8)`,
-    backgroundColor: `transparent`,
+    resize: "none",
+    minHeight: "40px",
+    maxHeight: "20vh",
+    paddingRight: "var(--space-8)",
+    backgroundColor: "transparent",
   },
   sendWrapper: {
-    position: `absolute`,
-    top: `50%`,
-    right: `var(--space-2)`,
-    transform: `translateY(-50%)`,
+    position: "absolute",
+    top: "50%",
+    right: "var(--space-2)",
+    transform: "translateY(-50%)",
     zIndex: 1,
   },
   sendButton: {
-    color: `#fff`,
+    color: "#fff",
   },
 })
 
@@ -38,7 +38,7 @@ function ChatInput({ threadId }: Props) {
   const classes = useStyles()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const { currentUserId } = useAuth()
-  const [message, setMessage] = useState(``)
+  const [message, setMessage] = useState("")
 
   const focus = () => {
     if (inputRef.current) {
@@ -52,7 +52,7 @@ function ChatInput({ threadId }: Props) {
   }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== `Enter`) {
+    if (e.key !== "Enter") {
       return
     }
 
@@ -75,13 +75,13 @@ function ChatInput({ threadId }: Props) {
       id: crypto.randomUUID(),
       thread_id: threadId,
       user_id: currentUserId!,
-      type: `text`,
+      type: "text",
       data: {
         text: trimmedMessage as string,
       },
     })
 
-    setMessage(``)
+    setMessage("")
 
     focus()
   }
@@ -93,7 +93,7 @@ function ChatInput({ threadId }: Props) {
     if (!inputRef.current) return
 
     const textarea = inputRef.current
-    textarea.style.height = `auto`
+    textarea.style.height = "auto"
 
     const maxHeight = window.innerHeight * 0.2 // 20% of screen height
     const newHeight = Math.min(textarea.scrollHeight, maxHeight)
@@ -107,7 +107,7 @@ function ChatInput({ threadId }: Props) {
   return (
     <Box className={classes.container}>
       <form onSubmit={handleSubmit}>
-        <Box style={{ position: `relative` }}>
+        <Box style={{ position: "relative" }}>
           <TextArea
             ref={inputRef}
             placeholder="Type a message..."

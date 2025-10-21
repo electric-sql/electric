@@ -54,12 +54,12 @@ export async function fetchStarCounts() {
   const counts = {}
 
   const results = await Promise.allSettled([
-    fetchStarCount(`electric`, FALLBACK_ELECTRIC_COUNT),
-    fetchStarCount(`pglite`, FALLBACK_PGLITE_COUNT),
+    fetchStarCount("electric", FALLBACK_ELECTRIC_COUNT),
+    fetchStarCount("pglite", FALLBACK_PGLITE_COUNT),
   ])
 
-  counts[`electric`] = results[0].value
-  counts[`pglite`] = results[1].value
+  counts["electric"] = results[0].value
+  counts["pglite"] = results[1].value
 
   return counts
 }

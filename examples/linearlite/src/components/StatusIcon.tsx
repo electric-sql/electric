@@ -1,5 +1,5 @@
-import classNames from 'classnames'
-import { StatusIcons, StatusValue } from '../types/types'
+import classNames from "classnames"
+import { StatusIcons, StatusValue } from "../types/types"
 
 interface Props {
   status: string
@@ -7,7 +7,7 @@ interface Props {
 }
 
 export default function StatusIcon({ status, className }: Props) {
-  const classes = classNames(`w-3.5 h-3.5 rounded`, className)
+  const classes = classNames("w-3.5 h-3.5 rounded", className)
 
   const Icon = StatusIcons[status.toLowerCase() as StatusValue]
 

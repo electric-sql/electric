@@ -4,7 +4,7 @@ import type { ActionFunctionArgs } from "@remix-run/node"
 import { pool } from "../db"
 
 export async function action({ request }: ActionFunctionArgs) {
-  if (request.method === `POST`) {
+  if (request.method === "POST") {
     const body = await request.json()
     const result = await pool.query(
       `INSERT INTO items (id)
@@ -14,9 +14,9 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ id: result.rows[0].id })
   }
 
-  if (request.method === `DELETE`) {
-    await pool.query(`DELETE FROM items;`)
+  if (request.method === "DELETE") {
+    await pool.query("DELETE FROM items;")
 
-    return `ok`
+    return "ok"
   }
 }

@@ -5,36 +5,36 @@ module.exports = {
     node: true,
   },
   extends: [
-    `eslint:recommended`,
-    `plugin:@typescript-eslint/recommended`,
-    `plugin:prettier/recommended`,
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:prettier/recommended",
   ],
   parserOptions: {
     ecmaVersion: 2022,
     requireConfigFile: false,
-    sourceType: `module`,
+    sourceType: "module",
     ecmaFeatures: {
       jsx: true,
     },
   },
-  parser: `@typescript-eslint/parser`,
-  plugins: [`prettier`],
+  parser: "@typescript-eslint/parser",
+  plugins: ["prettier"],
   rules: {
-    quotes: [`error`, `backtick`],
-    'no-unused-vars': `off`,
-    '@typescript-eslint/no-unused-vars': [
-      `error`,
+    quotes: ["error", "backtick"],
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": [
+      "error",
       {
-        argsIgnorePattern: `^_`,
-        varsIgnorePattern: `^_`,
-        caughtErrorsIgnorePattern: `^_`,
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
       },
     ],
   },
   ignorePatterns: [
-    `**/node_modules/**`,
-    `**/dist/**`,
-    `vitest.config.ts`,
-    `.eslintrc.js`,
+    "**/node_modules/**",
+    "**/dist/**",
+    "vitest.config.ts",
+    ".eslintrc.js",
   ],
 }

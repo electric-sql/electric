@@ -1,17 +1,17 @@
-import type { ReactNode } from 'react'
-import type { EventResult, UserBadgeColor } from '../../types'
+import type { ReactNode } from "react"
+import type { EventResult, UserBadgeColor } from "../../types"
 
-import { Box, Flex, Text, Badge } from '@radix-ui/themes'
-import { makeStyles } from '@griffel/react'
-import { useRelativeTime } from '../../hooks/useRelativeTime'
-import UserAvatar from '../UserAvatar'
+import { Box, Flex, Text, Badge } from "@radix-ui/themes"
+import { makeStyles } from "@griffel/react"
+import { useRelativeTime } from "../../hooks/useRelativeTime"
+import UserAvatar from "../UserAvatar"
 
 const useStyles = makeStyles({
   message: {
-    display: `flex`,
-    gap: `var(--space-4)`,
-    marginBottom: `var(--space-4)`,
-    maxWidth: `100%`,
+    display: "flex",
+    gap: "var(--space-4)",
+    marginBottom: "var(--space-4)",
+    maxWidth: "100%",
   },
   avatar: {
     flexShrink: 0,
@@ -21,21 +21,21 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   messageText: {
-    wordWrap: `break-word`,
-    whiteSpace: `pre-wrap`,
-    fontSize: `13px`,
+    wordWrap: "break-word",
+    whiteSpace: "pre-wrap",
+    fontSize: "13px",
   },
   timestamp: {
-    fontSize: `10px`,
+    fontSize: "10px",
     opacity: 0.7,
   },
   userBadge: {
-    whiteSpace: `normal`,
-    wordBreak: `break-word`,
-    display: `inline`,
-    verticalAlign: `middle`,
-    paddingTop: `1.5px`,
-    paddingBottom: `2px`,
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+    display: "inline",
+    verticalAlign: "middle",
+    paddingTop: "1.5px",
+    paddingBottom: "2px",
   },
 })
 
@@ -81,7 +81,7 @@ function TextMessage({
             <Badge
               size="1"
               variant="soft"
-              color={`yellow`}
+              color={"yellow"}
               className={classes.timestamp}
             >
               {label}

@@ -16,7 +16,7 @@ import Root from "./routes/root"
 
 const router = createBrowserRouter([
   {
-    path: `/`,
+    path: "/",
     element: <Root />,
     errorElement: <ErrorPage />,
     children: [
@@ -29,7 +29,7 @@ const router = createBrowserRouter([
 ])
 
 async function render() {
-  ReactDOM.createRoot(document.getElementById(`root`)!).render(
+  ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <Theme appearance="dark" accentColor="violet" panelBackground="solid">
         <RouterProvider router={router} />

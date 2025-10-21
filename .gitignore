@@ -1,5 +1,6 @@
 .DS_store
 .vscode
+.idea
 **/*.vitest-temp.json
 **/dist/**
 /packages/sync-service/state/

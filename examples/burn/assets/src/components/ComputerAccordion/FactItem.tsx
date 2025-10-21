@@ -1,7 +1,7 @@
-import { Box, Badge, Text, Tooltip } from '@radix-ui/themes'
-import { makeStyles, mergeClasses } from '@griffel/react'
-import { Lightbulb } from 'lucide-react'
-import type { FactResult } from '../../types'
+import { Box, Badge, Text, Tooltip } from "@radix-ui/themes"
+import { makeStyles, mergeClasses } from "@griffel/react"
+import { Lightbulb } from "lucide-react"
+import type { FactResult } from "../../types"
 
 type ConfidenceConfig = {
   color: string
@@ -12,35 +12,35 @@ type ConfidenceConfig = {
 function confidenceConfig(confidence: number): ConfidenceConfig {
   if (confidence >= 0.8) {
     return {
-      level: `High confidence`,
-      color: `var(--green-9)`,
-      fill: `var(--green-9)`,
+      level: "High confidence",
+      color: "var(--green-9)",
+      fill: "var(--green-9)",
     }
   }
 
   if (confidence >= 0.5) {
     return {
-      level: `Medium confidence`,
-      color: `var(--orange-9)`,
-      fill: `var(--orange-9)`,
+      level: "Medium confidence",
+      color: "var(--orange-9)",
+      fill: "var(--orange-9)",
     }
   }
 
   return {
-    level: `Low confidence`,
-    color: `var(--red-9)`,
-    fill: ``,
+    level: "Low confidence",
+    color: "var(--red-9)",
+    fill: "",
   }
 }
 
 const useStyles = makeStyles({
   factItem: {
-    display: `flex`,
-    alignItems: `center`,
-    gap: `var(--space-1)`,
-    lineHeight: `1.4`,
-    paddingTop: `var(--space-1)`,
-    paddingBottom: `var(--space-1)`,
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-1)",
+    lineHeight: "1.4",
+    paddingTop: "var(--space-1)",
+    paddingBottom: "var(--space-1)",
     minWidth: 0,
   },
   icon: {
@@ -48,20 +48,20 @@ const useStyles = makeStyles({
     flexGrow: 0,
   },
   badge: {
-    whiteSpace: `normal`,
-    wordBreak: `break-word`,
+    whiteSpace: "normal",
+    wordBreak: "break-word",
     minWidth: 0,
   },
   subject: {
-    flex: `0 0 auto`,
+    flex: "0 0 auto",
     minWidth: 0,
   },
   predicate: {
-    color: `var(--gray-12)`,
-    flex: `0 1 auto`,
+    color: "var(--gray-12)",
+    flex: "0 1 auto",
   },
   object: {
-    flex: `0 2 auto`,
+    flex: "0 2 auto",
     minWidth: 0,
   },
 })

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useLiveQuery, eq, not } from '@tanstack/react-db'
+import { useState } from "react"
+import { useLiveQuery, eq, not } from "@tanstack/react-db"
 import {
   Box,
   Flex,
@@ -7,40 +7,40 @@ import {
   TextField,
   Button,
   IconButton,
-} from '@radix-ui/themes'
-import { X as CloseIcon } from 'lucide-react'
-import { makeStyles, mergeClasses } from '@griffel/react'
-import { useAuth } from '../../db/auth'
-import { copyInviteLink, getJoinUrl } from '../../utils/clipboard'
-import UserAvatar from '../UserAvatar'
-import ThreadRemoveUserModal from './ThreadRemoveUserModal'
+} from "@radix-ui/themes"
+import { X as CloseIcon } from "lucide-react"
+import { makeStyles, mergeClasses } from "@griffel/react"
+import { useAuth } from "../../db/auth"
+import { copyInviteLink, getJoinUrl } from "../../utils/clipboard"
+import UserAvatar from "../UserAvatar"
+import ThreadRemoveUserModal from "./ThreadRemoveUserModal"
 
 import {
   membershipCollection,
   threadCollection,
   userCollection,
-} from '../../db/collections'
-import type { Membership, User } from '../../db/schema'
+} from "../../db/collections"
+import type { Membership, User } from "../../db/schema"
 
 const useClasses = makeStyles({
   listItem: {
-    borderRadius: `var(--radius-2)`,
-    padding: `var(--space-2)`,
-    marginLeft: `calc(-1 * var(--space-2))`,
-    marginRight: `calc(-1 * var(--space-2))`,
-    transition: `background-color 0.15s ease`,
+    borderRadius: "var(--radius-2)",
+    padding: "var(--space-2)",
+    marginLeft: "calc(-1 * var(--space-2))",
+    marginRight: "calc(-1 * var(--space-2))",
+    transition: "background-color 0.15s ease",
   },
   clickableRow: {
-    cursor: `pointer`,
-    ':hover': {
-      backgroundColor: `var(--gray-3)`,
+    cursor: "pointer",
+    ":hover": {
+      backgroundColor: "var(--gray-3)",
     },
   },
 })
 
-type UserResult = Pick<User, `id` | `name` | `avatar_url`> & {
-  membership_id: Membership[`id`]
-  membership_role: Membership[`role`]
+type UserResult = Pick<User, "id" | "name" | "avatar_url"> & {
+  membership_id: Membership["id"]
+  membership_role: Membership["role"]
 }
 
 type Props = {
@@ -96,14 +96,14 @@ function ThreadEditForm({ threadId }: Props) {
     (query) =>
       query
         .from({ result: memberResults })
-        .where(({ result }) => eq(result.type, `human`)),
+        .where(({ result }) => eq(result.type, "human")),
     [memberResults]
   )
   const { data: ownerUsers } = useLiveQuery(
     (query) =>
       query
         .from({ result: userResults })
-        .where(({ result }) => eq(result.membership_role, `owner`)),
+        .where(({ result }) => eq(result.membership_role, "owner")),
     [userResults]
   )
   const { data: currentUsers } = useLiveQuery(
@@ -117,7 +117,7 @@ function ThreadEditForm({ threadId }: Props) {
     (query) =>
       query
         .from({ result: userResults })
-        .orderBy(({ result }) => result.name, `asc`)
+        .orderBy(({ result }) => result.name, "asc")
         .where(({ result }) => not(eq(result.id, currentUserId))),
     [userResults, currentUserId]
   )
@@ -133,23 +133,23 @@ function ThreadEditForm({ threadId }: Props) {
     (query) =>
       query
         .from({ result: memberResults })
-        .where(({ result }) => eq(result.type, `agent`)),
+        .where(({ result }) => eq(result.type, "agent")),
     [memberResults]
   )
   const { data: producers } = useLiveQuery(
     (query) =>
       query
         .from({ result: agentResults })
-        .orderBy(({ result }) => result.name, `asc`)
-        .where(({ result }) => eq(result.membership_role, `producer`)),
+        .orderBy(({ result }) => result.name, "asc")
+        .where(({ result }) => eq(result.membership_role, "producer")),
     [agentResults]
   )
   const { data: comedians } = useLiveQuery(
     (query) =>
       query
         .from({ result: agentResults })
-        .orderBy(({ result }) => result.name, `asc`)
-        .where(({ result }) => eq(result.membership_role, `comedian`)),
+        .orderBy(({ result }) => result.name, "asc")
+        .where(({ result }) => eq(result.membership_role, "comedian")),
     [agentResults]
   )
   const threadAgents = [...producers, ...comedians]
@@ -202,7 +202,7 @@ function ThreadEditForm({ threadId }: Props) {
 
   return (
     <>
-      <Box p="4" pt="0" height="100%" style={{ overflowY: `auto` }}>
+      <Box p="4" pt="0" height="100%" style={{ overflowY: "auto" }}>
         {/* Edit thread name */}
         <Box mb="6">
           <form onSubmit={handleSaveThreadName}>
@@ -220,7 +220,7 @@ function ThreadEditForm({ threadId }: Props) {
                 />
               </Box>
               <Button type="submit" size="2" color="iris" variant="soft">
-                {threadNameSaved ? `Saved!` : `Save`}
+                {threadNameSaved ? "Saved!" : "Save"}
               </Button>
             </Flex>
           </form>
@@ -294,7 +294,7 @@ function ThreadEditForm({ threadId }: Props) {
                 variant="soft"
                 onClick={handleCopyInvite}
               >
-                {inviteCopied ? `Copied!` : `Copy`}
+                {inviteCopied ? "Copied!" : "Copy"}
               </Button>
             </Flex>
           </Box>
@@ -329,7 +329,7 @@ function ThreadEditForm({ threadId }: Props) {
                     ({agent.membership_role})
                   </Text>
                 </Flex>
-                {agent.membership_role !== `producer` && isOwner && (
+                {agent.membership_role !== "producer" && isOwner && (
                   <IconButton
                     variant="ghost"
                     size="1"
@@ -349,7 +349,7 @@ function ThreadEditForm({ threadId }: Props) {
       </Box>
       <ThreadRemoveUserModal
         isOpen={showRemoveModal}
-        userName={userToRemove?.name || ``}
+        userName={userToRemove?.name || ""}
         onConfirm={confirmRemoveUser}
         onCancel={cancelRemoveUser}
       />

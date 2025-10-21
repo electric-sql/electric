@@ -1,6 +1,6 @@
-import { MouseEventHandler } from 'react'
-import classnames from 'classnames'
-import AvatarImg from '../assets/icons/avatar.svg'
+import { MouseEventHandler } from "react"
+import classnames from "classnames"
+import AvatarImg from "../assets/icons/avatar.svg"
 
 interface Props {
   online?: boolean
@@ -19,12 +19,12 @@ function stringToHslColor(str: string, s: number, l: number) {
   }
 
   const h = hash % 360
-  return `hsl(` + h + `, ` + s + `%, ` + l + `%)`
+  return `hsl(${  h  }, ${  s  }%, ${  l  }%)`
 }
 
 function getAcronym(name: string) {
-  let acr = ((name || ``).match(/\b(\w)/g) || [])
-    .join(``)
+  let acr = ((name || "").match(/\b(\w)/g) || [])
+    .join("")
     .slice(0, 2)
     .toUpperCase()
   if (acr.length === 1) {
@@ -63,10 +63,10 @@ function Avatar({ online, showOffline, name, onClick, avatarUrl }: Props) {
       // <span className="absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full bg-green-500 border border-white"></span>
       <span
         className={classnames(
-          `absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full border border-white`,
+          "absolute -right-0.5 -bottom-0.5 w-2 h-2 rounded-full border border-white",
           {
-            'bg-green-500': online,
-            'bg-red-500': !online,
+            "bg-green-500": online,
+            "bg-red-500": !online,
           }
         )}
       ></span>

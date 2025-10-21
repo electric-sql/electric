@@ -1,4 +1,4 @@
-import { fetchStarCounts } from '../src/lib/star-count.ts'
+import { fetchStarCounts } from "../src/lib/star-count.ts"
 
 export default {
   async load() {

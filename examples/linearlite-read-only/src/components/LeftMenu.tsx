@@ -1,21 +1,21 @@
-import { ReactComponent as HelpIcon } from '../assets/icons/help.svg'
-import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
-import { ReactComponent as ElectricIcon } from '../assets/images/icon.inverse.svg'
-import { ReactComponent as BacklogIcon } from '../assets/icons/circle-dot.svg'
-import { MenuContext } from '../App'
-import classnames from 'classnames'
-import { memo, RefObject, useRef, useState, useContext } from 'react'
-import { BsPencilSquare as AddIcon } from 'react-icons/bs'
-import { BsSearch as SearchIcon } from 'react-icons/bs'
-import { BsFillGrid3X3GapFill as BoardIcon } from 'react-icons/bs'
-import { BsCollectionFill as IssuesIcon } from 'react-icons/bs'
-import { MdKeyboardArrowDown as ExpandMore } from 'react-icons/md'
-import { Link } from 'react-router-dom'
-import Avatar from './Avatar'
-import AboutModal from './AboutModal'
-import IssueModal from './IssueModal'
-import ItemGroup from './ItemGroup'
-import ProfileMenu from './ProfileMenu'
+import { ReactComponent as HelpIcon } from "../assets/icons/help.svg"
+import { ReactComponent as MenuIcon } from "../assets/icons/menu.svg"
+import { ReactComponent as ElectricIcon } from "../assets/images/icon.inverse.svg"
+import { ReactComponent as BacklogIcon } from "../assets/icons/circle-dot.svg"
+import { MenuContext } from "../App"
+import classnames from "classnames"
+import { memo, RefObject, useRef, useState, useContext } from "react"
+import { BsPencilSquare as AddIcon } from "react-icons/bs"
+import { BsSearch as SearchIcon } from "react-icons/bs"
+import { BsFillGrid3X3GapFill as BoardIcon } from "react-icons/bs"
+import { BsCollectionFill as IssuesIcon } from "react-icons/bs"
+import { MdKeyboardArrowDown as ExpandMore } from "react-icons/md"
+import { Link } from "react-router-dom"
+import Avatar from "./Avatar"
+import AboutModal from "./AboutModal"
+import IssueModal from "./IssueModal"
+import ItemGroup from "./ItemGroup"
+import ProfileMenu from "./ProfileMenu"
 
 function LeftMenu() {
   const ref = useRef<HTMLDivElement>() as RefObject<HTMLDivElement>
@@ -25,10 +25,10 @@ function LeftMenu() {
   const { showMenu, setShowMenu } = useContext(MenuContext)!
 
   const classes = classnames(
-    `absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start`,
+    "absolute z-40 lg:static inset-0 transform duration-300 lg:relative lg:translate-x-0 bg-white flex flex-col flex-shrink-0 w-56 font-sans text-sm text-gray-700 border-r border-gray-100 lg:shadow-none justify-items-start",
     {
-      '-translate-x-full ease-out shadow-none': !showMenu,
-      'translate-x-0 ease-in shadow-xl': showMenu,
+      "-translate-x-full ease-out shadow-none": !showMenu,
+      "translate-x-0 ease-in shadow-xl": showMenu,
     }
   )
 
@@ -143,7 +143,7 @@ function LeftMenu() {
           <div className="flex flex-col px-2 pb-2 text-gray-500 mt-7">
             <a className="inline-flex" href="https://electric-sql.com/">
               <ElectricIcon className="w-3 h-3 mr-2 mt-1 scale-150" />
-              {` `}
+              {" "}
               ElectricSQL
             </a>
             <button

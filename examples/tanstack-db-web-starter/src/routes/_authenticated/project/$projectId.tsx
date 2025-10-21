@@ -10,7 +10,7 @@ import {
 } from "@/lib/collections"
 import { type Todo } from "@/db/schema"
 
-export const Route = createFileRoute(`/_authenticated/project/$projectId`)({
+export const Route = createFileRoute("/_authenticated/project/$projectId")({
   component: ProjectPage,
   ssr: false,
   loader: async () => {
@@ -26,7 +26,7 @@ export const Route = createFileRoute(`/_authenticated/project/$projectId`)({
 function ProjectPage() {
   const { projectId } = Route.useParams()
   const { data: session } = authClient.useSession()
-  const [newTodoText, setNewTodoText] = useState(``)
+  const [newTodoText, setNewTodoText] = useState("")
 
   const { data: todos } = useLiveQuery(
     (q) =>
@@ -78,7 +78,7 @@ function ProjectPage() {
         user_ids: [],
         created_at: new Date(),
       })
-      setNewTodoText(``)
+      setNewTodoText("")
     }
   }
 
@@ -102,7 +102,7 @@ function ProjectPage() {
         <h1
           className="text-2xl font-bold text-gray-800 mb-2 cursor-pointer hover:bg-gray-50 p-0 rounded"
           onClick={() => {
-            const newName = prompt(`Edit project name:`, project.name)
+            const newName = prompt("Edit project name:", project.name)
             if (newName && newName !== project.name) {
               projectCollection.update(project.id, (draft) => {
                 draft.name = newName
@@ -117,8 +117,8 @@ function ProjectPage() {
           className="text-gray-600 mb-3 cursor-pointer hover:bg-gray-50 p-0 rounded min-h-[1.5rem]"
           onClick={() => {
             const newDescription = prompt(
-              `Edit project description:`,
-              project.description || ``
+              "Edit project description:",
+              project.description || ""
             )
             if (newDescription !== null) {
               projectCollection.update(project.id, (draft) => {
@@ -127,7 +127,7 @@ function ProjectPage() {
             }
           }}
         >
-          {project.description || `Click to add description...`}
+          {project.description || "Click to add description..."}
         </p>
 
         <div className="flex gap-2 mb-4">
@@ -135,7 +135,7 @@ function ProjectPage() {
             type="text"
             value={newTodoText}
             onChange={(e) => setNewTodoText(e.target.value)}
-            onKeyDown={(e) => e.key === `Enter` && addTodo()}
+            onKeyDown={(e) => e.key === "Enter" && addTodo()}
             placeholder="Add a new todo..."
             className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -162,8 +162,8 @@ function ProjectPage() {
               <span
                 className={`flex-1 ${
                   todo.completed
-                    ? `line-through text-gray-500`
-                    : `text-gray-800`
+                    ? "line-through text-gray-500"
+                    : "text-gray-800"
                 }`}
               >
                 {todo.text}

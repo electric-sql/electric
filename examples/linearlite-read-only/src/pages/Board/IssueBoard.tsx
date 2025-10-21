@@ -1,11 +1,11 @@
-import { DragDropContext, DropResult } from 'react-beautiful-dnd'
-import { useMemo, useState, useEffect } from 'react'
+import { DragDropContext, DropResult } from "react-beautiful-dnd"
+import { useMemo, useState, useEffect } from "react"
 
-import { generateKeyBetween } from 'fractional-indexing'
+import { generateKeyBetween } from "fractional-indexing"
 
-import { Issue, Status, StatusDisplay } from '../../types/types'
+import { Issue, Status, StatusDisplay } from "../../types/types"
 
-import IssueCol from './IssueCol'
+import IssueCol from "./IssueCol"
 
 // Type-fixed component to work around React 18/19 JSX strictness
 
@@ -93,9 +93,9 @@ export default function IssueBoard({ issues }: IssueBoardProps) {
       prevIssue = columnIssues[index - 1]
       nextIssue = columnIssues[index]
     }
-    console.log(`sameColumn`, sameColumn)
-    console.log(`prevIssue`, prevIssue)
-    console.log(`nextIssue`, nextIssue)
+    console.log("sameColumn", sameColumn)
+    console.log("prevIssue", prevIssue)
+    console.log("nextIssue", nextIssue)
     return { prevIssue, nextIssue }
   }
 

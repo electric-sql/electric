@@ -6,7 +6,7 @@ import {
   Offset,
   PostgresSnapshot,
   Row,
-} from './types'
+} from "./types"
 
 /**
  * Type guard for checking {@link Message} is {@link ChangeMessage}.
@@ -28,7 +28,7 @@ import {
 export function isChangeMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ChangeMessage<T> {
-  return `key` in message
+  return "key" in message
 }
 
 /**
@@ -57,7 +57,7 @@ export function isControlMessage<T extends Row<unknown> = Row>(
 export function isUpToDateMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage & { up_to_date: true } {
-  return isControlMessage(message) && message.headers.control === `up-to-date`
+  return isControlMessage(message) && message.headers.control === "up-to-date"
 }
 
 /**

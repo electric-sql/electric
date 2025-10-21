@@ -1,9 +1,9 @@
-import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { electricCollectionOptions } from "@tanstack/electric-db-collection"
 import {
   createCollection,
   localStorageCollectionOptions,
-} from '@tanstack/react-db'
-import { ingestMutations } from './mutations'
+} from "@tanstack/react-db"
+import { ingestMutations } from "./mutations"
 import {
   authSchema,
   eventSchema,
@@ -11,22 +11,22 @@ import {
   membershipSchema,
   threadSchema,
   userSchema,
-} from './schema'
+} from "./schema"
 
-import type { Value } from '@electric-sql/client'
-import type { ElectricCollectionUtils } from '@tanstack/electric-db-collection'
+import type { Value } from "@electric-sql/client"
+import type { ElectricCollectionUtils } from "@tanstack/electric-db-collection"
 import type {
   InsertMutationFn,
   UpdateMutationFn,
   DeleteMutationFn,
-} from '@tanstack/react-db'
-import type { Auth, Event, Fact, Membership, Thread, User } from './schema'
+} from "@tanstack/react-db"
+import type { Auth, Event, Fact, Membership, Thread, User } from "./schema"
 
 type CollectionKey = string | number
 
 export const authCollection = createCollection<Auth>(
   localStorageCollectionOptions({
-    storageKey: `auth`,
+    storageKey: "auth",
     getKey: (item: Auth) => item.key,
     onInsert: async () => true,
     onUpdate: async () => true,
@@ -37,20 +37,20 @@ export const authCollection = createCollection<Auth>(
 
 const headers = {
   Authorization: async () => {
-    const auth = authCollection.get(`current`)
+    const auth = authCollection.get("current")
 
-    return auth ? `Bearer ${auth.user_id}` : `Unauthenticated`
+    return auth ? `Bearer ${auth.user_id}` : "Unauthenticated"
   },
 }
 
 async function onError(error: Error) {
   const status =
-    `status` in error && Number.isInteger(error.status)
+    "status" in error && Number.isInteger(error.status)
       ? (error.status as number)
       : undefined
 
-  if (status === 403 && authCollection.has(`current`)) {
-    await authCollection.delete(`current`)
+  if (status === 403 && authCollection.has("current")) {
+    await authCollection.delete("current")
 
     return { headers }
   }
@@ -68,7 +68,7 @@ const parser = {
   timestamp: (dateStr: string) => {
     // Timestamps sync in as naive datetime strings with no
     // timezone info because they're all implicitly UTC.
-    const utcDateStr = dateStr.endsWith(`Z`) ? dateStr : `${dateStr}Z`
+    const utcDateStr = dateStr.endsWith("Z") ? dateStr : `${dateStr}Z`
     const date: Date = new Date(utcDateStr)
 
     // Cast to `Value`` because we haven't fixed the typing yet
@@ -101,9 +101,9 @@ export const eventCollection = createCollection<
   ElectricCollectionUtils
 >(
   electricCollectionOptions({
-    id: `events`,
+    id: "events",
     shapeOptions: {
-      url: relativeUrl(`/sync/events`),
+      url: relativeUrl("/sync/events"),
       ...baseShapeOptions,
     },
     getKey: (item: Event) => item.id as string,
@@ -118,9 +118,9 @@ export const factCollection = createCollection<
   ElectricCollectionUtils
 >(
   electricCollectionOptions({
-    id: `facts`,
+    id: "facts",
     shapeOptions: {
-      url: relativeUrl(`/sync/facts`),
+      url: relativeUrl("/sync/facts"),
       ...baseShapeOptions,
     },
     getKey: (item: Fact) => item.id as string,
@@ -135,9 +135,9 @@ export const membershipCollection = createCollection<
   ElectricCollectionUtils
 >(
   electricCollectionOptions({
-    id: `memberships`,
+    id: "memberships",
     shapeOptions: {
-      url: relativeUrl(`/sync/memberships`),
+      url: relativeUrl("/sync/memberships"),
       ...baseShapeOptions,
     },
     getKey: (item: Membership) => item.id as string,
@@ -152,9 +152,9 @@ export const threadCollection = createCollection<
   ElectricCollectionUtils
 >(
   electricCollectionOptions({
-    id: `threads`,
+    id: "threads",
     shapeOptions: {
-      url: relativeUrl(`/sync/threads`),
+      url: relativeUrl("/sync/threads"),
       ...baseShapeOptions,
     },
     getKey: (item: Thread) => item.id as string,
@@ -169,9 +169,9 @@ export const userCollection = createCollection<
   ElectricCollectionUtils
 >(
   electricCollectionOptions({
-    id: `users`,
+    id: "users",
     shapeOptions: {
-      url: relativeUrl(`/sync/users`),
+      url: relativeUrl("/sync/users"),
       ...baseShapeOptions,
     },
     getKey: (item: User) => item.id as string,

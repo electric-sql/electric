@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_SERVER_URL || `http://localhost:3001`
+const API_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001"
 
 type RequestOptions = {
   method: string
@@ -56,7 +56,7 @@ async function request(
   const options: RequestOptions = {
     method: method,
     headers: {
-      'Content-Type': `application/json`,
+      "Content-Type": "application/json",
     },
   }
 

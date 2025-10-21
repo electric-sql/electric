@@ -1,17 +1,17 @@
-import type { Context } from 'https://edge.netlify.com'
+import type { Context } from "https://edge.netlify.com"
 
 // Path prefixes that should serve markdown to agents
 const PATH_PREFIXES = [
-  `/about/`,
-  `/blog/`,
-  `/demos/`,
-  `/docs/`,
-  `/product/`,
-  `/use-cases/`,
+  "/about/",
+  "/blog/",
+  "/demos/",
+  "/docs/",
+  "/product/",
+  "/use-cases/",
 ]
 
 // Specific full paths (without extensions)
-const FULL_PATHS = [`/`, `/demos`]
+const FULL_PATHS = ["/", "/demos"]
 
 // Blacklisted blog post patterns (old posts to ignore)
 const BLACKLISTED_BLOG_PATTERNS = [
@@ -42,7 +42,7 @@ function transformBlogPostPath(pathname: string): string | null {
   const [, year, month, day, slug] = blogPostMatch
 
   // Remove .html or .md extension from slug if present
-  const cleanSlug = slug.replace(/\.(html|md)$/, ``)
+  const cleanSlug = slug.replace(/\.(html|md)$/, "")
 
   // Transform to markdown path: /blog/posts/YYYY-MM-DD-slug.md
   return `/blog/posts/${year}-${month}-${day}-${cleanSlug}.md`
@@ -50,12 +50,12 @@ function transformBlogPostPath(pathname: string): string | null {
 
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url)
-  const acceptHeader = request.headers.get(`accept`) || ``
+  const acceptHeader = request.headers.get("accept") || ""
   let targetPath = url.pathname
 
   // Check if this is a blog post
   const isBlogPost =
-    url.pathname.startsWith(`/blog/`) &&
+    url.pathname.startsWith("/blog/") &&
     url.pathname.match(/\/\d{4}\/\d{2}\/\d{2}\//)
 
   if (isBlogPost) {
@@ -68,9 +68,9 @@ export default async (request: Request, context: Context) => {
       // For blog posts, serve markdown if:
       // 1. Explicitly requesting .md (always serve markdown)
       // 2. Not requesting HTML (coding agents)
-      const isExplicitMdRequest = url.pathname.endsWith(`.md`)
+      const isExplicitMdRequest = url.pathname.endsWith(".md")
       const shouldServeMd =
-        isExplicitMdRequest || !acceptHeader.includes(`text/html`)
+        isExplicitMdRequest || !acceptHeader.includes("text/html")
 
       if (shouldServeMd) {
         const mdUrl = new URL(mdPath, url.origin)
@@ -78,7 +78,7 @@ export default async (request: Request, context: Context) => {
 
         if (mdResponse.ok) {
           return new Response(mdResponse.body, {
-            headers: { 'Content-Type': `text/markdown; charset=utf-8` },
+            headers: { "Content-Type": "text/markdown; charset=utf-8" },
           })
         }
       }
@@ -93,16 +93,16 @@ export default async (request: Request, context: Context) => {
   )
 
   const matchesFullPath = FULL_PATHS.some(
-    (path) => url.pathname === path || url.pathname.startsWith(path + `.`)
+    (path) => url.pathname === path || url.pathname.startsWith(`${path  }.`)
   )
 
   const isWhitelisted = matchesPrefix || matchesFullPath
 
-  if (isWhitelisted && !acceptHeader.includes(`text/html`)) {
-    if (url.pathname === `/`) {
-      targetPath = `/llms.txt`
-    } else if (!url.pathname.endsWith(`.md`)) {
-      targetPath = url.pathname.endsWith(`/`)
+  if (isWhitelisted && !acceptHeader.includes("text/html")) {
+    if (url.pathname === "/") {
+      targetPath = "/llms.txt"
+    } else if (!url.pathname.endsWith(".md")) {
+      targetPath = url.pathname.endsWith("/")
         ? `${url.pathname}index.md`
         : `${url.pathname}.md`
     }
@@ -112,7 +112,7 @@ export default async (request: Request, context: Context) => {
 
     if (mdResponse.ok) {
       return new Response(mdResponse.body, {
-        headers: { 'Content-Type': `text/markdown; charset=utf-8` },
+        headers: { "Content-Type": "text/markdown; charset=utf-8" },
       })
     }
   }

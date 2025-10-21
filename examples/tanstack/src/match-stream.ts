@@ -12,7 +12,7 @@ export async function matchStream<T extends Row<unknown>>({
   timeout = 10000,
 }: {
   stream: ShapeStream<T>
-  operations: Array<`insert` | `update` | `delete`>
+  operations: Array<"insert" | "update" | "delete">
   matchFn: ({
     operationType,
     message,

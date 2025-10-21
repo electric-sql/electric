@@ -24,8 +24,8 @@ export type GetExtensions<T> = [T] extends [Row<never>]
     : never
 
 export type Offset =
-  | `-1`
-  | `now`
+  | "-1"
+  | "now"
   | `${number}_${number}`
   | `${bigint}_${number}`
 
@@ -43,18 +43,18 @@ export type NormalizedPgSnapshot = {
 }
 
 interface Header {
-  [key: Exclude<string, `operation` | `control`>]: Value
+  [key: Exclude<string, "operation" | "control">]: Value
 }
 
-export type Operation = `insert` | `update` | `delete`
+export type Operation = "insert" | "update" | "delete"
 
 export type ControlMessage = {
   headers:
     | (Header & {
-        control: `up-to-date` | `must-refetch`
+        control: "up-to-date" | "must-refetch"
         global_last_seen_lsn?: string
       })
-    | (Header & { control: `snapshot-end` } & PostgresSnapshot)
+    | (Header & { control: "snapshot-end" } & PostgresSnapshot)
 }
 
 export type ChangeMessage<T extends Row<unknown> = Row> = {
@@ -84,50 +84,50 @@ export type RegularColumn = {
 } & CommonColumnProps
 
 export type VarcharColumn = {
-  type: `varchar`
+  type: "varchar"
   max_length?: number
 } & CommonColumnProps
 
 export type BpcharColumn = {
-  type: `bpchar`
+  type: "bpchar"
   length?: number
 } & CommonColumnProps
 
 export type TimeColumn = {
-  type: `time` | `timetz` | `timestamp` | `timestamptz`
+  type: "time" | "timetz" | "timestamp" | "timestamptz"
   precision?: number
 } & CommonColumnProps
 
 export type IntervalColumn = {
-  type: `interval`
+  type: "interval"
   fields?:
-    | `YEAR`
-    | `MONTH`
-    | `DAY`
-    | `HOUR`
-    | `MINUTE`
-    | `YEAR TO MONTH`
-    | `DAY TO HOUR`
-    | `DAY TO MINUTE`
-    | `DAY TO SECOND`
-    | `HOUR TO MINUTE`
-    | `HOUR TO SECOND`
-    | `MINUTE TO SECOND`
+    | "YEAR"
+    | "MONTH"
+    | "DAY"
+    | "HOUR"
+    | "MINUTE"
+    | "YEAR TO MONTH"
+    | "DAY TO HOUR"
+    | "DAY TO MINUTE"
+    | "DAY TO SECOND"
+    | "HOUR TO MINUTE"
+    | "HOUR TO SECOND"
+    | "MINUTE TO SECOND"
 } & CommonColumnProps
 
 export type IntervalColumnWithPrecision = {
-  type: `interval`
+  type: "interval"
   precision?: 0 | 1 | 2 | 3 | 4 | 5 | 6
-  fields?: `SECOND`
+  fields?: "SECOND"
 } & CommonColumnProps
 
 export type BitColumn = {
-  type: `bit`
+  type: "bit"
   length: number
 } & CommonColumnProps
 
 export type NumericColumn = {
-  type: `numeric`
+  type: "numeric"
   precision?: number
   scale?: number
 } & CommonColumnProps

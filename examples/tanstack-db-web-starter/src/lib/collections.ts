@@ -9,13 +9,13 @@ import { trpc } from "@/lib/trpc-client"
 
 export const usersCollection = createCollection(
   electricCollectionOptions({
-    id: `users`,
+    id: "users",
     shapeOptions: {
       url: new URL(
-        `/api/users`,
-        typeof window !== `undefined`
+        "/api/users",
+        typeof window !== "undefined"
           ? window.location.origin
-          : `http://localhost:5173`
+          : "http://localhost:5173"
       ).toString(),
       parser: {
         timestamptz: (date: string) => {
@@ -29,13 +29,13 @@ export const usersCollection = createCollection(
 )
 export const projectCollection = createCollection(
   electricCollectionOptions({
-    id: `projects`,
+    id: "projects",
     shapeOptions: {
       url: new URL(
-        `/api/projects`,
-        typeof window !== `undefined`
+        "/api/projects",
+        typeof window !== "undefined"
           ? window.location.origin
-          : `http://localhost:5173`
+          : "http://localhost:5173"
       ).toString(),
       parser: {
         timestamptz: (date: string) => {
@@ -82,13 +82,13 @@ export const projectCollection = createCollection(
 
 export const todoCollection = createCollection(
   electricCollectionOptions({
-    id: `todos`,
+    id: "todos",
     shapeOptions: {
       url: new URL(
-        `/api/todos`,
-        typeof window !== `undefined`
+        "/api/todos",
+        typeof window !== "undefined"
           ? window.location.origin
-          : `http://localhost:5173`
+          : "http://localhost:5173"
       ).toString(),
       parser: {
         // Parse timestamp columns into JavaScript Date objects

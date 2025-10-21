@@ -1,7 +1,7 @@
 import * as decoding from "lib0/decoding"
 
 const hexStringToUint8Array = (hexString: string) => {
-  const cleanHexString = hexString.startsWith(`\\x`)
+  const cleanHexString = hexString.startsWith("\\x")
     ? hexString.slice(2)
     : hexString
   return new Uint8Array(

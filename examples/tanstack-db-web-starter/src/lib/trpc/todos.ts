@@ -40,8 +40,8 @@ export const todosRouter = router({
 
         if (!updatedItem) {
           throw new TRPCError({
-            code: `NOT_FOUND`,
-            message: `Todo not found or you do not have permission to update it`,
+            code: "NOT_FOUND",
+            message: "Todo not found or you do not have permission to update it",
           })
         }
 
@@ -68,8 +68,8 @@ export const todosRouter = router({
 
         if (!deletedItem) {
           throw new TRPCError({
-            code: `NOT_FOUND`,
-            message: `Todo not found or you do not have permission to delete it`,
+            code: "NOT_FOUND",
+            message: "Todo not found or you do not have permission to delete it",
           })
         }
 

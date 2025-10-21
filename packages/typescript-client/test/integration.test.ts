@@ -1,34 +1,34 @@
-import { parse } from 'cache-control-parser'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { v4 as uuidv4 } from 'uuid'
-import { describe, expect, inject, vi } from 'vitest'
-import { FetchError, Shape, ShapeStream, ShapeStreamOptions } from '../src'
-import { Message } from '../src/types'
+import { parse } from "cache-control-parser"
+import { setTimeout as sleep } from "node:timers/promises"
+import { v4 as uuidv4 } from "uuid"
+import { describe, expect, inject, vi } from "vitest"
+import { FetchError, Shape, ShapeStream, ShapeStreamOptions } from "../src"
+import { Message } from "../src/types"
 import {
   isChangeMessage,
   isControlMessage,
   isUpToDateMessage,
-} from '../src/helpers'
+} from "../src/helpers"
 import {
   IssueRow,
   testWithIssuesTable as it,
   testWithMultitypeTable as mit,
-} from './support/test-context'
-import * as h from './support/test-helpers'
+} from "./support/test-context"
+import * as h from "./support/test-helpers"
 
-const BASE_URL = inject(`baseUrl`)
+const BASE_URL = inject("baseUrl")
 
 const fetchAndSse = [{ liveSse: false }, { liveSse: true }]
 
-it(`sanity check`, async ({ dbClient, issuesTableSql }) => {
+it("sanity check", async ({ dbClient, issuesTableSql }) => {
   const result = await dbClient.query(`SELECT * FROM ${issuesTableSql}`)
 
   expect(result.rows).toEqual([])
 })
 
-describe(`HTTP Sync`, () => {
+describe("HTTP Sync", () => {
   it.for(fetchAndSse)(
-    `should work with empty shape/table (liveSSE=$liveSse)`,
+    "should work with empty shape/table (liveSSE=$liveSse)",
     async ({ liveSse }, { issuesTableUrl, aborter }) => {
       // Get initial data
       const shapeData = new Map()
@@ -62,7 +62,7 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should wait properly for updates on an empty shape/table (liveSSE=$liveSse)`,
+    "should wait properly for updates on an empty shape/table (liveSSE=$liveSse)",
     async ({ liveSse }, { issuesTableUrl, aborter }) => {
       const urlsRequested: URL[] = []
       const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
@@ -127,13 +127,13 @@ describe(`HTTP Sync`, () => {
         expect(numRequests).toBeGreaterThan(2)
       }
 
-      expect(urlsRequested[0].searchParams.get(`offset`)).toBe(`-1`)
-      expect(urlsRequested[0].searchParams.has(`live`)).false
+      expect(urlsRequested[0].searchParams.get("offset")).toBe("-1")
+      expect(urlsRequested[0].searchParams.has("live")).false
       expect(
-        urlsRequested[numRequests - 1].searchParams.get(`offset`)
-      ).not.toBe(`-1`)
-      expect(urlsRequested[numRequests - 1].searchParams.has(`live`)).true
-      expect(urlsRequested[numRequests - 1].searchParams.has(`cursor`)).true
+        urlsRequested[numRequests - 1].searchParams.get("offset")
+      ).not.toBe("-1")
+      expect(urlsRequested[numRequests - 1].searchParams.has("live")).true
+      expect(urlsRequested[numRequests - 1].searchParams.has("cursor")).true
 
       // first request comes back immediately and is up to date, second one
       // should hang while waiting for updates
@@ -145,30 +145,30 @@ describe(`HTTP Sync`, () => {
     }
   )
 
-  it(`returns a header with the server shape handle`, async ({
+  it("returns a header with the server shape handle", async ({
     issuesTableUrl,
   }) => {
     const res = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
-    const shapeHandle = res.headers.get(`electric-handle`)
+    const shapeHandle = res.headers.get("electric-handle")
     expect(shapeHandle).to.exist
   })
 
-  it(`returns a header with the chunk's last offset`, async ({
+  it("returns a header with the chunk's last offset", async ({
     issuesTableUrl,
   }) => {
     const res = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
-    const lastOffset = res.headers.get(`electric-offset`)
+    const lastOffset = res.headers.get("electric-offset")
     expect(lastOffset).to.exist
   })
 
   it.for(fetchAndSse)(
-    `should get initial data (liveSSE=$liveSse)`,
+    "should get initial data (liveSSE=$liveSse)",
     async ({ liveSse }, { insertIssues, issuesTableUrl, aborter }) => {
       // Add an initial row.
       const uuid = uuidv4()
@@ -205,7 +205,7 @@ describe(`HTTP Sync`, () => {
   )
 
   mit.for(fetchAndSse)(
-    `should parse incoming data (liveSSE=$liveSse)`,
+    "should parse incoming data (liveSSE=$liveSse)",
     async ({ liveSse }, { dbClient, aborter, tableSql, tableUrl }) => {
       // Create a table with data we want to be parsed
       await dbClient.query(
@@ -241,16 +241,16 @@ describe(`HTTP Sync`, () => {
           ],
           [1, 2, 3],
           [true, false, true],
-          [`sad`, `ok`, `happy`],
+          ["sad", "ok", "happy"],
           [
-            [`sad`, `ok`],
-            [`ok`, `happy`],
+            ["sad", "ok"],
+            ["ok", "happy"],
           ],
-          [`(1.1, 2.2)`, `(3.3, 4.4)`],
+          ["(1.1, 2.2)", "(3.3, 4.4)"],
           [5, 9, 2],
-          [{ foo: `bar` }, { bar: `baz` }],
-          [`foo`, `bar`, `baz`],
-          { a: 5, b: [{ c: `foo` }] },
+          [{ foo: "bar" }, { bar: "baz" }],
+          ["foo", "bar", "baz"],
+          { a: 5, b: [{ c: "foo" }] },
           [Infinity, -Infinity, NaN],
         ]
       )
@@ -269,14 +269,14 @@ describe(`HTTP Sync`, () => {
 
       expect(rows).toMatchObject([
         {
-          txt: `test`,
+          txt: "test",
           i2: 1,
           i4: 2147483647,
-          i8: BigInt(`9223372036854775807`),
+          i8: BigInt("9223372036854775807"),
           f8: 4.5,
           b: true,
-          json: { foo: `bar` },
-          jsonb: { foo: `bar` },
+          json: { foo: "bar" },
+          jsonb: { foo: "bar" },
           ints: [BigInt(1), BigInt(2), BigInt(3)],
           ints2: [
             [BigInt(1), BigInt(2), BigInt(3)],
@@ -284,17 +284,17 @@ describe(`HTTP Sync`, () => {
           ],
           int4s: [1, 2, 3],
           bools: [true, false, true],
-          moods: [`sad`, `ok`, `happy`],
+          moods: ["sad", "ok", "happy"],
           moods2: [
-            [`sad`, `ok`],
-            [`ok`, `happy`],
+            ["sad", "ok"],
+            ["ok", "happy"],
           ],
           // It does not parse composite types and domain types
-          complexes: [`(1.1,2.2)`, `(3.3,4.4)`],
-          posints: [`5`, `9`, `2`],
-          jsons: [{ foo: `bar` }, { bar: `baz` }],
-          txts: [`foo`, `bar`, `baz`],
-          value: { a: 5, b: [{ c: `foo` }] },
+          complexes: ["(1.1,2.2)", "(3.3,4.4)"],
+          posints: ["5", "9", "2"],
+          jsons: [{ foo: "bar" }, { bar: "baz" }],
+          txts: ["foo", "bar", "baz"],
+          value: { a: 5, b: [{ c: "foo" }] },
           doubles: [Infinity, -Infinity, NaN],
         },
       ])
@@ -327,9 +327,9 @@ describe(`HTTP Sync`, () => {
     `,
         [
           [false, true, false],
-          [`(2.2,3.3)`, `(4.4,5.5)`],
+          ["(2.2,3.3)", "(4.4,5.5)"],
           [{}],
-          [`new`, `values`],
+          ["new", "values"],
           { a: 6 },
           [Infinity, NaN, -Infinity],
         ]
@@ -342,18 +342,18 @@ describe(`HTTP Sync`, () => {
       })
 
       await vi.waitFor(async () => {
-        expect(client.isUpToDate && !client.lastOffset.startsWith(`0_`)).true
+        expect(client.isUpToDate && !client.lastOffset.startsWith("0_")).true
         const updatedData = await client.rows
         expect(updatedData).toMatchObject([
           {
-            txt: `changed`,
+            txt: "changed",
             i2: 1,
             i4: 20,
             i8: BigInt(30),
             f8: 40.5,
             b: false,
-            json: { bar: `foo` },
-            jsonb: { bar: `foo` },
+            json: { bar: "foo" },
+            jsonb: { bar: "foo" },
             ints: [BigInt(4), BigInt(5), BigInt(6)],
             ints2: [
               [BigInt(4), BigInt(5), BigInt(6)],
@@ -361,15 +361,15 @@ describe(`HTTP Sync`, () => {
             ],
             int4s: [4, 5, 6],
             bools: [false, true, false],
-            moods: [`sad`, `happy`],
+            moods: ["sad", "happy"],
             moods2: [
-              [`sad`, `happy`],
-              [`happy`, `ok`],
+              ["sad", "happy"],
+              ["happy", "ok"],
             ],
-            complexes: [`(2.2,3.3)`, `(4.4,5.5)`],
-            posints: [`6`, `10`, `3`],
+            complexes: ["(2.2,3.3)", "(4.4,5.5)"],
+            posints: ["6", "10", "3"],
             jsons: [{}],
-            txts: [`new`, `values`],
+            txts: ["new", "values"],
             value: { a: 6 },
             doubles: [Infinity, NaN, -Infinity],
           },
@@ -379,7 +379,7 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should get initial data and then receive updates (liveSSE=$liveSse)`,
+    "should get initial data and then receive updates (liveSSE=$liveSse)",
     async (
       { liveSse },
       {
@@ -393,7 +393,7 @@ describe(`HTTP Sync`, () => {
     ) => {
       // With initial data
       const rowId = uuidv4()
-      await insertIssues({ id: rowId, title: `original insert` })
+      await insertIssues({ id: rowId, title: "original insert" })
       await waitForIssues({ numChangesExpected: 1 })
 
       const shapeData = new Map()
@@ -405,7 +405,7 @@ describe(`HTTP Sync`, () => {
         signal: aborter.signal,
         liveSse,
       })
-      let secondRowId = ``
+      let secondRowId = ""
       await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
         //console.log("GOT msg:", msg)
         //console.log("nth", nth)
@@ -414,9 +414,9 @@ describe(`HTTP Sync`, () => {
         shapeData.set(msg.key, msg.value)
 
         if (nth === 0) {
-          await updateIssue({ id: rowId, title: `foo1` })
+          await updateIssue({ id: rowId, title: "foo1" })
         } else if (nth === 1) {
-          ;[secondRowId] = await insertIssues({ title: `foo2` })
+          ;[secondRowId] = await insertIssues({ title: "foo2" })
         } else if (nth === 2) {
           res()
         }
@@ -426,10 +426,10 @@ describe(`HTTP Sync`, () => {
       // This test doesn't merge in updates, so we don't have `priority` on the row.
       expect(shapeData).toEqual(
         new Map([
-          [`${issuesTableKey}/"${rowId}"`, { id: rowId, title: `foo1` }],
+          [`${issuesTableKey}/"${rowId}"`, { id: rowId, title: "foo1" }],
           [
             `${issuesTableKey}/"${secondRowId}"`,
-            { id: secondRowId, title: `foo2`, priority: 10 },
+            { id: secondRowId, title: "foo2", priority: 10 },
           ],
         ])
       )
@@ -437,13 +437,13 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `should wait for processing before advancing stream (liveSSE=$liveSse)`,
+    "should wait for processing before advancing stream (liveSSE=$liveSse)",
     async (
       { liveSse },
       { aborter, issuesTableUrl, insertIssues, waitForIssues }
     ) => {
       // With initial data
-      await insertIssues({ id: uuidv4(), title: `original insert` })
+      await insertIssues({ id: uuidv4(), title: "original insert" })
 
       const fetchWrapper = vi
         .fn()
@@ -474,7 +474,7 @@ describe(`HTTP Sync`, () => {
 
           // ensure fetch has not been called again while
           // waiting for processing
-          await insertIssues({ title: `foo1` })
+          await insertIssues({ title: "foo1" })
 
           // independent stream should be able to see this item,
           // but the stream we have is waiting
@@ -489,13 +489,13 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `multiple clients can get the same data in parallel (liveSSE=$liveSse)`,
+    "multiple clients can get the same data in parallel (liveSSE=$liveSse)",
     async ({ liveSse }, { issuesTableUrl, updateIssue, insertIssues }) => {
       const rowId = uuidv4(),
         rowId2 = uuidv4()
       await insertIssues(
-        { id: rowId, title: `first original insert` },
-        { id: rowId2, title: `second original insert` }
+        { id: rowId, title: "first original insert" },
+        { id: rowId2, title: "second original insert" }
       )
 
       const shapeData1 = new Map()
@@ -525,7 +525,7 @@ describe(`HTTP Sync`, () => {
         shapeData1.set(msg.key, msg.value)
 
         if (nth === 1) {
-          setTimeout(() => updateIssue({ id: rowId, title: `foo3` }), 50)
+          setTimeout(() => updateIssue({ id: rowId, title: "foo3" }), 50)
         } else if (nth === 2) {
           return res()
         }
@@ -547,16 +547,16 @@ describe(`HTTP Sync`, () => {
   )
 
   it.for(fetchAndSse)(
-    `can go offline and then catchup (liveSSE=$liveSse)`,
+    "can go offline and then catchup (liveSSE=$liveSse)",
     async (
       { liveSse },
       { aborter, issuesTableUrl, insertIssues, waitForIssues }
     ) => {
       // initialize storage for the cases where persisted shape streams are tested
       await insertIssues(
-        { title: `foo1` },
-        { title: `foo2` },
-        { title: `foo3` }
+        { title: "foo1" },
+        { title: "foo2" },
+        { title: "foo3" }
       )
 
       const streamState = await waitForIssues({ numChangesExpected: 3 })
@@ -599,7 +599,7 @@ describe(`HTTP Sync`, () => {
     }
   )
 
-  it(`should return correct caching headers`, async ({
+  it("should return correct caching headers", async ({
     issuesTableUrl,
     insertIssues,
     waitForIssues,
@@ -608,26 +608,26 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
-    const cacheHeaders = res.headers.get(`cache-control`)
-    expect(cacheHeaders, `Response should have cache-control header`).not.toBe(
+    const cacheHeaders = res.headers.get("cache-control")
+    expect(cacheHeaders, "Response should have cache-control header").not.toBe(
       null
     )
     const directives = parse(cacheHeaders!)
     expect(directives).toEqual({
       public: true,
-      'max-age': 604800,
-      's-maxage': 3600,
-      'stale-while-revalidate': 2629746,
+      "max-age": 604800,
+      "s-maxage": 3600,
+      "stale-while-revalidate": 2629746,
     })
-    const etagHeader = res.headers.get(`etag`)
-    expect(etagHeader, `Response should have etag header`).not.toBe(null)
+    const etagHeader = res.headers.get("etag")
+    expect(etagHeader, "Response should have etag header").not.toBe(null)
 
     await insertIssues(
-      { title: `foo4` },
-      { title: `foo5` },
-      { title: `foo6` },
-      { title: `foo7` },
-      { title: `foo8` }
+      { title: "foo4" },
+      { title: "foo5" },
+      { title: "foo6" },
+      { title: "foo7" },
+      { title: "foo8" }
     )
     // Wait for server to get all the messages.
     await waitForIssues({
@@ -637,20 +637,20 @@ describe(`HTTP Sync`, () => {
     const res2 = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`
     )
-    const etag2Header = res2.headers.get(`etag`)
-    expect(etag2Header, `Response should have etag header`).not.toEqual(null)
+    const etag2Header = res2.headers.get("etag")
+    expect(etag2Header, "Response should have etag header").not.toEqual(null)
     expect(etagHeader).toEqual(etag2Header)
 
     // Second chunk is not yet full, so no e-tag yet
     const res3 = await fetch(
-      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${res2.headers.get(`electric-offset`)}&handle=${res2.headers.get(`electric-handle`)}`
+      `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${res2.headers.get("electric-offset")}&handle=${res2.headers.get("electric-handle")}`
     )
-    const etag3Header = res3.headers.get(`etag`)
-    expect(etag3Header, `Response should have etag header`).not.toEqual(null)
+    const etag3Header = res3.headers.get("etag")
+    expect(etag3Header, "Response should have etag header").not.toEqual(null)
     expect(etagHeader).not.toEqual(etag3Header)
   })
 
-  it(`should revalidate etags`, async ({
+  it("should revalidate etags", async ({
     issuesTableUrl,
     insertIssues,
     waitForIssues,
@@ -660,7 +660,7 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=-1`,
       {}
     )
-    const handle = baseRes.headers.get(`electric-handle`)
+    const handle = baseRes.headers.get("electric-handle")
     // Fill it up in separate transactions
     const numTransactions = 9
     for (const i of Array.from({ length: numTransactions }, (_, i) => i + 1)) {
@@ -676,20 +676,20 @@ describe(`HTTP Sync`, () => {
     )
     const messages = (await res.json()) as Message[]
     expect(messages.length).toEqual(10) // 9 inserts + up-to-date
-    const shapeHandle = res.headers.get(`electric-handle`)
-    const shapeOffset = res.headers.get(`electric-offset`)!
+    const shapeHandle = res.headers.get("electric-handle")
+    const shapeOffset = res.headers.get("electric-offset")!
     const fakeMidOffset = shapeOffset
-      .split(`_`)
+      .split("_")
       .map(BigInt)
       .map((x, i) => (i === 0 ? x - BigInt(1) : x))
-      .join(`_`)
-    const etag = res.headers.get(`etag`)
-    expect(etag, `Response should have etag header`).not.toBe(null)
+      .join("_")
+    const etag = res.headers.get("etag")
+    expect(etag, "Response should have etag header").not.toBe(null)
 
     const etagValidation = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=0_0&handle=${handle}`,
       {
-        headers: { 'If-None-Match': etag! },
+        headers: { "If-None-Match": etag! },
       }
     )
 
@@ -701,8 +701,8 @@ describe(`HTTP Sync`, () => {
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${fakeMidOffset}&handle=${shapeHandle}`,
       {}
     )
-    const catchupEtag = catchupEtagRes.headers.get(`etag`)
-    expect(catchupEtag, `Response should have catchup etag header`).not.toBe(
+    const catchupEtag = catchupEtagRes.headers.get("etag")
+    expect(catchupEtag, "Response should have catchup etag header").not.toBe(
       null
     )
 
@@ -711,7 +711,7 @@ describe(`HTTP Sync`, () => {
     const catchupEtagValidation = await fetch(
       `${BASE_URL}/v1/shape?table=${issuesTableUrl}&offset=${fakeMidOffset}&handle=${shapeHandle}`,
       {
-        headers: { 'If-None-Match': catchupEtag! },
+        headers: { "If-None-Match": catchupEtag! },
       }
     )
     const catchupStatus = catchupEtagValidation.status
@@ -719,7 +719,7 @@ describe(`HTTP Sync`, () => {
   })
 
   it.for(fetchAndSse)(
-    `should correctly use a where clause for initial sync and updates (liveSSE=$liveSse)`,
+    "should correctly use a where clause for initial sync and updates (liveSSE=$liveSse)",
     async (
       { liveSse },
       {
@@ -735,7 +735,7 @@ describe(`HTTP Sync`, () => {
       const id1 = uuidv4()
       const id2 = uuidv4()
 
-      await insertIssues({ id: id1, title: `foo` }, { id: id2, title: `bar` })
+      await insertIssues({ id: id1, title: "foo" }, { id: id2, title: "bar" })
 
       // Get initial data
       const shapeData = new Map()
@@ -743,7 +743,7 @@ describe(`HTTP Sync`, () => {
         url: `${BASE_URL}/v1/shape`,
         params: {
           table: issuesTableUrl,
-          where: `title LIKE 'foo%'`,
+          where: "title LIKE 'foo%'",
         },
         signal: aborter.signal,
         liveSse,
@@ -754,8 +754,8 @@ describe(`HTTP Sync`, () => {
         shapeData.set(msg.key, msg.value)
 
         if (nth === 0) {
-          updateIssue({ id: id1, title: `foo1` })
-          updateIssue({ id: id2, title: `bar1` })
+          updateIssue({ id: id1, title: "foo1" })
+          updateIssue({ id: id2, title: "bar1" })
         } else if (nth === 1) {
           res()
         }
@@ -764,17 +764,17 @@ describe(`HTTP Sync`, () => {
       await clearShape(issuesTableUrl, { handle: issueStream.shapeHandle! })
 
       expect(shapeData).toEqual(
-        new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: `foo1` }]])
+        new Map([[`${issuesTableKey}/"${id1}"`, { id: id1, title: "foo1" }]])
       )
     }
   )
 
   mit.for(fetchAndSse)(
-    `should correctly select columns for initial sync and updates (liveSSE=$liveSse)`,
+    "should correctly select columns for initial sync and updates (liveSSE=$liveSse)",
     async ({ liveSse }, { dbClient, aborter, tableSql, tableUrl }) => {
       await dbClient.query(
         `INSERT INTO ${tableSql} (txt, i2, i4, i8) VALUES ($1, $2, $3, $4)`,
-        [`test1`, 1, 10, 100]
+        ["test1", 1, 10, 100]
       )
 
       // Get initial data
@@ -783,7 +783,7 @@ describe(`HTTP Sync`, () => {
         url: `${BASE_URL}/v1/shape`,
         params: {
           table: tableUrl,
-          columns: [`txt`, `i2`, `i4`],
+          columns: ["txt", "i2", "i4"],
         },
         signal: aborter.signal,
         liveSse,
@@ -794,13 +794,13 @@ describe(`HTTP Sync`, () => {
 
         if (nth === 0) {
           expect(msg.value).toStrictEqual({
-            txt: `test1`,
+            txt: "test1",
             i2: 1,
             i4: 10,
           })
           await dbClient.query(
             `UPDATE ${tableSql} SET txt = $1, i4 = $2, i8 = $3 WHERE i2 = $4`,
-            [`test2`, 20, 200, 1]
+            ["test2", 20, 200, 1]
           )
         } else if (nth === 1) {
           res()
@@ -809,7 +809,7 @@ describe(`HTTP Sync`, () => {
 
       expect([...shapeData.values()]).toStrictEqual([
         {
-          txt: `test2`,
+          txt: "test2",
           i2: 1,
           i4: 20,
         },
@@ -817,7 +817,7 @@ describe(`HTTP Sync`, () => {
     }
   )
 
-  it(`should chunk a large log with reasonably sized chunks`, async ({
+  it("should chunk a large log with reasonably sized chunks", async ({
     insertIssues,
     waitForIssues,
   }) => {
@@ -825,7 +825,7 @@ describe(`HTTP Sync`, () => {
       Array.from({ length: byteSize }, () =>
         // generate random ASCII code
         String.fromCharCode(Math.floor(32 + Math.random() * (126 - 32)))
-      ).join(``)
+      ).join("")
 
     // adds a bunch of rows with very large titles to force chunking
     const insertDataSize = (byteSize: number) =>
@@ -882,7 +882,7 @@ describe(`HTTP Sync`, () => {
   })
 
   it.for(fetchAndSse)(
-    `should handle invalid requests by terminating stream (liveSSE=$liveSse)`,
+    "should handle invalid requests by terminating stream (liveSSE=$liveSse)",
     async ({ liveSse }, { expect, issuesTableUrl, aborter, waitForIssues }) => {
       const streamState = await waitForIssues({ numChangesExpected: 0 })
 
@@ -891,7 +891,7 @@ describe(`HTTP Sync`, () => {
         url: `${BASE_URL}/v1/shape`,
         params: {
           table: issuesTableUrl,
-          where: `1 x 1`, // invalid SQL
+          where: "1 x 1", // invalid SQL
         },
         signal: aborter.signal,
         handle: streamState.handle,
@@ -910,23 +910,23 @@ describe(`HTTP Sync`, () => {
       expect((invalidIssueStream.error! as FetchError).status).toBe(400)
       expect(invalidIssueStream.isConnected()).false
       expect((error! as FetchError).json).toStrictEqual({
-        message: `Invalid request`,
+        message: "Invalid request",
         errors: {
-          where: [`At location 17: syntax error at or near "x"`],
+          where: ["At location 17: syntax error at or near \"x\""],
         },
       })
     }
   )
 
   it.for(fetchAndSse)(
-    `should handle invalid requests by terminating stream (liveSSE=$liveSse)`,
+    "should handle invalid requests by terminating stream (liveSSE=$liveSse)",
     async ({ liveSse }, { expect, issuesTableUrl, aborter }) => {
       let error: Error
       const invalidIssueStream = new ShapeStream<IssueRow>({
         url: `${BASE_URL}/v1/shape`,
         params: {
           table: issuesTableUrl,
-          where: `1=1`,
+          where: "1=1",
         },
         signal: aborter.signal,
         // handle: streamState.handle,
@@ -949,13 +949,13 @@ describe(`HTTP Sync`, () => {
       expect(invalidIssueStream.error).instanceOf(FetchError)
       expect(invalidIssueStream.isConnected()).false
       expect(error!.message).contains(
-        `Body is unusable: Body has already been read`
+        "Body is unusable: Body has already been read"
       )
     }
   )
 
   it.for(fetchAndSse)(
-    `should detect shape deprecation and restart syncing (liveSSE=$liveSse)`,
+    "should detect shape deprecation and restart syncing (liveSSE=$liveSse)",
     async (
       { liveSse },
       { expect, insertIssues, issuesTableUrl, aborter, clearIssuesShape }
@@ -963,7 +963,7 @@ describe(`HTTP Sync`, () => {
       // With initial data
       const rowId = uuidv4(),
         rowId2 = uuidv4()
-      await insertIssues({ id: rowId, title: `foo1` })
+      await insertIssues({ id: rowId, title: "foo1" })
 
       const statusCodesReceived: number[] = []
       let numRequests = 0
@@ -972,7 +972,7 @@ describe(`HTTP Sync`, () => {
         // before any subsequent requests after the initial one, ensure
         // that the existing shape is deleted and some more data is inserted
         if (numRequests === 2) {
-          await insertIssues({ id: rowId2, title: `foo2` })
+          await insertIssues({ id: rowId2, title: "foo2" })
           await clearIssuesShape(issueStream.shapeHandle)
         }
 
@@ -1030,7 +1030,7 @@ describe(`HTTP Sync`, () => {
             // first message is the initial row
             expect(msg.value).toEqual({
               id: rowId,
-              title: `foo1`,
+              title: "foo1",
               priority: 10,
             })
             expect(issueStream.shapeHandle).to.exist
@@ -1046,7 +1046,7 @@ describe(`HTTP Sync`, () => {
               // with different shape handle
               expect(msg.value).toEqual({
                 id: rowId,
-                title: `foo1`,
+                title: "foo1",
                 priority: 10,
               })
               expect(issueStream.shapeHandle).not.toBe(originalShapeHandle)
@@ -1054,14 +1054,14 @@ describe(`HTTP Sync`, () => {
               // should get the second row as well with the new shape handle
               expect(msg.value).toEqual({
                 id: rowId2,
-                title: `foo2`,
+                title: "foo2",
                 priority: 10,
               })
               expect(issueStream.shapeHandle).not.toBe(originalShapeHandle)
             }
             break
           default:
-            expect.unreachable(`Received more messages than expected`)
+            expect.unreachable("Received more messages than expected")
         }
       })
     }

@@ -1,28 +1,28 @@
-import { useNavigate } from '@tanstack/react-router'
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { makeStyles } from '@griffel/react'
+import { useNavigate } from "@tanstack/react-router"
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { makeStyles } from "@griffel/react"
 
-import { Button, Flex, Text } from '@radix-ui/themes'
-import { Plus, MessagesSquare } from 'lucide-react'
+import { Button, Flex, Text } from "@radix-ui/themes"
+import { Plus, MessagesSquare } from "lucide-react"
 
-import { useAuth } from '../../db/auth'
-import { membershipCollection, threadCollection } from '../../db/collections'
-import { createTransaction } from '../../db/transaction'
+import { useAuth } from "../../db/auth"
+import { membershipCollection, threadCollection } from "../../db/collections"
+import { createTransaction } from "../../db/transaction"
 
-import SidebarButton from './SidebarButton'
+import SidebarButton from "./SidebarButton"
 
 const useClasses = makeStyles({
   threadButton: {
-    paddingLeft: `0px`,
+    paddingLeft: "0px",
   },
   threadsContainer: {
-    paddingLeft: `var(--space-2)`,
+    paddingLeft: "var(--space-2)",
   },
   newThreadButton: {
-    width: `100%`,
-    display: `flex`,
-    alignItems: `center`,
-    justifyContent: `center`,
+    width: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
 })
 
@@ -58,8 +58,8 @@ function SidebarThreads({ threadId }: Props) {
       query
         .from({ result: threadResults })
         .orderBy(({ result }) => result.inserted_at, {
-          direction: `desc`,
-          nulls: `first`,
+          direction: "desc",
+          nulls: "first",
         })
         .select(({ result }) => ({
           id: result.id,
@@ -78,11 +78,11 @@ function SidebarThreads({ threadId }: Props) {
       threadCollection.insert({
         id: newThreadId,
         name: `Untitled thread ${numThreads + 1}`,
-        status: `started`,
+        status: "started",
       })
       membershipCollection.insert({
         id: crypto.randomUUID(),
-        role: `owner`,
+        role: "owner",
         thread_id: newThreadId,
         user_id: userId,
       })

@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { execSync } from "node:child_process"
 
 type NeonEndpointsResponse = {
   endpoints?: Array<{ host: string; id: string }>
@@ -23,20 +23,20 @@ export function getNeonConnectionString({
 }): $util.Output<string> {
   // Compute synchronously via Neon HTTP API (avoids Pulumi provider invokes)
   if (!process.env.NEON_API_KEY) {
-    throw new Error(`NEON_API_KEY is not set`)
+    throw new Error("NEON_API_KEY is not set")
   }
 
   return $resolve([projectId, branchId, roleName, databaseName]).apply(
     ([pid, bid, role, db]) => {
       const endpointsJson = JSON.parse(
         execSync(
-          `curl -s -H "Authorization: Bearer $NEON_API_KEY" ` +
+          "curl -s -H \"Authorization: Bearer $NEON_API_KEY\" " +
             `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/endpoints`
         ).toString()
       ) as unknown as NeonEndpointsResponse
       const endpoint = endpointsJson?.endpoints?.[0]
       if (!endpoint?.host || !endpoint?.id) {
-        throw new Error(`Failed to resolve Neon branch endpoint`)
+        throw new Error("Failed to resolve Neon branch endpoint")
       }
       const host = pooled
         ? String(endpoint.host).replace(
@@ -44,19 +44,19 @@ export function getNeonConnectionString({
             `${endpoint.id}-pooler`
           )
         : String(endpoint.host)
-      console.log(`[neon] Using ${pooled ? `pooled` : `direct`} endpoint`, {
+      console.log(`[neon] Using ${pooled ? "pooled" : "direct"} endpoint`, {
         host,
       })
 
       const pwdJson = JSON.parse(
         execSync(
-          `curl -s -X POST -H "Authorization: Bearer $NEON_API_KEY" ` +
+          "curl -s -X POST -H \"Authorization: Bearer $NEON_API_KEY\" " +
             `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/roles/${role}/reset_password`
         ).toString()
       ) as unknown as NeonResetPasswordResponse
       const password = pwdJson?.password
       if (!password) {
-        throw new Error(`Failed to obtain Neon role password`)
+        throw new Error("Failed to obtain Neon role password")
       }
 
       return `postgresql://${role}:${password}@${host}/${db}?sslmode=require`
@@ -81,10 +81,10 @@ export function createNeonDb({
   ownerName: string
 }> {
   if (!process.env.NEON_API_KEY) {
-    throw new Error(`NEON_API_KEY is not set`)
+    throw new Error("NEON_API_KEY is not set")
   }
 
-  const ownerName = `neondb_owner`
+  const ownerName = "neondb_owner"
 
   const createCommand = `
     max_retries=10
@@ -120,7 +120,7 @@ export function createNeonDb({
       exit 0
     done`
 
-  const updateCommand = `echo "Cannot update Neon database with this provisioning method SUCCESS"`
+  const updateCommand = "echo \"Cannot update Neon database with this provisioning method SUCCESS\""
 
   const deleteCommand = `curl -f -s -X 'DELETE' \
     "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BRANCH_ID/databases/$DATABASE_NAME" \
@@ -140,7 +140,7 @@ export function createNeonDb({
     },
   })
   return $resolve([result.stdout, dbName]).apply(([stdout, dbName]) => {
-    if (stdout.endsWith(`SUCCESS`)) {
+    if (stdout.endsWith("SUCCESS")) {
       console.log(`Created Neon database ${dbName}`)
       return {
         dbName,

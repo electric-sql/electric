@@ -1,14 +1,14 @@
-import { ReactComponent as MenuIcon } from '../assets/icons/menu.svg'
-import { useState, useContext, useEffect } from 'react'
-import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from 'react-icons/bs'
-import { useLiveQuery, usePGlite } from '@electric-sql/pglite-react'
-import ViewOptionMenu from './ViewOptionMenu'
-import { MenuContext } from '../App'
-import FilterMenu from './contextmenu/FilterMenu'
-import { FilterState, useFilterState } from '../utils/filterState'
-import { PriorityDisplay, StatusDisplay } from '../types/types'
-import debounce from 'lodash.debounce'
-import { createFTSIndex } from '../migrations'
+import { ReactComponent as MenuIcon } from "../assets/icons/menu.svg"
+import { useState, useContext, useEffect } from "react"
+import { BsSortUp, BsPlus, BsX, BsSearch as SearchIcon } from "react-icons/bs"
+import { useLiveQuery, usePGlite } from "@electric-sql/pglite-react"
+import ViewOptionMenu from "./ViewOptionMenu"
+import { MenuContext } from "../App"
+import FilterMenu from "./contextmenu/FilterMenu"
+import { FilterState, useFilterState } from "../utils/filterState"
+import { PriorityDisplay, StatusDisplay } from "../types/types"
+import debounce from "lodash.debounce"
+import { createFTSIndex } from "../migrations"
 
 interface Props {
   filteredIssuesCount: number
@@ -22,20 +22,20 @@ export default function ({
   filteredIssuesCount,
   hideSort,
   showSearch,
-  title = `All issues`,
+  title = "All issues",
   filterState,
 }: Props) {
   const [usedFilterState, setFilterState] = useFilterState()
   const [showViewOption, setShowViewOption] = useState(false)
   const { showMenu, setShowMenu } = useContext(MenuContext)!
-  const [searchQuery, setSearchQuery] = useState(``)
+  const [searchQuery, setSearchQuery] = useState("")
   const [FTSIndexReady, setFTSIndexReady] = useState(true)
   const pg = usePGlite()
 
   filterState ??= usedFilterState
 
   const totalIssuesCount = useLiveQuery<{ count: number }>(
-    `SELECT COUNT(id) FROM issue WHERE deleted = false`
+    "SELECT COUNT(id) FROM issue WHERE deleted = false"
   )?.rows[0].count
 
   const handleSearchInner = debounce((query: string) => {
@@ -59,10 +59,10 @@ export default function ({
   }
 
   if (filterState.status?.length) {
-    if (eqStatuses([`backlog`])) {
-      title = `Backlog`
-    } else if (eqStatuses([`todo`, `in_progress`])) {
-      title = `Active`
+    if (eqStatuses(["backlog"])) {
+      title = "Backlog"
+    } else if (eqStatuses(["todo", "in_progress"])) {
+      title = "Active"
     }
   }
 
@@ -70,7 +70,7 @@ export default function ({
     if (!showSearch) return
     const checkFTSIndex = async () => {
       const res = await pg.query(
-        `SELECT 1 FROM pg_indexes WHERE indexname = 'issue_search_idx';`
+        "SELECT 1 FROM pg_indexes WHERE indexname = 'issue_search_idx';"
       )
       const indexReady = res.rows.length > 0
       if (!indexReady) {
@@ -104,7 +104,7 @@ export default function ({
             {totalIssuesCount !== undefined &&
             filteredIssuesCount !== totalIssuesCount
               ? ` of ${totalIssuesCount.toLocaleString()}`
-              : ``}
+              : ""}
           </span>
           <FilterMenu
             button={
@@ -116,7 +116,7 @@ export default function ({
                 Filter
               </button>
             }
-            id={`filter-menu`}
+            id={"filter-menu"}
           />
         </div>
 
@@ -144,7 +144,7 @@ export default function ({
                     (priority) =>
                       PriorityDisplay[priority as keyof typeof PriorityDisplay]
                   )
-                  .join(`, `)}
+                  .join(", ")}
               </span>
               <span
                 className="px-1 bg-gray-300 rounded-r cursor-pointer flex items-center"
@@ -168,7 +168,7 @@ export default function ({
                     (status) =>
                       StatusDisplay[status as keyof typeof StatusDisplay]
                   )
-                  .join(`, `)}
+                  .join(", ")}
               </span>
               <span
                 className="px-1 bg-gray-300 rounded-r cursor-pointer flex items-center"

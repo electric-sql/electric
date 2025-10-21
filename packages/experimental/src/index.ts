@@ -1,2 +1,2 @@
-export * from './match'
-export * from './multi-shape-stream'
+export * from "./match"
+export * from "./multi-shape-stream"

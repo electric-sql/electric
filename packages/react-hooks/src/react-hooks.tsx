@@ -4,9 +4,9 @@ import {
   ShapeStreamOptions,
   Row,
   GetExtensions,
-} from '@electric-sql/client'
-import React from 'react'
-import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector.js'
+} from "@electric-sql/client"
+import React from "react"
+import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector.js"
 
 type UnknownShape = Shape<Row<unknown>>
 type UnknownShapeStream = ShapeStream<Row<unknown>>
@@ -24,8 +24,8 @@ export async function preloadShape<T extends Row<unknown> = Row>(
 }
 
 function sortObjectKeys(obj: any): any {
-  if (typeof obj === `function`) return Function.prototype.toString.call(obj)
-  if (typeof obj !== `object` || obj === null) return obj
+  if (typeof obj === "function") return Function.prototype.toString.call(obj)
+  if (typeof obj !== "object" || obj === null) return obj
 
   if (Array.isArray(obj)) {
     return obj.map(sortObjectKeys)
@@ -109,7 +109,7 @@ export interface UseShapeResult<T extends Row<unknown> = Row> {
   isLoading: boolean
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
   lastSyncedAt?: number
-  error: Shape<T>[`error`]
+  error: Shape<T>["error"]
   isError: boolean
 }
 

@@ -1,15 +1,15 @@
-import { useEffect } from 'react'
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
+import { useEffect } from "react"
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router"
 
-import { useAuth } from '../../db/auth'
-import { membershipCollection } from '../../db/collections'
+import { useAuth } from "../../db/auth"
+import { membershipCollection } from "../../db/collections"
 
 function JoinPage() {
   const navigate = useNavigate()
 
   const { currentUserId, isAuthenticated } = useAuth()
-  const { threadId } = useParams({ from: `/join/$threadId` })
+  const { threadId } = useParams({ from: "/join/$threadId" })
 
   const { data: memberships } = useLiveQuery(
     (query) =>
@@ -31,7 +31,7 @@ function JoinPage() {
         id: crypto.randomUUID(),
         thread_id: threadId,
         user_id: userId,
-        role: `member`,
+        role: "member",
       })
 
       navigate({ to: `/threads/${threadId}` })
@@ -41,7 +41,7 @@ function JoinPage() {
   return null
 }
 
-export const Route = createFileRoute(`/join/$threadId`)({
+export const Route = createFileRoute("/join/$threadId")({
   component: JoinPage,
   loader: async () => {
     await membershipCollection.preload()

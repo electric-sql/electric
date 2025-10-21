@@ -1,52 +1,52 @@
-import { useEffect } from 'react'
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
-import { Box, Flex, IconButton } from '@radix-ui/themes'
-import { Menu, Cpu } from 'lucide-react'
-import { makeStyles } from '@griffel/react'
+import { useEffect } from "react"
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router"
+import { Box, Flex, IconButton } from "@radix-ui/themes"
+import { Menu, Cpu } from "lucide-react"
+import { makeStyles } from "@griffel/react"
 
-import Sidebar from '../../components/Sidebar'
-import RightSidebar from '../../components/RightSidebar'
-import { useSidebar } from '../../components/Providers/SidebarProvider'
+import Sidebar from "../../components/Sidebar"
+import RightSidebar from "../../components/RightSidebar"
+import { useSidebar } from "../../components/Providers/SidebarProvider"
 
-import MainThread from '../../components/MainThread'
-import ThreadHeading from '../../components/MainThread/ThreadHeading'
+import MainThread from "../../components/MainThread"
+import ThreadHeading from "../../components/MainThread/ThreadHeading"
 
-import { useAuth } from '../../db/auth'
+import { useAuth } from "../../db/auth"
 import {
   eventCollection,
   factCollection,
   membershipCollection,
   threadCollection,
   userCollection,
-} from '../../db/collections'
+} from "../../db/collections"
 
 const useClasses = makeStyles({
   scrollArea: {
-    height: `100%`,
-    width: `100%`,
+    height: "100%",
+    width: "100%",
   },
   header: {
-    display: `flex`,
-    alignItems: `center`,
-    padding: `12px 16px`,
-    borderBottom: `1px solid var(--border-color)`,
+    display: "flex",
+    alignItems: "center",
+    padding: "12px 16px",
+    borderBottom: "1px solid var(--border-color)",
     flexShrink: 0,
-    height: `56px`,
-    position: `sticky`,
+    height: "56px",
+    position: "sticky",
     top: 0,
     zIndex: 10,
   },
   leftToggle: {
-    display: `inline-flex`,
-    '@media (min-width: 970px)': {
-      display: `none`,
+    display: "inline-flex",
+    "@media (min-width: 970px)": {
+      display: "none",
     },
   },
   rightToggle: {
-    display: `inline-flex`,
-    '@media (min-width: 700px)': {
-      display: `none`,
+    display: "inline-flex",
+    "@media (min-width: 700px)": {
+      display: "none",
     },
   },
 })
@@ -56,7 +56,7 @@ function ThreadPage() {
   const navigate = useNavigate()
 
   const { currentUserId, isAuthenticated } = useAuth()
-  const { threadId } = useParams({ from: `/threads/$threadId` })
+  const { threadId } = useParams({ from: "/threads/$threadId" })
   const { toggleLeftSidebar, toggleRightSidebar } = useSidebar()
 
   const { data: threads } = useLiveQuery(
@@ -79,7 +79,7 @@ function ThreadPage() {
 
   useEffect(() => {
     if (isAuthenticated && !activeThread) {
-      navigate({ to: `/` })
+      navigate({ to: "/" })
     }
   }, [isAuthenticated, activeThread, navigate])
 
@@ -116,7 +116,7 @@ function ThreadPage() {
               </Flex>
             </Flex>
           </Box>
-          <Box style={{ flex: 1, overflow: `hidden` }}>
+          <Box style={{ flex: 1, overflow: "hidden" }}>
             <MainThread threadId={activeThread.id} />
           </Box>
         </Flex>
@@ -126,7 +126,7 @@ function ThreadPage() {
   )
 }
 
-export const Route = createFileRoute(`/threads/$threadId`)({
+export const Route = createFileRoute("/threads/$threadId")({
   component: ThreadPage,
   loader: async () => {
     await Promise.all([

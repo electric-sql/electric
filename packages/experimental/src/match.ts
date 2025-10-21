@@ -7,7 +7,7 @@ import {
   type Row,
   type Value,
   type Message,
-} from '@electric-sql/client'
+} from "@electric-sql/client"
 
 export function matchStream<T extends Row<unknown>>(
   stream: ShapeStreamInterface<T>,

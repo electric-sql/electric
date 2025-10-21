@@ -10,8 +10,8 @@ import "./Example.css"
 
 type Item = { id: string }
 
-const baseApiUrl = import.meta.env.VITE_SERVER_URL ?? `http://localhost:3001`
-const itemsUrl = new URL(`/items`, baseApiUrl)
+const baseApiUrl = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3001"
+const itemsUrl = new URL("/items", baseApiUrl)
 
 const itemShape = () => ({
   url: itemsUrl.href,
@@ -23,13 +23,13 @@ async function createItem(newId: string) {
   // Match the insert
   const findUpdatePromise = matchStream({
     stream: itemsStream,
-    operations: [`insert`],
+    operations: ["insert"],
     matchFn: ({ message }) => message.value.id === newId,
   })
 
   // Insert item
   const fetchPromise = fetch(itemsUrl, {
-    method: `POST`,
+    method: "POST",
     body: JSON.stringify({ id: newId }),
   })
 
@@ -44,14 +44,14 @@ async function clearItems(numItems: number) {
     numItems > 0
       ? matchStream({
           stream: itemsStream,
-          operations: [`delete`],
+          operations: ["delete"],
           // First delete will match
           matchFn: () => true,
         })
       : Promise.resolve()
 
   // Delete all items
-  const fetchPromise = fetch(itemsUrl, { method: `DELETE` })
+  const fetchPromise = fetch(itemsUrl, { method: "DELETE" })
 
   return await Promise.all([findUpdatePromise, fetchPromise])
 }
@@ -60,13 +60,13 @@ export const Example = () => {
   const queryClient = useQueryClient()
   const { data: items } = useShape<Item>(itemShape())
   const submissions: Item[] = useMutationState({
-    filters: { status: `pending` },
+    filters: { status: "pending" },
     select: (mutation) => mutation.state.context as Item,
   }).filter((item) => item !== undefined)
 
   const { mutateAsync: addItemMut } = useMutation({
-    scope: { id: `items` },
-    mutationKey: [`add-item`],
+    scope: { id: "items" },
+    mutationKey: ["add-item"],
     mutationFn: (newId: string) => createItem(newId),
     onMutate: (id) => {
       const optimisticItem: Item = { id }
@@ -75,13 +75,13 @@ export const Example = () => {
   })
 
   const { mutateAsync: clearItemsMut, isPending: isClearing } = useMutation({
-    scope: { id: `items` },
-    mutationKey: [`clear-items`],
+    scope: { id: "items" },
+    mutationKey: ["clear-items"],
     mutationFn: (numItems: number) => clearItems(numItems),
     onMutate: () => {
       const addMutations = queryClient
         .getMutationCache()
-        .findAll({ mutationKey: [`add-item`] })!
+        .findAll({ mutationKey: ["add-item"] })!
       addMutations?.forEach((mut) => queryClient.getMutationCache().remove(mut))
     },
   })

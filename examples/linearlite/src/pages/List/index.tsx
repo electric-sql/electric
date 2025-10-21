@@ -1,11 +1,11 @@
-import { useLiveQuery } from '@electric-sql/pglite-react'
-import { LiveQuery } from '@electric-sql/pglite/live'
-import { useLoaderData } from 'react-router-dom'
-import { type ListOnItemsRenderedProps } from 'react-window'
-import TopFilter from '../../components/TopFilter'
-import IssueList from './IssueList'
-import { Issue } from '../../types/types'
-import { FilterState } from '../../utils/filterState'
+import { useLiveQuery } from "@electric-sql/pglite-react"
+import { LiveQuery } from "@electric-sql/pglite/live"
+import { useLoaderData } from "react-router-dom"
+import { type ListOnItemsRenderedProps } from "react-window"
+import TopFilter from "../../components/TopFilter"
+import IssueList from "./IssueList"
+import { Issue } from "../../types/types"
+import { FilterState } from "../../utils/filterState"
 const CHUNK_SIZE = 50
 
 function calculateWindow(

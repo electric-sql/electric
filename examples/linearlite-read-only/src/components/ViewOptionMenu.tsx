@@ -1,8 +1,8 @@
-import { Transition } from '@headlessui/react'
-import { useClickOutside } from '../hooks/useClickOutside'
-import { useRef } from 'react'
-import Select from './Select'
-import { useFilterState } from '../utils/filterState'
+import { Transition } from "@headlessui/react"
+import { useClickOutside } from "../hooks/useClickOutside"
+import { useRef } from "react"
+import Select from "./Select"
+import { useFilterState } from "../utils/filterState"
 
 interface Props {
   isOpen: boolean
@@ -28,7 +28,7 @@ export default function ({ isOpen, onDismiss }: Props) {
   ) => {
     setFilterState({
       ...filterState,
-      orderDirection: e.target.value as `asc` | `desc`,
+      orderDirection: e.target.value as "asc" | "desc",
     })
   }
 

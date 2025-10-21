@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef } from "react"
 
 export function useGithubAvatar(username: string) {
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined)
@@ -29,7 +29,7 @@ export function useGithubAvatar(username: string) {
     return () => {
       clearTimeout(timeoutId)
 
-      img.src = ``
+      img.src = ""
     }
   }, [username])
 

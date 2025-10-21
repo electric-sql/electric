@@ -1,8 +1,8 @@
-import createPool, { sql } from '@databases/pg'
-import { generateIssues } from './generate_data.js'
+import createPool, { sql } from "@databases/pg"
+import { generateIssues } from "./generate_data.js"
 
 if (!process.env.DATABASE_URL) {
-  throw new Error(`DATABASE_URL is not set`)
+  throw new Error("DATABASE_URL is not set")
 }
 
 const DATABASE_URL = process.env.DATABASE_URL
@@ -14,21 +14,21 @@ const db = createPool(DATABASE_URL)
 
 async function makeInsertQuery(db, table, data) {
   const columns = Object.keys(data)
-  const columnsNames = columns.join(`, `)
+  const columnsNames = columns.join(", ")
   const values = columns.map((column) => data[column])
   return await db.query(sql`
     INSERT INTO ${sql.ident(table)} (${sql(columnsNames)})
-    VALUES (${sql.join(values.map(sql.value), `, `)})
+    VALUES (${sql.join(values.map(sql.value), ", ")})
   `)
 }
 
 async function importIssue(db, issue) {
   const { comments: _, ...rest } = issue
-  return await makeInsertQuery(db, `issue`, rest)
+  return await makeInsertQuery(db, "issue", rest)
 }
 
 async function importComment(db, comment) {
-  return await makeInsertQuery(db, `comment`, comment)
+  return await makeInsertQuery(db, "comment", comment)
 }
 
 const issueCount = issues.length
@@ -49,7 +49,7 @@ for (let i = 0; i < issueCount; i += batchSize) {
   })
 }
 
-process.stdout.write(`\n`)
+process.stdout.write("\n")
 
 db.dispose()
 console.info(`Loaded ${issueCount} issues with ${commentCount} comments.`)

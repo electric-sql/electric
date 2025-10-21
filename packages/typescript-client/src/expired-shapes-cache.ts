@@ -9,7 +9,7 @@ interface ExpiredShapeCacheEntry {
 export class ExpiredShapesCache {
   private data: Record<string, ExpiredShapeCacheEntry> = {}
   private max: number = 250
-  private readonly storageKey = `electric_expired_shapes`
+  private readonly storageKey = "electric_expired_shapes"
 
   getExpiredHandle(shapeUrl: string): string | null {
     const entry = this.data[shapeUrl]
@@ -37,7 +37,7 @@ export class ExpiredShapesCache {
   }
 
   private save(): void {
-    if (typeof localStorage === `undefined`) return
+    if (typeof localStorage === "undefined") return
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.data))
     } catch {
@@ -46,7 +46,7 @@ export class ExpiredShapesCache {
   }
 
   private load(): void {
-    if (typeof localStorage === `undefined`) return
+    if (typeof localStorage === "undefined") return
     try {
       const stored = localStorage.getItem(this.storageKey)
       if (stored) {

@@ -1,26 +1,26 @@
 // @ts-nocheck
-import { useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import Editor from '../../components/editor/Editor'
-import Avatar from '../../components/Avatar'
-import { formatDate } from '../../utils/date'
-import { showWarning } from '../../utils/notification'
-import { Comment, Issue } from '../../types/types'
-import { useShape } from '@electric-sql/react'
-import { baseUrl, source_id, secret } from '../../electric'
+import { useState } from "react"
+import ReactMarkdown from "react-markdown"
+import Editor from "../../components/editor/Editor"
+import Avatar from "../../components/Avatar"
+import { formatDate } from "../../utils/date"
+import { showWarning } from "../../utils/notification"
+import { Comment, Issue } from "../../types/types"
+import { useShape } from "@electric-sql/react"
+import { baseUrl, source_id, secret } from "../../electric"
 
 export interface CommentsProps {
   issue: Issue
 }
 
 function Comments(commentProps: CommentsProps) {
-  const [newCommentBody, setNewCommentBody] = useState<string>(``)
+  const [newCommentBody, setNewCommentBody] = useState<string>("")
   const allComments = useShape({
     url: `${baseUrl}/v1/shape`,
     params: {
       secret,
       source_id,
-      table: `comment`,
+      table: "comment",
     },
   })! as Comment[]
 
@@ -55,8 +55,8 @@ function Comments(commentProps: CommentsProps) {
   const handlePost = () => {
     if (!newCommentBody) {
       showWarning(
-        `Please enter a comment before submitting`,
-        `Comment required`
+        "Please enter a comment before submitting",
+        "Comment required"
       )
       return
     }
@@ -70,7 +70,7 @@ function Comments(commentProps: CommentsProps) {
     //     username: 'testuser',
     //   },
     // })
-    setNewCommentBody(``)
+    setNewCommentBody("")
   }
 
   return (

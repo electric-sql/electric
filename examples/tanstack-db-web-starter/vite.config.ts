@@ -12,18 +12,18 @@ const config = defineConfig({
   plugins: [
     // this is the plugin that enables path aliases
     viteTsConfigPaths({
-      projects: [`./tsconfig.json`],
+      projects: ["./tsconfig.json"],
     }),
     // Local HTTPS with Caddy
     caddyPlugin(),
     tailwindcss(),
     // TanStack Start must come before viteReact
     tanstackStart({
-      srcDirectory: `src`,
-      start: { entry: `./start.tsx` },
-      server: { entry: `./server.ts` },
+      srcDirectory: "src",
+      start: { entry: "./start.tsx" },
+      server: { entry: "./server.ts" },
       router: {
-        srcDirectory: `src`,
+        srcDirectory: "src",
       },
       spa: {
         enabled: true,
@@ -32,7 +32,7 @@ const config = defineConfig({
     viteReact(),
   ],
   ssr: {
-    noExternal: [`zod`],
+    noExternal: ["zod"],
   },
 })
 

@@ -1,4 +1,4 @@
-import { Dialog, Flex, Text, Button } from '@radix-ui/themes'
+import { Dialog, Flex, Text, Button } from "@radix-ui/themes"
 
 interface UserRemoveModalProps {
   isOpen: boolean

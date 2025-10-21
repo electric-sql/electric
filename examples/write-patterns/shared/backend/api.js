@@ -1,21 +1,21 @@
-import bodyParser from 'body-parser'
-import cors from 'cors'
-import express from 'express'
-import pg from 'pg'
+import bodyParser from "body-parser"
+import cors from "cors"
+import express from "express"
+import pg from "pg"
 
-import { z } from 'zod'
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
+import { z } from "zod"
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+import { Readable } from "stream"
+import { pipeline } from "stream/promises"
 
 // Connect to Postgres.
 const DATABASE_URL =
   process.env.DATABASE_URL ||
-  `postgresql://postgres:password@localhost:54321/electric`
+  "postgresql://postgres:password@localhost:54321/electric"
 const pool = new pg.Pool({ connectionString: DATABASE_URL })
 
 // Expose an HTTP server.
-const PORT = parseInt(process.env.PORT || `3001`)
+const PORT = parseInt(process.env.PORT || "3001")
 const app = express()
 app.use(bodyParser.json())
 app.use(cors())
@@ -53,13 +53,13 @@ const updateTodo = async (id, completed, write_id) => {
     WHERE id = $3
   `
 
-  const params = [completed ? `1` : `0`, write_id || null, id]
+  const params = [completed ? "1" : "0", write_id || null, id]
 
   await pool.query(sql, params)
 }
 
 const deleteTodo = async (id) => {
-  const sql = `DELETE from todos where id = $1`
+  const sql = "DELETE from todos where id = $1"
   const params = [id]
   await pool.query(sql, params)
 }
@@ -67,8 +67,8 @@ const deleteTodo = async (id) => {
 // Expose the shared REST API to create, update and delete todos.
 
 // GET /todos - proxy to Electric for syncing todos
-app.get(`/todos`, async (req, res) => {
-  const ELECTRIC_URL = process.env.ELECTRIC_URL || `http://localhost:3000`
+app.get("/todos", async (req, res) => {
+  const ELECTRIC_URL = process.env.ELECTRIC_URL || "http://localhost:3000"
   const electricUrl = new URL(`${ELECTRIC_URL}/v1/shape`)
 
   // Only pass through Electric protocol parameters
@@ -79,14 +79,14 @@ app.get(`/todos`, async (req, res) => {
   })
 
   // Set the table server-side
-  electricUrl.searchParams.set(`table`, `todos`)
+  electricUrl.searchParams.set("table", "todos")
 
   // Add source credentials if available
   if (process.env.ELECTRIC_SOURCE_ID) {
-    electricUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
+    electricUrl.searchParams.set("source_id", process.env.ELECTRIC_SOURCE_ID)
   }
   if (process.env.ELECTRIC_SOURCE_SECRET) {
-    electricUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+    electricUrl.searchParams.set("secret", process.env.ELECTRIC_SOURCE_SECRET)
   }
 
   try {
@@ -96,8 +96,8 @@ app.get(`/todos`, async (req, res) => {
     const headers = {}
     response.headers.forEach((value, key) => {
       if (
-        key.toLowerCase() !== `content-encoding` &&
-        key.toLowerCase() !== `content-length`
+        key.toLowerCase() !== "content-encoding" &&
+        key.toLowerCase() !== "content-length"
       ) {
         headers[key] = value
       }
@@ -110,34 +110,34 @@ app.get(`/todos`, async (req, res) => {
     const nodeStream = Readable.fromWeb(response.body)
 
     // Handle stream errors gracefully
-    nodeStream.on(`error`, (err) => {
-      console.error(`Stream error:`, err)
+    nodeStream.on("error", (err) => {
+      console.error("Stream error:", err)
       if (!res.headersSent) {
         res.writeHead(500)
       }
       res.end()
     })
 
-    res.on(`close`, () => {
+    res.on("close", () => {
       nodeStream.destroy()
     })
 
     await pipeline(nodeStream, res)
   } catch (error) {
     // Ignore premature close errors - these happen when clients disconnect early
-    if (error.code === `ERR_STREAM_PREMATURE_CLOSE`) {
+    if (error.code === "ERR_STREAM_PREMATURE_CLOSE") {
       return
     }
 
-    console.error(`Error proxying to Electric:`, error)
+    console.error("Error proxying to Electric:", error)
     // Only write headers if they haven't been sent yet
     if (!res.headersSent) {
-      res.status(500).json({ error: `Internal server error` })
+      res.status(500).json({ error: "Internal server error" })
     }
   }
 })
 
-app.post(`/todos`, async (req, res) => {
+app.post("/todos", async (req, res) => {
   let data
   try {
     data = createSchema.parse(req.body)
@@ -151,10 +151,10 @@ app.post(`/todos`, async (req, res) => {
     return res.status(500).json({ errors: err })
   }
 
-  return res.status(200).json({ status: `OK` })
+  return res.status(200).json({ status: "OK" })
 })
 
-app.put(`/todos/:id`, async (req, res) => {
+app.put("/todos/:id", async (req, res) => {
   let id, data
   try {
     id = idSchema.parse(req.params.id)
@@ -169,10 +169,10 @@ app.put(`/todos/:id`, async (req, res) => {
     return res.status(500).json({ errors: err })
   }
 
-  return res.status(200).json({ status: `OK` })
+  return res.status(200).json({ status: "OK" })
 })
 
-app.delete(`/todos/:id`, async (req, res) => {
+app.delete("/todos/:id", async (req, res) => {
   let id
   try {
     id = idSchema.parse(req.params.id)
@@ -186,7 +186,7 @@ app.delete(`/todos/:id`, async (req, res) => {
     return res.status(500).json({ errors: err })
   }
 
-  return res.status(200).json({ status: `OK` })
+  return res.status(200).json({ status: "OK" })
 })
 
 // And expose a `POST /changes` route specifically to support the
@@ -210,7 +210,7 @@ const transactionsSchema = z.array(
   })
 )
 
-app.post(`/changes`, async (req, res) => {
+app.post("/changes", async (req, res) => {
   let data
   try {
     data = transactionsSchema.parse(req.body)
@@ -220,39 +220,39 @@ app.post(`/changes`, async (req, res) => {
 
   const client = await pool.connect()
   try {
-    await client.query(`BEGIN`)
+    await client.query("BEGIN")
 
     data.forEach((tx) => {
       tx.changes.forEach(({ operation, value, write_id }) => {
         switch (operation) {
-          case `insert`:
+          case "insert":
             createTodo(value.id, value.title, value.created_at, write_id)
             break
 
-          case `update`:
+          case "update":
             updateTodo(value.id, value.completed, write_id)
             break
 
-          case `delete`:
+          case "delete":
             deleteTodo(value.id)
             break
         }
       })
     })
 
-    await client.query(`COMMIT`)
+    await client.query("COMMIT")
   } catch (err) {
-    await client.query(`ROLLBACK`)
+    await client.query("ROLLBACK")
 
     return res.status(500).json({ errors: err })
   } finally {
     await client.release()
   }
 
-  return res.status(200).json({ status: `OK` })
+  return res.status(200).json({ status: "OK" })
 })
 
-app.get(`/health`, (_req, res) => {
+app.get("/health", (_req, res) => {
   return res.sendStatus(200)
 })
 

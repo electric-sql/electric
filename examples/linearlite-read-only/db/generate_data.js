@@ -1,6 +1,6 @@
-import { faker } from '@faker-js/faker'
-import { generateNKeysBetween } from 'fractional-indexing'
-import { v4 as uuidv4 } from 'uuid'
+import { faker } from "@faker-js/faker"
+import { generateNKeysBetween } from "fractional-indexing"
+import { v4 as uuidv4 } from "uuid"
 
 export function generateIssues(numIssues) {
   // generate properly spaced kanban keys and shuffle them
@@ -18,14 +18,14 @@ function generateIssue(kanbanKey) {
   return {
     id: issueId,
     title: faker.lorem.sentence({ min: 3, max: 8 }),
-    description: faker.lorem.sentences({ min: 2, max: 6 }, `\n`),
-    priority: faker.helpers.arrayElement([`none`, `low`, `medium`, `high`]),
+    description: faker.lorem.sentences({ min: 2, max: 6 }, "\n"),
+    priority: faker.helpers.arrayElement(["none", "low", "medium", "high"]),
     status: faker.helpers.arrayElement([
-      `backlog`,
-      `todo`,
-      `in_progress`,
-      `done`,
-      `canceled`,
+      "backlog",
+      "todo",
+      "in_progress",
+      "done",
+      "canceled",
     ]),
     created: createdAt.toISOString(),
     modified: faker.date

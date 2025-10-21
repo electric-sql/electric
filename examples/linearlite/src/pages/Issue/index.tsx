@@ -1,21 +1,21 @@
-import { useNavigate, useLoaderData } from 'react-router-dom'
-import { useState, useRef, useCallback } from 'react'
-import { BsCloudCheck as SyncedIcon } from 'react-icons/bs'
-import { BsCloudSlash as UnsyncedIcon } from 'react-icons/bs'
-import { LiveQuery } from '@electric-sql/pglite/live'
-import { usePGlite, useLiveQuery } from '@electric-sql/pglite-react'
-import { BsTrash3 as DeleteIcon } from 'react-icons/bs'
-import { BsXLg as CloseIcon } from 'react-icons/bs'
-import PriorityMenu from '../../components/contextmenu/PriorityMenu'
-import StatusMenu from '../../components/contextmenu/StatusMenu'
-import PriorityIcon from '../../components/PriorityIcon'
-import StatusIcon from '../../components/StatusIcon'
-import Avatar from '../../components/Avatar'
-import { Issue, PriorityDisplay, StatusDisplay } from '../../types/types'
-import Editor from '../../components/editor/Editor'
-import DeleteModal from './DeleteModal'
-import Comments from './Comments'
-import debounce from 'lodash.debounce'
+import { useNavigate, useLoaderData } from "react-router-dom"
+import { useState, useRef, useCallback } from "react"
+import { BsCloudCheck as SyncedIcon } from "react-icons/bs"
+import { BsCloudSlash as UnsyncedIcon } from "react-icons/bs"
+import { LiveQuery } from "@electric-sql/pglite/live"
+import { usePGlite, useLiveQuery } from "@electric-sql/pglite-react"
+import { BsTrash3 as DeleteIcon } from "react-icons/bs"
+import { BsXLg as CloseIcon } from "react-icons/bs"
+import PriorityMenu from "../../components/contextmenu/PriorityMenu"
+import StatusMenu from "../../components/contextmenu/StatusMenu"
+import PriorityIcon from "../../components/PriorityIcon"
+import StatusIcon from "../../components/StatusIcon"
+import Avatar from "../../components/Avatar"
+import { Issue, PriorityDisplay, StatusDisplay } from "../../types/types"
+import Editor from "../../components/editor/Editor"
+import DeleteModal from "./DeleteModal"
+import Comments from "./Comments"
+import debounce from "lodash.debounce"
 
 const debounceTime = 500
 
@@ -34,7 +34,7 @@ function IssuePage() {
 
   const handleTitleChangeDebounced = useCallback(
     debounce(async (title: string) => {
-      console.log(`handleTitleChangeDebounced`, title)
+      console.log("handleTitleChangeDebounced", title)
       pg.sql`
       UPDATE issue 
       SET title = ${title}, modified = ${new Date()} 
@@ -116,11 +116,11 @@ function IssuePage() {
     if (window.history.length > 2) {
       navigate(-1)
     }
-    navigate(`/`)
+    navigate("/")
   }
 
   const shortId = () => {
-    if (issue.id.includes(`-`)) {
+    if (issue.id.includes("-")) {
       return issue.id.slice(issue.id.length - 8)
     } else {
       return issue.id
@@ -187,7 +187,7 @@ function IssuePage() {
                 </div>
                 <div className="flex flex-[3_0_0]">
                   <StatusMenu
-                    id={`issue-status-` + issue.id}
+                    id={`issue-status-${  issue.id}`}
                     button={
                       <button
                         type="button"
@@ -207,7 +207,7 @@ function IssuePage() {
                 </div>
                 <div className="flex flex-[3_0_0]">
                   <PriorityMenu
-                    id={`issue-priority-` + issue.id}
+                    id={`issue-priority-${  issue.id}`}
                     button={
                       <button
                         type="button"
@@ -239,8 +239,8 @@ function IssuePage() {
                 className="prose font-normal appearance-none text-md rounded editor"
                 value={
                   descriptionIsDirty.current
-                    ? dirtyDescription || ``
-                    : issue.description || ``
+                    ? dirtyDescription || ""
+                    : issue.description || ""
                 }
                 onChange={(val) => handleDescriptionChange(val)}
                 placeholder="Add description..."

@@ -1,21 +1,21 @@
-import { describe, expectTypeOf, it } from 'vitest'
+import { describe, expectTypeOf, it } from "vitest"
 import {
   ChangeMessage,
   ControlMessage,
   isChangeMessage,
   isControlMessage,
   Message,
-} from '../src'
+} from "../src"
 
-describe(`helpers`, () => {
-  it(`should respect ChangeMessages type guard`, () => {
+describe("helpers", () => {
+  it("should respect ChangeMessages type guard", () => {
     const message = {
       headers: {
-        operation: `insert`,
+        operation: "insert",
       },
-      offset: `-1`,
-      key: `foo`,
-      value: { foo: `bar` },
+      offset: "-1",
+      key: "foo",
+      value: { foo: "bar" },
     } as Message<{ foo: string }>
 
     if (isChangeMessage(message)) {
@@ -27,10 +27,10 @@ describe(`helpers`, () => {
     }
   })
 
-  it(`should respect ControlMessages type guard`, () => {
+  it("should respect ControlMessages type guard", () => {
     const message = {
       headers: {
-        control: `up-to-date`,
+        control: "up-to-date",
       },
     } as Message<{ [key: string]: string }>
 

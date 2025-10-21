@@ -1,6 +1,6 @@
-import { describe, expectTypeOf, test } from 'vitest'
-import { Row, ShapeStream, ShapeStreamOptions } from '@electric-sql/client'
-import { MultiShapeStream } from '../src/multi-shape-stream'
+import { describe, expectTypeOf, test } from "vitest"
+import { Row, ShapeStream, ShapeStreamOptions } from "@electric-sql/client"
+import { MultiShapeStream } from "../src/multi-shape-stream"
 
 interface UserRow extends Row {
   id: string
@@ -12,12 +12,12 @@ interface PostRow extends Row {
   content: string
 }
 
-describe(`MultiShapeStream`, () => {
-  test(`type inference with ShapeStream instances`, () => {
+describe("MultiShapeStream", () => {
+  test("type inference with ShapeStream instances", () => {
     const stream = new MultiShapeStream({
       shapes: {
-        users: new ShapeStream<UserRow>({ url: `users` }),
-        posts: new ShapeStream<PostRow>({ url: `posts` }),
+        users: new ShapeStream<UserRow>({ url: "users" }),
+        posts: new ShapeStream<PostRow>({ url: "posts" }),
       },
     })
 
@@ -25,11 +25,11 @@ describe(`MultiShapeStream`, () => {
     expectTypeOf(stream.shapes.posts).toEqualTypeOf<ShapeStream<PostRow>>()
   })
 
-  test(`type inference with ShapeStreamOptions`, () => {
+  test("type inference with ShapeStreamOptions", () => {
     const stream = new MultiShapeStream({
       shapes: {
-        users: { url: `users` } as ShapeStreamOptions<UserRow>,
-        posts: { url: `posts` } as ShapeStreamOptions<PostRow>,
+        users: { url: "users" } as ShapeStreamOptions<UserRow>,
+        posts: { url: "posts" } as ShapeStreamOptions<PostRow>,
       },
     })
 
@@ -37,11 +37,11 @@ describe(`MultiShapeStream`, () => {
     expectTypeOf(stream.shapes.posts).toEqualTypeOf<ShapeStream<PostRow>>()
   })
 
-  test(`type inference with mixed ShapeStream and ShapeStreamOptions`, () => {
+  test("type inference with mixed ShapeStream and ShapeStreamOptions", () => {
     const stream = new MultiShapeStream({
       shapes: {
-        users: new ShapeStream<UserRow>({ url: `users` }),
-        posts: { url: `posts` } as ShapeStreamOptions<PostRow>,
+        users: new ShapeStream<UserRow>({ url: "users" }),
+        posts: { url: "posts" } as ShapeStreamOptions<PostRow>,
       },
     })
 

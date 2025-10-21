@@ -1,7 +1,7 @@
-import type { EventResult } from '../../../types'
+import type { EventResult } from "../../../types"
 
-import { useLiveQuery, eq } from '@tanstack/react-db'
-import { userCollection } from '../../../db/collections'
+import { useLiveQuery, eq } from "@tanstack/react-db"
+import { userCollection } from "../../../db/collections"
 
 interface Props {
   event: EventResult
@@ -29,8 +29,8 @@ function RoastUser({ event }: Props) {
 
   return (
     <>
-      <span style={{ color: `rgb(125, 184, 255)` }}>@{subjectUser.name}</span>
-      {` `}
+      <span style={{ color: "rgb(125, 184, 255)" }}>@{subjectUser.name}</span>
+      {" "}
       {formattedRoast}
     </>
   )
