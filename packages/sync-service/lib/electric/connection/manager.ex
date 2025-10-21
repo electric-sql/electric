@@ -113,7 +113,7 @@ defmodule Electric.Connection.Manager do
       :tweaks,
       :max_shapes,
       :persistent_kv,
-      :purge_all_shapes?,
+      purge_all_shapes?: false,
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
@@ -485,13 +485,16 @@ defmodule Electric.Connection.Manager do
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
     # and reset any replication related persistent state
-    timeline_changed? =
+    timeline_check =
       Electric.Timeline.check(
         {state.pg_system_identifier, state.pg_timeline_id},
         state.timeline_opts
-      ) == :timeline_changed
+      )
 
-    if timeline_changed? or state.purge_all_shapes? do
+    timeline_changed? = timeline_check == :timeline_changed
+    initializing? = timeline_check == :no_previous_timeline
+
+    if timeline_changed? or (state.purge_all_shapes? and not initializing?) do
       # Before starting the replication supervisor, clean up the on-disk storage from all shapes.
       Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
 
