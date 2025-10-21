@@ -61,7 +61,6 @@ defmodule Electric.StackSupervisor do
                    keys: Electric.connection_opts_schema()
                  ],
                  max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
-                 expiry_batch_size: [type: :pos_integer, default: 50],
                  replication_opts: [
                    type: :keyword_list,
                    required: true,
@@ -331,7 +330,6 @@ defmodule Electric.StackSupervisor do
       persistent_kv: config.persistent_kv,
       shape_cache_opts: shape_cache_opts,
       max_shapes: config.max_shapes,
-      expiry_batch_size: config.expiry_batch_size,
       tweaks: tweaks,
       manual_table_publishing?: config.manual_table_publishing?
     ]

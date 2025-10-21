@@ -112,7 +112,6 @@ defmodule Electric.Connection.Manager do
       :stack_events_registry,
       :tweaks,
       :max_shapes,
-      :expiry_batch_size,
       :persistent_kv,
       :purge_all_shapes?,
       # PIDs of the database connection pools
@@ -309,8 +308,7 @@ defmodule Electric.Connection.Manager do
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
         manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
-        max_shapes: Keyword.fetch!(opts, :max_shapes),
-        expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size)
+        max_shapes: Keyword.fetch!(opts, :max_shapes)
       }
       |> initialize_connection_opts(opts)
 
@@ -528,8 +526,7 @@ defmodule Electric.Connection.Manager do
       tweaks: state.tweaks,
       manual_table_publishing?: state.manual_table_publishing?,
       persistent_kv: state.persistent_kv,
-      max_shapes: state.max_shapes,
-      expiry_batch_size: state.expiry_batch_size
+      max_shapes: state.max_shapes
     ]
 
     start_time = System.monotonic_time()
