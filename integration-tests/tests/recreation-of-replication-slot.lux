@@ -45,6 +45,7 @@
   -
   !:ok = Application.stop(:electric)
   !:ok = Application.start(:electric)
+  ??[debug] Starting replication client
 
   -$fail_pattern
 
