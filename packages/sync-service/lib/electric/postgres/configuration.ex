@@ -39,6 +39,7 @@ defmodule Electric.Postgres.Configuration do
 
   @doc """
   Check whether the publication with the given name exists, and return its status.
+
   The status includes whether the publication is owned, whether it publishes all operations,
   and whether it publishes generated columns (if supported by the Postgres version).
   """

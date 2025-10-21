@@ -329,7 +329,7 @@ defmodule Electric.Replication.PublicationManager do
         can_alter_publication?: can_alter_publication?,
         publishes_generated_columns?: publishes_generated_columns?
       } ->
-        # if the publication has switched form being able to publish generated columns
+        # if the publication has switched from being able to publish generated columns
         # to not being able to publish them, we need to fail any shapes that depend on
         # that feature
         state =
