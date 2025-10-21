@@ -162,6 +162,24 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
     end
+
+    test "never drops the consumer count below 0", ctx do
+      handle = "handle-1"
+      parent = self()
+
+      {:ok, pid} =
+        TestSubscriber.start_link(fn message ->
+          send(parent, {:broadcast, handle, message})
+        end)
+
+      {:ok, 1} = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
+    end
   end
 
   describe "broadcast/2" do

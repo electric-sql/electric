@@ -60,7 +60,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.delete(table, shape_handle)
 
     table
-    |> :ets.update_counter(@count_key, -1)
+    |> :ets.update_counter(@count_key, {2, -1, 0, 0})
     |> tap(fn n -> Logger.debug("Stopped consumer. #{n} active consumers") end)
 
     :ok
