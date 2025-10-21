@@ -7,8 +7,6 @@ defmodule Electric.Shapes.ConsumerRegistry do
   defstruct table: nil,
             stack_id: nil
 
-  @count_key :consumer_count
-
   @type stack_id() :: Electric.stack_id()
   @type stack_ref() :: stack_id() | [stack_id: stack_id()] | %{stack_id: stack_id()}
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
@@ -19,7 +17,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
   def active_consumer_count(stack_id) when is_binary(stack_id) do
-    :ets.lookup_element(ets_name(stack_id), @count_key, 2)
+    :ets.info(ets_name(stack_id), :size)
   end
 
   @spec register_consumer(shape_handle(), pid(), stack_id()) :: {:ok, non_neg_integer()}
@@ -34,14 +32,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @spec register_consumer(shape_handle(), pid(), :ets.table()) :: {:ok, non_neg_integer()}
   def register_consumer(shape_handle, pid, table) when is_atom(table) or is_reference(table) do
-    n = register_consumer!(shape_handle, pid, table)
-    {:ok, n}
+    register_consumer!(shape_handle, pid, table)
+    :ok
   end
 
   defp register_consumer!(shape_handle, pid, table) do
     true = :ets.insert_new(table, [{shape_handle, pid}])
-
-    :ets.update_counter(table, @count_key, 1)
   end
 
   @spec publish([shape_handle()], term(), t()) :: :ok
@@ -59,9 +55,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   def remove_consumer(shape_handle, %__MODULE__{table: table}) do
     :ets.delete(table, shape_handle)
 
-    table
-    |> :ets.update_counter(@count_key, {2, -1, 0, 0})
-    |> tap(fn n -> Logger.debug("Stopped consumer. #{n} active consumers") end)
+    Logger.debug(fn -> "Stopped and removed consumer #{shape_handle}" end)
 
     :ok
   end
@@ -117,14 +111,16 @@ defmodule Electric.Shapes.ConsumerRegistry do
         case ShapeCache.start_consumer_for_handle(handle, stack_id: stack_id) do
           {:ok, pid_handles} ->
             {n, pid} =
-              Enum.reduce(pid_handles, {0, nil}, fn {inner_handle, pid}, {_, consumer_pid} ->
+              Enum.reduce(pid_handles, {0, nil}, fn {inner_handle, pid}, {n, consumer_pid} ->
+                register_consumer!(inner_handle, pid, table)
+
                 {
-                  register_consumer!(inner_handle, pid, table),
+                  n + 1,
                   if(handle == inner_handle, do: pid, else: consumer_pid)
                 }
               end)
 
-            Logger.info("Started consumer #{n} for existing handle #{handle}")
+            Logger.info("Started #{n} consumer(s) for existing handle #{handle}")
 
             pid
 
@@ -142,9 +138,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @doc false
   def registry_table(stack_id) do
-    table = :ets.new(ets_name(stack_id), [:public, :named_table, write_concurrency: :auto])
-    :ets.insert(table, {@count_key, 0})
-    table
+    :ets.new(ets_name(stack_id), [:public, :named_table, write_concurrency: :auto])
   end
 
   def new(stack_id, opts \\ []) when is_binary(stack_id) do

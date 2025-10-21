@@ -119,7 +119,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         )
 
       # since we're starting the consumer manually we have to explictly register it
-      Electric.Shapes.ConsumerRegistry.register_consumer(@shape_handle, consumer, ctx.stack_id)
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(@shape_handle, consumer, ctx.stack_id)
 
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}

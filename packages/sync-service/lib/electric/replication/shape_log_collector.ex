@@ -196,7 +196,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
-        ConsumerRegistry.register_consumer(shape_handle, pid, state.registry_state)
+        :ok = ConsumerRegistry.register_consumer(shape_handle, pid, state.registry_state)
 
         state =
           %{
