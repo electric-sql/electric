@@ -1160,13 +1160,13 @@ defmodule Electric.Connection.Manager do
     end
   end
 
-  defp kill_replication_backend(state) when not admin_pool_available(state) do
-    Logger.warning("Skipping killing replication backend, pool connection not available")
+  defp kill_replication_backend(%State{replication_pg_backend_pid: nil} = state) do
+    Logger.debug("Skipping killing replication backend, pid not known")
     state
   end
 
-  defp kill_replication_backend(%State{replication_pg_backend_pid: nil} = state) do
-    Logger.warning("Skipping killing replication backend, pid not known")
+  defp kill_replication_backend(state) when not admin_pool_available(state) do
+    Logger.warning("Skipping killing replication backend, pool connection not available")
     state
   end
 
