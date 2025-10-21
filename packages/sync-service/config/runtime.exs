@@ -30,7 +30,7 @@ config :logger, :default_formatter,
 sasl? = env!("ELECTRIC_LOG_OTP_REPORTS", :boolean, false)
 
 config :logger,
-  handle_otp_reports: false,
+  handle_otp_reports: true,
   handle_sasl_reports: sasl?
 
 if config_env() == :test do
