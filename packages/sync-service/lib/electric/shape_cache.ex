@@ -161,10 +161,11 @@ defmodule Electric.ShapeCache do
         {:error, :unknown}
 
       true ->
-        server = Electric.Shapes.Consumer.name(stack_id, shape_handle)
-
         try do
-          GenServer.call(server, :await_snapshot_start, 15_000)
+          Electric.Shapes.Consumer.await_snapshot_start(
+            %{stack_id: stack_id, shape_handle: shape_handle},
+            15_000
+          )
         catch
           :exit, {:timeout, {GenServer, :call, _}} ->
             # Please note that :await_snapshot_start can also return a timeout error as well
@@ -181,6 +182,9 @@ defmodule Electric.ShapeCache do
             await_snapshot_start(shape_handle, opts)
         end
     end
+  rescue
+    ArgumentError ->
+      {:error, %RuntimeError{message: "Shape meta tables not found"}}
   end
 
   @impl Electric.ShapeCacheBehaviour

@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.ApiTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit
   use Support.Mock
 
   alias Electric.Postgres.Lsn
@@ -1194,29 +1195,38 @@ defmodule Electric.Shapes.ApiTest do
         []
       end)
 
-      lsn = Lsn.from_integer(:rand.uniform(1_000_000))
-      Electric.LsnTracker.set_last_processed_lsn(lsn, ctx.stack_id)
+      stack_id = ctx.stack_id
 
-      assert {:ok, request} =
-               Api.validate(
-                 ctx.api,
-                 %{
-                   table: "public.users",
-                   offset: "#{@test_offset}",
-                   handle: @test_shape_handle,
-                   live: true
-                 }
-               )
+      status_task =
+        start_supervised!({
+          Task,
+          fn ->
+            set_status_to_active(ctx)
+            Process.sleep(:infinity)
+          end
+        })
 
-      response = Api.serve_shape_response(request)
-      assert response.status == 200
+      req_task =
+        Task.async(fn ->
+          assert {:ok, request} =
+                   Api.validate(
+                     ctx.api,
+                     %{
+                       table: "public.users",
+                       offset: "#{@test_offset}",
+                       handle: @test_shape_handle,
+                       live: true
+                     }
+                   )
 
-      assert [
-               %{
-                 headers: %{control: "up-to-date", global_last_seen_lsn: "#{Lsn.to_integer(lsn)}"}
-               }
-             ] ==
-               response_body(response)
+          Process.exit(status_task, :kill)
+          Electric.StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+          Process.sleep(50)
+
+          Api.serve_shape_response(request)
+        end)
+
+      assert %{status: 503} = Task.await(req_task)
     end
   end
 

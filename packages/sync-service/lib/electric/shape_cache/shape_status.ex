@@ -20,7 +20,8 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
     @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
   end
 
-  @callback initialize_from_storage(stack_ref(), Storage.t()) :: :ok | {:error, term()}
+  @callback initialize_from_storage(stack_ref(), Electric.ShapeCache.Storage.storage()) ::
+              :ok | {:error, term()}
   @callback terminate(stack_ref(), String.t()) :: :ok | {:error, term()}
   @callback list_shapes(stack_ref()) :: [{shape_handle(), Shape.t()}]
   @callback count_shapes(stack_ref()) :: non_neg_integer()
@@ -521,10 +522,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp backup_file_path(backup_dir) do
-    case backup_dir do
-      nil -> nil
-      dir -> dir |> Path.join(@backup_file) |> String.to_charlist()
-    end
+    backup_dir |> Path.join(@backup_file) |> String.to_charlist()
   end
 
   def backup_dir(storage) do
