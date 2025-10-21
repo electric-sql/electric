@@ -129,6 +129,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
 
+  @default_connect_timeout 30_000
   @idle_check_interval Electric.Config.min_replication_idle_timeout()
 
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
@@ -141,6 +142,7 @@ defmodule Electric.Postgres.ReplicationClient do
     start_opts =
       [
         name: name(config.stack_id),
+        timeout: Access.get(opts, :timeout, @default_connect_timeout),
         auto_reconnect: false,
         sync_connect: false
       ] ++ Electric.Utils.deobfuscate_password(config.replication_opts[:connection_opts])
