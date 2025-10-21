@@ -34,6 +34,7 @@ defmodule Electric.Telemetry.Processes do
     |> Stream.reject(&(proc_mem(&1, :type) == :dead))
     |> Enum.group_by(&proc_mem(&1, :type), &proc_mem(&1, :memory))
     |> keep_top_n(&memory_sum/1, count)
+    |> Enum.map(fn {rec, _} -> %{type: proc_mem(rec, :type), memory: proc_mem(rec, :memory)} end)
   end
 
   defp memory_sum({type, memory_list}) do
@@ -54,7 +55,6 @@ defmodule Electric.Telemetry.Processes do
     |> Stream.map(trans_fun)
     |> Enum.reduce(first_n, fn item, acc -> insert_into_sorted(item, acc, n) end)
     |> Enum.take(n)
-    |> Enum.map(fn {rec, _} -> %{type: proc_mem(rec, :type), memory: proc_mem(rec, :memory)} end)
   end
 
   defp insert_into_sorted(item, acc, limit), do: insert_into_sorted(item, acc, 0, limit)
