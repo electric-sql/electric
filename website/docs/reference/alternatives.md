@@ -47,6 +47,7 @@ We list a selection of projects below, including for example:
 - [Prisma Pulse](https://www.prisma.io/data-platform/pulse)
 - [RisingWave](https://risingwave.com)
 - [Qlik](https://www.qlik.com/us/products/qlik-data-streaming-cdc)
+- [s2.dev](https://s2.dev)
 - [Sequin](https://sequinstream.com)
 - [SKDB](https://skdb.io)
 - [SQLedge](https://github.com/zknill/sqledge)
