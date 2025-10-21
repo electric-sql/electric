@@ -103,9 +103,6 @@ defmodule Electric.Connection.Manager do
       :pg_system_identifier,
       # PostgreSQL timeline ID
       :pg_timeline_id,
-      # Capability flag that is set during replication client initialization and shows whether
-      # the PG role has the necessary privilege to alter the PG publication.
-      :can_alter_publication?,
       # User setting that determines whether the table publishing is to be automatically
       # managed by the stack or whether it's the user's responsibility.
       :manual_table_publishing?,
@@ -225,10 +222,6 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :replication_client_created_new_slot)
   end
 
-  def replication_client_has_insufficient_privilege(manager) do
-    GenServer.cast(manager, :replication_client_has_insufficient_privilege)
-  end
-
   def replication_client_ready_to_stream(manager) do
     GenServer.cast(manager, :replication_client_ready_to_stream)
   end
@@ -315,7 +308,6 @@ defmodule Electric.Connection.Manager do
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
-        can_alter_publication?: true,
         manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
         max_shapes: Keyword.fetch!(opts, :max_shapes),
         expiry_batch_size: Keyword.fetch!(opts, :expiry_batch_size)
@@ -534,7 +526,6 @@ defmodule Electric.Connection.Manager do
       pool_opts: state.pool_opts,
       replication_opts: state.replication_opts,
       tweaks: state.tweaks,
-      can_alter_publication?: state.can_alter_publication?,
       manual_table_publishing?: state.manual_table_publishing?,
       persistent_kv: state.persistent_kv,
       max_shapes: state.max_shapes,
@@ -805,16 +796,6 @@ defmodule Electric.Connection.Manager do
     # When the replication slot is created for the first time or recreated at any point, we
     # must invalidate all shapes to ensure transactional continuity and prevent missed changes.
     {:noreply, %{state | purge_all_shapes?: true}}
-  end
-
-  def handle_cast(
-        :replication_client_has_insufficient_privilege,
-        %State{
-          current_phase: :connection_setup,
-          current_step: {:start_replication_client, :configuring_connection}
-        } = state
-      ) do
-    {:noreply, %{state | can_alter_publication?: false}}
   end
 
   def handle_cast(

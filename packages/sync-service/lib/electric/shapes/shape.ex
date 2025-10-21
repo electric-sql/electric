@@ -50,7 +50,8 @@ defmodule Electric.Shapes.Shape do
           compaction: :enabled | :disabled
         }
   @type log_mode() :: :changes_only | :full
-  @type flag() :: :selects_all_columns | :non_primitive_columns_in_where
+  @type flag() ::
+          :selects_all_columns | :selects_generated_columns | :non_primitive_columns_in_where
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
           root_table_id: Electric.relation_id(),
@@ -204,14 +205,18 @@ defmodule Electric.Shapes.Shape do
          inspector = Map.fetch!(opts, :inspector),
          {:ok, {oid, table} = relation} <- validate_relation(opts, inspector),
          {:ok, column_info, pk_cols} <- load_column_info(relation, inspector),
+         {:ok, supported_features} <- load_supported_features(inspector),
          {:ok, selected_columns, explicitly_selected_columns} <-
-           validate_selected_columns(column_info, pk_cols, opts),
+           validate_selected_columns(column_info, pk_cols, supported_features, opts),
          refs = Inspector.columns_to_expr(column_info),
          {:ok, where, shape_dependencies} <-
            validate_where_clause(Map.get(opts, :where), opts, refs) do
       flags =
         [
           if(is_nil(Map.get(opts, :columns)), do: :selects_all_columns),
+          if(any_columns_generated?(column_info, selected_columns),
+            do: :selects_generated_columns
+          ),
           if(any_columns_non_primitive?(column_info, where),
             do: :non_primitive_columns_in_where
           )
@@ -331,6 +336,7 @@ defmodule Electric.Shapes.Shape do
   @spec validate_selected_columns(
           [Inspector.column_info()],
           [String.t()],
+          Inspector.supported_features(),
           map()
         ) ::
           {:ok, needed :: [String.t(), ...], selected :: [String.t(), ...]}
@@ -338,7 +344,12 @@ defmodule Electric.Shapes.Shape do
 
   # When an explicit list of columns was included in the shape request, make sure that they are
   # valid, they cover all the PK columns and none of them is a generated column.
-  defp validate_selected_columns(column_info, pk_cols, %{columns: columns_to_select} = opts)
+  defp validate_selected_columns(
+         column_info,
+         pk_cols,
+         %{supports_generated_column_replication: supports_generated_column_replication},
+         %{columns: columns_to_select} = opts
+       )
        when is_list(columns_to_select) do
     autofill_pk_select? = Map.fetch!(opts, :autofill_pk_select?)
 
@@ -355,7 +366,7 @@ defmodule Electric.Shapes.Shape do
         invalid_cols != [] ->
           "The following columns are not found on the table: " <> Enum.join(invalid_cols, ", ")
 
-        generated_cols != [] ->
+        generated_cols != [] and not supports_generated_column_replication ->
           "The following columns are generated and cannot be included in the shape: " <>
             (generated_cols |> Enum.map(& &1.name) |> Enum.join(", "))
 
@@ -377,10 +388,15 @@ defmodule Electric.Shapes.Shape do
 
   # No explicit column list was included in the shape request. Only check for the presence of
   # generated columns in the table schema.
-  defp validate_selected_columns(column_info, _pk_cols, _) do
+  defp validate_selected_columns(
+         column_info,
+         _pk_cols,
+         %{supports_generated_column_replication: supports_generated_column_replication},
+         _opts
+       ) do
     generated_cols = Enum.filter(column_info, & &1.is_generated)
 
-    if generated_cols == [] do
+    if generated_cols == [] or supports_generated_column_replication do
       all_columns = column_info |> Enum.map(& &1.name) |> Enum.sort()
       {:ok, all_columns, all_columns}
     else
@@ -433,6 +449,13 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
+  defp load_supported_features(inspector) do
+    case Inspector.load_supported_features(inspector) do
+      {:ok, features} -> {:ok, features}
+      {:error, :connection_not_available} -> connection_not_available_error()
+    end
+  end
+
   defp any_columns_non_primitive?(_, nil), do: false
 
   defp any_columns_non_primitive?(column_info, where) do
@@ -443,6 +466,15 @@ defmodule Electric.Shapes.Shape do
     |> Enum.filter(&(&1.name in unqualified_refs))
     |> Enum.any?(fn
       %{type_kind: kind} when kind in [:enum, :domain, :composite] -> true
+      _ -> false
+    end)
+  end
+
+  defp any_columns_generated?(column_info, selected_columns) when is_list(selected_columns) do
+    column_info
+    |> Enum.filter(&(&1.name in selected_columns))
+    |> Enum.any?(fn
+      %{is_generated: true} -> true
       _ -> false
     end)
   end
@@ -681,10 +713,15 @@ defmodule Electric.Shapes.Shape do
           Parser.validate_where_ast(where, params: Map.get(data, "params", %{}), refs: refs)
       end
 
+    actual_selected_columns = selected_columns || Enum.map(column_info, & &1.name)
+
     flags =
       Enum.reject(
         [
           if(is_nil(selected_columns), do: :selects_all_columns),
+          if(any_columns_generated?(column_info, actual_selected_columns),
+            do: :selects_generated_columns
+          ),
           if(any_columns_non_primitive?(column_info, where),
             do: :non_primitive_columns_in_where
           )
@@ -701,7 +738,7 @@ defmodule Electric.Shapes.Shape do
        root_column_count: length(column_info),
        flags: flags,
        where: where,
-       selected_columns: selected_columns || Enum.map(column_info, & &1.name),
+       selected_columns: actual_selected_columns,
        replica: String.to_atom(Map.get(data, "replica", "default")),
        storage: storage_config_from_json(Map.get(data, "storage"))
      }}

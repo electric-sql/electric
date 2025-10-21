@@ -3,7 +3,7 @@ name: 'electric_dev'
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
@@ -22,7 +22,7 @@ services:
       - -c
       - config_file=/etc/postgresql.conf
   postgres2:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres

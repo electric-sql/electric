@@ -61,16 +61,25 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp pg_info_result([%Postgrex.Result{} = result], state) do
     %{rows: [[version_str]]} = result
-    {%{server_version_num: String.to_integer(version_str)}, state}
+    version_num = String.to_integer(version_str)
+
+    {%{server_version_num: version_num}, %{state | pg_version: version_num}}
   end
 
   ###
 
+  @pg18_version 180_000
   defp create_publication_query(state) do
     Logger.debug("ReplicationClient step: create_publication_query")
     # We're creating an "empty" publication here because synced tables are added to it
     # elsewhere. See `Electric.Replication.PublicationManager`.
     query = "CREATE PUBLICATION #{Utils.quote_name(state.publication_name)}"
+
+    query =
+      if state.pg_version >= @pg18_version,
+        do: query <> " WITH (publish_generated_columns = stored)",
+        else: query
+
     {:query, query, state}
   end
 
