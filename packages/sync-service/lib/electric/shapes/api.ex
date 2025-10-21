@@ -1031,11 +1031,9 @@ defmodule Electric.Shapes.Api do
     # (e.g. column nullability changes but the type remains the same), we might return the new
     # version if it's invalidated in ETS or server is restarted.
     case Inspector.load_column_info(shape.root_table_id, inspector) do
-      {:ok, columns} ->
-        Electric.Schema.from_column_info(columns, shape.selected_columns)
-
-      :table_not_found ->
-        nil
+      {:ok, columns} -> Electric.Schema.from_column_info(columns, shape.selected_columns)
+      {:error, :connection_not_available} -> nil
+      :table_not_found -> nil
     end
   end
 
