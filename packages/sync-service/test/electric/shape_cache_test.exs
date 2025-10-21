@@ -868,20 +868,26 @@ defmodule Electric.ShapeCacheTest do
       Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
       %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
+      test_pid = self()
+
       Repatch.patch(
         Electric.Shapes.DynamicConsumerSupervisor,
         :start_shape_consumer,
         [mode: :shared],
-        fn _, _ -> Process.sleep(:infinity) end
+        fn _, _ ->
+          send(test_pid, :about_to_start_consumer)
+          Process.sleep(:infinity)
+        end
       )
 
       Repatch.allow(self(), opts[:server])
 
       start_supervised({Task, fn -> ShapeCache.get_or_create_shape_handle(@shape, opts) end})
 
-      Process.sleep(10)
-
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, _} =
+        receive do
+          :about_to_start_consumer -> ShapeCache.get_or_create_shape_handle(@shape, opts)
+        end
 
       wait_task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
 
