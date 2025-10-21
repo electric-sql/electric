@@ -10,7 +10,7 @@ defmodule Electric.Timeline do
   @type timeline_id :: integer()
   @type timeline :: {pg_id(), timeline_id()} | nil
 
-  @type check_result :: :ok | :timeline_changed
+  @type check_result :: :ok | :timeline_changed | :no_previous_timeline
 
   @doc """
   Checks that we're connected to the same Postgres DB as before and on the same timeline.
@@ -43,7 +43,7 @@ defmodule Electric.Timeline do
   defp verify_timeline({pg_id, timeline_id}, nil) do
     Logger.info("No previous timeline detected.")
     Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
-    :ok
+    :no_previous_timeline
   end
 
   defp verify_timeline({pg_id, _}, {electric_pg_id, _}) when pg_id != electric_pg_id do

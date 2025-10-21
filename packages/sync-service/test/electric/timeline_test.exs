@@ -59,7 +59,7 @@ defmodule Electric.TimelineTest do
       timeline = {2, 5}
 
       assert capture_log(fn ->
-               assert :ok = Timeline.check(timeline, opts)
+               assert :no_previous_timeline = Timeline.check(timeline, opts)
              end) =~ "No previous timeline"
 
       assert ^timeline = Timeline.load_timeline(opts)
