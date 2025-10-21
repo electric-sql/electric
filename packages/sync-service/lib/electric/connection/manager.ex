@@ -83,14 +83,14 @@ defmodule Electric.Connection.Manager do
       # PID of the replication client
       :replication_client_pid,
       # Timer reference for the periodic replication client status check
-      :replication_client_timer,
+      :replication_configuration_timer,
       # This flag is set whenever the timer that checks the replication client's status trips
       # and the client still hasn't finished configuration its connection by then.
-      :replication_client_blocked_by_pending_transaction?,
-      # Postgres backend PID serving the lock connection
-      :lock_connection_pg_backend_pid,
+      :replication_configuration_blocked_by_pending_transaction,
+      # Postgres backend PID serving the replication connection
+      :replication_pg_backend_pid,
       # Timer reference for the periodic lock status check
-      :lock_connection_timer,
+      :replication_lock_timer,
       # Backoff term used for reconnection with exponential back-off
       :connection_backoff,
       # PostgreSQL server version
@@ -187,10 +187,6 @@ defmodule Electric.Connection.Manager do
 
   def drop_replication_slot_on_stop(manager) do
     GenServer.cast(manager, :drop_replication_slot_on_stop)
-  end
-
-  def lock_connection_started(manager) do
-    GenServer.cast(manager, :lock_connection_started)
   end
 
   def consumers_ready(stack_id, total_recovered, total_failed_to_recover) do
@@ -367,7 +363,7 @@ defmodule Electric.Connection.Manager do
         state = %{
           state
           | replication_client_pid: pid,
-            replication_client_blocked_by_pending_transaction?: false,
+            replication_configuration_blocked_by_pending_transaction: false,
             current_step: {:start_replication_client, :connecting}
         }
 
@@ -523,7 +519,7 @@ defmodule Electric.Connection.Manager do
 
   def handle_continue(
         :check_lock_not_abandoned,
-        %State{lock_connection_pg_backend_pid: pid} = state
+        %State{replication_pg_backend_pid: pid} = state
       ) do
     if state.current_step == {:start_replication_client, :acquiring_lock} and not is_nil(pid) do
       with {:ok, conn_opts, state} <-
@@ -546,23 +542,23 @@ defmodule Electric.Connection.Manager do
 
   @impl true
   def handle_info(
-        {:timeout, tref, {:check_status, :lock_connection}},
+        {:timeout, tref, {:check_status, :replication_lock}},
         %State{
-          lock_connection_timer: tref,
+          replication_lock_timer: tref,
           current_phase: :connection_setup,
           current_step: {:start_replication_client, :acquiring_lock}
         } = state
       ) do
     Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
-    tref = schedule_periodic_connection_status_check(:lock_connection)
-    state = %{state | lock_connection_timer: tref}
+    tref = schedule_periodic_connection_status_check(:replication_lock)
+    state = %{state | replication_lock_timer: tref}
     {:noreply, state, {:continue, :check_lock_not_abandoned}}
   end
 
   def handle_info(
-        {:timeout, tref, {:check_status, :replication_client}},
+        {:timeout, tref, {:check_status, :replication_configuration}},
         %State{
-          replication_client_timer: tref,
+          replication_configuration_timer: tref,
           current_phase: :connection_setup,
           current_step: {:start_replication_client, :configuring_connection}
         } = state
@@ -574,16 +570,16 @@ defmodule Electric.Connection.Manager do
         "before it can create the replication slot."
     end)
 
-    if not state.replication_client_blocked_by_pending_transaction? do
+    if not state.replication_configuration_blocked_by_pending_transaction do
       dispatch_stack_event(:replication_slot_creation_blocked_by_pending_trasactions, state)
     end
 
-    tref = schedule_periodic_connection_status_check(:replication_client)
+    tref = schedule_periodic_connection_status_check(:replication_configuration)
 
     state = %{
       state
-      | replication_client_timer: tref,
-        replication_client_blocked_by_pending_transaction?: true
+      | replication_configuration_timer: tref,
+        replication_configuration_blocked_by_pending_transaction: true
     }
 
     {:noreply, state}
@@ -670,11 +666,11 @@ defmodule Electric.Connection.Manager do
       ) do
     dispatch_stack_event(:waiting_for_connection_lock, state)
     state = mark_connection_succeeded(state)
-    tref = schedule_periodic_connection_status_check(:lock_connection)
+    tref = schedule_periodic_connection_status_check(:replication_lock)
 
     state = %{
       state
-      | lock_connection_timer: tref,
+      | replication_lock_timer: tref,
         current_step: {:start_replication_client, :acquiring_lock}
     }
 
@@ -708,14 +704,14 @@ defmodule Electric.Connection.Manager do
       ) do
     Electric.StatusMonitor.mark_pg_lock_acquired(state.stack_id, state.replication_client_pid)
     dispatch_stack_event(:connection_lock_acquired, state)
-    tref = schedule_periodic_connection_status_check(:replication_client)
+    tref = schedule_periodic_connection_status_check(:replication_configuration)
 
     # As soon as we acquire the connection lock, we try to configure the replication connection
     # first because it requires additional privileges compared to regular "pooled" connections,
     # so failure to configure a replication connection should be reported ASAP.
     state = %{
       state
-      | replication_client_timer: tref,
+      | replication_configuration_timer: tref,
         current_step: {:start_replication_client, :configuring_connection}
     }
 
@@ -748,7 +744,7 @@ defmodule Electric.Connection.Manager do
 
     state = %{
       state
-      | replication_client_blocked_by_pending_transaction?: false,
+      | replication_configuration_blocked_by_pending_transaction: false,
         current_step: {:start_connection_pool, nil}
     }
 
@@ -863,7 +859,7 @@ defmodule Electric.Connection.Manager do
      %{
        state
        | pg_version: info.server_version_num,
-         lock_connection_pg_backend_pid: info.pg_backend_pid
+         replication_pg_backend_pid: info.pg_backend_pid
      }}
   end
 
@@ -1164,15 +1160,15 @@ defmodule Electric.Connection.Manager do
     state
   end
 
-  defp kill_replication_backend(%State{lock_connection_pg_backend_pid: nil} = state) do
+  defp kill_replication_backend(%State{replication_pg_backend_pid: nil} = state) do
     Logger.warning("Skipping killing replication backend, pid not known")
     state
   end
 
-  defp kill_replication_backend(%State{lock_connection_pg_backend_pid: backend_pid} = state) do
+  defp kill_replication_backend(%State{replication_pg_backend_pid: backend_pid} = state) do
     pool = pool_name(state.stack_id, :admin)
     execute_and_log_errors(pool, "SELECT pg_terminate_backend(#{backend_pid});")
-    %{state | lock_connection_pg_backend_pid: nil}
+    %{state | replication_pg_backend_pid: nil}
   end
 
   defp execute_and_log_errors(pool, query) do
@@ -1258,11 +1254,11 @@ defmodule Electric.Connection.Manager do
   defp nillify_pid(%State{pool_pids: %{snapshot: {pid, _}} = pool_pids} = state, pid),
     do: {:snapshot_pool, %{state | pool_pids: %{pool_pids | snapshot: nil}}}
 
-  defp nillify_timer(%State{lock_connection_timer: tref} = state, tref),
-    do: %{state | lock_connection_timer: nil}
+  defp nillify_timer(%State{replication_lock_timer: tref} = state, tref),
+    do: %{state | replication_lock_timer: nil}
 
-  defp nillify_timer(%State{replication_client_timer: tref} = state, tref),
-    do: %{state | replication_client_timer: nil}
+  defp nillify_timer(%State{replication_configuration_timer: tref} = state, tref),
+    do: %{state | replication_configuration_timer: nil}
 
   defp nillify_timer(state, _tref), do: state
 end
