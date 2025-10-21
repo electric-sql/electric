@@ -103,11 +103,14 @@ defmodule Electric.DbConnectionError do
         %Postgrex.Error{
           postgres: %{
             code: :object_not_in_prerequisite_state,
-            detail:
-              "This slot has been invalidated because it exceeded the maximum reserved size."
+            detail: detail
           }
         } = error
-      ) do
+      )
+      when detail in [
+             "This slot has been invalidated because it exceeded the maximum reserved size.",
+             "This replication slot has been invalidated due to \"wal_removed\"."
+           ] do
     %DbConnectionError{
       message: """
       Couldn't start replication: slot has been invalidated because it exceeded the maximum reserved size.

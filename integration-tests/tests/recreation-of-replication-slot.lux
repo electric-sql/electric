@@ -43,11 +43,8 @@
 
 [shell electric]
   -
-
-  ??[error] :gen_statem {:"Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
-  ??** (Postgrex.Error) ERROR 42704 (undefined_object) publication "electric_publication_integration" does not exist
-  ??[warning] Electric.Connection.Manager is restarting after it has encountered an error
-  ??[debug] Starting replication client for stack single_stack
+  !:ok = Application.stop(:electric)
+  !:ok = Application.start(:electric)
 
   -$fail_pattern
 
