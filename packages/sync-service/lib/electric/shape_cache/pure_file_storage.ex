@@ -39,9 +39,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
   alias Electric.ShapeCache.PureFileStorage.Snapshot
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
+
   import LogOffset
   import Electric.ShapeCache.PureFileStorage.SharedRecords
   import Electric.ShapeCache.PureFileStorage.WriteLoop, only: [writer_acc: 0]
+
+  import File, only: [write!: 3]
+
   require Logger
 
   @behaviour Electric.ShapeCache.Storage
@@ -1172,10 +1176,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       {:error, reason} ->
         raise Storage.Error, message: inspect(reason) <> " while renaming #{path1} to #{path2}"
     end
-  end
-
-  defp write!(path, value, opts) do
-    File.write!(path, value, opts)
   end
 
   @doc false

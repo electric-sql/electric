@@ -10,6 +10,8 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
   import Electric.Replication.LogOffset, only: :macros
 
+  import File, only: [open!: 2, open!: 3, open: 3]
+
   # bytes
   @full_record_width 64
   @half_record_width 32
@@ -461,17 +463,5 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     end)
     |> Stream.into(File.stream!(target, [:delayed_write]))
     |> Stream.run()
-  end
-
-  defp open!(path, opts) do
-    File.open!(path, opts)
-  end
-
-  defp open!(path, opts, fun) do
-    File.open!(path, opts, fun)
-  end
-
-  defp open(path, opts, fun) do
-    File.open(path, opts, fun)
   end
 end
