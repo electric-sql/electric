@@ -448,7 +448,9 @@ defmodule Electric.Replication.ShapeLogCollector do
            }
            |> log_subscription_status()}
         else
-          Logger.warning("Received unsubscribe from unknown consumer: #{inspect(shape_handle)}")
+          # This may happen as we attempt to remove a shape multiple times
+          # depending on the source of the delete, on the understanding that
+          # removal is idempotent.
           {:error, "shape #{shape_handle} not registered"}
         end
       end
