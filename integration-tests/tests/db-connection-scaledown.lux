@@ -44,7 +44,7 @@
 
   !select datname, usename, backend_type, query from pg_stat_activity where usename = 'electric_test' order by query;
   ??datname|usename|backend_type|query
-  ??electric|electric_test|walsender|SELECT pg_advisory_lock(hashtext('electric_slot_integration'))
+  ??electric|electric_test|client backend|
   ??electric|electric_test|walsender|START_REPLICATION SLOT "electric_slot_integration"
   ?\(([1-9]|[1-9][0-9]) rows\)
 
@@ -121,7 +121,9 @@
   ??[debug] GET /v1/shape
   ??[debug] Query String: table=items&handle=$handle&offset=0_0&live
 
-  ??[debug] Opening lock connection
+
+  ??[info] Acquiring lock from postgres
+  ??[debug] Starting consumer for $handle
   ??[info] Starting replication from postgres
   ??[debug] Starting consumer for $handle
 

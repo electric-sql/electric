@@ -31,45 +31,39 @@
   # Slightly larger timeout than the default because we're going to match against warnings that
   # are logged after 10 seconds of idling.
   [timeout 12]
-
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
-  ??[info] Lock acquired from postgres with name electric_slot_integration
-
   # Set the failure match pattern such that we can prove that replication does not start since
   # it's blocked by the pending transaction.
   -Starting replication from postgres|$fail_pattern
 
   ??[debug] Starting replication client for stack single_stack
+  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[info] Lock acquired from postgres with name electric_slot_integration
   ??[debug] ReplicationClient step: create_slot
   ??[warning] Waiting for the replication connection setup to complete...
 
 # Terminate Electric. Even though it closes all database connections, there still remains a
-# live backend in Postgres blocked on the `CREATE_REPLICATION_SLOT` statement. However, the
-# slot has already been created and can be seen in the result of `SELECT * FROM
-# pg_replication_slots`. So restarting Electric puts it into an odd failure state.
+# live backend in Postgres blocked on the `CREATE_REPLICATION_SLOT` statement, which also holds
+# the advisory lock. However, the slot has already been created and can be seen in the result
+# of `SELECT * FROM pg_replication_slots` and shown as active. So restarting Electric puts
+# it into an odd state where it cannot acquire the lock.
 [shell electric]
   !:ok = Application.stop(:electric)
   !:ok = Application.start(:electric)
 
-  -
+  -Lock acquired from postgres|$fail_pattern
 
-  ??[info] Starting replication from postgres
-  ??[debug] ReplicationClient step: start_streaming
-  ??[debug] ReplicationClient step: start_replication_slot
-  ??[error] :gen_statem {:"Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
-  ??** (Postgrex.Error) ERROR 55006 (object_in_use) replication slot "electric_slot_integration" is active for PID
-  ??[warning] Electric.Connection.Manager is restarting after it has encountered an error
-  ??[debug] Starting replication client for stack single_stack
+  ??[info] Acquiring lock from postgres with name electric_slot_integration
 
 # Rollback the pending transaction to unblock Electric and verify that it completes its initialization.
 [shell psql]
   !ROLLBACK;
 
 [shell electric]
+  -$fail_pattern
+
+  ??[info] Lock acquired from postgres with name electric_slot_integration
   ??[debug] ReplicationClient step: create_slot
   ??[debug] Created new slot at lsn=
-  
-  -$fail_pattern
 
   ??[info] Starting replication from postgres
   ??[debug] ReplicationClient step: start_streaming
