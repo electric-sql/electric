@@ -222,10 +222,6 @@ defmodule Electric.Connection.Manager do
     GenServer.cast(manager, :replication_client_created_new_slot)
   end
 
-  def replication_client_has_insufficient_privilege(manager) do
-    GenServer.cast(manager, :replication_client_has_insufficient_privilege)
-  end
-
   def replication_client_ready_to_stream(manager) do
     GenServer.cast(manager, :replication_client_ready_to_stream)
   end
@@ -800,16 +796,6 @@ defmodule Electric.Connection.Manager do
     # When the replication slot is created for the first time or recreated at any point, we
     # must invalidate all shapes to ensure transactional continuity and prevent missed changes.
     {:noreply, %{state | purge_all_shapes?: true}}
-  end
-
-  def handle_cast(
-        :replication_client_has_insufficient_privilege,
-        %State{
-          current_phase: :connection_setup,
-          current_step: {:start_replication_client, :configuring_connection}
-        } = state
-      ) do
-    {:noreply, state}
   end
 
   def handle_cast(
