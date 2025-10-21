@@ -113,7 +113,7 @@ defmodule Electric.Connection.Manager do
       :tweaks,
       :max_shapes,
       :persistent_kv,
-      :purge_all_shapes?,
+      purge_all_shapes?: false,
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
