@@ -139,6 +139,20 @@ defmodule Electric.Replication.PublicationManagerDbTest do
   end
 
   describe "publication misonfiguration" do
+    setup do
+      test_pid = self()
+
+      Repatch.patch(
+        Electric.Connection.Restarter,
+        :restart_connection_subsystem,
+        [mode: :shared],
+        fn _ ->
+          send(test_pid, :connection_subsystem_restarted)
+          :ok
+        end
+      )
+    end
+
     test "handles publication being deleted during operation", ctx do
       Postgrex.query!(ctx.pool, "DROP PUBLICATION #{ctx.publication_name};", [])
 
@@ -150,6 +164,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
                      PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
                    end
 
+      assert_receive :connection_subsystem_restarted
       refute_receive {:remove_shapes_for_relations, _}
       assert [] == fetch_pub_tables(ctx)
     end
@@ -170,6 +185,7 @@ defmodule Electric.Replication.PublicationManagerDbTest do
                      PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
                    end
 
+      assert_receive :connection_subsystem_restarted
       refute_receive {:remove_shapes_for_relations, _}
       assert [] == fetch_pub_tables(ctx)
     end
