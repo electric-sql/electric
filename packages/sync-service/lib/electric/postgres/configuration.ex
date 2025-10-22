@@ -93,7 +93,7 @@ defmodule Electric.Postgres.Configuration do
     %{
       to_preserve: to_preserve,
       to_add: to_add,
-      to_reconfigure: to_reconfigure,
+      to_configure_replica_identity: to_configure_replica_identity,
       to_invalidate: to_invalidate
     } =
       determine_publication_relation_actions!(conn, publication_name, expected_rels)
@@ -102,13 +102,13 @@ defmodule Electric.Postgres.Configuration do
       [
         Enum.map(to_preserve, &{&1, {:ok, :validated}}),
         Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
-        Enum.map(to_reconfigure, &{&1, {:error, :misconfigured_replica_identity}}),
+        Enum.map(to_configure_replica_identity, &{&1, {:error, :misconfigured_replica_identity}}),
         Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
       ]
       |> Stream.concat()
       |> Map.new()
 
-    if MapSet.size(to_add) == 0 and MapSet.size(to_reconfigure) == 0 do
+    if MapSet.size(to_add) == 0 and MapSet.size(to_configure_replica_identity) == 0 do
       Logger.info(fn ->
         tables = for {_, rel} <- to_preserve, do: Utils.relation_to_sql(rel)
 
@@ -153,13 +153,13 @@ defmodule Electric.Postgres.Configuration do
       to_preserve: to_preserve,
       to_add: to_add,
       to_drop: to_drop,
-      to_reconfigure: to_reconfigure,
+      to_configure_replica_identity: to_configure_replica_identity,
       to_invalidate: to_invalidate
     } =
       determine_publication_relation_actions!(conn, publication_name, new_publication_rels)
 
     # Re-add tables that need fixing
-    to_add = MapSet.union(to_add, to_reconfigure)
+    to_add = MapSet.union(to_add, to_configure_replica_identity)
 
     if MapSet.size(to_add) > 0 or MapSet.size(to_drop) > 0 do
       to_add_list = for {_, rel} <- to_add, do: Utils.relation_to_sql(rel)
@@ -196,9 +196,13 @@ defmodule Electric.Postgres.Configuration do
         {rel, :add} -> {rel, add_table_to_publication(conn, publication_name, rel)}
       end)
       |> Enum.map(fn
-        {rel, {:ok, :added}} ->
-          with {:ok, :configured} <- set_table_replica_identity_full(conn, rel) do
-            {rel, {:ok, :added}}
+        {rel, {:ok, :added}} = res ->
+          if MapSet.member?(to_configure_replica_identity, rel) do
+            with {:ok, :configured} <- set_table_replica_identity_full(conn, rel) do
+              res
+            end
+          else
+            res
           end
 
         res ->
@@ -231,32 +235,12 @@ defmodule Electric.Postgres.Configuration do
           {:ok, :configured} | {:error, term()}
   defp set_table_replica_identity_full(conn, oid_relation) do
     {_oid, relation} = oid_relation
-    {schema, name} = relation
     table = Utils.relation_to_sql(relation)
 
-    case Postgrex.query(
-           conn,
-           """
-           SELECT c.relreplident
-           FROM pg_class c
-           JOIN pg_namespace n ON n.oid = c.relnamespace
-           WHERE n.nspname = $1 AND c.relname = $2
-           """,
-           [schema, name]
-         ) do
-      {:ok, %Postgrex.Result{rows: [[<<"f">>]]}} ->
-        Logger.debug("Replica identity already FULL for #{table}, skipping")
-        {:ok, :configured}
+    Logger.debug("Setting #{table} replica identity to FULL")
 
-      {:ok, _} ->
-        Logger.debug("Setting #{table} replica identity to FULL")
-
-        with :ok <- exec_set_replica_identity_full(conn, table) do
-          {:ok, :configured}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    with :ok <- exec_set_replica_identity_full(conn, table) do
+      {:ok, :configured}
     end
   end
 
@@ -326,7 +310,7 @@ defmodule Electric.Postgres.Configuration do
             to_preserve: relation_filters(),
             to_add: relation_filters(),
             to_drop: relation_filters(),
-            to_reconfigure: relation_filters(),
+            to_configure_replica_identity: relation_filters(),
             to_invalidate: relation_filters()
           }
   defp determine_publication_relation_actions!(conn, publication_name, expected_rels) do
@@ -350,15 +334,24 @@ defmodule Electric.Postgres.Configuration do
 
     valid_expected = MapSet.difference(expected_rels, to_invalidate)
     to_preserve = MapSet.intersection(valid, valid_expected)
-    to_reconfigure = MapSet.intersection(invalid, valid_expected)
+    to_reconfigure_replica_identity = MapSet.intersection(invalid, valid_expected)
     to_drop = MapSet.difference(MapSet.union(invalid, valid), valid_expected)
     to_add = MapSet.difference(valid_expected, valid)
+
+    to_configure_replica_identity =
+      MapSet.union(
+        to_reconfigure_replica_identity,
+        get_replica_identities!(conn, to_add)
+        |> Enum.filter(fn {_oid, _rel, replident} -> replident != "f" end)
+        |> Enum.map(&trim_relation_with_replica/1)
+        |> MapSet.new()
+      )
 
     %{
       to_preserve: to_preserve,
       to_add: to_add,
       to_drop: to_drop,
-      to_reconfigure: to_reconfigure,
+      to_configure_replica_identity: to_configure_replica_identity,
       to_invalidate: to_invalidate
     }
   end
