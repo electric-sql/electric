@@ -35,7 +35,7 @@ defmodule Electric.Postgres.Configuration do
              Electric.relation() | nil
            }
 
-  @typep publication_relation :: {Electric.relation_id(), Electric.relation(), <<_::8>>}
+  @typep relation_with_replica :: {Electric.relation_id(), Electric.relation(), <<_::8>>}
 
   @doc """
   Check whether the publication with the given name exists, and return its status.
@@ -344,9 +344,9 @@ defmodule Electric.Postgres.Configuration do
       get_publication_tables!(conn, publication_name)
       |> Enum.split_with(fn {_oid, _rel, replident} -> replident == "f" end)
 
-    valid = MapSet.new(prev_valid_publication_rels, &trim_publication_relation/1)
+    valid = MapSet.new(prev_valid_publication_rels, &trim_relation_with_replica/1)
 
-    invalid = MapSet.new(prev_misconfigured_publication_rels, &trim_publication_relation/1)
+    invalid = MapSet.new(prev_misconfigured_publication_rels, &trim_relation_with_replica/1)
 
     valid_expected = MapSet.difference(expected_rels, to_invalidate)
     to_preserve = MapSet.intersection(valid, valid_expected)
@@ -363,7 +363,7 @@ defmodule Electric.Postgres.Configuration do
     }
   end
 
-  @spec get_publication_tables!(Postgrex.conn(), String.t()) :: list(publication_relation())
+  @spec get_publication_tables!(Postgrex.conn(), String.t()) :: list(relation_with_replica())
   def get_publication_tables!(conn, publication) do
     # `pg_publication_tables` is too clever for us -- if you add a partitioned
     # table to the publication `pg_publication_tables` lists all the partitions
@@ -394,6 +394,26 @@ defmodule Electric.Postgres.Configuration do
       )
 
     Enum.map(rows, &List.to_tuple/1)
+  end
+
+  defp get_replica_identities!(conn, oid_relations) do
+    oids = Enum.map(oid_relations, fn {oid, _rel} -> oid end)
+
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        SELECT
+          pc.oid, pc.relreplident
+        FROM
+          pg_class pc
+        WHERE
+          pc.oid = ANY($1::oid[])
+        """,
+        [oids]
+      )
+
+    Map.new(rows, fn [oid, replident] -> {oid, replident} end)
   end
 
   @spec list_changed_relations!(Postgrex.conn(), relation_filters()) :: list(changed_relation())
@@ -430,6 +450,6 @@ defmodule Electric.Postgres.Configuration do
   @spec trim_changed_relation(changed_relation()) :: Electric.oid_relation()
   defp trim_changed_relation({oid, relation, _new_oid, _renamed_relation}), do: {oid, relation}
 
-  @spec trim_publication_relation(publication_relation()) :: Electric.oid_relation()
-  defp trim_publication_relation({oid, relation, _replident}), do: {oid, relation}
+  @spec trim_relation_with_replica(relation_with_replica()) :: Electric.oid_relation()
+  defp trim_relation_with_replica({oid, relation, _replident}), do: {oid, relation}
 end
