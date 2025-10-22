@@ -43,11 +43,12 @@
 
 [shell electric]
   -
-
-  ??[error] :gen_statem {:"Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
-  ??** (Postgrex.Error) ERROR 42704 (undefined_object) publication "electric_publication_integration" does not exist
-  ??[warning] Electric.Connection.Manager is restarting after it has encountered an error
-  ??[debug] Starting replication client for stack single_stack
+  ## TODO: we should detect the publication missing and trigger a restart automatically,
+  ## but that requires a manual check since PG18 - this is tracked in the following issue:
+  ## https://github.com/electric-sql/electric/issues/3322
+  !:ok = Application.stop(:electric)
+  !:ok = Application.start(:electric)
+  ??[debug] Starting replication client
 
   -$fail_pattern
 
