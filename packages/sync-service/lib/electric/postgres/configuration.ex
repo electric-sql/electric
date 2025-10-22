@@ -298,7 +298,7 @@ defmodule Electric.Postgres.Configuration do
     # (if at all, might have been from cache) so we need to check if any of
     # the relations were dropped/renamed since then
     to_invalidate =
-      list_changed_relations!(conn, expected_rels)
+      list_changed_relations!(conn, expected_rels |> Enum.to_list())
       |> Enum.map(&trim_changed_relation/1)
       |> MapSet.new()
 
@@ -324,7 +324,7 @@ defmodule Electric.Postgres.Configuration do
     to_configure_replica_identity =
       MapSet.union(
         to_reconfigure_replica_identity,
-        get_replica_identities!(conn, to_add)
+        get_replica_identities!(conn, to_add |> Enum.to_list())
         |> Enum.filter(fn {_oid, _rel, replident} -> replident != "f" end)
         |> Enum.map(&trim_relation_with_replica/1)
         |> MapSet.new()
@@ -372,8 +372,10 @@ defmodule Electric.Postgres.Configuration do
     Enum.map(rows, &List.to_tuple/1)
   end
 
-  @spec get_replica_identities!(Postgrex.conn(), relation_filters()) ::
+  @spec get_replica_identities!(Postgrex.conn(), list(Electric.oid_relation())) ::
           list(relation_with_replica())
+  defp get_replica_identities!(_conn, []), do: []
+
   defp get_replica_identities!(conn, oid_relations) do
     oid_to_rel = Map.new(oid_relations, fn {oid, rel} -> {oid, {oid, rel}} end)
     oids = Map.keys(oid_to_rel)
@@ -398,7 +400,10 @@ defmodule Electric.Postgres.Configuration do
     end)
   end
 
-  @spec list_changed_relations!(Postgrex.conn(), relation_filters()) :: list(changed_relation())
+  @spec list_changed_relations!(Postgrex.conn(), list(Electric.oid_relation())) ::
+          list(changed_relation())
+  defp list_changed_relations!(_conn, []), do: []
+
   defp list_changed_relations!(conn, known_relations) do
     # We're checking whether the table has been renamed (same oid, different name) or
     # dropped (maybe same name exists, but different oid). If either is true, we need to update
