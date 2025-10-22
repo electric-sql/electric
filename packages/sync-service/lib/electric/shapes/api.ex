@@ -380,7 +380,7 @@ defmodule Electric.Shapes.Api do
         # `block_on_conn_sleeping` flag to the next call of
         # `Electric.StatusMonitor.wait_until_active()` to prevent this request from getting
         # into a recursive spin loop until the status value changes in StatusMonitor's ETS table.
-        Electric.Connection.Restarter.restart_connection_subsystem(stack_id)
+        Electric.Connection.Restarter.restore_connection_subsystem(stack_id)
         hold_until_stack_ready(api, block_on_conn_sleeping: true)
 
       {:error, message} ->

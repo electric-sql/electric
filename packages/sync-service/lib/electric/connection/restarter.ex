@@ -44,16 +44,24 @@ defmodule Electric.Connection.Restarter do
   @doc """
   Restore the connection subsystem after it had been stopped by `stop_connection_subsystem/1`.
 
-  The "restart" in the name is related to the fact that the Replication.Supervisor is stopped
-  first before getting restarted by the Connection.Manager later. The Connection.Manager itself
-  is started via a `Supervisor.restart_child()` call.
+  ## Implementation notes
+  To restore the subsystem, the Replication.Supervisor is stopped first before getting
+  restarted by the Connection.Manager later. The Connection.Manager itself is started
+  via a `Supervisor.restart_child()` call.
   """
-  def restart_connection_subsystem(stack_id) do
+  def restore_connection_subsystem(stack_id) do
     with %{conn: :sleeping} <- StatusMonitor.status(stack_id) do
-      GenServer.cast(name(stack_id), :restart_connection_subsystem)
+      GenServer.cast(name(stack_id), :restore_connection_subsystem)
     end
 
     :ok
+  end
+
+  @doc """
+  Restart the connection subsystem.
+  """
+  def restart_connection_subsystem(stack_id) do
+    GenServer.call(name(stack_id), :restart_connection_subsystem)
   end
 
   def start_link(opts) do
@@ -75,7 +83,7 @@ defmodule Electric.Connection.Restarter do
     {:noreply, state}
   end
 
-  def handle_cast(:restart_connection_subsystem, %{pending_db_state: nil} = state) do
+  def handle_cast(:restore_connection_subsystem, %{pending_db_state: nil} = state) do
     StatusMonitor.database_connections_waking_up(state.stack_id)
     Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
 
@@ -84,10 +92,15 @@ defmodule Electric.Connection.Restarter do
     {:noreply, %{state | pending_db_state: :up, status_monitor_ref: ref}}
   end
 
-  def handle_cast(:restart_connection_subsystem, %{pending_db_state: :up} = state) do
+  def handle_cast(:restore_connection_subsystem, %{pending_db_state: :up} = state) do
     # Ignore the restart request since we're already waiting on the connection manager to
     # start.
     {:noreply, state}
+  end
+
+  def handle_call(:restart_connection_subsystem, _from, state) do
+    :ok = Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
+    {:reply, :ok, state}
   end
 
   def handle_info({ref, :ok}, %{status_monitor_ref: ref} = state) do
