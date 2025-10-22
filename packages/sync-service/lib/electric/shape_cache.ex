@@ -232,11 +232,6 @@ defmodule Electric.ShapeCache do
     {last_processed_lsn, total_recovered, total_failed_to_recover} =
       recover_shapes(state, recover_shape_timeout)
 
-    # Empirical evidence shows that after recovering 50K shapes ShapeStatusOwner and ShapeCache
-    # each take up 200+MB of memory. Explicitly running garbage collection for both immediately
-    # takes that down to 4-5MB.
-    :erlang.garbage_collect()
-
     {pub_man, pub_man_opts} = state.publication_manager
     pub_man.wait_for_restore(pub_man_opts)
 
