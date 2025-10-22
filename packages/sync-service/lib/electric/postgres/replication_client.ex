@@ -370,7 +370,7 @@ defmodule Electric.Postgres.ReplicationClient do
           "pg_txn.replication_client.relation_received",
           ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
           stack_id,
-          fn -> apply_with_retries({m, f, [rel | args]}) end
+          fn -> apply_with_retries({m, f, [rel | args]}, state) end
         )
 
         OpenTelemetry.start_interval("replication_client.await_more_data")
@@ -426,39 +426,26 @@ defmodule Electric.Postgres.ReplicationClient do
           fn ->
             OpenTelemetry.start_interval("replication_client.telemetry_span")
 
-            case apply_with_retries({m, f, [txn | args]}) do
-              :ok ->
-                OpenTelemetry.start_interval("replication_client.update_received_wal")
-                # We currently process incoming replication messages sequentially, persisting each
-                # new transaction into the shape log store. So, when the applied function
-                # returns, we can safely advance the replication slot past the transaction's commit
-                # LSN.
-                state =
-                  state
-                  |> update_received_wal(Electric.Postgres.Lsn.to_integer(txn.lsn))
+            apply_with_retries({m, f, [txn | args]}, state)
 
-                response = [encode_standby_status_update(state)]
+            OpenTelemetry.start_interval("replication_client.update_received_wal")
+            # We currently process incoming replication messages sequentially, persisting each
+            # new transaction into the shape log store. So, when the applied function
+            # returns, we can safely advance the replication slot past the transaction's commit
+            # LSN.
+            state =
+              state
+              |> update_received_wal(Electric.Postgres.Lsn.to_integer(txn.lsn))
 
-                OpenTelemetry.stop_and_save_intervals(
-                  total_attribute: :"shape_log_collector.transaction.total_duration_µs"
-                )
+            response = [encode_standby_status_update(state)]
 
-                OpenTelemetry.start_interval("replication_client.await_more_data")
+            OpenTelemetry.stop_and_save_intervals(
+              total_attribute: :"shape_log_collector.transaction.total_duration_µs"
+            )
 
-                {:noreply, response, state}
+            OpenTelemetry.start_interval("replication_client.await_more_data")
 
-              other ->
-                # TODO(alco): crash the connection process here?
-                # If we keep going and a subsequent transaction is processed successfully, Electric
-                # will acknowledge the later LSN to Postgres and so the next time it opens a
-                # replication connection, it will no longer receive the failed transaction.
-                Logger.error(
-                  "Unexpected result from calling #{inspect(m)}.#{f}(): #{inspect(other)}"
-                )
-
-                OpenTelemetry.start_interval("replication_client.await_more_data")
-                {:noreply, state}
-            end
+            {:noreply, response, state}
           end
         )
     end
@@ -484,12 +471,26 @@ defmodule Electric.Postgres.ReplicationClient do
   # time is only there to avoid a worst case scenario, as the processor being unable
   # to process things for this long should lead to the replication client being killed.
   @max_retry_time 10 * 60_000
-  defp apply_with_retries(mfa, time_remaining \\ @max_retry_time) do
+  @effectively_infinity 100 * 365 * 24 * 60 * 60 * 1000
+  defp apply_with_retries(mfa, state, time_remaining \\ @max_retry_time) do
     start_time = System.monotonic_time(:millisecond)
     {m, f, args} = mfa
 
     try do
-      apply(m, f, args)
+      case apply(m, f, args) do
+        :ok ->
+          :ok
+
+        {:error, error} when error in [:not_ready, :connection_not_available] ->
+          Process.sleep(100)
+
+          Electric.StatusMonitor.wait_until_active(state.stack_id,
+            timeout: @effectively_infinity,
+            block_on_conn_sleeping: true
+          )
+
+          apply_with_retries(mfa, state, @max_retry_time)
+      end
     catch
       _, _ when time_remaining > 0 ->
         receive do
@@ -498,7 +499,7 @@ defmodule Electric.Postgres.ReplicationClient do
         after
           50 ->
             time_remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
-            apply_with_retries(mfa, time_remaining)
+            apply_with_retries(mfa, state, time_remaining)
         end
     end
   end

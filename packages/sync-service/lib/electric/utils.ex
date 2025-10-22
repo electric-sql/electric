@@ -109,6 +109,20 @@ defmodule Electric.Utils do
   end
 
   @doc """
+  Map a value if it's in an OK tuple, but not otherwise.
+
+  ## Examples
+
+      iex> map_if_ok({:ok, "a"}, &String.upcase/1)
+      {:ok, "A"}
+
+      iex> map_if_ok({:error, :invalid}, &String.upcase/1)
+      {:error, :invalid}
+  """
+  def map_if_ok({:ok, value}, fun), do: {:ok, fun.(value)}
+  def map_if_ok(other, _fun), do: other
+
+  @doc """
   Apply a function to each element of an enumerable, recursively if the element is an enumerable itself.
 
   ## Examples

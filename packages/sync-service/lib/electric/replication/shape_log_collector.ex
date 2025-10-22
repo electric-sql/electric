@@ -23,6 +23,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Telemetry.IntervalTimer
 
+  import Electric.Utils, only: [map_while_ok: 2, map_if_ok: 2]
+
   require Logger
 
   @schema NimbleOptions.new!(
@@ -63,11 +65,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     trace_context = OpenTelemetry.get_current_context()
 
-    {:ok, timer} = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
+    {response, timer} = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
 
     OpenTelemetry.set_interval_timer(timer)
 
-    :ok
+    response
   end
 
   def handle_relation_msg(%Changes.Relation{} = rel, server) do
@@ -208,8 +210,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
   end
 
-  def handle_call({:new_txn, _, _, _}, _from, state) when not is_ready_to_process(state) do
-    {:reply, {:error, :not_ready}, state}
+  def handle_call({:new_txn, _, _, timer}, _from, state) when not is_ready_to_process(state) do
+    {:reply, {{:error, :not_ready}, timer}, state}
   end
 
   def handle_call(
@@ -235,11 +237,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
 
-    state = handle_transaction(state, txn)
+    {response, state} = handle_transaction(state, txn)
 
     OpenTelemetry.start_interval("shape_log_collector.transaction_message_response")
 
-    {:reply, {:ok, OpenTelemetry.extract_interval_timer()}, state}
+    {:reply, {response, OpenTelemetry.extract_interval_timer()}, state}
   end
 
   def handle_call({:relation_msg, _, _}, _from, state) when not is_ready_to_process(state) do
@@ -265,7 +267,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp handle_transaction(%{subscriptions: {0, _}} = state, txn) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}
+    {:ok, %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}}
   end
 
   # If we've already processed a transaction, then drop it without processing
@@ -276,30 +278,26 @@ defmodule Electric.Replication.ShapeLogCollector do
     end)
 
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}
+    {:ok, %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}}
   end
 
   defp handle_transaction(state, txn) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
-    OpenTelemetry.start_interval("shape_log_collector.handle_transaction")
+    OpenTelemetry.start_interval("shape_log_collector.fill_keys_in_txn")
 
-    pk_cols_of_relations =
-      for relation <- txn.affected_relations, into: %{} do
-        {:ok, {oid, _}} = Inspector.load_relation_oid(relation, state.inspector)
-        {:ok, info} = Inspector.load_column_info(oid, state.inspector)
-        pk_cols = Inspector.get_pk_cols(info)
-        {relation, pk_cols}
-      end
+    case fill_keys_in_txn(txn, state) do
+      {:ok, txn} ->
+        state =
+          state
+          |> put_last_processed_lsn(txn.lsn)
+          |> publish(txn)
 
-    txn =
-      Map.update!(txn, :changes, fn changes ->
-        Enum.map(changes, &Changes.fill_key(&1, pk_cols_of_relations[&1.relation]))
-      end)
+        {:ok, state}
 
-    state
-    |> put_last_processed_lsn(txn.lsn)
-    |> publish(txn)
+      {:error, :connection_not_available} ->
+        {{:error, :connection_not_available}, state}
+    end
   end
 
   defp publish(state, event) do
@@ -337,11 +335,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         state.flush_tracker
       end
 
-    %{
-      state
-      | partitions: partitions,
-        flush_tracker: flush_tracker
-    }
+    %{state | partitions: partitions, flush_tracker: flush_tracker}
   end
 
   defp handle_relation(rel, _from, state) do
@@ -444,5 +438,33 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   else
     def activate_mocked_functions_from_test_process, do: :noop
+  end
+
+  defp fill_keys_in_txn(txn, state) do
+    with {:ok, pk_cols_of_relations} <- pk_cols_of_relations(txn, state) do
+      txn =
+        Map.update!(txn, :changes, fn changes ->
+          Enum.map(changes, &Changes.fill_key(&1, pk_cols_of_relations[&1.relation]))
+        end)
+
+      {:ok, txn}
+    end
+  end
+
+  defp pk_cols_of_relations(txn, state) do
+    txn.affected_relations
+    |> map_while_ok(fn relation ->
+      with {:ok, pk_cols} <- pk_cols_of_relation(relation, state) do
+        {:ok, {relation, pk_cols}}
+      end
+    end)
+    |> map_if_ok(&Map.new/1)
+  end
+
+  defp pk_cols_of_relation(relation, state) do
+    with {:ok, {oid, _}} <- Inspector.load_relation_oid(relation, state.inspector),
+         {:ok, info} <- Inspector.load_column_info(oid, state.inspector) do
+      {:ok, Inspector.get_pk_cols(info)}
+    end
   end
 end

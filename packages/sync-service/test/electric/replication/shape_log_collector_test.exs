@@ -432,6 +432,24 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert_receive {:flush_boundary_updated, 20}, 50
     end
+
+    test "returns error if relation info cannot be loaded", ctx do
+      Mock.Inspector
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:error, :connection_not_available}
+      end)
+      |> allow(self(), ctx.server)
+
+      txn =
+        %Transaction{xid: 100, lsn: 1, last_log_offset: LogOffset.new(1, 0)}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert {:error, :connection_not_available} =
+               ShapeLogCollector.store_transaction(txn, ctx.server)
+    end
   end
 
   describe "handle_relation_msg/2" do
@@ -525,7 +543,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       txn = %Transaction{xid: 100, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
 
-      assert_raise MatchError, fn -> ShapeLogCollector.store_transaction(txn, ctx.server) end
+      assert {:error, :not_ready} = ShapeLogCollector.store_transaction(txn, ctx.server)
     end
 
     test "rejects relation messages", ctx do
