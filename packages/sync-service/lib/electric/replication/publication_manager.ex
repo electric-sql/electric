@@ -466,10 +466,9 @@ defmodule Electric.Replication.PublicationManager do
 
           state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
 
-          prepared_filters = MapSet.delete(state.prepared_relation_filters, oid_rel)
           ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
 
-          %{state | prepared_relation_filters: prepared_filters}
+          state
       end
     )
   end

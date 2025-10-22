@@ -144,6 +144,21 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:filters, [{_, {"public", "items"}}]}
       assert_receive {:remove_shapes_for_relations, [{10, {"public", "another_table"}}]}
     end
+
+    @tag configuration_result_overrides: %{
+           {1, {"public", "items"}} => {:error, %RuntimeError{message: "some error"}}
+         }
+    test "should continue to fail with same error", %{opts: opts} do
+      shape = generate_shape({1, {"public", "items"}})
+
+      assert_raise RuntimeError, "some error", fn ->
+        PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      end
+
+      assert_raise RuntimeError, "some error", fn ->
+        PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      end
+    end
   end
 
   describe "remove_shape/2" do
