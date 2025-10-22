@@ -171,9 +171,7 @@ defmodule Electric.Postgres.ConfigurationTest do
       publication_name: publication
     } do
       oid1 = get_table_oid(conn, {"public", "items"})
-      oid2 = get_table_oid(conn, {"public", "other_table"})
       oid_rel1 = {oid1, {"public", "items"}}
-      oid_rel2 = {oid2, {"public", "other_table"}}
 
       start_supervised(
         {Task,
@@ -185,16 +183,14 @@ defmodule Electric.Postgres.ConfigurationTest do
          end}
       )
 
-      assert %{
-               ^oid_rel1 => {:error, _},
-               ^oid_rel2 => {:error, _}
-             } =
-               Configuration.configure_publication!(
-                 conn,
-                 publication,
-                 MapSet.new([oid_rel1, oid_rel2]),
-                 500
-               )
+      assert_raise DBConnection.ConnectionError, fn ->
+        Configuration.configure_publication!(
+          conn,
+          publication,
+          MapSet.new([oid_rel1]),
+          500
+        )
+      end
     end
 
     test "concurrent alters to the publication don't deadlock and run correctly", %{
