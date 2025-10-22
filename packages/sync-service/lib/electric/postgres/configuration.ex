@@ -102,7 +102,10 @@ defmodule Electric.Postgres.Configuration do
       [
         Enum.map(to_preserve, &{&1, {:ok, :validated}}),
         Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
-        Enum.map(to_configure_replica_identity, &{&1, {:error, :misconfigured_replica_identity}}),
+        Enum.map(
+          MapSet.difference(to_configure_replica_identity, to_add),
+          &{&1, {:error, :misconfigured_replica_identity}}
+        ),
         Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
       ]
       |> Stream.concat()
@@ -392,14 +395,15 @@ defmodule Electric.Postgres.Configuration do
   @spec get_replica_identities!(Postgrex.conn(), relation_filters()) ::
           list(relation_with_replica())
   defp get_replica_identities!(conn, oid_relations) do
-    oids = Enum.map(oid_relations, fn {oid, _rel} -> oid end)
+    oid_to_rel = Map.new(oid_relations, fn {oid, rel} -> {oid, {oid, rel}} end)
+    oids = Map.keys(oid_to_rel)
 
     %Postgrex.Result{rows: rows} =
       Postgrex.query!(
         conn,
         """
         SELECT
-          pc.oid, (pn.nspname, pc.relname), pc.relreplident
+          pc.oid, pc.relreplident
         FROM
           pg_class pc
         WHERE
@@ -408,7 +412,10 @@ defmodule Electric.Postgres.Configuration do
         [oids]
       )
 
-    Enum.map(rows, &List.to_tuple/1)
+    Enum.map(rows, fn [oid, replident] ->
+      {_, rel} = Map.fetch!(oid_to_rel, oid)
+      {oid, rel, replident}
+    end)
   end
 
   @spec list_changed_relations!(Postgrex.conn(), relation_filters()) :: list(changed_relation())
