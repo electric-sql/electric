@@ -135,18 +135,8 @@ defmodule Electric.Postgres.Configuration do
   @spec configure_publication!(Postgrex.conn(), String.t(), relation_filters()) ::
           relations_configured()
   def configure_publication!(conn, publication_name, new_relations) do
-    Postgrex.transaction(conn, &do_configure_publication!(&1, publication_name, new_relations))
-    |> case do
-      {:ok, relations_configured} ->
-        Logger.debug(
-          "Publication configuration committed - result: #{inspect(relations_configured)}"
-        )
-
-        relations_configured
-
-      {:error, reason} ->
-        raise reason
-    end
+    # run with single connection to avoid overlapping operations
+    DBConnection.run(conn, &do_configure_publication!(&1, publication_name, new_relations))
   end
 
   @spec do_configure_publication!(Postgrex.conn(), String.t(), relation_filters()) ::
@@ -271,40 +261,21 @@ defmodule Electric.Postgres.Configuration do
     publication_query =
       "ALTER PUBLICATION #{Utils.quote_name(publication_name)} #{op} TABLE #{table}"
 
-    Postgrex.query!(conn, "SAVEPOINT before_publication", [])
-
     case Postgrex.query(conn, publication_query, []) do
-      {:ok, _} ->
-        Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-        :ok
-
-      {:error, reason} ->
-        Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_publication", [])
-        Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
-
-        case reason do
-          # undefined table can happen when removing a table that was already removed
-          %{postgres: %{code: :undefined_object}} when op_atom == :drop -> :ok
-          # duplicate object can happen when adding a table that was already added
-          %{postgres: %{code: :duplicate_object}} when op_atom == :add -> :ok
-          _ -> {:error, reason}
-        end
+      {:ok, _} -> :ok
+      # undefined table can happen when removing a table that was already removed
+      {:error, %{postgres: %{code: :undefined_object}}} when op_atom == :drop -> :ok
+      # duplicate object can happen when adding a table that was already added
+      {:error, %{postgres: %{code: :duplicate_object}}} when op_atom == :add -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 
   @spec exec_set_replica_identity_full(Postgrex.conn(), String.t()) :: :ok | {:error, term()}
   defp exec_set_replica_identity_full(conn, table) do
-    Postgrex.query!(conn, "SAVEPOINT before_replica", [])
-
     case Postgrex.query(conn, "ALTER TABLE #{table} REPLICA IDENTITY FULL", []) do
-      {:ok, _} ->
-        Postgrex.query!(conn, "RELEASE SAVEPOINT before_replica", [])
-        :ok
-
-      {:error, reason} ->
-        Postgrex.query!(conn, "ROLLBACK TO SAVEPOINT before_replica", [])
-        Postgrex.query!(conn, "RELEASE SAVEPOINT before_replica", [])
-        {:error, reason}
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 
