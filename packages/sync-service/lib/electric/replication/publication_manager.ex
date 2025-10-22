@@ -291,7 +291,13 @@ defmodule Electric.Replication.PublicationManager do
               end
 
             {:error, err, state} ->
-              Logger.warning("Failed to confirm publication status: #{inspect(err)}")
+              log_level =
+                if is_struct(err, DBConnection.ConnectionError) or
+                     is_struct(err, Electric.DbConfigurationError),
+                   do: :warning,
+                   else: :error
+
+              Logger.log(log_level, "Failed to confirm publication status: #{inspect(err)}")
               reply_to_all_waiters({:error, err}, state)
           end
         end
@@ -394,16 +400,14 @@ defmodule Electric.Replication.PublicationManager do
     else
       state = %{state | next_update_forced?: false}
 
-      try do
-        do_configure_publication!(state)
-      rescue
-        err ->
-          Logger.warning("Failed to #{key_word} publication: #{inspect(err)}")
+      case do_configure_publication!(state) do
+        {:ok, relations_configured} ->
+          {:ok, relations_configured, state}
+
+        {:error, err} ->
+          log_level = if is_struct(err, DBConnection.ConnectionError), do: :warning, else: :error
+          Logger.log(log_level, "Failed to #{key_word} publication: #{inspect(err)}")
           {:error, err, state}
-      catch
-        :exit, {_, {DBConnection.Holder, :checkout, _}} ->
-          Logger.warning("Failed to #{key_word} publication: connection not available")
-          {:error, %RuntimeError{message: "Database connection not available"}, state}
       end
     end
   end
@@ -424,7 +428,13 @@ defmodule Electric.Replication.PublicationManager do
         )
       end
 
-    {:ok, relations_configured, state}
+    {:ok, relations_configured}
+  rescue
+    err ->
+      {:error, err}
+  catch
+    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+      {:error, %DBConnection.ConnectionError{message: "Database connection not available"}}
   end
 
   defguardp is_known_publication_error(error)
