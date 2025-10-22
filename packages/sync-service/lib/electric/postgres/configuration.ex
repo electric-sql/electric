@@ -396,6 +396,8 @@ defmodule Electric.Postgres.Configuration do
     Enum.map(rows, &List.to_tuple/1)
   end
 
+  @spec get_replica_identities!(Postgrex.conn(), relation_filters()) ::
+          list(relation_with_replica())
   defp get_replica_identities!(conn, oid_relations) do
     oids = Enum.map(oid_relations, fn {oid, _rel} -> oid end)
 
@@ -404,7 +406,7 @@ defmodule Electric.Postgres.Configuration do
         conn,
         """
         SELECT
-          pc.oid, pc.relreplident
+          pc.oid, (pn.nspname, pc.relname), pc.relreplident
         FROM
           pg_class pc
         WHERE
@@ -413,7 +415,7 @@ defmodule Electric.Postgres.Configuration do
         [oids]
       )
 
-    Map.new(rows, fn [oid, replident] -> {oid, replident} end)
+    Enum.map(rows, &List.to_tuple/1)
   end
 
   @spec list_changed_relations!(Postgrex.conn(), relation_filters()) :: list(changed_relation())
