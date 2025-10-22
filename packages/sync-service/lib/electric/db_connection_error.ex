@@ -132,13 +132,13 @@ defmodule Electric.DbConnectionError do
           postgres: %{
             code: :object_not_in_prerequisite_state,
             message: "can no longer access replication slot" <> _,
-            detail: "This replication slot has been invalidated due to " <> _
+            detail: "This replication slot has been invalidated due to " <> reason
           }
         } = error
       ) do
     %DbConnectionError{
       message: """
-      Couldn't start replication: slot has been invalidated and can no longer be accessed.
+      Couldn't start replication: slot has been invalidated with reason #{reason}
         In order to recover consistent replication, the slot will be dropped along with all existing shapes.
         If you're seeing this message without having recently stopped Electric for a while,
         it's possible either Electric is lagging behind and you might need to scale up,

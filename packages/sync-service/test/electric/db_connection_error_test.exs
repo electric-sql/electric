@@ -205,7 +205,9 @@ defmodule Electric.DbConnectionErrorTest do
       }
 
       assert %DbConnectionError{
-               message: "Couldn't start replication: slot has been invalidated" <> _,
+               message:
+                 "Couldn't start replication: slot has been invalidated with reason \"wal_removed\"." <>
+                   _,
                type: :database_slot_invalidated,
                original_error: ^error,
                retry_may_fix?: false,
