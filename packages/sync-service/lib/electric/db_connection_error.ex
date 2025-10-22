@@ -131,7 +131,8 @@ defmodule Electric.DbConnectionError do
         %Postgrex.Error{
           postgres: %{
             code: :object_not_in_prerequisite_state,
-            detail: "This replication slot has been invalidated due to \"wal_removed\"."
+            message: "can no longer access replication slot" <> _,
+            detail: "This replication slot has been invalidated due to " <> _
           }
         } = error
       ) do
