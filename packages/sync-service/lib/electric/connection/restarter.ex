@@ -69,31 +69,42 @@ defmodule Electric.Connection.Restarter do
   end
 
   def init(opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
-
-    # pending_db_state is used as an exclusion mechanism when the database connections are
-    # sleeping: multiple concurrent shape requests will only trigger DB connection wakeup once
-    # because they will all be serialized through this Restarter process.
-    {:ok, %{stack_id: stack_id, pending_db_state: nil, status_monitor_ref: nil}}
+    # wait_until_conn_up_ref is used as an exclusion mechanism when the database connections are
+    # sleeping: multiple concurrent shape requests will trigger the restart of the
+    # connection subsystem once because they will all be serialized through this Restarter
+    # process.
+    {:ok,
+     %{
+       stack_id: Keyword.fetch!(opts, :stack_id),
+       stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
+       wait_until_conn_up_ref: nil
+     }}
   end
 
   def handle_cast(:stop_connection_subsystem, state) do
     StatusMonitor.database_connections_going_to_sleep(state.stack_id)
     Electric.Connection.Manager.Supervisor.stop_connection_manager(stack_id: state.stack_id)
+
+    Electric.StackSupervisor.dispatch_stack_event(
+      state.stack_events_registry,
+      state.stack_id,
+      :scaled_down_database_connections
+    )
+
     {:noreply, state}
   end
 
-  def handle_cast(:restore_connection_subsystem, %{pending_db_state: nil} = state) do
+  def handle_cast(:restore_connection_subsystem, %{wait_until_conn_up_ref: nil} = state) do
     StatusMonitor.database_connections_waking_up(state.stack_id)
     Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
 
     ref = StatusMonitor.wait_until_conn_up_async(state.stack_id)
 
-    {:noreply, %{state | pending_db_state: :up, status_monitor_ref: ref}}
+    {:noreply, %{state | wait_until_conn_up_ref: ref}}
   end
 
-  def handle_cast(:restore_connection_subsystem, %{pending_db_state: :up} = state) do
-    # Ignore the restart request since we're already waiting on the connection manager to
+  def handle_cast(:restore_connection_subsystem, state) do
+    # Ignore the restart request since we're already waiting on the connection subsystem to
     # start.
     {:noreply, state}
   end
@@ -103,8 +114,7 @@ defmodule Electric.Connection.Restarter do
     {:reply, :ok, state}
   end
 
-  def handle_info({ref, :ok}, %{status_monitor_ref: ref} = state) do
-    # Reset the pending DB state. Restarter is now ready for the next scale-down/wake-up cycle.
-    {:noreply, %{state | pending_db_state: nil, status_monitor_ref: nil}}
+  def handle_info({ref, :ok}, %{wait_until_conn_up_ref: ref} = state) do
+    {:noreply, %{state | wait_until_conn_up_ref: nil}}
   end
 end
