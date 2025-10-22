@@ -345,27 +345,6 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       refute_receive {:filters, _}, 200
     end
-
-    # test "invalidates add requests if removed immediately", %{opts: opts} do
-    #   shape1 = generate_shape({"public", "items"})
-
-    #   add_task =
-    #     Task.async(fn ->
-    #       assert_raise RuntimeError, "Shape removed before updating publication", fn ->
-    #         PublicationManager.add_shape(@shape_handle_1, shape1, opts)
-    #       end
-    #     end)
-
-    #   remove_task =
-    #     Task.async(fn ->
-    #       Process.sleep(5)
-    #       :ok = PublicationManager.remove_shape(@shape_handle_1, opts)
-    #     end)
-
-    #   Task.await_many([add_task, remove_task])
-
-    #   refute_receive {:filters, _}, 200
-    # end
   end
 
   defp run_async(fun) do
