@@ -317,15 +317,8 @@ defmodule Electric.Replication.PublicationManager do
   @spec check_publication_status(state()) :: {:ok, state()} | {:error, any(), state()}
   defp check_publication_status(state) do
     case Configuration.check_publication_status!(state.db_pool, state.publication_name) do
-      %{publishes_all_operations?: false} ->
-        # TODO: notify connection manager about misconfiguration so that
-        # it can restart itself and set up the publication correctly, or
-        # configure them automatically in case it is owned
-        {:error,
-         Electric.DbConfigurationError.publication_missing_operations(state.publication_name),
-         state}
-
       %{
+        publishes_all_operations?: publishes_all_operations?,
         can_alter_publication?: can_alter_publication?,
         publishes_generated_columns?: publishes_generated_columns?
       } ->
@@ -337,23 +330,50 @@ defmodule Electric.Replication.PublicationManager do
             do: fail_generated_column_shapes(state),
             else: state
 
-        {:ok,
-         %{
-           state
-           | can_alter_publication?: can_alter_publication?,
-             publishes_generated_columns?: publishes_generated_columns?
-         }}
+        state = %{
+          state
+          | can_alter_publication?: can_alter_publication?,
+            publishes_generated_columns?: publishes_generated_columns?
+        }
+
+        if publishes_all_operations? do
+          {:ok, state}
+        else
+          err =
+            Electric.DbConfigurationError.publication_missing_operations(state.publication_name)
+
+          handle_publication_fatally_misconfigured(err, state)
+          {:error, err, state}
+        end
 
       :not_found ->
-        # TODO: notify connection manager about misconfiguration so that
-        # it can restart itself and set up the publication correctly
-        {:error, Electric.DbConfigurationError.publication_missing(state.publication_name), state}
+        err = Electric.DbConfigurationError.publication_missing(state.publication_name)
+        handle_publication_fatally_misconfigured(err, state)
+        {:error, err, state}
     end
   rescue
     err -> {:error, err, state}
   catch
     :exit, {_, {DBConnection.Holder, :checkout, _}} ->
-      {:error, %RuntimeError{message: "Database connection not available"}, state}
+      {:error, %DBConnection.ConnectionError{message: "Database connection not available"}, state}
+  end
+
+  defp handle_publication_fatally_misconfigured(err, %{manual_table_publishing?: true}),
+    do:
+      Logger.warning("""
+      Publication fatal misconfiguration: #{inspect(err)}
+      Recovery attempt skipped due to manual table publishing mode.
+      Please ensure that the publication is created and configured correctly.
+      """)
+
+  defp handle_publication_fatally_misconfigured(err, state) do
+    Logger.warning("""
+    Publication fatal misconfiguration: #{inspect(err)}
+    Attempting recovery through a restart and fresh setup of connection subsystem.
+    """)
+
+    Electric.Connection.Restarter.restart_connection_subsystem(state.stack_id)
+    :ok
   end
 
   # Updates are forced when we're doing periodic checks: we expect no changes to the filters,

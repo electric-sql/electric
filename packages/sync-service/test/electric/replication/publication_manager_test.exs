@@ -332,7 +332,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     test "publication configuration fails when DB is unreachable", %{opts: opts} do
       shape = generate_shape({"public", "items"})
 
-      assert_raise RuntimeError, "Database connection not available", fn ->
+      assert_raise DBConnection.ConnectionError, "Database connection not available", fn ->
         PublicationManager.add_shape(@shape_handle_1, shape, opts)
       end
 
