@@ -210,6 +210,9 @@ defmodule Electric.Replication.PublicationManagerTest do
     setup do
       test_pid = self()
 
+      # We don't have the Restarter process running in this test, or the enitre connection subsystem for that matter.
+      # So this mock is just to verfiy the correct function is called when publication manager encounters
+      # a fatal error.
       Repatch.patch(
         Electric.Connection.Restarter,
         :restart_connection_subsystem,
