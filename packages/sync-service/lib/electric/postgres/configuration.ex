@@ -134,9 +134,14 @@ defmodule Electric.Postgres.Configuration do
   """
   @spec configure_publication!(Postgrex.conn(), String.t(), relation_filters()) ::
           relations_configured()
-  def configure_publication!(conn, publication_name, new_relations) do
-    # run with single connection to avoid overlapping operations
-    DBConnection.run(conn, &do_configure_publication!(&1, publication_name, new_relations))
+  def configure_publication!(conn, publication_name, new_relations, timeout \\ 15_000) do
+    # run with single connection to avoid overlapping operations and to
+    # set an upper bound on the time taken to perform operations
+    DBConnection.run(
+      conn,
+      &do_configure_publication!(&1, publication_name, new_relations),
+      timeout: timeout
+    )
   end
 
   @spec do_configure_publication!(Postgrex.conn(), String.t(), relation_filters()) ::
@@ -191,8 +196,9 @@ defmodule Electric.Postgres.Configuration do
       |> Enum.map(fn
         {rel, {:ok, :added}} = res ->
           if MapSet.member?(to_configure_replica_identity, rel) do
-            with {:ok, :configured} <- set_table_replica_identity_full(conn, rel) do
-              res
+            case set_table_replica_identity_full(conn, rel) do
+              {:ok, :configured} -> res
+              {:error, error} -> {rel, {:error, error}}
             end
           else
             res
