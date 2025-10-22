@@ -43,6 +43,9 @@
 
 [shell electric]
   -
+  ## TODO: we should detect the publication missing and trigger a restart automatically,
+  ## but that requires a manual check since PG18 - this is tracked in the following issue:
+  ## https://github.com/electric-sql/electric/issues/3322
   !:ok = Application.stop(:electric)
   !:ok = Application.start(:electric)
   ??[debug] Starting replication client
