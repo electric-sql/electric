@@ -23,6 +23,7 @@ jobs:
         working-directory: integration-tests
     env:
       MIX_ENV: dev
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 2
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +56,7 @@ jobs:
             ${{ runner.os }}-sync-service-build-
 
       - name: Install dependencies
-        run: mix deps.get && mix deps.compile
+        run: mix do deps.get + deps.compile
         working-directory: packages/sync-service
 
       - name: Compile

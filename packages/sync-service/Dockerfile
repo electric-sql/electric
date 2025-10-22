@@ -24,7 +24,7 @@ WORKDIR /app
 
 COPY mix.* /app/
 RUN mix deps.get
-RUN mix deps.compile
+RUN MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4 mix deps.compile
 
 # These are ordered by change frequency, with the least frequently changing dir first.
 COPY rel /app/rel

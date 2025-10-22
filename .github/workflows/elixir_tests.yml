@@ -27,6 +27,7 @@ jobs:
         postgres_version: [14, 15, 17, 18]
     env:
       MIX_ENV: test
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 2
       POSTGRES_VERSION: '${{ matrix.postgres_version }}0000'
     services:
       postgres:
@@ -96,8 +97,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          mix deps.get && mix deps.compile
-          MIX_TARGET=application mix deps.get && mix deps.compile
+          mix deps.get
+          mix deps.compile
+          MIX_TARGET=application mix deps.compile
 
       - name: Compile
         # don't bail on compile warnings - let's get the results of the tests
@@ -143,6 +145,7 @@ jobs:
         working-directory: packages/sync-service
     env:
       MIX_ENV: test
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 2
     steps:
       - uses: actions/checkout@v4
 

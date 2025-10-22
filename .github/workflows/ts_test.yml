@@ -73,6 +73,7 @@ jobs:
     env:
       ELECTRIC_DATABASE_ID: ci_test_tenant
       MIX_ENV: dev
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 2
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -110,7 +111,7 @@ jobs:
             ${{ runner.os }}-sync-service-build-
 
       - name: Install dependencies
-        run: mix deps.get && mix deps.compile
+        run: mix do deps.get + deps.compile
         working-directory: packages/sync-service
 
       - name: Compile sync-service

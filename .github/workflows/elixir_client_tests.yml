@@ -23,6 +23,7 @@ jobs:
         working-directory: packages/elixir-client
     env:
       MIX_ENV: test
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 2
       POSTGRES_VERSION: 140006
       ELECTRIC_PORT: 3100
       PG_PORT: 54323
@@ -74,7 +75,7 @@ jobs:
             ${{ runner.os }}-elixir-client-build-
 
       - name: Install dependencies
-        run: mix deps.get && mix deps.compile
+        run: mix do deps.get + deps.compile
 
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
