@@ -166,6 +166,37 @@ defmodule Electric.Postgres.ConfigurationTest do
                Configuration.configure_publication!(conn, "nonexistent", MapSet.new([oid_rel]))
     end
 
+    test "fails relation configuration if timing out on lock", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid1 = get_table_oid(conn, {"public", "items"})
+      oid2 = get_table_oid(conn, {"public", "other_table"})
+      oid_rel1 = {oid1, {"public", "items"}}
+      oid_rel2 = {oid2, {"public", "other_table"}}
+
+      start_supervised(
+        {Task,
+         fn ->
+           Postgrex.transaction(conn, fn conn ->
+             Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
+             Process.sleep(:infinity)
+           end)
+         end}
+      )
+
+      assert %{
+               ^oid_rel1 => {:error, _},
+               ^oid_rel2 => {:error, _}
+             } =
+               Configuration.configure_publication!(
+                 conn,
+                 publication,
+                 MapSet.new([oid_rel1, oid_rel2]),
+                 500
+               )
+    end
+
     test "concurrent alters to the publication don't deadlock and run correctly", %{
       pool: conn,
       publication_name: publication
