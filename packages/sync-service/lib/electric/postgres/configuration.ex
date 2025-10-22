@@ -327,19 +327,22 @@ defmodule Electric.Postgres.Configuration do
 
     # Compare with current relations in the publication to determine what needs dropping/adding,
     # as well as reconfiguring because of misconfigured replica identity
-    {prev_valid_publication_rels, prev_misconfigured_publication_rels} =
-      get_publication_tables!(conn, publication_name)
-      |> Enum.split_with(fn {_oid, _rel, replident} -> replident == "f" end)
+    pub_tables = get_publication_tables!(conn, publication_name)
+    publication_rels = MapSet.new(pub_tables, &trim_relation_with_replica/1)
 
-    valid = MapSet.new(prev_valid_publication_rels, &trim_relation_with_replica/1)
-
-    invalid = MapSet.new(prev_misconfigured_publication_rels, &trim_relation_with_replica/1)
+    misconfigured_publication_rels =
+      pub_tables
+      |> Enum.filter(fn {_oid, _rel, replident} -> replident != "f" end)
+      |> MapSet.new(&trim_relation_with_replica/1)
 
     valid_expected = MapSet.difference(expected_rels, to_invalidate)
-    to_preserve = MapSet.intersection(valid, valid_expected)
-    to_reconfigure_replica_identity = MapSet.intersection(invalid, valid_expected)
-    to_drop = MapSet.difference(MapSet.union(invalid, valid), valid_expected)
-    to_add = MapSet.difference(valid_expected, valid)
+    to_preserve = MapSet.intersection(publication_rels, valid_expected)
+
+    to_reconfigure_replica_identity =
+      MapSet.intersection(misconfigured_publication_rels, valid_expected)
+
+    to_drop = MapSet.difference(publication_rels, valid_expected)
+    to_add = MapSet.difference(valid_expected, publication_rels)
 
     to_configure_replica_identity =
       MapSet.union(
