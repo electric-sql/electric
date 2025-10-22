@@ -23,7 +23,7 @@ jobs:
         working-directory: integration-tests
     env:
       MIX_ENV: dev
-      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 2
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
     steps:
       - uses: actions/checkout@v4
 

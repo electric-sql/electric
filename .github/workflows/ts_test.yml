@@ -73,7 +73,7 @@ jobs:
     env:
       ELECTRIC_DATABASE_ID: ci_test_tenant
       MIX_ENV: dev
-      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 2
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
