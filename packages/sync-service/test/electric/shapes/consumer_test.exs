@@ -1,6 +1,5 @@
 defmodule Electric.Shapes.ConsumerTest do
   use ExUnit.Case, async: true
-  use Support.Mock
   use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.Postgres.Lsn
