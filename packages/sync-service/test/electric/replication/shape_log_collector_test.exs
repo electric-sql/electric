@@ -12,6 +12,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Shapes.Shape
   alias Electric.StatusMonitor
 
+  alias Support.Fixtures
   alias Support.RepatchExt
 
   import Support.ComponentSetup,
@@ -761,5 +762,35 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              [ctx.stack_id, ctx.server],
              100
            )
+  end
+
+  describe "subscribe/4" do
+    setup :setup_log_collector
+    @shape Fixtures.Shape.new(1)
+    @shape_handle "the-shape-handle"
+    @relation_info %{
+      id: @shape.root_table_id,
+      schema: @shape.root_table |> elem(0),
+      name: @shape.root_table |> elem(1),
+      parent: nil,
+      children: nil
+    }
+
+    test "returns :ok when relation info available", %{server: server} do
+      Mock.Inspector
+      |> stub(:load_relation_info, fn _, _ -> {:ok, @relation_info} end)
+      |> allow(self(), server)
+
+      assert ShapeLogCollector.subscribe(server, @shape_handle, @shape, :create) == :ok
+    end
+
+    test "returns error when connection not available", %{server: server} do
+      Mock.Inspector
+      |> stub(:load_relation_info, fn _, _ -> {:error, :connection_not_available} end)
+      |> allow(self(), server)
+
+      assert ShapeLogCollector.subscribe(server, @shape_handle, @shape, :create) ==
+               {:error, :connection_not_available}
+    end
   end
 end
