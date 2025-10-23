@@ -30,9 +30,18 @@ const stream = new ShapeStream({
       if (status === 401 || status === 403) {
         return await fetchConfig()
       }
+
+      // Note: 5xx errors are automatically retried by the client
+      // For other 4xx errors, stop the stream
+      if (status >= 400 && status < 500) {
+        console.error(`Client error ${status}, stopping stream`)
+        return // Return void to stop
+      }
     }
 
-    throw error
+    // For other errors (network errors, etc.), retry with same config
+    console.log(`Retrying after error:`, error.message)
+    return {}
   },
 })
 
