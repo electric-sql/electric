@@ -1034,6 +1034,11 @@ defmodule Electric.Shapes.Api do
       {:ok, columns} ->
         Electric.Schema.from_column_info(columns, shape.selected_columns)
 
+      {:error, :connection_not_available} ->
+        # TODO: we currently only convert DBConnection errors to proper 503s, we should
+        # handle a custom error we can more easily propagate
+        raise %DBConnection.ConnectionError{message: "Cannot connect to the database."}
+
       :table_not_found ->
         nil
     end

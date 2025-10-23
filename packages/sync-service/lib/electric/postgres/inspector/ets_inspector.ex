@@ -364,6 +364,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       :not_in_cache -> :not_in_cache
       oid -> {:ok, {oid, relation}}
     end
+  rescue
+    ArgumentError -> :not_in_cache
   end
 
   @spec fetch_relation_info_from_ets(Electric.relation_id(), opts :: term()) ::
@@ -375,6 +377,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       :not_in_cache -> :not_in_cache
       relation -> {:ok, relation}
     end
+  rescue
+    ArgumentError -> :not_in_cache
   end
 
   @spec fetch_column_info_from_ets(Electric.relation_id(), opts :: term()) ::
@@ -386,6 +390,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       :not_in_cache -> :not_in_cache
       column_list -> {:ok, column_list}
     end
+  rescue
+    ArgumentError -> :not_in_cache
   end
 
   @spec fetch_supported_features_from_ets(opts :: term()) ::
@@ -395,6 +401,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
       :not_in_cache -> :not_in_cache
       features -> {:ok, features}
     end
+  rescue
+    ArgumentError -> :not_in_cache
   end
 
   @spec known_schema(opts :: term()) :: [

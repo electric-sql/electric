@@ -1789,6 +1789,8 @@ defmodule Electric.Plug.RouterTest do
         []
       )
 
+      offset = get_resp_last_offset(conn)
+
       # Make a write to trigger relation message processing
       # Use a live request first to ensure the change propagates and cache is cleaned
       task =
