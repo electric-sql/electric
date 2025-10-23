@@ -346,6 +346,56 @@ This pattern is particularly useful when:
 
 The function is called when needed and its value is resolved in parallel with other dynamic options, making it efficient for real-world auth scenarios.
 
+### Handling Auth Errors with onError
+
+When auth tokens expire or become invalid, use the `onError` callback to handle authentication errors and refresh credentials:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  headers: {
+    Authorization: `Bearer ${currentToken}`,
+  },
+  onError: async (error) => {
+    if (error instanceof FetchError) {
+      // Token expired - refresh and retry
+      if (error.status === 401) {
+        const newToken = await refreshAuthToken()
+        return {
+          headers: {
+            Authorization: `Bearer ${newToken}`,
+          },
+        }
+      }
+
+      // Forbidden - user may need different permissions
+      if (error.status === 403) {
+        console.error('Access forbidden')
+        return // Return void to stop
+      }
+
+      // Other 4xx errors - stop the stream
+      if (error.status >= 400 && error.status < 500) {
+        return // Stop
+      }
+    }
+
+    // Network errors are auto-retried, but you can also
+    // explicitly retry by returning an empty object
+    return {}
+  },
+})
+```
+
+**Important:** The return value from `onError` controls stream behavior:
+
+- **Return `{ headers }`** - Retry with new auth headers
+- **Return `{ params }`** - Retry with new params
+- **Return `{}`** - Retry with same config
+- **Return void** - Stop the stream
+
+Note that 5xx server errors and network errors are automatically retried with exponential backoff, so `onError` is primarily for handling 4xx client errors like expired auth tokens.
+
 ## Session Invalidation with Vary Headers
 
 When users log out or their authentication status changes, it's important to ensure they can't access cached shapes that they should no longer have access to. The HTTP `Vary` header is crucial for this.
