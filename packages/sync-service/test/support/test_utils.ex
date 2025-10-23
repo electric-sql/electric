@@ -150,13 +150,18 @@ defmodule Support.TestUtils do
     activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
   end
 
-  def patch_calls(module, funs) do
+  def patch_calls(module, global_opts \\ [], funs) do
     Enum.each(funs, fn
       {name, {fun, opts}} when is_function(fun) ->
-        Repatch.patch(module, name, Keyword.merge([mode: :shared], opts), fun)
+        Repatch.patch(
+          module,
+          name,
+          Electric.Utils.merge_all([[mode: :shared], global_opts, opts]),
+          fun
+        )
 
       {name, fun} when is_function(fun) ->
-        Repatch.patch(module, name, [mode: :shared], fun)
+        Repatch.patch(module, name, Keyword.merge([mode: :shared], global_opts), fun)
     end)
   end
 
