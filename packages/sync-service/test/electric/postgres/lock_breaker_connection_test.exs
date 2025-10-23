@@ -9,7 +9,7 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
   setup [
     :with_unique_db,
     :with_stack_id_from_test,
-    :with_slot_name_and_stream_id
+    :with_slot_name
   ]
 
   test "should break an abandoned lock if slot is inactive", ctx do
