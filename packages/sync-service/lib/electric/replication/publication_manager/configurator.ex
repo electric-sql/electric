@@ -60,7 +60,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   end
 
   @impl true
-  def handle_cast({:update_publication, filters, from}, %{scheduled_filters: nil} = state) do
+  def handle_cast({:update_publication, filters}, %{scheduled_filters: nil} = state) do
     case check_publication_status(state) do
       {:ok, status} ->
         state = %{
@@ -75,16 +75,16 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         )
 
         Process.send_after(self(), :configured_scheduled_filters, 0)
-        {:noreply, state, {:continue, {:configure_filters, filters, from}}}
+        {:noreply, state, {:continue, {:configure_filters, filters}}}
 
       {:error, err} ->
-        for filter <- filters, do: reply_for_filter(from, filter, {:error, err}, state)
+        for filter <- filters, do: reply_for_filter(filter, {:error, err}, state)
         {:noreply, state}
     end
   end
 
   @impl true
-  def handle_continue({:configure_filters, filters, from}, state) do
+  def handle_continue({:configure_filters, filters}, state) do
     case determine_publication_relation_actions(state, filters) do
       {:ok,
        %{
@@ -96,8 +96,8 @@ defmodule Electric.Replication.PublicationManager.Configurator do
        }} ->
         to_configure_only = MapSet.difference(to_configure_replica_identity, to_add)
 
-        reply_for_filters(from, to_preserve, {:ok, :validated}, state)
-        reply_for_filters(from, to_invalidate, {:error, :schema_changed}, state)
+        reply_for_filters(to_preserve, {:ok, :validated}, state)
+        reply_for_filters(to_invalidate, {:error, :schema_changed}, state)
 
         if can_update_publication?(state) do
           to_add_and_configure = MapSet.intersection(to_add, to_configure_replica_identity)
@@ -113,16 +113,10 @@ defmodule Electric.Replication.PublicationManager.Configurator do
             |> Stream.concat()
             |> Enum.sort(&(elem(&1, 1) <= elem(&2, 1)))
 
-          {:noreply, state, {:continue, {:perform_relation_actions, relation_actions, from}}}
+          {:noreply, state, {:continue, {:perform_relation_actions, relation_actions}}}
         else
-          reply_for_filters(from, to_add, {:error, :relation_missing_from_publication}, state)
-
-          reply_for_filters(
-            from,
-            to_configure_only,
-            {:error, :misconfigured_replica_identity},
-            state
-          )
+          reply_for_filters(to_add, {:error, :relation_missing_from_publication}, state)
+          reply_for_filters(to_configure_only, {:error, :misconfigured_replica_identity}, state)
 
           if MapSet.size(to_add) == 0 and MapSet.size(to_configure_replica_identity) == 0 do
             Logger.info(fn ->
@@ -137,7 +131,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         end
 
       {:error, err} ->
-        reply_for_filters(from, filters, {:error, err}, state)
+        reply_for_filters(filters, {:error, err}, state)
         {:noreply, state}
     end
   end
@@ -146,19 +140,18 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     {:noreply, state}
   end
 
-  def handle_continue({:perform_relation_actions, [{:add, filter} | rest], from}, state) do
+  def handle_continue({:perform_relation_actions, [{:add, filter} | rest]}, state) do
     do_relation_action(
       &Configuration.add_table_to_publication(&1, state.publication_name, filter),
       filter,
-      from,
       state
     )
 
-    {:noreply, state, {:continue, {:perform_relation_actions, rest, from}}}
+    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
 
   def handle_continue(
-        {:perform_relation_actions, [{:add_and_configure, filter} | rest], from},
+        {:perform_relation_actions, [{:add_and_configure, filter} | rest]},
         state
       ) do
     do_relation_action(
@@ -171,33 +164,30 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         end
       end,
       filter,
-      from,
       state
     )
 
-    {:noreply, state, {:continue, {:perform_relation_actions, rest, from}}}
+    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
 
-  def handle_continue({:perform_relation_actions, [{:configure, filter} | rest], from}, state) do
+  def handle_continue({:perform_relation_actions, [{:configure, filter} | rest]}, state) do
     do_relation_action(
       &Configuration.set_table_replica_identity_full(&1, filter),
       filter,
-      from,
       state
     )
 
-    {:noreply, state, {:continue, {:perform_relation_actions, rest, from}}}
+    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
 
-  def handle_continue({:perform_relation_actions, [{:drop, filter} | rest], from}, state) do
+  def handle_continue({:perform_relation_actions, [{:drop, filter} | rest]}, state) do
     do_relation_action(
       &Configuration.drop_table_from_publication(&1, state.publication_name, filter),
       filter,
-      from,
       state
     )
 
-    {:noreply, state, {:continue, {:perform_relation_actions, rest, from}}}
+    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
 
   @spec check_publication_status(state()) ::
@@ -256,9 +246,9 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     :ok
   end
 
-  defp do_relation_action(action_fn, filter, from, state) do
+  defp do_relation_action(action_fn, filter, state) do
     result = run_in_transaction(state.db_pool, action_fn)
-    reply_for_filter(from, filter, result, state)
+    reply_for_filter(filter, result, state)
   end
 
   defp run_in_transaction(db_pool, fun) do
@@ -292,11 +282,11 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     can_alter and not manual
   end
 
-  defp reply_for_filters(from, filters, reply, state) do
-    for filter <- filters, do: reply_for_filter(from, filter, reply, state)
+  defp reply_for_filters(filters, reply, state) do
+    for filter <- filters, do: reply_for_filter(filter, reply, state)
   end
 
-  defp reply_for_filter(from, filter, {:ok, _} = reply, state) do
+  defp reply_for_filter(filter, {:ok, _} = reply, state) do
     PublicationManager.RelationTracker.notify_configuration_result(
       [stack_id: state.stack_id],
       filter,
@@ -304,7 +294,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     )
   end
 
-  defp reply_for_filter(from, filter, {:error, err}, state) do
+  defp reply_for_filter(filter, {:error, err}, state) do
     reply = {:error, publication_error(err, filter, state)}
 
     PublicationManager.RelationTracker.notify_configuration_result(
