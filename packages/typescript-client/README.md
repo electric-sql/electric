@@ -165,7 +165,7 @@ onError: async (error) => {
 }
 ```
 
-If no `onError` handler is provided, errors will be thrown and the stream will stop.
+**Without `onError`**: If no `onError` handler is provided, any error will be thrown and the stream will stop permanently. There is NO automatic retry behavior.
 
 #### 2. Subscription-level error callbacks
 

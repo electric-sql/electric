@@ -600,6 +600,8 @@ The return value from `onError` controls whether syncing continues:
 
 **Critical**: If you want syncing to continue after an error, you **must** return at least an empty object `{}`. Simply logging the error and returning nothing will stop syncing.
 
+**Without `onError`**: If no error handler is provided, any error will be thrown and syncing will stop permanently. There is NO automatic retry behavior.
+
 #### Examples
 
 **Basic retry on server errors:**
