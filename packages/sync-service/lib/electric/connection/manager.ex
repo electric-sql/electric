@@ -711,9 +711,6 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(:connection_lock_acquired, state)
     tref = schedule_periodic_connection_status_check(:replication_configuration)
 
-    # As soon as we acquire the connection lock, we try to configure the replication connection
-    # first because it requires additional privileges compared to regular "pooled" connections,
-    # so failure to configure a replication connection should be reported ASAP.
     state = %{
       state
       | replication_configuration_timer: tref,
@@ -1064,8 +1061,8 @@ defmodule Electric.Connection.Manager do
       state
     )
 
-    drop_slot(state)
     drop_publication(state)
+    drop_slot(state)
 
     Electric.Timeline.store_irrecoverable_timeline(
       state.pg_system_identifier,
