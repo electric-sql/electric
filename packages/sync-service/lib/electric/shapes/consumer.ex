@@ -21,9 +21,7 @@ defmodule Electric.Shapes.Consumer do
 
   require Logger
 
-  def name(%{stack_id: stack_id, shape_handle: shape_handle}) do
-    name(stack_id, shape_handle)
-  end
+  @default_snapshot_timeout 30_000
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
     ConsumerRegistry.name(stack_id, shape_handle)
@@ -33,23 +31,18 @@ defmodule Electric.Shapes.Consumer do
     GenServer.call(consumer, :initial_state, 30_000)
   end
 
-  @spec await_snapshot_start(pid() | map()) :: :started | {:error, any()}
-  @spec await_snapshot_start(pid() | map(), timeout()) :: :started | {:error, any()}
-  def await_snapshot_start(consumer, timeout \\ 30_000)
-
-  def await_snapshot_start(consumer_ref, timeout) when is_map(consumer_ref) do
-    consumer_ref
-    |> whereis()
-    |> await_snapshot_start(timeout)
+  @spec await_snapshot_start(Electric.stack_id(), ShapeCache.shape_handle(), timeout()) ::
+          :started | {:error, any()}
+  def await_snapshot_start(stack_id, shape_handle, timeout \\ @default_snapshot_timeout)
+      when is_binary(stack_id) and is_binary(shape_handle) do
+    stack_id
+    |> whereis(shape_handle)
+    |> GenServer.call(:await_snapshot_start, timeout)
   end
 
-  def await_snapshot_start(consumer, timeout) do
-    GenServer.call(consumer, :await_snapshot_start, timeout)
-  end
-
-  def subscribe_materializer(consumer_ref) do
-    consumer_ref
-    |> whereis()
+  def subscribe_materializer(stack_id, shape_handle) do
+    stack_id
+    |> whereis(shape_handle)
     |> GenServer.call(:subscribe_materializer)
   end
 
@@ -58,26 +51,16 @@ defmodule Electric.Shapes.Consumer do
   # when the `shape_handle` consumer has processed every transaction.
   # Transactions that we skip because of xmin logic do not generate
   # a notification
-  @spec monitor(String.t(), ShapeCache.shape_handle(), pid()) :: reference()
+  @spec monitor(Electric.stack_id(), ShapeCache.shape_handle(), pid()) :: reference()
   def monitor(stack_id, shape_handle, pid \\ self()) do
     stack_id
     |> whereis(shape_handle)
     |> GenServer.call({:monitor, pid})
   end
 
-  @spec whereis(%{stack_id: Electric.stack_id(), shape_handle: ShapeCache.shape_handle()}) ::
-          pid() | nil
-  def whereis(%{stack_id: stack_id, shape_handle: shape_handle}) do
-    whereis(stack_id, shape_handle)
-  end
-
-  @spec whereis(String.t(), ShapeCache.shape_handle()) :: pid() | nil
+  @spec whereis(Electric.stack_id(), ShapeCache.shape_handle()) :: pid() | nil
   def whereis(stack_id, shape_handle) do
     ConsumerRegistry.whereis(stack_id, shape_handle)
-  end
-
-  def stop_and_clean(%{stack_id: stack_id, shape_handle: shape_handle}) do
-    stop_and_clean(stack_id, shape_handle)
   end
 
   def stop_and_clean(stack_id, shape_handle) do
@@ -89,8 +72,8 @@ defmodule Electric.Shapes.Consumer do
     :exit, {:noproc, _} -> :noproc
   end
 
-  def start_link(config) when is_map(config) do
-    GenServer.start_link(__MODULE__, config, name: name(config))
+  def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = config) do
+    GenServer.start_link(__MODULE__, config, name: name(stack_id, shape_handle))
   end
 
   @impl GenServer

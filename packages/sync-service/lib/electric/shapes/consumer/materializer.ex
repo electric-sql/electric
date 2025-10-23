@@ -91,10 +91,13 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_continue({:start_materializer, storage}, state) do
-    _ = Consumer.await_snapshot_start(state)
-    Consumer.subscribe_materializer(state)
+    %{stack_id: stack_id, shape_handle: shape_handle} = state
 
-    Process.monitor(Consumer.whereis(state),
+    :started = Consumer.await_snapshot_start(stack_id, shape_handle)
+
+    Consumer.subscribe_materializer(stack_id, shape_handle)
+
+    Process.monitor(Consumer.whereis(stack_id, shape_handle),
       tag: {:consumer_down, state.shape_handle}
     )
 

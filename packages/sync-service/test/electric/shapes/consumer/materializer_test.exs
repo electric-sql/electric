@@ -43,7 +43,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:await_snapshot_start, :started)
     respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -60,7 +60,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:await_snapshot_start, :started)
     respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -366,7 +366,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: Keyword.get(opts, :materialized_type, {:array, :int8})
       })
 
-    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:await_snapshot_start, :started)
     respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok
