@@ -24,7 +24,7 @@
       -p $pg_host_port:5432 \
       -v $(realpath ../scripts/reset_wal.sh):/docker-entrypoint-initdb.d/initdb-reset_wal.sh \
       ${extra_volumes} \
-      postgres:14-alpine \
+      postgres:18-alpine \
         -c wal_level=logical ${config_opts}
 
     [timeout 15]
@@ -56,7 +56,7 @@
       -v $(realpath ../support_files/server.crt):/etc/server.crt:ro \
       -v $(realpath ../support_files/server.key):/etc/server.key:ro \
       --entrypoint entrypoint-ssl.sh \
-      postgres:17-alpine \
+      postgres:18-alpine \
         -c config_file=/etc/postgresql.conf
 
     [timeout 15]
