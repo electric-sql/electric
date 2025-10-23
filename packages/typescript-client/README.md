@@ -115,12 +115,10 @@ const stream = new ShapeStream({
     // IMPORTANT: Return an object to keep syncing!
     // Return void/undefined to stop syncing permanently.
 
-    if (error instanceof FetchError) {
-      if (error.status >= 500) {
-        // Server error - retry with same params
-        return {}
-      }
+    // Note: 5xx errors and network errors are automatically retried,
+    // so onError is mainly for handling client errors (4xx)
 
+    if (error instanceof FetchError) {
       if (error.status === 401) {
         // Unauthorized - refresh token and retry
         const newToken = getRefreshedToken()
@@ -130,11 +128,17 @@ const stream = new ShapeStream({
           }
         }
       }
-    }
 
-    // Network error - retry
-    if (error.message.includes('network')) {
-      return {}
+      if (error.status === 403) {
+        // Forbidden - maybe change user context
+        return {
+          params: {
+            table: `foo`,
+            where: `user_id = $1`,
+            params: [fallbackUserId]
+          }
+        }
+      }
     }
 
     // Stop syncing for other errors (return void)
@@ -165,7 +169,9 @@ onError: async (error) => {
 }
 ```
 
-**Without `onError`**: If no `onError` handler is provided, any error will be thrown and the stream will stop permanently. There is NO automatic retry behavior.
+**Automatic retries**: The client automatically retries 5xx server errors, network errors, and 429 rate limits with exponential backoff. The `onError` callback is only invoked after these retries are exhausted, or for non-retryable errors like 4xx client errors.
+
+**Without `onError`**: If no `onError` handler is provided, non-retryable errors (like 4xx client errors) will be thrown and the stream will stop.
 
 #### 2. Subscription-level error callbacks
 

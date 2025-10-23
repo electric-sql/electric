@@ -600,11 +600,13 @@ The return value from `onError` controls whether syncing continues:
 
 **Critical**: If you want syncing to continue after an error, you **must** return at least an empty object `{}`. Simply logging the error and returning nothing will stop syncing.
 
-**Without `onError`**: If no error handler is provided, any error will be thrown and syncing will stop permanently. There is NO automatic retry behavior.
+**Automatic retries**: The client automatically retries 5xx server errors, network errors, and 429 rate limits with exponential backoff (configurable via `backoffOptions`). The `onError` callback is only invoked after these automatic retries are exhausted, or for non-retryable errors like 4xx client errors.
+
+**Without `onError`**: If no error handler is provided, non-retryable errors (like 4xx client errors) will be thrown and the stream will stop.
 
 #### Examples
 
-**Basic retry on server errors:**
+**Handle client errors with retry:**
 
 ```typescript
 const stream = new ShapeStream({
@@ -613,9 +615,14 @@ const stream = new ShapeStream({
   onError: (error) => {
     console.error('Stream error:', error)
 
-    if (error instanceof FetchError && error.status >= 500) {
-      // Server error - retry with same params
-      return {}
+    // Note: 5xx errors are automatically retried by the client
+    // onError is mainly for handling 4xx client errors
+
+    if (error instanceof FetchError && error.status === 400) {
+      // Bad request - maybe retry with different params
+      return {
+        params: { table: 'items', where: 'id > 0' }
+      }
     }
 
     // Stop on other errors (return void)
@@ -677,7 +684,7 @@ const stream = new ShapeStream({
 })
 ```
 
-**Selective retry logic:**
+**Selective retry logic for client errors:**
 
 ```typescript
 let retryCount = 0
@@ -686,27 +693,32 @@ const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   params: { table: 'items' },
   onError: (error) => {
-    console.error(`Stream error (attempt ${retryCount + 1}):`, error)
+    console.error('Stream error:', error)
 
-    // Network errors - retry up to 3 times
-    if (error.message.includes('network') && retryCount < 3) {
-      retryCount++
-      return {} // Retry
+    // Note: This callback is invoked AFTER automatic retries for 5xx errors
+    // So if you see a 5xx here, the exponential backoff has been exhausted
+
+    if (error instanceof FetchError) {
+      // 401 - Try to refresh auth token once
+      if (error.status === 401 && retryCount === 0) {
+        retryCount++
+        return { headers: { Authorization: getNewToken() } }
+      }
+
+      // 400 - Bad request, maybe our params are wrong
+      if (error.status === 400) {
+        console.error('Bad request, stopping stream')
+        return // Stop
+      }
+
+      // Other 4xx errors - stop
+      if (error.status >= 400 && error.status < 500) {
+        return // Stop
+      }
     }
 
-    // Server errors - always retry
-    if (error instanceof FetchError && error.status >= 500) {
-      return {}
-    }
-
-    // Client errors - stop
-    if (error instanceof FetchError && error.status >= 400 && error.status < 500) {
-      console.error('Client error, stopping stream')
-      return // Return void to stop
-    }
-
-    // Default: retry
-    return {}
+    // For non-HTTP errors or exhausted 5xx retries, stop
+    return // Stop
   }
 })
 ```

@@ -297,8 +297,12 @@ export interface ShapeStreamOptions<T = never> {
   /**
    * A function for handling shapestream errors.
    *
-   * When not provided, any shapestream errors will be thrown and syncing will stop.
-   * There is NO automatic retry without an `onError` handler.
+   * **Automatic retries**: The client automatically retries 5xx server errors, network
+   * errors, and 429 rate limits with exponential backoff. The `onError` callback is
+   * only invoked after these automatic retries are exhausted, or for non-retryable
+   * errors like 4xx client errors.
+   *
+   * When not provided, non-retryable errors will be thrown and syncing will stop.
    *
    * **Return value behavior**:
    * - Return an **object** (RetryOpts or empty `{}`) to retry syncing:
