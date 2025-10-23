@@ -27,6 +27,14 @@ defmodule Electric.Postgres.Configuration do
           publishes_generated_columns?: boolean()
         }
 
+  @type relation_actions :: %{
+          to_preserve: relation_filters(),
+          to_add: relation_filters(),
+          to_drop: relation_filters(),
+          to_configure_replica_identity: relation_filters(),
+          to_invalidate: relation_filters()
+        }
+
   @typep changed_relation ::
            {
              Electric.relation_id(),
@@ -230,7 +238,7 @@ defmodule Electric.Postgres.Configuration do
 
   @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
           {:ok, :added} | {:error, term()}
-  defp add_table_to_publication(conn, publication_name, oid_relation) do
+  def add_table_to_publication(conn, publication_name, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
@@ -243,7 +251,7 @@ defmodule Electric.Postgres.Configuration do
 
   @spec set_table_replica_identity_full(Postgrex.conn(), Electric.oid_relation()) ::
           {:ok, :configured} | {:error, term()}
-  defp set_table_replica_identity_full(conn, oid_relation) do
+  def set_table_replica_identity_full(conn, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
@@ -256,7 +264,7 @@ defmodule Electric.Postgres.Configuration do
 
   @spec drop_table_from_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
           {:ok, :dropped} | {:error, term()}
-  defp drop_table_from_publication(conn, publication_name, oid_relation) do
+  def drop_table_from_publication(conn, publication_name, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
     Logger.debug("Removing #{table} from publication #{publication_name}")
@@ -316,14 +324,8 @@ defmodule Electric.Postgres.Configuration do
   end
 
   @spec determine_publication_relation_actions!(Postgrex.conn(), String.t(), relation_filters()) ::
-          %{
-            to_preserve: relation_filters(),
-            to_add: relation_filters(),
-            to_drop: relation_filters(),
-            to_configure_replica_identity: relation_filters(),
-            to_invalidate: relation_filters()
-          }
-  defp determine_publication_relation_actions!(conn, publication_name, expected_rels) do
+          relation_actions()
+  def determine_publication_relation_actions!(conn, publication_name, expected_rels) do
     # New relations were configured using a schema read in a different transaction
     # (if at all, might have been from cache) so we need to check if any of
     # the relations were dropped/renamed since then
