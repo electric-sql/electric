@@ -19,7 +19,9 @@ defmodule Electric.Postgres.ReplicationClient do
   @type step ::
           :disconnected
           | :connected
+          | :identify_system
           | :query_pg_info
+          | :acquire_lock
           | :create_publication
           | :check_if_publication_exists
           | :drop_slot
@@ -37,6 +39,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :transaction_received,
       :relation_received,
       :publication_name,
+      :lock_acquired?,
       :try_creating_publication?,
       :recreate_slot?,
       :start_streaming?,
@@ -126,6 +129,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
 
+  @default_connect_timeout 30_000
   @idle_check_interval Electric.Config.min_replication_idle_timeout()
 
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
@@ -138,6 +142,7 @@ defmodule Electric.Postgres.ReplicationClient do
     start_opts =
       [
         name: name(config.stack_id),
+        timeout: Access.get(opts, :timeout, @default_connect_timeout),
         auto_reconnect: false,
         sync_connect: false
       ] ++ Electric.Utils.deobfuscate_password(config.replication_opts[:connection_opts])
@@ -214,8 +219,18 @@ defmodule Electric.Postgres.ReplicationClient do
     {current_step, next_step, extra_info, return_val} =
       ConnectionSetup.process_query_result(result_list_or_error, state)
 
+    if current_step == :identify_system,
+      do: notify_system_identified(state, extra_info)
+
     if current_step == :query_pg_info,
       do: notify_pg_info_obtained(state, extra_info)
+
+    if current_step == :acquire_lock do
+      case extra_info do
+        :lock_acquired -> notify_lock_acquired(state)
+        {:lock_acquisition_failed, error} -> notify_lock_acquisition_error(state, error)
+      end
+    end
 
     if current_step == :create_slot and extra_info == :created_new_slot,
       do: notify_created_new_slot(state)
@@ -534,8 +549,23 @@ defmodule Electric.Postgres.ReplicationClient do
     state
   end
 
+  defp notify_system_identified(%State{connection_manager: manager} = state, info) do
+    :ok = Electric.Connection.Manager.pg_system_identified(manager, info)
+    state
+  end
+
   defp notify_pg_info_obtained(%State{connection_manager: manager} = state, pg_info) do
     :ok = Electric.Connection.Manager.pg_info_obtained(manager, pg_info)
+    state
+  end
+
+  defp notify_lock_acquisition_error(%State{connection_manager: manager} = state, error) do
+    :ok = Electric.Connection.Manager.replication_client_lock_acquisition_failed(manager, error)
+    state
+  end
+
+  defp notify_lock_acquired(%State{connection_manager: manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_lock_acquired(manager)
     state
   end
 

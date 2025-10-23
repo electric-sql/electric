@@ -1,6 +1,8 @@
 defmodule Electric.Postgres.ReplicationClientTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   import Support.ComponentSetup,
     only: [with_stack_id_from_test: 1, with_status_monitor: 1, with_slot_name: 1]
 
@@ -37,8 +39,14 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     defp process_message({:"$gen_cast", :replication_client_started}), do: nil
-    defp process_message({:"$gen_cast", :replication_client_created_new_slot}), do: nil
     defp process_message({:"$gen_cast", {:pg_info_obtained, _}}), do: nil
+    defp process_message({:"$gen_cast", {:pg_system_identified, _}}), do: nil
+    defp process_message({:"$gen_cast", :replication_client_lock_acquired}), do: :lock_acquired
+
+    defp process_message({:"$gen_cast", {:replication_client_lock_acquisition_failed, err}}),
+      do: {:lock_acquisition_failed, err}
+
+    defp process_message({:"$gen_cast", :replication_client_created_new_slot}), do: nil
 
     defp process_message({:"$gen_cast", :replication_client_streamed_first_message}),
       do: {self(), :streaming_started}
@@ -201,6 +209,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       assert_receive {:DOWN, ^monitor, :process, ^pid, :some_reason}, @assert_receive_db_timeout
 
+      assert_received :lock_acquired
       refute_received _
 
       # Now, when we restart the connection process, it replays transactions from the last
@@ -210,6 +219,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "another value"}} = receive_tx_change()
       assert %NewRecord{record: %{"value" => ^interrupt_val}} = receive_tx_change()
 
+      assert_received :lock_acquired
       refute_receive _
     end
 
@@ -292,6 +302,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       # Make sure there are no extraneous messages left.
       assert MapSet.size(set) == 0
+      assert_received :lock_acquired
       refute_receive _
     end
 
@@ -581,6 +592,74 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
   end
 
+  describe "ReplicationClient lock handling" do
+    setup [
+      :with_unique_db,
+      :with_basic_tables,
+      :with_publication,
+      :with_replication_opts,
+      :with_status_monitor
+    ]
+
+    test "should acquire an advisory lock on startup", ctx do
+      log =
+        capture_log(fn ->
+          start_client(ctx)
+          assert_receive :lock_acquired
+        end)
+
+      # should have logged lock acquisition process
+      lock_name = ctx.slot_name
+      assert log =~ "Acquiring lock from postgres with name #{lock_name}"
+      assert log =~ "Lock acquired from postgres with name #{lock_name}"
+
+      # should have acquired an advisory lock on PG
+      assert %Postgrex.Result{rows: [[false]]} =
+               Postgrex.query!(
+                 ctx.db_conn,
+                 "SELECT pg_try_advisory_lock(hashtext('#{lock_name}'))",
+                 []
+               )
+    end
+
+    test "should wait if lock is already acquired", ctx do
+      # grab lock with one connection
+      start_client(ctx, id: :lock_client1)
+
+      assert_receive :lock_acquired
+
+      # try to grab the same lock using a different connection
+      new_stack_id = ctx.stack_id <> "_new"
+      start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
+
+      start_client(
+        ctx,
+        id: :lock_client2,
+        stack_id: new_stack_id,
+        wait_for_start: false
+      )
+
+      # should fail to grab it
+      refute_receive {:lock_acquisition_failed, _}, 1000
+
+      # should immediately grab it once previous lock is released
+      stop_supervised!(:lock_client1)
+      assert_receive :lock_acquired
+    end
+
+    test "should exit if timed out on connection ", ctx do
+      client_pid = start_client(ctx, timeout: 1, wait_for_start: false)
+      Process.unlink(client_pid)
+
+      ref = Process.monitor(client_pid)
+
+      assert_receive {:DOWN, ^ref, _, _, %DBConnection.ConnectionError{message: message}},
+                     1000
+
+      assert message =~ "tcp"
+    end
+  end
+
   test "correctly responds to a status update request message from PG", ctx do
     state =
       ReplicationClient.State.new(
@@ -721,15 +800,24 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     client_pid =
       start_link_supervised!(%{
-        id: ReplicationClient,
+        id: ctx[:id] || ReplicationClient,
         start:
           {ReplicationClient, :start_link,
-           [[stack_id: ctx.stack_id, replication_opts: ctx.replication_opts]]},
+           [
+             [
+               stack_id: ctx.stack_id,
+               replication_opts: ctx.replication_opts,
+               timeout: Map.get(ctx, :timeout, nil)
+             ]
+           ]},
         restart: :temporary
       })
 
     conn_mgr = ctx.connection_manager
-    assert_receive {^conn_mgr, :streaming_started}, @assert_receive_db_timeout
+
+    if Map.get(ctx, :wait_for_start, true) do
+      assert_receive {^conn_mgr, :streaming_started}, @assert_receive_db_timeout
+    end
 
     client_pid
   end

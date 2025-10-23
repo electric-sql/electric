@@ -93,7 +93,7 @@
 [macro stop_pg]
   [shell pg_lifecycle]
     # This timeout is needed until https://github.com/electric-sql/electric/issues/1632 is fixed.
-    !docker stop -t 1 $pg_container_name
+    !docker stop $pg_container_name
     ?$PS1
 
   [shell pg]
