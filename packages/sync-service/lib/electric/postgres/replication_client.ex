@@ -466,10 +466,12 @@ defmodule Electric.Postgres.ReplicationClient do
     >>
   end
 
-  # Retry applying the given MFA for up to @max_retry_time milliseconds, used for
-  # processing transactions without crashing if the processor is down. The max retry
-  # time is only there to avoid a worst case scenario, as the processor being unable
-  # to process things for this long should lead to the replication client being killed.
+  # Retry applying the given MFA
+  # A retry may need to happen if the connection is available or the collector is not ready yet.
+  # In those instances we wait until the stack is ready and retry, and will go on retrying forever.
+  # We may also get a process down, and we retry here too but with a timeout since processes should
+  # be bought back up by the supervisor and if this carries on for longer than the timeout there may
+  # be a more serious issue.
   @retry_time 10 * 60_000
   @effectively_infinity 100 * 365 * 24 * 60 * 60 * 1000
   @spin_prevention_delay 50
