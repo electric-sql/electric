@@ -473,7 +473,6 @@ defmodule Electric.Postgres.ReplicationClient do
   # be bought back up by the supervisor and if this carries on for longer than the timeout there may
   # be a more serious issue.
   @retry_time 10 * 60_000
-  @effectively_infinity 100 * 365 * 24 * 60 * 60 * 1000
   @spin_prevention_delay 50
   defp apply_with_retries(mfa, state, time_remaining \\ @retry_time) do
     start_time = System.monotonic_time(:millisecond)
@@ -488,7 +487,7 @@ defmodule Electric.Postgres.ReplicationClient do
           Process.sleep(@spin_prevention_delay)
 
           Electric.StatusMonitor.wait_until_active(state.stack_id,
-            timeout: @effectively_infinity,
+            timeout: :infinity,
             block_on_conn_sleeping: true
           )
 

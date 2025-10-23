@@ -142,6 +142,28 @@ defmodule Electric.StatusMonitorTest do
       assert_receive :active, 100
     end
 
+    test "allows timeout: :infinity", %{stack_id: stack_id} do
+      test_process = self()
+      stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
+
+      Task.async(fn ->
+        assert StatusMonitor.wait_until_active(stack_id, timeout: :infinity) == :ok
+        send(test_process, :active)
+      end)
+
+      start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+      StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+
+      refute_receive :active, 20
+      assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
+      assert_receive :active, 100
+    end
+
     test "returns error on timeout when process registry is not present", %{stack_id: stack_id} do
       stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
 
