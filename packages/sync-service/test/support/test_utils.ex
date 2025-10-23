@@ -165,13 +165,23 @@ defmodule Support.TestUtils do
     end)
   end
 
-  def expect_calls(module, expectations) do
+  def expect_calls(module, global_opts \\ [], expectations) do
     Enum.each(expectations, fn
       {name, {fun, opts}} when is_function(fun) ->
-        Repatch.Expectations.expect(module, name, Keyword.merge([mode: :shared], opts), fun)
+        Repatch.Expectations.expect(
+          module,
+          name,
+          Electric.Utils.merge_all([[mode: :shared], global_opts, opts]),
+          fun
+        )
 
       {name, fun} when is_function(fun) ->
-        Repatch.Expectations.expect(module, name, [mode: :shared], fun)
+        Repatch.Expectations.expect(
+          module,
+          name,
+          Keyword.merge([mode: :shared], global_opts),
+          fun
+        )
     end)
   end
 
