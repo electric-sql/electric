@@ -470,9 +470,10 @@ defmodule Electric.Postgres.ReplicationClient do
   # processing transactions without crashing if the processor is down. The max retry
   # time is only there to avoid a worst case scenario, as the processor being unable
   # to process things for this long should lead to the replication client being killed.
-  @max_retry_time 10 * 60_000
+  @retry_time 10 * 60_000
   @effectively_infinity 100 * 365 * 24 * 60 * 60 * 1000
-  defp apply_with_retries(mfa, state, time_remaining \\ @max_retry_time) do
+  @spin_prevention_delay 50
+  defp apply_with_retries(mfa, state, time_remaining \\ @retry_time) do
     start_time = System.monotonic_time(:millisecond)
     {m, f, args} = mfa
 
@@ -482,14 +483,14 @@ defmodule Electric.Postgres.ReplicationClient do
           :ok
 
         {:error, error} when error in [:not_ready, :connection_not_available] ->
-          Process.sleep(100)
+          Process.sleep(@spin_prevention_delay)
 
           Electric.StatusMonitor.wait_until_active(state.stack_id,
             timeout: @effectively_infinity,
             block_on_conn_sleeping: true
           )
 
-          apply_with_retries(mfa, state, @max_retry_time)
+          apply_with_retries(mfa, state, @retry_time)
       end
     catch
       _, _ when time_remaining > 0 ->
@@ -497,7 +498,7 @@ defmodule Electric.Postgres.ReplicationClient do
           # on receiving an exit while holding processing, we should respect the exit
           {:EXIT, _from, reason} -> exit(reason)
         after
-          50 ->
+          @spin_prevention_delay ->
             time_remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
             apply_with_retries(mfa, state, time_remaining)
         end
