@@ -567,30 +567,151 @@ stream.unsubscribeAll()
 
 ### Error Handling
 
-The ShapeStream provides two ways to handle errors:
+The ShapeStream provides robust error handling with automatic retry support through the `onError` callback.
 
-1. Using the `onError` handler (recommended):
+#### The `onError` Callback
+
+The `onError` option provides powerful error recovery with automatic retry support:
+
+```typescript
+onError?: ShapeStreamErrorHandler
+
+type ShapeStreamErrorHandler = (
+  error: Error
+) => void | RetryOpts | Promise<void | RetryOpts>
+
+type RetryOpts = {
+  params?: ParamsRecord
+  headers?: Record<string, string>
+}
+```
+
+#### Return Value Behavior
+
+The return value from `onError` controls whether syncing continues:
+
+| Return Value | Behavior |
+|--------------|----------|
+| `{}` (empty object) | Retry syncing with the same params and headers |
+| `{ params }` | Retry syncing with modified params |
+| `{ headers }` | Retry syncing with modified headers |
+| `{ params, headers }` | Retry syncing with both modified |
+| `void` or `undefined` | **Stop syncing permanently** |
+
+**Critical**: If you want syncing to continue after an error, you **must** return at least an empty object `{}`. Simply logging the error and returning nothing will stop syncing.
+
+#### Examples
+
+**Basic retry on server errors:**
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'items' },
+  onError: (error) => {
+    console.error('Stream error:', error)
+
+    if (error instanceof FetchError && error.status >= 500) {
+      // Server error - retry with same params
+      return {}
+    }
+
+    // Stop on other errors (return void)
+  }
+})
+```
+
+**Refresh authentication token:**
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'items' },
+  headers: {
+    Authorization: `Bearer ${initialToken}`
+  },
+  onError: async (error) => {
+    if (error instanceof FetchError && error.status === 401) {
+      // Refresh the token asynchronously
+      const newToken = await refreshAuthToken()
+
+      return {
+        headers: {
+          Authorization: `Bearer ${newToken}`
+        }
+      }
+    }
+
+    // Retry other errors with same params
+    return {}
+  }
+})
+```
+
+**Update query parameters:**
 
 ```typescript
 const stream = new ShapeStream({
   url: 'http://localhost:3000/v1/shape',
   params: {
-    table: 'issues',
+    table: 'items',
+    where: 'user_id = $1',
+    params: [currentUserId]
   },
   onError: (error) => {
-    // Handle all stream errors here
-    if (error instanceof FetchError) {
-      console.error('HTTP error:', error.status, error.message)
-    } else {
-      console.error('Stream error:', error)
+    if (error instanceof FetchError && error.status === 403) {
+      // Access denied - maybe switch to a different user context
+      return {
+        params: {
+          table: 'items',
+          where: 'user_id = $1',
+          params: [fallbackUserId]
+        }
+      }
     }
-  },
+
+    return {} // Retry other errors
+  }
 })
 ```
 
-If no `onError` handler is provided, the ShapeStream will throw errors that occur during streaming.
+**Selective retry logic:**
 
-2. Individual subscribers can optionally handle errors specific to their subscription:
+```typescript
+let retryCount = 0
+
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'items' },
+  onError: (error) => {
+    console.error(`Stream error (attempt ${retryCount + 1}):`, error)
+
+    // Network errors - retry up to 3 times
+    if (error.message.includes('network') && retryCount < 3) {
+      retryCount++
+      return {} // Retry
+    }
+
+    // Server errors - always retry
+    if (error instanceof FetchError && error.status >= 500) {
+      return {}
+    }
+
+    // Client errors - stop
+    if (error instanceof FetchError && error.status >= 400 && error.status < 500) {
+      console.error('Client error, stopping stream')
+      return // Return void to stop
+    }
+
+    // Default: retry
+    return {}
+  }
+})
+```
+
+#### Subscription-Level Error Callbacks
+
+Individual subscribers can also handle errors specific to their subscription:
 
 ```typescript
 stream.subscribe(
@@ -604,9 +725,11 @@ stream.subscribe(
 )
 ```
 
+Note: Subscription error callbacks cannot control retry behavior - use the stream-level `onError` for that.
+
 #### Error Types
 
-The following error types may be encountered:
+All Electric errors extend the base `Error` class:
 
 **Initialization Errors** (thrown by constructor):
 
@@ -616,10 +739,24 @@ The following error types may be encountered:
 
 **Runtime Errors** (handled by `onError` or thrown):
 
-- `FetchError`: HTTP errors during shape fetching
-- `FetchBackoffAbortError`: Fetch aborted using AbortSignal
-- `MissingShapeHandleError`: Missing required shape handle
-- `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+- **`FetchError`**: HTTP request failed
+  - Properties: `status`, `text`, `json`, `headers`, `url`
+  - Use this to check HTTP status codes and implement retry logic
+
+- **`FetchBackoffAbortError`**: Request aborted by backoff logic
+  - Thrown when using `AbortSignal` to cancel requests
+
+- **`MissingShapeHandleError`**: Shape handle required when offset > -1
+
+- **`ParserNullValueError`**: NULL value in a column that doesn't allow NULL
+
+- **`MissingHeadersError`**: Response missing required headers
+
+Import error types from the package:
+
+```typescript
+import { FetchError, FetchBackoffAbortError } from '@electric-sql/client'
+```
 
 ### Changes-only mode and subset snapshots
 

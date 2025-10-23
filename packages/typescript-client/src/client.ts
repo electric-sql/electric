@@ -296,10 +296,46 @@ export interface ShapeStreamOptions<T = never> {
 
   /**
    * A function for handling shapestream errors.
-   * This is optional, when it is not provided any shapestream errors will be thrown.
-   * If the function returns an object containing parameters and/or headers
-   * the shapestream will apply those changes and try syncing again.
-   * If the function returns void the shapestream is stopped.
+   *
+   * When not provided, any shapestream errors will be thrown.
+   *
+   * **Return value behavior**:
+   * - Return an **object** (RetryOpts or empty `{}`) to retry syncing:
+   *   - `{}` - Retry with the same params and headers
+   *   - `{ params }` - Retry with modified params
+   *   - `{ headers }` - Retry with modified headers (e.g., refreshed auth token)
+   *   - `{ params, headers }` - Retry with both modified
+   * - Return **void** or **undefined** to stop the stream permanently
+   *
+   * **Important**: If you want syncing to continue after an error (e.g., to retry
+   * on network failures), you MUST return at least an empty object `{}`. Simply
+   * logging the error and returning nothing will stop syncing.
+   *
+   * Supports async functions that return `Promise<void | RetryOpts>`.
+   *
+   * @example
+   * ```typescript
+   * // Retry on network errors, stop on others
+   * onError: (error) => {
+   *   console.error('Stream error:', error)
+   *   if (error instanceof FetchError && error.status >= 500) {
+   *     return {} // Retry with same params
+   *   }
+   *   // Return void to stop on other errors
+   * }
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Refresh auth token on 401
+   * onError: async (error) => {
+   *   if (error instanceof FetchError && error.status === 401) {
+   *     const newToken = await refreshAuthToken()
+   *     return { headers: { Authorization: `Bearer ${newToken}` } }
+   *   }
+   *   return {} // Retry other errors
+   * }
+   * ```
    */
   onError?: ShapeStreamErrorHandler
 }
