@@ -124,8 +124,8 @@ const stream = new ShapeStream({
         const newToken = getRefreshedToken()
         return {
           headers: {
-            Authorization: `Bearer ${newToken}`
-          }
+            Authorization: `Bearer ${newToken}`,
+          },
         }
       }
 
@@ -135,8 +135,8 @@ const stream = new ShapeStream({
           params: {
             table: `foo`,
             where: `user_id = $1`,
-            params: [fallbackUserId]
-          }
+            params: [fallbackUserId],
+          },
         }
       }
     }
@@ -147,6 +147,7 @@ const stream = new ShapeStream({
 ```
 
 **Critical**: The `onError` callback's return value controls whether syncing continues:
+
 - **Return an object** (even empty `{}`) to retry syncing:
   - `{}` - Retry with same params and headers
   - `{ params }` - Retry with modified params
@@ -162,7 +163,7 @@ onError: async (error) => {
     // Perform async token refresh
     const newToken = await refreshAuthToken()
     return {
-      headers: { Authorization: `Bearer ${newToken}` }
+      headers: { Authorization: `Bearer ${newToken}` },
     }
   }
   return {} // Retry other errors
@@ -194,11 +195,13 @@ Note: Subscription error callbacks cannot control retry behavior - use the strea
 #### Common Error Types
 
 Setup errors:
+
 - `MissingShapeUrlError`: Missing required URL parameter
 - `InvalidSignalError`: Invalid AbortSignal instance
 - `ReservedParamError`: Using reserved parameter names
 
 Runtime errors:
+
 - `FetchError`: HTTP errors during shape fetching (includes `status`, `url`, `headers`)
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle
