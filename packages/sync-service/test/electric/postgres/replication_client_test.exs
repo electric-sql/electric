@@ -183,8 +183,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
                log_offset: %LogOffset{tx_offset: tx_lsn}
              } = receive_tx_change()
 
-      insert_item(conn, "return: not ok")
-      assert %NewRecord{record: %{"value" => "return: not ok"}} = receive_tx_change()
+      insert_item(conn, "another value")
+      assert %NewRecord{record: %{"value" => "another value"}} = receive_tx_change()
 
       # Verify that raising in the transaction callback crashes the connection process
       monitor = Process.monitor(pid)
@@ -207,7 +207,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       # confirmed one
       start_client(ctx)
 
-      assert %NewRecord{record: %{"value" => "return: not ok"}} = receive_tx_change()
+      assert %NewRecord{record: %{"value" => "another value"}} = receive_tx_change()
       assert %NewRecord{record: %{"value" => ^interrupt_val}} = receive_tx_change()
 
       refute_receive _
@@ -639,10 +639,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
         test_pid
       ) do
     case Map.fetch!(change.record, "value") do
-      "return: " <> val ->
-        send(test_pid, {:from_replication, transaction})
-        val
-
       "interrupt #PID" <> pid_str ->
         pid = pid_str |> String.to_charlist() |> :erlang.list_to_pid()
 
