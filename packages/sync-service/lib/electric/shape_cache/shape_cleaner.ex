@@ -30,6 +30,10 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   @spec remove_shapes_for_relations(list(Electric.oid_relation()), Keyword.t()) :: :ok
+  def remove_shapes_for_relations([], _opts) do
+    :ok
+  end
+
   def remove_shapes_for_relations(relations, opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     # We don't want for this call to be blocking because it will be called in `PublicationManager`
@@ -77,11 +81,9 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     affected_shapes =
       ShapeStatus.list_shape_handles_for_relations(state.stack_id, relations)
 
-    if relations != [] do
-      Logger.info(fn ->
-        "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
-      end)
-    end
+    Logger.info(fn ->
+      "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
+    end)
 
     # schedule these shape removals one by one to avoid blocking the GenServer
     # for too long to allow interleaved sync removals

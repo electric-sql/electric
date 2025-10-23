@@ -13,7 +13,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Postgres.Lsn
   alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
-  alias Electric.Publisher
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
   alias Electric.Shapes.Consumer.Materializer
@@ -22,6 +21,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Telemetry.IntervalTimer
+  alias Electric.Shapes.ConsumerRegistry
 
   import Electric.Utils, only: [map_while_ok: 2, map_if_ok: 2]
 
@@ -30,7 +30,8 @@ defmodule Electric.Replication.ShapeLogCollector do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             inspector: [type: :mod_arg, required: true],
-            persistent_kv: [type: :any, required: true]
+            persistent_kv: [type: :any, required: true],
+            consumer_registry_opts: [type: :any]
           )
 
   defguardp is_ready_to_process(state)
@@ -77,12 +78,33 @@ defmodule Electric.Replication.ShapeLogCollector do
     :ok = GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
-  def subscribe(server_ref, shape_handle, shape, action) when action in [:restore, :create] do
-    GenServer.call(server(server_ref), {:subscribe, shape_handle, shape, action})
+  # shapes that are being restored are already in the filters
+  # because they were restored from the ets at startup
+  def subscribe(_server_ref, _shape_handle, _shape, :restore) do
+    :ok
+  end
+
+  # new shapes -- created after boot -- do need to be added
+  def subscribe(server_ref, shape_handle, shape, :create) do
+    GenServer.call(server(server_ref), {:subscribe, shape_handle, shape})
+  end
+
+  def remove_shape(server_ref, shape_handle) do
+    # This has to be async otherwise the system will deadlock -
+    # - a consumer being cleanly shutdown may be waiting for a response from ShapeLogCollector
+    #   while ShapeLogCollector is waiting for an ack from a transaction event, or
+    # - a consumer that has crashed will be waiting in a terminate callback
+    #   for a reply from the unsubscribe while the ShapeLogCollector is again
+    #   waiting for a txn ack.
+    GenServer.cast(server(server_ref), {:remove_shape, shape_handle})
   end
 
   def notify_flushed(server_ref, shape_handle, offset) do
     GenServer.cast(server(server_ref), {:writer_flushed, shape_handle, offset})
+  end
+
+  def active_shapes(server_ref) do
+    GenServer.call(server(server_ref), :active_shapes)
   end
 
   def init(opts) do
@@ -104,9 +126,12 @@ defmodule Electric.Replication.ShapeLogCollector do
       |> PersistentReplicationState.get_tracked_relations()
       |> AffectedColumns.init()
 
+    {:ok, registry_state} =
+      ConsumerRegistry.new(stack_id, Map.get(opts, :consumer_registry_opts, []))
+
     state =
       Map.merge(opts, %{
-        subscriptions: {0, MapSet.new()},
+        subscriptions: 0,
         persistent_replication_data_opts: persistent_replication_data_opts,
         tracked_relations: tracker_state,
         partitions: Partitions.new(Keyword.new(opts)),
@@ -125,7 +150,8 @@ defmodule Electric.Replication.ShapeLogCollector do
                 pid -> send(pid, {:flush_boundary_updated, lsn})
               end
             end
-          )
+          ),
+        registry_state: registry_state
       })
 
     {:ok, state, {:continue, :restore_shapes}}
@@ -137,66 +163,52 @@ defmodule Electric.Replication.ShapeLogCollector do
       [],
       state.stack_id,
       fn ->
-        {partitions, filter, layers} =
+        {partitions, filter, layers, count} =
           state.stack_id
           |> Electric.ShapeCache.ShapeStatus.list_shapes()
           |> Enum.reduce(
-            {state.partitions, state.filter, state.dependency_layers},
-            fn {shape_handle, shape}, {partitions, filter, layers} ->
+            {state.partitions, state.filter, state.dependency_layers, 0},
+            fn {shape_handle, shape}, {partitions, filter, layers, count} ->
               {
                 Partitions.add_shape(partitions, shape_handle, shape),
                 Filter.add_shape(filter, shape_handle, shape),
-                DependencyLayers.add_dependency(layers, shape, shape_handle)
+                DependencyLayers.add_dependency(layers, shape, shape_handle),
+                count + 1
               }
             end
           )
 
-        {:noreply, %{state | partitions: partitions, filter: filter, dependency_layers: layers}}
+        Logger.info("Restored filters for #{count} shapes")
+
+        {:noreply,
+         %{
+           state
+           | partitions: partitions,
+             filter: filter,
+             dependency_layers: layers,
+             subscriptions: count
+         }}
       end
     )
   end
 
-  def handle_info({{:unsubscribe, shape_handle}, ref, :process, pid, _reason}, state) do
-    OpenTelemetry.with_span(
-      "shape_log_collector.unsubscribe",
-      [shape_handle: shape_handle],
-      state.stack_id,
-      fn ->
-        {:noreply, remove_subscription(state, {pid, ref}, shape_handle)}
-      end
-    )
-  end
-
-  def handle_call({:subscribe, shape_handle, shape, action}, {pid, _ref}, state) do
+  def handle_call({:subscribe, shape_handle, shape}, {pid, _ref}, state) do
     OpenTelemetry.with_span(
       "shape_log_collector.subscribe",
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
-        ref = Process.monitor(pid, tag: {:unsubscribe, shape_handle})
-        from = {pid, ref}
+        :ok = ConsumerRegistry.register_consumer(shape_handle, pid, state.registry_state)
 
         state =
-          case action do
-            :restore ->
-              # Once we move consumer monitoring out of this process,
-              # subscribing with action :restore will be a no-op that we can
-              # filter in the `subscribe/4` function
-              state
-
-            :create ->
-              %{
-                state
-                | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
-                  filter: Filter.add_shape(state.filter, shape_handle, shape),
-                  dependency_layers:
-                    DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
-              }
-          end
-          |> Map.update!(:pids_by_shape_handle, &Map.put(&1, shape_handle, pid))
-          |> Map.update!(:subscriptions, fn {count, set} ->
-            {count + 1, MapSet.put(set, from)}
-          end)
+          %{
+            state
+            | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
+              filter: Filter.add_shape(state.filter, shape_handle, shape),
+              dependency_layers:
+                DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
+          }
+          |> Map.update!(:subscriptions, &(&1 + 1))
           |> log_subscription_status()
 
         {:reply, :ok, state}
@@ -256,15 +268,29 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, handle_relation(rel, from, state)}
   end
 
+  def handle_call(:active_shapes, _from, state) do
+    {:reply, Filter.active_shapes(state.filter), state}
+  end
+
   def handle_cast({:writer_flushed, shape_id, offset}, state) do
     {:noreply,
      state
      |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
   end
 
+  def handle_cast({:remove_shape, shape_handle}, state) do
+    state =
+      case remove_subscription(state, shape_handle) do
+        {:ok, state} -> state
+        {:error, _} -> state
+      end
+
+    {:noreply, state}
+  end
+
   # If no-one is listening to the replication stream, then just return without
   # emitting the transaction.
-  defp handle_transaction(%{subscriptions: {0, _}} = state, txn) do
+  defp handle_transaction(%{subscriptions: 0} = state, txn) do
     Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
     {:ok, %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}}
@@ -319,9 +345,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
       # Each publish is synchronous, so layers will be processed in order
-      layer
-      |> Enum.map(&Map.fetch!(state.pids_by_shape_handle, &1))
-      |> Publisher.publish({:handle_event, event, context})
+      ConsumerRegistry.publish(layer, {:handle_event, event, context}, state.registry_state)
     end
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
@@ -359,7 +383,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       )
 
     case state do
-      %{subscriptions: {0, _}} ->
+      %{subscriptions: 0} ->
         Logger.debug(fn ->
           "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
         end)
@@ -367,54 +391,67 @@ defmodule Electric.Replication.ShapeLogCollector do
         %{state | tracked_relations: tracker_state}
 
       _ ->
+        # relation changes will also start consumers if they're not running
         publish(%{state | tracked_relations: tracker_state}, updated_rel)
     end
   end
 
-  defp remove_subscription(%{subscriptions: {count, set}} = state, from, shape_handle) do
-    OpenTelemetry.start_interval("unsubscribe_shape.remove_subscription")
+  defp remove_subscription(%{subscriptions: count} = state, shape_handle) do
+    OpenTelemetry.with_span(
+      "shape_log_collector.remove_shape",
+      [shape_handle: shape_handle],
+      state.stack_id,
+      fn ->
+        if Filter.has_shape?(state.filter, shape_handle) do
+          Logger.debug("Deleting shape #{shape_handle}")
 
-    subscriptions =
-      if MapSet.member?(set, from) do
-        {count - 1, MapSet.delete(set, from)}
-      else
-        Logger.error(
-          "Received unsubscribe from unknown consumer: #{inspect(from)}; known: #{inspect(set)}"
-        )
+          OpenTelemetry.start_interval("unsubscribe_shape.remove_subscription")
 
-        {count, set}
+          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_filter")
+          filter = Filter.remove_shape(state.filter, shape_handle)
+
+          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_partitions")
+          partitions = Partitions.remove_shape(state.partitions, shape_handle)
+
+          OpenTelemetry.start_interval("unsubscribe_shape.remove_pids_by_shape_handle")
+          pids_by_shape_handle = Map.delete(state.pids_by_shape_handle, shape_handle)
+
+          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_flush_tracker")
+          flush_tracker = FlushTracker.handle_shape_removed(state.flush_tracker, shape_handle)
+
+          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_dependency_layers")
+
+          dependency_layers =
+            DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)
+
+          Electric.Shapes.ConsumerRegistry.remove_consumer(shape_handle, state.registry_state)
+
+          OpenTelemetry.stop_and_save_intervals(
+            total_attribute: "unsubscribe_shape.total_duration_µs"
+          )
+
+          {:ok,
+           %{
+             state
+             | subscriptions: count - 1,
+               filter: filter,
+               partitions: partitions,
+               pids_by_shape_handle: pids_by_shape_handle,
+               dependency_layers: dependency_layers,
+               flush_tracker: flush_tracker
+           }
+           |> log_subscription_status()}
+        else
+          # This may happen as we attempt to remove a shape multiple times
+          # depending on the source of the delete, on the understanding that
+          # removal is idempotent.
+          {:error, "shape #{shape_handle} not registered"}
+        end
       end
-
-    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_filter")
-    filter = Filter.remove_shape(state.filter, shape_handle)
-
-    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_partitions")
-    partitions = Partitions.remove_shape(state.partitions, shape_handle)
-
-    OpenTelemetry.start_interval("unsubscribe_shape.remove_pids_by_shape_handle")
-    pids_by_shape_handle = Map.delete(state.pids_by_shape_handle, shape_handle)
-
-    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_flush_tracker")
-    flush_tracker = FlushTracker.handle_shape_removed(state.flush_tracker, shape_handle)
-
-    OpenTelemetry.start_interval("unsubscribe_shape.remove_from_dependency_layers")
-    dependency_layers = DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)
-
-    OpenTelemetry.stop_and_save_intervals(total_attribute: "unsubscribe_shape.total_duration_µs")
-
-    %{
-      state
-      | subscriptions: subscriptions,
-        filter: filter,
-        partitions: partitions,
-        pids_by_shape_handle: pids_by_shape_handle,
-        dependency_layers: dependency_layers,
-        flush_tracker: flush_tracker
-    }
-    |> log_subscription_status()
+    )
   end
 
-  defp log_subscription_status(%{subscriptions: {active, _set}} = state) do
+  defp log_subscription_status(%{subscriptions: active} = state) do
     Logger.debug(fn ->
       "#{active} consumers of replication stream"
     end)

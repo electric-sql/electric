@@ -51,12 +51,55 @@ defmodule Electric.ShapeCleanerTest do
     @cleanup_fn cleanup_fn
 
     describe "#{suite_title}" do
+      setup(ctx) do
+        %{stack_id: stack_id} = ctx
+        existing_shapes = Map.get(ctx, :restore_shapes, [])
+
+        Repatch.patch(
+          Electric.ShapeCache.ShapeStatus,
+          :list_shapes,
+          [mode: :shared],
+          fn ^stack_id ->
+            existing_shapes
+          end
+        )
+
+        Support.TestUtils.activate_mocks_for_descendant_procs(
+          Electric.Replication.ShapeLogCollector
+        )
+
+        parent = self()
+
+        Repatch.patch(
+          Electric.StatusMonitor,
+          :mark_shape_log_collector_ready,
+          [mode: :shared],
+          fn _, _ ->
+            send(parent, :shape_log_collector_ready)
+            :ok
+          end
+        )
+
+        :ok
+      end
+
       setup [
         :with_log_chunking,
         :with_registry,
         :with_shape_log_collector,
         :with_noop_publication_manager
       ]
+
+      setup(ctx) do
+        Electric.Replication.ShapeLogCollector.set_last_processed_lsn(
+          ctx.stack_id,
+          Electric.Postgres.Lsn.from_integer(100)
+        )
+
+        assert_receive :shape_log_collector_ready, 1000
+
+        :ok
+      end
 
       test "cleans up shape data and rotates the shape handle", ctx do
         Support.TestUtils.patch_snapshotter(fn parent,
@@ -103,6 +146,18 @@ defmodule Electric.ShapeCleanerTest do
         {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
         assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
         assert shape_handle != shape_handle2
+      end
+
+      @tag restore_shapes: [{"my-shape", @shape}]
+      test "removes shape handle from shape log collector if no consumer runnning", ctx do
+        alias Electric.Replication.ShapeLogCollector
+
+        assert ["my-shape"] = ShapeLogCollector.active_shapes(ctx.stack_id)
+
+        :ok = ShapeCleaner.remove_shape("my-shape", stack_id: ctx.stack_id)
+
+        assert_receive {Electric.Shapes.Monitor, :cleanup, "my-shape"}
+        assert [] = ShapeLogCollector.active_shapes(ctx.stack_id)
       end
 
       test "remove_shape swallows error if no shape to clean up", ctx do

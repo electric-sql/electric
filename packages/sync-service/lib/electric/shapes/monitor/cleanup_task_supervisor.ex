@@ -47,17 +47,23 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
           task2 =
             Task.Supervisor.async(name(stack_id), fn ->
               set_task_metadata(stack_id, shape_handle)
-              cleanup_storage(storage_impl, shape_handle)
+              cleanup_shape_log_collector(stack_id, shape_handle)
             end)
 
           task3 =
+            Task.Supervisor.async(name(stack_id), fn ->
+              set_task_metadata(stack_id, shape_handle)
+              cleanup_storage(storage_impl, shape_handle)
+            end)
+
+          task4 =
             Task.Supervisor.async(name(stack_id), fn ->
               set_task_metadata(stack_id, shape_handle)
               cleanup_publication_manager(publication_manager_impl, shape_handle)
             end)
 
           try do
-            [task1, task2, task3]
+            [task1, task2, task3, task4]
             |> Task.await_many(@cleanup_timeout)
           catch
             :exit, {:timeout, _} ->
@@ -87,12 +93,25 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     end
   end
 
+  defp cleanup_shape_log_collector(stack_id, shape_handle) do
+    perform_reporting_errors(
+      fn ->
+        :ok = Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle)
+        Logger.debug("Removed shape #{shape_handle} from ShapeLogCollector")
+      end,
+      "Failed to remove shape #{shape_handle} from ShapeLogCollector"
+    )
+  end
+
   defp cleanup_storage(
          storage_impl,
          shape_handle
        ) do
     perform_reporting_errors(
-      fn -> Storage.cleanup!(storage_impl, shape_handle) end,
+      fn ->
+        shape_storage = Storage.for_shape(shape_handle, storage_impl)
+        Storage.cleanup!(shape_storage)
+      end,
       "Failed to delete data for shape #{shape_handle}"
     )
   end

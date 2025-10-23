@@ -10,6 +10,7 @@ defmodule Electric.ShapeCacheBehaviour do
 
   @callback get_shape(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()} | nil
+  @callback fetch_shape_by_handle(shape_handle(), opts :: Access.t()) :: {:ok, Shape.t()} | :error
   @callback get_or_create_shape_handle(shape_def(), opts :: Access.t()) ::
               {shape_handle(), current_snapshot_offset :: LogOffset.t()}
   @callback list_shapes(keyword() | map()) :: [{shape_handle(), Shape.t()}] | :error
@@ -17,6 +18,8 @@ defmodule Electric.ShapeCacheBehaviour do
   @callback await_snapshot_start(shape_handle(), opts :: Access.t()) ::
               :started | {:error, term()}
   @callback has_shape?(shape_handle(), Access.t()) :: boolean()
+  @callback start_consumer_for_handle(shape_handle(), Access.t()) ::
+              {:ok, [{shape_handle(), pid()}]} | {:error, :no_shape}
   @callback clean_shape(shape_handle(), Access.t()) :: :ok
 end
 
@@ -27,6 +30,7 @@ defmodule Electric.ShapeCache do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
+  alias Electric.ShapeCache
   alias Electric.Shapes
   alias Electric.Shapes.ConsumerSupervisor
   alias Electric.ShapeCache.ShapeCleaner
@@ -37,6 +41,7 @@ defmodule Electric.ShapeCache do
   @behaviour Electric.ShapeCacheBehaviour
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_def() :: Electric.ShapeCacheBehaviour.shape_def()
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
@@ -56,10 +61,6 @@ defmodule Electric.ShapeCache do
             shape_hibernate_after: [
               type: :integer,
               default: Electric.Config.default(:shape_hibernate_after)
-            ],
-            recover_shape_timeout: [
-              type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
-              default: 5_000
             ],
             snapshot_timeout_to_first_data: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
@@ -104,6 +105,12 @@ defmodule Electric.ShapeCache do
   def get_shape(shape, opts \\ []) do
     table = ShapeStatus.shape_meta_table(opts)
     ShapeStatus.get_existing_shape(table, shape)
+  end
+
+  @impl Electric.ShapeCacheBehaviour
+  def fetch_shape_by_handle(handle, opts) do
+    table = ShapeStatus.shape_meta_table(opts)
+    ShapeStatus.fetch_shape_by_handle(table, handle)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -199,6 +206,12 @@ defmodule Electric.ShapeCache do
     end
   end
 
+  @impl Electric.ShapeCacheBehaviour
+  def start_consumer_for_handle(shape_handle, opts) when is_binary(shape_handle) do
+    server = Access.get(opts, :server, name(opts))
+    GenServer.call(server, {:start_consumer_for_handle, shape_handle}, @call_timeout)
+  end
+
   @impl GenServer
   def init(opts) do
     opts = Map.new(opts)
@@ -224,13 +237,12 @@ defmodule Electric.ShapeCache do
       snapshot_timeout_to_first_data: opts.snapshot_timeout_to_first_data
     }
 
-    {:ok, state, {:continue, {:recover_shapes, opts.recover_shape_timeout}}}
+    {:ok, state, {:continue, :recover_shapes}}
   end
 
   @impl GenServer
-  def handle_continue({:recover_shapes, recover_shape_timeout}, state) do
-    {last_processed_lsn, total_recovered, total_failed_to_recover} =
-      recover_shapes(state, recover_shape_timeout)
+  def handle_continue(:recover_shapes, state) do
+    {last_processed_lsn, total_recovered, total_failed_to_recover} = recover_shapes(state)
 
     {pub_man, pub_man_opts} = state.publication_manager
     pub_man.wait_for_restore(pub_man_opts)
@@ -259,70 +271,74 @@ defmodule Electric.ShapeCache do
     {:reply, !is_nil(ShapeStatus.get_existing_shape(state.stack_id, shape_handle)), state}
   end
 
-  # Timeout is per-shape, not for the entire function
-  defp recover_shapes(state, timeout) do
-    # we're starting here group after group without parallelization between groups
-    all_handles_and_shapes = ShapeStatus.list_shapes(state.stack_id)
-
-    recovered =
-      all_handles_and_shapes
-      |> group_into_layers()
-      |> Enum.flat_map(fn shape_group ->
-        Task.Supervisor.async_stream_nolink(
-          Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor),
-          shape_group,
-          fn {shape_handle, shape} -> start_and_recover_shape(shape_handle, shape, state) end,
-          ordered: true,
-          timeout: timeout,
-          on_timeout: :kill_task,
-          zip_input_on_exit: true
-        )
-        |> Stream.flat_map(fn
-          {:ok, result} ->
-            result
-
-          # All other exit reasons are caught in the `start_and_recover_shape/3` function
-          {:exit, {{shape_handle, shape}, :timeout}} ->
-            Logger.error(
-              "shape #{inspect(shape)} (#{inspect(shape_handle)}) failed to start within #{timeout}ms"
-            )
-
-            ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
-
-            []
-        end)
-        |> Enum.to_list()
-      end)
-
-    total_recovered = length(recovered)
-    total_failed_to_recover = length(all_handles_and_shapes) - total_recovered
-
-    {Lsn.max(recovered), total_recovered, total_failed_to_recover}
-  end
-
-  defp start_and_recover_shape(shape_handle, shape, state) do
-    case start_shape(shape_handle, shape, state, nil, :restore) do
-      :ok ->
-        consumer = Shapes.Consumer.name(state.stack_id, shape_handle)
-        # This `initial_state` is a GenServer call, so we're blocked until consumer is ready
-        {:ok, latest_offset} = Shapes.Consumer.initial_state(consumer)
-        [LogOffset.extract_lsn(latest_offset)]
+  def handle_call({:start_consumer_for_handle, shape_handle}, _from, state) do
+    # This is racy: it's possible for a shape to have been deleted while the
+    # ShapeLogCollector is processing a transaction that includes it
+    # In this case fetch_shape_by_handle returns an error. ConsumerRegistry
+    # basically ignores the {:error, :no_shape} result - excluding the shape handle
+    # from the broadcast.
+    case ShapeStatus.fetch_shape_by_handle(state.stack_id, shape_handle) do
+      {:ok, shape} ->
+        # TODO: otel ctx from shape log collector?
+        {
+          :reply,
+          restore_shape_and_dependencies(shape_handle, shape, state, nil),
+          state
+        }
 
       :error ->
-        []
+        {:reply, {:error, :no_shape}, state}
     end
-  catch
-    # exception can only come from the receover_shape call
-    # if the shape consumer failed to start for some reason
-    # start_shape/4 will have returned an error
-    kind, reason when kind in [:exit, :error] ->
-      Logger.error(
-        "Failed to recover shape #{shape_handle}: #{Exception.format(kind, reason, __STACKTRACE__)}"
-      )
+  end
 
-      # clean up corrupted data to avoid persisting bad state
-      ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
-      []
+  defp recover_shapes(state) do
+    import Electric.Postgres.Lsn, only: [is_larger: 2]
+
+    start_time = System.monotonic_time()
+    %{stack_id: stack_id, storage: storage} = state
+
+    all_handles_and_shapes = ShapeStatus.list_shapes(state.stack_id)
+
+    {max_lsn, total_recovered} =
+      all_handles_and_shapes
+      |> Task.async_stream(
+        fn {shape_handle, shape} ->
+          shape_storage = ShapeCache.Storage.for_shape(shape_handle, storage)
+
+          case ShapeCache.Storage.get_current_position(shape_storage) do
+            {:ok, latest_offset, _pg_snapshot} ->
+              {shape_handle, LogOffset.extract_lsn(latest_offset)}
+
+            {:error, reason} ->
+              Logger.error([
+                "shape #{inspect(shape)} (#{inspect(shape_handle)})",
+                " returned error from get_current_position: #{inspect(reason)}"
+              ])
+
+              ShapeCleaner.remove_shape(shape_handle, stack_id: stack_id)
+
+              {shape_handle, :error}
+          end
+        end,
+        ordered: false
+      )
+      |> Enum.reduce({Lsn.from_integer(0), 0}, fn
+        {:ok, {_handle, :error}}, acc -> acc
+        {:ok, {_handle, lsn}}, {max, recovered} when is_larger(lsn, max) -> {lsn, recovered + 1}
+        _, {max, recovered} -> {max, recovered + 1}
+      end)
+
+    total_failed_to_recover = length(all_handles_and_shapes) - total_recovered
+
+    duration = System.monotonic_time() - start_time
+
+    Logger.info([
+      "Restored LSN position #{max_lsn} in",
+      " #{System.convert_time_unit(duration, :native, :millisecond)}ms",
+      " (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
+    ])
+
+    {max_lsn, total_recovered, total_failed_to_recover}
   end
 
   defp maybe_create_shape(shape, otel_ctx, state) do
@@ -340,7 +356,7 @@ defmodule Electric.ShapeCache do
 
       Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-      :ok = start_shape(shape_handle, shape, state, otel_ctx, :create)
+      {:ok, _pid} = start_shape(shape_handle, shape, state, otel_ctx, :create)
 
       # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
       # "latest offset" because it'll be in the snapshotting stage
@@ -363,7 +379,7 @@ defmodule Electric.ShapeCache do
       })
     end)
 
-    case Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(
+    case Shapes.DynamicConsumerSupervisor.start_shape_consumer(
            state.consumer_supervisor,
            stack_id: state.stack_id,
            inspector: state.inspector,
@@ -379,8 +395,15 @@ defmodule Electric.ShapeCache do
            snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data,
            action: action
          ) do
-      {:ok, _supervisor_pid} ->
-        :ok
+      {:ok, supervisor_pid} ->
+        # TODO: we will just get the consumer pid when we simplify the consumer process tree
+        consumer_pid =
+          Enum.find_value(Supervisor.which_children(supervisor_pid), fn
+            {Electric.Shapes.Consumer, pid, :worker, _modules} -> pid
+            _child -> nil
+          end)
+
+        {:ok, consumer_pid}
 
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
@@ -390,18 +413,64 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @spec group_into_layers([{shape_handle(), Shape.t()}]) :: [[{shape_handle(), Shape.t()}], ...]
-  defp group_into_layers(handles_and_shapes, acc \\ [], visited \\ MapSet.new())
-  defp group_into_layers([], acc, _visited), do: Enum.reverse(acc)
+  # start_shape assumes that any dependent shapes already have running consumers
+  # so we need to start those. this may be something we can do lazily: i.e.
+  # only starting dependent shapes when they receive a write
+  defp restore_shape_and_dependencies(shape_handle, shape, state, otel_ctx) do
+    [{shape_handle, shape}]
+    |> build_shape_dependencies(MapSet.new())
+    |> elem(0)
+    |> Enum.reduce_while({:ok, []}, fn {handle, shape}, {:ok, acc} ->
+      case Electric.Shapes.ConsumerRegistry.whereis(state.stack_id, handle) do
+        nil ->
+          case start_shape(handle, shape, state, otel_ctx, :restore) do
+            {:ok, pid} ->
+              {:cont, {:ok, [{handle, pid} | acc]}}
 
-  defp group_into_layers(handles_and_shapes, acc, visited) do
-    {appendable, missing_deps} =
-      Enum.split_with(handles_and_shapes, fn {_, shape} ->
-        Enum.all?(shape.shape_dependencies_handles, &MapSet.member?(visited, &1))
-      end)
+            :error ->
+              {:halt, {:error, handle}}
+          end
 
-    visited = MapSet.new(appendable, &elem(&1, 0)) |> MapSet.union(visited)
+        pid when is_pid(pid) ->
+          {:cont, {:ok, acc}}
+      end
+    end)
+    |> case do
+      {:ok, handles} ->
+        {:ok, handles}
 
-    group_into_layers(missing_deps, [appendable | acc], visited)
+      {:error, failed_handle} ->
+        if failed_handle != shape_handle do
+          Logger.warning(
+            "Failed to start consumer for handle #{shape_handle}: error starting consumer for inner shape #{failed_handle}"
+          )
+
+          # If we got an error starting any of the dependent shapes then we
+          # remove the outer shape too
+          ShapeCleaner.remove_shape(shape_handle, stack_id: state.stack_id)
+        end
+
+        {:error, "Failed to start consumer for #{shape_handle}"}
+    end
+  end
+
+  @spec build_shape_dependencies([{shape_handle(), shape_def()}], MapSet.t()) ::
+          {[
+             {shape_handle(), shape_def()}
+           ], MapSet.t()}
+
+  defp build_shape_dependencies([], known) do
+    {[], known}
+  end
+
+  defp build_shape_dependencies([{handle, shape} | rest], known) do
+    {siblings, known} = build_shape_dependencies(rest, MapSet.put(known, handle))
+
+    {descendents, known} =
+      Enum.zip(shape.shape_dependencies_handles, shape.shape_dependencies)
+      |> Enum.reject(fn {handle, _shape} -> MapSet.member?(known, handle) end)
+      |> build_shape_dependencies(known)
+
+    {descendents ++ [{handle, shape} | siblings], known}
   end
 end

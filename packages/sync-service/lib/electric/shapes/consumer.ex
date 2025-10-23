@@ -614,6 +614,7 @@ defmodule Electric.Shapes.Consumer do
     } = state
 
     shape_status_mod.remove_shape(stack_id, shape_handle)
+    ShapeLogCollector.remove_shape(stack_id, shape_handle)
 
     :ok = Electric.Shapes.Monitor.notify_reader_termination(stack_id, shape_handle, reason)
 

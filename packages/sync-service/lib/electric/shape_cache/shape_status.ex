@@ -8,7 +8,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type xmin() :: non_neg_integer()
 
-  @type stack_id() :: String.t()
+  @type stack_id() :: Electric.stack_id()
 
   if Mix.env() == :test do
     @type stack_ref() ::
@@ -27,6 +27,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback count_shapes(stack_ref()) :: non_neg_integer()
   @callback get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
+  @callback fetch_shape_by_handle(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | :error
   @callback add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   @callback initialise_shape(stack_ref(), shape_handle(), xmin(), LogOffset.t()) :: :ok
   @callback set_snapshot_xmin(stack_ref(), shape_handle(), xmin()) :: :ok
@@ -260,6 +261,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
+  def fetch_shape_by_handle(stack_ref, shape_handle) do
+    case :ets.lookup_element(
+           shape_meta_table(stack_ref),
+           {@shape_meta_data, shape_handle},
+           @shape_meta_shape_pos,
+           nil
+         ) do
+      nil -> :error
+      shape -> {:ok, shape}
+    end
+  end
+
+  @impl true
   def initialise_shape(stack_ref, shape_handle, snapshot_xmin, latest_offset) do
     true =
       :ets.update_element(
@@ -341,7 +355,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def snapshot_started?(stack_ref, shape_handle) do
     case :ets.lookup(shape_meta_table(stack_ref), {@snapshot_started, shape_handle}) do
       [] -> false
-      [{{@snapshot_started, ^shape_handle}, true}] -> true
+      [{{@snapshot_started, ^shape_handle}, started?}] -> started?
     end
   end
 
@@ -406,17 +420,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp load(meta_table, last_used_table, storage) do
+    _ = Electric.Postgres.supported_types()
+
     with {:ok, shapes} <- Storage.get_all_stored_shapes(storage) do
       now = System.monotonic_time()
 
       {meta_tuples, last_used_tuples} =
-        Enum.flat_map_reduce(shapes, [], fn {shape_handle, shape}, last_used_tuples ->
+        Enum.flat_map_reduce(shapes, [], fn {shape_handle, {shape, snapshot_started?}},
+                                            last_used_tuples ->
           relations = Shape.list_relations(shape)
 
           meta_tuples =
             [
               {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
-              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()}
+              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()},
+              {{@snapshot_started, shape_handle}, snapshot_started?}
               | Enum.map(relations, fn {oid, _} ->
                   {{@shape_relation_lookup, oid, shape_handle}, true}
                 end)
@@ -438,10 +456,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   defp restore_dependency_handles(shapes, meta_table, storage) do
     shapes
-    |> Enum.filter(fn {_, shape} ->
+    |> Enum.filter(fn {_, {shape, _snapshot_started?}} ->
       Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
     end)
-    |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
+    |> Enum.each(fn {handle, {%Shape{shape_dependencies: deps} = shape, _snapshot_started?}} ->
       handles = Enum.map(deps, &get_existing_shape(meta_table, &1))
 
       if not Enum.any?(handles, &is_nil/1) do

@@ -2,6 +2,8 @@ defmodule Electric.StatusMonitor do
   @moduledoc false
   use GenServer
 
+  require Logger
+
   @type status() :: %{
           conn: :waiting_on_lock | :starting | :up | :sleeping,
           shape: :starting | :up
@@ -219,7 +221,7 @@ defmodule Electric.StatusMonitor do
 
   def handle_cast({:condition_met, condition, process}, state)
       when condition in @conditions do
-    Process.monitor(process)
+    Process.monitor(process, tag: {:down, condition})
     :ets.insert(ets_table(state.stack_id), {condition, {true, %{process: process}}})
     {:noreply, maybe_reply_to_waiters(state)}
   end
@@ -266,8 +268,12 @@ defmodule Electric.StatusMonitor do
     {:reply, :ok, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+  def handle_info({{:down, condition}, _ref, :process, pid, _reason}, state) do
     :ets.match_delete(ets_table(state.stack_id), {:_, {true, %{process: pid}}})
+
+    Logger.warning(
+      "#{__MODULE__} condition failed: #{inspect(condition)}. Status #{inspect(status(state.stack_id))}"
+    )
 
     {:noreply, state}
   end

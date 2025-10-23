@@ -39,9 +39,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
   alias Electric.ShapeCache.PureFileStorage.Snapshot
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
+
   import LogOffset
   import Electric.ShapeCache.PureFileStorage.SharedRecords
   import Electric.ShapeCache.PureFileStorage.WriteLoop, only: [writer_acc: 0]
+
+  import File, only: [write!: 3]
+
   require Logger
 
   @behaviour Electric.ShapeCache.Storage
@@ -173,7 +177,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
         |> Enum.reduce(%{}, fn opts, acc ->
           case read_shape_definition(opts) do
             {:ok, shape} ->
-              Map.put(acc, opts.shape_handle, shape)
+              snapshot_started? = snapshot_started?(opts)
+              Map.put(acc, opts.shape_handle, {shape, snapshot_started?})
 
             _ ->
               Logger.warning(
@@ -681,7 +686,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     metadata_dir = shape_metadata_dir(opts)
 
     path = Path.join(metadata_dir, "#{key}.bin.tmp")
-    File.write!(path, :erlang.term_to_binary(value), [:write, :raw])
+    write!(path, :erlang.term_to_binary(value), [:write, :raw])
 
     rename!(path, Path.join(metadata_dir, "#{key}.bin"))
   end
@@ -708,6 +713,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
         :pg_snapshot ->
           :ets.update_element(table, handle, {storage_meta(:pg_snapshot) + 1, value})
       end
+
+      :ok
     rescue
       ArgumentError ->
         # ETS entry doesn't exist yet, that's okay
@@ -716,7 +723,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp write_shape_definition!(%__MODULE__{} = opts, shape_definition) do
-    File.write!(
+    write!(
       shape_metadata_path(opts, "shape_definition.json"),
       Jason.encode!(shape_definition),
       [:raw]
@@ -880,7 +887,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def make_new_snapshot!(stream, %__MODULE__{} = opts) do
     last_chunk_num = Snapshot.write_snapshot_stream!(stream, opts)
     write_cached_metadata!(opts, :last_snapshot_chunk, LogOffset.new(0, last_chunk_num))
-    :ok
   end
 
   def get_log_stream(%LogOffset{} = min_offset, %LogOffset{} = max_offset, opts)
