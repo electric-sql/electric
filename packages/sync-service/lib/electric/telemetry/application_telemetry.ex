@@ -223,7 +223,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         last_value("system.memory_percent.free_memory"),
         last_value("system.memory_percent.available_memory"),
         last_value("system.memory_percent.used_memory"),
-        sum("vm.monitor.long_message_queue.present", tags: [:process_type]),
+        sum("vm.monitor.long_message_queue.length", tags: [:process_type]),
         distribution("vm.monitor.long_schedule.timeout",
           tags: [:process_type],
           unit: :millisecond
@@ -282,7 +282,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     def process_memory(%{top_process_count: process_count}) do
       for %{type: type, memory: memory} <-
-            Electric.Debug.Process.top_memory_by_type(process_count) do
+            Electric.Telemetry.Processes.top_memory_by_type(process_count) do
         :telemetry.execute([:process, :memory], %{total: memory}, %{process_type: to_string(type)})
       end
     end
