@@ -19,8 +19,9 @@ This document analyzes a proposed architecture for optimizing Electric's routing
 3. **Expected Improvements** (projected):
    - **3-10x faster** routing for equality-heavy workloads
    - **60-80% reduction** in memory allocations per lookup
-   - **Near-linear parallelism** across CPU cores via sharding
+   - **10-32x reduced slow lane work** via sharding (algorithmic, not parallel)
    - **Isolated slow path** prevents complex shapes from impacting simple ones
+   - **Better cache locality** from smaller per-shard working sets
 
 4. **Recommendation**: Proceed with implementation in phases, starting with posting lists and fast/slow lane separation, then adding sharding.
 
@@ -283,10 +284,12 @@ Proposed:
 
 ### 4.1 Benefits
 
-**1. Parallelization**
-- Current: Single Filter bottleneck (though ETS has read_concurrency)
-- Proposed: N independent shards, true multi-core utilization
-- Impact: Near-linear scaling up to N cores
+**1. Algorithmic Improvement** (NOT Parallelization)
+- Current: O(N) evaluation of all shapes in `other_shapes`
+- Proposed: O(N/shards) evaluation of shapes in relevant shard(s)
+- Impact: 10-32x less work for slow lane (still on ONE core)
+- **Important**: ShapeLogCollector is a single GenServer, so routing runs on one core. Sharding provides algorithmic speedup, not parallelism. True parallelism only possible with batch processing or multiple concurrent transactions.
+- Cache locality: Smaller per-shard working sets improve CPU cache hit rates
 
 **2. Reduced Allocations**
 - Current: MapSet.new() on every `affected_shapes` call
@@ -307,6 +310,15 @@ Proposed:
 - Current: All shapes use Eval.Runner (even `id = 42`)
 - Proposed: Direct comparison for simple shapes
 - Impact: 5-20x faster for majority case
+
+**6. Foundation for Future Parallelism**
+- Architecture enables (but doesn't automatically provide) parallelization
+- Possible parallelism paths:
+  - **Batch processing**: Route multiple records concurrently across shards
+  - **Table partitioning**: Multiple ShapeLogCollectors, one per table
+  - **Distributed sharding**: Shards spread across cluster nodes (Phase 7)
+- Current single-record, single-ShapeLogCollector routing: NO parallelism
+- Benefit: Architectural flexibility for future scaling
 
 ### 4.2 Costs
 
