@@ -849,7 +849,519 @@ ShardedRouter.affected_shapes(router, table, record, opts) #=> [shape_id]
 
 ---
 
-**Document Version**: 1.0
+## 10. Path to Millions: Scaling Beyond 50k Shapes
+
+### 10.1 The Critical Question
+
+**Can Electric scale to millions of shapes while maintaining <10-20 μs routing latency?**
+
+**Short Answer**: Yes, but it requires phases 6-8 beyond the initial prototype.
+
+**Long Answer**: The path to millions depends critically on maintaining the **"write-to-0-1 shapes"** property at scale.
+
+### 10.2 Scaling Analysis by Shape Count
+
+#### Target 1: 10k-50k Shapes (Phases 1-4)
+
+**Memory Projection**:
+- Posting list entries: 50k × 24 bytes = 1.2 MB
+- CompiledShape structs: 50k × 150 bytes = 7.5 MB
+- Shape metadata (interned): 50k × 200 bytes = 10 MB
+- **Total routing overhead: ~20 MB**
+- **Total with shape logs: ~2-5 GB**
+
+**Routing Performance**:
+- Fast lane (90% shapes): O(1) posting list = **<5 μs**
+- Slow lane (10% shapes): 5k / 32 shards = 156 per shard = **~15 μs**
+- **Average: <10 μs** ✅
+
+**Confidence**: **High** (covered by Phases 1-4)
+
+#### Target 2: 50k-500k Shapes (Phases 5-6)
+
+**Memory Projection**:
+- Posting lists: 500k × 24 bytes = 12 MB
+- CompiledShapes: 500k × 150 bytes = 75 MB
+- Shape metadata: 500k × 200 bytes = 100 MB
+- Bloom filters (32 shards): 32 × 1 MB = 32 MB
+- **Total routing overhead: ~220 MB**
+- **Total with shape logs: ~5-15 GB**
+
+**Routing Performance** (with optimizations):
+- Fast lane: O(1) with Bloom filter pre-check = **<5 μs**
+- Slow lane: 50k / 256 shards = 195 per shard
+  - With subsumption: ~50 actual evaluations = **~20 μs**
+- **Average: <15 μs** ✅
+
+**Confidence**: **Medium** (requires Phase 5-6 optimizations)
+
+**Key Requirement**: Bloom filters + increased shard count + subsumption
+
+#### Target 3: 500k-5M Shapes (Phases 7-8)
+
+**Memory Projection**:
+- Posting lists: 5M × 24 bytes = 120 MB
+- CompiledShapes: 5M × 150 bytes = 750 MB
+- Shape metadata (distributed): 5M × 100 bytes = 500 MB (with aggressive dedup)
+- Bloom filters (1024 shards): 1024 × 1 MB = 1 GB
+- **Total routing overhead: ~2.4 GB**
+- **Total across cluster: ~20-50 GB** (distributed)
+
+**Routing Performance** (distributed):
+- Fast lane: Local shard lookup = **<10 μs**
+- Slow lane: 500k / 1024 shards = 488 per shard
+  - With subsumption + materialized indexes: ~20 evaluations = **~20 μs**
+- **Average: <25 μs** ⚠️
+
+**Confidence**: **Lower** (requires distributed architecture)
+
+**Key Requirements**:
+- Multi-node sharding
+- Materialized indexes for high-cardinality fields
+- Aggressive subsumption analysis
+- Shape family clustering
+
+### 10.3 The Bottleneck Shifts
+
+As you scale, the bottleneck **changes**:
+
+| Shape Count | Primary Bottleneck | Solution |
+|-------------|-------------------|----------|
+| **1k-10k** | `other_shapes` evaluation | ✅ **Sharding (Phase 4)** |
+| **10k-100k** | Shard count insufficient | ✅ **256-1024 shards (Phase 6)** |
+| **100k-1M** | Slow lane still O(n/shards) | ⚠️ **Subsumption + Bloom filters (Phase 6)** |
+| **1M-10M** | Single-node memory limit | ⚠️ **Distributed sharding (Phase 7)** |
+| **10M+** | Even distributed slow lane | ⚠️ **Materialized indexes (Phase 8)** |
+
+### 10.4 Phase 6: Advanced Indexing (100k-1M shapes)
+
+**Goal**: Reduce slow lane overhead and increase parallelism
+
+#### 6.1 Bloom Filters per Shard
+
+**Problem**: Querying all shards has overhead even if most won't match
+
+**Solution**: Per-shard Bloom filters to skip shards
+
+```elixir
+defmodule RouterShard do
+  defstruct [
+    :shard_id,
+    :posting_list,
+    :bloom_filter,  # NEW: Probabilistic filter
+    :shapes,
+    :slow_lane_shapes
+  ]
+end
+
+def affected_shapes(router, table, record) do
+  # Check Bloom filter before querying shard
+  target_shards =
+    for shard_id <- 0..(router.num_shards - 1),
+        shard = Map.fetch!(router.shards, shard_id),
+        bloom_filter_might_match?(shard.bloom_filter, record) do
+      shard_id
+    end
+
+  # Only query shards that might match
+  query_shards(router, target_shards, table, record)
+end
+```
+
+**Benefits**:
+- False positive rate: ~1% (configurable)
+- Memory: ~1 MB per shard for 100k shapes
+- Skips 99% of irrelevant shards
+
+**Expected Gain**: 5-10x fewer shard queries
+
+#### 6.2 Hierarchical Sharding
+
+**Problem**: 32 shards insufficient for 500k+ shapes
+
+**Solution**: Increase to 256-1024 shards
+
+```elixir
+# Scale shard count with shape count
+def optimal_shard_count(shape_count) do
+  cond do
+    shape_count < 10_000 -> 32
+    shape_count < 100_000 -> 128
+    shape_count < 1_000_000 -> 512
+    true -> 1024
+  end
+end
+```
+
+**Benefits**:
+- Slow lane: 500k shapes / 512 shards = ~977 per shard (vs 15k with 32 shards)
+- Better CPU utilization on high-core-count machines
+
+**Expected Gain**: 10-20x fewer slow lane evaluations per shard
+
+#### 6.3 Subsumption Analysis
+
+**Problem**: Many shapes have overlapping predicates
+
+**Solution**: Detect when one shape implies another
+
+**Example**:
+```sql
+-- Shape A: id = 5
+-- Shape B: id >= 0
+-- Shape C: id IN (1, 5, 10)
+
+-- If record has id = 5:
+--   Shape A matches → Shape B must match (no need to evaluate)
+--   Shape A matches → Shape C must match (no need to evaluate)
+```
+
+**Implementation**:
+```elixir
+defmodule Subsumption do
+  def build_subsumption_graph(shapes) do
+    # For each pair of shapes, check if A implies B
+    for shape_a <- shapes, shape_b <- shapes, shape_a != shape_b do
+      if implies?(shape_a.where, shape_b.where) do
+        {shape_a.id, :implies, shape_b.id}
+      end
+    end
+  end
+
+  def prune_with_subsumption(matched_shapes, subsumption_graph) do
+    # If shape A matched and A implies B, mark B as matched without evaluation
+    matched_shapes ++ implied_shapes(matched_shapes, subsumption_graph)
+  end
+end
+```
+
+**Expected Gain**: 30-50% fewer slow lane evaluations
+
+#### 6.4 Shape Families
+
+**Problem**: Similar WHERE patterns evaluated independently
+
+**Solution**: Group shapes by pattern, share evaluation
+
+**Example**:
+```sql
+-- Family: "user_id equality"
+--   Shape 1: user_id = 100
+--   Shape 2: user_id = 200
+--   Shape 3: user_id = 300
+--   ... (10,000 shapes)
+
+-- Evaluation:
+--   1. Extract user_id from record ONCE
+--   2. Lookup in posting list: {user_id => [shape_ids]}
+--   3. All 10,000 shapes handled with 1 field extraction + 1 lookup
+```
+
+**Implementation**: Already partially covered by PostingList, but extend to complex patterns
+
+**Expected Gain**: 2-5x faster for clustered shape patterns
+
+### 10.5 Phase 7: Distributed Sharding (1M-10M shapes)
+
+**Goal**: Spread routing load across multiple nodes
+
+#### 7.1 Multi-Node Shard Distribution
+
+**Architecture**:
+```
+                ┌─────────────────────┐
+                │  Coordinator Node   │
+                │  (Routes to shards) │
+                └──────────┬──────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+   ┌────▼────┐        ┌────▼────┐       ┌────▼────┐
+   │ Node 1  │        │ Node 2  │       │ Node N  │
+   │ Shards  │        │ Shards  │       │ Shards  │
+   │ 0-255   │        │ 256-511 │       │ 768-1023│
+   └─────────┘        └─────────┘       └─────────┘
+```
+
+**Shard Assignment**:
+```elixir
+# Consistent hashing for shard placement
+def node_for_shard(shard_id, nodes) do
+  node_index = :erlang.phash2(shard_id, length(nodes))
+  Enum.at(nodes, node_index)
+end
+
+# Route to remote shard if needed
+def affected_shapes(router, table, record) do
+  target_shards = determine_target_shards(router, table, record)
+
+  # Group by node
+  shards_by_node = Enum.group_by(target_shards, &node_for_shard(&1, router.nodes))
+
+  # Parallel RPC to all nodes
+  Task.async_stream(shards_by_node, fn {node, shards} ->
+    :rpc.call(node, RouterShard, :batch_affected_shapes, [shards, table, record])
+  end)
+  |> Enum.flat_map(fn {:ok, results} -> results end)
+end
+```
+
+**Benefits**:
+- **Memory**: Distributed across nodes (5M shapes × 400 bytes / 10 nodes = ~2 GB per node)
+- **CPU**: Parallel execution across nodes
+- **Scalability**: Add nodes as shape count grows
+
+**Challenges**:
+- Network latency: RPC adds 1-5 ms overhead
+- Fault tolerance: Node failures require shard replication
+- Coordination: Need distributed registry (pg, Registry, or custom)
+
+**Expected Gain**: Near-linear scaling with node count (up to network latency limits)
+
+#### 7.2 Local-First Routing
+
+**Optimization**: Keep frequently-matched shapes on local node
+
+```elixir
+defmodule LocalityAware do
+  def assign_shape(router, shape, locality_hint) do
+    shard_id = hash(shape.routing_key, router.num_shards)
+
+    # If this shape matches frequently on this node, override placement
+    node = if frequently_matched_locally?(shape) do
+      node()  # Keep local
+    else
+      node_for_shard(shard_id, router.nodes)  # Distribute
+    end
+
+    place_shard(shard_id, node)
+  end
+end
+```
+
+**Expected Gain**: 80%+ of lookups stay local, avoiding network hops
+
+### 10.6 Phase 8: Materialized Indexes (10M+ shapes)
+
+**Goal**: Pre-compute routing results for common cases
+
+#### 8.1 Materialized Value→Shapes Index
+
+**Problem**: Even with sharding, high-cardinality fields are expensive
+
+**Solution**: Pre-compute and cache value→[shape_ids] for hot values
+
+**Example**:
+```elixir
+# For field "user_id" with 1M distinct values, 5M shapes:
+# Instead of evaluating 5M shapes for user_id = 12345,
+# Pre-compute: user_id_index[12345] = [shape_1, shape_5, shape_100, ...]
+
+defmodule MaterializedIndex do
+  # Background process updates index
+  def maintain_index(index, shapes) do
+    for shape <- shapes, {:ok, {field, value}} <- [routing_key(shape)] do
+      update_index(index, field, value, shape.id)
+    end
+  end
+
+  # Fast lookup
+  def lookup(index, field, value) do
+    :ets.lookup(index, {field, value})
+    |> Enum.map(fn {{_f, _v}, shape_id} -> shape_id end)
+  end
+end
+```
+
+**Memory Cost**:
+- 10M shapes × 1 equality condition × 32 bytes = **320 MB**
+- With multiple fields: ~1-2 GB
+
+**Trade-off**: Disk/memory for speed
+
+**Expected Gain**: O(1) lookup for materialized cases, bypassing all evaluation
+
+#### 8.2 Incremental Index Maintenance
+
+**Challenge**: Keeping materialized indexes up-to-date
+
+**Solution**: Incremental updates on shape add/remove
+
+```elixir
+def add_shape(router, shape) do
+  # Update materialized index
+  case routing_key(shape) do
+    {:ok, {field, value}} ->
+      MaterializedIndex.insert(router.mat_index, field, value, shape.id)
+    :error ->
+      # No materialized entry for complex shapes
+      :ok
+  end
+
+  # Continue with normal shard assignment
+  ShardedRouter.add_shape(router, shape)
+end
+```
+
+**Expected Maintenance Cost**: O(1) per shape mutation
+
+### 10.7 Scaling Roadmap Summary
+
+| Phase | Shape Count | Timeline | Key Features | Routing Latency | Memory | Confidence |
+|-------|-------------|----------|--------------|-----------------|--------|------------|
+| **1-4** | 10k-50k | 16 weeks | Posting lists, sharding (32) | <10 μs | 2-5 GB | ✅ High |
+| **5** | 50k-100k | +4 weeks | Batching, subsumption basics | <15 μs | 5-8 GB | ✅ High |
+| **6** | 100k-1M | +8 weeks | Bloom filters, 512 shards, subsumption | <20 μs | 8-15 GB | ⚠️ Medium |
+| **7** | 1M-5M | +12 weeks | Distributed (3-5 nodes), local-first | <30 μs | 15-30 GB | ⚠️ Medium |
+| **8** | 5M-10M+ | +12 weeks | Materialized indexes, 10+ nodes | <50 μs | 30-100 GB | ⚠️ Lower |
+
+**Total to 10M shapes**: ~52 weeks (~1 year) from start
+
+### 10.8 Critical Prerequisites for Millions
+
+#### Prerequisite 1: Workload Validation
+
+**You MUST validate** that at millions of shapes:
+
+1. **Selectivity remains high**:
+   - ✅ 95%+ of shapes use equality conditions (fast lane eligible)
+   - ✅ Records match <10 shapes on average (early-exit viable)
+   - ❌ If most shapes are complex OR records match thousands → different architecture needed
+
+2. **Distribution remains even**:
+   - ✅ Routing keys are uniformly distributed (hash balancing works)
+   - ❌ If 80% of shapes have `user_id = 1` → hot shard problem
+
+**Action**: Add telemetry to production NOW to measure these properties
+
+#### Prerequisite 2: Hardware Scaling
+
+**Single Node Limits** (reasonably sized machine):
+
+- **Memory**: 64-128 GB → ~500k-1M shapes
+- **CPU**: 32-64 cores → 512-1024 shards effective
+- **Network**: 10 Gbps for distributed sharding
+
+**Beyond 1M shapes**: Plan for 3-10 node cluster
+
+#### Prerequisite 3: Operational Complexity
+
+**Phases 7-8 require**:
+- Distributed systems expertise (handling network partitions, node failures)
+- Monitoring infrastructure (per-shard metrics across nodes)
+- Resharding capability (as cluster grows/shrinks)
+- Replication strategy (shard replicas for fault tolerance)
+
+### 10.9 Alternative: Lazy Routing
+
+**For certain workloads**, an alternative to scaling routing is to make it **lazy**:
+
+**Idea**: Don't route eagerly; let shapes pull records they need
+
+```elixir
+# Instead of:
+affected_shapes = route_to_all_shapes(record)
+for shape_id <- affected_shapes, do: send_to_shape(shape_id, record)
+
+# Consider:
+# Publish record to a log partition by {table, primary_key}
+# Shapes poll their relevant partitions based on WHERE clause
+# Only shapes that care about a record pull it
+```
+
+**Benefits**:
+- No routing overhead (shapes self-select)
+- Scales to unlimited shapes
+- Simple architecture
+
+**Drawbacks**:
+- Higher read load (shapes poll frequently)
+- Latency (poll interval vs push immediate)
+- Duplicated work (each shape evaluates WHERE independently)
+
+**When to consider**: If routing becomes bottleneck despite Phases 1-8
+
+### 10.10 Decision Framework
+
+**Use Phases 1-4** if:
+- ✅ Shape count: <50k
+- ✅ Current bottleneck is `other_shapes` evaluation
+- ✅ Most shapes are equality-based
+
+**Add Phase 5-6** if:
+- ✅ Shape count: 50k-500k
+- ✅ Workload validated: 90%+ fast lane, records match <10 shapes
+- ✅ Single node has sufficient memory (64+ GB)
+
+**Add Phase 7** if:
+- ✅ Shape count: 500k-5M
+- ✅ Team has distributed systems expertise
+- ✅ Budget for 3-10 node cluster
+
+**Add Phase 8** if:
+- ✅ Shape count: 5M-10M+
+- ✅ Can afford 1-2 GB materialized index memory
+- ✅ Shape churn is low (index maintenance is feasible)
+
+**Consider lazy routing** if:
+- ❌ Records match >100 shapes on average
+- ❌ Routing latency budget exceeds 100 μs
+- ❌ Phases 1-8 don't achieve required performance
+
+### 10.11 Honest Assessment: Millions of Shapes
+
+**Can Electric scale to millions of shapes with this architecture?**
+
+**YES, with caveats:**
+
+1. **1-5M shapes**: ✅ **Achievable** with Phases 1-7 (1 year timeline)
+   - Requires cluster deployment
+   - Requires workload to maintain "write-to-0-1" property
+   - Expected: <30 μs routing latency
+
+2. **5-10M shapes**: ⚠️ **Challenging but possible** with Phase 8
+   - Requires materialized indexes
+   - Expected: <50 μs routing latency
+   - Significant operational complexity
+
+3. **10M+ shapes**: ❌ **Different architecture likely needed**
+   - Consider lazy routing / pull-based model
+   - Or federated routing (partition shapes by domain)
+   - Or rethink the problem (why do you need 10M+ shapes?)
+
+**The key insight**: This optimization gives you a **100x headroom** from current scale:
+- Current: 1k-5k shapes comfortably
+- Phases 1-4: 10k-50k shapes comfortably (10x)
+- Phases 5-6: 100k-500k shapes feasibly (100x)
+- Phases 7-8: 1M-5M shapes with effort (1000x)
+
+**Beyond that**, you're in uncharted territory and need custom solutions.
+
+### 10.12 Next Steps for Path to Millions
+
+1. **Immediate** (this week):
+   - ✅ Add telemetry to production to measure:
+     - % of shapes that are equality-based
+     - Average # of shapes matched per record
+     - Distribution of routing keys (hash variance)
+
+2. **Phase 1-4** (months 1-4):
+   - ✅ Implement and validate prototype (10k-50k shapes)
+
+3. **After Phase 4** (month 5):
+   - Analyze telemetry data
+   - Decide: Is path to millions viable for our workload?
+   - If YES → plan Phases 5-6
+   - If NO → investigate alternatives (lazy routing, federation)
+
+4. **Ongoing**:
+   - Monitor slow lane population (should stay <10%)
+   - Benchmark at increasing shape counts (10k, 25k, 50k, 100k)
+   - Validate memory and latency stay within budget
+
+---
+
+**Document Version**: 1.1
 **Last Updated**: 2025-10-24
 **Next Review**: After Phase 1 completion
 
