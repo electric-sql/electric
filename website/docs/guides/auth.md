@@ -346,6 +346,40 @@ This pattern is particularly useful when:
 
 The function is called when needed and its value is resolved in parallel with other dynamic options, making it efficient for real-world auth scenarios.
 
+### Handling Auth Errors
+
+Both proxy and gatekeeper patterns can return 401 or 403 errors when authentication fails or tokens expire. Use the `onError` callback to handle these errors and retry with refreshed credentials:
+
+```typescript
+const stream = new ShapeStream({
+  url: '/api/shapes/items',
+  headers: {
+    Authorization: `Bearer ${currentToken}`,
+  },
+  onError: async (error) => {
+    if (error instanceof FetchError && error.status === 401) {
+      // Token expired - refresh and retry
+      const newToken = await refreshAuthToken()
+      return {
+        headers: {
+          Authorization: `Bearer ${newToken}`,
+        },
+      }
+    }
+
+    // For other errors, stop syncing
+  },
+})
+```
+
+**Important:** The return value controls stream behavior:
+
+- **Return `{ headers }`** or **`{ params }`** - Retry with updated values
+- **Return `{}`** - Retry with same config (useful for transient errors)
+- **Return void** - Stop the stream
+
+Note: 5xx server errors are automatically retried with exponential backoff. See the [TypeScript client error handling docs](/docs/api/clients/typescript#error-handling) for complete details.
+
 ## Session Invalidation with Vary Headers
 
 When users log out or their authentication status changes, it's important to ensure they can't access cached shapes that they should no longer have access to. The HTTP `Vary` header is crucial for this.
