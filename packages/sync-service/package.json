@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.2.0",
   "scripts": {
-    "publish:hex": "mix do deps.get, hex.publish --yes || true",
+    "publish:hex": "mix do deps.get + hex.publish --yes || true",
     "changeset": "pushd ../..; pnpm changeset; popd"
   }
 }
