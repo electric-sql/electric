@@ -37,6 +37,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   alias Electric.ShapeCache.PureFileStorage.FileInfo
   alias Electric.ShapeCache.PureFileStorage.LogFile
   alias Electric.ShapeCache.PureFileStorage.Snapshot
+  alias Electric.ShapeCache.PureFileStorage.OperationCache
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
 
@@ -83,6 +84,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
       compaction_config: %{
         period: Keyword.get(opts, :compaction_period) || :timer.minutes(10),
         keep_complete_chunks: Keyword.get(opts, :keep_complete_chunks) || 2
+      },
+      operation_cache_config: %{
+        max_operations: Keyword.get(opts, :operation_cache_max_operations) || 1000,
+        ttl_ms: Keyword.get(opts, :operation_cache_ttl_ms) || :timer.minutes(1)
       }
     }
   end
@@ -108,7 +113,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp stack_task_supervisor(stack_id),
     do: ProcessRegistry.name(stack_id, __MODULE__.TaskSupervisor)
 
-  defp shape_data_dir(%__MODULE__{} = shape_opts) do
+  @doc false
+  def shape_data_dir(%__MODULE__{} = shape_opts) do
     shape_data_dir(shape_opts, [])
   end
 
@@ -507,16 +513,27 @@ defmodule Electric.ShapeCache.PureFileStorage do
           {initial_acc, suffix}
       end
 
+    {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
+
     if shape_definition.storage.compaction == :enabled do
-      {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
       schedule_compaction(stack_opts.compaction_config)
     end
+
+    # Start operation cache for fast in-memory serving of recent operations
+    {:ok, cache_pid} =
+      OperationCache.start_link(
+        Keyword.merge(
+          [shape_handle: shape_opts.shape_handle],
+          Map.to_list(stack_opts.operation_cache_config)
+        )
+      )
 
     writer_state(
       writer_acc: initial_acc,
       latest_name: suffix,
       opts: shape_opts,
-      ets: table
+      ets: table,
+      operation_cache: cache_pid
     )
   end
 
@@ -542,8 +559,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
     close_all_files(state)
   end
 
-  def terminate(writer_state(opts: opts) = state) do
+  def terminate(writer_state(opts: opts, operation_cache: cache) = state) do
     writer_state(writer_acc: writer_acc) = close_all_files(state)
+
+    # Stop operation cache
+    if cache && Process.alive?(cache) do
+      GenServer.stop(cache, :normal)
+    end
 
     try do
       case :ets.lookup(stack_ets(opts.stack_id), opts.shape_handle) do

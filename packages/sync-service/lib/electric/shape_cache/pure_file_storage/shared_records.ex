@@ -24,6 +24,8 @@ defmodule Electric.ShapeCache.PureFileStorage.SharedRecords do
     :write_timer,
     :ets,
     :latest_name,
-    :opts
+    :opts,
+    :operation_cache,
+    chunk_seq: 0
   ]
 end

@@ -8,10 +8,14 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
   alias Electric.ShapeCache.PureFileStorage
   alias Electric.ShapeCache.PureFileStorage.ChunkIndex
   alias Electric.ShapeCache.PureFileStorage.LogFile
+  alias Electric.ShapeCache.PureFileStorage.SealedChunk
+  alias Electric.ShapeCache.PureFileStorage.OperationCache
   alias Electric.Replication.LogOffset
   import Electric.Replication.LogOffset
   import Record
   import Electric.ShapeCache.PureFileStorage.SharedRecords
+
+  require Logger
 
   defrecord :open_files,
     json_file: nil,
@@ -30,6 +34,9 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     bytes_in_chunk: 0,
     times_flushed: 0,
     chunk_started?: false,
+    chunk_seq: 0,
+    chunk_start_offset: nil,
+    chunk_start_pos: nil,
     cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []},
     open_files: {:open_files, nil, nil}
 
@@ -156,11 +163,15 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
   defp maybe_write_opening_chunk_boundary(writer_acc(chunk_started?: true) = acc, _, _), do: acc
 
   defp maybe_write_opening_chunk_boundary(
-         writer_acc(write_position: pos) = acc,
+         writer_acc(write_position: pos, chunk_seq: seq) = acc,
          writer_state(opts: opts) = state,
          offset
        ) do
-    writer_acc(acc, chunk_started?: true)
+    writer_acc(acc,
+      chunk_started?: true,
+      chunk_start_offset: offset,
+      chunk_start_pos: pos
+    )
     |> ensure_chunk_file_open(state)
     |> write_to_chunk_file(ChunkIndex.make_half_entry(offset, pos, 0))
     |> add_opening_chunk_boundary_to_cache(offset, pos)
@@ -175,15 +186,29 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
        do: acc
 
   defp maybe_write_closing_chunk_boundary(
-         writer_acc(last_seen_offset: offset, write_position: position) = acc,
+         writer_acc(
+           last_seen_offset: offset,
+           write_position: position,
+           chunk_seq: seq,
+           chunk_start_offset: start_offset,
+           chunk_start_pos: start_pos,
+           open_files: open_files(json_file: json_file)
+         ) = acc,
          writer_state(opts: opts) = state
        ) do
-    writer_acc(acc, chunk_started?: false, bytes_in_chunk: 0)
-    |> ensure_chunk_file_open(state)
-    |> write_to_chunk_file(ChunkIndex.make_half_entry(offset, position, 0))
-    |> add_closing_chunk_boundary_to_cache(offset, position)
-    |> update_chunk_boundaries_cache(opts)
-    |> flush_buffer(state)
+    acc =
+      writer_acc(acc, chunk_started?: false, bytes_in_chunk: 0, chunk_seq: seq + 1)
+      |> ensure_chunk_file_open(state)
+      |> write_to_chunk_file(ChunkIndex.make_half_entry(offset, position, 0))
+      |> add_closing_chunk_boundary_to_cache(offset, position)
+      |> update_chunk_boundaries_cache(opts)
+      |> flush_buffer(state)
+
+    # Seal the chunk in a background task to avoid blocking writes
+    # This creates the JSON array file for sendfile() serving
+    seal_chunk_async(json_file, seq, start_offset, offset, start_pos, position, opts, state)
+
+    acc
   end
 
   defp write_to_chunk_file(
@@ -324,6 +349,9 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     # Tell the parent process that we've flushed up to this point
     send(self(), {Storage, :flushed, last_seen_offset})
 
+    # Feed operations to cache before trimming ETS
+    acc = feed_to_operation_cache(acc, state)
+
     # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
     writer_acc(acc,
       buffer: [],
@@ -372,4 +400,68 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     end
     |> update_persistance_metadata(state, prev_persisted_txn)
   end
+
+  ### Chunk sealing and operation caching
+
+  defp seal_chunk_async(
+         json_file,
+         chunk_seq,
+         start_offset,
+         end_offset,
+         start_pos,
+         end_pos,
+         opts,
+         _state
+       ) do
+    shape_dir = PureFileStorage.shape_data_dir(opts)
+
+    # Seal chunk in background task
+    Task.start(fn ->
+      case SealedChunk.seal_chunk(
+             json_file,
+             chunk_seq,
+             start_offset,
+             end_offset,
+             start_pos,
+             end_pos,
+             shape_dir
+           ) do
+        {:ok, info} ->
+          Logger.debug(
+            "Sealed chunk #{chunk_seq} for shape #{opts.shape_handle}: #{info.byte_len} bytes"
+          )
+
+        {:error, reason} ->
+          Logger.error(
+            "Failed to seal chunk #{chunk_seq} for shape #{opts.shape_handle}: #{inspect(reason)}"
+          )
+      end
+    end)
+  end
+
+  @doc """
+  Feed operations to the operation cache.
+
+  This should be called after adding to buffer to keep the cache up to date.
+  """
+  def feed_to_operation_cache(
+        writer_acc(ets_line_buffer: buffer) = acc,
+        writer_state(operation_cache: cache)
+      )
+      when not is_nil(cache) do
+    # Convert buffer to operation cache format
+    operations =
+      Enum.map(buffer, fn {offset_tuple, json} ->
+        %{
+          offset: LogOffset.from_tuple(offset_tuple),
+          json: json,
+          timestamp: System.monotonic_time(:millisecond)
+        }
+      end)
+
+    OperationCache.put_operations(cache, operations)
+    acc
+  end
+
+  def feed_to_operation_cache(acc, _state), do: acc
 end
