@@ -14,19 +14,19 @@ defmodule Electric.Plug.HealthCheckPlug do
   # keeping the message name decoupled from the internal representation
   # of the status to ensure the API is stable
   defp check_service_status(%Conn{assigns: %{config: config}} = conn, _) do
-    {status_code, status_text} =
+    {http_status, status_text} =
       case StatusMonitor.status(config[:stack_id]) do
-        %{conn: :waiting_on_lock, shape: _} -> {202, "waiting"}
-        %{conn: :starting, shape: _} -> {202, "starting"}
-        %{conn: _, shape: :starting} -> {202, "starting"}
-        %{conn: :up, shape: :up} -> {200, "active"}
+        %{conn: :waiting_on_lock, shape: _} -> {:accepted, "waiting"}
+        %{conn: :starting, shape: _} -> {:accepted, "starting"}
+        %{conn: _, shape: :starting} -> {:accepted, "starting"}
+        %{conn: :up, shape: :up} -> {:ok, "active"}
         # when Electric is in the scaled-down mode (all database connections are closed),
         # report its status as active because for any incoming shape request it will
         # transparently restore the connection subsystem before processing the request
-        %{conn: :sleeping, shape: _} -> {200, "active"}
+        %{conn: :sleeping, shape: _} -> {:ok, "active"}
       end
 
-    conn |> assign(:status_text, status_text) |> assign(:status_code, status_code)
+    merge_assigns(conn, http_status: http_status, status_text: status_text)
   end
 
   defp put_cache_headers(conn, _) do
@@ -34,6 +34,6 @@ defmodule Electric.Plug.HealthCheckPlug do
   end
 
   defp send_response(%Conn{assigns: assigns} = conn, _) do
-    send_resp(conn, assigns.status_code, Jason.encode!(%{status: assigns.status_text}))
+    Electric.Plug.Utils.json_resp(conn, assigns.http_status, %{status: assigns.status_text})
   end
 end

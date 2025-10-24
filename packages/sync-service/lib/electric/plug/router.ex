@@ -6,8 +6,7 @@ defmodule Electric.Plug.Router do
     use Sentry.PlugCapture
   end
 
-  alias Electric.Plug.Utils.CORSHeaderPlug
-  alias Electric.Plug.Utils.PassAssignToOptsPlug
+  import Electric.Plug.Utils, only: [json_resp: 3]
 
   plug Plug.RequestId, assign_as: :plug_request_id
   plug :server_header, Electric.version()
@@ -32,11 +31,11 @@ defmodule Electric.Plug.Router do
   match "/", via: [:get, :head], do: send_resp(conn, 200, "")
 
   get "/v1/shape",
-    to: PassAssignToOptsPlug,
+    to: Electric.Plug.PassAssignToOptsPlug,
     init_opts: [plug: Electric.Plug.ServeShapePlug, assign_key: :config]
 
   delete "/v1/shape",
-    to: PassAssignToOptsPlug,
+    to: Electric.Plug.PassAssignToOptsPlug,
     init_opts: [plug: Electric.Plug.DeleteShapePlug, assign_key: :config]
 
   options "/v1/shape", to: Electric.Plug.OptionsShapePlug
@@ -68,7 +67,7 @@ defmodule Electric.Plug.Router do
 
         _ ->
           conn
-          |> send_resp(401, Jason.encode!(%{message: "Unauthorized - Invalid API secret"}))
+          |> json_resp(:unauthorized, %{message: "Unauthorized - Invalid API secret"})
           |> halt()
       end
     end
@@ -78,10 +77,10 @@ defmodule Electric.Plug.Router do
   def authenticate(conn, _opts), do: conn
 
   def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
-    do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
+    do: Electric.Plug.CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
 
   def put_cors_headers(conn, _opts),
-    do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD"]})
+    do: Electric.Plug.CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD"]})
 
   def add_stack_id_to_metadata(conn, _) do
     Logger.metadata(stack_id: conn.assigns.config[:stack_id])
