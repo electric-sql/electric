@@ -1,5 +1,14 @@
 # @electric-sql/y-electric
 
+## 0.1.12
+
+### Patch Changes
+
+- Updated dependencies [37242f6]
+- Updated dependencies [37242f6]
+- Updated dependencies [a328418]
+  - @electric-sql/client@1.1.0
+
 ## 0.1.11
 
 ### Patch Changes
