@@ -1,5 +1,7 @@
 # Storage Engine Improvements Implementation
 
+**⚠️ PROTOTYPE STATUS**: This PR contains the core infrastructure for sealed chunks and operation caching. Critical bugs have been fixed (see CODE_REVIEW_FINDINGS.md), but additional work is needed for production readiness.
+
 This document describes the improvements made to Electric's storage engine to enhance performance for serving shape data.
 
 ## Overview
@@ -9,6 +11,16 @@ Three major improvements have been implemented:
 1. **Sealed Chunks with sendfile() Support**: Immutable chunks are pre-rendered as JSON arrays for zero-copy serving
 2. **In-Memory Operation Cache**: Recent operations are cached in memory for fast catchup requests
 3. **Incremental Chunk Sealing**: Chunks are automatically sealed when they reach size limits
+
+## Critical Bugs Fixed
+
+**See CODE_REVIEW_FINDINGS.md for complete analysis.**
+
+### ✅ Fixed: File Handle Race Condition
+The initial implementation passed the writer's open file handle to sealing tasks, causing file position pointer races. **Fixed:** Sealer now opens its own read-only file descriptor using `:file.pread/3` for position-safe reads.
+
+### ✅ Fixed: Cache Durability Watermark
+Cache was being fed before persistence completed, risking crash inconsistency. **Fixed:** Reordered flush sequence to feed cache ONLY AFTER metadata is durably updated.
 
 ## 1. Sealed Chunks Implementation
 

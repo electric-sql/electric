@@ -335,6 +335,7 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
   def flush_buffer(
         writer_acc(
           buffer: buffer,
+          ets_line_buffer: ets_line_buffer,
           last_seen_offset: last_seen_offset,
           last_seen_txn_offset: last_seen_txn,
           last_persisted_txn_offset: last_persisted_txn,
@@ -349,20 +350,27 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     # Tell the parent process that we've flushed up to this point
     send(self(), {Storage, :flushed, last_seen_offset})
 
-    # Feed operations to cache before trimming ETS
-    acc = feed_to_operation_cache(acc, state)
+    # Update persistence metadata BEFORE feeding cache
+    # This ensures that if we crash, the cache never holds operations
+    # that aren't reflected in the durable metadata
+    acc =
+      writer_acc(acc,
+        buffer: [],
+        buffer_size: 0,
+        ets_line_buffer: [],
+        last_persisted_offset: last_seen_offset,
+        last_persisted_txn_offset: last_seen_txn,
+        times_flushed: times_flushed + 1
+      )
+      |> update_persistance_metadata(state, last_persisted_txn)
 
-    # Because we've definitely persisted everything up to this point, we can remove all in-memory lines from ETS
-    writer_acc(acc,
-      buffer: [],
-      buffer_size: 0,
-      ets_line_buffer: [],
-      last_persisted_offset: last_seen_offset,
-      last_persisted_txn_offset: last_seen_txn,
-      times_flushed: times_flushed + 1
-    )
-    |> update_persistance_metadata(state, last_persisted_txn)
-    |> trim_ets(state)
+    # Feed operations to cache AFTER persistence is complete
+    # This guarantees crash consistency: cache never contains non-durable ops
+    # We saved ets_line_buffer before clearing it above
+    acc = feed_operations_to_cache(acc, state, ets_line_buffer)
+
+    # Clean up ETS last
+    trim_ets(acc, state)
   end
 
   defp update_persistance_metadata(
@@ -404,21 +412,25 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
   ### Chunk sealing and operation caching
 
   defp seal_chunk_async(
-         json_file,
+         _json_file,
          chunk_seq,
          start_offset,
          end_offset,
          start_pos,
          end_pos,
          opts,
-         _state
+         writer_state(latest_name: latest_name)
        ) do
     shape_dir = PureFileStorage.shape_data_dir(opts)
+    # Get the log file path (not the open handle) to avoid file descriptor races
+    log_path = PureFileStorage.json_file(opts, latest_name)
 
     # Seal chunk in background task
+    # IMPORTANT: We pass the path, not the handle, so the sealer opens its own
+    # read-only file descriptor and doesn't race with the writer
     Task.start(fn ->
       case SealedChunk.seal_chunk(
-             json_file,
+             log_path,
              chunk_seq,
              start_offset,
              end_offset,
@@ -442,16 +454,17 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
   @doc """
   Feed operations to the operation cache.
 
-  This should be called after adding to buffer to keep the cache up to date.
+  This should be called AFTER persistence is complete to ensure crash consistency.
   """
-  def feed_to_operation_cache(
-        writer_acc(ets_line_buffer: buffer) = acc,
-        writer_state(operation_cache: cache)
-      )
-      when not is_nil(cache) do
+  defp feed_operations_to_cache(
+         acc,
+         writer_state(operation_cache: cache),
+         ets_line_buffer
+       )
+       when not is_nil(cache) and is_list(ets_line_buffer) do
     # Convert buffer to operation cache format
     operations =
-      Enum.map(buffer, fn {offset_tuple, json} ->
+      Enum.map(ets_line_buffer, fn {offset_tuple, json} ->
         %{
           offset: LogOffset.from_tuple(offset_tuple),
           json: json,
@@ -463,5 +476,5 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     acc
   end
 
-  def feed_to_operation_cache(acc, _state), do: acc
+  defp feed_operations_to_cache(acc, _state, _buffer), do: acc
 end

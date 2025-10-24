@@ -26,11 +26,14 @@ defmodule Electric.ShapeCache.PureFileStorage.SealedChunk do
   @doc """
   Seals a chunk by rendering it as a JSON array file.
 
-  Takes the log file handle, chunk boundaries, and writes a pre-rendered JSON array
+  Takes the log file path, chunk boundaries, and writes a pre-rendered JSON array
   to disk. This file can later be served via sendfile() for efficient zero-copy transmission.
 
+  IMPORTANT: This function opens its own read-only file descriptor to avoid racing with
+  the writer's file handle. Never pass the writer's open file descriptor.
+
   ## Parameters
-    - log_handle: Open log file handle
+    - log_path: Path to the log file (NOT an open handle)
     - chunk_seq: Sequential chunk number (0, 1, 2, ...)
     - start_offset: First offset in the chunk
     - end_offset: Last offset in the chunk (inclusive)
@@ -43,7 +46,7 @@ defmodule Electric.ShapeCache.PureFileStorage.SealedChunk do
     - {:error, reason} if sealing fails
   """
   @spec seal_chunk(
-          log_handle :: File.io_device(),
+          log_path :: Path.t(),
           chunk_seq :: non_neg_integer(),
           start_offset :: LogOffset.t(),
           end_offset :: LogOffset.t(),
@@ -51,7 +54,7 @@ defmodule Electric.ShapeCache.PureFileStorage.SealedChunk do
           end_pos :: non_neg_integer(),
           shape_dir :: Path.t()
         ) :: {:ok, chunk_info()} | {:error, term()}
-  def seal_chunk(log_handle, chunk_seq, start_offset, end_offset, start_pos, end_pos, shape_dir) do
+  def seal_chunk(log_path, chunk_seq, start_offset, end_offset, start_pos, end_pos, shape_dir) do
     chunks_dir = Path.join(shape_dir, "chunks")
     File.mkdir_p!(chunks_dir)
 
@@ -61,38 +64,9 @@ defmodule Electric.ShapeCache.PureFileStorage.SealedChunk do
     chunk_path = Path.join(chunks_dir, chunk_filename)
     temp_path = chunk_path <> ".tmp"
 
-    try do
-      # Read the chunk from the log file
-      :file.position(log_handle, start_pos)
-      chunk_bytes = end_pos - start_pos
-      {:ok, data} = :file.read(log_handle, chunk_bytes)
-
-      # Parse entries and render as JSON array
-      entries = parse_log_entries(data, [])
-
-      # Write JSON array to temporary file
-      File.open!(temp_path, [:write, :binary], fn file ->
-        IO.write(file, "[")
-
-        entries
-        |> Enum.intersperse(",")
-        |> Enum.each(fn
-          "," -> IO.write(file, ",")
-          entry -> IO.write(file, entry)
-        end)
-
-        IO.write(file, "]")
-      end)
-
-      # Get file size
-      %{size: byte_len} = File.stat!(temp_path)
-
-      # Atomically move temp file to final location
-      File.rename!(temp_path, chunk_path)
-
-      Logger.debug(
-        "Sealed chunk #{chunk_seq}: #{byte_len} bytes, offsets #{inspect(start_offset)}..#{inspect(end_offset)}"
-      )
+    # Skip if already sealed (idempotent)
+    if File.exists?(chunk_path) do
+      %{size: byte_len} = File.stat!(chunk_path)
 
       {:ok,
        %{
@@ -102,12 +76,62 @@ defmodule Electric.ShapeCache.PureFileStorage.SealedChunk do
          end_offset: end_offset,
          chunk_seq: chunk_seq
        }}
-    rescue
-      e ->
-        # Clean up temp file on error
-        File.rm(temp_path)
-        Logger.error("Failed to seal chunk #{chunk_seq}: #{inspect(e)}")
-        {:error, e}
+    else
+      try do
+        # Open our own read-only handle to avoid racing with the writer
+        {:ok, log_handle} = :file.open(log_path, [:read, :raw, :binary])
+
+        try do
+          # Read the chunk from the log file using pread (position-safe)
+          chunk_bytes = end_pos - start_pos
+          {:ok, data} = :file.pread(log_handle, start_pos, chunk_bytes)
+
+          # Parse entries and render as JSON array
+          entries = parse_log_entries(data, [])
+
+          # Write JSON array to temporary file
+          File.open!(temp_path, [:write, :binary], fn file ->
+            IO.write(file, "[")
+
+            entries
+            |> Enum.intersperse(",")
+            |> Enum.each(fn
+              "," -> IO.write(file, ",")
+              entry -> IO.write(file, entry)
+            end)
+
+            IO.write(file, "]")
+          end)
+
+          # Get file size
+          %{size: byte_len} = File.stat!(temp_path)
+
+          # Atomically move temp file to final location
+          File.rename!(temp_path, chunk_path)
+
+          Logger.debug(
+            "Sealed chunk #{chunk_seq}: #{byte_len} bytes, offsets #{inspect(start_offset)}..#{inspect(end_offset)}"
+          )
+
+          {:ok,
+           %{
+             path: chunk_path,
+             byte_len: byte_len,
+             start_offset: start_offset,
+             end_offset: end_offset,
+             chunk_seq: chunk_seq
+           }}
+        after
+          # Always close our read handle
+          :file.close(log_handle)
+        end
+      rescue
+        e ->
+          # Clean up temp file on error
+          File.rm(temp_path)
+          Logger.error("Failed to seal chunk #{chunk_seq}: #{inspect(e)}")
+          {:error, e}
+      end
     end
   end
 

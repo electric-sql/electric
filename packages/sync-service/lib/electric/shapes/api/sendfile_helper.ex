@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.API.SendfileHelper do
+defmodule Electric.Shapes.Api.SendfileHelper do
   @moduledoc """
   Helpers for serving sealed chunks via sendfile() for zero-copy transmission.
 
