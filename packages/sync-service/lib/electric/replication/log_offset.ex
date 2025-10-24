@@ -350,8 +350,10 @@ defmodule Electric.Replication.LogOffset do
   end
 
   defimpl Jason.Encoder, for: LogOffset do
-    def encode(value, opts) do
-      Jason.Encode.string("#{value}", opts)
+    def encode(offset, opts) do
+      [?", Electric.Replication.LogOffset.to_iolist(offset), ?"]
+      |> Jason.Fragment.new()
+      |> Jason.Encode.value(opts)
     end
   end
 end
