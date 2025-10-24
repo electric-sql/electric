@@ -192,14 +192,12 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  def handle_call({:subscribe, shape_handle, shape}, {pid, _ref}, state) do
+  def handle_call({:subscribe, shape_handle, shape}, _from, state) do
     OpenTelemetry.with_span(
       "shape_log_collector.subscribe",
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
-        :ok = ConsumerRegistry.register_consumer(shape_handle, pid, state.registry_state)
-
         state =
           %{
             state

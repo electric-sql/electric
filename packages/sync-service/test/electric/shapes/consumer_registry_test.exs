@@ -14,6 +14,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       GenServer.start_link(__MODULE__, on_message)
     end
 
+    def start_link(stack_id, handle, on_message) do
+      GenServer.start_link(__MODULE__, on_message, name: ConsumerRegistry.name(stack_id, handle))
+    end
+
     def init(on_message) do
       {:ok, on_message}
     end
@@ -39,11 +43,11 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
         send(parent, {:start_consumer, handle})
 
         {:ok, pid} =
-          TestSubscriber.start_link(fn message ->
+          TestSubscriber.start_link(stack_id, handle, fn message ->
             send(parent, {:broadcast, handle, message})
           end)
 
-        {:ok, [{handle, pid}]}
+        {:ok, pid}
       end
     )
 
@@ -106,7 +110,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+      :ok = ConsumerRegistry.register_consumer(pid, handle, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
@@ -117,16 +121,14 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
   end
 
   describe "whereis/2" do
-    test "returns the registered pid", ctx do
+    test "returns the registered pid for named processes", ctx do
       handle = "handle-1"
       parent = self()
 
       {:ok, pid} =
-        TestSubscriber.start_link(fn message ->
+        TestSubscriber.start_link(ctx.stack_id, handle, fn message ->
           send(parent, {:broadcast, handle, message})
         end)
-
-      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
 
       assert pid == ConsumerRegistry.whereis(ctx.stack_id, handle)
     end
@@ -137,14 +139,12 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       handle = "handle-1"
       parent = self()
 
-      {:ok, pid} =
-        TestSubscriber.start_link(fn message ->
-          send(parent, {:broadcast, handle, message})
-        end)
-
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
+      {:ok, _pid} =
+        TestSubscriber.start_link(ctx.stack_id, handle, fn message ->
+          send(parent, {:broadcast, handle, message})
+        end)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
@@ -167,12 +167,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       handle = "handle-1"
       parent = self()
 
-      {:ok, pid} =
-        TestSubscriber.start_link(fn message ->
+      {:ok, _pid} =
+        TestSubscriber.start_link(ctx.stack_id, handle, fn message ->
           send(parent, {:broadcast, handle, message})
         end)
-
-      :ok = ConsumerRegistry.register_consumer(handle, pid, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
       :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)

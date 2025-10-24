@@ -17,7 +17,12 @@ defmodule Electric.Shapes.MonitorTest do
   @shape Shape.new!("the_table", inspector: @inspector)
   @shape_handle "some-handle"
 
-  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_test_publication_manager]
+  setup [
+    :with_stack_id_from_test,
+    :with_in_memory_storage,
+    :with_test_publication_manager,
+    :with_consumer_registry
+  ]
 
   def shape, do: @shape
 
@@ -137,7 +142,7 @@ defmodule Electric.Shapes.MonitorTest do
 
     test "sends a message immediately if no subscribers active", %{stack_id: stack_id} = _ctx do
       handle = "some-handle"
-      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle)
+      {:ok, _consumer_supervisor} = start_consumer(stack_id, handle)
       Monitor.notify_reader_termination(stack_id, handle, {:shutdown, :bored})
       assert_receive {Monitor, :reader_termination, ^handle, {:shutdown, :bored}}, 1000
     end
@@ -146,7 +151,7 @@ defmodule Electric.Shapes.MonitorTest do
       handle = "some-handle"
       parent = self()
 
-      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle)
+      {:ok, _consumer_supervisor} = start_consumer(stack_id, handle)
 
       {:ok, subscriber1} =
         start_supervised(
@@ -218,28 +223,25 @@ defmodule Electric.Shapes.MonitorTest do
       end
     end
 
-    defp start_consumer_supervisor(stack_id, handle) do
+    defp start_consumer(stack_id, handle) do
       parent = self()
 
       {:ok, pid} =
         start_supervised(
           {Task,
            fn ->
-             {:via, Registry, {registry, name}} =
-               Electric.Shapes.ConsumerSupervisor.name(stack_id, handle)
+             Electric.Shapes.ConsumerRegistry.register_consumer(self(), handle, stack_id)
 
-             Registry.register(registry, name, [])
-
-             send(parent, {:ready, :supervisor})
+             send(parent, {:ready, :consumer})
 
              receive do
                _ -> :ok
              end
            end},
-          id: {:consumer_supervisor, {stack_id, handle}}
+          id: {:consumer, {stack_id, handle}}
         )
 
-      assert_receive {:ready, :supervisor}
+      assert_receive {:ready, :consumer}
 
       {:ok, pid}
     end
@@ -248,8 +250,6 @@ defmodule Electric.Shapes.MonitorTest do
       %{stack_id: stack_id} = ctx
 
       parent = self()
-
-      {:ok, consumer_supervisor} = start_consumer_supervisor(stack_id, handle)
 
       {:ok, consumer} =
         start_supervised(%{
@@ -287,7 +287,6 @@ defmodule Electric.Shapes.MonitorTest do
         )
 
       Process.monitor(consumer)
-      Process.monitor(consumer_supervisor)
 
       assert_receive {:ready, :consumer, 1}
       assert_receive {:ready, :subscriber, 1}
@@ -310,9 +309,6 @@ defmodule Electric.Shapes.MonitorTest do
       assert_receive {:DOWN, _, :process, ^consumer, _}
 
       # we don't get reasons from the supervisor, it just `:shutdown`s
-      send(consumer_supervisor, :bye)
-
-      assert_receive {:DOWN, _, :process, ^consumer_supervisor, _}
 
       assert {:ok, []} = Monitor.termination_watchers(stack_id, handle)
     end
@@ -355,8 +351,8 @@ defmodule Electric.Shapes.MonitorTest do
       handle1 = "some-handle-1"
       handle2 = "some-handle-2"
 
-      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle1)
-      {:ok, _consumer_supervisor} = start_consumer_supervisor(stack_id, handle2)
+      {:ok, _consumer1} = start_consumer(stack_id, handle1)
+      {:ok, _consumer2} = start_consumer(stack_id, handle2)
 
       :ok = Monitor.register_reader(stack_id, handle1)
 

@@ -124,7 +124,7 @@
 
   ??[info] Acquiring lock from postgres
   ??[info] Starting replication from postgres
-  ??[debug] Starting consumer for $handle
+  ??[debug] Starting Electric.Shapes.Consumer for $handle
 
   ??[debug] Chunked 200 in
 

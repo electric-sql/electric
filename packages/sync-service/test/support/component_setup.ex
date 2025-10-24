@@ -11,11 +11,33 @@ defmodule Support.ComponentSetup do
   alias Electric.Postgres.Inspector.EtsInspector
 
   defmodule NoopPublicationManager do
+    use GenServer
+
     @behaviour Electric.Replication.PublicationManager
+
     def name(_), do: :pub_man
     def add_shape(_handle, _shape, _opts), do: :ok
     def remove_shape(_handle, _opts), do: :ok
     def wait_for_restore(_opts), do: :ok
+
+    def start_link(stack_id) do
+      GenServer.start_link(__MODULE__, [],
+        name: Electric.Replication.PublicationManager.name(stack_id)
+      )
+    end
+
+    def init([]) do
+      {:ok, []}
+    end
+
+    def handle_call({:add_shape, _shape_handle, _pub_filter}, _from, state),
+      do: {:reply, :ok, state}
+
+    def handle_call({:remove_shape, _shape_handle}, _from, state),
+      do: {:reply, :ok, state}
+
+    def handle_call(:wait_for_restore, _from, state),
+      do: {:reply, :ok, state}
   end
 
   defmodule TestPublicationManager do
@@ -46,12 +68,37 @@ defmodule Support.ComponentSetup do
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
     registry = start_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
-    start_supervised!({Electric.StackConfig, stack_id: stack_id})
+
+    seed_config = Map.get(ctx, :stack_config_seed, [])
+
+    start_supervised!(
+      {Electric.StackConfig,
+       stack_id: stack_id,
+       seed_config:
+         Keyword.merge(
+           [
+             chunk_bytes_threshold:
+               Map.get(
+                 ctx,
+                 :chunk_bytes_threshold,
+                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
+               ),
+             snapshot_timeout_to_first_data: :timer.seconds(30),
+             inspector: Map.get(ctx, :inspector, nil),
+             shape_changes_registry:
+               Map.get(ctx, :registry, Electric.StackSupervisor.registry_name(stack_id)),
+             shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000)
+           ],
+           seed_config
+         )}
+    )
+
     %{stack_id: stack_id, process_registry: registry}
   end
 
   def with_registry(ctx) do
-    registry_name = :"#{inspect(Registry.ShapeChanges)}:#{ctx.stack_id}"
+    registry_name = Electric.StackSupervisor.registry_name(ctx.stack_id)
+
     start_supervised!({Registry, keys: :duplicate, name: registry_name})
 
     %{registry: registry_name}
@@ -83,13 +130,15 @@ defmodule Support.ComponentSetup do
   end
 
   def with_in_memory_storage(ctx) do
-    storage_opts =
-      InMemoryStorage.shared_opts(
-        table_base_name: :"in_memory_storage_#{ctx.stack_id}",
-        stack_id: ctx.stack_id
+    storage =
+      Storage.shared_opts(
+        {InMemoryStorage,
+         table_base_name: :"in_memory_storage_#{ctx.stack_id}", stack_id: ctx.stack_id}
       )
 
-    %{storage: {InMemoryStorage, storage_opts}}
+    start_supervised!(Storage.stack_child_spec(storage), restart: :temporary)
+
+    %{storage: storage}
   end
 
   def with_tracing_storage(%{storage: storage}) do
@@ -128,7 +177,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_publication_manager(ctx) do
-    server = :"publication_manager_#{full_test_name(ctx)}"
+    server = Electric.Replication.PublicationManager.name(ctx.stack_id)
 
     start_supervised!(%{
       id: server,
@@ -159,7 +208,8 @@ defmodule Support.ComponentSetup do
     %{publication_manager: TestPublicationManager.new()}
   end
 
-  def with_noop_publication_manager(_ctx) do
+  def with_noop_publication_manager(ctx) do
+    start_supervised!({NoopPublicationManager, ctx.stack_id})
     %{publication_manager: {NoopPublicationManager, []}}
   end
 
@@ -180,9 +230,31 @@ defmodule Support.ComponentSetup do
     %{shape_status_owner: "shape_status_owner"}
   end
 
+  def with_dynamic_consumer_supervisor(%{consumer_supervisor: name} = ctx) do
+    if GenServer.whereis(name) do
+      ctx
+    else
+      start_consumer_supervisor(ctx)
+    end
+  end
+
+  def with_dynamic_consumer_supervisor(ctx) do
+    start_consumer_supervisor(ctx)
+  end
+
+  defp start_consumer_supervisor(ctx) do
+    consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
+
+    {Electric.Shapes.DynamicConsumerSupervisor,
+     [name: consumer_supervisor, stack_id: ctx.stack_id]}
+    |> Supervisor.child_spec(id: consumer_supervisor, restart: :temporary)
+    |> start_supervised!()
+
+    %{consumer_supervisor: consumer_supervisor}
+  end
+
   def with_shape_cache(ctx, additional_opts \\ []) do
     server = :"shape_cache_#{full_test_name(ctx)}"
-    consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
 
     start_supervised!(
       {Task.Supervisor,
@@ -190,26 +262,16 @@ defmodule Support.ComponentSetup do
       |> Supervisor.child_spec(id: "shape_task_supervisor")
     )
 
+    %{consumer_supervisor: consumer_supervisor} = with_dynamic_consumer_supervisor(ctx)
+
     start_opts =
       [
         name: server,
         stack_id: ctx.stack_id,
         inspector: ctx.inspector,
-        storage: ctx.storage,
-        publication_manager: ctx.publication_manager,
-        shape_hibernate_after: 1_000,
-        chunk_bytes_threshold: ctx.chunk_bytes_threshold,
-        db_pool: ctx.pool,
-        registry: ctx.registry,
         consumer_supervisor: consumer_supervisor
       ]
       |> Keyword.merge(additional_opts)
-      |> Keyword.merge(Map.get(ctx, :shape_cache_opts_overrides, []))
-
-    {Electric.Shapes.DynamicConsumerSupervisor,
-     [name: consumer_supervisor, stack_id: ctx.stack_id]}
-    |> Supervisor.child_spec(id: consumer_supervisor, restart: :temporary)
-    |> start_supervised!()
 
     start_supervised!(%{
       id: start_opts[:name],
@@ -235,6 +297,24 @@ defmodule Support.ComponentSetup do
     Electric.LsnTracker.create_table(stack_id)
     Electric.LsnTracker.set_last_processed_lsn(Electric.Postgres.Lsn.from_integer(0), stack_id)
     :ok
+  end
+
+  def with_consumer_registry(ctx) do
+    pid =
+      start_supervised!(
+        {Agent,
+         fn ->
+           {:ok, registry_state} =
+             Electric.Shapes.ConsumerRegistry.new(
+               ctx.stack_id,
+               Map.get(ctx, :consumer_registry_opts, [])
+             )
+
+           registry_state
+         end}
+      )
+
+    %{consumer_registry: pid}
   end
 
   def with_shape_log_collector(ctx) do
@@ -275,6 +355,12 @@ defmodule Support.ComponentSetup do
       )
 
     pg_inspector_table = EtsInspector.inspector_table(stack_id: ctx.stack_id)
+
+    Electric.StackConfig.put(
+      ctx.stack_id,
+      :inspector,
+      {EtsInspector, stack_id: ctx.stack_id, server: server}
+    )
 
     %{
       inspector: {EtsInspector, stack_id: ctx.stack_id, server: server},

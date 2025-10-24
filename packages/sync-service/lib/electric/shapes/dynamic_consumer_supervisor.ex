@@ -4,8 +4,6 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   """
   use DynamicSupervisor
 
-  alias Electric.Shapes.ConsumerSupervisor
-
   require Logger
 
   @doc """
@@ -25,7 +23,15 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
     PartitionSupervisor.child_spec(child_spec: super(opts), name: name)
   end
 
-  def name(stack_id) do
+  def name(name) when is_atom(name) do
+    name
+  end
+
+  def name({:via, _, _} = name) do
+    name
+  end
+
+  def name(stack_id) when is_binary(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
@@ -36,16 +42,28 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
     DynamicSupervisor.start_link(__MODULE__, stack_id: stack_id)
   end
 
-  def start_shape_consumer(name, config) do
-    shape_handle = Keyword.fetch!(config, :shape_handle)
+  def start_shape_consumer(supervisor_ref, config) do
+    start_child(supervisor_ref, {Electric.Shapes.Consumer, config})
+  end
 
-    Logger.debug(fn -> "Starting consumer for #{shape_handle}" end)
+  def start_snapshotter(supervisor_ref, config) do
+    start_child(supervisor_ref, {Electric.Shapes.Consumer.Snapshotter, config})
+  end
+
+  def start_materializer(supervisor_ref, config) do
+    start_child(supervisor_ref, {Electric.Shapes.Consumer.Materializer, config})
+  end
+
+  defp start_child(supervisor_ref, {child_module, child_opts} = child_spec) do
+    %{shape_handle: shape_handle} = child_opts
 
     routing_key = :erlang.phash2(shape_handle)
 
+    Logger.debug(fn -> "Starting #{inspect(child_module)} for #{shape_handle}" end)
+
     DynamicSupervisor.start_child(
-      {:via, PartitionSupervisor, {name, routing_key}},
-      {ConsumerSupervisor, config}
+      {:via, PartitionSupervisor, {name(supervisor_ref), routing_key}},
+      child_spec
     )
   end
 

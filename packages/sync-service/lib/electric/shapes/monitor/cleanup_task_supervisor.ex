@@ -144,8 +144,15 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     end
   end
 
+  # race conditions mean that the consumer pid can still be registered even if
+  # the consumer is down
   defp consumer_alive?(stack_id, shape_handle) do
-    !is_nil(Electric.Shapes.Consumer.whereis(stack_id, shape_handle))
+    stack_id
+    |> Electric.Shapes.Consumer.whereis(shape_handle)
+    |> case do
+      nil -> false
+      pid when is_pid(pid) -> Process.alive?(pid)
+    end
   end
 
   if @env == :test do

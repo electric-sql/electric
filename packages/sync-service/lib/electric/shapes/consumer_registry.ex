@@ -15,29 +15,47 @@ defmodule Electric.Shapes.ConsumerRegistry do
           stack_id: stack_id()
         }
 
+  def name(stack_id, shape_handle) do
+    {:via, __MODULE__, {stack_id, shape_handle}}
+  end
+
+  def register_name({stack_id, shape_handle}, pid) do
+    if register_consumer!(pid, shape_handle, ets_name(stack_id)), do: :yes, else: :no
+  end
+
+  # don't unregister when the pid exits -- we have mechanisms to ensure that happens cleanly
+  def unregister_name({_stack_id, _shape_handle}) do
+    :ok
+  end
+
+  def whereis_name({stack_id, shape_handle}) do
+    whereis(stack_id, shape_handle) || :undefined
+  end
+
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
   def active_consumer_count(stack_id) when is_binary(stack_id) do
     :ets.info(ets_name(stack_id), :size)
   end
 
-  @spec register_consumer(shape_handle(), pid(), stack_id()) :: {:ok, non_neg_integer()}
-  def register_consumer(shape_handle, pid, stack_id) when is_binary(stack_id) do
-    register_consumer(shape_handle, pid, ets_name(stack_id))
+  @spec register_consumer(pid(), shape_handle(), stack_id()) :: {:ok, non_neg_integer()}
+  def register_consumer(pid, shape_handle, stack_id) when is_binary(stack_id) do
+    register_consumer(pid, shape_handle, ets_name(stack_id))
   end
 
-  @spec register_consumer(shape_handle(), pid(), t()) :: {:ok, non_neg_integer()}
-  def register_consumer(shape_handle, pid, %__MODULE__{table: table}) do
-    register_consumer(shape_handle, pid, table)
+  @spec register_consumer(pid(), shape_handle(), t()) :: {:ok, non_neg_integer()}
+  def register_consumer(pid, shape_handle, %__MODULE__{table: table}) do
+    register_consumer(pid, shape_handle, table)
   end
 
-  @spec register_consumer(shape_handle(), pid(), :ets.table()) :: {:ok, non_neg_integer()}
-  def register_consumer(shape_handle, pid, table) when is_atom(table) or is_reference(table) do
-    register_consumer!(shape_handle, pid, table)
+  @spec register_consumer(pid(), shape_handle(), :ets.table()) :: {:ok, non_neg_integer()}
+  def register_consumer(pid, shape_handle, table) when is_atom(table) or is_reference(table) do
+    register_consumer!(pid, shape_handle, table)
     :ok
   end
 
-  defp register_consumer!(shape_handle, pid, table) do
-    true = :ets.insert_new(table, [{shape_handle, pid}])
+  defp register_consumer!(pid, shape_handle, table)
+       when is_pid(pid) and (is_atom(table) or is_reference(table)) do
+    :ets.insert_new(table, [{shape_handle, pid}])
   end
 
   @spec publish([shape_handle()], term(), t()) :: :ok
@@ -46,7 +64,8 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
     shape_handles
     |> Enum.flat_map(fn handle ->
-      (consumer_pid(handle, table) || start_consumer!(handle, registry_state)) |> List.wrap()
+      (consumer_pid(handle, table) || start_consumer!(handle, registry_state))
+      |> List.wrap()
     end)
     |> broadcast(event)
   end
@@ -100,27 +119,15 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.lookup_element(table, handle, 2, nil)
   end
 
-  defp start_consumer!(handle, %__MODULE__{} = state) do
-    %__MODULE__{stack_id: stack_id, table: table} = state
-
+  defp start_consumer!(handle, %__MODULE__{stack_id: stack_id} = state) do
     OpenTelemetry.with_span(
       "consumer_registry.start_consumer",
       ["shape.handle": handle],
       state.stack_id,
       fn ->
         case ShapeCache.start_consumer_for_handle(handle, stack_id: stack_id) do
-          {:ok, pid_handles} ->
-            {n, pid} =
-              Enum.reduce(pid_handles, {0, nil}, fn {inner_handle, pid}, {n, consumer_pid} ->
-                register_consumer!(inner_handle, pid, table)
-
-                {
-                  n + 1,
-                  if(handle == inner_handle, do: pid, else: consumer_pid)
-                }
-              end)
-
-            Logger.info("Started #{n} consumer(s) for existing handle #{handle}")
+          {:ok, pid} ->
+            Logger.info("Started consumer for existing handle #{handle}")
 
             pid
 

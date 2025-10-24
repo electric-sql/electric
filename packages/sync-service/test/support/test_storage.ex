@@ -172,8 +172,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def hibernate({parent, shape_handle, _, storage}) do
+  def hibernate({parent, shape_handle, data, storage}) do
     send(parent, {__MODULE__, :hibernate, shape_handle})
-    Storage.hibernate(storage)
+    storage = Storage.hibernate(storage)
+    {parent, shape_handle, data, storage}
   end
 end

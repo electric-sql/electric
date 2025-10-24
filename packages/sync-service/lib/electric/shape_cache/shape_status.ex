@@ -169,6 +169,16 @@ defmodule Electric.ShapeCache.ShapeStatus do
     topological_sort(missing_deps, [appendable | acc], visited)
   end
 
+  def list_shape_handles(term) do
+    :ets.select(shape_meta_table(term), [
+      {
+        {{@shape_meta_data, :"$1"}, :_, :_, :_},
+        [],
+        [:"$1"]
+      }
+    ])
+  end
+
   @impl true
   def count_shapes(stack_ref) do
     :ets.info(shape_last_used_table(stack_ref), :size)
