@@ -311,7 +311,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     json
     |> Jason.decode!()
     |> LogItems.keep_generic_headers()
-    |> Jason.encode!()
+    |> :json.encode()
   end
 
   @doc """
@@ -424,7 +424,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
       end)
       |> Stream.map(&Jason.decode!/1)
       |> Enum.reduce(fn new, acc -> merge_fun.(acc, new) end)
-      |> Jason.encode!()
+      |> :json.encode()
 
     # Restore position to continue reading in the outer loop
     Enum.each(saved_positions, fn {label, position} ->

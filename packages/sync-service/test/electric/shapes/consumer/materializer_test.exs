@@ -383,7 +383,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     changes
     |> prep_changes(opts)
     |> Enum.flat_map(&LogItems.from_change(&1, 1, pk_cols, :default))
-    |> Enum.map(fn {_offset, item} -> Jason.encode!(item) end)
+    |> Enum.map(fn {_offset, item} -> :json.encode(item) end)
   end
 
   defp prep_changes(changes, opts \\ []) do

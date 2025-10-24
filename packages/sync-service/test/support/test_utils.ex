@@ -17,7 +17,7 @@ defmodule Support.TestUtils do
     |> Enum.map(&Changes.fill_key(&1, pk))
     |> Enum.flat_map(&LogItems.from_change(&1, xid, pk, replica))
     |> Enum.map(fn {offset, item} ->
-      {offset, item.key, item.headers.operation, Jason.encode!(item)}
+      {offset, item.key, item.headers.operation, :json.encode(item)}
     end)
   end
 

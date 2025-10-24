@@ -665,7 +665,7 @@ defmodule Electric.Shapes.Consumer do
     )
     |> Enum.map_reduce(0, fn {offset, %{key: key, headers: %{operation: operation}} = log_item},
                              total_size ->
-      json_line = Jason.encode!(log_item)
+      json_line = :json.encode(log_item)
       line_tuple = {offset, key, operation, json_line}
       {line_tuple, total_size + byte_size(json_line)}
     end)
