@@ -185,19 +185,19 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  @retry_time 10
+  @spin_prevention_delay 10
   defp maybe_retry_wait_until_active(_stack_id, _opts, timeout, last_error)
-       when timeout <= @retry_time do
+       when timeout <= @spin_prevention_delay do
     {:error, last_error}
   end
 
   defp maybe_retry_wait_until_active(stack_id, opts, timeout, _) do
-    Process.sleep(@retry_time)
+    Process.sleep(@spin_prevention_delay)
 
     remaining_timeout =
       case timeout do
         :infinity -> :infinity
-        _ -> timeout - @retry_time
+        _ -> timeout - @spin_prevention_delay
       end
 
     wait_until_active(stack_id, Keyword.put(opts, :timeout, remaining_timeout))
