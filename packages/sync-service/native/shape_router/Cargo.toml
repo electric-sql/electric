@@ -1,0 +1,28 @@
+[package]
+name = "shape_router"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "shape_router"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.34"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+xorf = "0.11"  # Binary Fuse filter implementation
+# Note: PTHash doesn't have a mature Rust crate yet, so we'll implement a simplified MPHF
+# In production, consider: minimal-perfect-hash or build PTHash bindings
+roaring = "0.10"  # For predicate IN sets
+ahash = "0.8"  # Fast hashing for delta overlay
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dependencies.rustler_bigint]
+version = "0.5"
+optional = true
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
