@@ -233,7 +233,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         PureFileStorage.json_file(opts, PureFileStorage.latest_name(opts)),
         [:append, :raw],
         fn file ->
-          json = Jason.encode!(%{test: 2})
+          json = :json.encode(%{test: 2})
 
           IO.binwrite(
             file,

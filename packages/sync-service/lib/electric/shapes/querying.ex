@@ -134,7 +134,7 @@ defmodule Electric.Shapes.Querying do
         nil -> headers
         mark -> Map.put(headers, :snapshot_mark, mark)
       end
-      |> Jason.encode!()
+      |> :json.encode()
       |> Utils.escape_quotes(?')
 
     ~s['"headers":#{headers}']

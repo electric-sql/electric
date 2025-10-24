@@ -380,7 +380,7 @@ defmodule Electric.Shapes.ApiTest do
         next_offset
       end)
       |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        [:json.encode(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       assert {:ok, request} =
@@ -427,7 +427,7 @@ defmodule Electric.Shapes.ApiTest do
         next_offset
       end)
       |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        [:json.encode(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       assert {:ok, request} =
@@ -629,7 +629,7 @@ defmodule Electric.Shapes.ApiTest do
         @first_offset
       end)
       |> expect(:get_log_stream, fn @before_all_offset, @first_offset, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        [:json.encode(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       assert {:ok, request} =
@@ -673,8 +673,8 @@ defmodule Electric.Shapes.ApiTest do
       end)
       |> expect(:get_log_stream, fn @start_offset_50, _, @test_opts ->
         [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
-          Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
+          :json.encode(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+          :json.encode(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
         ]
       end)
 
@@ -769,7 +769,7 @@ defmodule Electric.Shapes.ApiTest do
         nil
       end)
       |> expect(:get_log_stream, fn @test_offset, ^next_offset, @test_opts ->
-        [Jason.encode!("test result")]
+        [:json.encode("test result")]
       end)
 
       task =
@@ -846,7 +846,7 @@ defmodule Electric.Shapes.ApiTest do
         nil
       end)
       |> expect(:get_log_stream, fn @test_offset, ^next_offset, @test_opts ->
-        [Jason.encode!("test result")]
+        [:json.encode("test result")]
       end)
 
       task =
@@ -920,13 +920,13 @@ defmodule Electric.Shapes.ApiTest do
       |> stub(:get_chunk_end_log_offset, fn @start_offset_50, _ -> last_minute_next_offset end)
       |> expect(:get_log_stream, fn @start_offset_50, ^next_offset, @test_opts ->
         [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
+          :json.encode(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
         ]
       end)
       |> stub(:get_log_stream, fn @start_offset_50, _, @test_opts ->
         [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
-          Jason.encode!(%{
+          :json.encode(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+          :json.encode(%{
             key: "log2",
             value: "bar",
             headers: %{},
@@ -1081,7 +1081,7 @@ defmodule Electric.Shapes.ApiTest do
 
         @test_offset, ^next_offset, @test_opts ->
           [
-            Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
+            :json.encode(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
           ]
       end)
 
