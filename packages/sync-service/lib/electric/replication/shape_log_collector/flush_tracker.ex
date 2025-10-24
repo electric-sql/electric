@@ -1,5 +1,4 @@
 defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
-  require Electric.Replication.LogOffset
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Changes.Transaction
 

@@ -84,9 +84,9 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
 
   defp read_line(file) do
     with <<tx_offset::64, op_offset::64, key_size::32>> <- IO.binread(file, 20),
-         <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
+         <<key::binary-size(^key_size)>> <- IO.binread(file, key_size),
          <<op_type::8, processed_flag::8, json_size::64>> <- IO.binread(file, 10),
-         <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
+         <<json::binary-size(^json_size)>> <- IO.binread(file, json_size) do
       {LogOffset.new(tx_offset, op_offset), key_size, key, op_type, processed_flag, json_size,
        json}
     end
@@ -173,9 +173,9 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
 
         {file, position} ->
           with <<tx_offset::64, op_offset::64, key_size::32>> <- IO.binread(file, 20),
-               <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
+               <<key::binary-size(^key_size)>> <- IO.binread(file, key_size),
                <<op_type::8, flag::8, json_size::64>> <- IO.binread(file, 10),
-               <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
+               <<json::binary-size(^json_size)>> <- IO.binread(file, json_size) do
             entry =
               {LogOffset.new(tx_offset, op_offset), key_size, key, op_type, flag, json_size, json}
 
@@ -323,9 +323,9 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
 
       Stream.unfold(search_start_pos, fn position ->
         with <<tx_offset::64, op_offset::64, key_size::32>> <- IO.binread(file, 20),
-             <<_::binary-size(key_size)>> <- IO.binread(file, key_size),
+             <<_::binary-size(^key_size)>> <- IO.binread(file, key_size),
              <<_::8, _::8, json_size::64>> <- IO.binread(file, 10),
-             <<_::binary-size(json_size)>> <- IO.binread(file, json_size) do
+             <<_::binary-size(^json_size)>> <- IO.binread(file, json_size) do
           read = 20 + key_size + json_size + 10
           {{LogOffset.new(tx_offset, op_offset), position + read, read}, position + read}
         else

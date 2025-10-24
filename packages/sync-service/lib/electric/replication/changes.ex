@@ -13,8 +13,6 @@ defmodule Electric.Replication.Changes do
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
 
-  require Logger
-
   @type db_identifier() :: String.t()
   @type xid() :: non_neg_integer()
   @type relation_name() :: {schema :: db_identifier(), table :: db_identifier()}
