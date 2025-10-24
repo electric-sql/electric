@@ -19,16 +19,27 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
 
   ## Architecture
 
+  **CRITICAL**: Lookups hit the native index (NIF), NOT BEAM maps.
+  BEAM only holds residual predicates (additional WHERE clauses beyond equality).
+
   The index is partitioned into lanes (default 64) using jump consistent hash.
   Each lane has:
   - One mutable overlay (fast hash table for recent changes)
   - Multiple immutable segments (MPH-based, levels L0, L1, L2...)
 
-  Lookups probe:
-  1. Overlay first (newest data)
-  2. Segments from newest to oldest
+  Lookup path:
+  1. Hash key → lane (jump consistent hash)
+  2. NIF lookup: overlay → L0 → L1 → L2
+  3. Apply residual predicates (if any) in BEAM
+  4. Return matching shape IDs
 
   When overlay exceeds threshold, it's compacted into a new segment.
+
+  ## Memory Model
+
+  - Routing data (value → shape_id): **Native memory** (overlay + segments)
+  - Residual predicates: **BEAM memory** (only when shapes have additional WHERE clauses)
+  - Total BEAM footprint: O(shapes with residuals), NOT O(values)
 
   ## Usage
 
@@ -38,7 +49,7 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
       # Add a shape
       index = Index.add_shape(index, 42, shape_id, and_where)
 
-      # Lookup affected shapes
+      # Lookup affected shapes (hits NIF)
       shapes = Index.affected_shapes(index, "user_id", %{"user_id" => "42"}, shapes_map)
 
   ## Prototype Limitations
@@ -46,10 +57,11 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
   This is a prototype for evaluation and discussion. Production implementation would need:
   - True RecSplit or BBHash MPH (currently uses simple HashMap)
   - Memory-mapped segment files for persistence
-  - Background compaction worker pool
+  - Background compaction worker pool (DirtyCpu schedulers)
   - Atomic manifest swaps for zero-downtime updates
   - xor-filters for miss-heavy workloads
   - Comprehensive error handling and monitoring
+  - Batch lookup API for transaction routing
   """
 
   alias Electric.Replication.Eval.Env
@@ -65,11 +77,9 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
     :nif_ref,
     :num_lanes,
     :compaction_threshold,
-    # Map of value -> WhereCondition (same as EqualityIndex)
-    # This allows us to support nested where conditions
-    :value_to_condition,
-    # Track which values map to which shape IDs for reverse lookups
-    :shape_to_values
+    # ONLY store residual predicates (shapes with additional WHERE clauses)
+    # NOT per-value routing data (that's in the NIF)
+    :residuals
   ]
 
   @doc """
@@ -91,8 +101,7 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
       nif_ref: nif_ref,
       num_lanes: num_lanes,
       compaction_threshold: compaction_threshold,
-      value_to_condition: %{},
-      shape_to_values: %{}
+      residuals: %{}  # shape_id => residual_predicate
     }
   end
 
@@ -120,7 +129,14 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
     def nif_new(_num_lanes), do: :erlang.nif_error(:nif_not_loaded)
     def nif_insert(_ref, _key, _shape_id), do: :erlang.nif_error(:nif_not_loaded)
     def nif_remove(_ref, _key, _shape_id), do: :erlang.nif_error(:nif_not_loaded)
+
+    # Returns: {:found, [shape_id, ...]} | :miss
     def nif_lookup(_ref, _key), do: :erlang.nif_error(:nif_not_loaded)
+
+    # Batch lookup for transaction routing (amortizes NIF overhead)
+    # Returns: [result, ...] where result is {:found, [shape_id, ...]} | :miss
+    def nif_lookup_many(_ref, _keys), do: :erlang.nif_error(:nif_not_loaded)
+
     def nif_all_shape_ids(_ref), do: :erlang.nif_error(:nif_not_loaded)
     def nif_is_empty(_ref), do: :erlang.nif_error(:nif_not_loaded)
     def nif_maybe_compact(_ref, _threshold), do: :erlang.nif_error(:nif_not_loaded)
@@ -141,77 +157,63 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
   end
 
   defimpl Index.Protocol, for: LsmEqualityIndex do
-    def empty?(%LsmEqualityIndex{value_to_condition: values}), do: values == %{}
+    # Use NIF for emptiness check
+    def empty?(%LsmEqualityIndex{nif_ref: nif_ref}), do: LsmEqualityIndex.Nif.nif_is_empty(nif_ref)
 
     def add_shape(%LsmEqualityIndex{} = index, value, shape_id, and_where) do
-      # Store in value_to_condition map (same as EqualityIndex)
-      new_value_to_condition =
-        index.value_to_condition
-        |> Map.put_new(value, WhereCondition.new())
-        |> Map.update!(value, &WhereCondition.add_shape(&1, shape_id, and_where))
-
-      # Track reverse mapping
-      new_shape_to_values =
-        Map.update(index.shape_to_values, shape_id, [value], fn values ->
-          if value in values, do: values, else: [value | values]
-        end)
-
-      # Insert into NIF index
-      # Convert value to binary key
+      # Insert into NIF index (this is the source of truth)
       key = value_to_key(value)
       :ok = LsmEqualityIndex.Nif.nif_insert(index.nif_ref, key, shape_id)
+
+      # Only store residuals in BEAM (shapes with additional WHERE clauses)
+      new_residuals =
+        case and_where do
+          nil ->
+            # No residual, don't store anything in BEAM
+            index.residuals
+
+          residual_predicate ->
+            # Store residual checker for this shape
+            # In production, precompile AST to fast predicate
+            Map.put(index.residuals, shape_id, residual_predicate)
+        end
 
       # Maybe trigger compaction
       maybe_compact(index)
 
-      %{
-        index
-        | value_to_condition: new_value_to_condition,
-          shape_to_values: new_shape_to_values
-      }
+      %{index | residuals: new_residuals}
     end
 
-    def remove_shape(%LsmEqualityIndex{} = index, value, shape_id, and_where) do
-      # Remove from value_to_condition map
-      condition =
-        index.value_to_condition
-        |> Map.fetch!(value)
-        |> WhereCondition.remove_shape(shape_id, and_where)
-
-      new_value_to_condition =
-        if WhereCondition.empty?(condition) do
-          Map.delete(index.value_to_condition, value)
-        else
-          Map.put(index.value_to_condition, value, condition)
-        end
-
-      # Update reverse mapping
-      new_shape_to_values =
-        Map.update(index.shape_to_values, shape_id, [], fn values ->
-          List.delete(values, value)
-        end)
-        |> Map.reject(fn {_k, v} -> v == [] end)
-
+    def remove_shape(%LsmEqualityIndex{} = index, value, shape_id, _and_where) do
       # Remove from NIF index
       key = value_to_key(value)
       :ok = LsmEqualityIndex.Nif.nif_remove(index.nif_ref, key, shape_id)
 
-      %{
-        index
-        | value_to_condition: new_value_to_condition,
-          shape_to_values: new_shape_to_values
-      }
+      # Remove residual if it exists
+      new_residuals = Map.delete(index.residuals, shape_id)
+
+      %{index | residuals: new_residuals}
     end
 
+    # CRITICAL: This is the hot path - must go through NIF, not BEAM maps
     def affected_shapes(%LsmEqualityIndex{} = index, field, record, shapes) do
       value = value_from_record(record, field, index.type)
+      key = value_to_key(value)
 
-      case Map.get(index.value_to_condition, value) do
-        nil ->
+      # Lookup in NIF (overlay → segments)
+      case LsmEqualityIndex.Nif.nif_lookup(index.nif_ref, key) do
+        {:found, shape_ids} ->
+          # Apply residual predicates if any
+          Enum.reduce(shape_ids, MapSet.new(), fn shape_id, acc ->
+            if residual_ok?(shape_id, record, shapes, index.residuals) do
+              MapSet.put(acc, shape_id)
+            else
+              acc
+            end
+          end)
+
+        :miss ->
           MapSet.new()
-
-        condition ->
-          WhereCondition.affected_shapes(condition, record, shapes)
       end
     end
 
@@ -227,13 +229,40 @@ defmodule Electric.Shapes.Filter.Indexes.LsmEqualityIndex do
       end
     end
 
-    def all_shape_ids(%LsmEqualityIndex{value_to_condition: values}) do
-      Enum.reduce(values, MapSet.new(), fn {_value, condition}, ids ->
-        MapSet.union(ids, WhereCondition.all_shape_ids(condition))
-      end)
+    # Check residual predicate for a shape
+    defp residual_ok?(shape_id, record, shapes, residuals) do
+      case Map.get(residuals, shape_id) do
+        nil ->
+          # No residual, shape matches
+          true
+
+        residual_predicate ->
+          # Evaluate residual (simplified for prototype)
+          # Production would use precompiled predicate
+          case Map.get(shapes, shape_id) do
+            nil ->
+              # Shape not in shapes map, skip
+              false
+
+            shape ->
+              # Use WhereCondition to evaluate residual
+              # This is a simplification; production would optimize this
+              condition = WhereCondition.new() |> WhereCondition.add_shape(shape_id, residual_predicate)
+              affected = WhereCondition.affected_shapes(condition, record, shapes)
+              MapSet.member?(affected, shape_id)
+          end
+      end
+    end
+
+    # Use NIF for shape enumeration
+    def all_shape_ids(%LsmEqualityIndex{nif_ref: nif_ref}) do
+      LsmEqualityIndex.Nif.nif_all_shape_ids(nif_ref)
+      |> MapSet.new()
     end
 
     # Convert a value to a binary key for the NIF
+    # NOTE: Production hashing (SipHash-2-4) happens in the NIF
+    # This BEAM conversion is just a convenience for the prototype
     defp value_to_key(value) when is_integer(value) do
       <<value::64-big>>
     end

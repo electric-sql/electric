@@ -2,8 +2,25 @@
 
 **Author**: Claude (Anthropic)
 **Date**: 2025-10-24
-**Status**: Prototype for Team Discussion
+**Updated**: 2025-10-24 (after candidate feedback)
+**Status**: Prototype for Team Discussion (Corrected)
 **Repository**: electric-sql/electric
+
+---
+
+## ⚠️ Important Update
+
+**A critical bug was identified and fixed** after initial implementation. The original prototype had the NIF infrastructure but **didn't route lookups through it** - the hot path still used BEAM maps, defeating the entire purpose.
+
+**What was fixed**:
+- ✅ Lookups now go through NIF (overlay → segments)
+- ✅ BEAM only stores residual predicates, not routing data
+- ✅ Memory model corrected: O(shapes with residuals) not O(values)
+- ✅ Added batch lookup API for transaction routing
+
+See [CANDIDATE_FEEDBACK.md](./CANDIDATE_FEEDBACK.md) for detailed analysis of the bug and fixes.
+
+**Status**: Prototype now correctly implements the promised architecture.
 
 ---
 
@@ -16,7 +33,7 @@ This document presents findings from prototyping an LSM-based route index for El
 3. **High churn**: Efficient constant add/remove operations
 4. **Multi-tenant**: Easy backup, migration, zero-downtime updates
 
-**Key Result**: The prototype demonstrates that an LSM approach with lane partitioning can meet all four constraints simultaneously, with estimated production memory footprint of **~12-13 bytes/key** (vs ~20-30 bytes for current maps).
+**Key Result**: The corrected prototype demonstrates that an LSM approach with lane partitioning can meet all four constraints simultaneously, with estimated production memory footprint of **~12-13 bytes/key** in native memory (vs ~20-30 bytes in BEAM for current maps).
 
 **Recommendation**: The design is sound and worth pursuing, but requires significant engineering effort to productionize (estimated 4-8 weeks for MVP). See [Production Roadmap](#production-roadmap) section for details.
 

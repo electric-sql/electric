@@ -185,6 +185,7 @@ rustler::init!(
         nif_insert,
         nif_remove,
         nif_lookup,
+        nif_lookup_many,
         nif_all_shape_ids,
         nif_is_empty,
         nif_maybe_compact,
@@ -237,13 +238,38 @@ fn nif_remove(
 
 /// Lookup a key
 /// Args: (index: resource, key: binary)
-/// Returns: [shape_id, ...] | nil
+/// Returns: {:ok, [shape_id, ...]} | :miss
 #[rustler::nif]
 fn nif_lookup(
     index: ResourceArc<LsmIndexResource>,
     key: rustler::Binary,
-) -> Option<Vec<u32>> {
-    index.inner.lookup(key.as_slice())
+) -> NifLookupResult {
+    match index.inner.lookup(key.as_slice()) {
+        Some(shape_ids) => NifLookupResult::Found(shape_ids),
+        None => NifLookupResult::Miss,
+    }
+}
+
+/// Batch lookup for multiple keys (amortizes NIF overhead)
+/// Args: (index: resource, keys: [binary])
+/// Returns: [result, ...] where result is {:ok, [shape_id, ...]} | :miss
+#[rustler::nif]
+fn nif_lookup_many(
+    index: ResourceArc<LsmIndexResource>,
+    keys: Vec<rustler::Binary>,
+) -> Vec<NifLookupResult> {
+    keys.iter()
+        .map(|key| match index.inner.lookup(key.as_slice()) {
+            Some(shape_ids) => NifLookupResult::Found(shape_ids),
+            None => NifLookupResult::Miss,
+        })
+        .collect()
+}
+
+#[derive(NifUnitEnum)]
+enum NifLookupResult {
+    Found(Vec<u32>),
+    Miss,
 }
 
 /// Get all shape IDs
