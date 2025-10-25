@@ -242,7 +242,7 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.put_resp_header(
       conn,
       @electric_schema_header,
-      response |> Api.schema() |> Jason.encode!()
+      response |> Api.schema() |> :json.encode()
     )
   end
 

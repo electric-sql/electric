@@ -5,6 +5,8 @@ defmodule Electric.Plug.ServeShapePlug do
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
 
+  import Electric.Plug.Utils, only: [json_resp: 3]
+
   alias Electric.Utils
   alias Electric.Shapes.Api
   alias Electric.Telemetry.OpenTelemetry
@@ -96,8 +98,9 @@ defmodule Electric.Plug.ServeShapePlug do
       "shape_req.is_long_poll_timeout" => attrs[:ot_is_long_poll_timeout] || false,
       "shape_req.is_empty_response" => attrs[:ot_is_empty_response] || false,
       "shape_req.is_immediate_response" => attrs[:ot_is_immediate_response] || true,
-      "shape_req.is_cached" => if(conn.status, do: conn.status == 304),
-      "shape_req.is_error" => if(conn.status, do: conn.status >= 400),
+      "shape_req.is_cached" =>
+        (conn.status && Plug.Conn.Status.code(conn.status) == 304) || false,
+      "shape_req.is_error" => (conn.status && Plug.Conn.Status.code(conn.status) >= 400) || false,
       "shape_req.is_up_to_date" => maybe_up_to_date
     })
   end
@@ -140,7 +143,7 @@ defmodule Electric.Plug.ServeShapePlug do
         live: get_live_mode(assigns),
         shape_handle: get_handle(assigns) || conn.query_params["handle"],
         client_ip: conn.remote_ip,
-        status: conn.status,
+        status: Plug.Conn.Status.code(conn.status),
         stack_id: get_in(conn.assigns, [:config, :stack_id])
       }
     )
@@ -183,7 +186,7 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> fetch_query_params()
     |> assign(:error_str, error_str)
-    |> send_resp(503, Jason.encode!(%{error: "Database is unreachable"}))
+    |> json_resp(:service_unavailable, %{error: "Database is unreachable"})
   end
 
   def handle_errors(conn, error) do
@@ -194,7 +197,7 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> fetch_query_params()
     |> assign(:error_str, error_str)
-    |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
+    |> json_resp(conn.status, %{error: error_str})
 
     # No end_telemetry_span() call here because by this point that stack of plugs has been
     # unwound to the point where the `conn` struct did not yet have any span-related properties
