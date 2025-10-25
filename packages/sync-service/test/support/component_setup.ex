@@ -12,7 +12,6 @@ defmodule Support.ComponentSetup do
 
   defmodule NoopPublicationManager do
     @behaviour Electric.Replication.PublicationManager
-    def name(_), do: :pub_man
     def add_shape(_handle, _shape, _opts), do: :ok
     def remove_shape(_handle, _opts), do: :ok
     def wait_for_restore(_opts), do: :ok
@@ -24,8 +23,6 @@ defmodule Support.ComponentSetup do
     def new do
       {__MODULE__, %{parent: self()}}
     end
-
-    def name(_), do: TestPublicationManager
 
     def add_shape(handle, shape, %{parent: parent}) do
       send(parent, {TestPublicationManager, :add_shape, handle, shape})

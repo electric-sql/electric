@@ -60,7 +60,6 @@ defmodule Electric.ShapeCacheTest do
 
   defmodule TempPubManager do
     @behaviour Electric.Replication.PublicationManager
-    def name(_opts), do: :temp_pub_manager
 
     def add_shape(_handle, _, opts) do
       send(opts[:test_pid], {:called, :prepare_tables_fn})
@@ -1017,10 +1016,8 @@ defmodule Electric.ShapeCacheTest do
 
       use GenServer
 
-      def name(opts), do: Keyword.fetch!(opts, :name)
-
       def start_link(opts),
-        do: GenServer.start_link(__MODULE__, opts, name: name(opts))
+        do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
 
       def init(opts), do: {:ok, opts}
 

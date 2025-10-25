@@ -49,7 +49,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   @behaviour Electric.Replication.PublicationManager
 
-  @impl Electric.Replication.PublicationManager
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
