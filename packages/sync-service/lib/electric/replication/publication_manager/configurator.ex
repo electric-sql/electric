@@ -74,7 +74,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   end
 
   @impl true
-  def handle_cast({:update_publication, filters}, %{scheduled_filters: nil} = state) do
+  def handle_cast({:update_publication, filters}, %{scheduled_update_ref: nil} = state) do
     ref = Process.send_after(self(), :debounced_update_publication, state.update_debounce_timeout)
     {:noreply, %{state | scheduled_filters: filters, scheduled_update_ref: ref}}
   end
