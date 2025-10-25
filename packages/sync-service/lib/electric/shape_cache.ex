@@ -264,12 +264,6 @@ defmodule Electric.ShapeCache do
       %{stack_id: state.stack_id}
     )
 
-    Electric.Connection.Manager.consumers_ready(
-      state.stack_id,
-      total_recovered,
-      total_failed_to_recover
-    )
-
     {:noreply, state}
   end
 
