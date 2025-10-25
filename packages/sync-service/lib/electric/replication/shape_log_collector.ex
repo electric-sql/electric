@@ -398,7 +398,7 @@ defmodule Electric.Replication.ShapeLogCollector do
           "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
         end)
 
-        %{state | tracked_relations: tracker_state}
+        {:ok, %{state | tracked_relations: tracker_state}}
 
       _ ->
         case Partitions.handle_relation(state.partitions, updated_rel) do
