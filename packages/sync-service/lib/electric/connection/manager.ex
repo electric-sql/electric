@@ -492,6 +492,8 @@ defmodule Electric.Connection.Manager do
       exit(reason)
     end
 
+    StatusMonitor.mark_integrety_checks_passed(state.stack_id, self())
+
     state = %{
       state
       | current_step: {:waiting_for_consumers, start_time},
