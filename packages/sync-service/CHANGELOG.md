@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.2.1
+
+### Patch Changes
+
+- 67b487b: Handle connection failures during relation changes and new shapes more gracefully
+
 ## 1.2.0
 
 ### Minor Changes
