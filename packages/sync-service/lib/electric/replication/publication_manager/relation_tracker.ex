@@ -175,13 +175,13 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
              state.publication_name
            )},
           state,
-          state.publication_refresh_timeout
+          state.publication_refresh_period
         }
 
       # if the relation is already part of the committed publication filters,
       # we can reply immediately
       MapSet.member?(state.committed_relation_filters, oid_rel) ->
-        {:reply, :ok, state, state.publication_refresh_timeout}
+        {:reply, :ok, state, state.publication_refresh_period}
 
       # otherwise, add the caller to the waiters list and reply when the
       # publication is ready
@@ -199,11 +199,11 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     # reconcile the publication, otherwise you run into issues where only the last
     # removal fails and all others succeed. No removal guarantees anything about
     # the state of the publication.
-    {:reply, :ok, state, state.publication_refresh_timeout}
+    {:reply, :ok, state, state.publication_refresh_period}
   end
 
   def handle_call(:wait_for_restore, _from, state) do
-    {:reply, :ok, state, state.publication_refresh_timeout}
+    {:reply, :ok, state, state.publication_refresh_period}
   end
 
   @impl true
@@ -252,7 +252,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     case Electric.StatusMonitor.status(state.stack_id) do
       %{conn: :up} ->
         state = update_publication(state)
-        {:noreply, state, state.publication_refresh_timeout}
+        {:noreply, state, state.publication_refresh_period}
 
       status ->
         Logger.debug("Publication update skipped due to inactive stack: #{inspect(status)}")
