@@ -50,6 +50,7 @@ defmodule Electric.Replication.PublicationManager do
   @impl __MODULE__
   defdelegate wait_for_restore(stack_id), to: RelationTracker
 
+  @impl Supervisor
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     Process.set_label({:publication_manager_supervisor, stack_id})
