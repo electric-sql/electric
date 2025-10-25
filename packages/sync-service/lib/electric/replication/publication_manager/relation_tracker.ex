@@ -20,10 +20,8 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   defstruct [
     :stack_id,
-    :update_debounce_timeout,
     :publication_name,
     :publication_refresh_period,
-    :restore_retry_timeout,
     relation_ref_counts: %{},
     prepared_relation_filters: MapSet.new(),
     committed_relation_filters: MapSet.new(),
@@ -32,9 +30,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     # start with optimistic assumption about what the
     # publication supports (altering and generated columns)
     # and rely on the first check to correct that
-    publishes_generated_columns?: true,
-    restore_waiters: [],
-    restore_complete?: false
+    publishes_generated_columns?: true
   ]
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
@@ -48,9 +44,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
            tracked_shape_handles: %{shape_handle() => publication_filter()},
            publication_name: String.t(),
            publishes_generated_columns?: boolean(),
-           restore_waiters: [GenServer.from()],
-           restore_complete?: boolean(),
-           restore_retry_timeout: non_neg_integer()
+           publication_refresh_period: non_neg_integer()
          }
 
   @behaviour Electric.Replication.PublicationManager
@@ -131,7 +125,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     state = %__MODULE__{
       stack_id: opts.stack_id,
       publication_name: opts.publication_name,
-      restore_retry_timeout: opts.restore_retry_timeout
+      publication_refresh_period: opts.refresh_period
     }
 
     {:ok, state, {:continue, :restore_relations}}
@@ -158,12 +152,8 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
             end
           )
 
-        state =
-          if update_needed?(state),
-            do: update_publication(state),
-            else: mark_restore_complete(state)
-
-        {:noreply, state, refresh_timeout(state)}
+        state = update_publication_if_necessary(state)
+        {:noreply, state, state.publication_refresh_period}
       end
     )
   end
@@ -186,19 +176,19 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
              state.publication_name
            )},
           state,
-          refresh_timeout(state)
+          state.publication_refresh_timeout
         }
 
       # if the relation is already part of the committed publication filters,
       # we can reply immediately
       MapSet.member?(state.committed_relation_filters, oid_rel) ->
-        {:reply, :ok, state, refresh_timeout(state)}
+        {:reply, :ok, state, state.publication_refresh_timeout}
 
       # otherwise, add the caller to the waiters list and reply when the
       # publication is ready
       true ->
         state = add_waiter(from, shape_handle, publication_filter, state)
-        {:noreply, state, refresh_timeout(state)}
+        {:noreply, state}
     end
   end
 
@@ -210,16 +200,11 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     # reconcile the publication, otherwise you run into issues where only the last
     # removal fails and all others succeed. No removal guarantees anything about
     # the state of the publication.
-    {:reply, :ok, state, refresh_timeout(state)}
+    {:reply, :ok, state, state.publication_refresh_timeout}
   end
 
-  def handle_call(:wait_for_restore, from, state) do
-    if state.restore_complete? do
-      {:reply, :ok, state, refresh_timeout(state)}
-    else
-      state = %{state | restore_waiters: [from | state.restore_waiters]}
-      {:noreply, state, refresh_timeout(state)}
-    end
+  def handle_call(:wait_for_restore, _from, state) do
+    {:reply, :ok, state, state.publication_refresh_timeout}
   end
 
   @impl true
@@ -268,7 +253,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     case Electric.StatusMonitor.status(state.stack_id) do
       %{conn: :up} ->
         state = update_publication(state)
-        {:noreply, state, refresh_timeout(state)}
+        {:noreply, state, state.publication_refresh_timeout}
 
       status ->
         Logger.debug("Publication update skipped due to inactive stack: #{inspect(status)}")
@@ -291,22 +276,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     state
   end
 
-  defp mark_restore_complete(%{restore_complete?: true} = state), do: state
-
-  defp mark_restore_complete(state) do
-    for waiter <- state.restore_waiters, do: GenServer.reply(waiter, :ok)
-    %{state | restore_complete?: true, restore_waiters: []}
-  end
-
   defp update_needed?(%__MODULE__{
          prepared_relation_filters: prepared,
          committed_relation_filters: committed
        }) do
     not MapSet.equal?(prepared, committed)
   end
-
-  defp refresh_timeout(%{restore_complete?: false, restore_retry_timeout: timeout}), do: timeout
-  defp refresh_timeout(%{publication_refresh_period: period}), do: period
 
   defguardp is_tracking_shape_handle?(shape_handle, state)
             when is_map_key(state.tracked_shape_handles, shape_handle)
