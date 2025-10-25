@@ -169,8 +169,10 @@ defmodule Electric.Replication.ShapeLogCollector do
           |> Enum.reduce(
             {state.partitions, state.filter, state.dependency_layers, 0},
             fn {shape_handle, shape}, {partitions, filter, layers, count} ->
+              {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
+
               {
-                Partitions.add_shape(partitions, shape_handle, shape),
+                partitions,
                 Filter.add_shape(filter, shape_handle, shape),
                 DependencyLayers.add_dependency(layers, shape, shape_handle),
                 count + 1
@@ -198,20 +200,26 @@ defmodule Electric.Replication.ShapeLogCollector do
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
-        :ok = ConsumerRegistry.register_consumer(shape_handle, pid, state.registry_state)
+        case Partitions.add_shape(state.partitions, shape_handle, shape) do
+          {:ok, partitions} ->
+            :ok = ConsumerRegistry.register_consumer(shape_handle, pid, state.registry_state)
 
-        state =
-          %{
-            state
-            | partitions: Partitions.add_shape(state.partitions, shape_handle, shape),
-              filter: Filter.add_shape(state.filter, shape_handle, shape),
-              dependency_layers:
-                DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
-          }
-          |> Map.update!(:subscriptions, &(&1 + 1))
-          |> log_subscription_status()
+            state =
+              %{
+                state
+                | partitions: partitions,
+                  filter: Filter.add_shape(state.filter, shape_handle, shape),
+                  dependency_layers:
+                    DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
+              }
+              |> Map.update!(:subscriptions, &(&1 + 1))
+              |> log_subscription_status()
 
-        {:reply, :ok, state}
+            {:reply, :ok, state}
+
+          {:error, :connection_not_available} ->
+            {:reply, {:error, :connection_not_available}, state}
+        end
       end
     )
   end
@@ -265,7 +273,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
     Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
 
-    {:reply, :ok, handle_relation(rel, from, state)}
+    {response, state} = handle_relation(rel, from, state)
+    {:reply, response, state}
   end
 
   def handle_call(:active_shapes, _from, state) do
@@ -314,8 +323,12 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     case fill_keys_in_txn(txn, state) do
       {:ok, txn} ->
+        OpenTelemetry.start_interval("partitions.handle_transaction")
+        {partitions, txn} = Partitions.handle_transaction(state.partitions, txn)
+
         state =
           state
+          |> Map.put(:partitions, partitions)
           |> put_last_processed_lsn(txn.lsn)
           |> publish(txn)
 
@@ -327,9 +340,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp publish(state, event) do
-    OpenTelemetry.start_interval("partitions.handle_event")
-    {partitions, event} = Partitions.handle_event(state.partitions, event)
-
     OpenTelemetry.start_interval("shape_log_collector.affected_shapes")
 
     affected_shapes = Filter.affected_shapes(state.filter, event)
@@ -359,7 +369,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         state.flush_tracker
       end
 
-    %{state | partitions: partitions, flush_tracker: flush_tracker}
+    %{state | flush_tracker: flush_tracker}
   end
 
   defp handle_relation(rel, _from, state) do
@@ -388,11 +398,23 @@ defmodule Electric.Replication.ShapeLogCollector do
           "Dropping relation message for #{inspect(rel.schema)}.#{inspect(rel.table)}: no active consumers"
         end)
 
-        %{state | tracked_relations: tracker_state}
+        {:ok, %{state | tracked_relations: tracker_state}}
 
       _ ->
-        # relation changes will also start consumers if they're not running
-        publish(%{state | tracked_relations: tracker_state}, updated_rel)
+        case Partitions.handle_relation(state.partitions, updated_rel) do
+          {:ok, partitions} ->
+            # relation changes will also start consumers if they're not running
+            state =
+              publish(
+                %{state | tracked_relations: tracker_state, partitions: partitions},
+                updated_rel
+              )
+
+            {:ok, state}
+
+          {:error, :connection_not_available} ->
+            {{:error, :connection_not_available}, state}
+        end
     end
   end
 
