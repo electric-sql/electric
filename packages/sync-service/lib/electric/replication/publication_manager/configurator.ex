@@ -8,22 +8,27 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   alias Electric.Postgres.Configuration
   alias Electric.Utils
 
-  @enforce_keys [:stack_id, :publication_name, :db_pool, :manual_table_publishing?]
-  defstruct [
+  @enforce_keys [
     :stack_id,
     :publication_name,
     :db_pool,
     :manual_table_publishing?,
     :can_alter_publication?,
-    scheduled_filters: nil
+    :scheduled_filters,
+    :update_debounce_timeout,
+    :scheduled_update_ref
   ]
+
+  defstruct @enforce_keys
 
   @type state :: %__MODULE__{
           stack_id: Electric.stack_id(),
           publication_name: String.t(),
           manual_table_publishing?: boolean(),
           can_alter_publication?: boolean(),
-          scheduled_filters: PublicationManager.RelationTracker.relation_filters() | nil
+          scheduled_filters: PublicationManager.RelationTracker.relation_filters() | nil,
+          update_debounce_timeout: timeout(),
+          scheduled_update_ref: nil | reference()
         }
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id),
@@ -49,32 +54,51 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   def init(opts) do
     opts = Map.new(opts)
 
-    {:ok,
-     %__MODULE__{
-       stack_id: opts.stack_id,
-       publication_name: opts.publication_name,
-       db_pool: opts.db_pool,
-       manual_table_publishing?: opts.manual_table_publishing?,
-       can_alter_publication?: true
-     }}
+    {
+      :ok,
+      %__MODULE__{
+        stack_id: opts.stack_id,
+        publication_name: opts.publication_name,
+        db_pool: opts.db_pool,
+        manual_table_publishing?: opts.manual_table_publishing?,
+        can_alter_publication?: true,
+        scheduled_filters: nil,
+        update_debounce_timeout: opts.update_debounce_timeout,
+        scheduled_update_ref: nil
+      }
+    }
   end
 
   @impl true
   def handle_cast({:update_publication, filters}, %{scheduled_filters: nil} = state) do
+    ref = Process.send_after(self(), :debounced_update_publication, state.update_debounce_timeout)
+    {:noreply, %{state | scheduled_filters: filters, scheduled_update_ref: ref}}
+  end
+
+  def handle_cast({:update_publication, filters}, state) do
+    {:noreply, %{state | scheduled_filters: filters}}
+  end
+
+  @impl true
+  def handle_info(:debounced_update_publication, state) do
+    {
+      :noreply,
+      %{state | scheduled_filters: nil, scheduled_update_ref: nil},
+      {:continue, {:check_publication, state.scheduled_filters}}
+    }
+  end
+
+  @impl true
+  def handle_continue({:check_publication, filters}, state) do
     case check_publication_status(state) do
       {:ok, status} ->
-        state = %{
-          state
-          | scheduled_filters: filters,
-            can_alter_publication?: status.can_alter_publication?
-        }
+        state = %{state | can_alter_publication?: status.can_alter_publication?}
 
         PublicationManager.RelationTracker.notify_publication_status(
           [stack_id: state.stack_id],
           status
         )
 
-        Process.send_after(self(), :configured_scheduled_filters, 0)
         {:noreply, state, {:continue, {:configure_filters, filters}}}
 
       {:error, err} ->
@@ -83,7 +107,6 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     end
   end
 
-  @impl true
   def handle_continue({:configure_filters, filters}, state) do
     case determine_publication_relation_actions(state, filters) do
       {:ok,

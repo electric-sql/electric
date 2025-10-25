@@ -29,12 +29,10 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     committed_relation_filters: MapSet.new(),
     tracked_shape_handles: %{},
     waiters: %{},
-    scheduled_updated_ref: nil,
     # start with optimistic assumption about what the
     # publication supports (altering and generated columns)
     # and rely on the first check to correct that
     publishes_generated_columns?: true,
-    next_update_forced?: false,
     restore_waiters: [],
     restore_complete?: false
   ]
@@ -46,27 +44,14 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
            prepared_relation_filters: relation_filters(),
            committed_relation_filters: relation_filters(),
-           update_debounce_timeout: timeout(),
-           scheduled_updated_ref: nil | reference(),
            waiters: %{Electric.oid_relation() => [GenServer.from(), ...]},
            tracked_shape_handles: %{shape_handle() => publication_filter()},
            publication_name: String.t(),
            publishes_generated_columns?: boolean(),
-           publication_refresh_period: non_neg_integer(),
-           next_update_forced?: boolean(),
            restore_waiters: [GenServer.from()],
            restore_complete?: boolean(),
            restore_retry_timeout: non_neg_integer()
          }
-
-  # The default debounce timeout is 0, which means that the publication update
-  # will be scheduled immediately to run at the end of the current process
-  # mailbox, but we are leaving this configurable in case we want larger
-  # windows to aggregate shape filter updates
-  @default_debounce_timeout 0
-
-  # The default retry timeout in case of failed restore attempts
-  @default_restore_retry_timeout 1_000
 
   @behaviour Electric.Replication.PublicationManager
 
@@ -145,9 +130,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
     state = %__MODULE__{
       stack_id: opts.stack_id,
-      update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
-      publication_refresh_period: opts.refresh_period,
       restore_retry_timeout: opts.restore_retry_timeout
     }
 
@@ -177,7 +160,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
         state =
           if update_needed?(state),
-            do: schedule_update_publication(0, true, state),
+            do: update_publication(state),
             else: mark_restore_complete(state)
 
         {:noreply, state, refresh_timeout(state)}
@@ -188,7 +171,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   @impl true
   def handle_call({:add_shape, shape_handle, publication_filter}, from, state) do
     state = add_shape_to_publication_filters(shape_handle, publication_filter, state)
-    state = schedule_update_if_necessary(state)
+    state = update_publication_if_necessary(state)
 
     {oid_rel, with_gen_cols} = publication_filter
 
@@ -221,7 +204,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   def handle_call({:remove_shape, shape_handle}, _from, state) do
     state = remove_shape_from_publication_filters(shape_handle, state)
-    state = schedule_update_if_necessary(state)
+    state = update_publication_if_necessary(state)
 
     # never wait for removals - reply immediately and let publication manager
     # reconcile the publication, otherwise you run into issues where only the last
@@ -240,34 +223,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   end
 
   @impl true
-  def handle_info(:update_publication, state) do
-    # Clear out the timer ref
-    if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
-    state = %{state | scheduled_updated_ref: nil}
-
-    Electric.Replication.PublicationManager.Configurator.configure_publication(
-      state.stack_id,
-      state.prepared_relation_filters
-    )
-
-    # Schedule a forced refresh to happen periodically unless there's an explicit call to
-    # update the publication that happens sooner.
-    {:noreply, state, refresh_timeout(state)}
-  end
-
-  def handle_info(:timeout, state) do
-    case Electric.StatusMonitor.status(state.stack_id) do
-      %{conn: :up} ->
-        state = schedule_update_publication(0, true, state)
-        {:noreply, state, refresh_timeout(state)}
-
-      status ->
-        Logger.debug("Publication update skipped due to inactive stack: #{inspect(status)}")
-        {:noreply, state}
-    end
-  end
-
-  @impl true
   def handle_cast({:publication_status, status}, state) do
     # if the publication has switched from being able to publish generated columns
     # to not being able to publish them, we need to fail any shapes that depend on
@@ -280,81 +235,61 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     {:noreply, %{state | publishes_generated_columns?: status.publishes_generated_columns?}}
   end
 
-  def handle_cast({:configuration_result, oid_rel, result}, state) do
-    state = handle_publication_update_result(%{oid_rel => result}, state)
+  def handle_cast({:configuration_result, oid_rel, {:ok, :dropped}}, state) do
+    new_committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
+    {:noreply, %{state | committed_relation_filters: new_committed_filters}}
+  end
+
+  def handle_cast({:configuration_result, oid_rel, {:ok, res}}, state)
+      when res in [:validated, :added] do
+    state = reply_to_relation_waiters(oid_rel, :ok, state)
+    new_committed_filters = MapSet.put(state.committed_relation_filters, oid_rel)
+    {:noreply, %{state | committed_relation_filters: new_committed_filters}}
+  end
+
+  def handle_cast({:configuration_result, oid_rel, {:error, error}}, state) do
+    log_level = if is_known_publication_error(error), do: :warning, else: :error
+
+    Logger.log(
+      log_level,
+      "Failed to configure publication for relation #{inspect(oid_rel)}: #{inspect(error)}",
+      relation: inspect(oid_rel)
+    )
+
+    state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
+
+    ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
+
     {:noreply, state}
   end
 
-  defguardp is_known_publication_error(error)
-            when is_exception(error) and
-                   (is_struct(error, Electric.DbConfigurationError) or
-                      (is_struct(error, Postgrex.Error) and
-                         error.postgres.code in [
-                           :insufficient_privilege,
-                           :undefined_table,
-                           :undefined_function
-                         ]))
+  @impl true
+  def handle_info(:timeout, state) do
+    case Electric.StatusMonitor.status(state.stack_id) do
+      %{conn: :up} ->
+        state = update_publication(state)
+        {:noreply, state, refresh_timeout(state)}
 
-  defp handle_publication_update_result(relations_configured, state) do
-    relations_configured
-    |> Enum.reduce(
-      %{state | committed_relation_filters: MapSet.new()},
-      fn
-        {_oid_rel, {:ok, :dropped}}, state ->
-          state
-
-        {oid_rel, {:ok, op}}, state when op in [:validated, :added] ->
-          state = reply_to_relation_waiters(oid_rel, :ok, state)
-
-          %{
-            state
-            | committed_relation_filters: MapSet.put(state.committed_relation_filters, oid_rel)
-          }
-
-        {oid_rel, {:error, error}}, state ->
-          log_level = if is_known_publication_error(error), do: :warning, else: :error
-
-          Logger.log(
-            log_level,
-            "Failed to configure publication for relation #{inspect(oid_rel)}: #{inspect(error)}",
-            relation: inspect(oid_rel)
-          )
-
-          state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
-
-          ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
-
-          state
-      end
-    )
-  end
-
-  defp schedule_update_if_necessary(state) do
-    if update_needed?(state) do
-      schedule_update_publication(state.update_debounce_timeout, state)
-    else
-      state
+      status ->
+        Logger.debug("Publication update skipped due to inactive stack: #{inspect(status)}")
+        {:noreply, state}
     end
   end
 
-  @spec schedule_update_publication(timeout(), boolean(), state()) :: state()
-  defp schedule_update_publication(timeout, forced? \\ false, state)
-
-  defp schedule_update_publication(
-         timeout,
-         forced?,
-         %__MODULE__{scheduled_updated_ref: nil} = state
-       ) do
-    ref = Process.send_after(self(), :update_publication, timeout)
-    %{state | scheduled_updated_ref: ref, next_update_forced?: forced?}
+  @spec update_publication_if_necessary(state()) :: state()
+  defp update_publication_if_necessary(state) do
+    if update_needed?(state), do: update_publication(state), else: state
   end
 
-  defp schedule_update_publication(
-         _timeout,
-         forced?,
-         %__MODULE__{scheduled_updated_ref: _} = state
-       ),
-       do: %{state | next_update_forced?: forced? or state.next_update_forced?}
+  @spec update_publication(state()) :: state()
+  defp update_publication(state) do
+    Electric.Replication.PublicationManager.Configurator.configure_publication(
+      state.stack_id,
+      state.prepared_relation_filters
+    )
+
+    state
+  end
 
   defp mark_restore_complete(%{restore_complete?: true} = state), do: state
 
@@ -542,4 +477,16 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
          flags: flags
        }),
        do: {{oid, relation}, Map.get(flags, :selects_generated_columns, false)}
+
+  defp is_known_publication_error(%Electric.DbConfigurationError{}), do: true
+
+  defp is_known_publication_error(%Postgrex.Error{postgres: %{code: code}})
+       when code in [
+              :insufficient_privilege,
+              :undefined_table,
+              :undefined_function
+            ],
+       do: true
+
+  defp is_known_publication_error(_), do: false
 end

@@ -12,6 +12,14 @@ defmodule Electric.Replication.PublicationManager do
   @type stack_id :: Electric.stack_id()
   @type shape_handle :: Electric.ShapeCache.shape_handle()
 
+  # The default debounce timeout is 0, which means that the publication update
+  # will be scheduled immediately to run at the end of the current process
+  # mailbox, but we are leaving this configurable in case we want larger
+  # windows to aggregate shape filter updates
+  @default_debounce_timeout 0
+
+  @default_restore_retry_timeout 1_000
+
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
