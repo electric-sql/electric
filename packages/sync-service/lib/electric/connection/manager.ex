@@ -783,24 +783,12 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast(
-        {:consumers_ready, total_recovered, total_failed_to_recover},
+        {:consumers_ready, _total_recovered, _total_failed_to_recover},
         %State{
           current_phase: :connection_setup,
-          current_step: {:waiting_for_consumers, start_time}
+          current_step: {:waiting_for_consumers, _start_time}
         } = state
       ) do
-    duration = System.monotonic_time() - start_time
-
-    Logger.notice(
-      "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
-    )
-
-    Electric.Telemetry.OpenTelemetry.execute(
-      [:electric, :connection, :consumers_ready],
-      %{duration: duration, total: total_recovered, failed_to_recover: total_failed_to_recover},
-      %{stack_id: state.stack_id}
-    )
-
     state = %{state | current_step: {:start_replication_client, :start_streaming}}
     {:noreply, state, {:continue, :start_streaming}}
   end
