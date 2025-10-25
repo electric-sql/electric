@@ -22,8 +22,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     :stack_id,
     :update_debounce_timeout,
     :publication_name,
-    :db_pool,
-    :manual_table_publishing?,
     :publication_refresh_period,
     :restore_retry_timeout,
     relation_ref_counts: %{},
@@ -53,9 +51,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
            waiters: %{Electric.oid_relation() => [GenServer.from(), ...]},
            tracked_shape_handles: %{shape_handle() => publication_filter()},
            publication_name: String.t(),
-           db_pool: term(),
            publishes_generated_columns?: boolean(),
-           manual_table_publishing?: boolean(),
            publication_refresh_period: non_neg_integer(),
            next_update_forced?: boolean(),
            restore_waiters: [GenServer.from()],
@@ -71,24 +67,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   # The default retry timeout in case of failed restore attempts
   @default_restore_retry_timeout 1_000
-
-  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
-  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
-  @schema NimbleOptions.new!(
-            name: [type: @genserver_name_schema, required: false],
-            stack_id: [type: :string, required: true],
-            publication_name: [type: :string, required: true],
-            db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
-            manual_table_publishing?: [type: :boolean, required: false, default: false],
-            update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
-            server: [type: :any, required: false],
-            refresh_period: [type: :pos_integer, required: false, default: 60_000],
-            restore_retry_timeout: [
-              type: :pos_integer,
-              required: false,
-              default: @default_restore_retry_timeout
-            ]
-          )
 
   @behaviour Electric.Replication.PublicationManager
 
@@ -131,27 +109,28 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     :ok
   end
 
+  @spec notify_configuration_result(
+          Keyword.t(),
+          Electric.oid_relation(),
+          {:ok, term()} | {:error, any()}
+        ) :: :ok
   def notify_configuration_result(opts, oid_rel, result) do
     server = Access.get(opts, :server, name(opts))
     GenServer.cast(server, {:configuration_result, oid_rel, result})
   end
 
+  @spec notify_publication_status(
+          Keyword.t(),
+          Electric.Postgres.Configuration.publication_status()
+        ) :: :ok
   def notify_publication_status(opts, status) do
     server = Access.get(opts, :server, name(opts))
     GenServer.cast(server, {:publication_status, status})
   end
 
   def start_link(opts) do
-    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      stack_id = Keyword.fetch!(opts, :stack_id)
-
-      name = Keyword.get(opts, :name, name(stack_id))
-
-      db_pool =
-        Keyword.get(opts, :db_pool, Electric.Connection.Manager.admin_pool(stack_id))
-
-      GenServer.start_link(__MODULE__, [name: name, db_pool: db_pool] ++ opts, name: name)
-    end
+    stack_id = Keyword.fetch!(opts, :stack_id)
+    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, name(stack_id)))
   end
 
   # --- Private API ---
@@ -160,7 +139,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   def init(opts) do
     opts = Map.new(opts)
 
-    Process.set_label({:publication_manager, opts.stack_id})
+    Process.set_label({:relation_tracker, opts.stack_id})
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
@@ -168,8 +147,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       stack_id: opts.stack_id,
       update_debounce_timeout: Map.get(opts, :update_debounce_timeout, @default_debounce_timeout),
       publication_name: opts.publication_name,
-      db_pool: opts.db_pool,
-      manual_table_publishing?: opts.manual_table_publishing?,
       publication_refresh_period: opts.refresh_period,
       restore_retry_timeout: opts.restore_retry_timeout
     }

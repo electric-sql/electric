@@ -12,12 +12,33 @@ defmodule Electric.Replication.PublicationManager do
   @type stack_id :: Electric.stack_id()
   @type shape_handle :: Electric.ShapeCache.shape_handle()
 
+  @name_schema_tuple {:tuple, [:atom, :atom, :any]}
+  @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
+  @schema NimbleOptions.new!(
+            name: [type: @genserver_name_schema, required: false],
+            stack_id: [type: :string, required: true],
+            publication_name: [type: :string, required: true],
+            db_pool: [type: {:or, [:atom, :pid, @name_schema_tuple]}],
+            manual_table_publishing?: [type: :boolean, required: false, default: false],
+            update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
+            server: [type: :any, required: false],
+            refresh_period: [type: :pos_integer, required: false, default: 60_000],
+            restore_retry_timeout: [
+              type: :pos_integer,
+              required: false,
+              default: @default_restore_retry_timeout
+            ]
+          )
+
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
   def start_link(opts) do
-    Supervisor.start_link(__MODULE__, opts, name: name(opts[:stack_id]))
+    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
+      stack_id = Keyword.fetch!(opts, :stack_id)
+      Supervisor.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, name(stack_id)))
+    end
   end
 
   defdelegate add_shape(stack_id, shape_handle, shape), to: RelationTracker
@@ -27,7 +48,10 @@ defmodule Electric.Replication.PublicationManager do
   defdelegate wait_for_restore(stack_id), to: RelationTracker
 
   def init(opts) do
-    Process.set_label({:publication_manager_sup, opts[:stack_id]})
+    stack_id = Keyword.fetch!(opts, :stack_id)
+    Process.set_label({:publication_manager, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     children = [
       {__MODULE__.RelationTracker, opts},
