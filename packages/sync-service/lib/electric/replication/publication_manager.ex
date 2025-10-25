@@ -17,8 +17,6 @@ defmodule Electric.Replication.PublicationManager do
   # windows to aggregate shape filter updates
   @default_debounce_timeout 0
 
-  @default_restore_retry_timeout 1_000
-
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
   @schema NimbleOptions.new!(
@@ -29,12 +27,7 @@ defmodule Electric.Replication.PublicationManager do
             manual_table_publishing?: [type: :boolean, required: false, default: false],
             update_debounce_timeout: [type: :timeout, default: @default_debounce_timeout],
             server: [type: :any, required: false],
-            refresh_period: [type: :pos_integer, required: false, default: 60_000],
-            restore_retry_timeout: [
-              type: :pos_integer,
-              required: false,
-              default: @default_restore_retry_timeout
-            ]
+            refresh_period: [type: :pos_integer, required: false, default: 60_000]
           )
 
   def name(stack_id) do
@@ -56,7 +49,7 @@ defmodule Electric.Replication.PublicationManager do
 
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    Process.set_label({:publication_manager, stack_id})
+    Process.set_label({:publication_manager_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 

@@ -54,6 +54,10 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   def init(opts) do
     opts = Map.new(opts)
 
+    Process.set_label({:publication_manager_configurator, opts.stack_id})
+    Logger.metadata(stack_id: opts.stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
+
     {
       :ok,
       %__MODULE__{
