@@ -1052,11 +1052,7 @@ defmodule Electric.ShapeCacheTest do
              )
 
       # Register this test as the connection manager to get "consumers ready" notification
-      {:via, Registry, {registry, key}} = Electric.Connection.Manager.name(ctx.stack_id)
-      Registry.register(registry, key, nil)
-
       restart_shape_cache(ctx)
-      assert_receive {:"$gen_cast", {:consumers_ready, 2, 0}}
 
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
     end
@@ -1076,12 +1072,7 @@ defmodule Electric.ShapeCacheTest do
                )
              )
 
-      # Register this test as the connection manager to get "consumers ready" notification
-      {:via, Registry, {registry, key}} = Electric.Connection.Manager.name(ctx.stack_id)
-      Registry.register(registry, key, nil)
-
       restart_shape_cache(ctx, remove_backup: true)
-      assert_receive {:"$gen_cast", {:consumers_ready, 2, 0}}
 
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
     end
@@ -1154,11 +1145,7 @@ defmodule Electric.ShapeCacheTest do
              )
 
       # Register this test as the connection manager to get "consumers ready" notification
-      {:via, Registry, {registry, key}} = Electric.Connection.Manager.name(ctx.stack_id)
-      Registry.register(registry, key, nil)
-
       restart_shape_cache(ctx)
-      assert_receive {:"$gen_cast", {:consumers_ready, 2, 0}}
 
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
 
