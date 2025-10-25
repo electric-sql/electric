@@ -41,10 +41,13 @@ defmodule Electric.Replication.PublicationManager do
     end
   end
 
+  @impl __MODULE__
   defdelegate add_shape(stack_id, shape_handle, shape), to: RelationTracker
 
+  @impl __MODULE__
   defdelegate remove_shape(stack_id, shape_handle), to: RelationTracker
 
+  @impl __MODULE__
   defdelegate wait_for_restore(stack_id), to: RelationTracker
 
   def init(opts) do
