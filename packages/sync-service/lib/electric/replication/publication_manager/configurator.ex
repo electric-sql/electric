@@ -37,7 +37,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   def name(opts), do: name(Access.fetch!(opts, :stack_id))
 
   def configure_publication(opts, filters) do
-    GenServer.cast(name(opts), {:update_publication, filters, self()})
+    GenServer.cast(name(opts), {:update_publication, filters})
   end
 
   def start_link(opts) do
@@ -168,7 +168,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     end
   end
 
-  def handle_continue({:perform_relation_actions, [], _from}, state) do
+  def handle_continue({:perform_relation_actions, []}, state) do
     {:noreply, state}
   end
 
