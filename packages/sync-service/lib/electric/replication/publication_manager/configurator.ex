@@ -23,7 +23,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
           publication_name: String.t(),
           manual_table_publishing?: boolean(),
           can_alter_publication?: boolean(),
-          scheduled_filters: PublicationManager.relation_filters() | nil
+          scheduled_filters: PublicationManager.RelationTracker.relation_filters() | nil
         }
 
   def name(stack_id) when not is_map(stack_id) and not is_list(stack_id),
@@ -218,7 +218,10 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     end)
   end
 
-  @spec determine_publication_relation_actions(state(), PublicationManager.relation_filters()) ::
+  @spec determine_publication_relation_actions(
+          state(),
+          PublicationManager.RelationTracker.relation_filters()
+        ) ::
           {:ok, Configuration.relation_actions()} | {:error, any()}
   defp determine_publication_relation_actions(state, filters) do
     run_handling_db_connection_errors(fn ->

@@ -7,7 +7,7 @@ defmodule Electric.Postgres.Configuration do
   alias Electric.Utils
   alias Electric.Replication.PublicationManager
 
-  @type relation_filters :: PublicationManager.relation_filters()
+  @type relation_filters :: PublicationManager.RelationTracker.relation_filters()
   @type relations_configured :: %{
           Electric.oid_relation() =>
             {:ok, :validated | :added | :dropped} | {:error, :schema_changed | term()}

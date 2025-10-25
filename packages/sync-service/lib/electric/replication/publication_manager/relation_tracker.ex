@@ -36,7 +36,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     # publication supports (altering and generated columns)
     # and rely on the first check to correct that
     publishes_generated_columns?: true,
-    can_alter_publication?: true,
     next_update_forced?: false,
     restore_waiters: [],
     restore_complete?: false
@@ -56,7 +55,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
            publication_name: String.t(),
            db_pool: term(),
            publishes_generated_columns?: boolean(),
-           can_alter_publication?: boolean(),
            manual_table_publishing?: boolean(),
            publication_refresh_period: non_neg_integer(),
            next_update_forced?: boolean(),
@@ -270,18 +268,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     if state.scheduled_updated_ref, do: Process.cancel_timer(state.scheduled_updated_ref)
     state = %{state | scheduled_updated_ref: nil}
 
-    # state =
-    #   OpenTelemetry.with_span(
-    #     "publication_manager.update_publication",
-    #     [
-    #       is_restore: not state.restore_complete?
-    #     ],
-    #     state.stack_id,
-    #     fn ->
-
-    #     end
-    #   )
-
     Electric.Replication.PublicationManager.Configurator.configure_publication(
       state.stack_id,
       state.prepared_relation_filters
@@ -314,13 +300,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
         do: fail_generated_column_shapes(state),
         else: state
 
-    state = %{
-      state
-      | can_alter_publication?: status.can_alter_publication?,
-        publishes_generated_columns?: status.publishes_generated_columns?
-    }
-
-    {:noreply, state}
+    {:noreply, %{state | publishes_generated_columns?: status.publishes_generated_columns?}}
   end
 
   def handle_cast({:configuration_result, oid_rel, result}, state) do

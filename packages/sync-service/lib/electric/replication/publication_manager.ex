@@ -2,7 +2,7 @@ defmodule Electric.Replication.PublicationManager do
   use Supervisor
 
   @callback name(binary() | Keyword.t()) :: term()
-  @callback add_shape(shape_handle(), Shape.t(), Keyword.t()) :: :ok
+  @callback add_shape(shape_handle(), Electric.Shapes.Shape.t(), Keyword.t()) :: :ok
   @callback remove_shape(shape_handle(), Keyword.t()) :: :ok
   @callback wait_for_restore(Keyword.t()) :: :ok
 
