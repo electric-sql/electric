@@ -62,8 +62,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     core_sup =
       start_link_supervised!(
         {Electric.CoreSupervisor,
-         stack_id: stack_id,
-         connection_manager_opts: connection_manager_opts},
+         stack_id: stack_id, connection_manager_opts: connection_manager_opts},
         # The test supervisor under which this one is started has `auto_shutdown` set to
         # `:never`, so we need to make sure the core supervisor is not a significant
         # child, otherwise we'd get the following error:
