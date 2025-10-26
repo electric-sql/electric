@@ -90,7 +90,8 @@ defmodule Electric.CoreSupervisor do
           schema_reconciler: schema_reconciler_spec,
           expiry_manager: expiry_manager_spec
         },
-        restart: :transient
+        restart: :temporary,
+        significant: true
       )
 
     Supervisor.start_child(name(opts), child_spec)
