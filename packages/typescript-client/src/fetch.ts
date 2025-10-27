@@ -57,28 +57,39 @@ export interface BackoffOptions {
   initialDelay: number
   /**
    * Maximum retry delay in milliseconds
+   * After reaching this, delay stays constant (e.g., retry every 60s)
    */
   maxDelay: number
   multiplier: number
   onFailedAttempt?: () => void
   debug?: boolean
   /**
-   * Maximum number of retry attempts before giving up
+   * Maximum number of retry attempts before giving up.
+   * Set to Infinity (default) for indefinite retries - needed for offline scenarios
+   * where clients may go offline and come back later.
+   *
+   * The retry budget provides protection against retry storms even with infinite retries.
    */
   maxRetries?: number
   /**
    * Percentage of requests that can be retries (0.1 = 10%)
-   * Implements retry budget to prevent retry storms
+   *
+   * This is the primary load shedding mechanism. It limits the *rate* of retries,
+   * not the total count. Even with infinite retries, at most 10% of your traffic
+   * will be retries, preventing retry storms from amplifying server load.
+   *
+   * The budget resets every 60 seconds, so a temporary spike of errors won't
+   * permanently exhaust the budget.
    */
   retryBudgetPercent?: number
 }
 
 export const BackoffDefaults = {
   initialDelay: 100,
-  maxDelay: 10_000,
+  maxDelay: 60_000, // Cap at 60s - reasonable for long-lived connections
   multiplier: 1.3,
-  maxRetries: 10,
-  retryBudgetPercent: 0.1,
+  maxRetries: Infinity, // Retry forever - clients may go offline and come back
+  retryBudgetPercent: 0.1, // 10% retry budget prevents amplification
 }
 
 export function createFetchWithBackoff(
@@ -91,7 +102,7 @@ export function createFetchWithBackoff(
     multiplier,
     debug = false,
     onFailedAttempt,
-    maxRetries = 10,
+    maxRetries = Infinity,
     retryBudgetPercent = 0.1,
   } = backoffOptions
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
@@ -133,19 +144,27 @@ export function createFetchWithBackoff(
             throw e
           }
 
+          // Check retry budget - this is our primary load shedding mechanism
+          // It limits the *rate* of retries (10% of traffic) not the count
+          // This prevents retry storms even with infinite retries
           if (!checkRetryBudget(retryBudgetPercent)) {
             if (debug) {
               console.log(
-                `Retry budget exhausted (attempt ${attempt}), giving up`
+                `Retry budget exhausted (attempt ${attempt}), backing off`
               )
             }
-            throw e
+            // Wait for maxDelay before checking budget again
+            // This prevents tight retry loops when budget is exhausted
+            await new Promise((resolve) => setTimeout(resolve, maxDelay))
+            // Don't throw - continue retrying after the wait
+            // This allows offline clients to eventually reconnect
+            continue
           }
 
           // Calculate wait time with Retry-After header support and jitter
           let waitMs = delay
 
-          // Honor Retry-After header if present
+          // Honor Retry-After header if present (server-driven backoff)
           if (e instanceof FetchError && e.headers) {
             const retryAfter = e.headers['retry-after']
             if (retryAfter) {
@@ -174,7 +193,7 @@ export function createFetchWithBackoff(
           // Wait for the calculated duration
           await new Promise((resolve) => setTimeout(resolve, waitMs))
 
-          // Increase the delay for the next attempt
+          // Increase the delay for the next attempt (capped at maxDelay)
           delay = Math.min(delay * multiplier, maxDelay)
         }
       }
