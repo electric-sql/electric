@@ -115,7 +115,11 @@ export function createFetchWithBackoff(
     while (true) {
       try {
         const result = await fetchClient(...args)
-        if (result.ok) return result
+        if (result.ok) {
+          // Reset backoff on successful request
+          delay = initialDelay
+          return result
+        }
 
         const err = await FetchError.fromResponse(result, url.toString())
 
@@ -161,33 +165,42 @@ export function createFetchWithBackoff(
             continue
           }
 
-          // Calculate wait time with Retry-After header support and jitter
-          let waitMs = delay
+          // Calculate wait time honoring server-driven backoff as a floor
+          // Precedence: max(serverMinimum, min(clientMaxDelay, backoffWithJitter))
 
-          // Honor Retry-After header if present (server-driven backoff)
+          // 1. Parse server-provided Retry-After (if present)
+          let serverMinimumMs = 0
           if (e instanceof FetchError && e.headers) {
             const retryAfter = e.headers['retry-after']
             if (retryAfter) {
               const retryAfterSec = Number(retryAfter)
-              if (Number.isFinite(retryAfterSec)) {
+              if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
                 // Retry-After in seconds
-                waitMs = Math.max(waitMs, retryAfterSec * 1000)
+                serverMinimumMs = retryAfterSec * 1000
               } else {
                 // Retry-After as HTTP date
                 const retryDate = Date.parse(retryAfter)
                 if (!isNaN(retryDate)) {
-                  waitMs = Math.max(waitMs, retryDate - Date.now())
+                  // Handle clock skew: clamp to non-negative, cap at reasonable max
+                  const deltaMs = retryDate - Date.now()
+                  serverMinimumMs = Math.max(0, Math.min(deltaMs, 3600_000)) // Cap at 1 hour
                 }
               }
             }
           }
 
-          // Add full jitter (AWS recommended pattern) to prevent thundering herd
-          const jitter = Math.random() * Math.min(delay, maxDelay)
-          waitMs = Math.max(waitMs, jitter)
+          // 2. Calculate client backoff with full jitter
+          const jitter = Math.random() * delay
+          const clientBackoffMs = Math.min(jitter, maxDelay)
+
+          // 3. Server minimum is the floor, client cap is the ceiling
+          const waitMs = Math.max(serverMinimumMs, clientBackoffMs)
 
           if (debug) {
-            console.log(`Retry attempt #${attempt} after ${waitMs}ms`)
+            const source = serverMinimumMs > 0 ? 'server+client' : 'client'
+            console.log(
+              `Retry attempt #${attempt} after ${waitMs}ms (${source}, serverMin=${serverMinimumMs}ms, clientBackoff=${clientBackoffMs}ms)`
+            )
           }
 
           // Wait for the calculated duration

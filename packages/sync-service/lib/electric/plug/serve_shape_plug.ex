@@ -19,6 +19,11 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
 
   plug :validate_request
+  # Admission control is applied here, but note:
+  # - /v1/health bypasses this plug (routed to HealthCheckPlug)
+  # - /metrics bypasses this plug (on separate utility router/port)
+  # - / (root) bypasses this plug (handled directly in router)
+  # This ensures observability remains available under load
   plug :check_admission
   plug :serve_shape_response
 
@@ -59,9 +64,14 @@ defmodule Electric.Plug.ServeShapePlug do
     case Electric.AdmissionControl.try_acquire(stack_id, max_concurrent: max_concurrent) do
       :ok ->
         # Store that we acquired a permit so we can release it later
+        # register_before_send is called before ANY response (success, error, exception)
+        # This ensures cleanup on all paths that send a response
         conn
         |> put_private(:admission_permit_acquired, true)
+        |> put_private(:admission_stack_id, stack_id)
         |> register_before_send(fn conn ->
+          # Release permit before sending response
+          # This runs on success, error, and exception paths
           if conn.private[:admission_permit_acquired] do
             Electric.AdmissionControl.release(stack_id)
           end
@@ -76,12 +86,14 @@ defmodule Electric.Plug.ServeShapePlug do
         response =
           Api.Response.error(
             get_in(config, [:api]),
-            "Server is currently overloaded, please retry",
+            %{code: "overloaded", message: "Server is currently overloaded, please retry"},
             status: 503,
             retry_after: retry_after
           )
 
         conn
+        |> put_resp_header("cache-control", "no-store")
+        |> put_resp_header("surrogate-control", "no-store")
         |> Api.Response.send(response)
         |> halt()
     end
@@ -229,7 +241,9 @@ defmodule Electric.Plug.ServeShapePlug do
     |> fetch_query_params()
     |> assign(:error_str, error_str)
     |> put_resp_header("retry-after", "10")
-    |> send_resp(503, Jason.encode!(%{error: "Database is unreachable"}))
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_header("surrogate-control", "no-store")
+    |> send_resp(503, Jason.encode!(%{code: "database_unreachable", error: "Database is unreachable"}))
   end
 
   def handle_errors(conn, error) do

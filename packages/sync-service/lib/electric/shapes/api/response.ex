@@ -274,10 +274,12 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   # All other 4xx and 5xx responses should never be cached
+  # Use no-store (not no-cache) to prevent CDN caching of error responses
   defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
        when status >= 400 do
     conn
-    |> put_cache_header("cache-control", "no-cache", api)
+    |> put_cache_header("cache-control", "no-store", api)
+    |> Plug.Conn.put_resp_header("surrogate-control", "no-store")
   end
 
   # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)

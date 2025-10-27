@@ -77,9 +77,24 @@ defmodule Electric.AdmissionControl do
     if current >= max_concurrent do
       # At or over capacity, decrement back and reject
       :ets.update_counter(@table_name, stack_id, {2, -1, 0, 0}, {stack_id, 0})
+
+      # Emit telemetry event
+      :telemetry.execute(
+        [:electric, :admission_control, :reject],
+        %{count: 1},
+        %{stack_id: stack_id, reason: :overloaded, current: current, limit: max_concurrent}
+      )
+
       {:error, :overloaded}
     else
       # Successfully acquired permit
+      # Emit telemetry for current concurrency level
+      :telemetry.execute(
+        [:electric, :admission_control, :acquire],
+        %{count: 1, current: current},
+        %{stack_id: stack_id, limit: max_concurrent}
+      )
+
       :ok
     end
   end
