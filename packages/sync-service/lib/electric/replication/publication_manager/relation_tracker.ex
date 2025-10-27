@@ -272,7 +272,13 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       state.prepared_relation_filters
     )
 
-    state
+    # only consider filters that were previously committed as still committed
+    # if the new prepared filters preserve them
+    %{
+      state
+      | committed_relation_filters:
+          MapSet.intersection(state.committed_relation_filters, state.prepared_relation_filters)
+    }
   end
 
   defp update_needed?(%__MODULE__{
