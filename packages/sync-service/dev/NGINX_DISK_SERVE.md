@@ -13,7 +13,7 @@ The nginx configuration provides a way to serve Electric Shape data from disk-ba
 
 ## Architecture
 
-The nginx configuration uses a hybrid approach: proxying to Electric for live mode and initial requests, while serving subsequent requests from disk for optimal performance.
+The nginx configuration uses a **simplified hybrid approach**: Electric decides for every non-live request whether nginx should serve from disk or proxy to Electric. This gives Electric full control over routing decisions.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -27,45 +27,65 @@ The nginx configuration uses a hybrid approach: proxying to Electric for live mo
 └──────────────────────┬──────────────────────────────────────┘
                        ↓
                   ┌────┴────┐
-                  │ Route?  │
+                  │ Live?   │
                   └────┬────┘
-        ┌─────────────┼─────────────┬──────────────┐
-        ↓             ↓             ↓              ↓
-   live=true    offset=-1      no handle    has handle
-        │             │             │         & offset
-        ↓             ↓             ↓              ↓
-┌───────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐
-│   Proxy   │  │  Proxy   │  │  Proxy   │  │   Query     │
-│  to       │  │  to      │  │  to      │  │  Electric   │
-│  Electric │  │ Electric │  │ Electric │  │  Metadata   │
-│  (Live)   │  │ (Initial)│  │          │  │             │
-└─────┬─────┘  └────┬─────┘  └────┬─────┘  └──────┬──────┘
-      │             │              │                │
-      │             │              │                ↓
-      │             │              │        ┌────────────────┐
-      │             │              │        │ Get byte range │
-      │             │              │        │ for offset     │
-      │             │              │        └───────┬────────┘
-      │             │              │                ↓
-      │             │              │        ┌────────────────┐
-      │             │              │        │ Serve bytes    │
-      │             │              │        │ from disk      │
-      │             │              │        └───────┬────────┘
-      ↓             ↓              ↓                ↓
+                   No  │  Yes
+        ┌──────────────┴────────────┐
+        ↓                           ↓
+   ┌─────────────┐          ┌──────────────┐
+   │   Query     │          │    Proxy     │
+   │  Electric   │          │  to Electric │
+   │  Metadata   │          │   (Live)     │
+   └──────┬──────┘          └──────┬───────┘
+          │                        │
+          ↓                        │
+   ┌──────────────┐                │
+   │Electric says:│                │
+   └──────┬───────┘                │
+          │                        │
+    ┌─────┴──────┐                 │
+    ↓            ↓                 │
+  "disk"      "proxy"              │
+    │            │                 │
+    ↓            │                 │
+┌────────────┐   │                 │
+│ Serve from │   │                 │
+│    Disk    │   │                 │
+└─────┬──────┘   │                 │
+      │          ↓                 │
+      │    ┌──────────┐            │
+      │    │  Proxy   │            │
+      │    │    to    │            │
+      │    │ Electric │            │
+      │    └─────┬────┘            │
+      │          │                 │
+      └──────────┴─────────────────┘
+                 ↓
 ┌──────────────────────────────────────────────────────────┐
 │                    Response to Client                     │
 │      Headers: electric-handle, electric-offset, etc.     │
 │      Body: JSON shape log operations                     │
-│      X-Served-By: nginx-proxy-live|nginx-disk|etc.      │
+│      X-Served-By: nginx-proxy-live|nginx-proxy-metadata  │
+│                  |nginx-disk|nginx-fallback              │
 └──────────────────────────────────────────────────────────┘
 ```
 
 ### Request Flow Details
 
+**Simple two-step decision:**
+
 1. **Live Mode (`live=true`)**: Proxied directly to Electric for real-time long-polling
-2. **Initial Sync (`offset=-1`)**: Proxied to Electric to establish shape and get handle
-3. **No Handle**: Proxied to Electric (client should have handle for disk serving)
-4. **With Handle & Offset**: Query Electric metadata endpoint for byte offsets, serve from disk
+2. **All Other Requests**: Query Electric's metadata endpoint
+   - Electric returns `X-Electric-Mode: disk` → Serve from disk
+   - Electric returns `X-Electric-Mode: proxy` → Proxy to Electric
+
+**Electric decides** based on:
+- `offset=-1` → proxy (shape creation)
+- `offset=now` → proxy (get current position)
+- No handle → proxy (can't locate on disk)
+- Shape not ready → proxy (building/missing)
+- Offset on disk → disk (serve file)
+- Offset not on disk yet → proxy (dynamic generation)
 
 ## Directory Structure
 
@@ -130,36 +150,40 @@ Proxies live mode requests directly to Electric:
 - No caching (live data must be fresh)
 - Extended timeouts (300s) for long-polling
 - Disables buffering for real-time streaming
-
-#### `/internal/proxy/initial`
-Proxies initial sync requests to Electric:
-- Handles offset=-1 and offset=now
-- Computes shape handle
-- Creates initial snapshot if needed
-- Enables caching of responses
-- Returns electric-handle header for subsequent requests
+- `X-Served-By: nginx-proxy-live`
 
 #### `/internal/shape/with_metadata`
-Serves data from disk using Electric's metadata:
-- Queries `/v1/shape/metadata` endpoint via subrequest
-- Gets file path and byte offsets for the requested offset
-- Serves the specific bytes from disk
-- Sets proper Electric headers
-- Falls back to Electric if disk serving fails
+Queries Electric metadata, then serves from disk or proxies:
+- Makes subrequest to `/internal/electric/metadata`
+- Captures `X-Electric-Mode` header from response
+- If `mode=disk`: Serves file from disk at path specified by Electric
+- If `mode=proxy`: Proxies to Electric via `/internal/proxy/from_metadata`
+- Falls back to Electric if disk files missing
+- `X-Served-By: nginx-disk` (disk mode)
 
 #### `/internal/electric/metadata`
 Subrequest to Electric's metadata endpoint:
-- Maps shape offset to disk file location
-- Returns byte ranges to read
-- Lightweight query (no data transfer)
-- See `ELECTRIC_METADATA_API.md` for implementation details
+- Queries `GET /v1/shape/metadata` with all request parameters
+- Electric decides: serve from disk or proxy?
+- Returns `X-Electric-Mode: disk` or `X-Electric-Mode: proxy`
+- Returns file path, handle, offset headers for disk mode
+- Lightweight query (no data transfer, only metadata)
+- See `ELECTRIC_METADATA_API.md` for full specification
+
+#### `/internal/proxy/from_metadata`
+Proxies to Electric when metadata says so:
+- Used when Electric returns `X-Electric-Mode: proxy`
+- Happens for: offset=-1, no handle, shape building, offset not ready
+- Enables caching (unlike live mode)
+- `X-Served-By: nginx-proxy-metadata`
 
 #### `@fallback_to_electric`
 Named location for error handling:
-- Used when disk files are not found
+- Used when disk files are not found (try_files failure)
+- Used when metadata endpoint is unavailable
 - Proxies entire request to Electric
 - Enables caching for future requests
-- Logs fallback events for monitoring
+- `X-Served-By: nginx-fallback`
 
 ### 5. Static File Serving (`/v1/shape/static/`)
 
@@ -258,7 +282,7 @@ sudo nginx -s reload
 
 ### 1. Initial Sync Request (Proxied to Electric)
 
-When offset=-1, nginx proxies to Electric to establish the shape and get a handle:
+When offset=-1, nginx queries metadata, Electric says "proxy", nginx proxies:
 
 ```bash
 curl -i 'http://localhost:3002/v1/shape?table=users&offset=-1'
@@ -270,7 +294,7 @@ HTTP/1.1 200 OK
 electric-handle: 3833821-1721812114261
 electric-offset: 1002_3
 electric-up-to-date: true
-X-Served-By: nginx-proxy-initial
+X-Served-By: nginx-proxy-metadata
 X-Proxy-Cache: MISS
 ```
 
@@ -296,11 +320,16 @@ Response body:
 ]
 ```
 
-**What happened**: Nginx proxied to Electric, which computed the shape handle, created/served the snapshot, and returned it with the handle header.
+**What happened**:
+1. Nginx queried `/v1/shape/metadata?table=users&offset=-1`
+2. Electric responded: `X-Electric-Mode: proxy` (shape needs creation)
+3. Nginx proxied full request to Electric's `/v1/shape`
+4. Electric created shape, computed handle, returned data with headers
+5. Client receives response with `electric-handle` for future requests
 
 ### 2. Subsequent Request with Handle (Served from Disk)
 
-Now that we have a handle, subsequent requests can be served from disk:
+Now that we have a handle, subsequent requests can be served from disk if Electric approves:
 
 ```bash
 curl -i 'http://localhost:3002/v1/shape?table=users&offset=0_0&handle=3833821-1721812114261'
@@ -316,10 +345,11 @@ Cache-Control: public, max-age=3600, stale-while-revalidate=86400
 ```
 
 **What happened**:
-1. Nginx queried Electric's metadata endpoint: `/v1/shape/metadata?table=users&offset=0_0&handle=...`
-2. Electric returned file path and byte offsets
-3. Nginx served the bytes directly from disk
-4. Response is cacheable for 1 hour
+1. Nginx queried `/v1/shape/metadata?table=users&offset=0_0&handle=3833821-1721812114261`
+2. Electric checked: shape exists, offset on disk → responds `X-Electric-Mode: disk`
+3. Electric included: `X-Electric-File-Path: default/3833821-1721812114261/snapshot_0.json`
+4. Nginx read the file from disk and served it to client
+5. Response is cached for 1 hour
 
 ### 3. Live Mode Request (Proxied to Electric)
 
@@ -377,15 +407,16 @@ curl http://localhost:3002/health
 
 All responses include the `X-Served-By` header showing how the request was handled:
 
-- `nginx-proxy-live`: Live mode, proxied to Electric
-- `nginx-proxy-initial`: Initial sync, proxied to Electric
-- `nginx-disk`: Served from disk using metadata
+- `nginx-proxy-live`: Live mode, proxied to Electric for long-polling
+- `nginx-proxy-metadata`: Metadata said "proxy", proxied to Electric
+- `nginx-disk`: Metadata said "disk", served from disk
 - `nginx-fallback`: Disk serving failed, fell back to Electric
 - `nginx-static`: Served from static pre-generated file
 
 ```bash
 curl -s -D - 'http://localhost:3002/v1/shape?table=users&offset=0_0&handle=3833821-1721812114261' | grep X-Served-By
-# X-Served-By: nginx-disk
+# X-Served-By: nginx-disk (if Electric said "disk")
+# X-Served-By: nginx-proxy-metadata (if Electric said "proxy")
 ```
 
 ## Pre-generating Static Shape Responses

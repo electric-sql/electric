@@ -2,15 +2,19 @@
 
 ## Overview
 
-To enable efficient disk-based serving of Shape data through nginx, Electric needs to provide a metadata endpoint that maps Shape offsets to byte positions in disk files. This allows nginx to serve specific portions of shape data without loading entire files into memory.
+To enable efficient disk-based serving of Shape data through nginx, Electric provides a metadata endpoint that determines whether a request can be served from disk or needs to be handled by Electric directly. This gives Electric full control over routing decisions.
 
 ## Endpoint Specification
 
 ### `GET /v1/shape/metadata`
 
-Returns metadata about where specific shape data is stored on disk.
+Returns metadata about how a shape request should be handled.
 
-**Purpose**: Allow nginx (or other caching layers) to serve shape data directly from disk by knowing exactly which bytes to read.
+**Purpose**: Electric decides for each request whether nginx can serve it from disk or if Electric needs to handle it. This allows Electric to control when disk serving is appropriate based on:
+- Whether the shape exists and is ready
+- Whether the requested offset is available on disk
+- Whether the request needs special handling (initial sync, shape creation, etc.)
+- System state and performance considerations
 
 ## Request Parameters
 
@@ -25,67 +29,85 @@ All the standard shape query parameters:
 
 ## Response Format
 
-### Success Response (200 OK)
+Electric responds with one of two modes: **disk** or **proxy**.
 
-```json
-{
-  "file": "snapshot_0.json",
-  "file_path": "default/3833821-1721812114261/snapshot_0.json",
-  "start_byte": 0,
-  "end_byte": 2048,
-  "next_offset": "1002_0",
-  "has_more": false,
-  "format": "json",
-  "chunk_info": {
-    "chunk_index": 0,
-    "total_chunks": 1,
-    "chunk_size": 2048
-  }
-}
+### Response 1: Serve from Disk (200 OK)
+
+When Electric determines nginx can serve from disk:
+
+**Required Headers:**
 ```
-
-### Response Headers
-
-The endpoint should also return custom headers that nginx can use:
-
-```
-X-Electric-Chunk-File: snapshot_0.json
+X-Electric-Mode: disk
 X-Electric-File-Path: default/3833821-1721812114261/snapshot_0.json
-X-Electric-Start-Byte: 0
-X-Electric-End-Byte: 2048
-X-Electric-Next-Offset: 1002_0
-X-Electric-Has-More: false
 electric-handle: 3833821-1721812114261
 electric-offset: 1002_0
 ```
 
-### Error Responses
+**Optional Headers (for byte-range serving):**
+```
+X-Electric-Start-Byte: 0
+X-Electric-End-Byte: 2048
+```
 
-**404 Not Found** - Shape or offset not found:
+**Optional JSON Body:**
 ```json
 {
-  "error": "not_found",
-  "message": "Shape or offset not found"
+  "mode": "disk",
+  "file_path": "default/3833821-1721812114261/snapshot_0.json",
+  "start_byte": 0,
+  "end_byte": 2048,
+  "handle": "3833821-1721812114261",
+  "offset": "1002_0"
 }
 ```
 
-**400 Bad Request** - Invalid parameters:
+**What nginx does:**
+- Reads the file at `$shapes_root/$file_path`
+- Serves it to the client with the specified Electric headers
+- Caches the response for 1 hour
+
+### Response 2: Proxy to Electric (200 OK)
+
+When Electric needs to handle the request itself:
+
+**Required Header:**
+```
+X-Electric-Mode: proxy
+```
+
+**Optional JSON Body:**
 ```json
 {
-  "error": "invalid_parameters",
-  "message": "Invalid offset format",
-  "details": "Offset must be in format {tx_offset}_{op_offset}"
+  "mode": "proxy",
+  "reason": "shape_not_ready"
 }
 ```
 
-**410 Gone** - Shape has been deleted:
-```json
-{
-  "error": "shape_deleted",
-  "message": "Shape has been deleted",
-  "control": "must-refetch"
-}
+**What nginx does:**
+- Proxies the full client request to Electric's `/v1/shape` endpoint
+- Electric handles the request completely
+- Nginx caches the response
+
+**Common reasons for proxy mode:**
+- `shape_not_ready` - Shape doesn't exist yet, needs creation (offset=-1)
+- `shape_building` - Shape is being rebuilt
+- `offset_unavailable` - Requested offset not on disk yet
+- `requires_computation` - Request needs dynamic computation
+- `no_handle` - Client didn't provide a handle
+
+### Response 3: Error Responses
+
+When metadata cannot be determined, nginx will fallback to proxying.
+
+**404 Not Found** - Nginx will fallback to proxy:
 ```
+X-Electric-Mode: proxy
+```
+(or nginx auth_request error handling triggers fallback)
+
+**500 Internal Server Error** - Nginx will fallback to proxy
+
+**Note**: Error responses from the metadata endpoint trigger nginx's fallback mechanism, which proxies the request to Electric's main endpoint. This ensures requests always succeed even if the metadata service is unavailable.
 
 ## Implementation Details
 
@@ -148,71 +170,120 @@ For requests that would return large amounts of data:
 
 ## Usage Examples
 
-### Example 1: Initial Sync
+### Example 1: Initial Sync (Proxy Mode)
 
-**Request**:
+**Client Request to Nginx**:
 ```
-GET /v1/shape/metadata?table=users&offset=-1&handle=3833821-1721812114261
+GET /v1/shape?table=users&offset=-1
 ```
 
-**Response**:
-```json
+**Nginx → Electric Metadata Request**:
+```
+GET /v1/shape/metadata?table=users&offset=-1
+```
+
+**Electric Response**:
+```
+HTTP/1.1 200 OK
+X-Electric-Mode: proxy
+
 {
-  "file": "snapshot_0.json",
-  "file_path": "default/3833821-1721812114261/snapshot_0.json",
-  "start_byte": 0,
-  "end_byte": 2048,
-  "next_offset": "1002_3",
-  "has_more": false,
-  "format": "json"
+  "mode": "proxy",
+  "reason": "shape_not_ready"
 }
 ```
 
-**Nginx Action**: Serves bytes 0-2048 from `snapshot_0.json`
+**Nginx Action**:
+- Sees `X-Electric-Mode: proxy`
+- Proxies full request to Electric's `/v1/shape`
+- Electric creates shape, computes handle, returns data
+- Client receives data with `electric-handle` header
+- Response is cached
 
-### Example 2: Pagination
+### Example 2: Subsequent Request (Disk Mode)
 
-**Request**:
+**Client Request to Nginx**:
 ```
-GET /v1/shape/metadata?table=users&offset=1002_3&handle=3833821-1721812114261
+GET /v1/shape?table=users&offset=0_0&handle=3833821-1721812114261
 ```
 
-**Response**:
-```json
+**Nginx → Electric Metadata Request**:
+```
+GET /v1/shape/metadata?table=users&offset=0_0&handle=3833821-1721812114261
+```
+
+**Electric Response**:
+```
+HTTP/1.1 200 OK
+X-Electric-Mode: disk
+X-Electric-File-Path: default/3833821-1721812114261/snapshot_0.json
+electric-handle: 3833821-1721812114261
+electric-offset: 1002_3
+
 {
-  "file": "snapshot_0.json",
-  "file_path": "default/3833821-1721812114261/snapshot_0.json",
-  "start_byte": 2048,
-  "end_byte": 4096,
-  "next_offset": "1005_1",
-  "has_more": false,
-  "format": "json"
+  "mode": "disk",
+  "file_path": "default/3833821-1721812114261/snapshot_0.json"
 }
 ```
 
-**Nginx Action**: Serves bytes 2048-4096 from `snapshot_0.json`
+**Nginx Action**:
+- Sees `X-Electric-Mode: disk`
+- Reads file from `$shapes_root/default/3833821-1721812114261/snapshot_0.json`
+- Serves to client with Electric headers
+- Caches for 1 hour
 
-### Example 3: Changes-Only Mode
+### Example 3: Offset Not Yet on Disk (Proxy Mode)
 
-**Request**:
+**Client Request to Nginx**:
+```
+GET /v1/shape?table=users&offset=1010_0&handle=3833821-1721812114261
+```
+
+**Nginx → Electric Metadata Request**:
 ```
 GET /v1/shape/metadata?table=users&offset=1010_0&handle=3833821-1721812114261
 ```
 
-**Response**:
-```json
+**Electric Response**:
+```
+HTTP/1.1 200 OK
+X-Electric-Mode: proxy
+
 {
-  "file": "log",
-  "file_path": "default/3833821-1721812114261/log",
-  "start_byte": 8192,
-  "end_byte": 8256,
-  "next_offset": "1011_0",
-  "has_more": false,
-  "format": "binary"
+  "mode": "proxy",
+  "reason": "offset_unavailable"
 }
 ```
 
-**Nginx Action**: Serves bytes 8192-8256 from the binary log file
+**Nginx Action**:
+- Sees `X-Electric-Mode: proxy`
+- Proxies to Electric
+- Electric serves the data dynamically
+
+### Example 4: Request Without Handle (Proxy Mode)
+
+**Client Request to Nginx**:
+```
+GET /v1/shape?table=users&offset=0_0
+```
+
+**Nginx → Electric Metadata Request**:
+```
+GET /v1/shape/metadata?table=users&offset=0_0
+```
+
+**Electric Response**:
+```
+HTTP/1.1 200 OK
+X-Electric-Mode: proxy
+
+{
+  "mode": "proxy",
+  "reason": "no_handle"
+}
+```
+
+**Nginx Action**: Proxies to Electric (client should have provided handle)
 
 ## Integration with Nginx
 
@@ -304,71 +375,147 @@ location /internal/shape/with_metadata {
 
 ## Implementation in Electric
 
+### Decision Logic
+
+Electric should decide between disk and proxy modes based on:
+
+```elixir
+def determine_mode(params) do
+  cond do
+    # Initial sync - need to create/compute shape
+    params.offset == "-1" ->
+      {:proxy, "shape_not_ready"}
+
+    # No handle - can't serve from disk
+    params.handle == nil ->
+      {:proxy, "no_handle"}
+
+    # Check if shape exists and is ready
+    !shape_exists?(params.handle) ->
+      {:proxy, "shape_not_found"}
+
+    # Check if offset is available on disk
+    !offset_on_disk?(params.handle, params.offset) ->
+      {:proxy, "offset_unavailable"}
+
+    # Shape is being rebuilt
+    shape_rebuilding?(params.handle) ->
+      {:proxy, "shape_building"}
+
+    # All good - serve from disk
+    true ->
+      {:disk, get_file_info(params.handle, params.offset)}
+  end
+end
+```
+
 ### Suggested Module Structure
 
 ```elixir
 # lib/electric/plug/shape_metadata_plug.ex
 defmodule Electric.Plug.ShapeMetadataPlug do
   @moduledoc """
-  Provides metadata about shape storage locations and byte offsets.
+  Metadata endpoint that tells nginx whether to serve from disk or proxy to Electric.
 
-  This endpoint allows caching layers (like nginx) to serve shape data
-  directly from disk by providing file paths and byte ranges.
+  Electric has full control over routing decisions - nginx simply follows instructions.
   """
 
   import Plug.Conn
   require Logger
 
   def call(conn, _opts) do
-    with {:ok, params} <- parse_params(conn),
-         {:ok, shape_handle} <- validate_handle(params),
-         {:ok, offset} <- parse_offset(params.offset),
-         {:ok, metadata} <- get_chunk_metadata(shape_handle, offset) do
+    params = parse_params(conn)
 
-      conn
-      |> put_resp_header("x-electric-chunk-file", metadata.file)
-      |> put_resp_header("x-electric-file-path", metadata.file_path)
-      |> put_resp_header("x-electric-start-byte", to_string(metadata.start_byte))
-      |> put_resp_header("x-electric-end-byte", to_string(metadata.end_byte))
-      |> put_resp_header("x-electric-next-offset", metadata.next_offset)
-      |> put_resp_header("x-electric-has-more", to_string(metadata.has_more))
-      |> put_resp_header("electric-handle", shape_handle)
-      |> send_json(conn, 200, metadata)
-    else
-      {:error, :not_found} ->
-        send_json(conn, 404, %{error: "not_found", message: "Shape or offset not found"})
+    case determine_serving_mode(params) do
+      {:disk, file_info} ->
+        # Tell nginx to serve from disk
+        conn
+        |> put_resp_header("x-electric-mode", "disk")
+        |> put_resp_header("x-electric-file-path", file_info.path)
+        |> put_resp_header("electric-handle", file_info.handle)
+        |> put_resp_header("electric-offset", file_info.offset)
+        |> send_json(conn, 200, %{
+          mode: "disk",
+          file_path: file_info.path,
+          handle: file_info.handle,
+          offset: file_info.offset
+        })
 
-      {:error, :invalid_offset} ->
-        send_json(conn, 400, %{error: "invalid_offset", message: "Invalid offset format"})
+      {:proxy, reason} ->
+        # Tell nginx to proxy to Electric
+        conn
+        |> put_resp_header("x-electric-mode", "proxy")
+        |> send_json(conn, 200, %{
+          mode: "proxy",
+          reason: reason
+        })
 
       {:error, reason} ->
-        Logger.error("Metadata error: #{inspect(reason)}")
-        send_json(conn, 500, %{error: "internal_error", message: "Failed to retrieve metadata"})
+        # Error - nginx will fallback to proxy
+        Logger.warn("Metadata error: #{inspect(reason)}")
+        conn
+        |> put_resp_header("x-electric-mode", "proxy")
+        |> send_json(conn, 200, %{
+          mode: "proxy",
+          reason: "error"
+        })
     end
   end
 
-  defp get_chunk_metadata(shape_handle, {tx_offset, op_offset}) do
-    # Query the chunk index to find byte positions
-    # This would use Electric.ShapeCache.FileStorage functions
+  defp determine_serving_mode(params) do
+    cond do
+      # Initial sync always goes through Electric
+      params.offset == "-1" ->
+        {:proxy, "shape_not_ready"}
 
-    with {:ok, chunk_index} <- read_chunk_index(shape_handle),
-         {:ok, chunk_info} <- find_chunk_for_offset(chunk_index, tx_offset, op_offset),
-         {:ok, byte_range} <- calculate_byte_range(chunk_info, tx_offset, op_offset) do
+      # offset=now goes through Electric
+      params.offset == "now" ->
+        {:proxy, "shape_not_ready"}
+
+      # No handle provided
+      params.handle == nil or params.handle == "" ->
+        {:proxy, "no_handle"}
+
+      # Check if we can serve from disk
+      true ->
+        check_disk_availability(params)
+    end
+  end
+
+  defp check_disk_availability(params) do
+    with {:ok, shape_handle} <- validate_handle(params.handle),
+         {:ok, offset} <- parse_offset(params.offset),
+         {:ok, shape_status} <- get_shape_status(shape_handle),
+         :ready <- shape_status,
+         {:ok, file_info} <- get_file_for_offset(shape_handle, offset) do
+
+      {:disk, %{
+        path: file_info.path,
+        handle: shape_handle,
+        offset: format_offset(offset)
+      }}
+    else
+      {:error, :not_found} -> {:proxy, "shape_not_found"}
+      {:error, :offset_unavailable} -> {:proxy, "offset_unavailable"}
+      :building -> {:proxy, "shape_building"}
+      _ -> {:proxy, "unknown"}
+    end
+  end
+
+  defp get_file_for_offset(shape_handle, {tx_offset, op_offset}) do
+    # Use existing Electric.ShapeCache.FileStorage functions
+    # to determine which file contains this offset
+
+    with {:ok, storage} <- ShapeCache.get_storage(shape_handle),
+         {:ok, chunk_info} <- FileStorage.find_chunk_for_offset(storage, tx_offset, op_offset) do
 
       {:ok, %{
-        file: chunk_info.file_name,
-        file_path: "#{chunk_info.stack_id}/#{shape_handle}/#{chunk_info.file_name}",
-        start_byte: byte_range.start,
-        end_byte: byte_range.end,
-        next_offset: format_offset(byte_range.next_tx, byte_range.next_op),
-        has_more: byte_range.has_more,
-        format: chunk_info.format,
-        chunk_info: %{
-          chunk_index: chunk_info.index,
-          total_chunks: chunk_info.total,
-          chunk_size: byte_range.end - byte_range.start
-        }
+        path: "default/#{shape_handle}/#{chunk_info.file_name}",
+        start_byte: chunk_info.start_byte,
+        end_byte: chunk_info.end_byte
       }}
+    else
+      {:error, :not_found} -> {:error, :offset_unavailable}
     end
   end
 end
