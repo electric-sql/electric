@@ -21,6 +21,35 @@ import {
 // want to retry
 const HTTP_RETRY_STATUS_CODES = [429]
 
+// Retry budget tracking (module-level)
+// Resets every minute to prevent retry storms
+let totalRequests = 0
+let totalRetries = 0
+let budgetResetTime = Date.now() + 60_000
+
+function checkRetryBudget(retryBudgetPercent: number): boolean {
+  const now = Date.now()
+  if (now > budgetResetTime) {
+    totalRequests = 0
+    totalRetries = 0
+    budgetResetTime = now + 60_000
+  }
+
+  totalRequests++
+
+  // Allow retries for first 10 requests to avoid cold start issues
+  if (totalRequests < 10) return true
+
+  const currentRetryRate = totalRetries / totalRequests
+  const hasCapacity = currentRetryRate < retryBudgetPercent
+
+  if (hasCapacity) {
+    totalRetries++
+  }
+
+  return hasCapacity
+}
+
 export interface BackoffOptions {
   /**
    * Initial delay before retrying in milliseconds
@@ -33,12 +62,23 @@ export interface BackoffOptions {
   multiplier: number
   onFailedAttempt?: () => void
   debug?: boolean
+  /**
+   * Maximum number of retry attempts before giving up
+   */
+  maxRetries?: number
+  /**
+   * Percentage of requests that can be retries (0.1 = 10%)
+   * Implements retry budget to prevent retry storms
+   */
+  retryBudgetPercent?: number
 }
 
 export const BackoffDefaults = {
   initialDelay: 100,
   maxDelay: 10_000,
   multiplier: 1.3,
+  maxRetries: 10,
+  retryBudgetPercent: 0.1,
 }
 
 export function createFetchWithBackoff(
@@ -51,6 +91,8 @@ export function createFetchWithBackoff(
     multiplier,
     debug = false,
     onFailedAttempt,
+    maxRetries = 10,
+    retryBudgetPercent = 0.1,
   } = backoffOptions
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
@@ -80,17 +122,60 @@ export function createFetchWithBackoff(
           // Any client errors cannot be backed off on, leave it to the caller to handle.
           throw e
         } else {
-          // Exponentially backoff on errors.
-          // Wait for the current delay duration
-          await new Promise((resolve) => setTimeout(resolve, delay))
+          // Check retry budget and max retries
+          attempt++
+          if (attempt >= maxRetries) {
+            if (debug) {
+              console.log(
+                `Max retries reached (${attempt}/${maxRetries}), giving up`
+              )
+            }
+            throw e
+          }
+
+          if (!checkRetryBudget(retryBudgetPercent)) {
+            if (debug) {
+              console.log(
+                `Retry budget exhausted (attempt ${attempt}), giving up`
+              )
+            }
+            throw e
+          }
+
+          // Calculate wait time with Retry-After header support and jitter
+          let waitMs = delay
+
+          // Honor Retry-After header if present
+          if (e instanceof FetchError && e.headers) {
+            const retryAfter = e.headers['retry-after']
+            if (retryAfter) {
+              const retryAfterSec = Number(retryAfter)
+              if (Number.isFinite(retryAfterSec)) {
+                // Retry-After in seconds
+                waitMs = Math.max(waitMs, retryAfterSec * 1000)
+              } else {
+                // Retry-After as HTTP date
+                const retryDate = Date.parse(retryAfter)
+                if (!isNaN(retryDate)) {
+                  waitMs = Math.max(waitMs, retryDate - Date.now())
+                }
+              }
+            }
+          }
+
+          // Add full jitter (AWS recommended pattern) to prevent thundering herd
+          const jitter = Math.random() * Math.min(delay, maxDelay)
+          waitMs = Math.max(waitMs, jitter)
+
+          if (debug) {
+            console.log(`Retry attempt #${attempt} after ${waitMs}ms`)
+          }
+
+          // Wait for the calculated duration
+          await new Promise((resolve) => setTimeout(resolve, waitMs))
 
           // Increase the delay for the next attempt
           delay = Math.min(delay * multiplier, maxDelay)
-
-          if (debug) {
-            attempt++
-            console.log(`Retry attempt #${attempt} after ${delay}ms`)
-          }
         }
       }
     }

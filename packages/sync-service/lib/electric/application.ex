@@ -21,7 +21,8 @@ defmodule Electric.Application do
 
   def children_library do
     [
-      {Registry, name: Electric.stack_events_registry(), keys: :duplicate}
+      {Registry, name: Electric.stack_events_registry(), keys: :duplicate},
+      Electric.AdmissionControl
     ]
   end
 
@@ -161,6 +162,7 @@ defmodule Electric.Application do
       allow_shape_deletion: get_env(opts, :allow_shape_deletion?),
       stack_ready_timeout: get_env(opts, :stack_ready_timeout),
       send_cache_headers?: get_env(opts, :send_cache_headers?),
+      max_concurrent_requests: get_env(opts, :max_concurrent_requests),
       secret: Application.get_env(:electric, :secret)
     )
     |> Keyword.merge(Keyword.take(opts, [:encoder, :inspector, :registry]))

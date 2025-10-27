@@ -19,6 +19,7 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
 
   plug :validate_request
+  plug :check_admission
   plug :serve_shape_response
 
   # end_telemetry_span needs to always be the last plug here.
@@ -49,6 +50,50 @@ defmodule Electric.Plug.ServeShapePlug do
         |> Api.Response.send(response)
         |> halt()
     end
+  end
+
+  defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
+    stack_id = get_in(config, [:stack_id])
+    max_concurrent = get_in(config, [:max_concurrent_requests]) || 1000
+
+    case Electric.AdmissionControl.try_acquire(stack_id, max_concurrent: max_concurrent) do
+      :ok ->
+        # Store that we acquired a permit so we can release it later
+        conn
+        |> put_private(:admission_permit_acquired, true)
+        |> register_before_send(fn conn ->
+          if conn.private[:admission_permit_acquired] do
+            Electric.AdmissionControl.release(stack_id)
+          end
+
+          conn
+        end)
+
+      {:error, :overloaded} ->
+        # Calculate adaptive retry-after based on load
+        retry_after = calculate_retry_after(stack_id, max_concurrent)
+
+        response =
+          Api.Response.error(
+            get_in(config, [:api]),
+            "Server is currently overloaded, please retry",
+            status: 503,
+            retry_after: retry_after
+          )
+
+        conn
+        |> Api.Response.send(response)
+        |> halt()
+    end
+  end
+
+  defp calculate_retry_after(_stack_id, _max_concurrent) do
+    # Simple version: random 5-10 seconds with jitter
+    # This spreads out retry attempts to prevent thundering herd
+    # TODO: Make adaptive based on actual metrics (P95 latency, queue depth, etc.)
+    base = 5
+    jitter = :rand.uniform(5)
+    base + jitter
   end
 
   defp serve_shape_response(%Conn{assigns: %{request: request}} = conn, _) do
@@ -183,6 +228,7 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> fetch_query_params()
     |> assign(:error_str, error_str)
+    |> put_resp_header("retry-after", "10")
     |> send_resp(503, Jason.encode!(%{error: "Database is unreachable"}))
   end
 
