@@ -1,0 +1,61 @@
+[
+  {
+    "headers": {
+      "operation": "insert",
+      "lsn": "0/16B3F70",
+      "op_position": 0,
+      "txids": ["1000"],
+      "last": false
+    },
+    "key": "1",
+    "value": {
+      "id": "1",
+      "name": "Alice",
+      "email": "alice@example.com",
+      "created_at": "2024-01-15 10:30:00"
+    },
+    "old_value": {}
+  },
+  {
+    "headers": {
+      "operation": "insert",
+      "lsn": "0/16B3F80",
+      "op_position": 1,
+      "txids": ["1001"],
+      "last": false
+    },
+    "key": "2",
+    "value": {
+      "id": "2",
+      "name": "Bob",
+      "email": "bob@example.com",
+      "created_at": "2024-01-15 10:31:00"
+    },
+    "old_value": {}
+  },
+  {
+    "headers": {
+      "operation": "insert",
+      "lsn": "0/16B3F90",
+      "op_position": 2,
+      "txids": ["1002"],
+      "last": true
+    },
+    "key": "3",
+    "value": {
+      "id": "3",
+      "name": "Charlie",
+      "email": "charlie@example.com",
+      "created_at": "2024-01-15 10:32:00"
+    },
+    "old_value": {}
+  },
+  {
+    "headers": {
+      "control": "up-to-date",
+      "xmin": "1000",
+      "xmax": "1003",
+      "xip_list": []
+    }
+  }
+]

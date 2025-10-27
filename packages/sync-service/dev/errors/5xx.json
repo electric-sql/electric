@@ -1,0 +1,5 @@
+{
+  "error": "Server Error",
+  "message": "Internal server error",
+  "details": "An unexpected error occurred while processing your request. Please try again later."
+}

@@ -1,0 +1,5 @@
+{
+  "error": "Not Found",
+  "message": "Shape not found",
+  "details": "The requested shape does not exist or has been deleted. Please verify the shape handle and table name."
+}
