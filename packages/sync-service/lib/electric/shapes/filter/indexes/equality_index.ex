@@ -33,32 +33,32 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
 
       updated_values =
         if and_where == nil do
-          # Simple predicate: store directly as bitmap
+          # Simple predicate: store as tagged bitmap
           Map.update(
             index.values,
             value,
-            RoaringBitmap.from_list([shape_int_id]),
+            {:bitmap, RoaringBitmap.from_list([shape_int_id])},
             fn
-              %RoaringBitmap{} = bitmap ->
-                RoaringBitmap.add(bitmap, shape_int_id)
+              {:bitmap, bitmap} ->
+                {:bitmap, RoaringBitmap.add(bitmap, shape_int_id)}
 
-              %WhereCondition{} = condition ->
+              {:condition, condition} ->
                 # Upgrade from WhereCondition to mixed storage
-                WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)
+                {:condition, WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)}
             end
           )
         else
           # Complex predicate: use WhereCondition for further filtering
           index.values
-          |> Map.put_new(value, WhereCondition.new())
+          |> Map.put_new(value, {:condition, WhereCondition.new()})
           |> Map.update!(value, fn
-            %WhereCondition{} = condition ->
-              WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)
+            {:condition, condition} ->
+              {:condition, WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)}
 
-            %RoaringBitmap{} = bitmap ->
+            {:bitmap, _bitmap} ->
               # We had simple predicates, now adding complex one - keep both
               condition = WhereCondition.new()
-              WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)
+              {:condition, WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)}
           end)
         end
 
@@ -70,22 +70,22 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
 
       updated_values =
         case Map.fetch!(index.values, value) do
-          %RoaringBitmap{} = bitmap ->
+          {:bitmap, bitmap} ->
             new_bitmap = RoaringBitmap.remove(bitmap, shape_int_id)
 
             if RoaringBitmap.empty?(new_bitmap) do
               Map.delete(index.values, value)
             else
-              Map.put(index.values, value, new_bitmap)
+              Map.put(index.values, value, {:bitmap, new_bitmap})
             end
 
-          %WhereCondition{} = condition ->
+          {:condition, condition} ->
             new_condition = WhereCondition.remove_shape(condition, shape_id, and_where, shape_bitmap)
 
             if WhereCondition.empty?(new_condition) do
               Map.delete(index.values, value)
             else
-              Map.put(index.values, value, new_condition)
+              Map.put(index.values, value, {:condition, new_condition})
             end
         end
 
@@ -97,7 +97,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
         nil ->
           MapSet.new()
 
-        %RoaringBitmap{} = bitmap ->
+        {:bitmap, bitmap} ->
           # Fast path: direct bitmap → shape handles conversion
           bitmap
           |> RoaringBitmap.to_list()
@@ -112,7 +112,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
           |> Enum.reject(&is_nil/1)
           |> MapSet.new()
 
-        %WhereCondition{} = condition ->
+        {:condition, condition} ->
           WhereCondition.affected_shapes(condition, record, shapes)
       end
     end
@@ -128,11 +128,11 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
         nil ->
           RoaringBitmap.new()
 
-        %RoaringBitmap{} = bitmap ->
+        {:bitmap, bitmap} ->
           # Ultra-fast path: O(1) hash lookup, return pre-computed bitmap directly!
           bitmap
 
-        %WhereCondition{} = condition ->
+        {:condition, condition} ->
           WhereCondition.affected_shapes_bitmap(condition, record, shapes, shape_bitmap)
       end
     end
@@ -151,12 +151,12 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
 
     def all_shape_ids(%EqualityIndex{values: values}) do
       Enum.reduce(values, MapSet.new(), fn
-        {_value, %RoaringBitmap{} = bitmap}, ids ->
+        {_value, {:bitmap, bitmap}}, ids ->
           bitmap
           |> RoaringBitmap.to_list()
           |> Enum.into(ids)
 
-        {_value, %WhereCondition{} = condition}, ids ->
+        {_value, {:condition, condition}}, ids ->
           MapSet.union(ids, WhereCondition.all_shape_ids(condition))
       end)
     end
@@ -165,8 +165,8 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
       # Use bulk union for efficiency
       bitmaps =
         Enum.map(values, fn
-          {_value, %RoaringBitmap{} = bitmap} -> bitmap
-          {_value, %WhereCondition{} = condition} -> WhereCondition.all_shapes_bitmap(condition, shape_bitmap)
+          {_value, {:bitmap, bitmap}} -> bitmap
+          {_value, {:condition, condition}} -> WhereCondition.all_shapes_bitmap(condition, shape_bitmap)
         end)
 
       RoaringBitmap.union_many(bitmaps)
