@@ -135,26 +135,29 @@ defmodule Electric.Shapes.FilterPropertyTest do
             end
           end)
 
-        # Apply operations
-        {filter, _shape_ids} =
-          Enum.reduce(operations, {initial_filter, Enum.to_list(0..(length(initial_shapes) - 1))}, fn
-            {:add, {table, where}}, {filt, ids} ->
-              new_id = length(ids)
-              shape_id = "shape_#{new_id}"
+        # Apply operations - track next_id separately to avoid duplicates
+        {filter, _shape_ids, _next_id} =
+          Enum.reduce(
+            operations,
+            {initial_filter, Enum.to_list(0..(length(initial_shapes) - 1)), length(initial_shapes)},
+            fn
+              {:add, {table, where}}, {filt, ids, next_id} ->
+                shape_id = "shape_#{next_id}"
 
-              case Shape.new(table, where: where, inspector: @inspector) do
-                {:ok, shape} -> {Filter.add_shape(filt, shape_id, shape), ids ++ [new_id]}
-                {:error, _} -> {filt, ids}
-              end
+                case Shape.new(table, where: where, inspector: @inspector) do
+                  {:ok, shape} -> {Filter.add_shape(filt, shape_id, shape), ids ++ [next_id], next_id + 1}
+                  {:error, _} -> {filt, ids, next_id}
+                end
 
-            {:remove, idx}, {filt, ids} ->
-              if idx < length(ids) and Enum.at(ids, idx) != nil do
-                shape_id = "shape_#{Enum.at(ids, idx)}"
-                {Filter.remove_shape(filt, shape_id), List.delete_at(ids, idx)}
-              else
-                {filt, ids}
-              end
-          end)
+              {:remove, idx}, {filt, ids, next_id} ->
+                if idx < length(ids) and Enum.at(ids, idx) != nil do
+                  shape_id = "shape_#{Enum.at(ids, idx)}"
+                  {Filter.remove_shape(filt, shape_id), List.delete_at(ids, idx), next_id}
+                else
+                  {filt, ids, next_id}
+                end
+            end
+          )
 
         # Test consistency after operations
         txn = %Transaction{
@@ -192,7 +195,7 @@ defmodule Electric.Shapes.FilterPropertyTest do
         filter =
           shapes
           |> Enum.with_index()
-          |> Enum.reduce(Filter.new(), fn {{{table, where}, idx}, acc} ->
+          |> Enum.reduce(Filter.new(), fn {{table, where}, idx}, acc ->
             shape_id = "shape_#{idx}"
 
             case Shape.new(table, where: where, inspector: @inspector) do
