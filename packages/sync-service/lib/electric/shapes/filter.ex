@@ -25,7 +25,12 @@ defmodule Electric.Shapes.Filter do
 
   require Logger
 
-  defstruct tables: %{}, refs_fun: nil, shapes: %{}, shape_bitmap: %ShapeBitmap{}
+  # per_table_bitmaps: Map(table_name => RoaringBitmap) tracking which shapes reference each table
+  defstruct tables: %{},
+            refs_fun: nil,
+            shapes: %{},
+            shape_bitmap: %ShapeBitmap{},
+            per_table_bitmaps: %{}
 
   @type t :: %Filter{}
   @type shape_id :: any()
@@ -56,7 +61,16 @@ defmodule Electric.Shapes.Filter do
     if has_shape?(filter, shape_id), do: raise("duplicate shape #{shape_id}")
 
     # Add shape to bitmap mapping
-    {shape_bitmap, _integer_id} = ShapeBitmap.add_shape(filter.shape_bitmap, shape_id)
+    {shape_bitmap, integer_id} = ShapeBitmap.add_shape(filter.shape_bitmap, shape_id)
+
+    # Update per-table bitmap to track this shape references this table
+    per_table_bitmaps =
+      Map.update(
+        filter.per_table_bitmaps,
+        shape.root_table,
+        RoaringBitmap.from_list([integer_id]),
+        fn bitmap -> RoaringBitmap.add(bitmap, integer_id) end
+      )
 
     %Filter{
       filter
@@ -70,7 +84,8 @@ defmodule Electric.Shapes.Filter do
             end
           ),
         shapes: Map.put(filter.shapes, shape_id, shape),
-        shape_bitmap: shape_bitmap
+        shape_bitmap: shape_bitmap,
+        per_table_bitmaps: per_table_bitmaps
     }
   end
 
@@ -86,6 +101,7 @@ defmodule Electric.Shapes.Filter do
     # the shape_id to an integer ID, leaving stale bits in the indexes.
     # This can cause false positives, especially when IDs are reused.
     old_bitmap = filter.shape_bitmap
+    integer_id = ShapeBitmap.get_id!(old_bitmap, shape_id)
 
     condition =
       Map.fetch!(filter.tables, shape.root_table)
@@ -101,11 +117,26 @@ defmodule Electric.Shapes.Filter do
         Map.put(filter.tables, shape.root_table, condition)
       end
 
+    # Remove from per-table bitmap
+    per_table_bitmaps =
+      Map.update!(filter.per_table_bitmaps, shape.root_table, fn bitmap ->
+        RoaringBitmap.remove(bitmap, integer_id)
+      end)
+      |> then(fn map ->
+        # Clean up empty bitmaps
+        if RoaringBitmap.empty?(Map.fetch!(map, shape.root_table)) do
+          Map.delete(map, shape.root_table)
+        else
+          map
+        end
+      end)
+
     %Filter{
       filter
       | tables: tables,
         shapes: Map.delete(filter.shapes, shape_id),
-        shape_bitmap: shape_bitmap
+        shape_bitmap: shape_bitmap,
+        per_table_bitmaps: per_table_bitmaps
     }
   end
 
@@ -242,9 +273,7 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shape_ids_for_table_bitmap(%Filter{} = filter, table_name) do
-    case Map.get(filter.tables, table_name) do
-      nil -> RoaringBitmap.new()
-      condition -> WhereCondition.all_shapes_bitmap(condition, filter.shape_bitmap)
-    end
+    # O(1) lookup using pre-computed per-table bitmap
+    Map.get(filter.per_table_bitmaps, table_name, RoaringBitmap.new())
   end
 end
