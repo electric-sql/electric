@@ -81,12 +81,18 @@ defmodule Electric.Shapes.Filter do
   def remove_shape(%Filter{} = filter, shape_id) do
     shape = Map.fetch!(filter.shapes, shape_id)
 
-    # Remove shape from bitmap mapping
-    {shape_bitmap, _freed_id} = ShapeBitmap.remove_shape(filter.shape_bitmap, shape_id)
+    # CRITICAL: Use the OLD bitmap to remove from indexes BEFORE updating the mapping.
+    # If we remove from the mapping first, WhereCondition.remove_shape can't resolve
+    # the shape_id to an integer ID, leaving stale bits in the indexes.
+    # This can cause false positives, especially when IDs are reused.
+    old_bitmap = filter.shape_bitmap
 
     condition =
       Map.fetch!(filter.tables, shape.root_table)
-      |> WhereCondition.remove_shape(shape_id, shape.where, shape_bitmap)
+      |> WhereCondition.remove_shape(shape_id, shape.where, old_bitmap)
+
+    # Now safe to remove from the mapping after indexes are cleaned up
+    {shape_bitmap, _freed_id} = ShapeBitmap.remove_shape(old_bitmap, shape_id)
 
     tables =
       if WhereCondition.empty?(condition) do

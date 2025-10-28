@@ -23,7 +23,8 @@ fn new() -> NifResult<ResourceArc<BitmapResource>> {
 }
 
 // Create a bitmap from a list of integers
-#[rustler::nif]
+// DirtyCpu: Building from large lists can take >1ms
+#[rustler::nif(schedule = "DirtyCpu")]
 fn from_list(values: Vec<u32>) -> NifResult<ResourceArc<BitmapResource>> {
     let bitmap = RoaringBitmap::from_iter(values);
     Ok(ResourceArc::new(BitmapResource {
@@ -59,7 +60,8 @@ fn contains(resource: ResourceArc<BitmapResource>, value: u32) -> NifResult<bool
 }
 
 // Union of two bitmaps
-#[rustler::nif]
+// DirtyCpu: Set operations on large bitmaps can take >1ms
+#[rustler::nif(schedule = "DirtyCpu")]
 fn union(
     resource1: ResourceArc<BitmapResource>,
     resource2: ResourceArc<BitmapResource>,
@@ -73,7 +75,8 @@ fn union(
 }
 
 // Intersection of two bitmaps
-#[rustler::nif]
+// DirtyCpu: Set operations on large bitmaps can take >1ms
+#[rustler::nif(schedule = "DirtyCpu")]
 fn intersection(
     resource1: ResourceArc<BitmapResource>,
     resource2: ResourceArc<BitmapResource>,
@@ -115,7 +118,8 @@ fn is_empty(resource: ResourceArc<BitmapResource>) -> NifResult<bool> {
 }
 
 // Convert bitmap to list
-#[rustler::nif]
+// DirtyCpu: Converting large bitmaps to lists can take >1ms
+#[rustler::nif(schedule = "DirtyCpu")]
 fn to_list(resource: ResourceArc<BitmapResource>) -> NifResult<Vec<u32>> {
     let bitmap = resource.bitmap.read().unwrap();
     Ok(bitmap.iter().collect())
@@ -167,7 +171,8 @@ fn add_many(
 }
 
 // Union multiple bitmaps at once (bulk operation)
-#[rustler::nif]
+// DirtyCpu: Bulk set operations can take >1ms
+#[rustler::nif(schedule = "DirtyCpu")]
 fn union_many(bitmaps: Vec<ResourceArc<BitmapResource>>) -> NifResult<ResourceArc<BitmapResource>> {
     let mut result = RoaringBitmap::new();
     for bitmap_resource in bitmaps {
@@ -180,7 +185,8 @@ fn union_many(bitmaps: Vec<ResourceArc<BitmapResource>>) -> NifResult<ResourceAr
 }
 
 // Intersection of multiple bitmaps at once (bulk operation)
-#[rustler::nif]
+// DirtyCpu: Bulk set operations can take >1ms
+#[rustler::nif(schedule = "DirtyCpu")]
 fn intersection_many(
     bitmaps: Vec<ResourceArc<BitmapResource>>,
 ) -> NifResult<ResourceArc<BitmapResource>> {
@@ -224,4 +230,12 @@ fn min(resource: ResourceArc<BitmapResource>) -> NifResult<Option<u32>> {
 fn max(resource: ResourceArc<BitmapResource>) -> NifResult<Option<u32>> {
     let bitmap = resource.bitmap.read().unwrap();
     Ok(bitmap.max())
+}
+
+// Get the size of the bitmap in bytes (for observability)
+// This reports off-heap memory usage which BEAM metrics won't include
+#[rustler::nif]
+fn size_in_bytes(resource: ResourceArc<BitmapResource>) -> NifResult<u64> {
+    let bitmap = resource.bitmap.read().unwrap();
+    Ok(bitmap.serialized_size() as u64)
 }

@@ -151,6 +151,16 @@ defmodule Electric.Shapes.RoaringBitmap do
   @spec max(t()) :: non_neg_integer() | nil
   def max(_bitmap), do: error()
 
+  @doc """
+  Returns the size of the bitmap in bytes.
+
+  This is useful for observability - it reports off-heap memory usage
+  which BEAM metrics won't include. Use this to track total memory
+  consumption of the shape routing system.
+  """
+  @spec size_in_bytes(t()) :: non_neg_integer()
+  def size_in_bytes(_bitmap), do: error()
+
   defp error do
     :erlang.nif_error(:nif_not_loaded)
   end
