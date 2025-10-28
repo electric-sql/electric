@@ -330,7 +330,7 @@ defmodule Electric.Shapes.FilterTest do
 
     # Test records to verify functional equivalence
     test_records = [
-      %NewRecord{relation: {"public", "table"}, record: %{"id" => "1", "an_array" => [1]}},
+      %NewRecord{relation: {"public", "table"}, record: %{"id" => "1", "an_array" => "{1}"}},
       %NewRecord{relation: {"public", "table"}, record: %{"id" => "2"}},
       %NewRecord{relation: {"public", "table"}, record: %{"id" => "10"}},
       %NewRecord{relation: {"public", "another_table"}, record: %{"id" => "1"}}
