@@ -1,5 +1,5 @@
 use roaring::RoaringBitmap;
-use rustler::{Encoder, Env, Error, NifResult, ResourceArc, Term};
+use rustler::{Env, NifResult, ResourceArc, Term};
 use std::sync::RwLock;
 
 // Resource wrapper for RoaringBitmap
@@ -13,32 +13,7 @@ fn load(env: Env, _: Term) -> bool {
     true
 }
 
-rustler::init!(
-    "Elixir.Electric.Shapes.RoaringBitmap",
-    [
-        new,
-        from_list,
-        add,
-        remove,
-        contains,
-        union,
-        intersection,
-        difference,
-        cardinality,
-        is_empty,
-        to_list,
-        clear,
-        equal,
-        is_subset,
-        add_many,
-        union_many,
-        intersection_many,
-        any_contains,
-        min,
-        max
-    ],
-    load = load
-);
+rustler::init!("Elixir.Electric.Shapes.RoaringBitmap", load = load);
 
 // Create a new empty bitmap
 #[rustler::nif]
@@ -93,7 +68,7 @@ fn union(
 ) -> NifResult<ResourceArc<BitmapResource>> {
     let bitmap1 = resource1.bitmap.read().unwrap();
     let bitmap2 = resource2.bitmap.read().unwrap();
-    let result = bitmap1.bitor(&*bitmap2);
+    let result = &*bitmap1 | &*bitmap2;
     Ok(ResourceArc::new(BitmapResource {
         bitmap: RwLock::new(result),
     }))
@@ -107,7 +82,7 @@ fn intersection(
 ) -> NifResult<ResourceArc<BitmapResource>> {
     let bitmap1 = resource1.bitmap.read().unwrap();
     let bitmap2 = resource2.bitmap.read().unwrap();
-    let result = bitmap1.bitand(&*bitmap2);
+    let result = &*bitmap1 & &*bitmap2;
     Ok(ResourceArc::new(BitmapResource {
         bitmap: RwLock::new(result),
     }))
@@ -150,7 +125,7 @@ fn to_list(resource: ResourceArc<BitmapResource>) -> NifResult<Vec<u32>> {
 
 // Clear all elements from the bitmap
 #[rustler::nif]
-fn clear(resource: ResourceArc<BitmapResource>) -> NifResult<ResourceArc<BitmapResource>> {
+fn clear(_resource: ResourceArc<BitmapResource>) -> NifResult<ResourceArc<BitmapResource>> {
     Ok(ResourceArc::new(BitmapResource {
         bitmap: RwLock::new(RoaringBitmap::new()),
     }))

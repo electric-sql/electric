@@ -213,31 +213,6 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
-  defp shapes_affected_by_change(%Filter{} = filter, %NewRecord{
-         relation: relation,
-         record: record
-       }) do
-    shapes_affected_by_record(filter, relation, record)
-  end
-
-  defp shapes_affected_by_change(%Filter{} = filter, %DeletedRecord{
-         relation: relation,
-         old_record: record
-       }) do
-    shapes_affected_by_record(filter, relation, record)
-  end
-
-  defp shapes_affected_by_change(%Filter{} = filter, %UpdatedRecord{relation: relation} = change) do
-    MapSet.union(
-      shapes_affected_by_record(filter, relation, change.record),
-      shapes_affected_by_record(filter, relation, change.old_record)
-    )
-  end
-
-  defp shapes_affected_by_change(%Filter{} = filter, %TruncatedRelation{relation: table_name}) do
-    shape_ids_for_table(filter, table_name)
-  end
-
   defp shapes_affected_by_record(filter, table_name, record) do
     # Legacy function for backward compat - converts bitmap to MapSet
     bitmap = shapes_affected_by_record_bitmap(filter, table_name, record)
