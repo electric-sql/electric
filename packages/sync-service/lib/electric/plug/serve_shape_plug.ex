@@ -5,6 +5,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
 
+  alias Electric.Replication.LogOffset
   alias Electric.Utils
   alias Electric.Shapes.Api
   alias Electric.Telemetry.OpenTelemetry
@@ -58,11 +59,15 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
-    dbg(conn.assigns.config |> Keyword.keys())
     stack_id = get_in(config, [:stack_id])
     max_concurrent = config[:api].max_concurrent_requests
 
-    case Electric.AdmissionControl.try_acquire(stack_id, max_concurrent: max_concurrent) do
+    kind =
+      if conn.assigns.request.params.offset == LogOffset.before_all(),
+        do: :initial,
+        else: :existing
+
+    case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
       :ok ->
         # Store that we acquired a permit so we can release it later
         # register_before_send is called before ANY response (success, error, exception)

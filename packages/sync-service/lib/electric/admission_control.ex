@@ -42,6 +42,11 @@ defmodule Electric.AdmissionControl do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
+  @allowed_kinds ~w|initial existing|a
+  for {kind, pos} <- Enum.with_index(@allowed_kinds, 2) do
+    defp tuple_pos(unquote(kind)), do: unquote(pos)
+  end
+
   @doc """
   Try to acquire a permit for the given stack_id.
 
@@ -60,7 +65,7 @@ defmodule Electric.AdmissionControl do
       {:error, :overloaded}
 
   """
-  def try_acquire(stack_id, opts \\ []) do
+  def try_acquire(stack_id, kind, opts \\ []) when kind in @allowed_kinds do
     max_concurrent =
       Keyword.get_lazy(opts, :max_concurrent, fn ->
         Electric.Config.get_env(:max_concurrent_requests)
@@ -68,24 +73,29 @@ defmodule Electric.AdmissionControl do
 
     # Atomically increment counter, but cap at max_concurrent
     # ETS update_counter format: {position, increment, threshold, set_value}
-    # Position 2 is the counter value in tuple {stack_id, counter}
     current =
       :ets.update_counter(
         @table_name,
         stack_id,
-        {2, 1, max_concurrent, max_concurrent},
-        {stack_id, 0}
+        {tuple_pos(kind), 1, max_concurrent, max_concurrent},
+        {stack_id, 0, 0}
       )
 
     if current >= max_concurrent do
       # At or over capacity, decrement back and reject
-      :ets.update_counter(@table_name, stack_id, {2, -1, 0, 0}, {stack_id, 0})
+      :ets.update_counter(@table_name, stack_id, {tuple_pos(kind), -1, 0, 0}, {stack_id, 0, 0})
 
       # Emit telemetry event
       :telemetry.execute(
         [:electric, :admission_control, :reject],
         %{count: 1},
-        %{stack_id: stack_id, reason: :overloaded, current: current, limit: max_concurrent}
+        %{
+          stack_id: stack_id,
+          reason: :overloaded,
+          kind: kind,
+          current: current,
+          limit: max_concurrent
+        }
       )
 
       {:error, :overloaded}
@@ -95,7 +105,7 @@ defmodule Electric.AdmissionControl do
       :telemetry.execute(
         [:electric, :admission_control, :acquire],
         %{count: 1, current: current},
-        %{stack_id: stack_id, limit: max_concurrent}
+        %{stack_id: stack_id, kind: kind, limit: max_concurrent}
       )
 
       :ok
