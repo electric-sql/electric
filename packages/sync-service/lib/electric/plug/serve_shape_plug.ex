@@ -58,8 +58,9 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
+    dbg(conn.assigns.config |> Keyword.keys())
     stack_id = get_in(config, [:stack_id])
-    max_concurrent = get_in(config, [:max_concurrent_requests]) || 1000
+    max_concurrent = config[:api].max_concurrent_requests
 
     case Electric.AdmissionControl.try_acquire(stack_id, max_concurrent: max_concurrent) do
       :ok ->
@@ -243,7 +244,10 @@ defmodule Electric.Plug.ServeShapePlug do
     |> put_resp_header("retry-after", "10")
     |> put_resp_header("cache-control", "no-store")
     |> put_resp_header("surrogate-control", "no-store")
-    |> send_resp(503, Jason.encode!(%{code: "database_unreachable", error: "Database is unreachable"}))
+    |> send_resp(
+      503,
+      Jason.encode!(%{code: "database_unreachable", error: "Database is unreachable"})
+    )
   end
 
   def handle_errors(conn, error) do

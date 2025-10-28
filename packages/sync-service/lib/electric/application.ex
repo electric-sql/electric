@@ -212,7 +212,8 @@ defmodule Electric.Application do
       persistent_kv: persistent_kv,
       storage_dir: get_env(opts, :storage_dir),
       storage: storage,
-      feature_flags: get_env(opts, :feature_flags)
+      feature_flags: get_env(opts, :feature_flags),
+      max_concurrent_requests: get_env(opts, :max_concurrent_requests)
     ]
   end
 

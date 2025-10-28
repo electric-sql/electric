@@ -36,7 +36,8 @@ defmodule Electric.Shapes.Api do
     stack_ready_timeout: [type: :integer],
     stale_age: [type: :integer],
     send_cache_headers?: [type: :boolean],
-    encoder: [type: :atom]
+    encoder: [type: :atom],
+    max_concurrent_requests: [type: :integer]
   ]
   @schema NimbleOptions.new!(@options)
   @option_keys Keyword.keys(@options) |> MapSet.new()
@@ -54,6 +55,7 @@ defmodule Electric.Shapes.Api do
     :stack_id,
     :storage,
     :feature_flags,
+    :max_concurrent_requests,
     allow_shape_deletion: false,
     keepalive_interval: 21_000,
     long_poll_timeout: 20_000,

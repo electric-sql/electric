@@ -61,7 +61,10 @@ defmodule Electric.AdmissionControl do
 
   """
   def try_acquire(stack_id, opts \\ []) do
-    max_concurrent = Keyword.get(opts, :max_concurrent, 1000)
+    max_concurrent =
+      Keyword.get_lazy(opts, :max_concurrent, fn ->
+        Electric.Config.get_env(:max_concurrent_requests)
+      end)
 
     # Atomically increment counter, but cap at max_concurrent
     # ETS update_counter format: {position, increment, threshold, set_value}
