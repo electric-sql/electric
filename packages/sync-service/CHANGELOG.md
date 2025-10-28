@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.2.1
+
+### Patch Changes
+
+- 67b487b: Handle connection failures during relation changes and new shapes more gracefully
+- ff36103: fix: ensure retry-after header is present on errors while stack is starting up
+
 ## 1.2.0
 
 ### Minor Changes

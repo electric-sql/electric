@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.1.1
+
+### Patch Changes
+
+- ff36103: fix: ensure retry-after header is present on errors while stack is starting up
+
 ## 1.1.0
 
 ### Minor Changes
