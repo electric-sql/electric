@@ -9,8 +9,7 @@ pub struct BitmapResource {
 
 // Initialize the NIF
 fn load(env: Env, _: Term) -> bool {
-    rustler::resource!(BitmapResource, env);
-    true
+    rustler::resource!(BitmapResource, env)
 }
 
 rustler::init!("Elixir.Electric.Shapes.RoaringBitmap", load = load);
