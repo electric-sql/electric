@@ -21,35 +21,6 @@ import {
 // want to retry
 const HTTP_RETRY_STATUS_CODES = [429]
 
-// Retry budget tracking (module-level)
-// Resets every minute to prevent retry storms
-let totalRequests = 0
-let totalRetries = 0
-let budgetResetTime = Date.now() + 60_000
-
-function checkRetryBudget(retryBudgetPercent: number): boolean {
-  const now = Date.now()
-  if (now > budgetResetTime) {
-    totalRequests = 0
-    totalRetries = 0
-    budgetResetTime = now + 60_000
-  }
-
-  totalRequests++
-
-  // Allow retries for first 10 requests to avoid cold start issues
-  if (totalRequests < 10) return true
-
-  const currentRetryRate = totalRetries / totalRequests
-  const hasCapacity = currentRetryRate < retryBudgetPercent
-
-  if (hasCapacity) {
-    totalRetries++
-  }
-
-  return hasCapacity
-}
-
 export interface BackoffOptions {
   /**
    * Initial delay before retrying in milliseconds
@@ -105,6 +76,35 @@ export function createFetchWithBackoff(
     maxRetries = Infinity,
     retryBudgetPercent = 0.1,
   } = backoffOptions
+
+  // Retry budget tracking (closure-scoped)
+  // Resets every minute to prevent retry storms
+  let totalRequests = 0
+  let totalRetries = 0
+  let budgetResetTime = Date.now() + 60_000
+
+  function checkRetryBudget(percent: number): boolean {
+    const now = Date.now()
+    if (now > budgetResetTime) {
+      totalRequests = 0
+      totalRetries = 0
+      budgetResetTime = now + 60_000
+    }
+
+    totalRequests++
+
+    // Allow retries for first 10 requests to avoid cold start issues
+    if (totalRequests < 10) return true
+
+    const currentRetryRate = totalRetries / totalRequests
+    const hasCapacity = currentRetryRate < percent
+
+    if (hasCapacity) {
+      totalRetries++
+    }
+
+    return hasCapacity
+  }
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
     const options = args[1]
@@ -171,7 +171,7 @@ export function createFetchWithBackoff(
           // 1. Parse server-provided Retry-After (if present)
           let serverMinimumMs = 0
           if (e instanceof FetchError && e.headers) {
-            const retryAfter = e.headers['retry-after']
+            const retryAfter = e.headers[`retry-after`]
             if (retryAfter) {
               const retryAfterSec = Number(retryAfter)
               if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
@@ -197,7 +197,7 @@ export function createFetchWithBackoff(
           const waitMs = Math.max(serverMinimumMs, clientBackoffMs)
 
           if (debug) {
-            const source = serverMinimumMs > 0 ? 'server+client' : 'client'
+            const source = serverMinimumMs > 0 ? `server+client` : `client`
             console.log(
               `Retry attempt #${attempt} after ${waitMs}ms (${source}, serverMin=${serverMinimumMs}ms, clientBackoff=${clientBackoffMs}ms)`
             )
