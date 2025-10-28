@@ -339,10 +339,26 @@ defmodule Electric.Shapes.FilterTest do
       # Note: Internal state (ID pools) may differ for efficiency, so we check functional properties
       assert removed_filter.tables == filter.tables
       assert removed_filter.shapes == filter.shapes
-      assert removed_filter.per_table_bitmaps == filter.per_table_bitmaps
+
+      # Compare per_table_bitmaps by converting to lists since references differ
+      assert_per_table_bitmaps_equal(removed_filter.per_table_bitmaps, filter.per_table_bitmaps)
 
       filter_with_shape_added
     end)
+  end
+
+  # Helper to compare per_table_bitmaps maps (can't compare references directly)
+  defp assert_per_table_bitmaps_equal(left, right) do
+    assert Map.keys(left) == Map.keys(right), "per_table_bitmaps keys differ"
+
+    for {table, left_bitmap} <- left do
+      right_bitmap = Map.fetch!(right, table)
+      left_list = Electric.Shapes.RoaringBitmap.to_list(left_bitmap) |> Enum.sort()
+      right_list = Electric.Shapes.RoaringBitmap.to_list(right_bitmap) |> Enum.sort()
+
+      assert left_list == right_list,
+             "per_table_bitmaps differ for table #{inspect(table)}: #{inspect(left_list)} != #{inspect(right_list)}"
+    end
   end
 
   describe "optimisations" do
