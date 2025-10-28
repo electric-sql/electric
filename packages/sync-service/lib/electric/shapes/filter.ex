@@ -18,12 +18,14 @@ defmodule Electric.Shapes.Filter do
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.WhereCondition
+  alias Electric.Shapes.RoaringBitmap
   alias Electric.Shapes.Shape
+  alias Electric.Shapes.ShapeBitmap
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
-  defstruct tables: %{}, refs_fun: nil, shapes: %{}
+  defstruct tables: %{}, refs_fun: nil, shapes: %{}, shape_bitmap: %ShapeBitmap{}
 
   @type t :: %Filter{}
   @type shape_id :: any()
@@ -53,18 +55,22 @@ defmodule Electric.Shapes.Filter do
   def add_shape(%Filter{} = filter, shape_id, shape) do
     if has_shape?(filter, shape_id), do: raise("duplicate shape #{shape_id}")
 
+    # Add shape to bitmap mapping
+    {shape_bitmap, _integer_id} = ShapeBitmap.add_shape(filter.shape_bitmap, shape_id)
+
     %Filter{
       filter
       | tables:
           Map.update(
             filter.tables,
             shape.root_table,
-            WhereCondition.add_shape(WhereCondition.new(), shape_id, shape.where),
+            WhereCondition.add_shape(WhereCondition.new(), shape_id, shape.where, shape_bitmap),
             fn condition ->
-              WhereCondition.add_shape(condition, shape_id, shape.where)
+              WhereCondition.add_shape(condition, shape_id, shape.where, shape_bitmap)
             end
           ),
-        shapes: Map.put(filter.shapes, shape_id, shape)
+        shapes: Map.put(filter.shapes, shape_id, shape),
+        shape_bitmap: shape_bitmap
     }
   end
 
@@ -75,9 +81,12 @@ defmodule Electric.Shapes.Filter do
   def remove_shape(%Filter{} = filter, shape_id) do
     shape = Map.fetch!(filter.shapes, shape_id)
 
+    # Remove shape from bitmap mapping
+    {shape_bitmap, _freed_id} = ShapeBitmap.remove_shape(filter.shape_bitmap, shape_id)
+
     condition =
       Map.fetch!(filter.tables, shape.root_table)
-      |> WhereCondition.remove_shape(shape_id, shape.where)
+      |> WhereCondition.remove_shape(shape_id, shape.where, shape_bitmap)
 
     tables =
       if WhereCondition.empty?(condition) do
@@ -86,7 +95,12 @@ defmodule Electric.Shapes.Filter do
         Map.put(filter.tables, shape.root_table, condition)
       end
 
-    %Filter{filter | tables: tables, shapes: Map.delete(filter.shapes, shape_id)}
+    %Filter{
+      filter
+      | tables: tables,
+        shapes: Map.delete(filter.shapes, shape_id),
+        shape_bitmap: shape_bitmap
+    }
   end
 
   @doc """
@@ -160,11 +174,23 @@ defmodule Electric.Shapes.Filter do
         MapSet.new()
 
       condition ->
-        WhereCondition.affected_shapes(condition, record, filter.shapes, filter.refs_fun)
+        # Use bitmap-based matching, then convert back to MapSet
+        bitmap =
+          WhereCondition.affected_shapes_bitmap(
+            condition,
+            record,
+            filter.shapes,
+            filter.shape_bitmap,
+            filter.refs_fun
+          )
+
+        ShapeBitmap.to_handles(filter.shape_bitmap, bitmap)
     end
   end
 
   defp all_shape_ids(%Filter{} = filter) do
+    # Return all shape IDs using the bitmap mapping
+    # For backward compatibility, convert to MapSet
     Enum.reduce(filter.tables, MapSet.new(), fn {_table, condition}, ids ->
       MapSet.union(ids, WhereCondition.all_shape_ids(condition))
     end)

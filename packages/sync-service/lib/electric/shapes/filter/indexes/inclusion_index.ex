@@ -19,6 +19,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Indexes.InclusionIndex
   alias Electric.Shapes.Filter.WhereCondition
+  alias Electric.Shapes.RoaringBitmap
 
   empty_node = %{keys: []}
   @empty_node empty_node
@@ -32,7 +33,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
     def empty?(%InclusionIndex{value_tree: value_tree}), do: node_empty?(value_tree)
 
-    def add_shape(%InclusionIndex{} = index, array, shape_id, and_where) do
+    def add_shape(%InclusionIndex{} = index, array, shape_id, and_where, shape_bitmap) do
       ordered = array |> Enum.sort() |> Enum.dedup()
 
       %{
@@ -40,7 +41,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         | value_tree:
             add_shape_to_node(index.value_tree, ordered, %{
               shape_id: shape_id,
-              and_where: and_where
+              and_where: and_where,
+              shape_bitmap: shape_bitmap
             })
       }
     end
@@ -76,12 +78,13 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         WhereCondition.add_shape(
           node[:condition] || WhereCondition.new(),
           shape_info.shape_id,
-          shape_info.and_where
+          shape_info.and_where,
+          shape_info.shape_bitmap
         )
       )
     end
 
-    def remove_shape(%InclusionIndex{} = index, array, shape_id, and_where) do
+    def remove_shape(%InclusionIndex{} = index, array, shape_id, and_where, shape_bitmap) do
       ordered = array |> Enum.sort() |> Enum.dedup()
 
       %{
@@ -89,7 +92,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         | value_tree:
             remove_shape_from_node(index.value_tree, ordered, %{
               shape_id: shape_id,
-              and_where: and_where
+              and_where: and_where,
+              shape_bitmap: shape_bitmap
             })
       }
     end
@@ -116,7 +120,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         node.condition
         |> WhereCondition.remove_shape(
           shape_info.shape_id,
-          shape_info.and_where
+          shape_info.and_where,
+          shape_info.shape_bitmap
         )
 
       if WhereCondition.empty?(condition) do
@@ -226,6 +231,103 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       end)
     end
 
+    # Bitmap versions of the above functions
+    def affected_shapes_bitmap(%InclusionIndex{} = index, field, record, shapes, shape_bitmap) do
+      record
+      |> value_from_record(field, index.type)
+      |> shapes_affected_by_array_bitmap(index, record, shapes, shape_bitmap)
+    end
+
+    defp shapes_affected_by_array_bitmap(nil, _, _, _, _), do: RoaringBitmap.new()
+
+    defp shapes_affected_by_array_bitmap(values, index, record, shapes, shape_bitmap)
+         when is_list(values) do
+      values =
+        values
+        |> Enum.sort()
+        |> Enum.dedup()
+
+      shapes_affected_by_tree_bitmap(index.value_tree, values, record, shapes, shape_bitmap) ||
+        RoaringBitmap.new()
+    end
+
+    defp shapes_affected_by_tree_bitmap(node, values, record, shapes, shape_bitmap) do
+      union_bitmap(
+        shapes_affected_by_node_bitmap(node, record, shapes, shape_bitmap),
+        shapes_affected_by_children_bitmap(node, values, record, shapes, shape_bitmap)
+      )
+    end
+
+    defp shapes_affected_by_node_bitmap(%{condition: condition}, record, shapes, shape_bitmap) do
+      WhereCondition.affected_shapes_bitmap(condition, record, shapes, shape_bitmap)
+    end
+
+    defp shapes_affected_by_node_bitmap(_, _, _, _), do: nil
+
+    defp shapes_affected_by_children_bitmap(
+           %{keys: [value | keys]} = node,
+           [value | values],
+           record,
+           shapes,
+           shape_bitmap
+         ) do
+      # key matches value, so add the child then continue with the rest of the values
+      union_bitmap(
+        shapes_affected_by_tree_bitmap(node[value], values, record, shapes, shape_bitmap),
+        shapes_affected_by_children_bitmap(%{node | keys: keys}, values, record, shapes, shape_bitmap)
+      )
+    end
+
+    defp shapes_affected_by_children_bitmap(
+           %{keys: [key | keys]} = node,
+           [value | _] = values,
+           record,
+           shapes,
+           shape_bitmap
+         )
+         when key < value do
+      # key can be discarded as it's not in the list of values
+      shapes_affected_by_children_bitmap(%{node | keys: keys}, values, record, shapes, shape_bitmap)
+    end
+
+    defp shapes_affected_by_children_bitmap(node, [_value | values], record, shapes, shape_bitmap) do
+      # value can be discarded as it's not in the list of keys
+      shapes_affected_by_children_bitmap(node, values, record, shapes, shape_bitmap)
+    end
+
+    defp shapes_affected_by_children_bitmap(%{keys: []}, _values, _record, _shapes, _shape_bitmap) do
+      # No more keys to process, so no more shapes to find
+      nil
+    end
+
+    defp shapes_affected_by_children_bitmap(%{keys: _keys}, [], _record, _shapes, _shape_bitmap) do
+      # No more values to process, so no more shapes to find
+      nil
+    end
+
+    def all_shapes_bitmap(%InclusionIndex{value_tree: value_tree}, shape_bitmap) do
+      shape_ids_in_tree_bitmap(value_tree, shape_bitmap)
+    end
+
+    defp shape_ids_in_tree_bitmap(node, shape_bitmap) do
+      RoaringBitmap.union(
+        shape_ids_in_node_bitmap(node, shape_bitmap),
+        shape_ids_in_children_bitmap(node, shape_bitmap)
+      )
+    end
+
+    defp shape_ids_in_node_bitmap(%{condition: condition}, shape_bitmap) do
+      WhereCondition.all_shapes_bitmap(condition, shape_bitmap)
+    end
+
+    defp shape_ids_in_node_bitmap(_, _), do: RoaringBitmap.new()
+
+    defp shape_ids_in_children_bitmap(node, shape_bitmap) do
+      Enum.reduce(node.keys, RoaringBitmap.new(), fn key, bitmap ->
+        RoaringBitmap.union(bitmap, shape_ids_in_tree_bitmap(node[key], shape_bitmap))
+      end)
+    end
+
     # Union two sets, treating `nil` as an empty set.
     # This allows us to use `nil` rather than `MapSet.new()`
     # and avoid many calls to `MapSet.union/2` which
@@ -233,5 +335,10 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     defp union(nil, set), do: set
     defp union(set, nil), do: set
     defp union(set1, set2), do: MapSet.union(set1, set2)
+
+    # Union for bitmaps, treating `nil` as an empty bitmap
+    defp union_bitmap(nil, bitmap), do: bitmap
+    defp union_bitmap(bitmap, nil), do: bitmap
+    defp union_bitmap(bitmap1, bitmap2), do: RoaringBitmap.union(bitmap1, bitmap2)
   end
 end

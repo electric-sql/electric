@@ -19,6 +19,13 @@ defmodule Electric.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
+      compilers: [:rustler] ++ Mix.compilers(),
+      rustler_crates: [
+        roaring_nif: [
+          path: "native/roaring_nif",
+          mode: rustler_mode(Mix.env())
+        ]
+      ],
       # This will go away after we upgrade Elixir to 1.19, which expects the public `cli/0`
       # function to be defined instead.
       preferred_cli_env: [
@@ -85,6 +92,9 @@ defmodule Electric.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
+  defp rustler_mode(:prod), do: :release
+  defp rustler_mode(_), do: :debug
+
   defp deps do
     List.flatten([
       [
@@ -102,6 +112,7 @@ defmodule Electric.MixProject do
         {:retry, "~> 0.19"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
+        {:rustler, "~> 0.37"},
         {:stream_split, "~> 0.1"},
         {:telemetry_poller, "~> 1.2"},
         # tls_certificate_check is required by otel_exporter_otlp

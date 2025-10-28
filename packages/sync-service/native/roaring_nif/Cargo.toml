@@ -1,0 +1,12 @@
+[package]
+name = "roaring_nif"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "roaring_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37.0"
+roaring = "0.10"

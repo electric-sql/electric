@@ -18,6 +18,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.WhereCondition
+  alias Electric.Shapes.RoaringBitmap
+  alias Electric.Shapes.ShapeBitmap
   alias Electric.Shapes.WhereClause
   alias Electric.Telemetry.OpenTelemetry
 
@@ -31,7 +33,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     indexes == %{} && other_shapes == %{}
   end
 
-  def add_shape(%WhereCondition{} = condition, shape_id, where_clause) do
+  def add_shape(%WhereCondition{} = condition, shape_id, where_clause, shape_bitmap) do
     case optimise_where(where_clause) do
       :not_optimised ->
         %{
@@ -42,12 +44,12 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       optimisation ->
         %{
           condition
-          | indexes: add_shape_to_indexes(condition.indexes, shape_id, optimisation)
+          | indexes: add_shape_to_indexes(condition.indexes, shape_id, optimisation, shape_bitmap)
         }
     end
   end
 
-  defp add_shape_to_indexes(indexes, shape_id, optimisation) do
+  defp add_shape_to_indexes(indexes, shape_id, optimisation, shape_bitmap) do
     Map.update(
       indexes,
       {optimisation.field, optimisation.operation},
@@ -55,10 +57,11 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         Index.new(optimisation.operation, optimisation.type),
         optimisation.value,
         shape_id,
-        optimisation.and_where
+        optimisation.and_where,
+        shape_bitmap
       ),
       fn index ->
-        Index.add_shape(index, optimisation.value, shape_id, optimisation.and_where)
+        Index.add_shape(index, optimisation.value, shape_id, optimisation.and_where, shape_bitmap)
       end
     )
   end
@@ -114,7 +117,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
 
-  def remove_shape(%WhereCondition{} = condition, shape_id, where_clause) do
+  def remove_shape(%WhereCondition{} = condition, shape_id, where_clause, shape_bitmap) do
     case optimise_where(where_clause) do
       :not_optimised ->
         %{condition | other_shapes: Map.delete(condition.other_shapes, shape_id)}
@@ -122,16 +125,16 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       optimisation ->
         %{
           condition
-          | indexes: remove_shape_from_indexes(condition.indexes, shape_id, optimisation)
+          | indexes: remove_shape_from_indexes(condition.indexes, shape_id, optimisation, shape_bitmap)
         }
     end
   end
 
-  defp remove_shape_from_indexes(indexes, shape_id, optimisation) do
+  defp remove_shape_from_indexes(indexes, shape_id, optimisation, shape_bitmap) do
     index =
       indexes
       |> Map.fetch!({optimisation.field, optimisation.operation})
-      |> Index.remove_shape(optimisation.value, shape_id, optimisation.and_where)
+      |> Index.remove_shape(optimisation.value, shape_id, optimisation.and_where, shape_bitmap)
 
     if Index.empty?(index) do
       Map.delete(indexes, {optimisation.field, optimisation.operation})
@@ -154,6 +157,32 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
       # We can't tell which shapes are affected, the safest thing to do is return all shapes
       all_shape_ids(condition)
+  end
+
+  @doc """
+  Returns a RoaringBitmap of shape IDs affected by the given record.
+  This is the performance-optimized version using bitmaps instead of MapSets.
+  """
+  def affected_shapes_bitmap(
+        %WhereCondition{} = condition,
+        record,
+        shapes,
+        shape_bitmap,
+        refs_fun \\ fn _ -> %{} end
+      ) do
+    RoaringBitmap.union(
+      indexed_shapes_affected_bitmap(condition, record, shapes, shape_bitmap),
+      other_shapes_affected_bitmap(condition, record, shapes, shape_bitmap, refs_fun)
+    )
+  rescue
+    error ->
+      Logger.error("""
+      Unexpected error in Filter.WhereCondition.affected_shapes_bitmap:
+      #{Exception.format(:error, error, __STACKTRACE__)}
+      """)
+
+      # We can't tell which shapes are affected, the safest thing to do is return all shapes
+      all_shapes_bitmap(condition, shape_bitmap)
   end
 
   defp indexed_shapes_affected(condition, record, shapes) do
@@ -194,5 +223,54 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         MapSet.put(ids, shape_id)
       end)
     )
+  end
+
+  defp indexed_shapes_affected_bitmap(condition, record, shapes, shape_bitmap) do
+    OpenTelemetry.with_child_span(
+      "filter.filter_using_indexes",
+      [index_count: map_size(condition.indexes)],
+      fn ->
+        condition.indexes
+        |> Enum.map(fn {{field, _operation}, index} ->
+          Index.affected_shapes_bitmap(index, field, record, shapes, shape_bitmap)
+        end)
+        |> Enum.reduce(RoaringBitmap.new(), &RoaringBitmap.union(&1, &2))
+      end
+    )
+  end
+
+  defp other_shapes_affected_bitmap(condition, record, shapes, shape_bitmap, refs_fun) do
+    OpenTelemetry.with_child_span(
+      "filter.filter_other_shapes",
+      [shape_count: map_size(condition.other_shapes)],
+      fn ->
+        shape_ids =
+          for {shape_id, where} <- condition.other_shapes,
+              shape = Map.fetch!(shapes, shape_id),
+              WhereClause.includes_record?(where, record, refs_fun.(shape)) do
+            ShapeBitmap.get_id!(shape_bitmap, shape_id)
+          end
+
+        RoaringBitmap.from_list(shape_ids)
+      end
+    )
+  end
+
+  @doc """
+  Returns a RoaringBitmap of all shape IDs in the condition.
+  """
+  def all_shapes_bitmap(%WhereCondition{indexes: indexes, other_shapes: other_shapes}, shape_bitmap) do
+    indexed_bitmap =
+      Enum.reduce(indexes, RoaringBitmap.new(), fn {_key, index}, bitmap ->
+        RoaringBitmap.union(bitmap, Index.all_shapes_bitmap(index, shape_bitmap))
+      end)
+
+    other_bitmap =
+      other_shapes
+      |> Map.keys()
+      |> Enum.map(&ShapeBitmap.get_id!(shape_bitmap, &1))
+      |> RoaringBitmap.from_list()
+
+    RoaringBitmap.union(indexed_bitmap, other_bitmap)
   end
 end

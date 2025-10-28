@@ -11,6 +11,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Indexes.EqualityIndex
   alias Electric.Shapes.Filter.WhereCondition
+  alias Electric.Shapes.RoaringBitmap
 
   defstruct [:type, :values]
 
@@ -19,18 +20,18 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   defimpl Index.Protocol, for: EqualityIndex do
     def empty?(%EqualityIndex{values: values}), do: values == %{}
 
-    def add_shape(%EqualityIndex{} = index, value, shape_id, and_where) do
+    def add_shape(%EqualityIndex{} = index, value, shape_id, and_where, shape_bitmap) do
       index.values
       |> Map.put_new(value, WhereCondition.new())
-      |> Map.update!(value, &WhereCondition.add_shape(&1, shape_id, and_where))
+      |> Map.update!(value, &WhereCondition.add_shape(&1, shape_id, and_where, shape_bitmap))
       |> then(&%{index | values: &1})
     end
 
-    def remove_shape(%EqualityIndex{} = index, value, shape_id, and_where) do
+    def remove_shape(%EqualityIndex{} = index, value, shape_id, and_where, shape_bitmap) do
       condition =
         index.values
         |> Map.fetch!(value)
-        |> WhereCondition.remove_shape(shape_id, and_where)
+        |> WhereCondition.remove_shape(shape_id, and_where, shape_bitmap)
 
       if WhereCondition.empty?(condition) do
         %{index | values: Map.delete(index.values, value)}
@@ -49,6 +50,22 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
       end
     end
 
+    def affected_shapes_bitmap(
+          %EqualityIndex{values: values, type: type},
+          field,
+          record,
+          shapes,
+          shape_bitmap
+        ) do
+      case Map.get(values, value_from_record(record, field, type)) do
+        nil ->
+          RoaringBitmap.new()
+
+        condition ->
+          WhereCondition.affected_shapes_bitmap(condition, record, shapes, shape_bitmap)
+      end
+    end
+
     @env Env.new()
     defp value_from_record(record, field, type) do
       case Env.parse_const(@env, record[field], type) do
@@ -64,6 +81,12 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
     def all_shape_ids(%EqualityIndex{values: values}) do
       Enum.reduce(values, MapSet.new(), fn {_value, condition}, ids ->
         MapSet.union(ids, WhereCondition.all_shape_ids(condition))
+      end)
+    end
+
+    def all_shapes_bitmap(%EqualityIndex{values: values}, shape_bitmap) do
+      Enum.reduce(values, RoaringBitmap.new(), fn {_value, condition}, bitmap ->
+        RoaringBitmap.union(bitmap, WhereCondition.all_shapes_bitmap(condition, shape_bitmap))
       end)
     end
   end
