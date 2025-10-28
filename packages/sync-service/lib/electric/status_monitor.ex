@@ -32,7 +32,7 @@ defmodule Electric.StatusMonitor do
     Process.set_label({:status_monitor, stack_id})
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ets.new(ets_table(stack_id), [:named_table, :protected])
+    :ets.new(ets_table(stack_id), [:named_table, :protected, read_concurrency: true])
 
     {:ok, %{stack_id: stack_id, waiters: MapSet.new(), conn_waiters: []}}
   end

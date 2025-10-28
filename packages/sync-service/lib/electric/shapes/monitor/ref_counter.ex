@@ -135,7 +135,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       :ets.new(table(stack_id), [
         :protected,
         :named_table,
-        read_concurrency: true
+        read_concurrency: true,
+        write_concurrency: true
       ])
 
     state = %{

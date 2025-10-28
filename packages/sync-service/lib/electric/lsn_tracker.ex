@@ -7,7 +7,7 @@ defmodule Electric.LsnTracker do
 
     case :ets.info(table, :id) do
       :undefined ->
-        :ets.new(table, [:public, :named_table])
+        :ets.new(table, [:public, :named_table, read_concurrency: true])
 
       ref when is_reference(ref) ->
         :ok

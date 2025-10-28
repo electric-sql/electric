@@ -288,7 +288,7 @@ with_telemetry Telemetry.Metrics do
 
     @spec create_table(name :: atom, type :: atom) :: :ets.tid() | atom
     defp create_table(name, type) do
-      :ets.new(name, [:named_table, :public, type, {:write_concurrency, true}])
+      :ets.new(name, [:named_table, :public, type, {:write_concurrency, true}, {:read_concurrency, true}])
     end
 
     def handle_event(_event_name, measurements, metadata, {metrics, context}) do

@@ -89,7 +89,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   defp storage_table(name) do
-    :ets.new(name, [:public, :named_table, :ordered_set])
+    :ets.new(name, [:public, :named_table, :ordered_set, read_concurrency: true])
   end
 
   @impl Electric.ShapeCache.Storage
