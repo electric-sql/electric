@@ -1,17 +1,19 @@
 use roaring::RoaringBitmap;
-use rustler::{Env, NifResult, ResourceArc, Term};
+use rustler::{NifResult, Resource, ResourceArc};
 use std::sync::RwLock;
 
 // Resource wrapper for RoaringBitmap
+// Implement Resource trait directly to avoid non-local impl warning
 pub struct BitmapResource {
     bitmap: RwLock<RoaringBitmap>,
 }
 
-// Initialize the NIF with inline resource registration to avoid non-local impl warning
-rustler::init!(
-    "Elixir.Electric.Shapes.RoaringBitmap",
-    load = |env: Env, _info: Term| { rustler::resource!(BitmapResource, env) }
-);
+// Use resource_impl attribute for automatic registration
+#[rustler::resource_impl]
+impl Resource for BitmapResource {}
+
+// Initialize the NIF
+rustler::init!("Elixir.Electric.Shapes.RoaringBitmap");
 
 // Create a new empty bitmap
 #[rustler::nif]
