@@ -32,7 +32,7 @@ defmodule Electric.StackConfig do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
     tab = table(stack_id)
-    :ets.new(tab, [:public, :named_table, :set, read_concurrency: true, write_concurrency: true])
+    :ets.new(tab, [:public, :named_table, :set, read_concurrency: true])
 
     {:ok, nil}
   end

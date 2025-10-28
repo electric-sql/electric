@@ -485,7 +485,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def start_link(_), do: :ignore
 
   def init_writer!(shape_opts, shape_definition, storage_recovery_state \\ nil) do
-    table = :ets.new(:in_memory_storage, [:ordered_set, :protected, read_concurrency: true])
+    table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
     {initial_acc, suffix} =
       case maybe_use_cached_writer(shape_opts, table, storage_recovery_state) do
