@@ -115,6 +115,60 @@ asdf install
 
 You'll probably need to fiddle with your bash/zsh/etc rc file to load the right tool into your environment.
 
+### Running Tests
+
+Electric has comprehensive test suites for both Elixir and TypeScript components.
+
+#### Elixir Tests
+
+**Sync Service:**
+
+```sh
+cd packages/sync-service
+mix test
+```
+
+For coverage reports:
+
+```sh
+mix coveralls.html
+```
+
+**Elixir Client:**
+
+```sh
+cd packages/elixir-client
+mix test
+```
+
+#### TypeScript Tests
+
+**Individual Package:**
+
+```sh
+cd packages/typescript-client  # or any other TS package
+pnpm test
+```
+
+**All TypeScript Packages:**
+
+From the root directory:
+
+```sh
+pnpm -r test
+```
+
+For coverage:
+
+```sh
+pnpm coverage
+```
+
+#### Prerequisites for Tests
+
+- Postgres database with logical replication enabled (some tests require it)
+- All dependencies installed via `asdf install` and `pnpm install`
+
 ## Contributing
 
 See the:
