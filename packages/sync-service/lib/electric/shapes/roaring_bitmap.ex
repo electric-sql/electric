@@ -115,6 +115,39 @@ defmodule Electric.Shapes.RoaringBitmap do
   # NIF function - returns true if first bitmap is subset of second
   defp is_subset(_bitmap1, _bitmap2), do: error()
 
+  @doc """
+  Returns the union of multiple bitmaps in a single operation.
+  More efficient than chaining union/2 calls.
+  """
+  @spec union_many([t()]) :: t()
+  def union_many(_bitmaps), do: error()
+
+  @doc """
+  Returns the intersection of multiple bitmaps in a single operation.
+  More efficient than chaining intersection/2 calls.
+  """
+  @spec intersection_many([t()]) :: t()
+  def intersection_many(_bitmaps), do: error()
+
+  @doc """
+  Checks if any bitmap in the list contains the value.
+  Returns true on first match (early exit optimization).
+  """
+  @spec any_contains?([t()], non_neg_integer()) :: boolean()
+  def any_contains?(_bitmaps, _value), do: error()
+
+  @doc """
+  Returns the minimum value in the bitmap, or nil if empty.
+  """
+  @spec min(t()) :: non_neg_integer() | nil
+  def min(_bitmap), do: error()
+
+  @doc """
+  Returns the maximum value in the bitmap, or nil if empty.
+  """
+  @spec max(t()) :: non_neg_integer() | nil
+  def max(_bitmap), do: error()
+
   defp error do
     :erlang.nif_error(:nif_not_loaded)
   end

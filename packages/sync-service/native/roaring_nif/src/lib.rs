@@ -13,7 +13,32 @@ fn load(env: Env, _: Term) -> bool {
     true
 }
 
-rustler::init!("Elixir.Electric.Shapes.RoaringBitmap");
+rustler::init!(
+    "Elixir.Electric.Shapes.RoaringBitmap",
+    [
+        new,
+        from_list,
+        add,
+        remove,
+        contains,
+        union,
+        intersection,
+        difference,
+        cardinality,
+        is_empty,
+        to_list,
+        clear,
+        equal,
+        is_subset,
+        add_many,
+        union_many,
+        intersection_many,
+        any_contains,
+        min,
+        max
+    ],
+    load = load
+);
 
 // Create a new empty bitmap
 #[rustler::nif]
@@ -166,4 +191,64 @@ fn add_many(
     Ok(ResourceArc::new(BitmapResource {
         bitmap: RwLock::new(bitmap),
     }))
+}
+
+// Union multiple bitmaps at once (bulk operation)
+#[rustler::nif]
+fn union_many(bitmaps: Vec<ResourceArc<BitmapResource>>) -> NifResult<ResourceArc<BitmapResource>> {
+    let mut result = RoaringBitmap::new();
+    for bitmap_resource in bitmaps {
+        let bitmap = bitmap_resource.bitmap.read().unwrap();
+        result |= &*bitmap;
+    }
+    Ok(ResourceArc::new(BitmapResource {
+        bitmap: RwLock::new(result),
+    }))
+}
+
+// Intersection of multiple bitmaps at once (bulk operation)
+#[rustler::nif]
+fn intersection_many(
+    bitmaps: Vec<ResourceArc<BitmapResource>>,
+) -> NifResult<ResourceArc<BitmapResource>> {
+    if bitmaps.is_empty() {
+        return Ok(ResourceArc::new(BitmapResource {
+            bitmap: RwLock::new(RoaringBitmap::new()),
+        }));
+    }
+
+    let mut result = bitmaps[0].bitmap.read().unwrap().clone();
+    for bitmap_resource in &bitmaps[1..] {
+        let bitmap = bitmap_resource.bitmap.read().unwrap();
+        result &= &*bitmap;
+    }
+    Ok(ResourceArc::new(BitmapResource {
+        bitmap: RwLock::new(result),
+    }))
+}
+
+// Fast check if any bitmap in list contains value (early exit on first match)
+#[rustler::nif]
+fn any_contains(bitmaps: Vec<ResourceArc<BitmapResource>>, value: u32) -> NifResult<bool> {
+    for bitmap_resource in bitmaps {
+        let bitmap = bitmap_resource.bitmap.read().unwrap();
+        if bitmap.contains(value) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+// Get the minimum value in the bitmap
+#[rustler::nif]
+fn min(resource: ResourceArc<BitmapResource>) -> NifResult<Option<u32>> {
+    let bitmap = resource.bitmap.read().unwrap();
+    Ok(bitmap.min())
+}
+
+// Get the maximum value in the bitmap
+#[rustler::nif]
+fn max(resource: ResourceArc<BitmapResource>) -> NifResult<Option<u32>> {
+    let bitmap = resource.bitmap.read().unwrap();
+    Ok(bitmap.max())
 }

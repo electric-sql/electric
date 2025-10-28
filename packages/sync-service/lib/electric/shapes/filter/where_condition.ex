@@ -230,11 +230,15 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       "filter.filter_using_indexes",
       [index_count: map_size(condition.indexes)],
       fn ->
-        condition.indexes
-        |> Enum.map(fn {{field, _operation}, index} ->
-          Index.affected_shapes_bitmap(index, field, record, shapes, shape_bitmap)
-        end)
-        |> Enum.reduce(RoaringBitmap.new(), &RoaringBitmap.union(&1, &2))
+        # Collect all bitmaps then do bulk union (single NIF call instead of N)
+        bitmaps =
+          condition.indexes
+          |> Enum.map(fn {{field, _operation}, index} ->
+            Index.affected_shapes_bitmap(index, field, record, shapes, shape_bitmap)
+          end)
+
+        # Bulk union: single Rust operation instead of N Elixir/Rust boundary crossings
+        RoaringBitmap.union_many(bitmaps)
       end
     )
   end

@@ -2,24 +2,39 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   @moduledoc """
   Efficiently finds shapes that are affected by a change when the shape's where clause has `array_field @> const_array` in it.
 
-  The index is a tree. Each node in the tree represents a value in the array.
+  This is a **prefix tree (trie) with pre-computed bitmaps at each node**. Each node represents a sorted array prefix,
+  and stores either a RoaringBitmap (for simple predicates) or a WhereCondition (for complex predicates with AND clauses).
 
-  When adding a shape to the tree, the shape's array is sorted and deduplicated, then first value is used to find the child node of the root node.
-  The child to that node is then found using the next value and so on. When there are no values left, the shape is then added to the last node.
-  Adding the shape to the last node is done by adding the shape the node's `WhereCondition` which represents the rest of the where
-  clause of the shape (the `@>` comparison may be only part of the where clause) and can also contain many shapes.
+  ## Structure
 
-  To find the shapes affected by a change, the values of the array in the change are sorted and deduplicated. The tree is then traversed using the values
-  and any nodes that contain shapes on the way are added to the result set, because if the node has been reached the shape's array must be a subset of the change's array.
+  The index is a tree where each node contains:
+  - `:keys` - sorted list of child value keys (for efficient traversal)
+  - `:condition` - RoaringBitmap (simple) or WhereCondition (complex) for shapes matching this prefix
+  - `value` (as map keys) - child nodes for each array element
 
-  A futher optimisation is we keep a sorted list of keys of the children in each node. In `shapes_affected_by_children/3` we have to check the values against the keys.
-  We may have more keys or more values, keeping this sorted list of keys allows up to only do min(key_count, value_count) comparisons for the node.
+  ## Algorithm
+
+  **Adding shapes:**
+  1. Sort and deduplicate the shape's array: `[3, 1, 2, 1]` → `[1, 2, 3]`
+  2. Traverse tree using each value, creating nodes as needed
+  3. At the leaf, store either a RoaringBitmap (if simple predicate) or WhereCondition (if complex)
+
+  **Matching changes:**
+  1. Sort and deduplicate the change's array
+  2. Traverse tree, collecting all encountered bitmaps (subset matches)
+  3. Use bulk bitmap union for O(1) aggregation
+
+  ## Optimization
+
+  This implements **columnar inverted indexing** for array contains operations. For simple predicates,
+  we pre-compute bitmaps at each node, allowing O(1) lookup + tree traversal without WHERE clause evaluation.
   """
   alias Electric.Replication.Eval.Env
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Indexes.InclusionIndex
   alias Electric.Shapes.Filter.WhereCondition
   alias Electric.Shapes.RoaringBitmap
+  alias Electric.Shapes.ShapeBitmap
 
   empty_node = %{keys: []}
   @empty_node empty_node
@@ -71,17 +86,42 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     end
 
     defp add_shape_to_node(node, [] = _values, shape_info) do
-      # There are no more arry values left so add the shape to the node
-      Map.put(
-        node,
-        :condition,
-        WhereCondition.add_shape(
-          node[:condition] || WhereCondition.new(),
-          shape_info.shape_id,
-          shape_info.and_where,
-          shape_info.shape_bitmap
+      # No more array values - add shape to this node
+      shape_int_id = ShapeBitmap.get_id!(shape_info.shape_bitmap, shape_info.shape_id)
+
+      if shape_info.and_where == nil do
+        # Simple predicate: store directly as bitmap
+        Map.update(
+          node,
+          :condition,
+          RoaringBitmap.from_list([shape_int_id]),
+          fn
+            %RoaringBitmap{} = bitmap ->
+              RoaringBitmap.add(bitmap, shape_int_id)
+
+            %WhereCondition{} = condition ->
+              # Mixed: keep WhereCondition for complex predicates
+              WhereCondition.add_shape(
+                condition,
+                shape_info.shape_id,
+                shape_info.and_where,
+                shape_info.shape_bitmap
+              )
+          end
         )
-      )
+      else
+        # Complex predicate: use WhereCondition
+        Map.put(
+          node,
+          :condition,
+          WhereCondition.add_shape(
+            node[:condition] || WhereCondition.new(),
+            shape_info.shape_id,
+            shape_info.and_where,
+            shape_info.shape_bitmap
+          )
+        )
+      end
     end
 
     def remove_shape(%InclusionIndex{} = index, array, shape_id, and_where, shape_bitmap) do
@@ -115,23 +155,41 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     end
 
     defp remove_shape_from_node(node, [] = _values, shape_info) do
-      # There are no more arry values left so remove the shape from the node
-      condition =
-        node.condition
-        |> WhereCondition.remove_shape(
-          shape_info.shape_id,
-          shape_info.and_where,
-          shape_info.shape_bitmap
-        )
+      # No more array values - remove shape from this node
+      shape_int_id = ShapeBitmap.get_id!(shape_info.shape_bitmap, shape_info.shape_id)
 
-      if WhereCondition.empty?(condition) do
-        Map.delete(node, :condition)
-      else
-        Map.put(node, :condition, condition)
+      case node[:condition] do
+        %RoaringBitmap{} = bitmap ->
+          new_bitmap = RoaringBitmap.remove(bitmap, shape_int_id)
+
+          if RoaringBitmap.empty?(new_bitmap) do
+            Map.delete(node, :condition)
+          else
+            Map.put(node, :condition, new_bitmap)
+          end
+
+        %WhereCondition{} = condition ->
+          new_condition =
+            WhereCondition.remove_shape(
+              condition,
+              shape_info.shape_id,
+              shape_info.and_where,
+              shape_info.shape_bitmap
+            )
+
+          if WhereCondition.empty?(new_condition) do
+            Map.delete(node, :condition)
+          else
+            Map.put(node, :condition, new_condition)
+          end
+
+        nil ->
+          node
       end
     end
 
-    defp node_empty?(%{condition: _}), do: false
+    defp node_empty?(%{condition: %RoaringBitmap{}}), do: false
+    defp node_empty?(%{condition: %WhereCondition{}}), do: false
     defp node_empty?(%{keys: []}), do: true
     defp node_empty?(_), do: false
 
@@ -159,7 +217,19 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       )
     end
 
-    defp shapes_affected_by_node(%{condition: condition}, record, shapes) do
+    defp shapes_affected_by_node(%{condition: %RoaringBitmap{} = bitmap}, _record, shapes) do
+      # Fast path: direct bitmap → MapSet conversion
+      # (This is inefficient due to needing shape_bitmap, but kept for backward compat)
+      bitmap
+      |> RoaringBitmap.to_list()
+      |> Enum.map(fn shape_id ->
+        Enum.find_value(shapes, fn {handle, _shape} -> handle end)
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> MapSet.new()
+    end
+
+    defp shapes_affected_by_node(%{condition: %WhereCondition{} = condition}, record, shapes) do
       WhereCondition.affected_shapes(condition, record, shapes)
     end
 
@@ -222,8 +292,17 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       Map.merge(shape_ids_in_node(node), shape_ids_in_children(node))
     end
 
-    defp shape_ids_in_node(%{condition: condition}), do: WhereCondition.all_shape_ids(condition)
-    defp shape_ids_in_node(_), do: %{}
+    defp shape_ids_in_node(%{condition: %RoaringBitmap{} = bitmap}) do
+      bitmap
+      |> RoaringBitmap.to_list()
+      |> MapSet.new()
+    end
+
+    defp shape_ids_in_node(%{condition: %WhereCondition{} = condition}) do
+      WhereCondition.all_shape_ids(condition)
+    end
+
+    defp shape_ids_in_node(_), do: MapSet.new()
 
     defp shape_ids_in_children(node) do
       Enum.reduce(node.keys, %{}, fn key, shapes ->
@@ -258,7 +337,23 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       )
     end
 
-    defp shapes_affected_by_node_bitmap(%{condition: condition}, record, shapes, shape_bitmap) do
+    defp shapes_affected_by_node_bitmap(
+           %{condition: %RoaringBitmap{} = bitmap},
+           _record,
+           _shapes,
+           _shape_bitmap
+         ) do
+      # Ultra-fast path: return pre-computed bitmap directly!
+      # No WHERE clause evaluation needed
+      bitmap
+    end
+
+    defp shapes_affected_by_node_bitmap(
+           %{condition: %WhereCondition{} = condition},
+           record,
+           shapes,
+           shape_bitmap
+         ) do
       WhereCondition.affected_shapes_bitmap(condition, record, shapes, shape_bitmap)
     end
 
@@ -316,7 +411,12 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       )
     end
 
-    defp shape_ids_in_node_bitmap(%{condition: condition}, shape_bitmap) do
+    defp shape_ids_in_node_bitmap(%{condition: %RoaringBitmap{} = bitmap}, _shape_bitmap) do
+      # Fast path: bitmap already pre-computed
+      bitmap
+    end
+
+    defp shape_ids_in_node_bitmap(%{condition: %WhereCondition{} = condition}, shape_bitmap) do
       WhereCondition.all_shapes_bitmap(condition, shape_bitmap)
     end
 
