@@ -134,7 +134,10 @@ defmodule Electric.Shapes.RoaringBitmap do
   Returns true on first match (early exit optimization).
   """
   @spec any_contains?([t()], non_neg_integer()) :: boolean()
-  def any_contains?(_bitmaps, _value), do: error()
+  def any_contains?(bitmaps, value), do: any_contains(bitmaps, value)
+
+  # NIF function - returns true if any bitmap contains value
+  defp any_contains(_bitmaps, _value), do: error()
 
   @doc """
   Returns the minimum value in the bitmap, or nil if empty.

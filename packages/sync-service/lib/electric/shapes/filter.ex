@@ -213,12 +213,6 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
-  defp shapes_affected_by_record(filter, table_name, record) do
-    # Legacy function for backward compat - converts bitmap to MapSet
-    bitmap = shapes_affected_by_record_bitmap(filter, table_name, record)
-    ShapeBitmap.to_handles(filter.shape_bitmap, bitmap)
-  end
-
   defp shapes_affected_by_record_bitmap(filter, table_name, record) do
     case Map.get(filter.tables, table_name) do
       nil ->
@@ -238,11 +232,6 @@ defmodule Electric.Shapes.Filter do
   defp all_shape_ids(%Filter{} = filter) do
     # For backward compatibility, convert bitmap to MapSet
     bitmap = ShapeBitmap.all_shapes_bitmap(filter.shape_bitmap)
-    ShapeBitmap.to_handles(filter.shape_bitmap, bitmap)
-  end
-
-  defp shape_ids_for_table(%Filter{} = filter, table_name) do
-    bitmap = shape_ids_for_table_bitmap(filter, table_name)
     ShapeBitmap.to_handles(filter.shape_bitmap, bitmap)
   end
 
