@@ -76,7 +76,7 @@ defmodule Electric.Shapes.FilterPropertyTest do
         filter =
           shapes
           |> Enum.with_index()
-          |> Enum.reduce(Filter.new(), fn {{{table, where}, idx}, acc} ->
+          |> Enum.reduce(Filter.new(), fn {{table, where}, idx}, acc ->
             shape_id = "shape_#{idx}"
 
             case Shape.new(table, where: where, inspector: @inspector) do
@@ -126,7 +126,7 @@ defmodule Electric.Shapes.FilterPropertyTest do
         initial_filter =
           initial_shapes
           |> Enum.with_index()
-          |> Enum.reduce(Filter.new(), fn {{{table, where}, idx}, acc} ->
+          |> Enum.reduce(Filter.new(), fn {{table, where}, idx}, acc ->
             shape_id = "shape_#{idx}"
 
             case Shape.new(table, where: where, inspector: @inspector) do
@@ -136,7 +136,7 @@ defmodule Electric.Shapes.FilterPropertyTest do
           end)
 
         # Apply operations
-        {filter, shape_ids} =
+        {filter, _shape_ids} =
           Enum.reduce(operations, {initial_filter, Enum.to_list(0..(length(initial_shapes) - 1))}, fn
             {:add, {table, where}}, {filt, ids} ->
               new_id = length(ids)

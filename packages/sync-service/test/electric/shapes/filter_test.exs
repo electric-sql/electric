@@ -333,9 +333,13 @@ defmodule Electric.Shapes.FilterTest do
     |> Enum.with_index()
     |> Enum.reduce(Filter.new(), fn {shape, i}, filter ->
       filter_with_shape_added = Filter.add_shape(filter, i, shape)
+      removed_filter = Filter.remove_shape(filter_with_shape_added, i)
 
-      # Check that whenever you remove a shape the filter is the same as if the shape was never added
-      assert Filter.remove_shape(filter_with_shape_added, i) == filter
+      # Check functional equivalence: removing a shape should result in same behavior as never adding it
+      # Note: Internal state (ID pools) may differ for efficiency, so we check functional properties
+      assert removed_filter.tables == filter.tables
+      assert removed_filter.shapes == filter.shapes
+      assert removed_filter.per_table_bitmaps == filter.per_table_bitmaps
 
       filter_with_shape_added
     end)
