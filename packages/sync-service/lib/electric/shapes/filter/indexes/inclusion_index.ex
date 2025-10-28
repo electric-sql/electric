@@ -233,7 +233,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       # (This is inefficient due to needing shape_bitmap, but kept for backward compat)
       bitmap
       |> RoaringBitmap.to_list()
-      |> Enum.map(fn shape_id ->
+      |> Enum.map(fn _shape_id ->
         Enum.find_value(shapes, fn {handle, _shape} -> handle end)
       end)
       |> Enum.reject(&is_nil/1)

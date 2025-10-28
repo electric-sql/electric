@@ -101,7 +101,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
           # Fast path: direct bitmap → shape handles conversion
           bitmap
           |> RoaringBitmap.to_list()
-          |> Enum.map(fn shape_id ->
+          |> Enum.map(fn _shape_id ->
             # This is a bit inefficient - ideally we'd have the shape_bitmap here
             # but keeping this for backward compat with the old API
             Enum.find_value(shapes, fn {handle, _shape} ->
