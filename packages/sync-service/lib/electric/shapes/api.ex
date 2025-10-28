@@ -36,8 +36,7 @@ defmodule Electric.Shapes.Api do
     stack_ready_timeout: [type: :integer],
     stale_age: [type: :integer],
     send_cache_headers?: [type: :boolean],
-    encoder: [type: :atom],
-    max_concurrent_requests: [type: :integer]
+    encoder: [type: :atom]
   ]
   @schema NimbleOptions.new!(@options)
   @option_keys Keyword.keys(@options) |> MapSet.new()
@@ -55,7 +54,6 @@ defmodule Electric.Shapes.Api do
     :stack_id,
     :storage,
     :feature_flags,
-    :max_concurrent_requests,
     allow_shape_deletion: false,
     keepalive_interval: 21_000,
     long_poll_timeout: 20_000,
@@ -387,7 +385,7 @@ defmodule Electric.Shapes.Api do
 
       {:error, message} ->
         Logger.warning("Stack not ready after #{opts[:timeout]}ms. Reason: #{message}")
-        {:error, Response.error(api, message, status: 503, retry_after: 5)}
+        {:error, Response.error(api, message, status: 503)}
     end
   end
 
@@ -665,7 +663,7 @@ defmodule Electric.Shapes.Api do
       {:error, %SnapshotError{type: :missing_privilege} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
         message = "Unable to create initial snapshot: " <> error.message
-        Response.error(request, message, status: 503, known_error: true, retry_after: 10)
+        Response.error(request, message, status: 503, known_error: true)
 
       {:error, %SnapshotError{type: :publication_missing_generated_columns} = error} ->
         Response.error(request, error.message, status: 400, known_error: true)
@@ -679,7 +677,7 @@ defmodule Electric.Shapes.Api do
           message = "Unexpected error while creating snapshot: " <> error.message
           Response.error(request, message, status: 500)
         else
-          Response.error(request, error.message, status: 503, known_error: true, retry_after: 10)
+          Response.error(request, error.message, status: 503, known_error: true)
         end
 
       {:error, error} ->
@@ -790,7 +788,7 @@ defmodule Electric.Shapes.Api do
 
           _ ->
             message = Electric.StatusMonitor.timeout_message(api.stack_id)
-            Response.error(request, message, status: 503, retry_after: 10)
+            Response.error(request, message, status: 503)
         end
     end
   end
