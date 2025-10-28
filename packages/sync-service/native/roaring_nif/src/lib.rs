@@ -7,12 +7,11 @@ pub struct BitmapResource {
     bitmap: RwLock<RoaringBitmap>,
 }
 
-// Initialize the NIF
-fn load(env: Env, _: Term) -> bool {
-    rustler::resource!(BitmapResource, env)
-}
-
-rustler::init!("Elixir.Electric.Shapes.RoaringBitmap", load = load);
+// Initialize the NIF with inline resource registration to avoid non-local impl warning
+rustler::init!(
+    "Elixir.Electric.Shapes.RoaringBitmap",
+    load = |env, _| { rustler::resource!(BitmapResource, env) }
+);
 
 // Create a new empty bitmap
 #[rustler::nif]
