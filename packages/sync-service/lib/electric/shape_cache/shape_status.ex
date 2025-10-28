@@ -408,14 +408,28 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp create_last_used_table(stack_ref) do
     last_used_table = shape_last_used_table(stack_ref)
 
-    :ets.new(last_used_table, [:named_table, :public, :ordered_set, read_concurrency: true, write_concurrency: true])
+    :ets.new(last_used_table, [
+      :named_table,
+      :public,
+      :ordered_set,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+
     last_used_table
   end
 
   defp create_meta_table(stack_ref) do
     meta_table = shape_meta_table(stack_ref)
 
-    :ets.new(meta_table, [:named_table, :public, :ordered_set, read_concurrency: true, write_concurrency: true])
+    :ets.new(meta_table, [
+      :named_table,
+      :public,
+      :ordered_set,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+
     meta_table
   end
 

@@ -104,7 +104,12 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     # Name needs to be an atom but we don't want to dynamically create atoms.
     # Instead, we will use the reference to the table that is returned by `:ets.new`
     pg_inspector_table =
-      :ets.new(opts.pg_inspector_table, [:named_table, :protected, :ordered_set, read_concurrency: true])
+      :ets.new(opts.pg_inspector_table, [
+        :named_table,
+        :protected,
+        :ordered_set,
+        read_concurrency: true
+      ])
 
     persistence_key = "#{opts.stack_id}:ets_inspector_state"
 
