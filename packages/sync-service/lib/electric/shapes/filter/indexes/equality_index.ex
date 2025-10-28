@@ -55,9 +55,18 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
             {:condition, condition} ->
               {:condition, WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)}
 
-            {:bitmap, _bitmap} ->
+            {:bitmap, bitmap} ->
               # We had simple predicates, now adding complex one - keep both
-              condition = WhereCondition.new()
+              # First, convert all existing bitmap shapes to the condition (as simple predicates)
+              condition =
+                bitmap
+                |> RoaringBitmap.to_list()
+                |> Enum.reduce(WhereCondition.new(), fn existing_shape_int_id, acc ->
+                  existing_shape_id = ShapeBitmap.get_handle!(shape_bitmap, existing_shape_int_id)
+                  WhereCondition.add_shape(acc, existing_shape_id, nil, shape_bitmap)
+                end)
+
+              # Now add the new complex shape
               {:condition, WhereCondition.add_shape(condition, shape_id, and_where, shape_bitmap)}
           end)
         end

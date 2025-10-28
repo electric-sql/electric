@@ -116,9 +116,20 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
         condition =
           case existing do
-            {:condition, c} -> c
-            nil -> WhereCondition.new()
-            _ -> WhereCondition.new()
+            {:condition, c} ->
+              c
+
+            nil ->
+              WhereCondition.new()
+
+            {:bitmap, bitmap} ->
+              # Convert existing bitmap shapes to condition first
+              bitmap
+              |> RoaringBitmap.to_list()
+              |> Enum.reduce(WhereCondition.new(), fn existing_shape_int_id, acc ->
+                existing_shape_id = ShapeBitmap.get_handle!(shape_info.shape_bitmap, existing_shape_int_id)
+                WhereCondition.add_shape(acc, existing_shape_id, nil, shape_info.shape_bitmap)
+              end)
           end
 
         Map.put(
