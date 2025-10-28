@@ -28,39 +28,17 @@ export interface BackoffOptions {
   initialDelay: number
   /**
    * Maximum retry delay in milliseconds
-   * After reaching this, delay stays constant (e.g., retry every 60s)
    */
   maxDelay: number
   multiplier: number
   onFailedAttempt?: () => void
   debug?: boolean
-  /**
-   * Maximum number of retry attempts before giving up.
-   * Set to Infinity (default) for indefinite retries - needed for offline scenarios
-   * where clients may go offline and come back later.
-   *
-   * The retry budget provides protection against retry storms even with infinite retries.
-   */
-  maxRetries?: number
-  /**
-   * Percentage of requests that can be retries (0.1 = 10%)
-   *
-   * This is the primary load shedding mechanism. It limits the *rate* of retries,
-   * not the total count. Even with infinite retries, at most 10% of your traffic
-   * will be retries, preventing retry storms from amplifying server load.
-   *
-   * The budget resets every 60 seconds, so a temporary spike of errors won't
-   * permanently exhaust the budget.
-   */
-  retryBudgetPercent?: number
 }
 
 export const BackoffDefaults = {
   initialDelay: 100,
-  maxDelay: 60_000, // Cap at 60s - reasonable for long-lived connections
+  maxDelay: 10_000,
   multiplier: 1.3,
-  maxRetries: Infinity, // Retry forever - clients may go offline and come back
-  retryBudgetPercent: 0.1, // 10% retry budget prevents amplification
 }
 
 export function createFetchWithBackoff(
@@ -73,38 +51,7 @@ export function createFetchWithBackoff(
     multiplier,
     debug = false,
     onFailedAttempt,
-    maxRetries = Infinity,
-    retryBudgetPercent = 0.1,
   } = backoffOptions
-
-  // Retry budget tracking (closure-scoped)
-  // Resets every minute to prevent retry storms
-  let totalRequests = 0
-  let totalRetries = 0
-  let budgetResetTime = Date.now() + 60_000
-
-  function checkRetryBudget(percent: number): boolean {
-    const now = Date.now()
-    if (now > budgetResetTime) {
-      totalRequests = 0
-      totalRetries = 0
-      budgetResetTime = now + 60_000
-    }
-
-    totalRequests++
-
-    // Allow retries for first 10 requests to avoid cold start issues
-    if (totalRequests < 10) return true
-
-    const currentRetryRate = totalRetries / totalRequests
-    const hasCapacity = currentRetryRate < percent
-
-    if (hasCapacity) {
-      totalRetries++
-    }
-
-    return hasCapacity
-  }
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
     const options = args[1]
@@ -115,11 +62,7 @@ export function createFetchWithBackoff(
     while (true) {
       try {
         const result = await fetchClient(...args)
-        if (result.ok) {
-          // Reset backoff on successful request
-          delay = initialDelay
-          return result
-        }
+        if (result.ok) return result
 
         const err = await FetchError.fromResponse(result, url.toString())
 
@@ -137,77 +80,17 @@ export function createFetchWithBackoff(
           // Any client errors cannot be backed off on, leave it to the caller to handle.
           throw e
         } else {
-          // Check retry budget and max retries
-          attempt++
-          if (attempt >= maxRetries) {
-            if (debug) {
-              console.log(
-                `Max retries reached (${attempt}/${maxRetries}), giving up`
-              )
-            }
-            throw e
-          }
+          // Exponentially backoff on errors.
+          // Wait for the current delay duration
+          await new Promise((resolve) => setTimeout(resolve, delay))
 
-          // Check retry budget - this is our primary load shedding mechanism
-          // It limits the *rate* of retries (10% of traffic) not the count
-          // This prevents retry storms even with infinite retries
-          if (!checkRetryBudget(retryBudgetPercent)) {
-            if (debug) {
-              console.log(
-                `Retry budget exhausted (attempt ${attempt}), backing off`
-              )
-            }
-            // Wait for maxDelay before checking budget again
-            // This prevents tight retry loops when budget is exhausted
-            await new Promise((resolve) => setTimeout(resolve, maxDelay))
-            // Don't throw - continue retrying after the wait
-            // This allows offline clients to eventually reconnect
-            continue
-          }
-
-          // Calculate wait time honoring server-driven backoff as a floor
-          // Precedence: max(serverMinimum, min(clientMaxDelay, backoffWithJitter))
-
-          // 1. Parse server-provided Retry-After (if present)
-          let serverMinimumMs = 0
-          if (e instanceof FetchError && e.headers) {
-            const retryAfter = e.headers[`retry-after`]
-            if (retryAfter) {
-              const retryAfterSec = Number(retryAfter)
-              if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
-                // Retry-After in seconds
-                serverMinimumMs = retryAfterSec * 1000
-              } else {
-                // Retry-After as HTTP date
-                const retryDate = Date.parse(retryAfter)
-                if (!isNaN(retryDate)) {
-                  // Handle clock skew: clamp to non-negative, cap at reasonable max
-                  const deltaMs = retryDate - Date.now()
-                  serverMinimumMs = Math.max(0, Math.min(deltaMs, 3600_000)) // Cap at 1 hour
-                }
-              }
-            }
-          }
-
-          // 2. Calculate client backoff with full jitter
-          const jitter = Math.random() * delay
-          const clientBackoffMs = Math.min(jitter, maxDelay)
-
-          // 3. Server minimum is the floor, client cap is the ceiling
-          const waitMs = Math.max(serverMinimumMs, clientBackoffMs)
+          // Increase the delay for the next attempt
+          delay = Math.min(delay * multiplier, maxDelay)
 
           if (debug) {
-            const source = serverMinimumMs > 0 ? `server+client` : `client`
-            console.log(
-              `Retry attempt #${attempt} after ${waitMs}ms (${source}, serverMin=${serverMinimumMs}ms, clientBackoff=${clientBackoffMs}ms)`
-            )
+            attempt++
+            console.log(`Retry attempt #${attempt} after ${delay}ms`)
           }
-
-          // Wait for the calculated duration
-          await new Promise((resolve) => setTimeout(resolve, waitMs))
-
-          // Increase the delay for the next attempt (capped at maxDelay)
-          delay = Math.min(delay * multiplier, maxDelay)
         }
       }
     }

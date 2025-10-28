@@ -61,10 +61,6 @@ defmodule Electric.StackSupervisor do
                    keys: Electric.connection_opts_schema()
                  ],
                  max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
-                 max_concurrent_requests: [
-                   type: :pos_integer,
-                   default: Electric.Config.default(:max_concurrent_requests)
-                 ],
                  replication_opts: [
                    type: :keyword_list,
                    required: true,
@@ -248,9 +244,7 @@ defmodule Electric.StackSupervisor do
       inspector: shared_inspector_opts(opts),
       stack_id: stack_id,
       persistent_kv: persistent_kv,
-      feature_flags: Map.get(opts, :feature_flags, []),
-      max_concurrent_requests:
-        Map.get(opts, :max_concurrent_requests, Electric.Config.default(:max_concurrent_requests))
+      feature_flags: Map.get(opts, :feature_flags, [])
     ]
   end
 
