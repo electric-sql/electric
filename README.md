@@ -119,6 +119,23 @@ You'll probably need to fiddle with your bash/zsh/etc rc file to load the right 
 
 Electric has comprehensive test suites for both Elixir and TypeScript components.
 
+#### Prerequisites
+
+First, start the test Postgres database:
+
+```sh
+cd packages/sync-service
+mix start_dev
+```
+
+This starts a Docker Compose setup with Postgres configured for logical replication on port 54321.
+
+To stop the database:
+
+```sh
+mix stop_dev
+```
+
 #### Elixir Tests
 
 **Sync Service:**
@@ -163,11 +180,6 @@ For coverage:
 ```sh
 pnpm coverage
 ```
-
-#### Prerequisites for Tests
-
-- Postgres database with logical replication enabled (some tests require it)
-- All dependencies installed via `asdf install` and `pnpm install`
 
 ## Contributing
 
