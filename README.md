@@ -121,7 +121,14 @@ Electric has comprehensive test suites for both Elixir and TypeScript components
 
 #### Prerequisites
 
-First, start the test Postgres database:
+Install dependencies (if not already done):
+
+```sh
+asdf install
+pnpm install
+```
+
+Then start the test Postgres database:
 
 ```sh
 cd packages/sync-service
