@@ -2032,6 +2032,132 @@ defmodule Electric.Plug.RouterTest do
     end
   end
 
+  describe "/v1/shapes - admission control" do
+    setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
+
+    setup :with_complete_stack
+
+    setup(ctx) do
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
+
+      # Build router opts with low max_concurrent limit for testing
+      router_opts =
+        ctx
+        |> build_router_opts()
+        |> Keyword.update!(:api, fn api ->
+          %{api | max_concurrent_requests: 2}
+        end)
+
+      %{opts: Router.init(router_opts)}
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "rejects requests when at capacity with 503", %{opts: opts, db_conn: db_conn} do
+      # Get initial snapshot to create the shape
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      offset = get_resp_last_offset(conn)
+
+      # Start 2 live requests (which will hold permits)
+      task1 =
+        Task.async(fn ->
+          conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{shape_handle}&live")
+          |> Router.call(opts)
+        end)
+
+      task2 =
+        Task.async(fn ->
+          conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{shape_handle}&live")
+          |> Router.call(opts)
+        end)
+
+      # Give the live requests time to acquire permits
+      Process.sleep(100)
+
+      # Third request should be rejected with 503
+      conn3 =
+        conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{shape_handle}&live")
+        |> Router.call(opts)
+
+      assert %{status: 503} = conn3
+
+      assert Jason.decode!(conn3.resp_body) == %{
+               "code" => "overloaded",
+               "message" => "Server is currently overloaded, please retry"
+             }
+
+      # Should have Retry-After header
+      assert [retry_after] = Plug.Conn.get_resp_header(conn3, "retry-after")
+      assert String.to_integer(retry_after) >= 5
+      assert String.to_integer(retry_after) <= 10
+
+      # Complete the live requests by inserting data
+      Postgrex.query!(db_conn, "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')", [])
+
+      # Live requests should complete successfully
+      assert %{status: 200} = Task.await(task1)
+      assert %{status: 200} = Task.await(task2)
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "tracks initial and existing requests separately", %{
+      opts: opts,
+      db_conn: db_conn,
+      stack_id: stack_id
+    } do
+      # Get initial snapshot to create the shape
+      req = make_shape_req("items")
+      assert {req, 200, _} = shape_req(req, opts)
+
+      # Verify no permits are held initially
+      assert %{initial: 0, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
+
+      # Start 2 live requests with existing offsets (these will wait for data, holding permits)
+      task_existing1 = live_shape_req(req, opts)
+      task_existing2 = live_shape_req(req, opts)
+
+      # Give the live requests time to acquire permits
+      Process.sleep(300)
+
+      # Verify 2 existing permits are held
+      assert %{initial: 0, existing: 2} = Electric.AdmissionControl.get_current(stack_id)
+
+      # Third existing request should be rejected (limit is 2)
+      {_, status_existing, _} = shape_req(req, opts)
+      assert status_existing == 503
+
+      # But initial requests should still work since they're tracked separately
+      # Use non-live requests which complete quickly
+      conn_initial1 =
+        conn("GET", "/v1/shape?table=items&offset=-1&where=value='test'") |> Router.call(opts)
+
+      assert %{status: 200} = conn_initial1
+
+      conn_initial2 =
+        conn("GET", "/v1/shape?table=items&offset=-1&where=value='other'") |> Router.call(opts)
+
+      assert %{status: 200} = conn_initial2
+
+      # After they complete, permits should still be 0 for initial (released) and 2 for existing (still held)
+      assert %{initial: 0, existing: 2} = Electric.AdmissionControl.get_current(stack_id)
+
+      # Insert data to complete the existing live requests
+      Postgrex.query!(db_conn, "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')", [])
+
+      # Wait for live requests to complete
+      assert {_, 200, _} = Task.await(task_existing1)
+      assert {_, 200, _} = Task.await(task_existing2)
+
+      # After completion, all permits should be released
+      assert %{initial: 0, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
+    end
+  end
+
   describe "/v1/shapes - subqueries" do
     setup [:with_unique_db, :with_basic_tables, :with_sql_execute]
 
