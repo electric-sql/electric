@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.2.2
+
+### Patch Changes
+
+- 5d71990: fix: revert load shedding
+
 ## 1.2.1
 
 ### Patch Changes
