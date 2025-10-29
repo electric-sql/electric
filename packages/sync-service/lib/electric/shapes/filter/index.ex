@@ -11,16 +11,33 @@ defmodule Electric.Shapes.Filter.Index do
   def new("@>", type), do: Indexes.InclusionIndex.new(type)
 
   defdelegate empty?(index), to: Protocol
-  defdelegate add_shape(index, value, shape_id, and_where), to: Protocol
-  defdelegate remove_shape(index, value, shape_id, and_where), to: Protocol
+  defdelegate add_shape(index, value, shape_id, and_where, shape_bitmap), to: Protocol
+  defdelegate remove_shape(index, value, shape_id, and_where, shape_bitmap), to: Protocol
   defdelegate affected_shapes(index, field, record, shapes), to: Protocol
+  defdelegate affected_shapes_bitmap(index, field, record, shapes, shape_bitmap), to: Protocol
   defdelegate all_shape_ids(index), to: Protocol
+  defdelegate all_shapes_bitmap(index, shape_bitmap), to: Protocol
 end
 
 defprotocol Electric.Shapes.Filter.Index.Protocol do
+  @doc "Returns true if the index is empty"
   def empty?(index)
-  def add_shape(index, value, shape_id, and_where)
-  def remove_shape(index, value, shape_id, and_where)
+
+  @doc "Adds a shape to the index"
+  def add_shape(index, value, shape_id, and_where, shape_bitmap)
+
+  @doc "Removes a shape from the index"
+  def remove_shape(index, value, shape_id, and_where, shape_bitmap)
+
+  @doc "Returns a MapSet of shape IDs affected by the record (legacy)"
   def affected_shapes(index, field, record, shapes)
+
+  @doc "Returns a RoaringBitmap of shape IDs affected by the record (optimized)"
+  def affected_shapes_bitmap(index, field, record, shapes, shape_bitmap)
+
+  @doc "Returns a MapSet of all shape IDs in the index (legacy)"
   def all_shape_ids(index)
+
+  @doc "Returns a RoaringBitmap of all shape IDs in the index (optimized)"
+  def all_shapes_bitmap(index, shape_bitmap)
 end

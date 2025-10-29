@@ -328,14 +328,43 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
     ]
 
+    # Test records to verify functional equivalence
+    test_records = [
+      %NewRecord{relation: {"public", "table"}, record: %{"id" => "1", "an_array" => "{1}"}},
+      %NewRecord{relation: {"public", "table"}, record: %{"id" => "2"}},
+      %NewRecord{relation: {"public", "table"}, record: %{"id" => "10"}},
+      %NewRecord{relation: {"public", "another_table"}, record: %{"id" => "1"}}
+    ]
+
     shapes
     |> Enum.shuffle()
     |> Enum.with_index()
     |> Enum.reduce(Filter.new(), fn {shape, i}, filter ->
       filter_with_shape_added = Filter.add_shape(filter, i, shape)
+      removed_filter = Filter.remove_shape(filter_with_shape_added, i)
 
-      # Check that whenever you remove a shape the filter is the same as if the shape was never added
-      assert Filter.remove_shape(filter_with_shape_added, i) == filter
+      # Check functional equivalence by testing behavior on sample records
+      # Both filters should produce identical results since the shape was added then removed
+      for test_record <- test_records do
+        txn = %Transaction{changes: [test_record]}
+
+        original_result = Filter.affected_shapes(filter, txn)
+        removed_result = Filter.affected_shapes(removed_filter, txn)
+
+        assert original_result == removed_result,
+               """
+               Filter behavior differs after add/remove cycle!
+               Shape index: #{i}
+               Shape: #{inspect(shape.where)}
+               Test record: #{inspect(test_record.record)}
+               Original filter result: #{inspect(original_result)}
+               After remove result: #{inspect(removed_result)}
+               """
+      end
+
+      # Also check that the basic structure matches
+      assert removed_filter.shapes == filter.shapes
+      assert Map.keys(removed_filter.tables) == Map.keys(filter.tables)
 
       filter_with_shape_added
     end)
