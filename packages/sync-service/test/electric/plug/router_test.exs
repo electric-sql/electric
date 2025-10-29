@@ -2045,7 +2045,7 @@ defmodule Electric.Plug.RouterTest do
         ctx
         |> build_router_opts()
         |> Keyword.update!(:api, fn api ->
-          %{api | max_concurrent_requests: 2}
+          %{api | max_concurrent_requests: %{initial: 2, existing: 2}}
         end)
 
       %{opts: Router.init(router_opts)}

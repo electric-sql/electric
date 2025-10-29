@@ -37,7 +37,13 @@ defmodule Electric.Shapes.Api do
     stale_age: [type: :integer],
     send_cache_headers?: [type: :boolean],
     encoder: [type: :atom],
-    max_concurrent_requests: [type: :integer]
+    max_concurrent_requests: [
+      type: :map,
+      keys: [
+        initial: [type: :integer, required: true],
+        existing: [type: :integer, required: true]
+      ]
+    ]
   ]
   @schema NimbleOptions.new!(@options)
   @option_keys Keyword.keys(@options) |> MapSet.new()

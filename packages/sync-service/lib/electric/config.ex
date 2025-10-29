@@ -67,7 +67,7 @@ defmodule Electric.Config do
     send_cache_headers?: true,
     max_shapes: nil,
     # This value should be tuned for the hardware it's running on.
-    max_concurrent_requests: 1000,
+    max_concurrent_requests: %{initial: 300, existing: 1000},
     ## Storage
     storage_dir: "./persistent",
     storage: &Electric.Config.Defaults.storage/0,

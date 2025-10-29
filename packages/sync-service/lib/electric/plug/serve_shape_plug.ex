@@ -5,7 +5,6 @@ defmodule Electric.Plug.ServeShapePlug do
   # The halt/1 function is redefined further down below
   import Plug.Conn, except: [halt: 1]
 
-  alias Electric.Replication.LogOffset
   alias Electric.Utils
   alias Electric.Shapes.Api
   alias Electric.Telemetry.OpenTelemetry
@@ -60,12 +59,13 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
-    max_concurrent = config[:api].max_concurrent_requests
 
     kind =
-      if conn.assigns.request.params.offset == LogOffset.before_all(),
+      if conn.query_params["offset"] == "-1",
         do: :initial,
         else: :existing
+
+    max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
 
     case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
       :ok ->
@@ -244,8 +244,10 @@ defmodule Electric.Plug.ServeShapePlug do
 
     error_str = Exception.format(:error, exception)
 
+    conn = fetch_query_params(conn)
+    ensure_admission_control_release(conn)
+
     conn
-    |> fetch_query_params()
     |> assign(:error_str, error_str)
     |> put_resp_header("retry-after", "10")
     |> put_resp_header("cache-control", "no-store")
@@ -261,13 +263,26 @@ defmodule Electric.Plug.ServeShapePlug do
 
     error_str = Exception.format(error.kind, error.reason)
 
+    conn = fetch_query_params(conn)
+    ensure_admission_control_release(conn)
+
     conn
-    |> fetch_query_params()
     |> assign(:error_str, error_str)
     |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
 
     # No end_telemetry_span() call here because by this point that stack of plugs has been
     # unwound to the point where the `conn` struct did not yet have any span-related properties
     # assigned to it.
+  end
+
+  defp ensure_admission_control_release(conn) do
+    stack_id = get_in(conn.assigns, [:config, :stack_id])
+
+    kind =
+      if conn.query_params["offset"] == "-1",
+        do: :initial,
+        else: :existing
+
+    Electric.AdmissionControl.release(stack_id, kind)
   end
 end

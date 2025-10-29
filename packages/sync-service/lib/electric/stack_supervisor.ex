@@ -62,7 +62,11 @@ defmodule Electric.StackSupervisor do
                  ],
                  max_shapes: [type: {:or, [:non_neg_integer, nil]}, default: nil],
                  max_concurrent_requests: [
-                   type: :pos_integer,
+                   type: :map,
+                   keys: [
+                     initial: [type: :integer, required: true],
+                     existing: [type: :integer, required: true]
+                   ],
                    default: Electric.Config.default(:max_concurrent_requests)
                  ],
                  replication_opts: [

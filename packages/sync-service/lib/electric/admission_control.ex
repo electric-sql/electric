@@ -3,14 +3,14 @@ defmodule Electric.AdmissionControl do
   Simple admission control using ETS-based counters to limit concurrent requests per stack.
 
   This module prevents server overload by:
-  - Limiting the number of concurrent requests per stack
+  - Limiting the number of concurrent requests per type of request (initial or existing) within a stack
   - Failing fast with 503 + Retry-After when at capacity
   - Using cheap ETS operations for minimal overhead
 
   ## Usage
 
       # Try to acquire a permit for a stack
-      case Electric.AdmissionControl.try_acquire(stack_id, max_concurrent: 1000) do
+      case Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 1000) do
         :ok ->
           # Request is allowed, process it
           # Don't forget to call release/1 when done!
@@ -20,13 +20,13 @@ defmodule Electric.AdmissionControl do
       end
 
       # Always release the permit when done
-      Electric.AdmissionControl.release(stack_id)
+      Electric.AdmissionControl.release(stack_id, :initial)
 
   ## Configuration
 
   The max_concurrent limit can be configured in your config files:
 
-      config :electric, :max_concurrent_requests, 1000
+      config :electric, :max_concurrent_requests, %{initial: 300, existing: 1000}
 
   """
 
@@ -79,6 +79,7 @@ defmodule Electric.AdmissionControl do
     max_concurrent =
       Keyword.get_lazy(opts, :max_concurrent, fn ->
         Electric.Config.get_env(:max_concurrent_requests)
+        |> Map.fetch!(kind)
       end)
 
     # Atomically increment counter

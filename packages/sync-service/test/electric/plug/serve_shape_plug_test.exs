@@ -74,7 +74,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         max_age: max_age(ctx),
         stale_age: stale_age(ctx),
         persistent_kv: ctx.persistent_kv,
-        max_concurrent_requests: 100
+        max_concurrent_requests: %{initial: 300, existing: 1000}
       )
 
     ServeShapePlug.call(conn, opts)
