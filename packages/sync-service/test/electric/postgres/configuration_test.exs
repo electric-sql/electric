@@ -294,55 +294,55 @@ defmodule Electric.Postgres.ConfigurationTest do
     end
   end
 
-  # describe "concurrent publication updates" do
-  #   @tag slow: true
-  #   @tag connection_opt_overrides: [pool_size: 10, queue_target: 1_000, queue_interval: 20_000]
-  #   test "should not cause deadlocks", %{
-  #     pool: conn,
-  #     publication_name: publication
-  #   } do
-  #     num_relations = 10
-  #     num_to_pick = div(num_relations, 3)
+  describe "concurrent publication updates" do
+    @tag slow: true
+    @tag connection_opt_overrides: [pool_size: 10, queue_target: 1_000, queue_interval: 20_000]
+    test "should not cause deadlocks", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      num_relations = 10
 
-  #     deadlock_oid_rels =
-  #       for i <- 1..num_relations do
-  #         table_name = "deadlock_table_#{i}"
+      deadlock_oid_rels =
+        for i <- 1..num_relations do
+          table_name = "deadlock_table_#{i}"
 
-  #         Postgrex.query!(
-  #           conn,
-  #           """
-  #           CREATE TABLE #{table_name} (
-  #             id UUID PRIMARY KEY,
-  #             value TEXT NOT NULL
-  #           )
-  #           """,
-  #           []
-  #         )
+          Postgrex.query!(
+            conn,
+            """
+            CREATE TABLE #{table_name} (
+              id UUID PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+            """,
+            []
+          )
 
-  #         table_oid = get_table_oid(conn, {"public", table_name})
-  #         {table_oid, {"public", table_name}}
-  #       end
-  #       |> MapSet.new()
+          table_oid = get_table_oid(conn, {"public", table_name})
+          {table_oid, {"public", table_name}}
+        end
+        |> MapSet.new()
 
-  #     tasks =
-  #       for _i <- 1..30 do
-  #         Task.async(fn ->
-  #           Configuration.configure_publication!(
-  #             conn,
-  #             publication,
-  #             Enum.take_random(deadlock_oid_rels, num_to_pick) |> MapSet.new()
-  #           )
-  #         end)
-  #       end
+      tasks =
+        for _i <- 1..1000 do
+          Task.async(fn ->
+            [oid_rel] = Enum.take_random(deadlock_oid_rels, 1)
 
-  #     error_results =
-  #       Task.await_many(tasks, 60_000)
-  #       |> Enum.flat_map(& &1)
-  #       |> Enum.filter(&match?({_, {:error, _}}, &1))
+            if Enum.random([true, false]) do
+              Configuration.configure_table_for_replication(conn, publication, oid_rel)
+            else
+              Configuration.drop_table_from_publication(conn, publication, oid_rel)
+            end
+          end)
+        end
 
-  #     assert error_results == []
-  #   end
-  # end
+      error_results =
+        Task.await_many(tasks, 60_000)
+        |> Enum.reject(&match?(:ok, &1))
+
+      assert error_results == []
+    end
+  end
 
   defp get_table_identity(conn, {schema, table}) do
     %{rows: [[ident]]} =
