@@ -385,7 +385,9 @@ defmodule Electric.Shapes.Api do
 
       {:error, %{message: message, error_code: error_code}} ->
         Logger.warning("Stack not ready after #{opts[:timeout]}ms. Reason: #{message}")
-        {:error, Response.error(api, message, status: 503, error_code: error_code, known_error: true)}
+
+        {:error,
+         Response.error(api, message, status: 503, error_code: error_code, known_error: true)}
     end
   end
 
@@ -790,7 +792,11 @@ defmodule Electric.Shapes.Api do
             %{message: message, error_code: error_code} =
               Electric.StatusMonitor.timeout_error(api.stack_id)
 
-            Response.error(request, message, status: 503, error_code: error_code, known_error: true)
+            Response.error(request, message,
+              status: 503,
+              error_code: error_code,
+              known_error: true
+            )
         end
     end
   end
