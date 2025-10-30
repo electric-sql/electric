@@ -10,12 +10,18 @@ interface UpToDateEntry {
  * On page refresh, if we find a recent timestamp (< 60s), we know we'll be replaying
  * cached responses. We suppress their up-to-date notifications until we see a NEW cursor
  * (different from the last recorded one), which indicates fresh data from the server.
+ *
+ * localStorage writes are throttled to once per 60 seconds to avoid performance issues
+ * with frequent updates. In-memory data is always kept current.
  */
 export class UpToDateTracker {
   private data: Record<string, UpToDateEntry> = {}
   private readonly storageKey = `electric_up_to_date_tracker`
   private readonly cacheTTL = 60_000 // 60s to match typical CDN s-maxage cache duration
   private readonly maxEntries = 250
+  private readonly writeThrottleMs = 60_000 // Throttle localStorage writes to once per 60s
+  private lastWriteTime = 0
+  private pendingSaveTimer?: ReturnType<typeof setTimeout>
 
   constructor() {
     this.load()
@@ -25,6 +31,7 @@ export class UpToDateTracker {
   /**
    * Records that a shape received an up-to-date message with a specific cursor.
    * This timestamp and cursor are used to detect cache replay scenarios.
+   * Updates in-memory immediately, but throttles localStorage writes.
    */
   recordUpToDate(shapeKey: string, cursor: string): void {
     this.data[shapeKey] = {
@@ -41,7 +48,31 @@ export class UpToDateTracker {
       delete this.data[oldest]
     }
 
-    this.save()
+    this.scheduleSave()
+  }
+
+  /**
+   * Schedules a throttled save to localStorage.
+   * Writes immediately if enough time has passed, otherwise schedules for later.
+   */
+  private scheduleSave(): void {
+    const now = Date.now()
+    const timeSinceLastWrite = now - this.lastWriteTime
+
+    if (timeSinceLastWrite >= this.writeThrottleMs) {
+      // Enough time has passed, write immediately
+      this.lastWriteTime = now
+      this.save()
+    } else if (!this.pendingSaveTimer) {
+      // Schedule a write for when the throttle period expires
+      const delay = this.writeThrottleMs - timeSinceLastWrite
+      this.pendingSaveTimer = setTimeout(() => {
+        this.lastWriteTime = Date.now()
+        this.pendingSaveTimer = undefined
+        this.save()
+      }, delay)
+    }
+    // else: a save is already scheduled, no need to do anything
   }
 
   /**
@@ -114,6 +145,10 @@ export class UpToDateTracker {
    */
   clear(): void {
     this.data = {}
+    if (this.pendingSaveTimer) {
+      clearTimeout(this.pendingSaveTimer)
+      this.pendingSaveTimer = undefined
+    }
     this.save()
   }
 }
