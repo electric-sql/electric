@@ -144,6 +144,21 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_receive {:filters, [{_, {"public", "items"}}]}
       assert_receive {:remove_shapes_for_relations, [{10, {"public", "another_table"}}]}
     end
+
+    @tag configuration_result_overrides: %{
+           {1, {"public", "items"}} => {:error, %RuntimeError{message: "some error"}}
+         }
+    test "should continue to fail with same error", %{opts: opts} do
+      shape = generate_shape({1, {"public", "items"}})
+
+      assert_raise RuntimeError, "some error", fn ->
+        PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      end
+
+      assert_raise RuntimeError, "some error", fn ->
+        PublicationManager.add_shape(@shape_handle_1, shape, opts)
+      end
+    end
   end
 
   describe "remove_shape/2" do
@@ -207,8 +222,27 @@ defmodule Electric.Replication.PublicationManagerTest do
   end
 
   describe "publication misconfiguration" do
+    setup do
+      test_pid = self()
+
+      # We don't have the Restarter process running in this test, or the enitre connection subsystem for that matter.
+      # So this mock is just to verfiy the correct function is called when publication manager encounters
+      # a fatal error.
+      Repatch.patch(
+        Electric.Connection.Restarter,
+        :restart_connection_subsystem,
+        [mode: :shared],
+        fn _ ->
+          send(test_pid, :connection_subsystem_restarted)
+          :ok
+        end
+      )
+
+      %{restart_ref: :connection_subsystem_restarted}
+    end
+
     @tag configuration_publication_status: :not_found
-    test "fails when publication is missing", %{opts: opts} do
+    test "fails when publication is missing", %{opts: opts, restart_ref: restart_ref} do
       shape = generate_shape({"public", "items"})
 
       assert_raise Electric.DbConfigurationError,
@@ -216,6 +250,9 @@ defmodule Electric.Replication.PublicationManagerTest do
                    fn ->
                      PublicationManager.add_shape(@shape_handle_1, shape, opts)
                    end
+
+      # should restart conn subsystem to set up publication correctly
+      assert_receive ^restart_ref
     end
 
     @tag configuration_publication_status: %{
@@ -223,7 +260,7 @@ defmodule Electric.Replication.PublicationManagerTest do
            can_alter_publication?: true,
            publishes_generated_columns?: false
          }
-    test "fails when not all columns are published", %{opts: opts} do
+    test "fails when not all columns are published", %{opts: opts, restart_ref: restart_ref} do
       shape = generate_shape({"public", "items"})
 
       assert_raise Electric.DbConfigurationError,
@@ -231,6 +268,9 @@ defmodule Electric.Replication.PublicationManagerTest do
                    fn ->
                      PublicationManager.add_shape(@shape_handle_1, shape, opts)
                    end
+
+      # should restart conn subsystem to set up publication correctly
+      assert_receive ^restart_ref
     end
 
     @tag configuration_publication_status: %{
@@ -239,7 +279,8 @@ defmodule Electric.Replication.PublicationManagerTest do
            publishes_generated_columns?: false
          }
     test "fails shapes that require generated columns when publication doesn't support them", %{
-      opts: opts
+      opts: opts,
+      restart_ref: restart_ref
     } do
       shape = generate_shape({"public", "items"})
 
@@ -251,6 +292,9 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_raise Electric.DbConfigurationError, ~r/does not publish generated columns/, fn ->
         PublicationManager.add_shape(@shape_handle_1, shape, opts)
       end
+
+      # should not restart conn subsystem
+      refute_receive ^restart_ref
     end
   end
 
@@ -332,7 +376,7 @@ defmodule Electric.Replication.PublicationManagerTest do
     test "publication configuration fails when DB is unreachable", %{opts: opts} do
       shape = generate_shape({"public", "items"})
 
-      assert_raise RuntimeError, "Database connection not available", fn ->
+      assert_raise DBConnection.ConnectionError, "Database connection not available", fn ->
         PublicationManager.add_shape(@shape_handle_1, shape, opts)
       end
 

@@ -133,27 +133,7 @@ defmodule Electric.Shapes.Consumer do
         normalized_latest_offset
       )
 
-    all_materializers_alive? =
-      Enum.all?(state.shape.shape_dependencies_handles, fn shape_handle ->
-        name = Materializer.name(state.stack_id, shape_handle)
-
-        with pid when is_pid(pid) <- GenServer.whereis(name),
-             true <- Process.alive?(pid) do
-          Process.monitor(pid,
-            tag: {:dependency_materializer_down, shape_handle}
-          )
-
-          Materializer.subscribe(state.stack_id, shape_handle)
-
-          true
-        else
-          _ -> false
-        end
-      end)
-
-    if all_materializers_alive? do
-      ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape, action)
-
+    if all_materializers_alive?(state) && subscribe(state, action) do
       Logger.debug("Writer for #{state.shape_handle} initialized")
 
       Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
@@ -165,10 +145,6 @@ defmodule Electric.Shapes.Consumer do
          pg_snapshot: pg_snapshot
        }), state.hibernate_after}
     else
-      Logger.warning(
-        "Materializers for dependencies of #{state.shape_handle} are not alive, invalidating shape"
-      )
-
       {:noreply, terminate_safely(state)}
     end
   end
@@ -614,6 +590,7 @@ defmodule Electric.Shapes.Consumer do
     } = state
 
     shape_status_mod.remove_shape(stack_id, shape_handle)
+    ShapeLogCollector.remove_shape(stack_id, shape_handle)
 
     :ok = Electric.Shapes.Monitor.notify_reader_termination(stack_id, shape_handle, reason)
 
@@ -726,6 +703,44 @@ defmodule Electric.Shapes.Consumer do
           %{state | txn_offset_mapping: Enum.reverse([{offset, new_boundary} | rest], tail)}
       end
     end
+  end
+
+  defp subscribe(state, action) do
+    case ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape, action) do
+      :ok ->
+        true
+
+      {:error, error} ->
+        Logger.warning(
+          "Shape #{state.shape_handle} cannot subscribe due to #{inspect(error)} - invalidating shape"
+        )
+
+        false
+    end
+  end
+
+  defp all_materializers_alive?(state) do
+    Enum.all?(state.shape.shape_dependencies_handles, fn shape_handle ->
+      name = Materializer.name(state.stack_id, shape_handle)
+
+      with pid when is_pid(pid) <- GenServer.whereis(name),
+           true <- Process.alive?(pid) do
+        Process.monitor(pid,
+          tag: {:dependency_materializer_down, shape_handle}
+        )
+
+        Materializer.subscribe(state.stack_id, shape_handle)
+
+        true
+      else
+        _ ->
+          Logger.warning(
+            "Materializer for #{shape_handle} is not alive, invalidating shape #{state.shape_handle}"
+          )
+
+          false
+      end
+    end)
   end
 
   if Mix.env() == :test do

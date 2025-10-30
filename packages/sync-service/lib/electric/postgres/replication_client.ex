@@ -19,7 +19,9 @@ defmodule Electric.Postgres.ReplicationClient do
   @type step ::
           :disconnected
           | :connected
+          | :identify_system
           | :query_pg_info
+          | :acquire_lock
           | :create_publication
           | :check_if_publication_exists
           | :drop_slot
@@ -37,6 +39,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :transaction_received,
       :relation_received,
       :publication_name,
+      :lock_acquired?,
       :try_creating_publication?,
       :recreate_slot?,
       :start_streaming?,
@@ -126,6 +129,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @repl_msg_primary_keepalive ?k
   @repl_msg_standby_status_update ?r
 
+  @default_connect_timeout 30_000
   @idle_check_interval Electric.Config.min_replication_idle_timeout()
 
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
@@ -138,6 +142,7 @@ defmodule Electric.Postgres.ReplicationClient do
     start_opts =
       [
         name: name(config.stack_id),
+        timeout: Access.get(opts, :timeout, @default_connect_timeout),
         auto_reconnect: false,
         sync_connect: false
       ] ++ Electric.Utils.deobfuscate_password(config.replication_opts[:connection_opts])
@@ -214,8 +219,18 @@ defmodule Electric.Postgres.ReplicationClient do
     {current_step, next_step, extra_info, return_val} =
       ConnectionSetup.process_query_result(result_list_or_error, state)
 
+    if current_step == :identify_system,
+      do: notify_system_identified(state, extra_info)
+
     if current_step == :query_pg_info,
       do: notify_pg_info_obtained(state, extra_info)
+
+    if current_step == :acquire_lock do
+      case extra_info do
+        :lock_acquired -> notify_lock_acquired(state)
+        {:lock_acquisition_failed, error} -> notify_lock_acquisition_error(state, error)
+      end
+    end
 
     if current_step == :create_slot and extra_info == :created_new_slot,
       do: notify_created_new_slot(state)
@@ -370,7 +385,7 @@ defmodule Electric.Postgres.ReplicationClient do
           "pg_txn.replication_client.relation_received",
           ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
           stack_id,
-          fn -> apply_with_retries({m, f, [rel | args]}) end
+          fn -> apply_with_retries({m, f, [rel | args]}, state) end
         )
 
         OpenTelemetry.start_interval("replication_client.await_more_data")
@@ -426,39 +441,26 @@ defmodule Electric.Postgres.ReplicationClient do
           fn ->
             OpenTelemetry.start_interval("replication_client.telemetry_span")
 
-            case apply_with_retries({m, f, [txn | args]}) do
-              :ok ->
-                OpenTelemetry.start_interval("replication_client.update_received_wal")
-                # We currently process incoming replication messages sequentially, persisting each
-                # new transaction into the shape log store. So, when the applied function
-                # returns, we can safely advance the replication slot past the transaction's commit
-                # LSN.
-                state =
-                  state
-                  |> update_received_wal(Electric.Postgres.Lsn.to_integer(txn.lsn))
+            apply_with_retries({m, f, [txn | args]}, state)
 
-                response = [encode_standby_status_update(state)]
+            OpenTelemetry.start_interval("replication_client.update_received_wal")
+            # We currently process incoming replication messages sequentially, persisting each
+            # new transaction into the shape log store. So, when the applied function
+            # returns, we can safely advance the replication slot past the transaction's commit
+            # LSN.
+            state =
+              state
+              |> update_received_wal(Electric.Postgres.Lsn.to_integer(txn.lsn))
 
-                OpenTelemetry.stop_and_save_intervals(
-                  total_attribute: :"shape_log_collector.transaction.total_duration_µs"
-                )
+            response = [encode_standby_status_update(state)]
 
-                OpenTelemetry.start_interval("replication_client.await_more_data")
+            OpenTelemetry.stop_and_save_intervals(
+              total_attribute: :"shape_log_collector.transaction.total_duration_µs"
+            )
 
-                {:noreply, response, state}
+            OpenTelemetry.start_interval("replication_client.await_more_data")
 
-              other ->
-                # TODO(alco): crash the connection process here?
-                # If we keep going and a subsequent transaction is processed successfully, Electric
-                # will acknowledge the later LSN to Postgres and so the next time it opens a
-                # replication connection, it will no longer receive the failed transaction.
-                Logger.error(
-                  "Unexpected result from calling #{inspect(m)}.#{f}(): #{inspect(other)}"
-                )
-
-                OpenTelemetry.start_interval("replication_client.await_more_data")
-                {:noreply, state}
-            end
+            {:noreply, response, state}
           end
         )
     end
@@ -479,26 +481,42 @@ defmodule Electric.Postgres.ReplicationClient do
     >>
   end
 
-  # Retry applying the given MFA for up to @max_retry_time milliseconds, used for
-  # processing transactions without crashing if the processor is down. The max retry
-  # time is only there to avoid a worst case scenario, as the processor being unable
-  # to process things for this long should lead to the replication client being killed.
-  @max_retry_time 10 * 60_000
-  defp apply_with_retries(mfa, time_remaining \\ @max_retry_time) do
+  # Retry applying the given MFA
+  # A retry may need to happen if the connection is available or the collector is not ready yet.
+  # In those instances we wait until the stack is ready and retry, and will go on retrying forever.
+  # We may also get a process down, and we retry here too but with a timeout since processes should
+  # be bought back up by the supervisor and if this carries on for longer than the timeout there may
+  # be a more serious issue.
+  @retry_time 10 * 60_000
+  @spin_prevention_delay 50
+  defp apply_with_retries(mfa, state, time_remaining \\ @retry_time) do
     start_time = System.monotonic_time(:millisecond)
     {m, f, args} = mfa
 
     try do
-      apply(m, f, args)
+      case apply(m, f, args) do
+        :ok ->
+          :ok
+
+        {:error, error} when error in [:not_ready, :connection_not_available] ->
+          Process.sleep(@spin_prevention_delay)
+
+          Electric.StatusMonitor.wait_until_active(state.stack_id,
+            timeout: :infinity,
+            block_on_conn_sleeping: true
+          )
+
+          apply_with_retries(mfa, state, @retry_time)
+      end
     catch
       _, _ when time_remaining > 0 ->
         receive do
           # on receiving an exit while holding processing, we should respect the exit
           {:EXIT, _from, reason} -> exit(reason)
         after
-          50 ->
+          @spin_prevention_delay ->
             time_remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
-            apply_with_retries(mfa, time_remaining)
+            apply_with_retries(mfa, state, time_remaining)
         end
     end
   end
@@ -530,8 +548,23 @@ defmodule Electric.Postgres.ReplicationClient do
     state
   end
 
+  defp notify_system_identified(%State{connection_manager: manager} = state, info) do
+    :ok = Electric.Connection.Manager.pg_system_identified(manager, info)
+    state
+  end
+
   defp notify_pg_info_obtained(%State{connection_manager: manager} = state, pg_info) do
     :ok = Electric.Connection.Manager.pg_info_obtained(manager, pg_info)
+    state
+  end
+
+  defp notify_lock_acquisition_error(%State{connection_manager: manager} = state, error) do
+    :ok = Electric.Connection.Manager.replication_client_lock_acquisition_failed(manager, error)
+    state
+  end
+
+  defp notify_lock_acquired(%State{connection_manager: manager} = state) do
+    :ok = Electric.Connection.Manager.replication_client_lock_acquired(manager)
     state
   end
 

@@ -19,7 +19,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Indexes.InclusionIndex
   alias Electric.Shapes.Filter.WhereCondition
-  require Logger
 
   empty_node = %{keys: []}
   @empty_node empty_node

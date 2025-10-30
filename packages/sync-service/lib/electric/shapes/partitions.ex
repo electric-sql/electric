@@ -41,29 +41,35 @@ defmodule Electric.Shapes.Partitions do
       {:ok, relation} ->
         children = List.wrap(Map.get(relation, :children, []))
 
-        state
-        |> Map.update!(:partitions, fn partitions ->
-          Enum.reduce(children, partitions, fn child, partitions ->
-            Map.put(partitions, child, [shape.root_table])
+        state =
+          state
+          |> Map.update!(:partitions, fn partitions ->
+            Enum.reduce(children, partitions, fn child, partitions ->
+              Map.put(partitions, child, [shape.root_table])
+            end)
           end)
-        end)
-        |> Map.update!(:partition_ownership, fn ownership ->
-          [shape.root_table | children]
-          |> Enum.reduce(ownership, fn relation, relation_ownership ->
-            Map.update(
-              relation_ownership,
-              relation,
-              MapSet.new([shape_id]),
-              &MapSet.put(&1, shape_id)
-            )
+          |> Map.update!(:partition_ownership, fn ownership ->
+            [shape.root_table | children]
+            |> Enum.reduce(ownership, fn relation, relation_ownership ->
+              Map.update(
+                relation_ownership,
+                relation,
+                MapSet.new([shape_id]),
+                &MapSet.put(&1, shape_id)
+              )
+            end)
           end)
-        end)
-        |> update_active()
+          |> update_active()
+
+        {:ok, state}
 
       :table_not_found ->
         # tables that don't exist will be caught later in the stack (hard to
         # run a snapshot against a non-existent table)
-        state
+        {:ok, state}
+
+      {:error, :connection_not_available} ->
+        {:error, :connection_not_available}
 
       {:error, reason} ->
         raise RuntimeError,
@@ -109,9 +115,10 @@ defmodule Electric.Shapes.Partitions do
   end
 
   @doc """
-  Utility function to update the partition map with the given relation.
+  Handle relation changes from the replication stream,
+  expanding changes to partitions into the partition root as appropriate.
   """
-  @spec handle_relation(t(), Relation.t()) :: t()
+  @spec handle_relation(t(), Relation.t()) :: {:ok, t()} | {:error, :connection_not_available}
   def handle_relation(%__MODULE__{} = state, %Relation{} = relation) do
     table = table(relation)
 
@@ -125,29 +132,29 @@ defmodule Electric.Shapes.Partitions do
           Inspector.clean(parent_id, state.inspector)
         end
 
-        state |> Map.update!(:partitions, &Map.put(&1, table, [parent])) |> update_active()
+        {:ok, state |> Map.update!(:partitions, &Map.put(&1, table, [parent])) |> update_active()}
 
       {:ok, _} ->
-        state
+        {:ok, state}
+
+      {:error, :connection_not_available} ->
+        {:error, :connection_not_available}
     end
   end
 
   @doc """
-  Handle events from the replication stream, updating the partition mapping or
-  expanding changes to partitions into the partition root as appropriate.
+  Handle transactions from the replication stream, updating the partition mapping as appropriate.
   """
-  @spec handle_event(t(), Transaction.t() | Relation.t()) :: {t(), Transaction.t() | Relation.t()}
-  def handle_event(%__MODULE__{} = state, %Relation{} = relation) do
-    {handle_relation(state, relation), relation}
-  end
 
   # no shapes on partitioned tables is probably the overwhelming majority of
   # cases, so let's shortcut to avoid churn
-  def handle_event(%__MODULE__{active: 0} = state, %Transaction{} = transaction) do
+  @spec handle_transaction(t(), Transaction.t() | Relation.t()) ::
+          {t(), Transaction.t() | Relation.t()}
+  def handle_transaction(%__MODULE__{active: 0} = state, %Transaction{} = transaction) do
     {state, transaction}
   end
 
-  def handle_event(%__MODULE__{} = state, %Transaction{changes: changes} = transaction) do
+  def handle_transaction(%__MODULE__{} = state, %Transaction{changes: changes} = transaction) do
     {state, %{transaction | changes: expand_changes(changes, state)}}
   end
 

@@ -3,7 +3,6 @@ defmodule Electric.Shapes do
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
-  require Logger
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
 
@@ -37,10 +36,10 @@ defmodule Electric.Shapes do
     shape_cache.get_shape(shape_def, opts)
   end
 
-  @spec get_shape_by_handle(Access.t(), shape_handle()) :: Shape.t() | nil
-  def get_shape_by_handle(config, shape_handle) do
+  @spec fetch_shape_by_handle(Access.t(), shape_handle()) :: Shape.t() | nil
+  def fetch_shape_by_handle(config, shape_handle) do
     {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-    shape_cache.get_shape_by_handle(shape_handle, opts)
+    shape_cache.fetch_shape_by_handle(shape_handle, opts)
   end
 
   @doc """

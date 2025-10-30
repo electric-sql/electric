@@ -167,6 +167,54 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with slot exceeded max size error (only on <PG18)" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :object_not_in_prerequisite_state,
+          message: "cannot read from logical replication slot \"electric_slot_integration\"",
+          detail: "This slot has been invalidated because it exceeded the maximum reserved size.",
+          severity: "ERROR",
+          pg_code: "55000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "Couldn't start replication: slot has been invalidated" <> _,
+               type: :database_slot_exceeded_max_size,
+               original_error: ^error,
+               retry_may_fix?: false,
+               drop_slot_and_restart?: true
+             } = DbConnectionError.from_error(error)
+    end
+
+    test "with slot invalidated and wal removed (max size exceeded >=PG18)" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :object_not_in_prerequisite_state,
+          message: "can no longer access replication slot \"electric_slot_integration\"",
+          detail: "This replication slot has been invalidated due to \"wal_removed\".",
+          severity: "ERROR",
+          pg_code: "55000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 "Couldn't start replication: slot has been invalidated with reason \"wal_removed\"." <>
+                   _,
+               type: :database_slot_invalidated,
+               original_error: ^error,
+               retry_may_fix?: false,
+               drop_slot_and_restart?: true
+             } = DbConnectionError.from_error(error)
+    end
+
     test "with server connection crashed error" do
       error = %Postgrex.Error{
         message: nil,

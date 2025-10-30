@@ -72,7 +72,7 @@ defmodule Electric.Shapes.FilterTest do
         |> Filter.add_shape("s2", Shape.new!("t1", where: "id = 2", inspector: @inspector))
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
         |> Filter.add_shape("s4", Shape.new!("t1", where: "id = 4", inspector: @inspector))
-        |> Filter.add_shape("s2", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("s5", Shape.new!("t2", where: "id = 2", inspector: @inspector))
 
       update =
         %Transaction{
@@ -237,6 +237,7 @@ defmodule Electric.Shapes.FilterTest do
           Stream.repeatedly(fn -> Enum.random(1..array_value_population) end)
           |> Enum.take(shape_array_size)
         end)
+        |> Stream.uniq_by(& &1)
         |> Enum.take(shape_count)
 
       where_clause = fn shape_array ->

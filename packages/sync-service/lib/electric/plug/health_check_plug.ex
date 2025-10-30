@@ -1,8 +1,8 @@
 defmodule Electric.Plug.HealthCheckPlug do
+  use Plug.Builder
+
   alias Plug.Conn
   alias Electric.StatusMonitor
-  require Logger
-  use Plug.Builder
 
   plug :fetch_query_params
   plug :check_service_status

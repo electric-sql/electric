@@ -1,7 +1,7 @@
-defmodule Electric.Debug.Process do
+defmodule Electric.Telemetry.Processes do
   @default_count 5
 
-  def type(pid), do: process_type(pid, info(pid))
+  def proc_type(pid), do: proc_type(pid, info(pid))
 
   def top_memory_by_type do
     top_memory_by_type(Process.list(), @default_count)
@@ -28,14 +28,14 @@ defmodule Electric.Debug.Process do
 
   defp type_and_memory(pid) do
     info = info(pid)
-    %{type: process_type(pid, info), memory: memory_from_info(info)}
+    %{type: proc_type(pid, info), memory: memory_from_info(info)}
   end
 
   defp info(pid) do
     Process.info(pid, [:dictionary, :initial_call, :label, :memory])
   end
 
-  defp process_type(pid, info) do
+  defp proc_type(pid, info) do
     label_from_info(info) ||
       initial_module_from_info(info) ||
       if(Process.alive?(pid), do: :unknown, else: :dead)

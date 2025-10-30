@@ -23,14 +23,13 @@
 [invoke setup_electric_shell_with_tenant "electric_1" "3000"]
 
 [shell electric_1]
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
-  ??[info] Lock acquired from postgres with name electric_slot_integration
-
   # Set the failure match pattern such that we can prove that replication does not start since
   # it's blocked by the pending transaction.
   -Starting replication from postgres|$fail_pattern
 
   ??[debug] Starting replication client for stack single_stack
+  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[info] Lock acquired from postgres with name electric_slot_integration
   ??[debug] ReplicationClient step: create_slot
 
 ## Verify that Electric's health check can report that the service is starting

@@ -10,6 +10,8 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
   import Electric.Replication.LogOffset, only: :macros
 
+  import File, only: [open!: 2, open!: 3, open: 3]
+
   # bytes
   @full_record_width 64
   @half_record_width 32
@@ -66,7 +68,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
   end
 
   defp read_complete_chunk(path, n) do
-    File.open!(path, [:read, :raw], fn file ->
+    open!(path, [:read, :raw], fn file ->
       {:ok,
        <<tx1::64, op1::64, start_pos::64, key_start_pos::64, tx2::64, op2::64, end_pos::64,
          key_end_pos::64>>} =
@@ -78,7 +80,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
   end
 
   defp read_incomplete_chunk(path, n) do
-    File.open!(path, [:read, :raw], fn file ->
+    open!(path, [:read, :raw], fn file ->
       {:ok, <<tx::64, op::64, start_pos::64, key_start_pos::64>>} =
         :file.pread(file, n * @full_record_width, @half_record_width)
 
@@ -104,7 +106,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
   def get_last_boundary(chunk_file_path, chunk_file_size)
       when rem(chunk_file_size, @full_record_width) == 0 do
-    File.open!(chunk_file_path, [:read, :raw], fn file ->
+    open!(chunk_file_path, [:read, :raw], fn file ->
       {:ok, <<_::64*4, tx::64, op::64, end_pos::64, key_file_end_pos::64>>} =
         :file.pread(file, chunk_file_size - @full_record_width, @full_record_width)
 
@@ -114,7 +116,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
   def get_last_boundary(chunk_file_path, chunk_file_size)
       when rem(chunk_file_size, @full_record_width) == @half_record_width do
-    File.open!(chunk_file_path, [:read, :raw], fn file ->
+    open!(chunk_file_path, [:read, :raw], fn file ->
       {:ok, <<tx::64, op::64, start_pos::64, key_file_start_pos::64>>} =
         :file.pread(file, chunk_file_size - @half_record_width, @half_record_width)
 
@@ -132,7 +134,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     full_chunks_to_read = min(n - incomplete_chunk, full_chunks)
     full_chunks_to_skip = full_chunks - full_chunks_to_read
 
-    File.open(chunk_file_path, [:read, :raw], fn file ->
+    open(chunk_file_path, [:read, :raw], fn file ->
       {:ok, [full_chunks_data, incomplete_chunk_data]} =
         :file.pread(
           file,
@@ -221,7 +223,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
       {:complete, ^last_persisted_offset, _, _} ->
         # We don't need to trim the chunk, but the search position must be from the start of this chunk
-        File.open!(chunk_file_path, [:read, :raw], fn file ->
+        open!(chunk_file_path, [:read, :raw], fn file ->
           {:ok, <<_::64*2, start_pos::64, key_start_pos::64, _::64*4>>} =
             :file.pread(file, file_size - @full_record_width, @full_record_width)
 
@@ -255,9 +257,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
   end
 
   defp fetch_chunk_with_positions(chunk_file_path, %LogOffset{} = exclusive_min_offset) do
-    file = File.open!(chunk_file_path, [:read, :raw])
-
-    try do
+    open(chunk_file_path, [:read, :raw], fn file ->
       {:ok, size} = :file.position(file, :eof)
 
       file_complete? = rem(size, @full_record_width) == 0
@@ -269,16 +269,25 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
         nil ->
           if file_complete?,
-            do: :error,
+            do: :not_found,
             else: read_last_partial_chunk(file, size)
       end
-    after
-      File.close(file)
+    end)
+    |> case do
+      {:ok, :not_found} ->
+        :error
+
+      {:ok, result} ->
+        result
+
+      {:error, :enoent} ->
+        # The file not existing is ok - we expect that if no txns have been received for the shape
+        :error
+
+      {:error, reason} ->
+        raise Storage.Error,
+          message: "Could not open chunk index file #{chunk_file_path}: #{inspect(reason)}"
     end
-  rescue
-    err in [File.Error] ->
-      message = "Could not open chunk index file #{chunk_file_path}: #{inspect(err.reason)}"
-      reraise Storage.Error, [message: message], __STACKTRACE__
   end
 
   defp read_last_partial_chunk(file, size) do
@@ -294,8 +303,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
 
     {:ok,
      <<min_tx::64, min_op::64, start_pos::64, key_start_pos::64, max_tx::64, max_op::64,
-       end_pos::64,
-       key_end_pos::64>>} =
+       end_pos::64, key_end_pos::64>>} =
       :file.pread(file, mid * @full_record_width, @full_record_width)
 
     max_offset = LogOffset.new(max_tx, max_op)
@@ -335,7 +343,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
           | {{LogOffset.t(), nil}, {non_neg_integer(), nil}, {non_neg_integer(), nil}}
         ]
   def read_chunk_file(path) do
-    File.open!(path, [:read, :raw], fn file ->
+    open!(path, [:read, :raw], fn file ->
       Stream.unfold(file, fn file ->
         case :file.read(file, @full_record_width) do
           {:ok,
@@ -372,7 +380,7 @@ defmodule Electric.ShapeCache.PureFileStorage.ChunkIndex do
     Utils.stream_add_side_effect(
       stream,
       # agg is {file, write_position, key_file_write_pos, byte_count, last_seen_offset}
-      fn -> {File.open!(path, [:write, :raw]), 0, 0, 0, nil} end,
+      fn -> {open!(path, [:write, :raw]), 0, 0, 0, nil} end,
       fn {offset, _, _, _, _, json_size, _} = line,
          {file, write_position, key_file_write_pos, byte_count, last_seen_offset} ->
         # Start the chunk if there's no last offset

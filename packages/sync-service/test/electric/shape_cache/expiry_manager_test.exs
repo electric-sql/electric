@@ -5,7 +5,7 @@ defmodule Electric.ExpiryManagerTest do
   alias Electric.ShapeCache.ExpiryManager
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.ShapeCache.ShapeStatus
-  alias Electric.Shapes.Shape
+  alias Support.Fixtures
   alias Support.RepatchExt
 
   import Support.ComponentSetup
@@ -38,7 +38,7 @@ defmodule Electric.ExpiryManagerTest do
 
     test "expires shapes if shape count has gone over max_shapes", ctx do
       for i <- 1..(@max_shapes + 1) do
-        ShapeStatus.add_shape(ctx.stack_id, create_shape(i))
+        ShapeStatus.add_shape(ctx.stack_id, Fixtures.Shape.new(i))
       end
 
       assert RepatchExt.called_within_ms?(ShapeCleaner, :remove_shape, 2, 50, ctx.expiry_manager)
@@ -46,7 +46,7 @@ defmodule Electric.ExpiryManagerTest do
 
     test "does not expires shapes if shape count has not gone over max_shapes", ctx do
       for i <- 1..@max_shapes do
-        ShapeStatus.add_shape(ctx.stack_id, create_shape(i))
+        ShapeStatus.add_shape(ctx.stack_id, Fixtures.Shape.new(i))
       end
 
       refute RepatchExt.called_within_ms?(ShapeCleaner, :remove_shape, 2, 50, ctx.expiry_manager)
@@ -56,21 +56,10 @@ defmodule Electric.ExpiryManagerTest do
   describe "when stack is not active" do
     test "does not expires shapes even if shape count has gone over max_shapes", ctx do
       for i <- 1..(@max_shapes + 1) do
-        ShapeStatus.add_shape(ctx.stack_id, create_shape(i))
+        ShapeStatus.add_shape(ctx.stack_id, Fixtures.Shape.new(i))
       end
 
       refute RepatchExt.called_within_ms?(ShapeCleaner, :remove_shape, 2, 50, ctx.expiry_manager)
     end
-  end
-
-  @inspector Support.StubInspector.new(
-               tables: ["t1"],
-               columns: [
-                 %{name: "id", type: "int8", pk_position: 0}
-               ]
-             )
-
-  defp create_shape(id) do
-    Shape.new!("t1", where: "id = #{id}", inspector: @inspector)
   end
 end

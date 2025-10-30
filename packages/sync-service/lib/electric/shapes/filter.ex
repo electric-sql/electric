@@ -33,6 +33,16 @@ defmodule Electric.Shapes.Filter do
     %Filter{refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)}
   end
 
+  @spec has_shape?(t(), shape_id()) :: boolean()
+  def has_shape?(%Filter{} = filter, shape_handle) do
+    is_map_key(filter.shapes, shape_handle)
+  end
+
+  @spec active_shapes(t()) :: [shape_id()]
+  def active_shapes(%Filter{} = filter) do
+    Map.keys(filter.shapes)
+  end
+
   @doc """
   Add a shape for the filter to track.
 
@@ -41,6 +51,8 @@ defmodule Electric.Shapes.Filter do
   """
   @spec add_shape(Filter.t(), shape_id(), Shape.t()) :: Filter.t()
   def add_shape(%Filter{} = filter, shape_id, shape) do
+    if has_shape?(filter, shape_id), do: raise("duplicate shape #{shape_id}")
+
     %Filter{
       filter
       | tables:

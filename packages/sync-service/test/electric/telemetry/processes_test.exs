@@ -1,7 +1,9 @@
-defmodule Electric.Debug.ProcessTest do
+defmodule Electric.Telemetry.ProcessesTest do
   use ExUnit.Case, async: true
 
   describe "top_memory_by_type/[1, 2]" do
+    import Electric.Telemetry.Processes, only: [top_memory_by_type: 0, top_memory_by_type: 1]
+
     test "handles dead processes" do
       parent = self()
 
@@ -25,8 +27,7 @@ defmodule Electric.Debug.ProcessTest do
 
       refute Process.alive?(pid1)
 
-      assert [%{memory: memory, type: :erlang}] =
-               Electric.Debug.Process.top_memory_by_type([pid1, pid2])
+      assert [%{memory: memory, type: :erlang}] = top_memory_by_type([pid1, pid2])
 
       assert is_integer(memory)
     end
@@ -38,14 +39,14 @@ defmodule Electric.Debug.ProcessTest do
                %{memory: _, type: _},
                %{memory: _, type: _},
                %{memory: _, type: _}
-             ] = Electric.Debug.Process.top_memory_by_type()
+             ] = top_memory_by_type()
     end
 
     test "allows for setting limit" do
       assert [
                %{memory: _, type: _},
                %{memory: _, type: _}
-             ] = Electric.Debug.Process.top_memory_by_type(2)
+             ] = top_memory_by_type(2)
     end
   end
 end

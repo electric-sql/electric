@@ -53,17 +53,87 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   ###
 
+  defp identify_system_query(state) do
+    Logger.debug("ReplicationClient step: identify_system_query")
+    query = "IDENTIFY_SYSTEM"
+    {:query, query, state}
+  end
+
+  def identify_system_result([%Postgrex.Result{command: :identify} = result], state) do
+    # [db] postgres:postgres=> IDENTIFY_SYSTEM;
+    #       systemid       │ timeline │  xlogpos  │  dbname
+    # ─────────────────────┼──────────┼───────────┼──────────
+    #  7506979529870965272 │        1 │ 0/220AE10 │ postgres
+    # (1 row)
+    [[systemid, timeline, xlogpos, _dbname]] = result.rows
+
+    {%{
+       system_identifier: systemid,
+       timeline_id: timeline,
+       current_wal_flush_lsn: xlogpos
+     }, state}
+  end
+
+  ###
+
   defp pg_info_query(state) do
     Logger.debug("ReplicationClient step: pg_info_query")
-    query = "SELECT current_setting('server_version_num') server_version_num"
+
+    query = """
+    SELECT
+      current_setting('server_version_num') server_version_num,
+      pg_backend_pid() pg_backend_pid
+    """
+
     {:query, query, state}
   end
 
   defp pg_info_result([%Postgrex.Result{} = result], state) do
-    %{rows: [[version_str]]} = result
+    %{rows: [[version_str, backend_pid]]} = result
     version_num = String.to_integer(version_str)
 
-    {%{server_version_num: version_num}, %{state | pg_version: version_num}}
+    {%{server_version_num: version_num, pg_backend_pid: backend_pid},
+     %{state | pg_version: version_num}}
+  end
+
+  ###
+
+  # Try to acquire the connection lock based on the replication slot
+  # before configuring it and subsequently starting replication, to ensure
+  # a single active sync service is connected to Postgres per slot.
+  defp acquire_lock_query(%State{slot_name: lock_name} = state) do
+    Logger.debug("ReplicationClient step: acquire_lock")
+    Logger.info("Acquiring lock from postgres with name #{lock_name}")
+    query = "SELECT pg_advisory_lock(hashtext('#{lock_name}'))"
+    {:query, query, state}
+  end
+
+  defp acquire_lock_result([%Postgrex.Result{}], state) do
+    Logger.info("Lock acquired from postgres with name #{state.slot_name}")
+    {:lock_acquired, %{state | lock_acquired?: true}}
+  end
+
+  # Failures due to statement timeouts can safely be retried, as databases configured
+  # with low statement timeouts may experience them during lock acquisition.
+  # Other query cancellation errors will fail loudly as they might be manual
+  # or due to other issues such as database shutdowns.
+  defp acquire_lock_result(
+         %Postgrex.Error{
+           postgres: %{
+             code: :query_canceled,
+             pg_code: "57014",
+             message: "canceling statement due to statement timeout"
+           }
+         } = error,
+         state
+       ) do
+    Logger.warning("Retrying lock acquisition for #{state.slot_name} due to #{inspect(error)}.")
+    {{:lock_acquisition_failed, error}, %{state | lock_acquired?: false}}
+  end
+
+  defp acquire_lock_result(%Postgrex.Error{} = error, _state) do
+    # Unexpected error, fail loudly.
+    raise error
   end
 
   ###
@@ -261,12 +331,21 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   @spec next_step(state) :: step
 
   defp next_step(%{step: :connected}),
+    do: :identify_system
+
+  defp next_step(%{step: :identify_system}),
     do: :query_pg_info
 
-  defp next_step(%{step: :query_pg_info, try_creating_publication?: true}),
+  defp next_step(%{step: :query_pg_info}),
+    do: :acquire_lock
+
+  defp next_step(%{step: :acquire_lock, lock_acquired?: false}),
+    do: :acquire_lock
+
+  defp next_step(%{step: :acquire_lock, lock_acquired?: true, try_creating_publication?: true}),
     do: :create_publication
 
-  defp next_step(%{step: :query_pg_info}),
+  defp next_step(%{step: :acquire_lock, lock_acquired?: true}),
     do: :create_slot
 
   defp next_step(%{step: :create_publication, publication_owner?: false}),
@@ -303,7 +382,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # this module.
   @spec query_for_step(step, state) :: callback_return
 
+  defp query_for_step(:identify_system, state), do: identify_system_query(state)
   defp query_for_step(:query_pg_info, state), do: pg_info_query(state)
+  defp query_for_step(:acquire_lock, state), do: acquire_lock_query(state)
   defp query_for_step(:create_publication, state), do: create_publication_query(state)
 
   defp query_for_step(:check_if_publication_exists, state),
@@ -322,8 +403,14 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   @spec dispatch_query_result(step, query_result, state) ::
           state | {extra_info, state} | no_return
 
+  defp dispatch_query_result(:identify_system, result, state),
+    do: identify_system_result(result, state)
+
   defp dispatch_query_result(:query_pg_info, result, state),
     do: pg_info_result(result, state)
+
+  defp dispatch_query_result(:acquire_lock, result, state),
+    do: acquire_lock_result(result, state)
 
   defp dispatch_query_result(:create_publication, result, state),
     do: create_publication_result(result, state)

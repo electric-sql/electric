@@ -12,6 +12,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.Shapes.Shape
   alias Electric.StatusMonitor
 
+  alias Support.Fixtures
   alias Support.RepatchExt
 
   import Support.ComponentSetup,
@@ -63,12 +64,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     opts = [
       stack_id: stack_id,
       inspector: inspector,
-      persistent_kv: ctx.persistent_kv
+      persistent_kv: ctx.persistent_kv,
+      consumer_registry_opts: Map.get(ctx, :consumer_registry_opts, [])
     ]
 
     {:ok, pid} = start_supervised({ShapeLogCollector, opts})
 
+    parent = self()
+
     Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
+      send(parent, :shape_log_collector_ready)
       :ok
     end)
 
@@ -84,6 +89,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       ]
 
     shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
+
+    assert_receive :shape_log_collector_ready, 1000
 
     %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
   end
@@ -112,6 +119,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            ]}
         )
 
+      # since we're starting the consumer manually we have to explictly register it
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(@shape_handle, consumer, ctx.stack_id)
+
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
         |> Transaction.prepend_change(%Changes.NewRecord{
@@ -123,6 +134,95 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
       assert xids == [xmin]
+    end
+  end
+
+  describe "lazy consumer initialization" do
+    setup do
+      supervisor = start_link_supervised!({DynamicSupervisor, strategy: :one_for_one})
+      [supervisor: supervisor]
+    end
+
+    setup :setup_log_collector
+
+    setup(ctx) do
+      %{stack_id: stack_id} = ctx
+
+      parent = self()
+
+      Repatch.patch(
+        Electric.ShapeCache,
+        :start_consumer_for_handle,
+        [mode: :shared],
+        fn shape_handle, stack_id: ^stack_id ->
+          id = System.unique_integer([:positive, :monotonic])
+
+          with {:ok, pid} <-
+                 DynamicSupervisor.start_child(ctx.supervisor, {
+                   Support.TransactionConsumer,
+                   id: id,
+                   parent: parent,
+                   producer: ctx.server,
+                   shape: @shape,
+                   shape_handle: shape_handle,
+                   action: :restore
+                 }) do
+            send(parent, {:start_consumer, shape_handle, id, pid})
+            {:ok, [{shape_handle, pid}]}
+          end
+        end
+      )
+
+      :ok
+    end
+
+    @describetag restore_shapes: [{@shape_handle, @shape}], inspector: @inspector
+    test "consumers are started when receiving a transaction that matches their filter", ctx do
+      xmin = 100
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      assert_receive {:start_consumer, @shape_handle, id, pid}
+      xids = Support.TransactionConsumer.assert_consume([{id, pid}], [txn])
+      assert xids == [xmin]
+    end
+
+    test "consumer exits remove the filter mapping", ctx do
+      xmin = 100
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      Process.monitor(ctx.server)
+
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      assert_receive {:start_consumer, @shape_handle, id, consumer_pid}
+      ref = Process.monitor(consumer_pid)
+      xids = Support.TransactionConsumer.assert_consume([{id, consumer_pid}], [txn])
+      assert xids == [xmin]
+
+      Support.TransactionConsumer.stop(consumer_pid, :normal)
+
+      assert_receive {Support.TransactionConsumer, {^id, ^consumer_pid}, {:terminate, :normal}}
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _}
+
+      # the shape has been removed from the filters
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
+      refute_receive {:start_consumer, @shape_handle, _id, _consumer_pid}
     end
   end
 
@@ -432,6 +532,24 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert_receive {:flush_boundary_updated, 20}, 50
     end
+
+    test "returns error if relation info cannot be loaded", ctx do
+      Mock.Inspector
+      |> stub(:load_relation_oid, fn {"public", "test_table"}, _ ->
+        {:error, :connection_not_available}
+      end)
+      |> allow(self(), ctx.server)
+
+      txn =
+        %Transaction{xid: 100, lsn: 1, last_log_offset: LogOffset.new(1, 0)}
+        |> Transaction.prepend_change(%Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2", "name" => "foo"}
+        })
+
+      assert {:error, :connection_not_available} =
+               ShapeLogCollector.store_transaction(txn, ctx.server)
+    end
   end
 
   describe "handle_relation_msg/2" do
@@ -525,7 +643,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       txn = %Transaction{xid: 100, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
 
-      assert_raise MatchError, fn -> ShapeLogCollector.store_transaction(txn, ctx.server) end
+      assert {:error, :not_ready} = ShapeLogCollector.store_transaction(txn, ctx.server)
     end
 
     test "rejects relation messages", ctx do
@@ -644,5 +762,35 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              [ctx.stack_id, ctx.server],
              100
            )
+  end
+
+  describe "subscribe/4" do
+    setup :setup_log_collector
+    @shape Fixtures.Shape.new(1)
+    @shape_handle "the-shape-handle"
+    @relation_info %{
+      id: @shape.root_table_id,
+      schema: @shape.root_table |> elem(0),
+      name: @shape.root_table |> elem(1),
+      parent: nil,
+      children: nil
+    }
+
+    test "returns :ok when relation info available", %{server: server} do
+      Mock.Inspector
+      |> stub(:load_relation_info, fn _, _ -> {:ok, @relation_info} end)
+      |> allow(self(), server)
+
+      assert ShapeLogCollector.subscribe(server, @shape_handle, @shape, :create) == :ok
+    end
+
+    test "returns error when connection not available", %{server: server} do
+      Mock.Inspector
+      |> stub(:load_relation_info, fn _, _ -> {:error, :connection_not_available} end)
+      |> allow(self(), server)
+
+      assert ShapeLogCollector.subscribe(server, @shape_handle, @shape, :create) ==
+               {:error, :connection_not_available}
+    end
   end
 end

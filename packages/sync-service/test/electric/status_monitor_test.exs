@@ -32,8 +32,21 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.mark_integrety_checks_passed(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == %{conn: :up, shape: :up}
+    end
+
+    test "when integrety checks not passed, returns :starting", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+      StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+      assert StatusMonitor.status(stack_id) == %{conn: :starting, shape: :up}
     end
 
     test "when replication client not ready, returns :starting", %{stack_id: stack_id} do
@@ -64,6 +77,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.mark_integrety_checks_passed(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == %{conn: :up, shape: :starting}
     end
@@ -75,6 +89,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+      StatusMonitor.mark_integrety_checks_passed(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == %{conn: :up, shape: :starting}
     end
@@ -105,6 +120,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.mark_integrety_checks_passed(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
       assert StatusMonitor.status(stack_id) == %{conn: :up, shape: :up}
 
@@ -136,6 +152,30 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
       StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.mark_integrety_checks_passed(stack_id, self())
+
+      refute_receive :active, 20
+      assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
+      assert_receive :active, 100
+    end
+
+    test "allows timeout: :infinity", %{stack_id: stack_id} do
+      test_process = self()
+      stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
+
+      Task.async(fn ->
+        assert StatusMonitor.wait_until_active(stack_id, timeout: :infinity) == :ok
+        send(test_process, :active)
+      end)
+
+      start_link_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+      StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.mark_integrety_checks_passed(stack_id, self())
 
       refute_receive :active, 20
       assert StatusMonitor.mark_shape_log_collector_ready(stack_id, self()) == :ok
@@ -230,6 +270,20 @@ defmodule Electric.StatusMonitorTest do
                   message: "Timeout waiting for shape data to be loaded",
                   error_code: :stack_unavailable
                 }}
+    end
+
+    test "returns error on timeout waiting for integrety checks", %{stack_id: stack_id} do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+      StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
+      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
+               {:error, "Timeout waiting for integrety checks"}
     end
 
     test "returns explicit error on timeout when supplied", %{

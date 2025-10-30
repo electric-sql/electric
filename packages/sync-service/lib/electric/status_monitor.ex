@@ -2,6 +2,8 @@ defmodule Electric.StatusMonitor do
   @moduledoc false
   use GenServer
 
+  require Logger
+
   @type status() :: %{
           conn: :waiting_on_lock | :starting | :up | :sleeping,
           shape: :starting | :up
@@ -13,7 +15,8 @@ defmodule Electric.StatusMonitor do
     :admin_connection_pool_ready,
     :snapshot_connection_pool_ready,
     :shape_log_collector_ready,
-    :supervisor_processes_ready
+    :supervisor_processes_ready,
+    :integrety_checks_passed
   ]
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
@@ -56,7 +59,8 @@ defmodule Electric.StatusMonitor do
   defp conn_status_from_results(%{
          replication_client_ready: {true, _},
          admin_connection_pool_ready: {true, _},
-         snapshot_connection_pool_ready: {true, _}
+         snapshot_connection_pool_ready: {true, _},
+         integrety_checks_passed: {true, _}
        }),
        do: :up
 
@@ -100,6 +104,10 @@ defmodule Electric.StatusMonitor do
 
   def mark_supervisor_processes_ready(stack_id, canary_pid) do
     mark_condition_met(stack_id, :supervisor_processes_ready, canary_pid)
+  end
+
+  def mark_integrety_checks_passed(stack_id, connection_manager_pid) do
+    mark_condition_met(stack_id, :integrety_checks_passed, connection_manager_pid)
   end
 
   def mark_pg_lock_as_errored(stack_id, message) when is_binary(message) do
@@ -192,15 +200,22 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  @retry_time 10
+  @spin_prevention_delay 10
   defp maybe_retry_wait_until_active(_stack_id, _opts, timeout, last_error)
-       when timeout <= @retry_time do
+       when timeout <= @spin_prevention_delay do
     {:error, last_error}
   end
 
   defp maybe_retry_wait_until_active(stack_id, opts, timeout, _) do
-    Process.sleep(@retry_time)
-    wait_until_active(stack_id, Keyword.put(opts, :timeout, timeout - @retry_time))
+    Process.sleep(@spin_prevention_delay)
+
+    remaining_timeout =
+      case timeout do
+        :infinity -> :infinity
+        _ -> timeout - @spin_prevention_delay
+      end
+
+    wait_until_active(stack_id, Keyword.put(opts, :timeout, remaining_timeout))
   end
 
   @doc """
@@ -228,7 +243,7 @@ defmodule Electric.StatusMonitor do
 
   def handle_cast({:condition_met, condition, process}, state)
       when condition in @conditions do
-    Process.monitor(process)
+    Process.monitor(process, tag: {:down, condition})
     :ets.insert(ets_table(state.stack_id), {condition, {true, %{process: process}}})
     {:noreply, maybe_reply_to_waiters(state)}
   end
@@ -259,7 +274,10 @@ defmodule Electric.StatusMonitor do
         {:reply, :ok, state}
 
       _ ->
-        Process.send_after(self(), {:timeout_waiter, from}, timeout)
+        if timeout != :infinity do
+          Process.send_after(self(), {:timeout_waiter, from}, timeout)
+        end
+
         {:noreply, %{state | waiters: MapSet.put(waiters, from)}}
     end
   end
@@ -275,8 +293,12 @@ defmodule Electric.StatusMonitor do
     {:reply, :ok, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+  def handle_info({{:down, condition}, _ref, :process, pid, _reason}, state) do
     :ets.match_delete(ets_table(state.stack_id), {:_, {true, %{process: pid}}})
+
+    Logger.warning(
+      "#{__MODULE__} condition failed: #{inspect(condition)}. Status #{inspect(status(state.stack_id))}"
+    )
 
     {:noreply, state}
   end
@@ -388,6 +410,9 @@ defmodule Electric.StatusMonitor do
 
       %{supervisor_processes_ready: {false, details}} ->
         "Timeout waiting for stack restart" <> format_details(details)
+
+      %{integrety_checks_passed: {false, details}} ->
+        "Timeout waiting for integrety checks" <> format_details(details)
     end
   end
 

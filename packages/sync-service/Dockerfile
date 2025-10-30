@@ -1,6 +1,6 @@
-ARG ELIXIR_VERSION=1.18.4
-ARG OTP_VERSION=28.0.1
-ARG DEBIAN_VERSION=bookworm-20250610-slim
+ARG ELIXIR_VERSION=1.19.1
+ARG OTP_VERSION=28.1.1
+ARG DEBIAN_VERSION=bookworm-20251020-slim
 
 ARG BUILDER_IMAGE="hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
 ARG RUNNER_IMAGE="debian:${DEBIAN_VERSION}"
@@ -24,7 +24,7 @@ WORKDIR /app
 
 COPY mix.* /app/
 RUN mix deps.get
-RUN mix deps.compile
+RUN MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4 mix deps.compile
 
 # These are ordered by change frequency, with the least frequently changing dir first.
 COPY rel /app/rel

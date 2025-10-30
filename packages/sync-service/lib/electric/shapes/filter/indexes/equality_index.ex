@@ -11,7 +11,6 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.Filter.Indexes.EqualityIndex
   alias Electric.Shapes.Filter.WhereCondition
-  require Logger
 
   defstruct [:type, :values]
 

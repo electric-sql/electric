@@ -8,7 +8,7 @@
 [invoke setup_pg]
 
 ## Start the sync service.
-[invoke setup_electric]
+[invoke setup_electric_with_env "ELECTRIC_TWEAKS_PUBLICATION_REFRESH_PERIOD=2s"]
 
 [shell electric]
   ??[info] Starting replication from postgres
@@ -43,10 +43,8 @@
 
 [shell electric]
   -
-
-  ??[error] :gen_statem {:"Electric.ProcessRegistry:single_stack", {Electric.Postgres.ReplicationClient, nil}} terminating
-  ??** (Postgrex.Error) ERROR 42704 (undefined_object) publication "electric_publication_integration" does not exist
-  ??[warning] Electric.Connection.Manager is restarting after it has encountered an error
+  
+  ??[warning] Publication fatal misconfiguration: %Electric.DbConfigurationError{type: :publication_missing
   ??[debug] Starting replication client for stack single_stack
 
   -$fail_pattern

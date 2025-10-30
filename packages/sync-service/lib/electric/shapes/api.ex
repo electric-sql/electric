@@ -380,7 +380,7 @@ defmodule Electric.Shapes.Api do
         # `block_on_conn_sleeping` flag to the next call of
         # `Electric.StatusMonitor.wait_until_active()` to prevent this request from getting
         # into a recursive spin loop until the status value changes in StatusMonitor's ETS table.
-        Electric.Connection.Restarter.restart_connection_subsystem(stack_id)
+        Electric.Connection.Restarter.restore_connection_subsystem(stack_id)
         hold_until_stack_ready(api, block_on_conn_sleeping: true)
 
       {:error, %{message: message, error_code: error_code}} ->
@@ -600,10 +600,10 @@ defmodule Electric.Shapes.Api do
 
   defp do_serve_shape_log(%Request{params: %{offset: :now}} = request) do
     # For "now" offset, return an immediate up-to-date response with no log data
-    %{global_last_seen_lsn: global_last_seen_lsn} = request
+    %{response: %Response{} = response, global_last_seen_lsn: global_last_seen_lsn} = request
 
-    %Response{
-      request.response
+    %{
+      response
       | status: 200,
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)]),
         finalized?: true
@@ -1041,6 +1041,11 @@ defmodule Electric.Shapes.Api do
     case Inspector.load_column_info(shape.root_table_id, inspector) do
       {:ok, columns} ->
         Electric.Schema.from_column_info(columns, shape.selected_columns)
+
+      {:error, :connection_not_available} ->
+        # TODO: we currently only convert DBConnection errors to proper 503s, we should
+        # handle a custom error we can more easily propagate
+        raise %DBConnection.ConnectionError{message: "Cannot connect to the database."}
 
       :table_not_found ->
         nil
