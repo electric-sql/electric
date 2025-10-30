@@ -497,6 +497,47 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
   end
 
+  describe "component restarts" do
+    test "handles relation tracker restart", ctx do
+      notify_alter_queries()
+      shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
+
+      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
+
+      run_async(fn ->
+        assert_raise RuntimeError, fn ->
+          PublicationManager.add_shape(shape_handle, shape, ctx.pub_mgr_opts)
+        end
+      end)
+
+      relation_tracker_name = PublicationManager.RelationTracker.name(ctx.stack_id)
+
+      receive do
+        {:alter_publication, _, _} -> GenServer.stop(relation_tracker_name)
+      end
+
+      assert_pub_tables(ctx, [ctx.relation])
+
+      # after restart, the publication manager should repopulate the publication
+      PublicationManager.remove_shape(shape_handle, ctx.pub_mgr_opts)
+      assert_pub_tables(ctx, [])
+    end
+
+    @tag update_debounce_timeout: 100
+    test "handles configurator restart", ctx do
+      notify_alter_queries()
+      shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
+
+      configurator_name = PublicationManager.Configurator.name(ctx.stack_id)
+
+      assert :ok = PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+      assert_pub_tables(ctx, [ctx.relation])
+      run_async(fn -> PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts) end)
+      GenServer.stop(configurator_name)
+      assert_pub_tables(ctx, [])
+    end
+  end
+
   defp assert_pub_tables(ctx, expected_tables, timeout \\ 500) do
     start_time = :erlang.monotonic_time(:millisecond)
     pub_tables = fetch_pub_tables(ctx)
