@@ -90,28 +90,34 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   end
 
   @spec notify_relation_configuration_result(
-          Keyword.t(),
           Electric.oid_relation(),
-          {:ok, term()} | {:error, any()}
+          {:ok, term()} | {:error, any()},
+          Keyword.t()
         ) :: :ok
-  def notify_relation_configuration_result(opts, oid_rel, result) do
+  def notify_relation_configuration_result(oid_rel, result, opts) do
     server = Access.get(opts, :server, name(opts))
     GenServer.cast(server, {:relation_configuration_result, oid_rel, result})
   end
 
-  @spec notify_configuration_error(Keyword.t(), {:error, any()}) :: :ok
-  def notify_configuration_error(opts, result) do
+  @spec notify_configuration_error({:error, any()}, Keyword.t()) :: :ok
+  def notify_configuration_error(result, opts) do
     server = Access.get(opts, :server, name(opts))
     GenServer.cast(server, {:configuration_error, result})
   end
 
   @spec notify_publication_status(
-          Keyword.t(),
-          Electric.Postgres.Configuration.publication_status()
+          Electric.Postgres.Configuration.publication_status(),
+          Keyword.t()
         ) :: :ok
-  def notify_publication_status(opts, status) do
+  def notify_publication_status(status, opts) do
     server = Access.get(opts, :server, name(opts))
     GenServer.cast(server, {:publication_status, status})
+  end
+
+  @spec fetch_current_filters!(Keyword.t()) :: relation_filters()
+  def fetch_current_filters!(opts) do
+    server = Access.get(opts, :server, name(opts))
+    GenServer.call(server, :fetch_current_filters)
   end
 
   def start_link(opts) do
@@ -216,6 +222,10 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   def handle_call(:wait_for_restore, _from, state) do
     {:reply, :ok, state, state.publication_refresh_period}
+  end
+
+  def handle_call(:fetch_current_filters, _from, state) do
+    {:reply, state.prepared_relation_filters, state, state.publication_refresh_period}
   end
 
   @impl true

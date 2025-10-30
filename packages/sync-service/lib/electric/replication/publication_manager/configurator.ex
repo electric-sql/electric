@@ -16,6 +16,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   require Logger
 
   alias Electric.Replication.PublicationManager
+  alias Electric.Replication.PublicationManager.RelationTracker
   alias Electric.Postgres.Configuration
   alias Electric.Utils
 
@@ -78,7 +79,8 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         scheduled_filters: nil,
         update_debounce_timeout: opts.update_debounce_timeout,
         scheduled_update_ref: nil
-      }
+      },
+      {:continue, :fetch_initial_filters}
     }
   end
 
@@ -102,15 +104,17 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   end
 
   @impl true
+  def handle_continue(:fetch_initial_filters, state) do
+    filters = RelationTracker.fetch_current_filters!(stack_id: state.stack_id)
+    {:noreply, state, {:continue, {:check_publication, filters}}}
+  end
+
   def handle_continue({:check_publication, filters}, state) do
     case check_publication_status(state) do
       {:ok, status} ->
         state = %{state | can_alter_publication?: status.can_alter_publication?}
 
-        PublicationManager.RelationTracker.notify_publication_status(
-          [stack_id: state.stack_id],
-          status
-        )
+        RelationTracker.notify_publication_status(status, stack_id: state.stack_id)
 
         {:noreply, state, {:continue, {:configure_filters, filters}}}
 
@@ -291,10 +295,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     end)
   end
 
-  @spec determine_publication_relation_actions(
-          state(),
-          PublicationManager.RelationTracker.relation_filters()
-        ) ::
+  @spec determine_publication_relation_actions(state(), RelationTracker.relation_filters()) ::
           {:ok, Configuration.relation_actions()} | {:error, any()}
   defp determine_publication_relation_actions(state, filters) do
     Configuration.run_handling_db_connection_errors(fn ->
@@ -340,28 +341,16 @@ defmodule Electric.Replication.PublicationManager.Configurator do
 
   defp notify_filter_result(filter, {:ok, res} = reply, state)
        when res in [:configured, :dropped] do
-    PublicationManager.RelationTracker.notify_relation_configuration_result(
-      [stack_id: state.stack_id],
-      filter,
-      reply
-    )
+    RelationTracker.notify_relation_configuration_result(filter, reply, stack_id: state.stack_id)
   end
 
   defp notify_filter_result(filter, {:error, err}, state) do
     reply = {:error, publication_error(err, filter, state)}
-
-    PublicationManager.RelationTracker.notify_relation_configuration_result(
-      [stack_id: state.stack_id],
-      filter,
-      reply
-    )
+    RelationTracker.notify_relation_configuration_result(filter, reply, stack_id: state.stack_id)
   end
 
   defp notify_global_configuration_error(err, state) do
-    PublicationManager.RelationTracker.notify_configuration_error(
-      [stack_id: state.stack_id],
-      {:error, err}
-    )
+    RelationTracker.notify_configuration_error({:error, err}, stack_id: state.stack_id)
   end
 
   defp publication_error(:relation_missing_from_publication, oid_rel, state) do
