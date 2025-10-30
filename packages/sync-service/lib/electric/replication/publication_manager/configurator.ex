@@ -128,6 +128,14 @@ defmodule Electric.Replication.PublicationManager.Configurator do
           to_add_and_configure = MapSet.intersection(to_add, to_configure_replica_identity)
           to_add_only = MapSet.difference(to_add, to_configure_replica_identity)
 
+          # Notes on avoiding deadlocks
+          # - `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
+          #   but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
+          #   deadlock if the order is reversed, and we've seen this happen even within the context of a single process perhaps
+          #   across multiple calls from separate deployments or timing issues.
+          # - It is important for all table operations to also occur in the same order to avoid deadlocks due to
+          #   lock ordering issues, so despite splitting drop and add operations we sort them and process them together
+          #   in a sorted single pass
           relation_actions =
             [
               Enum.map(to_add_only, &{:add, &1}),

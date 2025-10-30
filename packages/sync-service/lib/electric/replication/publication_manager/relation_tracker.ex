@@ -237,7 +237,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   end
 
   def handle_cast({:relation_configuration_result, oid_rel, {:ok, res}}, state)
-      when res in [:validated, :added] do
+      when res in [:validated, :added, :configured] do
     state = reply_to_relation_waiters(oid_rel, :ok, state)
     new_committed_filters = MapSet.put(state.committed_relation_filters, oid_rel)
     {:noreply, %{state | committed_relation_filters: new_committed_filters}}
