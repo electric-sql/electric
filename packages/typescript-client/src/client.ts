@@ -58,6 +58,7 @@ import {
   fetchEventSource,
 } from '@microsoft/fetch-event-source'
 import { expiredShapesCache } from './expired-shapes-cache'
+import { upToDateTracker } from './up-to-date-tracker'
 import { SnapshotTracker } from './snapshot-tracker'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
@@ -441,6 +442,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
   #midStreamPromise?: Promise<void>
   #midStreamPromiseResolver?: () => void
+  #currentFetchUrl?: URL // Current fetch URL for computing shape key
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -800,6 +802,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#isMidStream = false
         // Resolve the promise waiting for mid-stream to end
         this.#midStreamPromiseResolver?.()
+
+        // Check if we should suppress this up-to-date notification
+        // to prevent multiple renders from cached responses
+        const shapeKey = this.#currentFetchUrl
+          ? canonicalShapeKey(this.#currentFetchUrl)
+          : undefined
+
+        const shouldNotify =
+          !shapeKey ||
+          upToDateTracker.shouldNotifySubscribers(shapeKey, isSseMessage)
+
+        if (!shouldNotify) {
+          // Suppress notification for this up-to-date message
+          // State has already been updated above
+          return
+        }
       }
 
       // Filter messages using snapshot tracker
@@ -827,6 +845,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
     resumingFromPause?: boolean
   }): Promise<void> {
+    // Store current fetch URL for shape key computation
+    this.#currentFetchUrl = opts.fetchUrl
+
     const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
     if (
       this.#isUpToDate &&
