@@ -1,21 +1,18 @@
 defmodule Electric.Connection.Supervisor do
   @moduledoc """
-  The main connection supervisor that looks after Connection.Manager and Replication.Supervisor.
+  The main connection supervisor that looks after Connection.Manager.
 
-  It actually starts Connection.Manager.Supervisor and this latter then directly supervises
-  Connection.Manager and Replication.Supervisor processes. This is done with the goal of tying
-  the lifetimes of those two together (by configuring Connection.Manager.Supervisor
-  appropriately) while still being able to configure this Connection.Supervisor with the
-  rest_for_all strategy as explained further down in the code.
+  It starts Connection.Manager.Supervisor which then directly supervises
+  Connection.Manager and ConnectionResolver processes.
 
   Connection.Manager acts a bit like a supervisor for database connection processes:
 
     - it opens database connections in the right order
-    - restarts them during initialization of they fail for recoverable reasons
+    - restarts them during initialization if they fail for recoverable reasons
     - restarts the replication client at any point if it crashes due to a non-fatal error
-    - starts the Replication.Supervisor at the right point in time, passing it the right set of
-      options that have been informed by connection manager's own initialization sequence up to
-      that point
+    - coordinates with CoreSupervisor to start the Replication.Supervisor at the right point
+      in time, passing it the right set of options that have been informed by connection
+      manager's own initialization sequence up to that point
 
   If a database connection shuts down due to a non-recoverable error, the connection manager
   process will ask this supervisor to shut down, which in the single-tenant mode results in the
