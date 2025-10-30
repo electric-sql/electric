@@ -36,6 +36,27 @@ defmodule Electric.Replication.PublicationManagerTest do
   ]
 
   setup ctx do
+    relation = {"public", "items"}
+    relation_oid = lookup_relation_oid(ctx.pool, relation)
+
+    %{
+      relation: relation,
+      relation_with_oid: {relation_oid, relation}
+    }
+  end
+
+  setup ctx do
+    if ctx[:existing_where_clauses] do
+      for where_clause <- ctx.existing_where_clauses do
+        shape = generate_shape(ctx.relation_with_oid, where_clause)
+        {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
+      end
+    end
+
+    :ok
+  end
+
+  setup ctx do
     %{publication_manager: {_, pub_mgr_opts}} =
       with_publication_manager(%{
         module: ctx.module,
@@ -75,6 +96,7 @@ defmodule Electric.Replication.PublicationManagerTest do
   end
 
   describe "wait_for_restore/1" do
+    @tag existing_where_clauses: []
     test "immediately completes if nothing to restore", ctx do
       notify_alter_queries()
       assert :ok == PublicationManager.wait_for_restore(ctx.pub_mgr_opts)
@@ -82,11 +104,8 @@ defmodule Electric.Replication.PublicationManagerTest do
       refute_receive {:alter_publication, _, _}
     end
 
+    @tag existing_where_clauses: [@where_clause_1]
     test "restores existing shapes", ctx do
-      # populate shape status cache with shape
-      shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
-      {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
-
       assert :ok == PublicationManager.wait_for_restore(ctx.pub_mgr_opts)
       assert_pub_tables(ctx, [ctx.relation])
     end
