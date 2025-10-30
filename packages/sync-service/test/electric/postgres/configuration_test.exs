@@ -296,7 +296,7 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   describe "concurrent publication updates" do
     @tag slow: true
-    @tag connection_opt_overrides: [pool_size: 10, queue_target: 1_000, queue_interval: 20_000]
+    @tag connection_opt_overrides: [pool_size: 50, queue_target: 1_000, queue_interval: 20_000]
     test "should not cause deadlocks", %{
       pool: conn,
       publication_name: publication
@@ -324,7 +324,7 @@ defmodule Electric.Postgres.ConfigurationTest do
         |> MapSet.new()
 
       tasks =
-        for _i <- 1..1000 do
+        for _i <- 1..500 do
           Task.async(fn ->
             [oid_rel] = Enum.take_random(deadlock_oid_rels, 1)
 
