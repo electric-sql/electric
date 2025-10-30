@@ -1,4 +1,14 @@
 defmodule Electric.Replication.PublicationManager do
+  @moduledoc """
+  Manages a PostgreSQL publication for a given Electric stack, tracking shapes
+  and ensuring that the publication configuration matches the required set of
+  relations that need to be published for the shapes to function correctly.
+
+  Includes periodic checks of the publication to ensure that it remains valid,
+  and expires any shapes that are no longer valid due to schema changes or
+  permission issues.
+  """
+
   use Supervisor
 
   @callback add_shape(shape_handle(), Electric.Shapes.Shape.t(), Keyword.t()) :: :ok

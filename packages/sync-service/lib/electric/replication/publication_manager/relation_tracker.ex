@@ -1,12 +1,12 @@
 defmodule Electric.Replication.PublicationManager.RelationTracker do
   @moduledoc """
-  Manages a PostgreSQL publication for a given Electric stack, tracking shapes
-  and ensuring that the publication configuration matches the required set of
-  relations that need to be published for the shapes to function correctly.
+  Provides interface for shapes to register and deregister themselves
+  from a publication, and tracks the overall set of relations that need
+  to be published using reference counting.
 
-  Includes periodic checks of the publication to ensure that it remains valid,
-  and expires any shapes that are no longer valid due to schema changes or
-  permission issues.
+  Relies on Electric.Replication.PublicationManager.Configurator
+  to perform the actual publication updates and handles status updates
+  to reply to shapes requesting to be registered.
   """
   use GenServer
 

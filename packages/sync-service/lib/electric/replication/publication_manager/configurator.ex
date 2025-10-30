@@ -1,5 +1,16 @@
 defmodule Electric.Replication.PublicationManager.Configurator do
-  @moduledoc false
+  @moduledoc """
+  Configures and maintains a PostgreSQL publication on behalf of
+  Electric.Replication.PublicationManager.RelationTracker.
+
+  It receives requests to update the publication such that a given
+  set of relations are published with REPLICA IDENTITY FULL, and
+  performs the necessary SQL commands to ensure that the publication
+  matches the requested set of relations.
+
+  Each relation is updated individually to avoid blocking all other
+  operations on the publication due to locks held on individual tables.
+  """
   use GenServer
 
   require Logger
