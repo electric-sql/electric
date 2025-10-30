@@ -426,7 +426,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :named_table,
       :public,
       :ordered_set,
-      read_concurrency: true,
       write_concurrency: true
     ])
 
