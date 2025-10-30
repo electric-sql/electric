@@ -1,5 +1,21 @@
 defmodule Electric.Replication.PublicationManager.Supervisor do
-  @moduledoc false
+  @moduledoc """
+  Supervisor for the PublicationManager components.
+
+  The strategy is `:one_for_one`, supervising the `RelationTracker` and
+  `Configurator` processes.
+
+  The `Configurator` process always starts after the `RelationTracker` process, and
+  as part of its initialization it fetches the current set of shape filters. This makes
+  the system resilient to `Configurator` restarts as it will always be eager to
+  commit any outstanding filters to the publication.
+
+  The `RelationTracker` process does not depend on the `Configurator` process being
+  alive to function correctly, as it only tracks the shapes and their filters, and
+  notifies the `Configurator` of any changes. The system is resilient to `RelationTracker`
+  restarts as it repopulates its filters from the in-memory shape status cache, and
+  can handle notifications for filters it is not tracking.
+  """
 
   use Supervisor
   alias Electric.Replication.PublicationManager
@@ -46,6 +62,6 @@ defmodule Electric.Replication.PublicationManager.Supervisor do
       {PublicationManager.Configurator, opts}
     ]
 
-    Supervisor.init(children, strategy: :rest_for_one)
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end
