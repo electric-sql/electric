@@ -978,7 +978,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 503
 
       assert Jason.decode!(conn.resp_body) == %{
-               "message" => "Timeout waiting for Postgres lock acquisition"
+               "message" => "Timeout waiting for Postgres lock acquisition",
+               "code" => "STACK_UNAVAILABLE"
              }
     end
 
