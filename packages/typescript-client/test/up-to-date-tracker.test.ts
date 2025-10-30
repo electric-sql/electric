@@ -19,34 +19,24 @@ describe(`UpToDateTracker`, () => {
 
   afterEach(() => aborter.abort())
 
-  it(`should allow first up-to-date notification`, () => {
+  it(`should not enter replay mode when no recent up-to-date`, () => {
     const shapeKey = `https://example.com/v1/shape?table=test`
 
-    // First notification should be allowed
-    expect(tracker.shouldNotifySubscribers(shapeKey, false)).toBe(true)
+    // No previous up-to-date recorded
+    expect(tracker.shouldEnterReplayMode(shapeKey)).toBe(false)
   })
 
-  it(`should suppress up-to-date notifications within TTL window`, () => {
+  it(`should enter replay mode when recent up-to-date exists`, () => {
     const shapeKey = `https://example.com/v1/shape?table=test`
 
-    // First notification should be allowed
-    expect(tracker.shouldNotifySubscribers(shapeKey, false)).toBe(true)
+    // Record an up-to-date
+    tracker.recordUpToDate(shapeKey)
 
-    // Subsequent notification within TTL should be suppressed
-    expect(tracker.shouldNotifySubscribers(shapeKey, false)).toBe(false)
+    // Should enter replay mode immediately after
+    expect(tracker.shouldEnterReplayMode(shapeKey)).toBe(true)
   })
 
-  it(`should always allow live SSE messages`, () => {
-    const shapeKey = `https://example.com/v1/shape?table=test`
-
-    // Record a non-live up-to-date
-    tracker.shouldNotifySubscribers(shapeKey, false)
-
-    // Live message should still be allowed
-    expect(tracker.shouldNotifySubscribers(shapeKey, true)).toBe(true)
-  })
-
-  it(`should allow notifications after TTL expires`, async () => {
+  it(`should not enter replay mode after TTL expires`, async () => {
     const shapeKey = `https://example.com/v1/shape?table=test`
 
     // Create tracker with very short TTL for testing
@@ -54,54 +44,34 @@ describe(`UpToDateTracker`, () => {
     // Override the TTL via reflection for testing
     ;(testTracker as any).cacheTTL = 50 // 50ms
 
-    // First notification
-    expect(testTracker.shouldNotifySubscribers(shapeKey, false)).toBe(true)
+    // Record an up-to-date
+    testTracker.recordUpToDate(shapeKey)
 
-    // Immediate second should be suppressed
-    expect(testTracker.shouldNotifySubscribers(shapeKey, false)).toBe(false)
+    // Should enter replay mode immediately
+    expect(testTracker.shouldEnterReplayMode(shapeKey)).toBe(true)
 
     // Wait for TTL to expire
     await new Promise((resolve) => setTimeout(resolve, 60))
 
-    // After TTL, should allow again
-    expect(testTracker.shouldNotifySubscribers(shapeKey, false)).toBe(true)
+    // Should not enter replay mode after expiry
+    expect(testTracker.shouldEnterReplayMode(shapeKey)).toBe(false)
   })
 
-  it(`should suppress rapid successive up-to-dates within suppression window`, async () => {
-    const shapeKey = `https://example.com/v1/shape?table=test`
-
-    const testTracker = new UpToDateTracker()
-    // Override suppression window for testing
-    ;(testTracker as any).suppressionWindowMs = 100 // 100ms
-
-    // First notification
-    expect(testTracker.shouldNotifySubscribers(shapeKey, false)).toBe(true)
-
-    // Immediate second should be suppressed
-    expect(testTracker.shouldNotifySubscribers(shapeKey, false)).toBe(false)
-
-    // Wait less than suppression window
-    await new Promise((resolve) => setTimeout(resolve, 50))
-
-    // Still suppressed
-    expect(testTracker.shouldNotifySubscribers(shapeKey, false)).toBe(false)
-  })
-
-  it(`should persist tracked up-to-dates to localStorage`, () => {
+  it(`should persist to localStorage`, () => {
     const shapeKey = `https://example.com/v1/shape?table=test`
 
     // Record an up-to-date
-    tracker.shouldNotifySubscribers(shapeKey, false)
+    tracker.recordUpToDate(shapeKey)
 
     // Check that localStorage was updated
     const storedData = JSON.parse(
       localStorage.getItem(`electric_up_to_date_tracker`) || `{}`
     )
     expect(storedData[shapeKey]).toEqual(expect.any(Number))
-    expect(Date.now() - storedData[shapeKey]).toBeLessThan(100) // Should be recent
+    expect(Date.now() - storedData[shapeKey]).toBeLessThan(100)
   })
 
-  it(`should load tracked up-to-dates from localStorage on initialization`, () => {
+  it(`should load from localStorage on initialization`, () => {
     const existingShapeKey = `https://example.com/v1/shape?table=existing`
     const timestamp = Date.now() - 1000 // 1 second ago
 
@@ -117,10 +87,8 @@ describe(`UpToDateTracker`, () => {
     // Create new tracker - this should load from localStorage
     const newTracker = new UpToDateTracker()
 
-    // Should suppress notification for recently tracked shape
-    expect(newTracker.shouldNotifySubscribers(existingShapeKey, false)).toBe(
-      false
-    )
+    // Should enter replay mode based on loaded data
+    expect(newTracker.shouldEnterReplayMode(existingShapeKey)).toBe(true)
   })
 
   it(`should clean up expired entries on initialization`, () => {
@@ -142,56 +110,39 @@ describe(`UpToDateTracker`, () => {
     // Create new tracker - should clean up old entries
     const newTracker = new UpToDateTracker()
 
-    // Old entry should be cleaned up, so notification should be allowed
-    expect(newTracker.shouldNotifySubscribers(oldShapeKey, false)).toBe(true)
+    // Old entry should be cleaned up
+    expect(newTracker.shouldEnterReplayMode(oldShapeKey)).toBe(false)
 
-    // Recent entry should still be tracked
-    expect(newTracker.shouldNotifySubscribers(recentShapeKey, false)).toBe(
-      false
-    )
+    // Recent entry should still trigger replay mode
+    expect(newTracker.shouldEnterReplayMode(recentShapeKey)).toBe(true)
   })
 
   it(`should enforce LRU behavior with max entries`, () => {
-    // Create tracker and record many shapes (exceeds max of 250)
+    // Record many shapes (exceeds max of 250)
     for (let i = 1; i <= 252; i++) {
-      tracker.shouldNotifySubscribers(
-        `https://example.com/shape?table=table${i}`,
-        false
-      )
+      tracker.recordUpToDate(`https://example.com/shape?table=table${i}`)
     }
 
     // The first two shapes should have been evicted
     expect(
-      tracker.shouldNotifySubscribers(
-        `https://example.com/shape?table=table1`,
-        false
-      )
-    ).toBe(true) // Allowed because it was evicted
+      tracker.shouldEnterReplayMode(`https://example.com/shape?table=table1`)
+    ).toBe(false)
 
     expect(
-      tracker.shouldNotifySubscribers(
-        `https://example.com/shape?table=table2`,
-        false
-      )
-    ).toBe(true) // Allowed because it was evicted
+      tracker.shouldEnterReplayMode(`https://example.com/shape?table=table2`)
+    ).toBe(false)
 
     // Recent shapes should still be tracked
     expect(
-      tracker.shouldNotifySubscribers(
-        `https://example.com/shape?table=table251`,
-        false
-      )
-    ).toBe(false) // Suppressed
+      tracker.shouldEnterReplayMode(`https://example.com/shape?table=table251`)
+    ).toBe(true)
 
     expect(
-      tracker.shouldNotifySubscribers(
-        `https://example.com/shape?table=table252`,
-        false
-      )
-    ).toBe(false) // Suppressed
+      tracker.shouldEnterReplayMode(`https://example.com/shape?table=table252`)
+    ).toBe(true)
   })
 
-  it(`should handle localStorage errors gracefully when localStorage is unavailable`, () => {
+  it(`should handle localStorage errors gracefully`, () => {
     const originalLocalStorage = global.localStorage
 
     // Remove localStorage to simulate unavailability
@@ -203,13 +154,11 @@ describe(`UpToDateTracker`, () => {
         const trackerWithoutStorage = new UpToDateTracker()
         const testKey = `https://example.com/shape?table=test`
 
-        // Should still work in-memory
-        expect(
-          trackerWithoutStorage.shouldNotifySubscribers(testKey, false)
-        ).toBe(true)
-        expect(
-          trackerWithoutStorage.shouldNotifySubscribers(testKey, false)
-        ).toBe(false)
+        // Can still record (in memory only)
+        trackerWithoutStorage.recordUpToDate(testKey)
+
+        // Should not enter replay mode (no persistence)
+        expect(trackerWithoutStorage.shouldEnterReplayMode(testKey)).toBe(true)
       }).not.toThrow()
     } finally {
       // Restore localStorage
@@ -222,27 +171,35 @@ describe(`UpToDateTracker`, () => {
     const shapeKey2 = `https://example.com/v1/shape?table=test2`
 
     // Record multiple up-to-dates
-    tracker.shouldNotifySubscribers(shapeKey1, false)
-    tracker.shouldNotifySubscribers(shapeKey2, false)
+    tracker.recordUpToDate(shapeKey1)
+    tracker.recordUpToDate(shapeKey2)
 
-    // Both should be suppressed
-    expect(tracker.shouldNotifySubscribers(shapeKey1, false)).toBe(false)
-    expect(tracker.shouldNotifySubscribers(shapeKey2, false)).toBe(false)
+    // Both should trigger replay mode
+    expect(tracker.shouldEnterReplayMode(shapeKey1)).toBe(true)
+    expect(tracker.shouldEnterReplayMode(shapeKey2)).toBe(true)
 
     // Clear tracker
     tracker.clear()
 
-    // Both should now be allowed
-    expect(tracker.shouldNotifySubscribers(shapeKey1, false)).toBe(true)
-    expect(tracker.shouldNotifySubscribers(shapeKey2, false)).toBe(true)
+    // Neither should trigger replay mode after clear
+    expect(tracker.shouldEnterReplayMode(shapeKey1)).toBe(false)
+    expect(tracker.shouldEnterReplayMode(shapeKey2)).toBe(false)
   })
 
-  it(`should suppress multiple cached up-to-dates on page refresh`, async () => {
+  it(`should suppress cached up-to-dates during replay mode`, async () => {
     const notifications: any[] = []
 
-    // Simulate first session: shape gets multiple updates, each ending with up-to-date
+    // Pre-populate localStorage to simulate a previous session
+    const shapeKey = `${shapeUrl}?table=test`
+    const timestamp = Date.now() - 1000 // 1 second ago
+    localStorage.setItem(
+      `electric_up_to_date_tracker`,
+      JSON.stringify({ [shapeKey]: timestamp })
+    )
+
+    // Simulate multiple cached responses
     fetchMock
-      // Initial sync - data + up-to-date
+      // First cached response with up-to-date
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -261,7 +218,7 @@ describe(`UpToDateTracker`, () => {
           }
         )
       )
-      // Second update - more data + up-to-date (cached for 60s)
+      // Second cached response with up-to-date
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -280,7 +237,7 @@ describe(`UpToDateTracker`, () => {
           }
         )
       )
-      // Third update - more data + up-to-date (cached for 60s)
+      // Live mode response with up-to-date (should NOT be suppressed)
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify([
@@ -301,7 +258,8 @@ describe(`UpToDateTracker`, () => {
       )
 
     const stream = new ShapeStream({
-      url: `${shapeUrl}?table=test`,
+      url: shapeUrl,
+      params: { table: `test` },
       handle: `test-handle-1`,
       signal: aborter.signal,
       fetchClient: fetchMock,
@@ -313,13 +271,10 @@ describe(`UpToDateTracker`, () => {
     })
 
     // Wait for requests to complete
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 100))
 
-    // First up-to-date should trigger notification
-    expect(notifications.length).toBeGreaterThanOrEqual(1)
-
-    // Second and third up-to-dates should be suppressed
-    // We should not see 3 separate notifications
+    // Should only get notification from the live (third) up-to-date
+    // The first two cached up-to-dates should be suppressed
     expect(notifications.length).toBeLessThan(3)
   })
 
@@ -327,16 +282,13 @@ describe(`UpToDateTracker`, () => {
     const shapeKey1 = `https://example.com/v1/shape?table=table1`
     const shapeKey2 = `https://example.com/v1/shape?table=table2`
 
-    // First notification for shape1
-    expect(tracker.shouldNotifySubscribers(shapeKey1, false)).toBe(true)
+    // Record up-to-date for shape1 only
+    tracker.recordUpToDate(shapeKey1)
 
-    // First notification for shape2 (different shape)
-    expect(tracker.shouldNotifySubscribers(shapeKey2, false)).toBe(true)
+    // Shape1 should enter replay mode
+    expect(tracker.shouldEnterReplayMode(shapeKey1)).toBe(true)
 
-    // Second notification for shape1 should be suppressed
-    expect(tracker.shouldNotifySubscribers(shapeKey1, false)).toBe(false)
-
-    // Second notification for shape2 should be suppressed
-    expect(tracker.shouldNotifySubscribers(shapeKey2, false)).toBe(false)
+    // Shape2 should not (no previous up-to-date)
+    expect(tracker.shouldEnterReplayMode(shapeKey2)).toBe(false)
   })
 })

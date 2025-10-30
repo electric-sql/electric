@@ -442,6 +442,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
   #midStreamPromise?: Promise<void>
   #midStreamPromiseResolver?: () => void
+  #replayMode = false // True when replaying cached responses during page refresh
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
@@ -805,18 +806,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         // Check if we should suppress this up-to-date notification
         // to prevent multiple renders from cached responses
-        const shapeKey = this.#currentFetchUrl
-          ? canonicalShapeKey(this.#currentFetchUrl)
-          : undefined
-
-        const shouldNotify =
-          !shapeKey ||
-          upToDateTracker.shouldNotifySubscribers(shapeKey, isSseMessage)
-
-        if (!shouldNotify) {
-          // Suppress notification for this up-to-date message
-          // State has already been updated above
+        if (this.#replayMode && !isSseMessage) {
+          // We're in replay mode (replaying cached responses).
+          // Suppress this cached up-to-date notification.
+          // We'll wait for the live/SSE up-to-date before notifying subscribers.
           return
+        }
+
+        // We're either:
+        // 1. Not in replay mode (normal operation), or
+        // 2. This is a live/SSE message (exiting replay mode)
+        // In both cases, notify subscribers and record the up-to-date.
+        this.#replayMode = false // Exit replay mode
+
+        if (this.#currentFetchUrl) {
+          const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
+          upToDateTracker.recordUpToDate(shapeKey)
         }
       }
 
@@ -847,6 +852,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }): Promise<void> {
     // Store current fetch URL for shape key computation
     this.#currentFetchUrl = opts.fetchUrl
+
+    // Check if we should enter replay mode (replaying cached responses)
+    // This happens when we're starting fresh (offset=-1 or before first up-to-date)
+    // and there's a recent up-to-date in localStorage (< 60s)
+    if (!this.#isUpToDate && !this.#replayMode) {
+      const shapeKey = canonicalShapeKey(opts.fetchUrl)
+      if (upToDateTracker.shouldEnterReplayMode(shapeKey)) {
+        this.#replayMode = true
+      }
+    }
 
     const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
     if (

@@ -1,16 +1,15 @@
 /**
- * Tracks up-to-date messages to prevent multiple notifications
- * when cached responses are replayed on page refresh.
+ * Tracks up-to-date messages to detect when we're replaying cached responses.
  *
- * The tracker uses localStorage to persist timestamps across page loads
- * and a short-term in-memory window for rapid message deduplication.
+ * When a shape receives an up-to-date, we record the timestamp in localStorage.
+ * On page refresh, if we find a recent timestamp (< 60s), we know we'll be
+ * replaying cached responses and should suppress their up-to-date notifications
+ * until we reach live mode with fresh data from the server.
  */
 export class UpToDateTracker {
   private data: Record<string, number> = {}
   private readonly storageKey = `electric_up_to_date_tracker`
   private readonly cacheTTL = 60_000 // 60s to match HTTP s-maxage cache
-  private readonly suppressionWindowMs = 1000 // 1s for rapid message deduplication
-  private lastNotificationTime: Record<string, number> = {}
   private readonly maxEntries = 250
 
   constructor() {
@@ -19,58 +18,11 @@ export class UpToDateTracker {
   }
 
   /**
-   * Determines whether to notify subscribers about an up-to-date message.
-   *
-   * @param shapeKey - Canonical key identifying the shape
-   * @param isLiveMessage - Whether this is a live message (SSE) vs cached (long-poll)
-   * @returns true if subscribers should be notified, false if should be suppressed
+   * Records that a shape received an up-to-date message.
+   * This timestamp is used to detect cache replay scenarios.
    */
-  shouldNotifySubscribers(shapeKey: string, isLiveMessage: boolean): boolean {
-    const now = Date.now()
-
-    // Always notify for live (SSE) messages and record them
-    if (isLiveMessage) {
-      this.recordUpToDate(shapeKey, now)
-      return true
-    }
-
-    // Check if we have a recent up-to-date recorded in localStorage
-    // If so, suppress cached responses during the TTL window
-    const lastRecorded = this.data[shapeKey]
-    if (lastRecorded !== undefined) {
-      const age = now - lastRecorded
-      if (age < this.cacheTTL) {
-        // This is likely a cached response from the HTTP cache
-        // Don't notify subscribers but do update state
-        return false
-      }
-    }
-
-    // Also check short-term deduplication window
-    // This handles rapid successive up-to-dates within a single session
-    const lastNotification = this.lastNotificationTime[shapeKey]
-    if (lastNotification !== undefined) {
-      const timeSinceLast = now - lastNotification
-      if (timeSinceLast < this.suppressionWindowMs) {
-        return false
-      }
-    }
-
-    // No recent up-to-date found, allow notification and record it
-    this.recordUpToDate(shapeKey, now)
-    return true
-  }
-
-  /**
-   * Records an up-to-date message for a shape.
-   * Updates both localStorage and in-memory tracking.
-   */
-  private recordUpToDate(
-    shapeKey: string,
-    timestamp: number = Date.now()
-  ): void {
-    this.data[shapeKey] = timestamp
-    this.lastNotificationTime[shapeKey] = timestamp
+  recordUpToDate(shapeKey: string): void {
+    this.data[shapeKey] = Date.now()
 
     // Implement LRU eviction if we exceed max entries
     const keys = Object.keys(this.data)
@@ -79,10 +31,24 @@ export class UpToDateTracker {
         this.data[k] < this.data[min] ? k : min
       )
       delete this.data[oldest]
-      delete this.lastNotificationTime[oldest]
     }
 
     this.save()
+  }
+
+  /**
+   * Checks if we should enter replay mode for this shape.
+   * Returns true if there's a recent up-to-date (< 60s) which means
+   * we'll likely be replaying cached responses on this page load.
+   */
+  shouldEnterReplayMode(shapeKey: string): boolean {
+    const lastUpToDate = this.data[shapeKey]
+    if (lastUpToDate === undefined) {
+      return false
+    }
+
+    const age = Date.now() - lastUpToDate
+    return age < this.cacheTTL
   }
 
   /**
@@ -98,7 +64,6 @@ export class UpToDateTracker {
       const age = now - this.data[key]
       if (age > this.cacheTTL) {
         delete this.data[key]
-        delete this.lastNotificationTime[key]
         modified = true
       }
     }
@@ -136,7 +101,6 @@ export class UpToDateTracker {
    */
   clear(): void {
     this.data = {}
-    this.lastNotificationTime = {}
     this.save()
   }
 }
