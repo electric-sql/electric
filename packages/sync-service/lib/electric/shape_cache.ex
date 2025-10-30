@@ -462,10 +462,7 @@ defmodule Electric.ShapeCache do
   end
 
   @spec build_shape_dependencies([{shape_handle(), shape_def()}], MapSet.t()) ::
-          {[
-             {shape_handle(), shape_def()}
-           ], MapSet.t()}
-
+          {[{shape_handle(), shape_def()}], MapSet.t()}
   defp build_shape_dependencies([], known) do
     {[], known}
   end

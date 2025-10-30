@@ -229,8 +229,7 @@ defmodule Electric.StackSupervisor do
       Access.get(
         opts,
         :publication_manager,
-        {Electric.Replication.PublicationManager,
-         stack_id: stack_id, server: Electric.Replication.PublicationManager.name(stack_id)}
+        {Electric.Replication.PublicationManager, stack_id: stack_id}
       )
 
     persistent_kv = Access.fetch!(opts, :persistent_kv)
