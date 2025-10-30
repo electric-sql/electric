@@ -283,7 +283,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
             # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
             finishing_contol_message =
-              Jason.encode!(%{
+              :json.encode(%{
                 headers: %{
                   control: "snapshot-end",
                   xmin: to_string(xmin),

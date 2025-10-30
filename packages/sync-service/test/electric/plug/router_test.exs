@@ -1517,7 +1517,7 @@ defmodule Electric.Plug.RouterTest do
         |> Router.call(opts)
 
       assert %{status: 409} = conn
-      assert conn.resp_body == Jason.encode!([%{headers: %{control: "must-refetch"}}])
+      assert conn.resp_body == :json.encode([%{headers: %{control: "must-refetch"}}])
       assert new_shape_handle = get_resp_header(conn, "electric-handle")
       assert is_binary(new_shape_handle)
     end

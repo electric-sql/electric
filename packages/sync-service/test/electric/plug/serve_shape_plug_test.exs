@@ -238,7 +238,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         @first_offset
       end)
       |> expect(:get_log_stream, fn @before_all_offset, @first_offset, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        [:json.encode(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       conn =
@@ -280,7 +280,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         next_offset
       end)
       |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        [:json.encode(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       max_age = 62
@@ -361,7 +361,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         next_offset
       end)
       |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        [:json.encode(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       conn =
@@ -390,8 +390,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end)
       |> expect(:get_log_stream, fn @start_offset_50, _, @test_opts ->
         [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
-          Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
+          :json.encode(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+          :json.encode(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
         ]
       end)
 
@@ -510,7 +510,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         nil
       end)
       |> expect(:get_log_stream, fn @test_offset, ^next_offset, @test_opts ->
-        [Jason.encode!("test result")]
+        [:json.encode("test result")]
       end)
 
       task =
@@ -779,7 +779,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         next_offset
       end)
       |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        [:json.encode(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
       end)
 
       conn =

@@ -658,7 +658,7 @@ defmodule Electric.Shapes.ShapeTest do
             ]
           ]
         }
-        |> Jason.encode!()
+        |> :json.encode()
         |> Jason.decode!()
 
       shape_v1 =

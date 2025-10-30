@@ -723,11 +723,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp write_shape_definition!(%__MODULE__{} = opts, shape_definition) do
-    write!(
-      shape_metadata_path(opts, "shape_definition.json"),
-      Jason.encode!(shape_definition),
-      [:raw]
-    )
+    path = shape_metadata_path(opts, "shape_definition.json")
+    write!(path, :json.encode(shape_definition), [:raw])
   end
 
   defp read_shape_definition(%__MODULE__{} = opts) do
