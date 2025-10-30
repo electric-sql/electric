@@ -139,18 +139,9 @@ defmodule Electric.Shapes.Api.Response do
         body
 
       error_code_atom when is_atom(error_code_atom) ->
-        error_info = Electric.Shapes.Api.ErrorCode.get_info(error_code_atom)
-
-        body
-        |> Map.put(:code, error_info.code)
-        |> maybe_put(:component, error_info.component)
-        |> Map.put(:retryable, error_info.retryable)
-        |> maybe_put(:backoff_ms, error_info.backoff_ms)
+        Map.put(body, :code, Electric.Shapes.Api.ErrorCode.to_string(error_code_atom))
     end
   end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   @spec send(Plug.Conn.t(), t()) :: Plug.Conn.t()
   def send(%Plug.Conn{} = conn, %__MODULE__{chunked: false} = response) do

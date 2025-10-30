@@ -159,7 +159,7 @@ defmodule Electric.StatusMonitor do
             timeout,
             %{
               message: "Status monitor not found for stack ID: #{stack_id}",
-              error_code: :stack_not_found
+              error_code: :stack_unavailable
             }
           )
 
@@ -175,7 +175,7 @@ defmodule Electric.StatusMonitor do
           timeout,
           %{
             message: "Stack ID not recognised: #{stack_id}",
-            error_code: :stack_not_found
+            error_code: :stack_unavailable
           }
         )
     catch
@@ -186,7 +186,7 @@ defmodule Electric.StatusMonitor do
           timeout,
           %{
             message: "Stack #{inspect(stack_id)} has terminated",
-            error_code: :stack_terminated
+            error_code: :stack_unavailable
           }
         )
     end
@@ -338,15 +338,14 @@ defmodule Electric.StatusMonitor do
 
   Returns a map with:
   - `:message` - Human-readable error message
-  - `:error_code` - Machine-readable error code atom
+  - `:error_code` - Error code atom (always :stack_unavailable)
   """
   def timeout_error(stack_id) do
     results = stack_id |> ets_table() |> results()
-    error_code = Electric.Shapes.Api.ErrorCode.from_timeout_results(results)
 
     %{
       message: build_timeout_message(results),
-      error_code: error_code
+      error_code: :stack_unavailable
     }
   end
 

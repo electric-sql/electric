@@ -177,7 +177,7 @@ defmodule Electric.Shapes.Api.Params do
         %{connection_not_available: [msg]} ->
           Api.Response.error(api, msg,
             status: 503,
-            error_code: :stack_database_unavailable,
+            error_code: :stack_unavailable,
             known_error: true
           )
 
