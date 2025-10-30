@@ -59,105 +59,109 @@ defmodule Electric.Postgres.ConfigurationTest do
     :ok
   end
 
-  test "adds table to publication", %{pool: conn, publication_name: publication} do
-    assert get_table_identity(conn, {"public", "items"}) == "d"
-    assert list_tables_in_publication(conn, publication) == []
-    oid = get_table_oid(conn, {"public", "items"})
-    oid_rel = {oid, {"public", "items"}}
+  describe "configure publication" do
+    test "adds table to publication", %{pool: conn, publication_name: publication} do
+      assert get_table_identity(conn, {"public", "items"}) == "d"
+      assert list_tables_in_publication(conn, publication) == []
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
 
-    assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel)
+      assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel)
 
-    assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
+      assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
 
-    # idempotent
-    assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel)
+      # idempotent
+      assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel)
+    end
+
+    test "sets REPLICA IDENTITY on the table", %{pool: conn} do
+      assert get_table_identity(conn, {"public", "items"}) == "d"
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+
+      assert :ok = Configuration.set_table_replica_identity_full(conn, oid_rel)
+
+      assert get_table_identity(conn, {"public", "items"}) == "f"
+
+      # idempotent
+      assert :ok = Configuration.set_table_replica_identity_full(conn, oid_rel)
+    end
+
+    test "configures table for replication in publication and replica identity", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+
+      assert get_table_identity(conn, {"public", "items"}) == "d"
+      assert list_tables_in_publication(conn, publication) == []
+
+      assert :ok = Configuration.configure_table_for_replication(conn, publication, oid_rel)
+
+      assert get_table_identity(conn, {"public", "items"}) == "f"
+      assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
+    end
+
+    test "drops table from publication", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+
+      assert list_tables_in_publication(conn, publication) == []
+
+      assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel)
+
+      assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
+
+      assert :ok = Configuration.drop_table_from_publication(conn, publication, oid_rel)
+
+      assert list_tables_in_publication(conn, publication) == []
+
+      # idempotent
+      assert :ok = Configuration.drop_table_from_publication(conn, publication, oid_rel)
+    end
+
+    test "fails relation configuration when publication doesn't exist", %{pool: conn} do
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+
+      assert {:error, %Postgrex.Error{postgres: %{code: :undefined_object}}} =
+               Configuration.add_table_to_publication(conn, "nonexistent", oid_rel)
+
+      assert {:error, %Postgrex.Error{postgres: %{code: :undefined_object}}} =
+               Configuration.configure_table_for_replication(conn, "nonexistent", oid_rel)
+
+      assert {:error, %Postgrex.Error{postgres: %{code: :undefined_object}}} =
+               Configuration.drop_table_from_publication(conn, "nonexistent", oid_rel)
+    end
+
+    test "fails relation configuration if timing out on lock", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      oid = get_table_oid(conn, {"public", "items"})
+      oid_rel = {oid, {"public", "items"}}
+
+      start_supervised(
+        {Task,
+         fn ->
+           Postgrex.transaction(conn, fn conn ->
+             Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
+             Process.sleep(:infinity)
+           end)
+         end}
+      )
+
+      assert {:error,
+              %DBConnection.ConnectionError{
+                message: "connection is closed because of an error, disconnect or timeout"
+              }} =
+               Configuration.add_table_to_publication(conn, publication, oid_rel, 500)
+    end
   end
-
-  test "sets REPLICA IDENTITY on the table", %{pool: conn} do
-    assert get_table_identity(conn, {"public", "items"}) == "d"
-    oid = get_table_oid(conn, {"public", "items"})
-    oid_rel = {oid, {"public", "items"}}
-
-    assert :ok = Configuration.set_table_replica_identity_full(conn, oid_rel)
-
-    assert get_table_identity(conn, {"public", "items"}) == "f"
-
-    # idempotent
-    assert :ok = Configuration.set_table_replica_identity_full(conn, oid_rel)
-  end
-
-  test "configures table for replication in publication and replica identity", %{
-    pool: conn,
-    publication_name: publication
-  } do
-    oid = get_table_oid(conn, {"public", "items"})
-    oid_rel = {oid, {"public", "items"}}
-
-    assert get_table_identity(conn, {"public", "items"}) == "d"
-    assert list_tables_in_publication(conn, publication) == []
-
-    assert :ok = Configuration.configure_table_for_replication(conn, publication, oid_rel)
-
-    assert get_table_identity(conn, {"public", "items"}) == "f"
-    assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
-  end
-
-  test "drops table from publication", %{
-    pool: conn,
-    publication_name: publication
-  } do
-    oid = get_table_oid(conn, {"public", "items"})
-    oid_rel = {oid, {"public", "items"}}
-
-    assert list_tables_in_publication(conn, publication) == []
-
-    assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel)
-
-    assert list_tables_in_publication(conn, publication) == [{"public", "items"}]
-
-    assert :ok = Configuration.drop_table_from_publication(conn, publication, oid_rel)
-
-    assert list_tables_in_publication(conn, publication) == []
-
-    # idempotent
-    assert :ok = Configuration.drop_table_from_publication(conn, publication, oid_rel)
-  end
-
-  test "fails relation configuration when publication doesn't exist", %{pool: conn} do
-    oid = get_table_oid(conn, {"public", "items"})
-    oid_rel = {oid, {"public", "items"}}
-
-    assert {:error, %Postgrex.Error{postgres: %{code: :undefined_object}}} =
-             Configuration.add_table_to_publication(conn, "nonexistent", oid_rel)
-
-    assert {:error, %Postgrex.Error{postgres: %{code: :undefined_object}}} =
-             Configuration.configure_table_for_replication(conn, "nonexistent", oid_rel)
-
-    assert {:error, %Postgrex.Error{postgres: %{code: :undefined_object}}} =
-             Configuration.drop_table_from_publication(conn, "nonexistent", oid_rel)
-  end
-
-  # test "fails relation configuration if timing out on lock", %{
-  #   pool: conn,
-  #   publication_name: publication
-  # } do
-  #   oid = get_table_oid(conn, {"public", "items"})
-  #   oid_rel = {oid, {"public", "items"}}
-
-  #   start_supervised(
-  #     {Task,
-  #      fn ->
-  #        Postgrex.transaction(conn, fn conn ->
-  #          Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
-  #          Process.sleep(:infinity)
-  #        end)
-  #      end}
-  #   )
-
-  #   assert_raise DBConnection.ConnectionError, fn ->
-  #     Configuration.add_table_to_publication(conn, publication, oid_rel)
-  #   end
-  # end
 
   @empty_set MapSet.new()
   describe "determine_publication_relation_actions!/3" do

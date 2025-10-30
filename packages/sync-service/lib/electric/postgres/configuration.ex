@@ -8,18 +8,6 @@ defmodule Electric.Postgres.Configuration do
   alias Electric.Replication.PublicationManager
 
   @type relation_filters :: PublicationManager.RelationTracker.relation_filters()
-  @type relations_configured :: %{
-          Electric.oid_relation() =>
-            {:ok, :validated | :added | :dropped} | {:error, :schema_changed | term()}
-        }
-  @type relations_checked :: %{
-          Electric.oid_relation() =>
-            :ok
-            | {:error,
-               :schema_changed
-               | :relation_missing_from_publication
-               | :misconfigured_replica_identity}
-        }
 
   @type publication_status :: %{
           can_alter_publication?: boolean(),
@@ -44,6 +32,8 @@ defmodule Electric.Postgres.Configuration do
            }
 
   @typep relation_with_replica :: {Electric.relation_id(), Electric.relation(), <<_::8>>}
+
+  @default_action_timeout 5_000
 
   @doc """
   Check whether the publication with the given name exists, and return its status.
@@ -84,47 +74,81 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
+  @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation(), timeout()) ::
           :ok | {:error, term()}
-  def add_table_to_publication(conn, publication_name, oid_relation) do
+  def add_table_to_publication(
+        conn,
+        publication_name,
+        oid_relation,
+        timeout \\ @default_action_timeout
+      ) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
     Logger.debug("Adding #{table} to publication #{publication_name}")
 
-    run_in_transaction(conn, &exec_alter_publication_for_table(&1, publication_name, :add, table))
+    run_in_transaction(
+      conn,
+      &exec_alter_publication_for_table(&1, publication_name, :add, table),
+      timeout
+    )
   end
 
-  @spec set_table_replica_identity_full(Postgrex.conn(), Electric.oid_relation()) ::
+  @spec set_table_replica_identity_full(Postgrex.conn(), Electric.oid_relation(), timeout()) ::
           :ok | {:error, term()}
-  def set_table_replica_identity_full(conn, oid_relation) do
+  def set_table_replica_identity_full(conn, oid_relation, timeout \\ @default_action_timeout) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
     Logger.debug("Setting #{table} replica identity to FULL")
-    run_in_transaction(conn, &exec_set_replica_identity_full(&1, table))
+    run_in_transaction(conn, &exec_set_replica_identity_full(&1, table), timeout)
   end
 
-  @spec configure_table_for_replication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
+  @spec configure_table_for_replication(
+          Postgrex.conn(),
+          String.t(),
+          Electric.oid_relation(),
+          timeout()
+        ) ::
           :ok | {:error, term()}
-  def configure_table_for_replication(conn, publication_name, oid_relation) do
-    run_in_transaction(conn, fn conn ->
-      with :ok <- add_table_to_publication(conn, publication_name, oid_relation),
-           :ok <- set_table_replica_identity_full(conn, oid_relation) do
-        :ok
-      end
-    end)
+  def configure_table_for_replication(
+        conn,
+        publication_name,
+        oid_relation,
+        timeout \\ @default_action_timeout
+      ) do
+    run_in_transaction(
+      conn,
+      fn conn ->
+        with :ok <- add_table_to_publication(conn, publication_name, oid_relation),
+             :ok <- set_table_replica_identity_full(conn, oid_relation) do
+          :ok
+        end
+      end,
+      timeout
+    )
   end
 
-  @spec drop_table_from_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
+  @spec drop_table_from_publication(
+          Postgrex.conn(),
+          String.t(),
+          Electric.oid_relation(),
+          timeout()
+        ) ::
           :ok | {:error, term()}
-  def drop_table_from_publication(conn, publication_name, oid_relation) do
+  def drop_table_from_publication(
+        conn,
+        publication_name,
+        oid_relation,
+        timeout \\ @default_action_timeout
+      ) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
     Logger.debug("Removing #{table} from publication #{publication_name}")
 
     run_in_transaction(
       conn,
-      &exec_alter_publication_for_table(&1, publication_name, :drop, table)
+      &exec_alter_publication_for_table(&1, publication_name, :drop, table),
+      timeout
     )
   end
 
@@ -329,9 +353,9 @@ defmodule Electric.Postgres.Configuration do
     Enum.map(rows, &List.to_tuple/1)
   end
 
-  defp run_in_transaction(db_pool, fun) do
+  defp run_in_transaction(db_pool, fun, timeout) do
     run_handling_db_connection_errors(fn ->
-      case Postgrex.transaction(db_pool, fun) do
+      case Postgrex.transaction(db_pool, fun, timeout: timeout) do
         {:ok, result} ->
           result
 
@@ -344,7 +368,7 @@ defmodule Electric.Postgres.Configuration do
     end)
   end
 
-  defp run_handling_db_connection_errors(fun) do
+  def run_handling_db_connection_errors(fun) do
     fun.()
   rescue
     err -> {:error, err}

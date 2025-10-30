@@ -121,7 +121,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
        }} ->
         to_configure_only = MapSet.difference(to_configure_replica_identity, to_add)
 
-        notify_filters_result(to_preserve, {:ok, :validated}, state)
+        notify_filters_result(to_preserve, {:ok, :configured}, state)
         notify_filters_result(to_invalidate, {:error, :schema_changed}, state)
 
         if can_update_publication?(state) do
@@ -179,11 +179,13 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   end
 
   def handle_continue({:perform_relation_actions, [{:add, filter} | rest]}, state) do
-    do_relation_action(
-      &Configuration.add_table_to_publication(&1, state.publication_name, filter),
-      filter,
-      state
-    )
+    res =
+      with :ok <-
+             Configuration.add_table_to_publication(state.db_pool, state.publication_name, filter) do
+        {:ok, :configured}
+      end
+
+    notify_filter_result(filter, res, state)
 
     {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
@@ -192,38 +194,43 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         {:perform_relation_actions, [{:add_and_configure, filter} | rest]},
         state
       ) do
-    do_relation_action(
-      fn conn ->
-        with {:ok, :added} <-
-               Configuration.add_table_to_publication(conn, state.publication_name, filter),
-             {:ok, :configured} <-
-               Configuration.set_table_replica_identity_full(conn, filter) do
-          {:ok, :added}
-        end
-      end,
-      filter,
-      state
-    )
+    res =
+      with :ok <-
+             Configuration.configure_table_for_replication(
+               state.db_pool,
+               state.publication_name,
+               filter
+             ) do
+        {:ok, :configured}
+      end
 
+    notify_filter_result(filter, res, state)
     {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
 
   def handle_continue({:perform_relation_actions, [{:configure, filter} | rest]}, state) do
-    do_relation_action(
-      &Configuration.set_table_replica_identity_full(&1, filter),
-      filter,
-      state
-    )
+    res =
+      with :ok <- Configuration.set_table_replica_identity_full(state.db_pool, filter) do
+        {:ok, :configured}
+      end
+
+    notify_filter_result(filter, res, state)
 
     {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
 
   def handle_continue({:perform_relation_actions, [{:drop, filter} | rest]}, state) do
-    do_relation_action(
-      &Configuration.drop_table_from_publication(&1, state.publication_name, filter),
-      filter,
-      state
-    )
+    res =
+      with :ok <-
+             Configuration.drop_table_from_publication(
+               state.db_pool,
+               state.publication_name,
+               filter
+             ) do
+        {:ok, :dropped}
+      end
+
+    notify_filter_result(filter, res, state)
 
     {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
   end
@@ -231,7 +238,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   @spec check_publication_status(state()) ::
           {:ok, Configuration.publication_status()} | {:error, any()}
   defp check_publication_status(state) do
-    run_handling_db_connection_errors(fn ->
+    Configuration.run_handling_db_connection_errors(fn ->
       case Configuration.check_publication_status!(state.db_pool, state.publication_name) do
         :not_found ->
           err = Electric.DbConfigurationError.publication_missing(state.publication_name)
@@ -257,7 +264,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         ) ::
           {:ok, Configuration.relation_actions()} | {:error, any()}
   defp determine_publication_relation_actions(state, filters) do
-    run_handling_db_connection_errors(fn ->
+    Configuration.run_handling_db_connection_errors(fn ->
       res =
         Configuration.determine_publication_relation_actions!(
           state.db_pool,
@@ -287,35 +294,6 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     :ok
   end
 
-  defp do_relation_action(action_fn, filter, state) do
-    result = run_in_transaction(state.db_pool, action_fn)
-    notify_filter_result(filter, result, state)
-  end
-
-  defp run_in_transaction(db_pool, fun) do
-    run_handling_db_connection_errors(fn ->
-      case Postgrex.transaction(db_pool, fun) do
-        {:ok, result} ->
-          result
-
-        {:error, :rollback} ->
-          {:error, %RuntimeError{message: "Transaction unexpectedly rolled back"}}
-
-        {:error, err} ->
-          {:error, err}
-      end
-    end)
-  end
-
-  defp run_handling_db_connection_errors(fun) do
-    fun.()
-  rescue
-    err -> {:error, err}
-  catch
-    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
-      {:error, %DBConnection.ConnectionError{message: "Database connection not available"}}
-  end
-
   defp can_update_publication?(%__MODULE__{
          can_alter_publication?: can_alter,
          manual_table_publishing?: manual
@@ -327,7 +305,8 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     for filter <- filters, do: notify_filter_result(filter, reply, state)
   end
 
-  defp notify_filter_result(filter, {:ok, _} = reply, state) do
+  defp notify_filter_result(filter, {:ok, res} = reply, state)
+       when res in [:configured, :dropped] do
     PublicationManager.RelationTracker.notify_relation_configuration_result(
       [stack_id: state.stack_id],
       filter,
