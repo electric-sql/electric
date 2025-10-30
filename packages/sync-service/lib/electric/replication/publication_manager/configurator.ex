@@ -146,6 +146,27 @@ defmodule Electric.Replication.PublicationManager.Configurator do
             |> Stream.concat()
             |> Enum.sort(&(elem(&1, 1) <= elem(&2, 1)))
 
+          if relation_actions != [] do
+            to_add_list = for {_, rel} <- to_add, do: Utils.relation_to_sql(rel)
+            to_drop_list = for {_, rel} <- to_drop, do: Utils.relation_to_sql(rel)
+            to_invalidate_list = for {_, rel} <- to_invalidate, do: Utils.relation_to_sql(rel)
+
+            to_configure_list =
+              for {_, rel} <- to_configure_replica_identity, do: Utils.relation_to_sql(rel)
+
+            Logger.info(
+              "Configuring publication #{state.publication_name} to " <>
+                "drop #{inspect(to_drop_list)} tables, " <>
+                "add #{inspect(to_add_list)} tables, " <>
+                "and configure replica identity for #{inspect(to_configure_list)} tables " <>
+                "- skipping altered tables #{inspect(to_invalidate_list)}",
+              publication_alter_drop_tables: to_drop_list,
+              publication_alter_add_tables: to_add_list,
+              publication_alter_configure_replica_identity: to_configure_list,
+              publication_alter_invalid_tables: to_invalidate_list
+            )
+          end
+
           {:noreply, state, {:continue, {:perform_relation_actions, relation_actions}}}
         else
           notify_filters_result(to_add, {:error, :relation_missing_from_publication}, state)
@@ -175,6 +196,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   end
 
   def handle_continue({:perform_relation_actions, []}, state) do
+    Logger.debug("Processed all publication relation actions")
     {:noreply, state}
   end
 
