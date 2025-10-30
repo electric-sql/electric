@@ -283,7 +283,11 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
-               {:error, "Timeout waiting for integrety checks"}
+               {:error,
+                %{
+                  message: "Timeout waiting for integrety checks",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns explicit error on timeout when supplied", %{
