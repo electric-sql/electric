@@ -28,17 +28,50 @@ export interface BackoffOptions {
   initialDelay: number
   /**
    * Maximum retry delay in milliseconds
+   * After reaching this, delay stays constant (e.g., retry every 60s)
    */
   maxDelay: number
   multiplier: number
   onFailedAttempt?: () => void
   debug?: boolean
+  /**
+   * Maximum number of retry attempts before giving up.
+   * Set to Infinity (default) for indefinite retries - needed for offline scenarios
+   * where clients may go offline and come back later.
+   */
+  maxRetries?: number
 }
 
 export const BackoffDefaults = {
   initialDelay: 100,
-  maxDelay: 10_000,
+  maxDelay: 60_000, // Cap at 60s - reasonable for long-lived connections
   multiplier: 1.3,
+  maxRetries: Infinity, // Retry forever - clients may go offline and come back
+}
+
+/**
+ * Parse Retry-After header value and return delay in milliseconds
+ * Supports both delta-seconds format and HTTP-date format
+ * Returns 0 if header is not present or invalid
+ */
+export function parseRetryAfterHeader(retryAfter: string | undefined): number {
+  if (!retryAfter) return 0
+
+  // Try parsing as seconds (delta-seconds format)
+  const retryAfterSec = Number(retryAfter)
+  if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
+    return retryAfterSec * 1000
+  }
+
+  // Try parsing as HTTP-date
+  const retryDate = Date.parse(retryAfter)
+  if (!isNaN(retryDate)) {
+    // Handle clock skew: clamp to non-negative, cap at reasonable max
+    const deltaMs = retryDate - Date.now()
+    return Math.max(0, Math.min(deltaMs, 3600_000)) // Cap at 1 hour
+  }
+
+  return 0
 }
 
 export function createFetchWithBackoff(
@@ -51,6 +84,7 @@ export function createFetchWithBackoff(
     multiplier,
     debug = false,
     onFailedAttempt,
+    maxRetries = Infinity,
   } = backoffOptions
   return async (...args: Parameters<typeof fetch>): Promise<Response> => {
     const url = args[0]
@@ -62,7 +96,9 @@ export function createFetchWithBackoff(
     while (true) {
       try {
         const result = await fetchClient(...args)
-        if (result.ok) return result
+        if (result.ok) {
+          return result
+        }
 
         const err = await FetchError.fromResponse(result, url.toString())
 
@@ -80,17 +116,47 @@ export function createFetchWithBackoff(
           // Any client errors cannot be backed off on, leave it to the caller to handle.
           throw e
         } else {
-          // Exponentially backoff on errors.
-          // Wait for the current delay duration
-          await new Promise((resolve) => setTimeout(resolve, delay))
+          // Check max retries
+          attempt++
+          if (attempt > maxRetries) {
+            if (debug) {
+              console.log(
+                `Max retries reached (${attempt}/${maxRetries}), giving up`
+              )
+            }
+            throw e
+          }
 
-          // Increase the delay for the next attempt
-          delay = Math.min(delay * multiplier, maxDelay)
+          // Calculate wait time honoring server-driven backoff as a floor
+          // Precedence: max(serverMinimum, min(clientMaxDelay, backoffWithJitter))
+
+          // 1. Parse server-provided Retry-After (if present)
+          const serverMinimumMs =
+            e instanceof FetchError && e.headers
+              ? parseRetryAfterHeader(e.headers[`retry-after`])
+              : 0
+
+          // 2. Calculate client backoff with full jitter strategy
+          // Full jitter: random_between(0, min(cap, exponential_backoff))
+          // See: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+          const jitter = Math.random() * delay // random value between 0 and current delay
+          const clientBackoffMs = Math.min(jitter, maxDelay) // cap at maxDelay
+
+          // 3. Server minimum is the floor, client cap is the ceiling
+          const waitMs = Math.max(serverMinimumMs, clientBackoffMs)
 
           if (debug) {
-            attempt++
-            console.log(`Retry attempt #${attempt} after ${delay}ms`)
+            const source = serverMinimumMs > 0 ? `server+client` : `client`
+            console.log(
+              `Retry attempt #${attempt} after ${waitMs}ms (${source}, serverMin=${serverMinimumMs}ms, clientBackoff=${clientBackoffMs}ms)`
+            )
           }
+
+          // Wait for the calculated duration
+          await new Promise((resolve) => setTimeout(resolve, waitMs))
+
+          // Increase the delay for the next attempt (capped at maxDelay)
+          delay = Math.min(delay * multiplier, maxDelay)
         }
       }
     }

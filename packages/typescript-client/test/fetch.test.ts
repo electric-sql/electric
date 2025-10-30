@@ -6,6 +6,7 @@ import {
   BackoffDefaults,
   createFetchWithChunkBuffer,
   createFetchWithConsumedMessages,
+  parseRetryAfterHeader,
 } from '../src/fetch'
 import { CHUNK_LAST_OFFSET_HEADER, SHAPE_HANDLE_HEADER } from '../src/constants'
 import { afterEach } from 'node:test'
@@ -172,6 +173,69 @@ describe(`createFetchWithBackoff`, () => {
   //   )
   //   expect(mockFetchClient.mock.calls.length).greaterThan(1)
   // })
+})
+
+describe(`parseRetryAfterHeader`, () => {
+  it(`should return 0 for undefined header`, () => {
+    expect(parseRetryAfterHeader(undefined)).toBe(0)
+  })
+
+  it(`should return 0 for empty string`, () => {
+    expect(parseRetryAfterHeader(``)).toBe(0)
+  })
+
+  it(`should parse delta-seconds format correctly`, () => {
+    expect(parseRetryAfterHeader(`120`)).toBe(120_000) // 120 seconds = 120,000 ms
+    expect(parseRetryAfterHeader(`1`)).toBe(1_000)
+    expect(parseRetryAfterHeader(`60`)).toBe(60_000)
+  })
+
+  it(`should return 0 for invalid delta-seconds values`, () => {
+    expect(parseRetryAfterHeader(`-10`)).toBe(0) // Negative values
+    expect(parseRetryAfterHeader(`0`)).toBe(0) // Zero
+    expect(parseRetryAfterHeader(`abc`)).toBe(0) // Non-numeric
+  })
+
+  it(`should parse HTTP-date format correctly`, () => {
+    const futureDate = new Date(Date.now() + 30_000) // 30 seconds in the future
+    const httpDate = futureDate.toUTCString()
+    const result = parseRetryAfterHeader(httpDate)
+
+    // Should be approximately 30 seconds, allow some tolerance for test execution time
+    expect(result).toBeGreaterThan(29_000)
+    expect(result).toBeLessThan(31_000)
+  })
+
+  it(`should handle clock skew for past dates`, () => {
+    const pastDate = new Date(Date.now() - 10_000) // 10 seconds in the past
+    const httpDate = pastDate.toUTCString()
+
+    // Should clamp to 0 for past dates
+    expect(parseRetryAfterHeader(httpDate)).toBe(0)
+  })
+
+  it(`should cap very large HTTP-date values at 1 hour`, () => {
+    const farFutureDate = new Date(Date.now() + 7200_000) // 2 hours in the future
+    const httpDate = farFutureDate.toUTCString()
+
+    // Should be capped at 1 hour (3600000 ms)
+    expect(parseRetryAfterHeader(httpDate)).toBe(3600_000)
+  })
+
+  it(`should return 0 for invalid HTTP-date format`, () => {
+    expect(parseRetryAfterHeader(`not a date`)).toBe(0)
+    expect(parseRetryAfterHeader(`2024-13-45`)).toBe(0) // Invalid date
+  })
+
+  it(`should handle edge case of very large delta-seconds`, () => {
+    // Very large number (more than 1 hour worth of seconds)
+    expect(parseRetryAfterHeader(`7200`)).toBe(7200_000) // 2 hours in ms (not capped in delta-seconds format)
+  })
+
+  it(`should handle decimal numbers in delta-seconds format`, () => {
+    // HTTP spec requires delta-seconds to be integers, but parsing as Number allows decimals
+    expect(parseRetryAfterHeader(`30.5`)).toBe(30_500)
+  })
 })
 
 describe(`createFetchWithChunkBuffer`, () => {
