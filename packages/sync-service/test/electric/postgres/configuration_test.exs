@@ -22,40 +22,6 @@ defmodule Electric.Postgres.ConfigurationTest do
       []
     )
 
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE other_table (
-        id UUID PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-      """,
-      []
-    )
-
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE other_other_table (
-        id UUID PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-      """,
-      []
-    )
-
-    test_pid = self()
-
-    Repatch.patch(Postgrex, :query, fn conn, sql, params ->
-      if String.starts_with?(sql, "ALTER TABLE"),
-        do: send(test_pid, {:alter_table, sql, params})
-
-      if String.starts_with?(sql, "ALTER PUBLICATION"),
-        do: send(test_pid, {:alter_publication, sql, params})
-
-      Repatch.real(Postgrex, :query, [conn, sql, params])
-    end)
-
     :ok
   end
 
@@ -165,32 +131,57 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   @empty_set MapSet.new()
   describe "determine_publication_relation_actions!/3" do
+    setup %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        "CREATE TABLE other_table_1 (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        "CREATE TABLE other_table_2 (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        "CREATE TABLE other_table_3 (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        []
+      )
+
+      :ok
+    end
+
     test "determines necessary actions to configure provided relations", %{
       pool: conn,
       publication_name: publication
     } do
       oid1 = get_table_oid(conn, {"public", "items"})
-      oid2 = get_table_oid(conn, {"public", "other_table"})
-      oid3 = get_table_oid(conn, {"public", "other_other_table"})
+      oid2 = get_table_oid(conn, {"public", "other_table_1"})
+      oid3 = get_table_oid(conn, {"public", "other_table_2"})
+      oid4 = get_table_oid(conn, {"public", "other_table_3"})
       oid_rel1 = {oid1, {"public", "items"}}
-      oid_rel2 = {oid2, {"public", "other_table"}}
-      oid_rel3 = {oid3, {"public", "other_other_table"}}
-      oid_rel4 = {999_999, {"public", "nonexistent_table"}}
+      oid_rel2 = {oid2, {"public", "other_table_1"}}
+      oid_rel3 = {oid3, {"public", "other_table_2"}}
+      oid_rel4 = {oid4, {"public", "other_table_3"}}
+      oid_rel5 = {999_999, {"public", "nonexistent_table"}}
 
       assert :ok = Configuration.configure_table_for_replication(conn, publication, oid_rel1)
       assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel2)
+      assert :ok = Configuration.add_table_to_publication(conn, publication, oid_rel4)
 
       assert %{
                to_preserve: MapSet.new([oid_rel1]),
                to_add: MapSet.new([oid_rel3]),
                to_configure_replica_identity: MapSet.new([oid_rel2, oid_rel3]),
-               to_drop: @empty_set,
-               to_invalidate: MapSet.new([oid_rel4])
+               to_drop: MapSet.new([oid_rel4]),
+               to_invalidate: MapSet.new([oid_rel5])
              } ==
                Configuration.determine_publication_relation_actions!(
                  conn,
                  publication,
-                 MapSet.new([oid_rel1, oid_rel2, oid_rel3, oid_rel4])
+                 MapSet.new([oid_rel1, oid_rel2, oid_rel3, oid_rel5])
                )
     end
 
@@ -199,20 +190,20 @@ defmodule Electric.Postgres.ConfigurationTest do
       publication_name: publication
     } do
       oid1 = get_table_oid(conn, {"public", "items"})
-      oid2 = get_table_oid(conn, {"public", "other_table"})
+      oid2 = get_table_oid(conn, {"public", "other_table_1"})
       oid_rel1 = {oid1, {"public", "items"}}
-      oid_rel2 = {oid2, {"public", "other_table"}}
+      oid_rel2 = {oid2, {"public", "other_table_1"}}
       oid_rel1_renamed = {oid1, {"public", "items_old"}}
 
       assert :ok = Configuration.configure_table_for_replication(conn, publication, oid_rel1)
 
       # Rename one table and recreate the other
       Postgrex.query!(conn, "ALTER TABLE items RENAME TO items_old", [])
-      Postgrex.query!(conn, "DROP TABLE public.other_table", [])
+      Postgrex.query!(conn, "DROP TABLE public.other_table_1", [])
 
       Postgrex.query!(
         conn,
-        "CREATE TABLE public.other_table (id UUID PRIMARY KEY, value TEXT NOT NULL)",
+        "CREATE TABLE public.other_table_1 (id UUID PRIMARY KEY, value TEXT NOT NULL)",
         []
       )
 
