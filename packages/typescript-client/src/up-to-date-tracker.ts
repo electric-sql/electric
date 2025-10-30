@@ -1,13 +1,18 @@
+interface UpToDateEntry {
+  timestamp: number
+  cursor: string
+}
+
 /**
  * Tracks up-to-date messages to detect when we're replaying cached responses.
  *
- * When a shape receives an up-to-date, we record the timestamp in localStorage.
- * On page refresh, if we find a recent timestamp (< 60s), we know we'll be
- * replaying cached responses and should suppress their up-to-date notifications
- * until we reach live mode with fresh data from the server.
+ * When a shape receives an up-to-date, we record the timestamp and cursor in localStorage.
+ * On page refresh, if we find a recent timestamp (< 60s), we know we'll be replaying
+ * cached responses. We suppress their up-to-date notifications until we see a NEW cursor
+ * (different from the last recorded one), which indicates fresh data from the server.
  */
 export class UpToDateTracker {
-  private data: Record<string, number> = {}
+  private data: Record<string, UpToDateEntry> = {}
   private readonly storageKey = `electric_up_to_date_tracker`
   private readonly cacheTTL = 60_000 // 60s to match typical CDN s-maxage cache duration
   private readonly maxEntries = 250
@@ -18,17 +23,20 @@ export class UpToDateTracker {
   }
 
   /**
-   * Records that a shape received an up-to-date message.
-   * This timestamp is used to detect cache replay scenarios.
+   * Records that a shape received an up-to-date message with a specific cursor.
+   * This timestamp and cursor are used to detect cache replay scenarios.
    */
-  recordUpToDate(shapeKey: string): void {
-    this.data[shapeKey] = Date.now()
+  recordUpToDate(shapeKey: string, cursor: string): void {
+    this.data[shapeKey] = {
+      timestamp: Date.now(),
+      cursor,
+    }
 
     // Implement LRU eviction if we exceed max entries
     const keys = Object.keys(this.data)
     if (keys.length > this.maxEntries) {
       const oldest = keys.reduce((min, k) =>
-        this.data[k] < this.data[min] ? k : min
+        this.data[k].timestamp < this.data[min].timestamp ? k : min
       )
       delete this.data[oldest]
     }
@@ -38,17 +46,22 @@ export class UpToDateTracker {
 
   /**
    * Checks if we should enter replay mode for this shape.
-   * Returns true if there's a recent up-to-date (< 60s) which means
-   * we'll likely be replaying cached responses on this page load.
+   * Returns the last seen cursor if there's a recent up-to-date (< 60s),
+   * which means we'll likely be replaying cached responses.
+   * Returns null if no recent up-to-date exists.
    */
-  shouldEnterReplayMode(shapeKey: string): boolean {
-    const lastUpToDate = this.data[shapeKey]
-    if (lastUpToDate === undefined) {
-      return false
+  shouldEnterReplayMode(shapeKey: string): string | null {
+    const entry = this.data[shapeKey]
+    if (!entry) {
+      return null
     }
 
-    const age = Date.now() - lastUpToDate
-    return age < this.cacheTTL
+    const age = Date.now() - entry.timestamp
+    if (age >= this.cacheTTL) {
+      return null
+    }
+
+    return entry.cursor
   }
 
   /**
@@ -61,7 +74,7 @@ export class UpToDateTracker {
     let modified = false
 
     for (const key of keys) {
-      const age = now - this.data[key]
+      const age = now - this.data[key].timestamp
       if (age > this.cacheTTL) {
         delete this.data[key]
         modified = true
