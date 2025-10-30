@@ -167,6 +167,17 @@ mix test
 
 #### TypeScript Tests
 
+TypeScript tests require both the database and a running sync service.
+
+In a separate terminal, start the sync service:
+
+```sh
+cd packages/sync-service
+iex -S mix
+```
+
+Then run the tests:
+
 **Individual Package:**
 
 ```sh
