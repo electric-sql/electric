@@ -84,194 +84,48 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  @doc """
-  Check whether the state of the publication relations in the database matches the sets of
-  filters passed into the function.
-
-  For any of the relations in the filters that is missing from the publication or doesn't have its
-  replica identity set to full, an error is returned.
-
-  If some of the relations included in the publication have been modified (e.g. the table name
-  has changed), those will be returned as a list of invalidated relations from this function to
-  allow for the cleanup of their corresponding shapes.
-  """
-  @spec validate_publication_configuration!(Postgrex.conn(), String.t(), relation_filters()) ::
-          relations_configured()
-  def validate_publication_configuration!(conn, publication_name, expected_rels) do
-    %{
-      to_preserve: to_preserve,
-      to_add: to_add,
-      to_configure_replica_identity: to_configure_replica_identity,
-      to_invalidate: to_invalidate
-    } =
-      determine_publication_relation_actions!(conn, publication_name, expected_rels)
-
-    configuration_result =
-      [
-        Enum.map(to_preserve, &{&1, {:ok, :validated}}),
-        Enum.map(to_add, &{&1, {:error, :relation_missing_from_publication}}),
-        Enum.map(
-          MapSet.difference(to_configure_replica_identity, to_add),
-          &{&1, {:error, :misconfigured_replica_identity}}
-        ),
-        Enum.map(to_invalidate, &{&1, {:error, :schema_changed}})
-      ]
-      |> Stream.concat()
-      |> Map.new()
-
-    if MapSet.size(to_add) == 0 and MapSet.size(to_configure_replica_identity) == 0 do
-      Logger.info(fn ->
-        tables = for {_, rel} <- to_preserve, do: Utils.relation_to_sql(rel)
-
-        "Verified publication #{publication_name} to include #{inspect(tables)} tables with REPLICA IDENTITY FULL"
-      end)
-    end
-
-    configuration_result
-  end
-
-  @doc """
-  Configure the publication to include all relevant tables, also setting table identity to `FULL`
-  if necessary. Return a map of relations and whether they were successfully configured.
-
-  Any tables that were previously configured but were either renamed or dropped will *not* be automatically
-  re-added to the publication. Mentioned tables that have been renamed or dropped will be returned as a list.
-
-  Important: this function should not be ran in a transaction, because it starts multiple
-  internal transactions that are sometimes expected to fail.
-  """
-  @spec configure_publication!(Postgrex.conn(), String.t(), relation_filters(), timeout()) ::
-          relations_configured()
-
-  def configure_publication!(conn, publication_name, new_relations, timeout \\ 5000) do
-    Postgrex.transaction(conn, &do_configure_publication!(&1, publication_name, new_relations),
-      timeout: timeout
-    )
-    |> case do
-      {:ok, relations_configured} ->
-        Logger.debug(
-          "Publication configuration committed - result: #{inspect(relations_configured)}"
-        )
-
-        relations_configured
-
-      {:error, :rollback} ->
-        raise "Publication configuration transaction was unexpectedly rolled back"
-
-      {:error, reason} ->
-        raise reason
-    end
-  end
-
-  @spec do_configure_publication!(Postgrex.conn(), String.t(), relation_filters()) ::
-          relations_configured()
-  defp do_configure_publication!(conn, publication_name, new_publication_rels) do
-    %{
-      to_preserve: to_preserve,
-      to_add: to_add,
-      to_drop: to_drop,
-      to_configure_replica_identity: to_configure_replica_identity,
-      to_invalidate: to_invalidate
-    } =
-      determine_publication_relation_actions!(conn, publication_name, new_publication_rels)
-
-    # Re-add tables that need fixing
-    to_add = MapSet.union(to_add, to_configure_replica_identity)
-
-    if MapSet.size(to_add) > 0 or MapSet.size(to_drop) > 0 do
-      to_add_list = for {_, rel} <- to_add, do: Utils.relation_to_sql(rel)
-      to_drop_list = for {_, rel} <- to_drop, do: Utils.relation_to_sql(rel)
-      to_invalidate_list = for {_, rel} <- to_invalidate, do: Utils.relation_to_sql(rel)
-
-      Logger.info(
-        "Configuring publication #{publication_name} to " <>
-          "drop #{inspect(to_drop_list)} tables, and " <>
-          "add #{inspect(to_add_list)} tables " <>
-          "- skipping altered tables #{inspect(to_invalidate_list)}",
-        publication_alter_drop_tables: to_drop_list,
-        publication_alter_add_tables: to_add_list,
-        publication_alter_invalid_tables: to_invalidate_list
-      )
-    end
-
-    # Notes on avoiding deadlocks
-    # - `ALTER TABLE` should be after the publication altering, because it takes out an exclusive lock over this table,
-    #   but the publication altering takes out a shared lock on all mentioned tables, so a concurrent transaction will
-    #   deadlock if the order is reversed, and we've seen this happen even within the context of a single process perhaps
-    #   across multiple calls from separate deployments or timing issues.
-    # - It is important for all table operations to also occur in the same order to avoid deadlocks due to
-    #   lock ordering issues, so despite splitting drop and add operations we sort them and process them together
-    #   in a sorted single pass
-    results =
-      Enum.concat(
-        Enum.map(to_drop, &{&1, :drop}),
-        Enum.map(to_add, &{&1, :add})
-      )
-      |> Enum.sort(&(elem(&1, 0) <= elem(&2, 0)))
-      |> Enum.map(fn
-        {rel, :drop} -> {rel, drop_table_from_publication(conn, publication_name, rel)}
-        {rel, :add} -> {rel, add_table_to_publication(conn, publication_name, rel)}
-      end)
-      |> Enum.map(fn
-        {rel, {:ok, :added}} = res ->
-          if MapSet.member?(to_configure_replica_identity, rel) do
-            case set_table_replica_identity_full(conn, rel) do
-              {:ok, :configured} -> res
-              {:error, error} -> {rel, {:error, error}}
-            end
-          else
-            res
-          end
-
-        res ->
-          res
-      end)
-
-    configuration_result =
-      results
-      |> Enum.concat(Enum.map(to_preserve, &{&1, {:ok, :validated}}))
-      |> Enum.concat(Enum.map(to_invalidate, &{&1, {:error, :schema_changed}}))
-      |> Map.new()
-
-    configuration_result
-  end
-
   @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
-          {:ok, :added} | {:error, term()}
+          :ok | {:error, term()}
   def add_table_to_publication(conn, publication_name, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
     Logger.debug("Adding #{table} to publication #{publication_name}")
 
-    with :ok <- exec_alter_publication_for_table(conn, publication_name, :add, table) do
-      {:ok, :added}
-    end
+    run_in_transaction(conn, &exec_alter_publication_for_table(&1, publication_name, :add, table))
   end
 
   @spec set_table_replica_identity_full(Postgrex.conn(), Electric.oid_relation()) ::
-          {:ok, :configured} | {:error, term()}
+          :ok | {:error, term()}
   def set_table_replica_identity_full(conn, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
-
     Logger.debug("Setting #{table} replica identity to FULL")
+    run_in_transaction(conn, &exec_set_replica_identity_full(&1, table))
+  end
 
-    with :ok <- exec_set_replica_identity_full(conn, table) do
-      {:ok, :configured}
-    end
+  @spec configure_table_for_replication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
+          :ok | {:error, term()}
+  def configure_table_for_replication(conn, publication_name, oid_relation) do
+    run_in_transaction(conn, fn conn ->
+      with :ok <- add_table_to_publication(conn, publication_name, oid_relation),
+           :ok <- set_table_replica_identity_full(conn, oid_relation) do
+        :ok
+      end
+    end)
   end
 
   @spec drop_table_from_publication(Postgrex.conn(), String.t(), Electric.oid_relation()) ::
-          {:ok, :dropped} | {:error, term()}
+          :ok | {:error, term()}
   def drop_table_from_publication(conn, publication_name, oid_relation) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
     Logger.debug("Removing #{table} from publication #{publication_name}")
 
-    with :ok <- exec_alter_publication_for_table(conn, publication_name, :drop, table) do
-      {:ok, :dropped}
-    end
+    run_in_transaction(
+      conn,
+      &exec_alter_publication_for_table(&1, publication_name, :drop, table)
+    )
   end
 
   @spec exec_alter_publication_for_table(Postgrex.conn(), String.t(), :add | :drop, String.t()) ::
@@ -298,11 +152,16 @@ defmodule Electric.Postgres.Configuration do
         Postgrex.query!(conn, "RELEASE SAVEPOINT before_publication", [])
 
         case reason do
-          # undefined table can happen when removing a table that was already removed
-          %{postgres: %{code: :undefined_object}} when op_atom == :drop -> :ok
+          # undefined object can happen when removing a table that was already removed
+          %{postgres: %{code: :undefined_object, message: "relation" <> _}} when op_atom == :drop ->
+            :ok
+
           # duplicate object can happen when adding a table that was already added
-          %{postgres: %{code: :duplicate_object}} when op_atom == :add -> :ok
-          _ -> {:error, reason}
+          %{postgres: %{code: :duplicate_object}} when op_atom == :add ->
+            :ok
+
+          _ ->
+            {:error, reason}
         end
     end
   end
@@ -468,6 +327,30 @@ defmodule Electric.Postgres.Configuration do
       )
 
     Enum.map(rows, &List.to_tuple/1)
+  end
+
+  defp run_in_transaction(db_pool, fun) do
+    run_handling_db_connection_errors(fn ->
+      case Postgrex.transaction(db_pool, fun) do
+        {:ok, result} ->
+          result
+
+        {:error, :rollback} ->
+          {:error, %RuntimeError{message: "Transaction unexpectedly rolled back"}}
+
+        {:error, err} ->
+          {:error, err}
+      end
+    end)
+  end
+
+  defp run_handling_db_connection_errors(fun) do
+    fun.()
+  rescue
+    err -> {:error, err}
+  catch
+    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+      {:error, %DBConnection.ConnectionError{message: "Database connection not available"}}
   end
 
   @spec trim_changed_relation(changed_relation()) :: Electric.oid_relation()
