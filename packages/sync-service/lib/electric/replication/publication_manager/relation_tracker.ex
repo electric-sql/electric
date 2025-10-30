@@ -171,7 +171,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
     # if the relation is already committed AND part of the last made
     # update submission, we can consider it ready
-    relation_ready =
+    relation_ready? =
       MapSet.member?(state.submitted_relation_filters, oid_rel) and
         MapSet.member?(state.committed_relation_filters, oid_rel)
 
@@ -192,7 +192,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
           state.publication_refresh_period
         }
 
-      relation_ready ->
+      relation_ready? ->
         {:reply, :ok, state, state.publication_refresh_period}
 
       # otherwise, add the caller to the waiters list and reply when the
