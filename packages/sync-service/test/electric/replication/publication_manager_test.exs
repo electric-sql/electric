@@ -75,11 +75,20 @@ defmodule Electric.Replication.PublicationManagerTest do
   end
 
   describe "wait_for_restore/1" do
-    test "restoration immediately complete if nothing to restore", ctx do
+    test "immediately completes if nothing to restore", ctx do
       notify_alter_queries()
       assert :ok == PublicationManager.wait_for_restore(ctx.pub_mgr_opts)
       assert_pub_tables(ctx, [])
       refute_receive {:alter_publication, _, _}
+    end
+
+    test "restores existing shapes", ctx do
+      # populate shape status cache with shape
+      shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
+      {:ok, _shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
+
+      assert :ok == PublicationManager.wait_for_restore(ctx.pub_mgr_opts)
+      assert_pub_tables(ctx, [ctx.relation])
     end
   end
 

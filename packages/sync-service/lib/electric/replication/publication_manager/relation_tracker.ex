@@ -165,7 +165,8 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
             end
           )
 
-        state = update_publication_if_necessary(state)
+        # filters will be pulled by the configurator on startup, so no
+        # need to explicitly call for an update here
         {:noreply, state, state.publication_refresh_period}
       end
     )
