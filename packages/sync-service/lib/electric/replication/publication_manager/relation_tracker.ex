@@ -228,18 +228,23 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
         do: fail_generated_column_shapes(state),
         else: state
 
-    {:noreply, %{state | publishes_generated_columns?: status.publishes_generated_columns?}}
+    {:noreply, %{state | publishes_generated_columns?: status.publishes_generated_columns?},
+     state.publication_refresh_period}
   end
 
   def handle_cast({:relation_configuration_result, oid_rel, {:ok, :dropped}}, state) do
     new_committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
-    {:noreply, %{state | committed_relation_filters: new_committed_filters}}
+
+    {:noreply, %{state | committed_relation_filters: new_committed_filters},
+     state.publication_refresh_period}
   end
 
   def handle_cast({:relation_configuration_result, oid_rel, {:ok, :configured}}, state) do
     state = reply_to_relation_waiters(oid_rel, :ok, state)
     new_committed_filters = MapSet.put(state.committed_relation_filters, oid_rel)
-    {:noreply, %{state | committed_relation_filters: new_committed_filters}}
+
+    {:noreply, %{state | committed_relation_filters: new_committed_filters},
+     state.publication_refresh_period}
   end
 
   def handle_cast({:relation_configuration_result, oid_rel, {:error, error}}, state) do
@@ -257,11 +262,11 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
     end
 
-    {:noreply, state}
+    {:noreply, state, state.publication_refresh_period}
   end
 
   def handle_cast({:configuration_error, {:error, error}}, state) do
-    {:noreply, reply_to_all_waiters({:error, error}, state)}
+    {:noreply, reply_to_all_waiters({:error, error}, state), state.publication_refresh_period}
   end
 
   @impl true
