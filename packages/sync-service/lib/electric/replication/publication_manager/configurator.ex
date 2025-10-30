@@ -43,11 +43,9 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
-    name = Keyword.get(opts, :name, name(stack_id))
-
     opts = Keyword.put_new(opts, :db_pool, Electric.Connection.Manager.admin_pool(stack_id))
 
-    GenServer.start_link(__MODULE__, opts, name: name)
+    GenServer.start_link(__MODULE__, opts, name: name(stack_id))
   end
 
   @impl true
@@ -106,7 +104,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         {:noreply, state, {:continue, {:configure_filters, filters}}}
 
       {:error, err} ->
-        for filter <- filters, do: notify_filter_result(filter, {:error, err}, state)
+        notify_global_configuration_error(err, state)
         {:noreply, state}
     end
   end
@@ -163,7 +161,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
         end
 
       {:error, err} ->
-        notify_filters_result(filters, {:error, err}, state)
+        notify_global_configuration_error(err, state)
         {:noreply, state}
     end
   end
@@ -322,7 +320,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   end
 
   defp notify_filter_result(filter, {:ok, _} = reply, state) do
-    PublicationManager.RelationTracker.notify_configuration_result(
+    PublicationManager.RelationTracker.notify_relation_configuration_result(
       [stack_id: state.stack_id],
       filter,
       reply
@@ -332,10 +330,17 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   defp notify_filter_result(filter, {:error, err}, state) do
     reply = {:error, publication_error(err, filter, state)}
 
-    PublicationManager.RelationTracker.notify_configuration_result(
+    PublicationManager.RelationTracker.notify_relation_configuration_result(
       [stack_id: state.stack_id],
       filter,
       reply
+    )
+  end
+
+  defp notify_global_configuration_error(err, state) do
+    PublicationManager.RelationTracker.notify_configuration_error(
+      [stack_id: state.stack_id],
+      {:error, err}
     )
   end
 

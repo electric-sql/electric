@@ -134,7 +134,6 @@ defmodule Support.ComponentSetup do
         :start_link,
         [
           [
-            name: server,
             stack_id: ctx.stack_id,
             publication_name: ctx.publication_name,
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
@@ -146,9 +145,11 @@ defmodule Support.ComponentSetup do
       restart: :temporary
     })
 
+    call_target = Electric.Replication.PublicationManager.RelationTracker.name(ctx.stack_id)
+
     %{
       publication_manager:
-        {Electric.Replication.PublicationManager, stack_id: ctx.stack_id, server: server}
+        {Electric.Replication.PublicationManager, stack_id: ctx.stack_id, server: call_target}
     }
   end
 

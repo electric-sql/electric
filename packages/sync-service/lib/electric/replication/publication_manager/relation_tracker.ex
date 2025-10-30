@@ -24,6 +24,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     :publication_refresh_period,
     relation_ref_counts: %{},
     prepared_relation_filters: MapSet.new(),
+    submitted_relation_filters: MapSet.new(),
     committed_relation_filters: MapSet.new(),
     tracked_shape_handles: %{},
     waiters: %{},
@@ -39,6 +40,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
            stack_id: Electric.stack_id(),
            relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
            prepared_relation_filters: relation_filters(),
+           submitted_relation_filters: relation_filters(),
            committed_relation_filters: relation_filters(),
            waiters: %{Electric.oid_relation() => [GenServer.from(), ...]},
            tracked_shape_handles: %{shape_handle() => publication_filter()},
@@ -87,14 +89,20 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     :ok
   end
 
-  @spec notify_configuration_result(
+  @spec notify_relation_configuration_result(
           Keyword.t(),
           Electric.oid_relation(),
           {:ok, term()} | {:error, any()}
         ) :: :ok
-  def notify_configuration_result(opts, oid_rel, result) do
+  def notify_relation_configuration_result(opts, oid_rel, result) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.cast(server, {:configuration_result, oid_rel, result})
+    GenServer.cast(server, {:relation_configuration_result, oid_rel, result})
+  end
+
+  @spec notify_configuration_error(Keyword.t(), {:error, any()}) :: :ok
+  def notify_configuration_error(opts, result) do
+    server = Access.get(opts, :server, name(opts))
+    GenServer.cast(server, {:configuration_error, result})
   end
 
   @spec notify_publication_status(
@@ -108,7 +116,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, name(stack_id)))
+    GenServer.start_link(__MODULE__, opts, name: name(stack_id))
   end
 
   # --- Private API ---
@@ -161,7 +169,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   def handle_call({:add_shape, shape_handle, publication_filter}, from, state) do
     state = add_shape_to_publication_filters(shape_handle, publication_filter, state)
     state = update_publication_if_necessary(state)
-
     {oid_rel, with_gen_cols} = publication_filter
 
     cond do
@@ -178,9 +185,10 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
           state.publication_refresh_period
         }
 
-      # if the relation is already part of the committed publication filters,
-      # we can reply immediately
-      MapSet.member?(state.committed_relation_filters, oid_rel) ->
+      # if the relation is already committed AND part of the last made
+      # update submission, reply immediately
+      MapSet.member?(state.submitted_relation_filters, oid_rel) and
+          MapSet.member?(state.committed_relation_filters, oid_rel) ->
         {:reply, :ok, state, state.publication_refresh_period}
 
       # otherwise, add the caller to the waiters list and reply when the
@@ -219,19 +227,19 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     {:noreply, %{state | publishes_generated_columns?: status.publishes_generated_columns?}}
   end
 
-  def handle_cast({:configuration_result, oid_rel, {:ok, :dropped}}, state) do
+  def handle_cast({:relation_configuration_result, oid_rel, {:ok, :dropped}}, state) do
     new_committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
     {:noreply, %{state | committed_relation_filters: new_committed_filters}}
   end
 
-  def handle_cast({:configuration_result, oid_rel, {:ok, res}}, state)
+  def handle_cast({:relation_configuration_result, oid_rel, {:ok, res}}, state)
       when res in [:validated, :added] do
     state = reply_to_relation_waiters(oid_rel, :ok, state)
     new_committed_filters = MapSet.put(state.committed_relation_filters, oid_rel)
     {:noreply, %{state | committed_relation_filters: new_committed_filters}}
   end
 
-  def handle_cast({:configuration_result, oid_rel, {:error, error}}, state) do
+  def handle_cast({:relation_configuration_result, oid_rel, {:error, error}}, state) do
     log_level = if is_known_publication_error(error), do: :warning, else: :error
 
     Logger.log(
@@ -242,9 +250,15 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
     state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
 
-    ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
+    if not is_struct(error, DBConnection.ConnectionError) do
+      ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
+    end
 
     {:noreply, state}
+  end
+
+  def handle_cast({:configuration_error, {:error, error}}, state) do
+    {:noreply, reply_to_all_waiters({:error, error}, state)}
   end
 
   @impl true
@@ -272,20 +286,15 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       state.prepared_relation_filters
     )
 
-    # only consider filters that were previously committed as still committed
-    # if the new prepared filters preserve them
-    %{
-      state
-      | committed_relation_filters:
-          MapSet.intersection(state.committed_relation_filters, state.prepared_relation_filters)
-    }
+    %{state | submitted_relation_filters: state.prepared_relation_filters}
   end
 
   defp update_needed?(%__MODULE__{
          prepared_relation_filters: prepared,
+         submitted_relation_filters: submitted,
          committed_relation_filters: committed
        }) do
-    not MapSet.equal?(prepared, committed)
+    not MapSet.equal?(prepared, submitted) or not MapSet.equal?(submitted, committed)
   end
 
   defguardp is_tracking_shape_handle?(shape_handle, state)
@@ -376,6 +385,15 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     rel_waiters = Map.get(waiters, oid_rel, [])
     for {from, _} <- rel_waiters, do: GenServer.reply(from, reply)
     %{state | waiters: Map.delete(waiters, oid_rel)}
+  end
+
+  @spec reply_to_all_waiters(any(), state()) :: state()
+  defp reply_to_all_waiters(reply, %__MODULE__{waiters: waiters} = state) do
+    for {_oid_rel, rel_waiters} <- waiters,
+        {from, _} <- rel_waiters,
+        do: GenServer.reply(from, reply)
+
+    %{state | waiters: %{}}
   end
 
   # In case the publication switches from publishing to not publishing generated columns,

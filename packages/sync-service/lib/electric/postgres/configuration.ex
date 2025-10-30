@@ -344,8 +344,12 @@ defmodule Electric.Postgres.Configuration do
       |> Enum.filter(fn {_oid, _rel, replident} -> replident != "f" end)
       |> MapSet.new(&trim_relation_with_replica/1)
 
+    correctly_configured_publication_rels =
+      MapSet.difference(publication_rels, misconfigured_publication_rels)
+
     valid_expected = MapSet.difference(expected_rels, to_invalidate)
-    to_preserve = MapSet.intersection(publication_rels, valid_expected)
+
+    to_preserve = MapSet.intersection(correctly_configured_publication_rels, valid_expected)
 
     to_reconfigure_replica_identity =
       MapSet.intersection(misconfigured_publication_rels, valid_expected)
