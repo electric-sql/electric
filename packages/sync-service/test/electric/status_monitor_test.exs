@@ -146,19 +146,31 @@ defmodule Electric.StatusMonitorTest do
       stop_supervised!(Electric.ProcessRegistry.registry_name(stack_id))
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
-               {:error, "Stack ID not recognised: #{stack_id}"}
+               {:error,
+                %{
+                  message: "Stack ID not recognised: #{stack_id}",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns error on timeout when status monitor is not present", %{stack_id: stack_id} do
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
-               {:error, "Status monitor not found for stack ID: #{stack_id}"}
+               {:error,
+                %{
+                  message: "Status monitor not found for stack ID: #{stack_id}",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns error on timeout when mark_pg_lock_acquired not received", %{stack_id: stack_id} do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
-               {:error, "Timeout waiting for Postgres lock acquisition"}
+               {:error,
+                %{
+                  message: "Timeout waiting for Postgres lock acquisition",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns error on timeout when mark_replication_client_ready not received", %{
@@ -167,7 +179,7 @@ defmodule Electric.StatusMonitorTest do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
 
-      assert {:error, "Timeout waiting for replication client to be ready" <> _} =
+      assert {:error, %{message: "Timeout waiting for replication client to be ready" <> _}} =
                StatusMonitor.wait_until_active(stack_id, timeout: 1)
     end
 
@@ -180,7 +192,11 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
-               {:error, "Timeout waiting for database connection pool (metadata) to be ready"}
+               {:error,
+                %{
+                  message: "Timeout waiting for database connection pool (metadata) to be ready",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns error on timeout when snapshot mark_connection_pool_ready not received", %{
@@ -192,7 +208,11 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
-               {:error, "Timeout waiting for database connection pool (snapshot) to be ready"}
+               {:error,
+                %{
+                  message: "Timeout waiting for database connection pool (snapshot) to be ready",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns error on timeout when mark_shape_log_collector_ready not received", %{
@@ -205,7 +225,11 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
-               {:error, "Timeout waiting for shape data to be loaded"}
+               {:error,
+                %{
+                  message: "Timeout waiting for shape data to be loaded",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns explicit error on timeout when supplied", %{
@@ -222,7 +246,11 @@ defmodule Electric.StatusMonitorTest do
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error,
-                "Timeout waiting for database connection pool (snapshot) to be ready: #{error_message}"}
+                %{
+                  message:
+                    "Timeout waiting for database connection pool (snapshot) to be ready: #{error_message}",
+                  error_code: :stack_unavailable
+                }}
     end
 
     test "returns error if stack is terminated before fully initialized", %{stack_id: stack_id} do

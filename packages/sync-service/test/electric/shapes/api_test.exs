@@ -1321,7 +1321,8 @@ defmodule Electric.Shapes.ApiTest do
       assert response.status == 503
 
       assert response_body(response) == %{
-               message: "Timeout waiting for Postgres lock acquisition"
+               message: "Timeout waiting for Postgres lock acquisition",
+               code: "STACK_UNAVAILABLE"
              }
     end
 
