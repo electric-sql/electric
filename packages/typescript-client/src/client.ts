@@ -806,17 +806,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         // Check if we should suppress this up-to-date notification
         // to prevent multiple renders from cached responses
-        if (this.#replayMode && !isSseMessage) {
-          // We're in replay mode (replaying cached responses).
+        const isLiveRequest =
+          this.#currentFetchUrl?.searchParams.has(LIVE_QUERY_PARAM) ?? false
+
+        if (this.#replayMode && !isSseMessage && !isLiveRequest) {
+          // We're in replay mode (replaying cached responses during initial sync).
           // Suppress this cached up-to-date notification.
-          // We'll wait for the live/SSE up-to-date before notifying subscribers.
+          // We'll wait for the live mode up-to-date before notifying subscribers.
           return
         }
 
         // We're either:
         // 1. Not in replay mode (normal operation), or
-        // 2. This is a live/SSE message (exiting replay mode)
-        // In both cases, notify subscribers and record the up-to-date.
+        // 2. This is a live/SSE message (exiting replay mode), or
+        // 3. This is a live long-poll request (exiting replay mode)
+        // In all cases, notify subscribers and record the up-to-date.
         this.#replayMode = false // Exit replay mode
 
         if (this.#currentFetchUrl) {

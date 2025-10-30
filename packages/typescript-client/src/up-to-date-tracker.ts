@@ -9,7 +9,7 @@
 export class UpToDateTracker {
   private data: Record<string, number> = {}
   private readonly storageKey = `electric_up_to_date_tracker`
-  private readonly cacheTTL = 60_000 // 60s to match HTTP s-maxage cache
+  private readonly cacheTTL = 60_000 // 60s to match typical CDN s-maxage cache duration
   private readonly maxEntries = 250
 
   constructor() {
