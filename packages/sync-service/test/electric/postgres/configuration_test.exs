@@ -110,16 +110,20 @@ defmodule Electric.Postgres.ConfigurationTest do
     } do
       oid = get_table_oid(conn, {"public", "items"})
       oid_rel = {oid, {"public", "items"}}
+      test_pid = self()
 
       start_supervised(
         {Task,
          fn ->
            Postgrex.transaction(conn, fn conn ->
              Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
+             send(test_pid, :table_locked)
              Process.sleep(:infinity)
            end)
          end}
       )
+
+      assert_receive :table_locked
 
       assert {:error,
               %DBConnection.ConnectionError{
