@@ -147,7 +147,11 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response_body(response) == %{
                message:
-                 "Cannot connect to the database to verify the shape. Please try again later."
+                 "Cannot connect to the database to verify the shape. Please try again later.",
+               code: "STACK_DATABASE_UNAVAILABLE",
+               component: "database_inspector",
+               retryable: true,
+               backoff_ms: 2000
              }
     end
 

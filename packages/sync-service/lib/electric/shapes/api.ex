@@ -383,9 +383,9 @@ defmodule Electric.Shapes.Api do
         Electric.Connection.Restarter.restart_connection_subsystem(stack_id)
         hold_until_stack_ready(api, block_on_conn_sleeping: true)
 
-      {:error, message} ->
+      {:error, %{message: message, error_code: error_code}} ->
         Logger.warning("Stack not ready after #{opts[:timeout]}ms. Reason: #{message}")
-        {:error, Response.error(api, message, status: 503)}
+        {:error, Response.error(api, message, status: 503, error_code: error_code, known_error: true)}
     end
   end
 
@@ -787,8 +787,10 @@ defmodule Electric.Shapes.Api do
             |> no_change_response()
 
           _ ->
-            message = Electric.StatusMonitor.timeout_message(api.stack_id)
-            Response.error(request, message, status: 503)
+            %{message: message, error_code: error_code} =
+              Electric.StatusMonitor.timeout_error(api.stack_id)
+
+            Response.error(request, message, status: 503, error_code: error_code, known_error: true)
         end
     end
   end

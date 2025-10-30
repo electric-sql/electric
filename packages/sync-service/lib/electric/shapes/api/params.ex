@@ -174,8 +174,15 @@ defmodule Electric.Shapes.Api.Params do
 
     response =
       case reason do
-        %{connection_not_available: [msg]} -> Api.Response.error(api, msg, status: 503)
-        _ -> Api.Response.invalid_request(api, errors: reason)
+        %{connection_not_available: [msg]} ->
+          Api.Response.error(api, msg,
+            status: 503,
+            error_code: :stack_database_unavailable,
+            known_error: true
+          )
+
+        _ ->
+          Api.Response.invalid_request(api, errors: reason)
       end
 
     {:error, response}
