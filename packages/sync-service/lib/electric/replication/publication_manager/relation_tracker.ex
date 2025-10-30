@@ -167,9 +167,16 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   @impl true
   def handle_call({:add_shape, shape_handle, publication_filter}, from, state) do
+    {oid_rel, with_gen_cols} = publication_filter
+
+    # if the relation is already committed AND part of the last made
+    # update submission, we can consider it ready
+    relation_ready =
+      MapSet.member?(state.submitted_relation_filters, oid_rel) and
+        MapSet.member?(state.committed_relation_filters, oid_rel)
+
     state = add_shape_to_publication_filters(shape_handle, publication_filter, state)
     state = update_publication_if_necessary(state)
-    {oid_rel, with_gen_cols} = publication_filter
 
     cond do
       # if the publication doesn't support generated columns, fail any shapes
@@ -185,10 +192,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
           state.publication_refresh_period
         }
 
-      # if the relation is already committed AND part of the last made
-      # update submission, reply immediately
-      MapSet.member?(state.submitted_relation_filters, oid_rel) and
-          MapSet.member?(state.committed_relation_filters, oid_rel) ->
+      relation_ready ->
         {:reply, :ok, state, state.publication_refresh_period}
 
       # otherwise, add the caller to the waiters list and reply when the
