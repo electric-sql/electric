@@ -99,26 +99,84 @@ shape.subscribe(({ rows }) => {
 
 ### Error Handling
 
-The ShapeStream provides two ways to handle errors:
+The ShapeStream provides robust error handling with automatic retry support:
 
-1. Using the `onError` handler:
+#### 1. Stream-level error handler with retry control
+
+The `onError` handler gives you full control over error recovery:
 
 ```typescript
 const stream = new ShapeStream({
   url: `${BASE_URL}/v1/shape`,
-  params: {
-    table: `foo`,
-  },
+  params: { table: `foo` },
   onError: (error) => {
-    // Handle all stream errors here
     console.error('Stream error:', error)
+
+    // IMPORTANT: Return an object to keep syncing!
+    // Return void/undefined to stop syncing permanently.
+
+    // Note: 5xx errors and network errors are automatically retried,
+    // so onError is mainly for handling client errors (4xx)
+
+    if (error instanceof FetchError) {
+      if (error.status === 401) {
+        // Unauthorized - refresh token and retry
+        const newToken = getRefreshedToken()
+        return {
+          headers: {
+            Authorization: `Bearer ${newToken}`,
+          },
+        }
+      }
+
+      if (error.status === 403) {
+        // Forbidden - maybe change user context
+        return {
+          params: {
+            table: `foo`,
+            where: `user_id = $1`,
+            params: [fallbackUserId],
+          },
+        }
+      }
+    }
+
+    // Stop syncing for other errors (return void)
   },
 })
 ```
 
-If no `onError` handler is provided, the ShapeStream will throw errors that occur during streaming.
+**Critical**: The `onError` callback's return value controls whether syncing continues:
 
-2. Individual subscribers can optionally handle errors specific to their subscription:
+- **Return an object** (even empty `{}`) to retry syncing:
+  - `{}` - Retry with same params and headers
+  - `{ params }` - Retry with modified params
+  - `{ headers }` - Retry with modified headers
+  - `{ params, headers }` - Retry with both modified
+- **Return void/undefined** to stop the stream permanently
+
+The handler supports async operations:
+
+```typescript
+onError: async (error) => {
+  if (error instanceof FetchError && error.status === 401) {
+    // Perform async token refresh
+    const newToken = await refreshAuthToken()
+    return {
+      headers: { Authorization: `Bearer ${newToken}` },
+    }
+  }
+  return {} // Retry other errors
+}
+```
+
+**Automatic retries**: The client automatically retries 5xx server errors, network errors, and 429 rate limits with exponential backoff. The `onError` callback is only invoked after these retries are exhausted, or for non-retryable errors like 4xx client errors.
+
+**Without `onError`**: If no `onError` handler is provided, non-retryable errors (like 4xx client errors) will be thrown and the stream will stop.
+
+#### 2. Subscription-level error callbacks
+
+Individual subscribers can handle errors specific to their subscription:
 
 ```typescript
 stream.subscribe(
@@ -132,7 +190,11 @@ stream.subscribe(
 )
 ```
 
-Common error types include:
+Note: Subscription error callbacks cannot control retry behavior - use the stream-level `onError` for that.
+
+#### Common Error Types
+
+Setup errors:
 
 - `MissingShapeUrlError`: Missing required URL parameter
 - `InvalidSignalError`: Invalid AbortSignal instance
@@ -140,12 +202,12 @@ Common error types include:
 
 Runtime errors:
 
-- `FetchError`: HTTP errors during shape fetching
+- `FetchError`: HTTP errors during shape fetching (includes `status`, `url`, `headers`)
 - `FetchBackoffAbortError`: Fetch aborted using AbortSignal
 - `MissingShapeHandleError`: Missing required shape handle
-- `ParserNullValueError`: Parser encountered NULL value in a column that doesn't allow NULL values
+- `ParserNullValueError`: NULL value in a non-nullable column
 
-See the [typescript client docs on the website](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details on error handling.
+See the [TypeScript client docs](https://electric-sql.com/docs/api/clients/typescript#error-handling) for more details.
 
 And in general, see the [docs website](https://electric-sql.com) and [examples](https://electric-sql.com/demos) for more information.
 
