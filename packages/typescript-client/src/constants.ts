@@ -30,6 +30,7 @@ export const SUBSET_PARAM_WHERE_PARAMS = `subset__params`
 // Query parameters that should be passed through when proxying Electric requests
 export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
   LIVE_QUERY_PARAM,
+  LIVE_SSE_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
