@@ -706,14 +706,15 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
       onError: mockErrorHandler,
     })
 
-    await waitForFetch(shapeStream)
+    // Wait for the error to occur and the error handler to be invoked
+    await authChangePromise
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
-    expect(shapeStream.isConnected()).toBe(false)
 
-    await authChangePromise
-    // give some time for the error handler to modify the authorization header
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+    // Wait for successful recovery (data arrives after error is recovered from)
+    await waitForFetch(shapeStream)
+    // After successful recovery, the stream should be connected
+    expect(shapeStream.isConnected()).toBe(true)
   })
 
   it(`should stop fetching and report an error if response is missing required headers`, async ({

@@ -531,13 +531,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
           return
         }
         // onError returned void, meaning it doesn't want to retry
-        // Subscribers were already notified in #requestShape
+        // This is an unrecoverable error, notify subscribers
+        if (err instanceof Error) {
+          this.#sendErrorToSubscribers(err)
+        }
         this.#connected = false
         this.#tickPromiseRejecter?.()
         return
       }
 
-      // No onError handler provided, clean up and throw
+      // No onError handler provided, this is an unrecoverable error
+      // Notify subscribers and throw
+      if (err instanceof Error) {
+        this.#sendErrorToSubscribers(err)
+      }
       this.#connected = false
       this.#tickPromiseRejecter?.()
       throw err
@@ -626,12 +633,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         )
         return this.#requestShape()
       } else {
-        // Notify subscribers of the error
-        this.#sendErrorToSubscribers(e)
-
         // errors that have reached this point are not actionable without
         // additional user input, such as 400s or failures to read the
         // body of a response, so we exit the loop and let #start handle it
+        // Note: We don't notify subscribers here because onError might recover
         throw e
       }
     } finally {

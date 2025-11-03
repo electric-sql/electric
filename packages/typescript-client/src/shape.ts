@@ -171,10 +171,6 @@ export class Shape<T extends Row<unknown> = Row> {
 
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
-        // Clear any error when we start receiving data again (e.g., after error recovery)
-        if (this.#error) {
-          this.#error = false
-        }
         shouldNotify = this.#updateShapeStatus(`syncing`)
         if (this.mode === `full`) {
           switch (message.headers.operation) {
@@ -285,9 +281,7 @@ export class Shape<T extends Row<unknown> = Row> {
   #handleError(e: Error): void {
     if (e instanceof FetchError) {
       this.#error = e
-      // Don't notify here - let the error be cleared by recovery or
-      // let it be picked up when the next data arrives
-      // This prevents promises from rejecting prematurely before recovery attempts
+      this.#notify()
     }
   }
 
