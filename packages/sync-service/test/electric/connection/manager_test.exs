@@ -197,11 +197,11 @@ defmodule Electric.Connection.ConnectionManagerTest do
       # by the replication supervisor
       monitor =
         stack_id
-        |> Electric.Replication.Supervisor.canary_name()
+        |> Electric.Shapes.Supervisor.canary_name()
         |> GenServer.whereis()
         |> Process.monitor()
 
-      :ok = GenServer.stop(Electric.Replication.Supervisor.canary_name(stack_id), :shutdown)
+      :ok = GenServer.stop(Electric.Shapes.Supervisor.canary_name(stack_id), :shutdown)
 
       assert_receive {:DOWN, ^monitor, :process, _pid, :shutdown}
 

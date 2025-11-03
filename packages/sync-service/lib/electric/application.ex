@@ -46,7 +46,7 @@ defmodule Electric.Application do
     # replication connection, starting a connection pool).
     #
     # Once there is a DB connection pool running, Connection.Manager will start the singleton
-    # `Electric.Replication.Supervisor` which is responsible for starting the shape log collector
+    # `Electric.Shapes.Supervisor` which is responsible for starting the shape log collector
     # and individual shape consumer process trees.
     #
     # See the moduledoc in `Electric.Connection.Supervisor` for more info.

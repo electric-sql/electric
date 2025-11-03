@@ -3,7 +3,7 @@ defmodule Electric.CoreSupervisor do
   A supervisor that starts the core components of the Electric system.
   This is divided into two subsystems:
   1. The connection subsystem (processes that may exit on a connection failure), started with Connection.Manager.Supervisor
-  2. The shape subsystem (processes that are resilient to connection failures), started with Electric.Replication.Supervisor
+  2. The shape subsystem (processes that are resilient to connection failures), started with Electric.Shapes.Supervisor
   """
 
   use Supervisor, restart: :transient, significant: true
@@ -37,7 +37,7 @@ defmodule Electric.CoreSupervisor do
   This function is supposed to be called from Connection.Manager at the right point in its
   initialization sequence.
 
-  Replication.Supervisor is started as a temporary child so that, when it dies, it is up to the
+  Shapes.Supervisor is started as a temporary child so that, when it dies, it is up to the
   Connection.Manager process to restart it again at the right point in time.
   """
   def start_replication_supervisor(opts) do
@@ -80,7 +80,7 @@ defmodule Electric.CoreSupervisor do
     child_spec =
       Supervisor.child_spec(
         {
-          Electric.Replication.Supervisor,
+          Electric.Shapes.Supervisor,
           stack_id: stack_id,
           consumer_supervisor: consumer_supervisor_spec,
           shape_cleaner: shape_cleaner_spec,
@@ -97,15 +97,15 @@ defmodule Electric.CoreSupervisor do
   end
 
   @doc """
-  Stops the Replication.Supervisor if it's currently running.
+  Stops the Shapes.Supervisor if it's currently running.
 
   This is useful when you need to reset storage before starting a new supervisor.
   Returns :ok if the supervisor was stopped or wasn't running.
   """
   def stop_replication_supervisor(opts) do
-    case Supervisor.terminate_child(name(opts), Electric.Replication.Supervisor) do
+    case Supervisor.terminate_child(name(opts), Electric.Shapes.Supervisor) do
       :ok ->
-        Supervisor.delete_child(name(opts), Electric.Replication.Supervisor)
+        Supervisor.delete_child(name(opts), Electric.Shapes.Supervisor)
         :ok
 
       {:error, :not_found} ->

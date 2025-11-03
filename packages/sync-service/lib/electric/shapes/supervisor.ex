@@ -1,4 +1,4 @@
-defmodule Electric.Replication.Supervisor do
+defmodule Electric.Shapes.Supervisor do
   @moduledoc """
   Supervisor responsible for the entire shape subsystem.
 
