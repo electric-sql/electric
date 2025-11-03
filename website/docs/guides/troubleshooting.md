@@ -50,6 +50,74 @@ EOF
 
 Now change your shape URLs in your frontend code to use port `3001` instead of port 3000 and everything will run much faster 🚀
 
+### SSE connections &mdash; why is my client falling back to long polling?
+
+When using Server-Sent Events (SSE) mode for live updates (`liveSse: true`), you might see a warning in the console:
+
+```
+[Electric] SSE connections are closing immediately (possibly due to proxy buffering or misconfiguration).
+Falling back to long polling.
+```
+
+This happens when the Electric client detects that SSE connections are closing immediately after opening, which typically indicates proxy buffering or caching issues.
+
+##### Solution &mdash; configure your proxy for SSE streaming
+
+SSE requires proxies to support **streaming** responses without buffering the complete response. Here's how to configure common proxies:
+
+**Caddy**
+
+Add `flush_interval -1` to your reverse_proxy configuration:
+
+```caddyfile
+localhost:3001 {
+  reverse_proxy localhost:3000 {
+    # SSE: disable internal buffering so events are flushed immediately
+    flush_interval -1
+  }
+
+  encode gzip
+
+  # Helpful headers for streaming
+  header {
+    Cache-Control "no-cache, no-transform"
+    X-Accel-Buffering "no"
+  }
+}
+```
+
+**Nginx**
+
+Disable proxy buffering for SSE endpoints:
+
+```nginx
+location /v1/shape {
+  proxy_pass http://localhost:3000;
+  proxy_buffering off;  # Disable buffering for SSE streaming
+  proxy_http_version 1.1;
+
+  # Preserve Electric's cache headers for request collapsing
+  proxy_cache_valid 200 1s;
+}
+```
+
+**Important:** Do NOT disable caching entirely! Electric uses cache headers to enable request collapsing/fanout for efficiency. Your proxy should:
+- Support streaming (not buffer complete responses)
+- Respect Electric's cache headers for request collapsing
+- Flush SSE events immediately as they arrive
+
+##### How the client handles SSE issues
+
+When SSE connections close immediately, the Electric client:
+1. Retries with exponential backoff (0-200ms, 0-400ms, 0-800ms)
+2. After 3 consecutive short connections, automatically falls back to long polling
+3. Continues working normally in long polling mode (slightly less efficient)
+
+To verify your SSE setup is working, check that:
+- Console shows no fallback warnings
+- Network tab shows a persistent SSE connection (not rapidly reconnecting)
+- `shapeStream.isConnected()` returns `true` after initial sync
+
 ### Shape logs &mdash; how do I clear the server state?
 
 Electric writes [shape logs](/docs/api/http#shape-log) to disk.

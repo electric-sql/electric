@@ -441,6 +441,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
   #midStreamPromise?: Promise<void>
   #midStreamPromiseResolver?: () => void
+  #lastSseConnectionStartTime?: number
+  #minSseConnectionDuration = 1000 // Minimum expected SSE connection duration (1 second)
+  #consecutiveShortSseConnections = 0
+  #maxShortSseConnections = 3 // Fall back to long polling after this many short connections
+  #sseFallbackToLongPolling = false
+  #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
+  #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -859,7 +866,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#isUpToDate &&
       useSse &&
       !this.#isRefreshing &&
-      !opts.resumingFromPause
+      !opts.resumingFromPause &&
+      !this.#sseFallbackToLongPolling
     ) {
       opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
       opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
@@ -898,6 +906,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
     const fetch = this.#sseFetchClient
+
+    // Track when the SSE connection starts
+    this.#lastSseConnectionStartTime = Date.now()
+
     try {
       let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
@@ -943,6 +955,44 @@ export class ShapeStream<T extends Row<unknown> = Row>
         throw new FetchBackoffAbortError()
       }
       throw error
+    } finally {
+      // Check if the SSE connection closed too quickly
+      // This can happen when responses are cached or when the proxy/server
+      // is misconfigured for SSE and closes the connection immediately
+      const connectionDuration = Date.now() - this.#lastSseConnectionStartTime!
+      const wasAborted = requestAbortController.signal.aborted
+
+      if (connectionDuration < this.#minSseConnectionDuration && !wasAborted) {
+        // Connection was too short - likely a cached response or misconfiguration
+        this.#consecutiveShortSseConnections++
+
+        if (
+          this.#consecutiveShortSseConnections >= this.#maxShortSseConnections
+        ) {
+          // Too many short connections - fall back to long polling
+          this.#sseFallbackToLongPolling = true
+          console.warn(
+            `[Electric] SSE connections are closing immediately (possibly due to proxy buffering or misconfiguration). ` +
+              `Falling back to long polling. ` +
+              `Your proxy must support streaming SSE responses (not buffer the complete response). ` +
+              `Configuration: Nginx add 'X-Accel-Buffering: no', Caddy add 'flush_interval -1' to reverse_proxy. ` +
+              `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
+          )
+        } else {
+          // Add exponential backoff with full jitter to prevent tight infinite loop
+          // Formula: random(0, min(cap, base * 2^attempt))
+          const maxDelay = Math.min(
+            this.#sseBackoffMaxDelay,
+            this.#sseBackoffBaseDelay *
+              Math.pow(2, this.#consecutiveShortSseConnections)
+          )
+          const delayMs = Math.floor(Math.random() * maxDelay)
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        }
+      } else if (connectionDuration >= this.#minSseConnectionDuration) {
+        // Connection was healthy - reset counter
+        this.#consecutiveShortSseConnections = 0
+      }
     }
   }
 
@@ -1117,6 +1167,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#connected = false
     this.#schema = undefined
     this.#activeSnapshotRequests = 0
+    // Reset SSE fallback state to try SSE again after reset
+    this.#consecutiveShortSseConnections = 0
+    this.#sseFallbackToLongPolling = false
   }
 
   /**
