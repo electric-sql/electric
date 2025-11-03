@@ -37,7 +37,7 @@ defmodule Electric.CoreSupervisor do
   This function is supposed to be called from Connection.Manager at the right point in its
   initialization sequence.
   """
-  def start_replication_supervisor(opts) do
+  def start_shapes_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
@@ -99,7 +99,7 @@ defmodule Electric.CoreSupervisor do
   This is useful when you need to reset storage before starting a new supervisor.
   Returns :ok if the supervisor was stopped or wasn't running.
   """
-  def stop_replication_supervisor(opts) do
+  def stop_shapes_supervisor(opts) do
     case Supervisor.terminate_child(name(opts), Electric.Shapes.Supervisor) do
       :ok ->
         Supervisor.delete_child(name(opts), Electric.Shapes.Supervisor)
