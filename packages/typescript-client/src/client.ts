@@ -500,7 +500,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#mode
   }
 
-  async #start(): Promise<void> {
+  async #start(isRetry: boolean = false): Promise<void> {
     this.#started = true
 
     try {
@@ -508,24 +508,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } catch (err) {
       this.#error = err
 
-      // Check if onError handler wants to retry
-      if (this.#onError) {
+      // Check if onError handler wants to retry (but only if this isn't already a retry)
+      if (this.#onError && !isRetry) {
         const retryOpts = await this.#onError(err as Error)
         if (typeof retryOpts === `object`) {
           // Update params/headers but don't reset offset
           // We want to continue from where we left off, not refetch everything
-          if (`params` in retryOpts) {
+          if (retryOpts.params) {
             // Merge new params with existing params to preserve other parameters
             this.options.params = {
-              ...this.options.params,
+              ...(this.options.params ?? {}),
               ...retryOpts.params,
             }
           }
 
-          if (`headers` in retryOpts) {
+          if (retryOpts.headers) {
             // Merge new headers with existing headers to preserve other headers
             this.options.headers = {
-              ...this.options.headers,
+              ...(this.options.headers ?? {}),
               ...retryOpts.headers,
             }
           }
@@ -534,8 +534,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#error = null
 
           // Restart from current offset without running finally block
+          // Pass isRetry=true to prevent infinite retry loops
           this.#started = false
-          await this.#start()
+          await this.#start(true)
           return
         }
         // onError returned void, meaning it doesn't want to retry
