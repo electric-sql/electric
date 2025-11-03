@@ -366,6 +366,10 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error({:badkey, :code, %{message: _message}} = error) do
+    maybe_failed_to_identify_database(error) || unknown_error(error)
+  end
+
   def from_error(%DbConfigurationError{} = error) do
     %DbConnectionError{
       message: error.message,
@@ -415,6 +419,20 @@ defmodule Electric.DbConnectionError do
       %DbConnectionError{
         message: error.postgres.message,
         type: :database_does_not_exist,
+        original_error: error,
+        retry_may_fix?: false
+      }
+    end
+  end
+
+  defp maybe_failed_to_identify_database({:badkey, :code, %{message: message}} = error) do
+    if Regex.match?(
+         ~r/^Failed to identify your database: Your account has restrictions: [\w]+./,
+         message
+       ) do
+      %DbConnectionError{
+        message: message,
+        type: :endpoint_not_found,
         original_error: error,
         retry_may_fix?: false
       }
