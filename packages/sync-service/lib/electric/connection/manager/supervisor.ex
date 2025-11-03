@@ -38,7 +38,7 @@ defmodule Electric.Connection.Manager.Supervisor do
 
   # Stopping the Connection.Manager.Supervisor causes the Connection.Supervisor to restart it
   # from a clean state. The end result is the Connection.Manager is back up and the
-  # Replication.Supervisor has the opportunity to purge shapes if the need for this is
+  # Shapes.Supervisor has the opportunity to purge shapes if the need for this is
   # communicated by Connection.Manager.
   def restart(opts) do
     Supervisor.stop(name(opts))

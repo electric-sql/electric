@@ -10,7 +10,7 @@ defmodule Electric.Connection.Supervisor do
     - it opens database connections in the right order
     - restarts them during initialization if they fail for recoverable reasons
     - restarts the replication client at any point if it crashes due to a non-fatal error
-    - coordinates with CoreSupervisor to start the Replication.Supervisor at the right point
+    - coordinates with CoreSupervisor to start the Shapes.Supervisor at the right point
       in time, passing it the right set of options that have been informed by connection
       manager's own initialization sequence up to that point
 

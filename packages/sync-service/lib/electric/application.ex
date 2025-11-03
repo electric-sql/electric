@@ -31,6 +31,11 @@ defmodule Electric.Application do
   # This should be the only place that actually reads from
   # `Application.get_env/2`, because it's the only context where the
   # `config/runtime.exs` is executed
+  #
+  # The root application supervisor starts the core service processes, such as the HTTP
+  # server for the HTTP API and telemetry exporters, and a single StackSupervisor, basically
+  # making the application run in a single-tenant mode where all API requests are forwarded
+  # to that sole tenant.
   def children_application do
     :erlang.system_flag(:backtrace_depth, 50)
 
@@ -40,16 +45,6 @@ defmodule Electric.Application do
       Electric.Telemetry.Sentry.add_logger_handler()
     end
 
-    # The root application supervisor starts the core global processes, including the HTTP
-    # server and the database connection manager. The latter is responsible for establishing
-    # all needed connections to the database (acquiring the exclusive access lock, opening a
-    # replication connection, starting a connection pool).
-    #
-    # Once there is a DB connection pool running, Connection.Manager will start the singleton
-    # `Electric.Replication.Supervisor` which is responsible for starting the shape log collector
-    # and individual shape consumer process trees.
-    #
-    # See the moduledoc in `Electric.Connection.Supervisor` for more info.
     config = configuration()
 
     Enum.concat([

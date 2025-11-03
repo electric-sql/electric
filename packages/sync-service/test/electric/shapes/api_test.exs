@@ -61,7 +61,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   defp ready_stack(ctx) do
-    {:via, _, {registry_name, registry_key}} = Electric.Replication.Supervisor.name(ctx)
+    {:via, _, {registry_name, registry_key}} = Electric.Shapes.Supervisor.name(ctx)
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
     Electric.LsnTracker.create_table(ctx.stack_id)

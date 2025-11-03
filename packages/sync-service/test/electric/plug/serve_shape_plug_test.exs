@@ -84,7 +84,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     setup ctx do
       {:via, _, {registry_name, registry_key}} =
-        Electric.Replication.Supervisor.name(ctx)
+        Electric.Shapes.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
       set_status_to_active(ctx)
@@ -811,7 +811,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     setup ctx do
       {:via, _, {registry_name, registry_key}} =
-        Electric.Replication.Supervisor.name(ctx)
+        Electric.Shapes.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
       set_status_to_active(ctx)

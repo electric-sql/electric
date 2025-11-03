@@ -77,7 +77,7 @@ defmodule Electric.Connection.Manager do
       :pool_opts,
       # Options specific to `Electric.Timeline`
       :timeline_opts,
-      # Options passed to the Replication.Supervisor's start_link() function
+      # Options passed to the Shapes.Supervisor's start_link() function
       :shape_cache_opts,
       # PID of the replication client
       :replication_client_pid,
@@ -448,7 +448,7 @@ defmodule Electric.Connection.Manager do
       Electric.CoreSupervisor.stop_replication_supervisor(stack_id: state.stack_id)
 
       # Clean up the on-disk storage from all shapes.
-      Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+      Electric.Shapes.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
 
       # The ShapeStatusOwner process lives independently of connection or replication
       # supervisor. Purge all shapes from it before starting the replication supervisor.
