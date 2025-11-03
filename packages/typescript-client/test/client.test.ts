@@ -1948,12 +1948,11 @@ describe.for(fetchAndSse)(
   }
 )
 
-describe(`SSE infinite loop prevention`, () => {
-  it(`should fall back to long polling after 3 consecutive short SSE connections`, async ({
-    issuesTableUrl,
-    aborter,
-  }) => {
+it(
+  `should fall back to long polling after 3 consecutive short SSE connections`,
+  async ({ issuesTableUrl, aborter }) => {
     let requestCount = 0
+    let sseRequestCount = 0
     const requestUrls: string[] = []
 
     // Mock console.warn to capture the fallback warning
@@ -1974,18 +1973,31 @@ describe(`SSE infinite loop prevention`, () => {
         const urlObj = new URL(url)
         const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
 
-        if (isSSE && requestCount <= 3) {
-          // Simulate SSE connections that close immediately
-          // Return immediately to simulate cached/misconfigured response
-          return new Response(null, {
-            status: 200,
-            headers: new Headers({
-              'electric-offset': `0_0`,
-              'electric-handle': `test-handle`,
-              'electric-schema': JSON.stringify({}),
-              'electric-cursor': `123`,
-            }),
-          })
+        if (isSSE) {
+          sseRequestCount++
+          if (sseRequestCount <= 3) {
+            // Simulate SSE connections that close immediately by returning
+            // an empty stream that closes right away (simulates cached/misconfigured response)
+            const stream = new ReadableStream({
+              start(controller) {
+                // Close after a tiny delay to let onopen callback complete
+                // This simulates a connection that establishes but closes immediately
+                // (e.g., due to cached response or proxy misconfiguration)
+                setTimeout(() => controller.close(), 10)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': 'text/event-stream',
+              }),
+            })
+          }
         }
 
         // For normal requests or after fallback, use real fetch
@@ -2005,11 +2017,12 @@ describe(`SSE infinite loop prevention`, () => {
       // Subscribe to start the stream
       const unsubscribe = shapeStream.subscribe(() => {})
 
-      // Wait for the stream to process several requests
-      // Should see 1 initial request + 3 SSE attempts that fail + requests after fallback
+      // Wait for the stream to fall back to long polling
+      // Should see: initial request (long poll) + 3 short SSE attempts + fallback to long poll
       await vi.waitFor(
         () => {
-          expect(requestCount).toBeGreaterThan(3)
+          // After 3 SSE failures, should see the warning
+          expect(warnMock).toHaveBeenCalled()
         },
         { timeout: 10000 }
       )
@@ -2029,21 +2042,29 @@ describe(`SSE infinite loop prevention`, () => {
         )
       )
 
+      // Wait a bit more to ensure we have some requests after fallback
+      await vi.waitFor(
+        () => {
+          expect(requestCount).toBeGreaterThan(4)
+        },
+        { timeout: 5000 }
+      )
+
       // Verify that after the first 3 SSE attempts, subsequent requests don't use SSE
-      // Find requests after the 4th one and verify they don't have live_sse=true
-      const laterRequests = requestUrls.slice(4)
-      const sseRequestsAfterFallback = laterRequests.filter((url) => {
+      // Count SSE requests in all requests - should only be 3
+      const allSseRequests = requestUrls.filter((url) => {
         const urlObj = new URL(url)
         return urlObj.searchParams.get(`live_sse`) === `true`
       })
 
-      // After fallback, should not see more SSE requests
-      expect(sseRequestsAfterFallback.length).toBe(0)
+      // After fallback, should not see more than 3 SSE requests
+      expect(allSseRequests.length).toBe(3)
 
       unsubscribe()
     } finally {
       // Restore console.warn
       console.warn = originalWarn
     }
-  })
-})
+  },
+  { timeout: 15000 }
+)
