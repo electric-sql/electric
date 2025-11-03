@@ -727,6 +727,97 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     expect(shapeStream.isConnected()).toBe(true)
   })
 
+  it(`should handle onError returning null without crashing`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    const mockErrorHandler = vi.fn().mockImplementation(() => {
+      // Returning null should be treated as "don't retry"
+      return null
+    })
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        where: `invalid syntax`,
+      },
+      signal: aborter.signal,
+      onError: mockErrorHandler,
+      liveSse,
+    })
+
+    const errorPromise = new Promise((_, reject) => {
+      shapeStream.subscribe(() => {}, reject)
+    })
+
+    // Should receive error from bad query, handler called with null,
+    // and error propagated to subscribers without crash
+    await expect(errorPromise).rejects.toThrow(FetchError)
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+  })
+
+  it(`should handle onError returning only params (not headers)`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    let callCount = 0
+    const mockErrorHandler = vi.fn().mockImplementation((error) => {
+      if (error instanceof FetchError && error.status === 401) {
+        // Return only params, not headers - should preserve existing headers
+        return {
+          params: {
+            todo: `pass`,
+          },
+        }
+      }
+    })
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        todo: `fail`,
+      },
+      headers: {
+        'X-Custom-Header': `should-be-preserved`,
+      },
+      signal: aborter.signal,
+      fetchClient: async (input, init) => {
+        callCount++
+        const url = new URL(input instanceof Request ? input.url : input)
+        const headers = (init?.headers as Record<string, string>) || {}
+
+        if (url.searchParams.get(`todo`) === `fail`) {
+          return new Response(undefined, {
+            status: 401,
+          })
+        }
+
+        // Verify custom header was preserved through retry
+        expect(headers[`X-Custom-Header`]).toBe(`should-be-preserved`)
+
+        return new Response(
+          JSON.stringify([{ headers: { control: `up-to-date` } }]),
+          {
+            status: 200,
+            headers: {
+              'electric-offset': `0_0`,
+              'electric-handle': `test-handle-456`,
+              'electric-schema': `{}`,
+            },
+          }
+        )
+      },
+      liveSse,
+      onError: mockErrorHandler,
+    })
+
+    await waitForFetch(shapeStream)
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+    expect(callCount).toBeGreaterThan(1) // Initial request + retry
+  })
+
   it(`should stop fetching and report an error if response is missing required headers`, async ({
     issuesTableUrl,
     aborter,
