@@ -14,7 +14,7 @@ services:
       - ./postgres.conf:/etc/postgresql.conf:ro
       - ./init.sql:/docker-entrypoint-initdb.d/00_shared_init.sql:ro
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql
       - /tmp
     entrypoint:
       - docker-entrypoint.sh
