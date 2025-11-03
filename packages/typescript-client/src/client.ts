@@ -507,6 +507,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       await this.#requestShape()
     } catch (err) {
       this.#error = err
+
+      // Check if onError handler wants to retry
       if (this.#onError) {
         const retryOpts = await this.#onError(err as Error)
         if (typeof retryOpts === `object`) {
@@ -523,21 +525,27 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // Clear the error since we're retrying
           this.#error = null
 
-          // Restart from current offset
+          // Restart from current offset without running finally block
           this.#started = false
-          return this.#start()
+          await this.#start()
+          return
         }
         // onError returned void, meaning it doesn't want to retry
         // Subscribers were already notified in #requestShape
+        this.#connected = false
+        this.#tickPromiseRejecter?.()
         return
       }
 
-      // No onError handler provided, subscribers already notified, just throw
-      throw err
-    } finally {
+      // No onError handler provided, clean up and throw
       this.#connected = false
       this.#tickPromiseRejecter?.()
+      throw err
     }
+
+    // Normal completion, clean up
+    this.#connected = false
+    this.#tickPromiseRejecter?.()
   }
 
   async #requestShape(): Promise<void> {
