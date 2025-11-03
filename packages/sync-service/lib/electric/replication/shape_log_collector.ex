@@ -5,7 +5,6 @@ defmodule Electric.Replication.ShapeLogCollector do
   """
   use GenServer
 
-  require Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
   alias Electric.Replication.ShapeLogCollector.FlushTracker
   alias Electric.LsnTracker
@@ -25,6 +24,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   import Electric.Utils, only: [map_while_ok: 2, map_if_ok: 2]
 
+  require Electric.Postgres.Lsn
   require Logger
 
   @schema NimbleOptions.new!(
@@ -194,7 +194,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  def handle_call({:subscribe, shape_handle, shape}, {pid, _ref}, state) do
+  def handle_call({:subscribe, shape_handle, shape}, _from, state) do
     OpenTelemetry.with_span(
       "shape_log_collector.subscribe",
       [shape_handle: shape_handle],
@@ -202,8 +202,6 @@ defmodule Electric.Replication.ShapeLogCollector do
       fn ->
         case Partitions.add_shape(state.partitions, shape_handle, shape) do
           {:ok, partitions} ->
-            :ok = ConsumerRegistry.register_consumer(shape_handle, pid, state.registry_state)
-
             state =
               %{
                 state

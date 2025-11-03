@@ -32,7 +32,6 @@ defmodule Electric.ShapeCache do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.ShapeCache
   alias Electric.Shapes
-  alias Electric.Shapes.ConsumerSupervisor
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
 
@@ -169,10 +168,7 @@ defmodule Electric.ShapeCache do
 
       true ->
         try do
-          Electric.Shapes.Consumer.await_snapshot_start(
-            %{stack_id: stack_id, shape_handle: shape_handle},
-            15_000
-          )
+          Electric.Shapes.Consumer.await_snapshot_start(stack_id, shape_handle, 15_000)
         catch
           :exit, {:timeout, {GenServer, :call, _}} ->
             # Please note that :await_snapshot_start can also return a timeout error as well
@@ -377,7 +373,7 @@ defmodule Electric.ShapeCache do
       materialized_type =
         shape.where.used_refs |> Map.fetch!(["$sublink", Integer.to_string(index)])
 
-      ConsumerSupervisor.start_materializer(%{
+      Shapes.DynamicConsumerSupervisor.start_materializer(state.stack_id, %{
         stack_id: state.stack_id,
         shape_handle: shape_handle,
         storage: state.storage,
@@ -387,29 +383,24 @@ defmodule Electric.ShapeCache do
     end)
 
     case Shapes.DynamicConsumerSupervisor.start_shape_consumer(
-           state.consumer_supervisor,
-           stack_id: state.stack_id,
-           inspector: state.inspector,
-           shape_handle: shape_handle,
-           shape: shape,
-           storage: state.storage,
-           publication_manager: state.publication_manager,
-           chunk_bytes_threshold: state.chunk_bytes_threshold,
-           registry: state.registry,
-           db_pool: state.db_pool,
-           hibernate_after: state.shape_hibernate_after,
-           otel_ctx: otel_ctx,
-           snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data,
-           action: action
+           state.stack_id,
+           %{
+             stack_id: state.stack_id,
+             inspector: state.inspector,
+             shape_handle: shape_handle,
+             shape: shape,
+             storage: state.storage,
+             publication_manager: state.publication_manager,
+             chunk_bytes_threshold: state.chunk_bytes_threshold,
+             registry: state.registry,
+             db_pool: state.db_pool,
+             hibernate_after: state.shape_hibernate_after,
+             otel_ctx: otel_ctx,
+             snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data,
+             action: action
+           }
          ) do
-      {:ok, supervisor_pid} ->
-        # TODO: we will just get the consumer pid when we simplify the consumer process tree
-        consumer_pid =
-          Enum.find_value(Supervisor.which_children(supervisor_pid), fn
-            {Electric.Shapes.Consumer, pid, :worker, _modules} -> pid
-            _child -> nil
-          end)
-
+      {:ok, consumer_pid} ->
         {:ok, consumer_pid}
 
       {:error, _reason} = error ->
@@ -427,24 +418,24 @@ defmodule Electric.ShapeCache do
     [{shape_handle, shape}]
     |> build_shape_dependencies(MapSet.new())
     |> elem(0)
-    |> Enum.reduce_while({:ok, []}, fn {handle, shape}, {:ok, acc} ->
+    |> Enum.reduce_while({:ok, %{}}, fn {handle, shape}, {:ok, acc} ->
       case Electric.Shapes.ConsumerRegistry.whereis(state.stack_id, handle) do
         nil ->
           case start_shape(handle, shape, state, otel_ctx, :restore) do
             {:ok, pid} ->
-              {:cont, {:ok, [{handle, pid} | acc]}}
+              {:cont, {:ok, Map.put(acc, handle, pid)}}
 
             :error ->
               {:halt, {:error, handle}}
           end
 
         pid when is_pid(pid) ->
-          {:cont, {:ok, acc}}
+          {:cont, {:ok, Map.put(acc, handle, pid)}}
       end
     end)
     |> case do
       {:ok, handles} ->
-        {:ok, handles}
+        {:ok, Map.fetch!(handles, shape_handle)}
 
       {:error, failed_handle} ->
         if failed_handle != shape_handle do

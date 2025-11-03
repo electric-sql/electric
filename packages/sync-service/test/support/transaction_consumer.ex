@@ -5,8 +5,16 @@ defmodule Support.TransactionConsumer do
 
   import ExUnit.Assertions
 
+  def name(stack_id, shape_handle) do
+    Electric.Shapes.ConsumerRegistry.name(stack_id, shape_handle)
+  end
+
+  def name(opts) when is_list(opts) do
+    name(Keyword.fetch!(opts, :stack_id), Keyword.fetch!(opts, :shape_handle))
+  end
+
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+    GenServer.start_link(__MODULE__, opts, name: name(opts))
   end
 
   def assert_consume(consumers, evts, timeout \\ 100) do

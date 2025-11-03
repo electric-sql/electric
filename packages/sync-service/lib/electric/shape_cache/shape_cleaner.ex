@@ -6,7 +6,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   """
   use GenServer
 
-  alias Electric.Shapes.ConsumerSupervisor
+  alias Electric.Shapes.Consumer
   alias Electric.ShapeCache.ShapeStatus
 
   require Logger
@@ -122,7 +122,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   defp stop_and_clean_shape(shape_handle, state) do
     Logger.debug("Removing shape #{inspect(shape_handle)}")
 
-    case ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
+    case Consumer.stop_and_clean(state.stack_id, shape_handle) do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously,
         # starting with an immediate shape status removal

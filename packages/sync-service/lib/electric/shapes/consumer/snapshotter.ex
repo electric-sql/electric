@@ -9,20 +9,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
   require Logger
 
-  def name(%{
-        stack_id: stack_id,
-        shape_handle: shape_handle
-      }) do
+  def name(%{stack_id: stack_id, shape_handle: shape_handle}) do
     name(stack_id, shape_handle)
   end
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
-  end
-
-  def start_snapshot(stack_id, shape_handle) do
-    # Low timeout because we expect the process to be present & the block to be short
-    GenServer.call(name(stack_id, shape_handle), :start_snapshot, 1_000)
   end
 
   def start_link(config) when is_map(config) do
@@ -37,11 +29,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {:ok, config}
-  end
-
-  def handle_call(:start_snapshot, _from, state) do
-    {:reply, :ok, state, {:continue, :start_snapshot}}
+    {:ok, config, {:continue, :start_snapshot}}
   end
 
   def handle_continue(:start_snapshot, state) do
@@ -63,13 +51,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
-            shape_attrs(shape_handle, shape),
+            telemetry_shape_attrs(shape_handle, shape),
             stack_id,
             fn ->
               try do
                 OpenTelemetry.with_span(
                   "shape_snapshot.prepare_tables",
-                  shape_attrs(shape_handle, shape),
+                  telemetry_shape_attrs(shape_handle, shape),
                   stack_id,
                   fn ->
                     publication_manager.add_shape(shape_handle, shape, publication_manager_opts)
@@ -227,7 +215,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           chunk_bytes_threshold: chunk_bytes_threshold
         }
       ) do
-    shape_attrs = shape_attrs(shape_handle, shape)
+    shape_attrs = telemetry_shape_attrs(shape_handle, shape)
 
     Postgrex.transaction(
       db_pool,
@@ -275,7 +263,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
 
             # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
-            finishing_contol_message =
+            finishing_control_message =
               Jason.encode!(%{
                 headers: %{
                   control: "snapshot-end",
@@ -315,7 +303,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   acc
                 end
               )
-              |> Stream.concat([finishing_contol_message])
+              |> Stream.concat([finishing_control_message])
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
             # that way it has the relation, but it is still missing the pk_cols
@@ -339,7 +327,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     )
   end
 
-  defp shape_attrs(shape_handle, shape) do
+  defp telemetry_shape_attrs(shape_handle, shape) do
     [
       "shape.handle": shape_handle,
       "shape.root_table": shape.root_table,

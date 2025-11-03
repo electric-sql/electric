@@ -1158,7 +1158,7 @@ defmodule Electric.ShapeCacheTest do
                Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
              )
 
-      assert {:ok, [{^shape_handle, _pid1}, {^dep_handle, _pid2}]} =
+      assert {:ok, _pid1} =
                ShapeCache.start_consumer_for_handle(shape_handle, opts)
 
       # Materializer should be started
@@ -1213,6 +1213,9 @@ defmodule Electric.ShapeCacheTest do
             {:cont, []}
           end
         end)
+      end)
+      |> tap(fn _ ->
+        assert_receive({:snapshot, ^handle})
       end)
     end)
     |> Task.await_many()

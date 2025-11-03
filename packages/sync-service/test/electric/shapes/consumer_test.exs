@@ -95,10 +95,10 @@ defmodule Electric.Shapes.ConsumerTest do
     Lsn.from_integer(offset)
   end
 
-  defp stub_shape_status_shutdown(shape_handle, ctx) do
+  defp stub_shape_status_shutdown(shape_handle, pid, _ctx) do
     Mock.ShapeStatus
     |> stub(:get_existing_shape, fn _, _ -> {shape_handle, @shape1} end)
-    |> allow(self(), Consumer.whereis(ctx.stack_id, shape_handle))
+    |> allow(self(), pid)
   end
 
   describe "event handling" do
@@ -108,6 +108,7 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_persistent_kv,
       :with_status_monitor,
       :with_shape_monitor,
+      :with_dynamic_consumer_supervisor,
       :with_noop_publication_manager
     ]
 
@@ -137,7 +138,7 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       producer =
-        start_link_supervised!({
+        start_supervised!({
           ShapeLogCollector,
           stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
         })
@@ -154,30 +155,33 @@ defmodule Electric.Shapes.ConsumerTest do
 
           {:ok, consumer} =
             start_supervised(
-              {Shapes.ConsumerSupervisor,
-               shape_handle: shape_handle,
-               shape: shape,
-               stack_id: ctx.stack_id,
-               inspector: {Mock.Inspector, []},
-               db_pool: Electric.Connection.Manager.snapshot_pool(ctx.stack_id),
-               registry: registry_name,
-               shape_status_mod: Mock.ShapeStatus,
-               publication_manager: ctx.publication_manager,
-               hibernate_after: 1_000,
-               storage: storage,
-               otel_ctx: nil,
-               chunk_bytes_threshold:
-                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold()},
-              id: {Shapes.ConsumerSupervisor, shape_handle}
+              {Shapes.Consumer,
+               %{
+                 shape_handle: shape_handle,
+                 shape: shape,
+                 stack_id: ctx.stack_id,
+                 inspector: {Mock.Inspector, []},
+                 db_pool: Electric.Connection.Manager.snapshot_pool(ctx.stack_id),
+                 registry: registry_name,
+                 shape_status_mod: Mock.ShapeStatus,
+                 publication_manager: ctx.publication_manager,
+                 hibernate_after: 1_000,
+                 storage: storage,
+                 otel_ctx: nil,
+                 chunk_bytes_threshold:
+                   Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
+                 consumer_supervisor: ctx.consumer_supervisor,
+                 action: :create
+               }},
+              id: {Shapes.Consumer, shape_handle}
             )
 
           assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, ^shape}
           # Wait for the virtual snapshot to have started to avoid overriding any of the
           # defined Mox expectations
-          :started =
-            GenServer.call(Consumer.name(ctx.stack_id, shape_handle), :await_snapshot_start)
+          :started = Consumer.await_snapshot_start(ctx.stack_id, shape_handle)
 
-          stub_shape_status_shutdown(shape_handle, ctx)
+          stub_shape_status_shutdown(shape_handle, consumer, ctx)
 
           consumer
         end
@@ -372,7 +376,6 @@ defmodule Electric.Shapes.ConsumerTest do
     defp assert_consumer_shutdown(stack_id, shape_handle, fun) do
       monitors =
         for name <- [
-              Shapes.ConsumerSupervisor.name(stack_id, shape_handle),
               Shapes.Consumer.name(stack_id, shape_handle),
               Shapes.Consumer.Snapshotter.name(stack_id, shape_handle)
             ],
@@ -468,11 +471,9 @@ defmodule Electric.Shapes.ConsumerTest do
           columns: []
         }
 
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
 
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
@@ -499,11 +500,9 @@ defmodule Electric.Shapes.ConsumerTest do
         columns: []
       }
 
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
 
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       # also cleans up inspector cache and shape status cache
       Mock.Inspector
@@ -628,11 +627,8 @@ defmodule Electric.Shapes.ConsumerTest do
           log_offset: LogOffset.first()
         })
 
-      ref1 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
-
-      ref2 =
-        Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
+      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
+      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
@@ -645,7 +641,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
     test "consumer crashing stops affected consumer", ctx do
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
-
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)

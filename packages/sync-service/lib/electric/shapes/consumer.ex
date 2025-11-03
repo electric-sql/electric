@@ -1,20 +1,19 @@
 defmodule Electric.Shapes.Consumer do
-  use GenServer,
-    restart: :temporary,
-    significant: true
+  use GenServer, restart: :temporary
 
   import Electric.Postgres.Xid, only: [compare: 2]
   import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
 
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
+  alias Electric.Shapes.ConsumerRegistry
   alias Electric.LogItems
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
-  alias Electric.Shapes.Consumer.Snapshotter
+  alias Electric.Shapes
   alias Electric.Shapes.Shape
   alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
@@ -22,32 +21,30 @@ defmodule Electric.Shapes.Consumer do
 
   require Logger
 
-  def name(%{stack_id: stack_id, shape_handle: shape_handle}) do
-    name(stack_id, shape_handle)
-  end
+  @default_snapshot_timeout 30_000
+  @stop_and_clean_timeout 30_000
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
+    ConsumerRegistry.name(stack_id, shape_handle)
   end
 
   def initial_state(consumer) do
     GenServer.call(consumer, :initial_state, 30_000)
   end
 
-  @spec await_snapshot_start(pid() | map()) :: :started | {:error, any()}
-  @spec await_snapshot_start(pid() | map(), timeout()) :: :started | {:error, any()}
-  def await_snapshot_start(consumer, timeout \\ 30_000)
-
-  def await_snapshot_start(consumer, timeout) when is_pid(consumer) do
-    GenServer.call(consumer, :await_snapshot_start, timeout)
+  @spec await_snapshot_start(Electric.stack_id(), ShapeCache.shape_handle(), timeout()) ::
+          :started | {:error, any()}
+  def await_snapshot_start(stack_id, shape_handle, timeout \\ @default_snapshot_timeout)
+      when is_binary(stack_id) and is_binary(shape_handle) do
+    stack_id
+    |> consumer_pid(shape_handle)
+    |> GenServer.call(:await_snapshot_start, timeout)
   end
 
-  def await_snapshot_start(consumer, timeout) do
-    GenServer.call(name(consumer), :await_snapshot_start, timeout)
-  end
-
-  def subscribe_materializer(consumer) do
-    GenServer.call(name(consumer), :subscribe_materializer)
+  def subscribe_materializer(stack_id, shape_handle) do
+    stack_id
+    |> consumer_pid(shape_handle)
+    |> GenServer.call(:subscribe_materializer)
   end
 
   @doc false
@@ -55,28 +52,45 @@ defmodule Electric.Shapes.Consumer do
   # when the `shape_handle` consumer has processed every transaction.
   # Transactions that we skip because of xmin logic do not generate
   # a notification
-  @spec monitor(String.t(), ShapeCache.shape_handle(), pid()) :: reference()
+  @spec monitor(Electric.stack_id(), ShapeCache.shape_handle(), pid()) :: reference()
   def monitor(stack_id, shape_handle, pid \\ self()) do
-    GenServer.call(name(stack_id, shape_handle), {:monitor, pid})
+    stack_id
+    |> consumer_pid(shape_handle)
+    |> GenServer.call({:monitor, pid})
   end
 
-  @spec whereis(String.t(), ShapeCache.shape_handle()) :: pid() | nil
+  @spec whereis(Electric.stack_id(), ShapeCache.shape_handle()) :: pid() | nil
   def whereis(stack_id, shape_handle) do
-    GenServer.whereis(name(stack_id, shape_handle))
+    consumer_pid(stack_id, shape_handle)
   end
 
-  def start_link(config) when is_map(config) do
-    GenServer.start_link(__MODULE__, config, name: name(config))
+  def stop_and_clean(stack_id, shape_handle) do
+    # if consumer is present, terminate it gracefully
+    stack_id
+    |> consumer_pid(shape_handle)
+    |> GenServer.call(:stop_and_clean, @stop_and_clean_timeout)
+  catch
+    :exit, {:noproc, _} -> :noproc
+  end
+
+  defp consumer_pid(stack_id, shape_handle) do
+    ConsumerRegistry.whereis(stack_id, shape_handle)
+  end
+
+  def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = config) do
+    GenServer.start_link(__MODULE__, config, name: name(stack_id, shape_handle))
   end
 
   @impl GenServer
   def init(config) do
     activate_mocked_functions_from_test_process()
 
-    Process.set_label({:consumer, config.shape_handle})
+    %{stack_id: stack_id, shape_handle: shape_handle} = config
+
+    Process.set_label({:consumer, shape_handle})
     Process.flag(:trap_exit, true)
 
-    metadata = [shape_handle: config.shape_handle, stack_id: config.stack_id]
+    metadata = [shape_handle: shape_handle, stack_id: stack_id]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
@@ -104,9 +118,16 @@ defmodule Electric.Shapes.Consumer do
   @impl GenServer
   def handle_continue({:init_consumer, action}, state) do
     %{
-      storage: storage,
+      storage: stack_storage,
       shape_status_mod: shape_status_mod
     } = state
+
+    storage = ShapeCache.Storage.for_shape(state.shape_handle, stack_storage)
+
+    case ShapeCache.Storage.start_link(storage) do
+      {:ok, _pid} -> :ok
+      :ignore -> :ok
+    end
 
     writer = ShapeCache.Storage.init_writer!(storage, state.shape)
 
@@ -131,10 +152,32 @@ defmodule Electric.Shapes.Consumer do
     if all_materializers_alive?(state) && subscribe(state, action) do
       Logger.debug("Writer for #{state.shape_handle} initialized")
 
-      Snapshotter.start_snapshot(state.stack_id, state.shape_handle)
+      # We start the snapshotter even if there's a snapshot because it also performs the call
+      # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
+      # process if the shape already has a snapshot but the current semantics rely on being able
+      # to wait for the snapshot asynchronously and if we called publication manager here it would
+      # block and prevent await_snapshot_start calls from adding snapshot subscribers.
+
+      {:ok, _pid} =
+        Shapes.DynamicConsumerSupervisor.start_snapshotter(
+          state.stack_id,
+          %{
+            stack_id: state.stack_id,
+            shape: state.shape,
+            shape_handle: state.shape_handle,
+            storage: storage,
+            db_pool: state.db_pool,
+            otel_ctx: state.otel_ctx,
+            publication_manager: state.publication_manager,
+            chunk_bytes_threshold: state.chunk_bytes_threshold,
+            snapshot_timeout_to_first_data:
+              Map.get(state, :snapshot_timeout_to_first_data, :timer.seconds(30))
+          }
+        )
 
       {:noreply,
        Map.merge(state, %{
+         storage: storage,
          latest_offset: normalized_latest_offset,
          writer: writer,
          pg_snapshot: pg_snapshot
@@ -229,8 +272,11 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
-    state = set_pg_snapshot(state.pg_snapshot, state)
-    state = set_snapshot_started(state)
+    state =
+      state.pg_snapshot
+      |> set_pg_snapshot(state)
+      |> set_snapshot_started()
+
     {:noreply, state, state.hibernate_after}
   end
 
@@ -280,9 +326,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # We're trapping exists so that `terminate` is called to clean up the writer,
-  # otherwise we respect the OTP exit protocol.
-  def handle_info({:EXIT, _from, reason}, state) do
-    Logger.debug("Caught EXIT: #{inspect(reason)}")
+  # otherwise we respect the OTP exit protocol. Since nothing is linked to the consumer
+  # we shouldn't see this...
+  def handle_info({:EXIT, _pid, reason}, state) do
+    Logger.error("Caught EXIT: #{inspect(reason)}")
     {:stop, reason, state}
   end
 

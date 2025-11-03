@@ -115,13 +115,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              producer: ctx.server,
              shape: @shape,
              shape_handle: @shape_handle,
+             stack_id: ctx.stack_id,
              action: :restore
            ]}
         )
 
       # since we're starting the consumer manually we have to explictly register it
       :ok =
-        Electric.Shapes.ConsumerRegistry.register_consumer(@shape_handle, consumer, ctx.stack_id)
+        Electric.Shapes.ConsumerRegistry.register_consumer(consumer, @shape_handle, ctx.stack_id)
 
       txn =
         %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
@@ -161,6 +162,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                  DynamicSupervisor.start_child(ctx.supervisor, {
                    Support.TransactionConsumer,
                    id: id,
+                   stack_id: ctx.stack_id,
                    parent: parent,
                    producer: ctx.server,
                    shape: @shape,
@@ -168,7 +170,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                    action: :restore
                  }) do
             send(parent, {:start_consumer, shape_handle, id, pid})
-            {:ok, [{shape_handle, pid}]}
+            {:ok, pid}
           end
         end
       )
@@ -251,6 +253,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                  [
                    [
                      id: id,
+                     stack_id: ctx.stack_id,
                      parent: parent,
                      producer: ctx.server,
                      shape: @shape,
@@ -577,6 +580,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                  [
                    [
                      id: id,
+                     stack_id: ctx.stack_id,
                      parent: parent,
                      producer: ctx.server,
                      shape: @shape,
@@ -710,6 +714,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       start_link_supervised!(
         {Support.TransactionConsumer,
          id: consumer_id,
+         stack_id: ctx.stack_id,
          parent: self(),
          producer: pid,
          shape: @shape,

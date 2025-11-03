@@ -141,11 +141,16 @@ defmodule Support.TestUtils do
   end
 
   def patch_snapshotter(fun) do
+    test_pid = self()
+
     Repatch.patch(
       Electric.Shapes.Consumer.Snapshotter,
       :start_streaming_snapshot_from_db,
       [mode: :shared],
-      fun
+      fn consumer, shape_handle, shape, ctx ->
+        send(test_pid, {:snapshot, shape_handle})
+        fun.(consumer, shape_handle, shape, ctx)
+      end
     )
 
     activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
@@ -153,11 +158,16 @@ defmodule Support.TestUtils do
 
   def activate_mocks_for_descendant_procs(mod) do
     self_pid = self()
-    callback_fun = fn pid -> Repatch.allow(self_pid, pid) end
 
-    # The descendant process running module `mod` will look up this callback in its root ancestor and execute it.
-    old_cbs = Process.get(:callbacks_for_descendant_procs) || []
-    Process.put(:callbacks_for_descendant_procs, [{mod, callback_fun} | old_cbs])
+    callback_fun = fn pid ->
+      Repatch.allow(self_pid, pid)
+    end
+
+    callbacks = Process.get(:callback_for_descendant_procs, %{})
+
+    # The descendant process running module `mod` will look up this callback in
+    # its root ancestor and execute it.
+    Process.put(:callback_for_descendant_procs, Map.put(callbacks, mod, callback_fun))
 
     :ok
   end
@@ -169,14 +179,11 @@ defmodule Support.TestUtils do
   # function under the `:callback_for_descendant_procs` key matching the caller's module (if
   # any).
   def activate_mocked_functions_for_module(caller_mod) do
-    {:dictionary, test_process_dict} =
-      Process.get(:"$ancestors")
-      |> List.last()
-      |> Process.info(:dictionary)
-
-    case Keyword.get(test_process_dict, :callbacks_for_descendant_procs) do
-      cbs when is_list(cbs) -> for {^caller_mod, fun} <- cbs, do: fun.(self())
-      _ -> :noop
+    with {:dictionary, test_process_dict} <-
+           Process.get(:"$ancestors") |> List.last() |> Process.info(:dictionary),
+         %{^caller_mod => fun} <-
+           Keyword.get(test_process_dict, :callback_for_descendant_procs) do
+      fun.(self())
     end
   end
 end

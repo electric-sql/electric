@@ -178,15 +178,38 @@ defmodule Support.ComponentSetup do
     %{shape_status_owner: "shape_status_owner"}
   end
 
+  def with_dynamic_consumer_supervisor(%{consumer_supervisor: name} = ctx) do
+    if GenServer.whereis(name) do
+      ctx
+    else
+      start_consumer_supervisor(ctx)
+    end
+  end
+
+  def with_dynamic_consumer_supervisor(ctx) do
+    start_consumer_supervisor(ctx)
+  end
+
+  defp start_consumer_supervisor(ctx) do
+    consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
+
+    {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: ctx.stack_id]}
+    |> Supervisor.child_spec(id: consumer_supervisor, restart: :temporary)
+    |> start_supervised!()
+
+    %{consumer_supervisor: consumer_supervisor}
+  end
+
   def with_shape_cache(ctx, additional_opts \\ []) do
     server = :"shape_cache_#{full_test_name(ctx)}"
-    consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
 
     start_supervised!(
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(ctx.stack_id, Electric.StackTaskSupervisor)}
       |> Supervisor.child_spec(id: "shape_task_supervisor")
     )
+
+    %{consumer_supervisor: consumer_supervisor} = with_dynamic_consumer_supervisor(ctx)
 
     start_opts =
       [
@@ -203,11 +226,6 @@ defmodule Support.ComponentSetup do
       ]
       |> Keyword.merge(additional_opts)
       |> Keyword.merge(Map.get(ctx, :shape_cache_opts_overrides, []))
-
-    {Electric.Shapes.DynamicConsumerSupervisor,
-     [name: consumer_supervisor, stack_id: ctx.stack_id]}
-    |> Supervisor.child_spec(id: consumer_supervisor, restart: :temporary)
-    |> start_supervised!()
 
     start_supervised!(%{
       id: start_opts[:name],
@@ -233,6 +251,24 @@ defmodule Support.ComponentSetup do
     Electric.LsnTracker.create_table(stack_id)
     Electric.LsnTracker.set_last_processed_lsn(Electric.Postgres.Lsn.from_integer(0), stack_id)
     :ok
+  end
+
+  def with_consumer_registry(ctx) do
+    pid =
+      start_supervised!(
+        {Agent,
+         fn ->
+           {:ok, registry_state} =
+             Electric.Shapes.ConsumerRegistry.new(
+               ctx.stack_id,
+               Map.get(ctx, :consumer_registry_opts, [])
+             )
+
+           registry_state
+         end}
+      )
+
+    %{consumer_registry: pid}
   end
 
   def with_shape_log_collector(ctx) do
