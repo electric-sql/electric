@@ -263,7 +263,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     const shape = new Shape(shapeStream)
     let dataUpdateCount = 0
     await new Promise<void>((resolve, reject) => {
-      // Increased timeout to account for SSE short connection delays (~1s each)
+      // Increased timeout to account for SSE exponential backoff delays (up to 5s cap)
       setTimeout(() => reject(`Timed out waiting for data changes`), 5000)
       shape.subscribe(async ({ rows }) => {
         dataUpdateCount++

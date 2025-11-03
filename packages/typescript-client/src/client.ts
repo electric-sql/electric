@@ -446,6 +446,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #consecutiveShortSseConnections = 0
   #maxShortSseConnections = 3 // Fall back to long polling after this many short connections
   #sseFallbackToLongPolling = false
+  #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
+  #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -950,13 +952,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
               `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
           )
         } else {
-          // Add a delay to prevent tight infinite loop while we're still trying SSE
-          await new Promise((resolve) =>
-            setTimeout(
-              resolve,
-              this.#minSseConnectionDuration - connectionDuration
-            )
+          // Add exponential backoff with full jitter to prevent tight infinite loop
+          // Formula: random(0, min(cap, base * 2^attempt))
+          const maxDelay = Math.min(
+            this.#sseBackoffMaxDelay,
+            this.#sseBackoffBaseDelay *
+              Math.pow(2, this.#consecutiveShortSseConnections)
           )
+          const delayMs = Math.floor(Math.random() * maxDelay)
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
         }
       } else if (connectionDuration >= this.#minSseConnectionDuration) {
         // Connection was healthy - reset counter
