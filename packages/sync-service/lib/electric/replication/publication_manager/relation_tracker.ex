@@ -496,6 +496,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
        do: {{oid, relation}, Map.get(flags, :selects_generated_columns, false)}
 
   defp is_known_publication_error(%Electric.DbConfigurationError{}), do: true
+  defp is_known_publication_error(%DBConnection.ConnectionError{}), do: true
 
   defp is_known_publication_error(%Postgrex.Error{postgres: %{code: code}})
        when code in [
