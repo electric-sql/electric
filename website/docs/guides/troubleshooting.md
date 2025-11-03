@@ -88,14 +88,16 @@ localhost:3001 {
 
 **Nginx**
 
-Add the `X-Accel-Buffering: no` response header for SSE endpoints:
+Disable proxy buffering for SSE endpoints:
 
 ```nginx
 location /v1/shape {
   proxy_pass http://localhost:3000;
-  proxy_set_header X-Accel-Buffering no;  # Disable buffering for SSE
-  proxy_set_header Cache-Control no-cache;
+  proxy_buffering off;  # Disable buffering for SSE streaming
   proxy_http_version 1.1;
+
+  # Preserve Electric's cache headers for request collapsing
+  proxy_cache_valid 200 1s;
 }
 ```
 

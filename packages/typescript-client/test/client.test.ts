@@ -2072,3 +2072,276 @@ it(
   },
   { timeout: 15000 }
 )
+
+it(
+  `should reset SSE fallback state after shape rotation (409)`,
+  async ({ issuesTableUrl, aborter }) => {
+    let sseRequestCount = 0
+    let shouldReturn409 = false
+    const requestUrls: string[] = []
+
+    // Mock console.warn to capture the fallback warning
+    const originalWarn = console.warn
+    const warnMock = vi.fn()
+    console.warn = warnMock
+
+    try {
+      const fetchClient = async (
+        input: string | URL | Request,
+        init?: RequestInit
+      ) => {
+        const url = input instanceof Request ? input.url : input.toString()
+        requestUrls.push(url)
+
+        const urlObj = new URL(url)
+        const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
+        const hasHandle = urlObj.searchParams.has(`handle`)
+
+        // Return 409 to trigger shape rotation after fallback occurs
+        if (shouldReturn409 && hasHandle) {
+          shouldReturn409 = false // Only return 409 once
+          return new Response(null, {
+            status: 409,
+            statusText: `Conflict`,
+            headers: new Headers({
+              'electric-handle': `new-handle-${Date.now()}`,
+            }),
+          })
+        }
+
+        if (isSSE) {
+          sseRequestCount++
+          // First 3 SSE requests: return short connections to trigger fallback
+          if (sseRequestCount <= 3) {
+            const stream = new ReadableStream({
+              start(controller) {
+                setTimeout(() => controller.close(), 10)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+          // After reset (after 409), return successful SSE connection that stays open
+          else {
+            const stream = new ReadableStream({
+              start(controller) {
+                // Keep connection open for longer to simulate successful SSE
+                setTimeout(() => controller.close(), 2000)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `new-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+        }
+
+        // For normal requests, use real fetch
+        return fetch(input, init)
+      }
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        liveSse: true,
+        fetchClient,
+      })
+
+      const unsubscribe = shapeStream.subscribe(() => {})
+
+      // Wait for fallback to occur (3 short SSE connections)
+      await vi.waitFor(
+        () => {
+          expect(warnMock).toHaveBeenCalled()
+        },
+        { timeout: 10000 }
+      )
+
+      // Verify fallback warning was shown
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `[Electric] SSE connections are closing immediately`
+        )
+      )
+
+      // Count SSE requests before 409
+      const sseRequestsBeforeReset = requestUrls.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      }).length
+
+      // Should have 3 SSE requests that triggered fallback
+      expect(sseRequestsBeforeReset).toBeGreaterThanOrEqual(3)
+      expect(sseRequestsBeforeReset).toBeLessThanOrEqual(4)
+
+      // Now trigger a 409 to reset the shape
+      shouldReturn409 = true
+
+      // Wait for requests after the 409 reset
+      await vi.waitFor(
+        () => {
+          const sseRequestsAfterReset = requestUrls.filter((url) => {
+            const urlObj = new URL(url)
+            return urlObj.searchParams.get(`live_sse`) === `true`
+          }).length
+          // After reset, should see additional SSE requests (SSE should be tried again)
+          expect(sseRequestsAfterReset).toBeGreaterThan(sseRequestsBeforeReset)
+        },
+        { timeout: 10000 }
+      )
+
+      // Verify that SSE was attempted again after reset
+      const totalSseRequests = requestUrls.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      }).length
+
+      // Should have initial 3-4 failed SSE attempts + at least 1 more after reset
+      expect(totalSseRequests).toBeGreaterThan(sseRequestsBeforeReset)
+
+      unsubscribe()
+    } finally {
+      console.warn = originalWarn
+    }
+  },
+  { timeout: 20000 }
+)
+
+it(
+  `should not increment short connection counter for aborted SSE connections`,
+  async ({ issuesTableUrl, aborter }) => {
+    let sseRequestCount = 0
+    const requestUrls: string[] = []
+
+    // Mock console.warn to verify fallback warning is NOT shown
+    const originalWarn = console.warn
+    const warnMock = vi.fn()
+    console.warn = warnMock
+
+    try {
+      const fetchClient = async (
+        input: string | URL | Request,
+        init?: RequestInit
+      ) => {
+        const url = input instanceof Request ? input.url : input.toString()
+        requestUrls.push(url)
+
+        const urlObj = new URL(url)
+        const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
+
+        if (isSSE) {
+          sseRequestCount++
+
+          // First SSE request: return short connection (should count)
+          if (sseRequestCount === 1) {
+            const stream = new ReadableStream({
+              start(controller) {
+                setTimeout(() => controller.close(), 10)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+          // Second SSE request: abort shortly after it starts (should NOT count)
+          else if (sseRequestCount === 2) {
+            const stream = new ReadableStream({
+              start(controller) {
+                // Keep connection open, but we'll abort it from outside
+                setTimeout(() => controller.close(), 5000)
+              },
+            })
+
+            // Abort after a short delay to simulate user cancellation
+            setTimeout(() => {
+              aborter.abort()
+            }, 100)
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+        }
+
+        // For normal requests, use real fetch
+        return fetch(input, init)
+      }
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        liveSse: true,
+        fetchClient,
+      })
+
+      const unsubscribe = shapeStream.subscribe(() => {})
+
+      // Wait for both SSE requests to happen and for abort
+      await vi.waitFor(
+        () => {
+          expect(sseRequestCount).toBe(2)
+        },
+        { timeout: 5000 }
+      )
+
+      // Give it a bit more time to ensure no fallback warning is shown
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      // Verify that fallback warning was NOT shown
+      // (because the aborted connection should not count toward the threshold)
+      const fallbackWarnings = warnMock.mock.calls.filter((call) =>
+        call[0]?.toString().includes(`Falling back to long polling`)
+      )
+      expect(fallbackWarnings.length).toBe(0)
+
+      // Count SSE requests - should be exactly 2
+      const sseRequests = requestUrls.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      })
+      expect(sseRequests.length).toBe(2)
+
+      unsubscribe()
+    } finally {
+      console.warn = originalWarn
+    }
+  },
+  { timeout: 10000 }
+)
