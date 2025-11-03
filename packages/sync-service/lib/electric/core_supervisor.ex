@@ -2,8 +2,8 @@ defmodule Electric.CoreSupervisor do
   @moduledoc """
   A supervisor that starts the core components of the Electric system.
   This is divided into two subsystems:
-  1. The connection subsystem (processes that may exit on a connection failure), started with Connection.Manager.Supervisor
-  2. The shape subsystem (processes that are resilient to connection failures), started with Electric.Shapes.Supervisor
+  1. The connection subsystem (processes that may exit on a connection failure), started with Connection.Supervisor
+  2. The shape subsystem (processes that are resilient to connection failures), started with Shapes.Supervisor
   """
 
   use Supervisor, restart: :transient, significant: true
@@ -36,9 +36,6 @@ defmodule Electric.CoreSupervisor do
   @doc """
   This function is supposed to be called from Connection.Manager at the right point in its
   initialization sequence.
-
-  Shapes.Supervisor is started as a temporary child so that, when it dies, it is up to the
-  Connection.Manager process to restart it again at the right point in time.
   """
   def start_replication_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
