@@ -1994,7 +1994,7 @@ it(
                 'electric-handle': `test-handle`,
                 'electric-schema': JSON.stringify({}),
                 'electric-cursor': `123`,
-                'content-type': 'text/event-stream',
+                'content-type': `text/event-stream`,
               }),
             })
           }
