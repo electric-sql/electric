@@ -144,7 +144,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
              :public,
              keypos: storage_meta(:shape_handle) + 1,
              read_concurrency: true,
-             write_concurrency: true
+             write_concurrency: :auto
            ])
          end},
         {Task.Supervisor, name: stack_task_supervisor(opts.stack_id)}

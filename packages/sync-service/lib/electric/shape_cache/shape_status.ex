@@ -412,7 +412,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :named_table,
       :public,
       :ordered_set,
-      write_concurrency: true
+      write_concurrency: :auto
     ])
 
     last_used_table
@@ -425,7 +425,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :named_table,
       :public,
       :ordered_set,
-      write_concurrency: true
+      write_concurrency: :auto
     ])
 
     meta_table
