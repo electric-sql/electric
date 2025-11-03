@@ -1,5 +1,18 @@
 # @core/sync-service
 
+## 1.2.3
+
+### Patch Changes
+
+- a5a0443: Improve resilience of publication configuration updates and minimise queries
+- 5e6d3cd: Add write_concurrency to ShapeStatus ETS tables to improve performance under concurrent workloads. Enables `write_concurrency: true` on both LastUsedTable and MetaTable to reduce lock contention during concurrent shape operations, addressing slow deletes with large numbers of shapes.
+- 39e2458: Shape subsystem is no longer restarted on a connection failure
+- 8f65f04: Handle missing process when examining message queue lengths
+- e3c2320: Warn instead of error for publication configuration errors if they are connection errors.
+- 7ef355b: Set write_concurrency to :auto for all ETS tables that already have it enabled. This is the recommended setting, per OTP docs.
+- a5a0443: Modify `PublicationManager` to commit individual relation configurations while concurrently handling shape registrations to avoid timing out or blocking when updating high number of relations.
+- bb1f8d3: Only include schema in 200 responses
+
 ## 1.2.2
 
 ### Patch Changes
