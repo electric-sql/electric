@@ -507,32 +507,61 @@ export class ShapeStream<T extends Row<unknown> = Row>
       await this.#requestShape()
     } catch (err) {
       this.#error = err
+
+      // Check if onError handler wants to retry
       if (this.#onError) {
         const retryOpts = await this.#onError(err as Error)
-        if (typeof retryOpts === `object`) {
-          this.#reset()
-
-          if (`params` in retryOpts) {
-            this.options.params = retryOpts.params
+        // Guard against null (typeof null === "object" in JavaScript)
+        if (retryOpts && typeof retryOpts === `object`) {
+          // Update params/headers but don't reset offset
+          // We want to continue from where we left off, not refetch everything
+          if (retryOpts.params) {
+            // Merge new params with existing params to preserve other parameters
+            this.options.params = {
+              ...(this.options.params ?? {}),
+              ...retryOpts.params,
+            }
           }
 
-          if (`headers` in retryOpts) {
-            this.options.headers = retryOpts.headers
+          if (retryOpts.headers) {
+            // Merge new headers with existing headers to preserve other headers
+            this.options.headers = {
+              ...(this.options.headers ?? {}),
+              ...retryOpts.headers,
+            }
           }
 
-          // Restart
+          // Clear the error since we're retrying
+          this.#error = null
+
+          // Restart from current offset
           this.#started = false
-          this.#start()
+          await this.#start()
+          return
         }
+        // onError returned void, meaning it doesn't want to retry
+        // This is an unrecoverable error, notify subscribers
+        if (err instanceof Error) {
+          this.#sendErrorToSubscribers(err)
+        }
+        this.#connected = false
+        this.#tickPromiseRejecter?.()
         return
       }
 
-      // If no handler is provided for errors just throw so the error still bubbles up.
-      throw err
-    } finally {
+      // No onError handler provided, this is an unrecoverable error
+      // Notify subscribers and throw
+      if (err instanceof Error) {
+        this.#sendErrorToSubscribers(err)
+      }
       this.#connected = false
       this.#tickPromiseRejecter?.()
+      throw err
     }
+
+    // Normal completion, clean up
+    this.#connected = false
+    this.#tickPromiseRejecter?.()
   }
 
   async #requestShape(): Promise<void> {
@@ -613,12 +642,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         )
         return this.#requestShape()
       } else {
-        // Notify subscribers
-        this.#sendErrorToSubscribers(e)
-
         // errors that have reached this point are not actionable without
         // additional user input, such as 400s or failures to read the
-        // body of a response, so we exit the loop
+        // body of a response, so we exit the loop and let #start handle it
+        // Note: We don't notify subscribers here because onError might recover
         throw e
       }
     } finally {
