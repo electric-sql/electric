@@ -515,11 +515,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // Update params/headers but don't reset offset
           // We want to continue from where we left off, not refetch everything
           if (`params` in retryOpts) {
-            this.options.params = retryOpts.params
+            // Merge new params with existing params to preserve other parameters
+            this.options.params = {
+              ...this.options.params,
+              ...retryOpts.params,
+            }
           }
 
           if (`headers` in retryOpts) {
-            this.options.headers = retryOpts.headers
+            // Merge new headers with existing headers to preserve other headers
+            this.options.headers = {
+              ...this.options.headers,
+              ...retryOpts.headers,
+            }
           }
 
           // Clear the error since we're retrying

@@ -706,13 +706,16 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
       onError: mockErrorHandler,
     })
 
+    // Subscribe to trigger the stream to start
+    const fetchPromise = waitForFetch(shapeStream)
+
     // Wait for the error to occur and the error handler to be invoked
     await authChangePromise
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
 
     // Wait for successful recovery (data arrives after error is recovered from)
-    await waitForFetch(shapeStream)
+    await fetchPromise
     // After successful recovery, the stream should be connected
     expect(shapeStream.isConnected()).toBe(true)
   })
