@@ -1085,7 +1085,7 @@ describe(`HTTP Sync`, () => {
 
         // Capture offset from URL
         const urlObj = new URL(url)
-        const offset = urlObj.searchParams.get('offset')
+        const offset = urlObj.searchParams.get(`offset`)
 
         // Fail the second request (first live request after initial sync)
         if (requestCount === 2 && shouldFail) {
@@ -1095,7 +1095,7 @@ describe(`HTTP Sync`, () => {
           return new Response(JSON.stringify({ error: `Unauthorized` }), {
             status: 401,
             headers: {
-              'content-type': 'application/json',
+              'content-type': `application/json`,
             },
           })
         }
@@ -1120,7 +1120,7 @@ describe(`HTTP Sync`, () => {
         onError: async (error) => {
           if (error instanceof FetchError && error.status === 401) {
             // Simulate refreshing auth token
-            return { headers: { Authorization: 'Bearer new-token' } }
+            return { headers: { Authorization: `Bearer new-token` } }
           }
           throw error
         },
@@ -1158,7 +1158,7 @@ describe(`HTTP Sync`, () => {
       expect(offsetBeforeError).toBeDefined()
       expect(offsetAfterError).toBeDefined()
       expect(offsetAfterError).toBe(offsetBeforeError)
-      expect(offsetAfterError).not.toBe('-1')
+      expect(offsetAfterError).not.toBe(`-1`)
 
       // 2. We only saw each insert operation once (no duplicates)
       expect(insertCount).toBe(1)
