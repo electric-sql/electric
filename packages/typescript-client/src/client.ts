@@ -525,7 +525,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Restart from current offset
           this.#started = false
-          this.#start()
+          return this.#start()
         }
         return
       }
