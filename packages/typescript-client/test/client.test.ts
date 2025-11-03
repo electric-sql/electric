@@ -605,7 +605,14 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
 
         return new Response(
           JSON.stringify([{ headers: { control: `up-to-date` } }]),
-          { status: 200 }
+          {
+            status: 200,
+            headers: {
+              'electric-offset': `0_0`,
+              'electric-handle': `test-handle-123`,
+              'electric-schema': `{}`,
+            },
+          }
         )
       },
       liveSse,
