@@ -520,6 +520,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
             this.options.headers = retryOpts.headers
           }
 
+          // Clear the error since we're retrying
+          this.#error = null
+
           // Restart from current offset
           this.#started = false
           this.#start()
