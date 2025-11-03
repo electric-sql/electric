@@ -92,9 +92,7 @@ defmodule Electric.Telemetry.SystemMonitor do
 
     Logger.debug("Long message queue detected for pid #{inspect(pid)} (#{inspect(type)})")
 
-    {:message_queue_len, queue_len} = Process.info(pid, :message_queue_len)
-
-    :telemetry.execute(@vm_monitor_long_message_queue, %{length: queue_len}, %{process_type: type})
+    log_long_message_queue_event(pid, type)
 
     state =
       %{state | long_message_queue_pids: Map.put(state.long_message_queue_pids, pid, type)}
@@ -116,14 +114,18 @@ defmodule Electric.Telemetry.SystemMonitor do
 
   def handle_info(:recheck_message_queues, state) do
     Enum.each(state.long_message_queue_pids, fn {pid, type} ->
-      {:message_queue_len, queue_len} = Process.info(pid, :message_queue_len)
-
-      :telemetry.execute(@vm_monitor_long_message_queue, %{length: queue_len}, %{
-        process_type: type
-      })
+      log_long_message_queue_event(pid, type)
     end)
 
     {:noreply, state}
+  end
+
+  defp log_long_message_queue_event(pid, type) do
+    with {:message_queue_len, queue_len} <- Process.info(pid, :message_queue_len) do
+      :telemetry.execute(@vm_monitor_long_message_queue, %{length: queue_len}, %{
+        process_type: type
+      })
+    end
   end
 
   defp maybe_start_long_message_queue_timer(%{long_message_queue_timer: nil} = state) do

@@ -99,7 +99,15 @@ defmodule Support.DbSetup do
         "electric_test_publication_#{small_hash(ctx.test)}"
       end)
 
-    Postgrex.query!(ctx.pool, "CREATE PUBLICATION \"#{publication_name}\"", [])
+    query = "CREATE PUBLICATION \"#{publication_name}\""
+    supported_features = Support.TestUtils.fetch_supported_features(ctx.pool)
+
+    query =
+      if supported_features.supports_generated_column_replication,
+        do: "#{query} WITH (publish_generated_columns = stored)",
+        else: query
+
+    Postgrex.query!(ctx.pool, query, [])
 
     %{publication_name: publication_name}
   end

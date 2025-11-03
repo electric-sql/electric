@@ -12,7 +12,6 @@ defmodule Support.ComponentSetup do
 
   defmodule NoopPublicationManager do
     @behaviour Electric.Replication.PublicationManager
-    def name(_), do: :pub_man
     def add_shape(_handle, _shape, _opts), do: :ok
     def remove_shape(_handle, _opts), do: :ok
     def wait_for_restore(_opts), do: :ok
@@ -24,8 +23,6 @@ defmodule Support.ComponentSetup do
     def new do
       {__MODULE__, %{parent: self()}}
     end
-
-    def name(_), do: TestPublicationManager
 
     def add_shape(handle, shape, %{parent: parent}) do
       send(parent, {TestPublicationManager, :add_shape, handle, shape})
@@ -137,7 +134,6 @@ defmodule Support.ComponentSetup do
         :start_link,
         [
           [
-            name: server,
             stack_id: ctx.stack_id,
             publication_name: ctx.publication_name,
             update_debounce_timeout: Access.get(ctx, :update_debounce_timeout, 0),
@@ -149,9 +145,11 @@ defmodule Support.ComponentSetup do
       restart: :temporary
     })
 
+    call_target = Electric.Replication.PublicationManager.RelationTracker.name(ctx.stack_id)
+
     %{
       publication_manager:
-        {Electric.Replication.PublicationManager, stack_id: ctx.stack_id, server: server}
+        {Electric.Replication.PublicationManager, stack_id: ctx.stack_id, server: call_target}
     }
   end
 

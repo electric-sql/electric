@@ -263,7 +263,8 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     const shape = new Shape(shapeStream)
     let dataUpdateCount = 0
     await new Promise<void>((resolve, reject) => {
-      setTimeout(() => reject(`Timed out waiting for data changes`), 1000)
+      // Increased timeout to account for SSE exponential backoff delays (up to 5s cap)
+      setTimeout(() => reject(`Timed out waiting for data changes`), 5000)
       shape.subscribe(async ({ rows }) => {
         dataUpdateCount++
         if (dataUpdateCount === 1) {
@@ -605,7 +606,14 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
 
         return new Response(
           JSON.stringify([{ headers: { control: `up-to-date` } }]),
-          { status: 200 }
+          {
+            status: 200,
+            headers: {
+              'electric-offset': `0_0`,
+              'electric-handle': `test-handle-123`,
+              'electric-schema': `{}`,
+            },
+          }
         )
       },
       liveSse,
@@ -706,14 +714,109 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
       onError: mockErrorHandler,
     })
 
-    await waitForFetch(shapeStream)
+    // Subscribe to trigger the stream to start
+    const fetchPromise = waitForFetch(shapeStream)
+
+    // Wait for the error to occur and the error handler to be invoked
+    await authChangePromise
     expect(mockErrorHandler.mock.calls.length).toBe(1)
     expect(mockErrorHandler.mock.calls[0][0]).toBeInstanceOf(FetchError)
-    expect(shapeStream.isConnected()).toBe(false)
 
-    await authChangePromise
-    // give some time for the error handler to modify the authorization header
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+    // Wait for successful recovery (data arrives after error is recovered from)
+    await fetchPromise
+    // After successful recovery, the stream should be connected
+    expect(shapeStream.isConnected()).toBe(true)
+  })
+
+  it(`should handle onError returning null without crashing`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    const mockErrorHandler = vi.fn().mockImplementation(() => {
+      // Returning null should be treated as "don't retry"
+      return null
+    })
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        where: `invalid syntax`,
+      },
+      signal: aborter.signal,
+      onError: mockErrorHandler,
+      liveSse,
+    })
+
+    const errorPromise = new Promise((_, reject) => {
+      shapeStream.subscribe(() => {}, reject)
+    })
+
+    // Should receive error from bad query, handler called with null,
+    // and error propagated to subscribers without crash
+    await expect(errorPromise).rejects.toThrow(FetchError)
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+  })
+
+  it(`should handle onError returning only params (not headers)`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    let callCount = 0
+    const mockErrorHandler = vi.fn().mockImplementation((error) => {
+      if (error instanceof FetchError && error.status === 401) {
+        // Return only params, not headers - should preserve existing headers
+        return {
+          params: {
+            todo: `pass`,
+          },
+        }
+      }
+    })
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+        todo: `fail`,
+      },
+      headers: {
+        'X-Custom-Header': `should-be-preserved`,
+      },
+      signal: aborter.signal,
+      fetchClient: async (input, init) => {
+        callCount++
+        const url = new URL(input instanceof Request ? input.url : input)
+        const headers = (init?.headers as Record<string, string>) || {}
+
+        if (url.searchParams.get(`todo`) === `fail`) {
+          return new Response(undefined, {
+            status: 401,
+          })
+        }
+
+        // Verify custom header was preserved through retry
+        expect(headers[`X-Custom-Header`]).toBe(`should-be-preserved`)
+
+        return new Response(
+          JSON.stringify([{ headers: { control: `up-to-date` } }]),
+          {
+            status: 200,
+            headers: {
+              'electric-offset': `0_0`,
+              'electric-handle': `test-handle-456`,
+              'electric-schema': `{}`,
+            },
+          }
+        )
+      },
+      liveSse,
+      onError: mockErrorHandler,
+    })
+
+    await waitForFetch(shapeStream)
+    expect(mockErrorHandler.mock.calls.length).toBe(1)
+    expect(callCount).toBeGreaterThan(1) // Initial request + retry
   })
 
   it(`should stop fetching and report an error if response is missing required headers`, async ({
@@ -1946,4 +2049,401 @@ describe.for(fetchAndSse)(
       )
     })
   }
+)
+
+it(
+  `should fall back to long polling after 3 consecutive short SSE connections`,
+  async ({ issuesTableUrl, aborter }) => {
+    let requestCount = 0
+    let sseRequestCount = 0
+    const requestUrls: string[] = []
+
+    // Mock console.warn to capture the fallback warning
+    const originalWarn = console.warn
+    const warnMock = vi.fn()
+    console.warn = warnMock
+
+    try {
+      const fetchClient = async (
+        input: string | URL | Request,
+        init?: RequestInit
+      ) => {
+        requestCount++
+        const url = input instanceof Request ? input.url : input.toString()
+        requestUrls.push(url)
+
+        // Check if this is an SSE request (has live_sse=true param)
+        const urlObj = new URL(url)
+        const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
+
+        if (isSSE) {
+          sseRequestCount++
+          // Handle up to 4 SSE requests (we expect 3, but might see 4 due to timing)
+          if (sseRequestCount <= 4) {
+            // Simulate SSE connections that close immediately by returning
+            // an empty stream that closes right away (simulates cached/misconfigured response)
+            const stream = new ReadableStream({
+              start(controller) {
+                // Close after a tiny delay to let onopen callback complete
+                // This simulates a connection that establishes but closes immediately
+                // (e.g., due to cached response or proxy misconfiguration)
+                setTimeout(() => controller.close(), 10)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+        }
+
+        // For normal requests or after fallback, use real fetch
+        return fetch(input, init)
+      }
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        liveSse: true,
+        fetchClient,
+      })
+
+      // Subscribe to start the stream
+      const unsubscribe = shapeStream.subscribe(() => {})
+
+      // Wait for the stream to fall back to long polling
+      // Should see: initial request (long poll) + 3 short SSE attempts + fallback to long poll
+      await vi.waitFor(
+        () => {
+          // After 3 SSE failures, should see the warning
+          expect(warnMock).toHaveBeenCalled()
+        },
+        { timeout: 10000 }
+      )
+
+      // Verify that the warning was logged
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `[Electric] SSE connections are closing immediately`
+        )
+      )
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(`Falling back to long polling`)
+      )
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing`
+        )
+      )
+
+      // Wait a bit more to ensure we have some requests after fallback
+      await vi.waitFor(
+        () => {
+          expect(requestCount).toBeGreaterThan(4)
+        },
+        { timeout: 5000 }
+      )
+
+      // Verify that after the first 3 SSE attempts, subsequent requests don't use SSE
+      // Count SSE requests in all requests - should be 3, might be 4 due to timing
+      const allSseRequests = requestUrls.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      })
+
+      // After fallback, should see 3-4 SSE requests (3 short ones trigger fallback,
+      // but there might be one more in flight due to async timing)
+      expect(allSseRequests.length).toBeGreaterThanOrEqual(3)
+      expect(allSseRequests.length).toBeLessThanOrEqual(4)
+
+      unsubscribe()
+    } finally {
+      // Restore console.warn
+      console.warn = originalWarn
+    }
+  },
+  { timeout: 15000 }
+)
+
+it(
+  `should reset SSE fallback state after shape rotation (409)`,
+  async ({ issuesTableUrl, aborter }) => {
+    let sseRequestCount = 0
+    let shouldReturn409 = false
+    const requestUrls: string[] = []
+
+    // Mock console.warn to capture the fallback warning
+    const originalWarn = console.warn
+    const warnMock = vi.fn()
+    console.warn = warnMock
+
+    try {
+      const fetchClient = async (
+        input: string | URL | Request,
+        init?: RequestInit
+      ) => {
+        const url = input instanceof Request ? input.url : input.toString()
+        requestUrls.push(url)
+
+        const urlObj = new URL(url)
+        const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
+        const hasHandle = urlObj.searchParams.has(`handle`)
+
+        // Return 409 to trigger shape rotation after fallback occurs
+        if (shouldReturn409 && hasHandle) {
+          shouldReturn409 = false // Only return 409 once
+          return new Response(null, {
+            status: 409,
+            statusText: `Conflict`,
+            headers: new Headers({
+              'electric-handle': `new-handle-${Date.now()}`,
+            }),
+          })
+        }
+
+        if (isSSE) {
+          sseRequestCount++
+          // First 3 SSE requests: return short connections to trigger fallback
+          if (sseRequestCount <= 3) {
+            const stream = new ReadableStream({
+              start(controller) {
+                setTimeout(() => controller.close(), 10)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+          // After reset (after 409), return successful SSE connection that stays open
+          else {
+            const stream = new ReadableStream({
+              start(controller) {
+                // Keep connection open for longer to simulate successful SSE
+                setTimeout(() => controller.close(), 2000)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `new-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+        }
+
+        // For normal requests, use real fetch
+        return fetch(input, init)
+      }
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        liveSse: true,
+        fetchClient,
+      })
+
+      const unsubscribe = shapeStream.subscribe(() => {})
+
+      // Wait for fallback to occur (3 short SSE connections)
+      await vi.waitFor(
+        () => {
+          expect(warnMock).toHaveBeenCalled()
+        },
+        { timeout: 10000 }
+      )
+
+      // Verify fallback warning was shown
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `[Electric] SSE connections are closing immediately`
+        )
+      )
+
+      // Count SSE requests before 409
+      const sseRequestsBeforeReset = requestUrls.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      }).length
+
+      // Should have 3 SSE requests that triggered fallback
+      expect(sseRequestsBeforeReset).toBeGreaterThanOrEqual(3)
+      expect(sseRequestsBeforeReset).toBeLessThanOrEqual(4)
+
+      // Now trigger a 409 to reset the shape
+      shouldReturn409 = true
+
+      // Wait for requests after the 409 reset
+      await vi.waitFor(
+        () => {
+          const sseRequestsAfterReset = requestUrls.filter((url) => {
+            const urlObj = new URL(url)
+            return urlObj.searchParams.get(`live_sse`) === `true`
+          }).length
+          // After reset, should see additional SSE requests (SSE should be tried again)
+          expect(sseRequestsAfterReset).toBeGreaterThan(sseRequestsBeforeReset)
+        },
+        { timeout: 10000 }
+      )
+
+      // Verify that SSE was attempted again after reset
+      const totalSseRequests = requestUrls.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      }).length
+
+      // Should have initial 3-4 failed SSE attempts + at least 1 more after reset
+      expect(totalSseRequests).toBeGreaterThan(sseRequestsBeforeReset)
+
+      unsubscribe()
+    } finally {
+      console.warn = originalWarn
+    }
+  },
+  { timeout: 20000 }
+)
+
+it(
+  `should not increment short connection counter for aborted SSE connections`,
+  async ({ issuesTableUrl, aborter }) => {
+    let sseRequestCount = 0
+    const requestUrls: string[] = []
+
+    // Mock console.warn to verify fallback warning is NOT shown
+    const originalWarn = console.warn
+    const warnMock = vi.fn()
+    console.warn = warnMock
+
+    try {
+      const fetchClient = async (
+        input: string | URL | Request,
+        init?: RequestInit
+      ) => {
+        const url = input instanceof Request ? input.url : input.toString()
+        requestUrls.push(url)
+
+        const urlObj = new URL(url)
+        const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
+
+        if (isSSE) {
+          sseRequestCount++
+
+          // First SSE request: return short connection (should count)
+          if (sseRequestCount === 1) {
+            const stream = new ReadableStream({
+              start(controller) {
+                setTimeout(() => controller.close(), 10)
+              },
+            })
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+          // Second SSE request: abort shortly after it starts (should NOT count)
+          else if (sseRequestCount === 2) {
+            const stream = new ReadableStream({
+              start(controller) {
+                // Keep connection open, but we'll abort it from outside
+                setTimeout(() => controller.close(), 5000)
+              },
+            })
+
+            // Abort after a short delay to simulate user cancellation
+            setTimeout(() => {
+              aborter.abort()
+            }, 100)
+
+            return new Response(stream, {
+              status: 200,
+              headers: new Headers({
+                'electric-offset': `0_0`,
+                'electric-handle': `test-handle`,
+                'electric-schema': JSON.stringify({}),
+                'electric-cursor': `123`,
+                'content-type': `text/event-stream`,
+              }),
+            })
+          }
+        }
+
+        // For normal requests, use real fetch
+        return fetch(input, init)
+      }
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        liveSse: true,
+        fetchClient,
+      })
+
+      const unsubscribe = shapeStream.subscribe(() => {})
+
+      // Wait for both SSE requests to happen and for abort
+      await vi.waitFor(
+        () => {
+          expect(sseRequestCount).toBe(2)
+        },
+        { timeout: 5000 }
+      )
+
+      // Give it a bit more time to ensure no fallback warning is shown
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      // Verify that fallback warning was NOT shown
+      // (because the aborted connection should not count toward the threshold)
+      const fallbackWarnings = warnMock.mock.calls.filter((call) =>
+        call[0]?.toString().includes(`Falling back to long polling`)
+      )
+      expect(fallbackWarnings.length).toBe(0)
+
+      // Count SSE requests - should be exactly 2
+      const sseRequests = requestUrls.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      })
+      expect(sseRequests.length).toBe(2)
+
+      unsubscribe()
+    } finally {
+      console.warn = originalWarn
+    }
+  },
+  { timeout: 10000 }
 )

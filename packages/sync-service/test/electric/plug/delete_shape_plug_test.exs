@@ -73,7 +73,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       start_link_supervised!({Registry, keys: :duplicate, name: @registry})
 
       {:via, _, {registry_name, registry_key}} =
-        Electric.Replication.Supervisor.name(ctx)
+        Electric.Shapes.Supervisor.name(ctx)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
       set_status_to_active(ctx)

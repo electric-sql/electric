@@ -74,6 +74,8 @@
   ??Starting shape replication pipeline
   ??Starting replication from postgres
 
+  -
+
 ## Create a table and verify that Electric reports an error because it cannot update the publication
 [invoke start_psql]
 

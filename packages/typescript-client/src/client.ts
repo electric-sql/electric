@@ -444,6 +444,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #midStreamPromiseResolver?: () => void
   #replayMode: false | string = false // False or last seen cursor when replaying cached responses
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
+  #lastSseConnectionStartTime?: number
+  #minSseConnectionDuration = 1000 // Minimum expected SSE connection duration (1 second)
+  #consecutiveShortSseConnections = 0
+  #maxShortSseConnections = 3 // Fall back to long polling after this many short connections
+  #sseFallbackToLongPolling = false
+  #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
+  #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -510,32 +517,61 @@ export class ShapeStream<T extends Row<unknown> = Row>
       await this.#requestShape()
     } catch (err) {
       this.#error = err
+
+      // Check if onError handler wants to retry
       if (this.#onError) {
         const retryOpts = await this.#onError(err as Error)
-        if (typeof retryOpts === `object`) {
-          this.#reset()
-
-          if (`params` in retryOpts) {
-            this.options.params = retryOpts.params
+        // Guard against null (typeof null === "object" in JavaScript)
+        if (retryOpts && typeof retryOpts === `object`) {
+          // Update params/headers but don't reset offset
+          // We want to continue from where we left off, not refetch everything
+          if (retryOpts.params) {
+            // Merge new params with existing params to preserve other parameters
+            this.options.params = {
+              ...(this.options.params ?? {}),
+              ...retryOpts.params,
+            }
           }
 
-          if (`headers` in retryOpts) {
-            this.options.headers = retryOpts.headers
+          if (retryOpts.headers) {
+            // Merge new headers with existing headers to preserve other headers
+            this.options.headers = {
+              ...(this.options.headers ?? {}),
+              ...retryOpts.headers,
+            }
           }
 
-          // Restart
+          // Clear the error since we're retrying
+          this.#error = null
+
+          // Restart from current offset
           this.#started = false
-          this.#start()
+          await this.#start()
+          return
         }
+        // onError returned void, meaning it doesn't want to retry
+        // This is an unrecoverable error, notify subscribers
+        if (err instanceof Error) {
+          this.#sendErrorToSubscribers(err)
+        }
+        this.#connected = false
+        this.#tickPromiseRejecter?.()
         return
       }
 
-      // If no handler is provided for errors just throw so the error still bubbles up.
-      throw err
-    } finally {
+      // No onError handler provided, this is an unrecoverable error
+      // Notify subscribers and throw
+      if (err instanceof Error) {
+        this.#sendErrorToSubscribers(err)
+      }
       this.#connected = false
       this.#tickPromiseRejecter?.()
+      throw err
     }
+
+    // Normal completion, clean up
+    this.#connected = false
+    this.#tickPromiseRejecter?.()
   }
 
   async #requestShape(): Promise<void> {
@@ -616,12 +652,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         )
         return this.#requestShape()
       } else {
-        // Notify subscribers
-        this.#sendErrorToSubscribers(e)
-
         // errors that have reached this point are not actionable without
         // additional user input, such as 400s or failures to read the
-        // body of a response, so we exit the loop
+        // body of a response, so we exit the loop and let #start handle it
+        // Note: We don't notify subscribers here because onError might recover
         throw e
       }
     } finally {
@@ -879,7 +913,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#isUpToDate &&
       useSse &&
       !this.#isRefreshing &&
-      !opts.resumingFromPause
+      !opts.resumingFromPause &&
+      !this.#sseFallbackToLongPolling
     ) {
       opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
       opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
@@ -918,6 +953,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }): Promise<void> {
     const { fetchUrl, requestAbortController, headers } = opts
     const fetch = this.#sseFetchClient
+
+    // Track when the SSE connection starts
+    this.#lastSseConnectionStartTime = Date.now()
+
     try {
       let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
@@ -963,6 +1002,44 @@ export class ShapeStream<T extends Row<unknown> = Row>
         throw new FetchBackoffAbortError()
       }
       throw error
+    } finally {
+      // Check if the SSE connection closed too quickly
+      // This can happen when responses are cached or when the proxy/server
+      // is misconfigured for SSE and closes the connection immediately
+      const connectionDuration = Date.now() - this.#lastSseConnectionStartTime!
+      const wasAborted = requestAbortController.signal.aborted
+
+      if (connectionDuration < this.#minSseConnectionDuration && !wasAborted) {
+        // Connection was too short - likely a cached response or misconfiguration
+        this.#consecutiveShortSseConnections++
+
+        if (
+          this.#consecutiveShortSseConnections >= this.#maxShortSseConnections
+        ) {
+          // Too many short connections - fall back to long polling
+          this.#sseFallbackToLongPolling = true
+          console.warn(
+            `[Electric] SSE connections are closing immediately (possibly due to proxy buffering or misconfiguration). ` +
+              `Falling back to long polling. ` +
+              `Your proxy must support streaming SSE responses (not buffer the complete response). ` +
+              `Configuration: Nginx add 'X-Accel-Buffering: no', Caddy add 'flush_interval -1' to reverse_proxy. ` +
+              `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
+          )
+        } else {
+          // Add exponential backoff with full jitter to prevent tight infinite loop
+          // Formula: random(0, min(cap, base * 2^attempt))
+          const maxDelay = Math.min(
+            this.#sseBackoffMaxDelay,
+            this.#sseBackoffBaseDelay *
+              Math.pow(2, this.#consecutiveShortSseConnections)
+          )
+          const delayMs = Math.floor(Math.random() * maxDelay)
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        }
+      } else if (connectionDuration >= this.#minSseConnectionDuration) {
+        // Connection was healthy - reset counter
+        this.#consecutiveShortSseConnections = 0
+      }
     }
   }
 
@@ -1137,6 +1214,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#connected = false
     this.#schema = undefined
     this.#activeSnapshotRequests = 0
+    // Reset SSE fallback state to try SSE again after reset
+    this.#consecutiveShortSseConnections = 0
+    this.#sseFallbackToLongPolling = false
   }
 
   /**

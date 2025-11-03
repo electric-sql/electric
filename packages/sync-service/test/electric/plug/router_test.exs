@@ -1634,7 +1634,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 200} = conn
       assert ^new_handle = get_resp_shape_handle(conn)
-      # offset = get_resp_last_offset(conn)
+
       assert [%{"value" => %{"value" => "test value 3"}}, @up_to_date] =
                Jason.decode!(conn.resp_body)
     end

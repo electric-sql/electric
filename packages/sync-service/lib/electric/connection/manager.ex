@@ -56,7 +56,7 @@ defmodule Electric.Connection.Manager do
             | {:start_replication_client, :configuring_connection}
             | {:start_connection_pool, nil}
             | {:start_connection_pool, :connecting}
-            | :start_replication_supervisor
+            | :start_shapes_supervisor
             | {:start_replication_client, :start_streaming}
             # Steps of the :running phase:
             | :waiting_for_streaming_confirmation
@@ -77,7 +77,7 @@ defmodule Electric.Connection.Manager do
       :pool_opts,
       # Options specific to `Electric.Timeline`
       :timeline_opts,
-      # Options passed to the Replication.Supervisor's start_link() function
+      # Options passed to the Shapes.Supervisor's start_link() function
       :shape_cache_opts,
       # PID of the replication client
       :replication_client_pid,
@@ -424,10 +424,10 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_continue(
-        :start_replication_supervisor,
+        :start_shapes_supervisor,
         %State{
           current_phase: :connection_setup,
-          current_step: :start_replication_supervisor
+          current_step: :start_shapes_supervisor
         } = state
       ) do
     # Checking the timeline continuity to see if we need to purge all shapes persisted so far
@@ -442,8 +442,13 @@ defmodule Electric.Connection.Manager do
     initializing? = timeline_check == :no_previous_timeline
 
     if timeline_changed? or (state.purge_all_shapes? and not initializing?) do
-      # Before starting the replication supervisor, clean up the on-disk storage from all shapes.
-      Electric.Replication.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+      # Reset the Shape Subsystem:
+
+      # Stop the shapes supervisor if it's running before resetting storage
+      Electric.CoreSupervisor.stop_shapes_supervisor(stack_id: state.stack_id)
+
+      # Clean up the on-disk storage from all shapes.
+      Electric.Shapes.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
 
       # The ShapeStatusOwner process lives independently of connection or replication
       # supervisor. Purge all shapes from it before starting the replication supervisor.
@@ -479,10 +484,18 @@ defmodule Electric.Connection.Manager do
       max_shapes: state.max_shapes
     ]
 
-    with {:error, reason} <-
-           Electric.Connection.Manager.Supervisor.start_replication_supervisor(repl_sup_opts) do
-      Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
-      exit(reason)
+    case Electric.CoreSupervisor.start_shapes_supervisor(repl_sup_opts) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        # Shapes supervisor is already running, which can happen if the
+        # Connection.Manager is restarting
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+        exit(reason)
     end
 
     StatusMonitor.mark_integrety_checks_passed(state.stack_id, self())
@@ -767,8 +780,8 @@ defmodule Electric.Connection.Manager do
       %{admin: {pid1, true}, snapshot: {pid2, true}} when is_pid(pid1) and is_pid(pid2) ->
         state = mark_connection_succeeded(state)
 
-        {:noreply, %{state | current_step: :start_replication_supervisor},
-         {:continue, :start_replication_supervisor}}
+        {:noreply, %{state | current_step: :start_shapes_supervisor},
+         {:continue, :start_shapes_supervisor}}
 
       _ ->
         {:noreply, state}
