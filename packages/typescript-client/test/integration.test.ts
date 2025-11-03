@@ -1069,10 +1069,7 @@ describe(`HTTP Sync`, () => {
 
   it.for(fetchAndSse)(
     `should continue from same offset when recovering from error with onError retry (liveSSE=$liveSse)`,
-    async (
-      { liveSse },
-      { expect, insertIssues, issuesTableUrl, aborter }
-    ) => {
+    async ({ liveSse }, { expect, insertIssues, issuesTableUrl, aborter }) => {
       // Insert initial data
       const rowId = uuidv4()
       await insertIssues({ id: rowId, title: `test` })
@@ -1123,7 +1120,7 @@ describe(`HTTP Sync`, () => {
         onError: async (error) => {
           if (error instanceof FetchError && error.status === 401) {
             // Simulate refreshing auth token
-            return { headers: { 'Authorization': 'Bearer new-token' } }
+            return { headers: { Authorization: 'Bearer new-token' } }
           }
           throw error
         },
@@ -1139,7 +1136,9 @@ describe(`HTTP Sync`, () => {
           if (isChangeMessage(msg) && msg.headers.operation === `insert`) {
             // Track if we see duplicate inserts for the same key
             if (seenKeys.has(msg.key)) {
-              throw new Error(`Duplicate insert for key ${msg.key} - this should not happen!`)
+              throw new Error(
+                `Duplicate insert for key ${msg.key} - this should not happen!`
+              )
             }
             seenKeys.add(msg.key)
             insertCount++
