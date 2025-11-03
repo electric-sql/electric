@@ -366,6 +366,7 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  # Fix for badly formatted errors from Prisma's managed Postgres
   def from_error({:badkey, :code, %{message: _message}} = error) do
     maybe_failed_to_identify_database(error) || unknown_error(error)
   end
