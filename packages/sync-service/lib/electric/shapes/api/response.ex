@@ -238,7 +238,7 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.put_resp_header(conn, @electric_handle_header, response.handle)
   end
 
-  defp put_schema_header(conn, %__MODULE__{params: %{live: false}} = response) do
+  defp put_schema_header(conn, %__MODULE__{params: %{live: false}, status: 200} = response) do
     Plug.Conn.put_resp_header(
       conn,
       @electric_schema_header,
