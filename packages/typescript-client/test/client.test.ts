@@ -1947,3 +1947,98 @@ describe.for(fetchAndSse)(
     })
   }
 )
+
+describe(`SSE infinite loop prevention`, () => {
+  it(`should fall back to long polling after 3 consecutive short SSE connections`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    let requestCount = 0
+    const requestUrls: string[] = []
+
+    // Mock console.warn to capture the fallback warning
+    const originalWarn = console.warn
+    const warnMock = vi.fn()
+    console.warn = warnMock
+
+    try {
+      const fetchClient = async (
+        input: string | URL | Request,
+        init?: RequestInit
+      ) => {
+        requestCount++
+        const url = input instanceof Request ? input.url : input.toString()
+        requestUrls.push(url)
+
+        // Check if this is an SSE request (has live_sse=true param)
+        const urlObj = new URL(url)
+        const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
+
+        if (isSSE && requestCount <= 3) {
+          // Simulate SSE connections that close immediately
+          // Return immediately to simulate cached/misconfigured response
+          return new Response(null, {
+            status: 200,
+            headers: new Headers({
+              'electric-offset': `0_0`,
+              'electric-handle': `test-handle`,
+              'electric-schema': JSON.stringify({}),
+              'electric-cursor': `123`,
+            }),
+          })
+        }
+
+        // For normal requests or after fallback, use real fetch
+        return fetch(input, init)
+      }
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        signal: aborter.signal,
+        liveSse: true,
+        fetchClient,
+      })
+
+      // Subscribe to start the stream
+      const unsubscribe = shapeStream.subscribe(() => {})
+
+      // Wait for the stream to process several requests
+      // Should see 1 initial request + 3 SSE attempts that fail + requests after fallback
+      await vi.waitFor(
+        () => {
+          expect(requestCount).toBeGreaterThan(3)
+        },
+        { timeout: 10000 }
+      )
+
+      // Verify that the warning was logged
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `[Electric] SSE connections are closing immediately`
+        )
+      )
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(`Falling back to long polling`)
+      )
+
+      // Verify that after the first 3 SSE attempts, subsequent requests don't use SSE
+      // Find requests after the 4th one and verify they don't have live_sse=true
+      const laterRequests = requestUrls.slice(4)
+      const sseRequestsAfterFallback = laterRequests.filter((url) => {
+        const urlObj = new URL(url)
+        return urlObj.searchParams.get(`live_sse`) === `true`
+      })
+
+      // After fallback, should not see more SSE requests
+      expect(sseRequestsAfterFallback.length).toBe(0)
+
+      unsubscribe()
+    } finally {
+      // Restore console.warn
+      console.warn = originalWarn
+    }
+  })
+})

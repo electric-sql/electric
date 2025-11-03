@@ -946,7 +946,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `[Electric] SSE connections are closing immediately (possibly due to caching or proxy misconfiguration). ` +
               `Falling back to long polling. ` +
               `Please check your proxy/CDN configuration for SSE support. ` +
-              `SSE requires: Cache-Control: no-cache, X-Accel-Buffering: no, and proper streaming support.`
+              `For proxies: Nginx requires 'X-Accel-Buffering: no', Caddy requires 'flush_interval -1'. ` +
+              `All proxies should set 'Cache-Control: no-cache' and avoid buffering SSE responses.`
           )
         } else {
           // Add a delay to prevent tight infinite loop while we're still trying SSE
