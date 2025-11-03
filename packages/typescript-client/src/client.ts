@@ -943,11 +943,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // Too many short connections - fall back to long polling
           this.#sseFallbackToLongPolling = true
           console.warn(
-            `[Electric] SSE connections are closing immediately (possibly due to caching or proxy misconfiguration). ` +
+            `[Electric] SSE connections are closing immediately (possibly due to proxy buffering or misconfiguration). ` +
               `Falling back to long polling. ` +
-              `Please check your proxy/CDN configuration for SSE support. ` +
-              `For proxies: Nginx requires 'X-Accel-Buffering: no', Caddy requires 'flush_interval -1'. ` +
-              `All proxies should set 'Cache-Control: no-cache' and avoid buffering SSE responses.`
+              `Your proxy must support streaming SSE responses (not buffer the complete response). ` +
+              `Configuration: Nginx add 'X-Accel-Buffering: no', Caddy add 'flush_interval -1' to reverse_proxy. ` +
+              `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
           )
         } else {
           // Add a delay to prevent tight infinite loop while we're still trying SSE

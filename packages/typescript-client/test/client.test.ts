@@ -2023,6 +2023,11 @@ describe(`SSE infinite loop prevention`, () => {
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(`Falling back to long polling`)
       )
+      expect(warnMock).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing`
+        )
+      )
 
       // Verify that after the first 3 SSE attempts, subsequent requests don't use SSE
       // Find requests after the 4th one and verify they don't have live_sse=true
