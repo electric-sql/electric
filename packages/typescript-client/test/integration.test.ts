@@ -1066,4 +1066,108 @@ describe(`HTTP Sync`, () => {
       })
     }
   )
+
+  it.for(fetchAndSse)(
+    `should continue from same offset when recovering from error with onError retry (liveSSE=$liveSse)`,
+    async (
+      { liveSse },
+      { expect, insertIssues, issuesTableUrl, aborter }
+    ) => {
+      // Insert initial data
+      const rowId = uuidv4()
+      await insertIssues({ id: rowId, title: `test` })
+
+      let requestCount = 0
+      let shouldFail = true
+      let offsetBeforeError: string | undefined
+      let offsetAfterError: string | undefined
+
+      const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+        requestCount++
+        const url = args[0] as string
+
+        // Capture offset from URL
+        const urlObj = new URL(url)
+        const offset = urlObj.searchParams.get('offset')
+
+        // Fail the second request (first live request after initial sync)
+        if (requestCount === 2 && shouldFail) {
+          shouldFail = false
+          offsetBeforeError = offset ?? undefined
+          // Simulate a 401 error
+          return new Response(JSON.stringify({ error: `Unauthorized` }), {
+            status: 401,
+            headers: {
+              'content-type': 'application/json',
+            },
+          })
+        }
+
+        // Capture offset of retry request
+        if (requestCount === 3) {
+          offsetAfterError = offset ?? undefined
+        }
+
+        return fetch(...args)
+      }
+
+      const issueStream = new ShapeStream<IssueRow>({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: issuesTableUrl,
+        },
+        subscribe: true,
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+        liveSse,
+        onError: async (error) => {
+          if (error instanceof FetchError && error.status === 401) {
+            // Simulate refreshing auth token
+            return { headers: { 'Authorization': 'Bearer new-token' } }
+          }
+          throw error
+        },
+      })
+
+      const shape = new Shape(issueStream)
+
+      let insertCount = 0
+      const seenKeys = new Set<string>()
+
+      const unsubscribe = issueStream.subscribe((messages) => {
+        for (const msg of messages) {
+          if (isChangeMessage(msg) && msg.headers.operation === `insert`) {
+            // Track if we see duplicate inserts for the same key
+            if (seenKeys.has(msg.key)) {
+              throw new Error(`Duplicate insert for key ${msg.key} - this should not happen!`)
+            }
+            seenKeys.add(msg.key)
+            insertCount++
+          }
+        }
+      })
+
+      // Wait for initial sync and error recovery
+      await shape.rows
+      await sleep(500) // Give it time to recover and re-sync
+
+      unsubscribe()
+      aborter.abort()
+
+      // Verify that:
+      // 1. We continued from the same offset (not reset to -1)
+      expect(offsetBeforeError).toBeDefined()
+      expect(offsetAfterError).toBeDefined()
+      expect(offsetAfterError).toBe(offsetBeforeError)
+      expect(offsetAfterError).not.toBe('-1')
+
+      // 2. We only saw each insert operation once (no duplicates)
+      expect(insertCount).toBe(1)
+
+      // 3. The shape has the correct data
+      const rows = shape.currentRows
+      expect(rows).toHaveLength(1)
+      expect(rows[0].id).toBe(rowId)
+    }
+  )
 })

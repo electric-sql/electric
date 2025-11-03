@@ -510,8 +510,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (this.#onError) {
         const retryOpts = await this.#onError(err as Error)
         if (typeof retryOpts === `object`) {
-          this.#reset()
-
+          // Update params/headers but don't reset offset
+          // We want to continue from where we left off, not refetch everything
           if (`params` in retryOpts) {
             this.options.params = retryOpts.params
           }
@@ -520,7 +520,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             this.options.headers = retryOpts.headers
           }
 
-          // Restart
+          // Restart from current offset
           this.#started = false
           this.#start()
         }
