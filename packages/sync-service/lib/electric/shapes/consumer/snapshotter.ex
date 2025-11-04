@@ -105,12 +105,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                     {:snapshot_failed, shape_handle, SnapshotError.from_error(error)}
                   )
               catch
-                :exit, {_, {DBConnection.Holder, :checkout, _}} ->
-                  GenServer.cast(
-                    consumer,
-                    {:snapshot_failed, shape_handle, SnapshotError.connection_not_available()}
-                  )
-
                 :exit, {:timeout, {GenServer, :call, _}} ->
                   GenServer.cast(
                     consumer,
@@ -331,6 +325,9 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       end,
       timeout: :infinity
     )
+  catch
+    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+      raise SnapshotError.connection_not_available()
   end
 
   defp query_span!(conn, span_name, span_attrs, query, params, stack_id) do
