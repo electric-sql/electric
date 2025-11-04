@@ -542,6 +542,49 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with disk full error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :disk_full,
+          message: "could not write init file: No space left on device",
+          severity: "FATAL",
+          pg_code: "53100",
+          routine: "write_item"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "could not write init file: No space left on device",
+               type: :disk_full,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with duplicate slot file error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :duplicate_file,
+          message: "could not create file \"slot_file.tmp\": File exists",
+          pg_code: "58P02",
+          routine: "SaveSlotToPath"
+        },
+        connection_id: 24414,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "could not create file \"slot_file.tmp\": File exists",
+               type: :duplicate_slot_file,
+               original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with an unknown error" do
       error = %DBConnection.ConnectionError{
         message: "made-up error",

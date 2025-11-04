@@ -356,6 +356,28 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(%Postgrex.Error{postgres: %{code: :disk_full, pg_code: "53100"}} = error) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :disk_full,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{code: :duplicate_file, pg_code: "58P02", routine: "SaveSlotToPath"}
+        } = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :duplicate_slot_file,
+      original_error: error,
+      retry_may_fix?: true
+    }
+  end
+
   def from_error({:irrecoverable_slot, {type, message}} = error) do
     %DbConnectionError{
       message: message,
