@@ -115,6 +115,90 @@ asdf install
 
 You'll probably need to fiddle with your bash/zsh/etc rc file to load the right tool into your environment.
 
+### Running Tests
+
+Electric has comprehensive test suites for both Elixir and TypeScript components.
+
+#### Prerequisites
+
+Install dependencies (if not already done):
+
+```sh
+asdf install
+pnpm install
+```
+
+Then start the test Postgres database:
+
+```sh
+cd packages/sync-service
+mix start_dev
+```
+
+This starts a Docker Compose setup with Postgres configured for logical replication on port 54321.
+
+To stop the database:
+
+```sh
+mix stop_dev
+```
+
+#### Elixir Tests
+
+**Sync Service:**
+
+```sh
+cd packages/sync-service
+mix test
+```
+
+For coverage reports:
+
+```sh
+mix coveralls.html
+```
+
+**Elixir Client:**
+
+```sh
+cd packages/elixir-client
+mix test
+```
+
+#### TypeScript Tests
+
+TypeScript tests require both the database and a running sync service.
+
+In a separate terminal, start the sync service:
+
+```sh
+cd packages/sync-service
+iex -S mix
+```
+
+Then run the tests:
+
+**Individual Package:**
+
+```sh
+cd packages/typescript-client  # or any other TS package
+pnpm test
+```
+
+**All TypeScript Packages:**
+
+From the root directory:
+
+```sh
+pnpm -r test
+```
+
+For coverage:
+
+```sh
+pnpm coverage
+```
+
 ## Contributing
 
 See the:
