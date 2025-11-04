@@ -203,16 +203,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # select_delete can lead to inconsistent state
       :ets.delete(meta_table, {@shape_hash_lookup, Shape.comparable(shape)})
 
+      :ets.select_delete(meta_table, [
+        {{{@shape_meta_data, shape_handle}, :_, :_, :_}, [], [true]}
+      ])
+
+      :ets.select_delete(meta_table, [
+        {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]}
+      ])
+
+      :ets.select_delete(meta_table, [{{{@snapshot_started, shape_handle}, :_}, [], [true]}])
+
       :ets.select_delete(
         meta_table,
-        [
-          {{{@shape_meta_data, shape_handle}, :_, :_, :_}, [], [true]},
-          {{{@shape_storage_state_backup, shape_handle}, :_}, [], [true]},
-          {{{@snapshot_started, shape_handle}, :_}, [], [true]}
-          | Enum.map(Shape.list_relations(shape), fn {oid, _} ->
-              {{{@shape_relation_lookup, oid, shape_handle}, :_}, [], [true]}
-            end)
-        ]
+        Enum.map(Shape.list_relations(shape), fn {oid, _} ->
+          {{{@shape_relation_lookup, oid, shape_handle}, :_}, [], [true]}
+        end)
       )
 
       :ets.delete(shape_last_used_table(stack_ref), shape_handle)
