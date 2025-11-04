@@ -210,7 +210,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
           0..(:erlang.system_info(:logical_processors) - 1),
           &last_value("system.cpu.utilization.core_#{&1}")
         ) ++
-        Enum.map(scheduler_ids(), &last_value("vm.run_queue_lengths.normal_#{&1}")) ++
+        Enum.map(scheduler_ids(), &last_value("vm.run_queue_lengths.#{&1}")) ++
         Enum.map(schedulers_range, &last_value("vm.scheduler_utilization.normal_#{&1}")) ++
         Enum.map(dirty_cpu_schedulers_range, &last_value("vm.scheduler_utilization.cpu_#{&1}"))
     end
