@@ -156,8 +156,8 @@ The SSE stream includes:
 **When to use SSE vs Long Polling**
 
 SSE advantages:
-- Single persistent connection for all updates
-- Lower latency (push vs poll)
+- Single persistent connection for all updates - the client doesn't need to reconnect after each message
+- Lower latency when messages arrive frequently (equivalent to long polling if messages are 100ms+ apart)
 - Reduced bandwidth (no request overhead per update)
 - Server can efficiently batch updates
 
