@@ -123,12 +123,13 @@ defmodule Electric.AsyncDeleterTest do
         sleep_time = round(Enum.random(1..10) * 0.1 * (2 * @interval))
         Process.sleep(sleep_time)
         assert :ok = AsyncDeleter.delete(f, stack_id: stack_id)
+        sleep_time
       end)
 
-    Enum.to_list(stream)
+    {:ok, max_sleep_time} = Enum.to_list(stream) |> Enum.max()
 
     # ensure all files are deleted
-    Process.sleep(@interval + 30)
+    Process.sleep(max_sleep_time + @interval + 30)
     assert File.ls!(d1) == []
     assert File.ls!(trash_dir) == []
   end
