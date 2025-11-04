@@ -279,7 +279,7 @@ defmodule Electric.Shapes.Api.Response do
        when status >= 400 do
     conn
     |> put_cache_header("cache-control", "no-store", api)
-    |> Plug.Conn.put_resp_header("surrogate-control", "no-store")
+    |> put_cache_header("surrogate-control", "no-store", api)
   end
 
   # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)

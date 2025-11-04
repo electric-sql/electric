@@ -82,19 +82,11 @@ defmodule Electric.AdmissionControl do
         |> Map.fetch!(kind)
       end)
 
-    # Atomically increment counter
-    # ETS update_counter format: {position, increment}
-    current =
-      :ets.update_counter(
-        table_name,
-        stack_id,
-        {tuple_pos(kind), 1},
-        {stack_id, 0, 0}
-      )
+    current = incr(table_name, stack_id, kind)
 
     if current > max_concurrent do
       # At or over capacity, decrement back and reject
-      :ets.update_counter(table_name, stack_id, {tuple_pos(kind), -1, 0, 0}, {stack_id, 0, 0})
+      decr(table_name, stack_id, kind)
 
       # Emit telemetry event
       :telemetry.execute(
@@ -141,7 +133,7 @@ defmodule Electric.AdmissionControl do
   """
   def release(stack_id, kind, opts \\ []) when kind in @allowed_kinds do
     table_name = Keyword.get(opts, :table_name, @table_name)
-    :ets.update_counter(table_name, stack_id, {tuple_pos(kind), -1, 0, 0}, {stack_id, 0, 0})
+    decr(table_name, stack_id, kind)
     :ok
   end
 
@@ -185,5 +177,13 @@ defmodule Electric.AdmissionControl do
 
     Logger.info("Admission control initialized with table: #{table_name}")
     {:ok, %{table_name: table_name}}
+  end
+
+  defp incr(table_name, stack_id, kind) do
+    :ets.update_counter(table_name, stack_id, {tuple_pos(kind), 1}, {stack_id, 0, 0})
+  end
+
+  defp decr(table_name, stack_id, kind) do
+    :ets.update_counter(table_name, stack_id, {tuple_pos(kind), -1, 0, 0}, {stack_id, 0, 0})
   end
 end
