@@ -191,6 +191,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
         last_value("vm.reductions.total"),
         last_value("vm.reductions.delta"),
         last_value("vm.run_queue_lengths.total"),
+        last_value("vm.run_queue_lengths.total_plus_io"),
         last_value("vm.scheduler_utilization.total"),
         last_value("vm.scheduler_utilization.weighted"),
         last_value("vm.system_counts.atom_count"),
@@ -210,7 +211,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
           0..(:erlang.system_info(:logical_processors) - 1),
           &last_value("system.cpu.utilization.core_#{&1}")
         ) ++
-        Enum.map(scheduler_ids(), &last_value("vm.run_queue_lengths.normal_#{&1}")) ++
+        Enum.map(scheduler_ids(), &last_value("vm.run_queue_lengths.#{&1}")) ++
         Enum.map(schedulers_range, &last_value("vm.scheduler_utilization.normal_#{&1}")) ++
         Enum.map(dirty_cpu_schedulers_range, &last_value("vm.scheduler_utilization.cpu_#{&1}"))
     end
@@ -244,7 +245,7 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
 
     defp scheduler_ids do
       num_schedulers = :erlang.system_info(:schedulers)
-      Enum.map(1..num_schedulers, &:"normal_#{&1}") |> Enum.concat([:cpu, :io])
+      Enum.map(1..num_schedulers, &:"normal_#{&1}") ++ [:cpu, :io]
     end
 
     defp periodic_measurements(opts) do
@@ -346,12 +347,13 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     end
 
     def run_queue_lengths(scheduler_ids) do
-      run_queue_lengths = :erlang.statistics(:run_queue_lengths)
+      run_queue_lengths = :erlang.statistics(:run_queue_lengths_all)
 
       measurements =
         Enum.zip(scheduler_ids, run_queue_lengths)
         |> Map.new()
         |> Map.put(:total, :erlang.statistics(:total_run_queue_lengths))
+        |> Map.put(:total_plus_io, :erlang.statistics(:total_run_queue_lengths_all))
 
       :telemetry.execute([:vm, :run_queue_lengths], measurements)
     end
