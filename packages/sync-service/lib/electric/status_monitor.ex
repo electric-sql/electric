@@ -165,7 +165,10 @@ defmodule Electric.StatusMonitor do
             stack_id,
             opts,
             timeout,
-            "Status monitor not found for stack ID: #{stack_id}"
+            %{
+              message: "Status monitor not found for stack ID: #{stack_id}",
+              error_code: :stack_unavailable
+            }
           )
 
         pid when is_pid(pid) ->
@@ -178,7 +181,10 @@ defmodule Electric.StatusMonitor do
           stack_id,
           opts,
           timeout,
-          "Stack ID not recognised: #{stack_id}"
+          %{
+            message: "Stack ID not recognised: #{stack_id}",
+            error_code: :stack_unavailable
+          }
         )
     catch
       :exit, _reason ->
@@ -186,7 +192,10 @@ defmodule Electric.StatusMonitor do
           stack_id,
           opts,
           timeout,
-          "Stack #{inspect(stack_id)} has terminated"
+          %{
+            message: "Stack #{inspect(stack_id)} has terminated",
+            error_code: :stack_unavailable
+          }
         )
     end
   end
@@ -296,7 +305,7 @@ defmodule Electric.StatusMonitor do
 
   def handle_info({:timeout_waiter, waiter}, state) do
     if MapSet.member?(state.waiters, waiter) do
-      GenServer.reply(waiter, {:error, timeout_message(state.stack_id)})
+      GenServer.reply(waiter, {:error, timeout_error(state.stack_id)})
       {:noreply, %{state | waiters: MapSet.delete(state.waiters, waiter)}}
     else
       {:noreply, state}
@@ -346,8 +355,33 @@ defmodule Electric.StatusMonitor do
       @default_results
   end
 
+  @doc """
+  Get timeout error information including both message and error code.
+
+  Returns a map with:
+  - `:message` - Human-readable error message
+  - `:error_code` - Error code atom (always :stack_unavailable)
+  """
+  def timeout_error(stack_id) do
+    results = stack_id |> ets_table() |> results()
+
+    %{
+      message: build_timeout_message(results),
+      error_code: :stack_unavailable
+    }
+  end
+
+  @doc """
+  Get the human-readable timeout message for the stack.
+
+  For backwards compatibility. New code should use timeout_error/1 instead.
+  """
   def timeout_message(stack_id) do
-    case stack_id |> ets_table() |> results() do
+    timeout_error(stack_id).message
+  end
+
+  defp build_timeout_message(results) do
+    case results do
       %{timeout_message: message} when is_binary(message) ->
         message
 

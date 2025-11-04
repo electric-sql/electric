@@ -147,7 +147,8 @@ defmodule Electric.Shapes.ApiTest do
 
       assert response_body(response) == %{
                message:
-                 "Cannot connect to the database to verify the shape. Please try again later."
+                 "Cannot connect to the database to verify the shape. Please try again later.",
+               code: "STACK_UNAVAILABLE"
              }
     end
 
@@ -1320,7 +1321,8 @@ defmodule Electric.Shapes.ApiTest do
       assert response.status == 503
 
       assert response_body(response) == %{
-               message: "Timeout waiting for Postgres lock acquisition"
+               message: "Timeout waiting for Postgres lock acquisition",
+               code: "STACK_UNAVAILABLE"
              }
     end
 

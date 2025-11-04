@@ -28,6 +28,7 @@ defmodule Electric.Shapes.Api.Response do
     :offset,
     :shape_definition,
     :known_error,
+    :error_code,
     api: %Api{},
     chunked: false,
     up_to_date: false,
@@ -117,13 +118,29 @@ defmodule Electric.Shapes.Api.Response do
 
   defp error_body(api_or_request, message, args) do
     body =
-      if errors = Keyword.get(args, :errors) do
-        Map.put(message, :errors, errors)
-      else
-        message
-      end
+      message
+      |> maybe_add_errors(args)
+      |> maybe_add_error_code(args)
 
     Api.encode_error_message(api_or_request, body)
+  end
+
+  defp maybe_add_errors(body, args) do
+    if errors = Keyword.get(args, :errors) do
+      Map.put(body, :errors, errors)
+    else
+      body
+    end
+  end
+
+  defp maybe_add_error_code(body, args) do
+    case Keyword.get(args, :error_code) do
+      nil ->
+        body
+
+      error_code_atom when is_atom(error_code_atom) ->
+        Map.put(body, :code, Electric.Shapes.Api.ErrorCode.to_string(error_code_atom))
+    end
   end
 
   @spec send(Plug.Conn.t(), t()) :: Plug.Conn.t()
