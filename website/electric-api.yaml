@@ -118,6 +118,38 @@ paths:
 
             This allows you to implement a long-polling strategy to consume
             real-time updates.
+        - name: live_sse
+          in: query
+          schema:
+            type: boolean
+          description: |-
+            Use Server-Sent Events (SSE) for live updates instead of long polling.
+
+            When set to `true` along with `live=true`, the server will use SSE
+            to stream updates to the client. SSE provides a persistent connection
+            that allows the server to push updates as they happen, which is more
+            efficient than long polling.
+
+            SSE messages are sent in the standard SSE format with `data:` prefixes.
+            The stream includes data messages (shape log entries), control messages
+            (up-to-date, must-refetch, etc.), and keep-alive comments sent every
+            21 seconds to prevent connection timeout.
+
+            **Important**: SSE requires that reverse proxies and CDNs support
+            streaming responses without buffering. Configure your proxy accordingly:
+            - Nginx: `proxy_buffering off;`
+            - Caddy: `flush_interval -1`
+            - Apache: `flushpackets=on`
+
+            SSE can only be enabled when `live` is also `true`.
+        - name: experimental_live_sse
+          in: query
+          schema:
+            type: boolean
+          deprecated: true
+          description: |-
+            Deprecated in favor of `live_sse`. Use `live_sse` instead.
+            This parameter will be removed in a future version.
         - name: cursor
           in: query
           schema:
@@ -698,6 +730,26 @@ paths:
                       xip_list: ['1025', '1030']
                       snapshot_mark: 42
                       database_lsn: '0/16B3F70'
+            text/event-stream:
+              description: |-
+                Server-Sent Events (SSE) format when `live_sse=true` is used.
+
+                Each message is sent with the SSE `data:` prefix followed by a JSON payload.
+                Keep-alive comments are sent as `: keep-alive` every 21 seconds.
+
+                Note: SSE responses use `Content-Type: text/event-stream` but contain
+                the same JSON message structures as the regular `application/json` responses.
+              examples:
+                sse_stream:
+                  summary: SSE stream with insert operations and control message
+                  value: |
+                    data: {"headers":{"operation":"insert","lsn":"1234","op_position":0},"key":"issue-1","value":{"id":"issue-1","title":"Electric","status":"backlog"}}
+
+                    data: {"headers":{"operation":"insert","lsn":"1234","op_position":7},"key":"issue-2","value":{"id":"issue-2","title":"Hello","status":"backlog"}}
+
+                    data: {"headers":{"control":"up-to-date","global_last_seen_lsn":"0/1234567"}}
+
+                    : keep-alive
         '400':
           description: Bad request.
         '404':

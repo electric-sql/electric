@@ -126,6 +126,57 @@ The `live` parameter puts the server into live mode, where it will hold open the
 
 The server holds open the request until either a timeout (returning `200` with only an up-to-date message) or when new data is available, which it sends back as the response. The client then reconnects and the server blocks again for new content. This way the client is always updated as soon as new data is available.
 
+#### Server-Sent Events (SSE)
+
+Electric also supports Server-Sent Events (SSE) as a more efficient alternative to long polling for live mode. SSE provides a persistent connection that allows the server to push updates to the client as they happen, reducing request overhead and latency.
+
+To use SSE for live updates, add the `live_sse=true` parameter along with `live=true`:
+
+```sh
+curl -i 'http://localhost:3000/v1/shape?table=foo&live=true&live_sse=true&handle=3833821-1721812114261&offset=0_0'
+```
+
+**SSE Message Format**
+
+When using SSE, messages are sent in the standard SSE format with `data:` prefixes:
+
+```
+data: {"headers":{"operation":"insert"},"key":"1","value":{"id":"1","title":"Hello"}}
+
+data: {"headers":{"control":"up-to-date","global_last_seen_lsn":"0/1234567"}}
+
+: keep-alive
+```
+
+The SSE stream includes:
+- **Data messages**: Shape log entries in JSON format, prefixed with `data:`
+- **Control messages**: Same format as long polling (up-to-date, must-refetch, etc.)
+- **Keep-alive comments**: Sent as `: keep-alive` every 21 seconds to prevent connection timeout
+
+**When to use SSE vs Long Polling**
+
+SSE advantages:
+- Fewer HTTP requests - the client doesn't need to reconnect after each message
+- Lower latency for small messages arriving frequently (<100ms apart, such as token streaming)
+- Reduced bandwidth (no request overhead per update)
+- Server can efficiently batch updates
+
+Long polling advantages:
+- Works with more restrictive proxy configurations
+- Better for environments with aggressive caching
+- No persistent connection overhead
+
+**Important: Proxy Configuration**
+
+SSE requires that reverse proxies and CDNs support streaming responses without buffering. If your proxy buffers the complete response before sending it to the client, SSE connections will fail.
+
+Common proxy configurations:
+- **Nginx**: Add `proxy_buffering off;` for SSE endpoints
+- **Caddy**: Add `flush_interval -1` to the reverse_proxy directive
+- **Apache**: Ensure mod_proxy_http has `flushpackets=on`
+
+The Electric TypeScript client automatically detects when SSE connections are being buffered (by checking if connections close immediately) and falls back to long polling after 3 consecutive quick-close attempts.
+
 ### Log modes
 
 Electric supports two log modes for syncing shapes, controlled by the `log` query parameter:

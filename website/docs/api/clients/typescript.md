@@ -127,6 +127,41 @@ stream.subscribe((messages) => {
 })
 ```
 
+#### Using Server-Sent Events (SSE)
+
+Electric supports Server-Sent Events (SSE) for more efficient live updates. Instead of making repeated long-polling requests, SSE uses a persistent connection that allows the server to push updates as they happen:
+
+```tsx
+import { ShapeStream } from '@electric-sql/client'
+
+const stream = new ShapeStream({
+  url: `http://localhost:3000/v1/shape`,
+  params: {
+    table: `foo`,
+  },
+  liveSse: true, // Enable SSE for live updates
+})
+
+stream.subscribe((messages) => {
+  // Receive real-time updates via SSE
+})
+```
+
+**Benefits of SSE:**
+- Fewer HTTP requests - the client doesn't need to reconnect after each message
+- Lower latency for small messages arriving frequently (<100ms apart, such as token streaming)
+- Reduced bandwidth (no request overhead per update)
+- More efficient for frequent updates
+
+**Automatic Fallback:**
+
+The client automatically detects when SSE is not working properly (e.g., due to proxy buffering) and falls back to long polling. This happens when:
+1. SSE connections close immediately (< 1 second)
+2. This occurs 3 times consecutively
+3. The client logs a warning and switches to long polling
+
+If your reverse proxy or CDN is buffering responses, you may need to configure it to support streaming. See the [HTTP API SSE documentation](/docs/api/http#server-sent-events-sse) for proxy configuration examples.
+
 #### Options
 
 The `ShapeStream` constructor takes [the following options](https://github.com/electric-sql/electric/blob/main/packages/typescript-client/src/client.ts#L39):
@@ -235,6 +270,25 @@ export interface ShapeStreamOptions<T = never> {
    * fetch subsets of data on-demand.
    */
   log?: 'full' | 'changes_only'
+
+  /**
+   * Use Server-Sent Events (SSE) for live updates instead of long polling.
+   *
+   * When enabled, the client uses a persistent SSE connection to receive real-time
+   * updates, which is more efficient than long polling (single connection vs many requests).
+   *
+   * The client automatically falls back to long polling if SSE connections are failing
+   * (e.g., due to proxy buffering or misconfiguration). This happens after 3 consecutive
+   * quick-close attempts (connections lasting less than 1 second).
+   *
+   * Default: false (uses long polling)
+   */
+  liveSse?: boolean
+
+  /**
+   * @deprecated Use `liveSse` instead. Will be removed in a future version.
+   */
+  experimentalLiveSse?: boolean
 
   /**
    * Signal to abort the stream.
