@@ -563,6 +563,11 @@ defmodule Electric.ShapeCacheTest do
     ]
 
     test "returns the correct count of shapes", ctx do
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _, _ ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
       num_shapes = :rand.uniform(100)
 
       %{shape_cache_opts: opts} = with_shape_cache(ctx)
