@@ -148,8 +148,8 @@ stream.subscribe((messages) => {
 ```
 
 **Benefits of SSE:**
-- Single persistent connection for all live updates - the client doesn't need to reconnect after each message
-- Lower latency when messages arrive frequently (equivalent to long polling if messages are 100ms+ apart)
+- Fewer HTTP requests - the client doesn't need to reconnect after each message
+- Lower latency for small messages arriving frequently (<100ms apart, such as token streaming)
 - Reduced bandwidth (no request overhead per update)
 - More efficient for frequent updates
 
