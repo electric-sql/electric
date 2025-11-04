@@ -1,5 +1,15 @@
 # @core/sync-service
 
+## 1.2.4
+
+### Patch Changes
+
+- c7ca1b1: Avoid going through Erlang central file server for deleting shapes through the AsyncDeleter interface.
+- e473d16: Parse disk full and duplicate slot file PG errors.
+- dab8b15: Guard against missing connection wherever the DB connection pool is used.
+- 356b8f6: feat: re-intoroduce admission control
+- 7d5da13: Parse Prisma incorrectly formatted Postgres errors into known DB connection errors.
+
 ## 1.2.3
 
 ### Patch Changes

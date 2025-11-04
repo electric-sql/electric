@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.1.3
+
+### Patch Changes
+
+- 5c24974: add `live_sse` to ELECTRIC_PROTOCOL_QUERY_PARAMS
+
 ## 1.1.2
 
 ### Patch Changes
