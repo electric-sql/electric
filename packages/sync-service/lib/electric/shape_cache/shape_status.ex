@@ -202,11 +202,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # is ever matched to a handle with incomplete information, since deleting with
       # select_delete can lead to inconsistent state
       :ets.delete(meta_table, {@shape_hash_lookup, Shape.comparable(shape)})
-
       :ets.delete(meta_table, {@shape_meta_data, shape_handle})
-
       :ets.delete(meta_table, {@shape_storage_state_backup, shape_handle})
-
       :ets.delete(meta_table, {@snapshot_started, shape_handle})
 
       Enum.each(Shape.list_relations(shape), fn {oid, _} ->
