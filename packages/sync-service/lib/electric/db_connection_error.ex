@@ -366,6 +366,23 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  # Fix for badly formatted errors from Prisma's managed Postgres
+  def from_error({:badkey, :code, %{message: message}} = error) do
+    if Regex.match?(
+         ~r/^Failed to identify your database: Your account has restrictions: [\w]+./,
+         message
+       ) do
+      %DbConnectionError{
+        message: message,
+        type: :endpoint_not_found,
+        original_error: error,
+        retry_may_fix?: false
+      }
+    else
+      unknown_error(error)
+    end
+  end
+
   def from_error(%DbConfigurationError{} = error) do
     %DbConnectionError{
       message: error.message,

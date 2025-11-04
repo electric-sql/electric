@@ -527,6 +527,21 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with badkey failed to identify database error" do
+      message =
+        "Failed to identify your database: Your account has restrictions: planLimitReached. " <>
+          "Please contact Prisma support to resolve account restrictions."
+
+      error = {:badkey, :code, %{message: message}}
+
+      assert %DbConnectionError{
+               message: message,
+               type: :endpoint_not_found,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with an unknown error" do
       error = %DBConnection.ConnectionError{
         message: "made-up error",
