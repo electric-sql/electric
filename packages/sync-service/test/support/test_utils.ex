@@ -156,7 +156,8 @@ defmodule Support.TestUtils do
     callback_fun = fn pid -> Repatch.allow(self_pid, pid) end
 
     # The descendant process running module `mod` will look up this callback in its root ancestor and execute it.
-    Process.put(:callback_for_descendant_procs, {mod, callback_fun})
+    old_cbs = Process.get(:callbacks_for_descendant_procs) || []
+    Process.put(:callbacks_for_descendant_procs, [{mod, callback_fun} | old_cbs])
 
     :ok
   end
@@ -173,8 +174,8 @@ defmodule Support.TestUtils do
       |> List.last()
       |> Process.info(:dictionary)
 
-    case Keyword.get(test_process_dict, :callback_for_descendant_procs) do
-      {^caller_mod, fun} -> fun.(self())
+    case Keyword.get(test_process_dict, :callbacks_for_descendant_procs) do
+      cbs when is_list(cbs) -> for {^caller_mod, fun} <- cbs, do: fun.(self())
       _ -> :noop
     end
   end
