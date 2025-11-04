@@ -235,7 +235,7 @@ You can learn more about these by following <!-- the Tutorial and -->[Deployment
 
 ### Choosing a stack
 
-We recommend using [TanStack DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](http://localhost:5173/blog/2025/07/29/local-first-sync-with-tanstack-db).
+We recommend using [TanStack DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](/blog/2025/07/29/local-first-sync-with-tanstack-db).
 
 You can also combine TanStack DB with [Phoenix.Sync](#phoenix-sync) if you're building agentic systems with Elixir or looking for a batteries-included backend framework.
 
@@ -247,7 +247,7 @@ Electric works with [any Postgres with logical replication](/docs/guides/deploym
 
 ### Hosting your proxy
 
-You can proxy requests to Electric either [through your backend API](http://localhost:5173/docs/guides/auth#it-s-all-http), or through a cloud worker. [Cloudflare](/docs/integrations/cloudflare) is a great choice for hosting workers because it only charges for actual processing time (not for wall clock time holding [sync connections](/docs/api/http#live-mode) open).
+You can proxy requests to Electric either [through your backend API](/docs/guides/auth#it-s-all-http), or through a cloud worker. [Cloudflare](/docs/integrations/cloudflare) is a great choice for hosting workers because it only charges for actual processing time (not for wall clock time holding [sync connections](/docs/api/http#live-mode) open).
 
 ### Other stacks
 
