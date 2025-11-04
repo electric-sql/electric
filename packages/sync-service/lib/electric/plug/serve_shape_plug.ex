@@ -19,6 +19,12 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :put_resp_content_type, "application/json"
 
   plug :validate_request
+  # Admission control is applied here, but note:
+  # - /v1/health bypasses this plug (routed to HealthCheckPlug)
+  # - /metrics bypasses this plug (on separate utility router/port)
+  # - / (root) bypasses this plug (handled directly in router)
+  # This ensures observability remains available under load
+  plug :check_admission
   plug :serve_shape_response
 
   # end_telemetry_span needs to always be the last plug here.
@@ -49,6 +55,64 @@ defmodule Electric.Plug.ServeShapePlug do
         |> Api.Response.send(response)
         |> halt()
     end
+  end
+
+  defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
+    stack_id = get_in(config, [:stack_id])
+
+    kind =
+      if conn.query_params["offset"] == "-1",
+        do: :initial,
+        else: :existing
+
+    max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
+
+    case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
+      :ok ->
+        # Store that we acquired a permit so we can release it later
+        # register_before_send is called before ANY response (success, error, exception)
+        # This ensures cleanup on all paths that send a response
+        conn
+        |> put_private(:admission_permit_acquired, true)
+        |> put_private(:admission_stack_id, stack_id)
+        |> put_private(:admission_kind, kind)
+        |> register_before_send(fn conn ->
+          # Release permit before sending response
+          # This runs on success, error, and exception paths
+          if conn.private[:admission_permit_acquired] do
+            Electric.AdmissionControl.release(stack_id, conn.private[:admission_kind])
+          end
+
+          conn
+        end)
+
+      {:error, :overloaded} ->
+        # Calculate adaptive retry-after based on load
+        retry_after = calculate_retry_after(stack_id, max_concurrent)
+
+        response =
+          Api.Response.error(
+            get_in(config, [:api]),
+            %{code: "overloaded", message: "Server is currently overloaded, please retry"},
+            status: 503,
+            retry_after: retry_after
+          )
+
+        conn
+        |> put_resp_header("cache-control", "no-store")
+        |> put_resp_header("surrogate-control", "no-store")
+        |> Api.Response.send(response)
+        |> halt()
+    end
+  end
+
+  defp calculate_retry_after(_stack_id, _max_concurrent) do
+    # Simple version: random 5-10 seconds with jitter
+    # This spreads out retry attempts to prevent thundering herd
+    # TODO: Make adaptive based on actual metrics (P95 latency, queue depth, etc.)
+    base = 5
+    jitter = :rand.uniform(5)
+    base + jitter
   end
 
   defp serve_shape_response(%Conn{assigns: %{request: request}} = conn, _) do
@@ -180,10 +244,18 @@ defmodule Electric.Plug.ServeShapePlug do
 
     error_str = Exception.format(:error, exception)
 
+    conn = fetch_query_params(conn)
+    ensure_admission_control_release(conn)
+
     conn
-    |> fetch_query_params()
     |> assign(:error_str, error_str)
-    |> send_resp(503, Jason.encode!(%{error: "Database is unreachable"}))
+    |> put_resp_header("retry-after", "10")
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_header("surrogate-control", "no-store")
+    |> send_resp(
+      503,
+      Jason.encode!(%{code: "database_unreachable", error: "Database is unreachable"})
+    )
   end
 
   def handle_errors(conn, error) do
@@ -191,13 +263,26 @@ defmodule Electric.Plug.ServeShapePlug do
 
     error_str = Exception.format(error.kind, error.reason)
 
+    conn = fetch_query_params(conn)
+    ensure_admission_control_release(conn)
+
     conn
-    |> fetch_query_params()
     |> assign(:error_str, error_str)
     |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
 
     # No end_telemetry_span() call here because by this point that stack of plugs has been
     # unwound to the point where the `conn` struct did not yet have any span-related properties
     # assigned to it.
+  end
+
+  defp ensure_admission_control_release(conn) do
+    stack_id = get_in(conn.assigns, [:config, :stack_id])
+
+    kind =
+      if conn.query_params["offset"] == "-1",
+        do: :initial,
+        else: :existing
+
+    Electric.AdmissionControl.release(stack_id, kind)
   end
 end

@@ -73,7 +73,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
         sse_timeout: sse_timeout(ctx),
         max_age: max_age(ctx),
         stale_age: stale_age(ctx),
-        persistent_kv: ctx.persistent_kv
+        persistent_kv: ctx.persistent_kv,
+        max_concurrent_requests: %{initial: 300, existing: 1000}
       )
 
     ServeShapePlug.call(conn, opts)
@@ -342,7 +343,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         |> call_serve_shape_plug(ctx)
 
       assert conn.status == 400
-      assert get_resp_header(conn, "cache-control") == ["no-cache"]
+      assert get_resp_header(conn, "cache-control") == ["no-store"]
     end
 
     test "response has correct schema header", ctx do
@@ -996,7 +997,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       conn = Task.await(conn_task)
 
       assert conn.status == 400
-      assert get_resp_header(conn, "cache-control") == ["no-cache"]
+      assert get_resp_header(conn, "cache-control") == ["no-store"]
     end
   end
 

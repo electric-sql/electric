@@ -28,6 +28,7 @@ defmodule Electric.Shapes.Api.Response do
     :offset,
     :shape_definition,
     :known_error,
+    :retry_after,
     api: %Api{},
     chunked: false,
     up_to_date: false,
@@ -227,6 +228,7 @@ defmodule Electric.Shapes.Api.Response do
     |> put_up_to_date_header(response)
     |> put_offset_header(response)
     |> put_known_error_header(response)
+    |> put_retry_after_header(response)
     |> put_sse_headers(response)
   end
 
@@ -272,10 +274,12 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   # All other 4xx and 5xx responses should never be cached
+  # Use no-store (not no-cache) to prevent CDN caching of error responses
   defp put_cache_headers(conn, %__MODULE__{status: status, api: api})
        when status >= 400 do
     conn
-    |> put_cache_header("cache-control", "no-cache", api)
+    |> put_cache_header("cache-control", "no-store", api)
+    |> put_cache_header("surrogate-control", "no-store", api)
   end
 
   # If the offset is -1, set a 1 week max-age, 1 hour s-maxage (shared cache)
@@ -375,6 +379,14 @@ defmodule Electric.Shapes.Api.Response do
 
   defp put_known_error_header(conn, %__MODULE__{known_error: known_error}) do
     Plug.Conn.put_resp_header(conn, @electric_known_error_header, "#{known_error}")
+  end
+
+  defp put_retry_after_header(conn, %__MODULE__{retry_after: nil}) do
+    conn
+  end
+
+  defp put_retry_after_header(conn, %__MODULE__{retry_after: seconds}) do
+    Plug.Conn.put_resp_header(conn, "retry-after", "#{seconds}")
   end
 
   defp validate_response_finalized!(%__MODULE__{finalized?: false} = _response) do
