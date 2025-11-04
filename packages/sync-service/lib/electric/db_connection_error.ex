@@ -365,10 +365,14 @@ defmodule Electric.DbConnectionError do
     }
   end
 
-  def from_error(%Postgrex.Error{postgres: %{code: :duplicate_file, pg_code: "58P02"}} = error) do
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{code: :duplicate_file, pg_code: "58P02", routine: "SaveSlotToPath"}
+        } = error
+      ) do
     %DbConnectionError{
       message: error.postgres.message,
-      type: :duplicate_file,
+      type: :duplicate_slot_file,
       original_error: error,
       retry_may_fix?: true
     }

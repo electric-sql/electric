@@ -579,7 +579,7 @@ defmodule Electric.DbConnectionErrorTest do
 
       assert %DbConnectionError{
                message: "could not create file \"slot_file.tmp\": File exists",
-               type: :duplicate_file,
+               type: :duplicate_slot_file,
                original_error: error,
                retry_may_fix?: true
              } == DbConnectionError.from_error(error)
