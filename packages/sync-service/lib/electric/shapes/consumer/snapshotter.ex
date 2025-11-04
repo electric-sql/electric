@@ -105,6 +105,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                     {:snapshot_failed, shape_handle, SnapshotError.from_error(error)}
                   )
               catch
+                :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+                  GenServer.cast(
+                    consumer,
+                    {:snapshot_failed, shape_handle, SnapshotError.connection_not_available()}
+                  )
+
                 :exit, {:timeout, {GenServer, :call, _}} ->
                   GenServer.cast(
                     consumer,
@@ -125,13 +131,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     if not is_nil(ctx_token), do: :otel_ctx.detach(ctx_token)
 
     result
-  end
-
-  @doc false
-  # wrap DBConnection.run/2 with an infinite timeout. Required because you
-  # can't pass captures in NimbleOptions schemas.
-  def run_with_conn(conn, fun) do
-    DBConnection.run(conn, fun, timeout: :infinity)
   end
 
   @doc false

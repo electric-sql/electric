@@ -10,6 +10,13 @@ defmodule Electric.SnapshotError do
     }
   end
 
+  def connection_not_available do
+    %SnapshotError{
+      type: :connection_not_available,
+      message: "Database connection not available"
+    }
+  end
+
   def slow_snapshot_query(ttf_ms) do
     %SnapshotError{
       type: :slow_snapshot_query,

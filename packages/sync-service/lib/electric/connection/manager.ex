@@ -1158,9 +1158,17 @@ defmodule Electric.Connection.Manager do
       {:ok, _} ->
         :ok
 
+      {:error, %DBConnection.ConnectionError{} = error} ->
+        Logger.warning("Failed to execute query: #{query}\nError: #{inspect(error)}")
+
       {:error, error} ->
         Logger.error("Failed to execute query: #{query}\nError: #{inspect(error)}")
     end
+  catch
+    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+      Logger.warning(
+        "Failed to execute query: #{query}\nError: Database connection not available"
+      )
   end
 
   defp schedule_periodic_connection_status_check(type) do
