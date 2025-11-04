@@ -242,8 +242,11 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
         last_value("electric.connection.consumers_ready.failed_to_recover",
           keep: for_stack(opts)
         ),
-        last_value("electric.admission_control.acquire.current", keep: for_stack(opts)),
-        sum("electric.admission_control.reject.count", keep: for_stack(opts))
+        last_value("electric.admission_control.acquire.current",
+          keep: for_stack(opts),
+          tags: [:kind]
+        ),
+        sum("electric.admission_control.reject.count", keep: for_stack(opts), tags: [:kind])
       ]
     end
 
