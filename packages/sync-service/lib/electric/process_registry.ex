@@ -1,5 +1,5 @@
 defmodule Electric.ProcessRegistry do
-  defguardp is_stack_id(stack_id) when is_binary(stack_id)
+  import Electric, only: [is_stack_id: 1]
 
   @spec child_spec([Registry.start_option()]) :: Supervisor.child_spec()
   def child_spec(options) do

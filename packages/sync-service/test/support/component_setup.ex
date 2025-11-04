@@ -11,44 +11,119 @@ defmodule Support.ComponentSetup do
   alias Electric.Postgres.Inspector.EtsInspector
 
   defmodule NoopPublicationManager do
+    use GenServer
+
     @behaviour Electric.Replication.PublicationManager
-    def add_shape(_handle, _shape, _opts), do: :ok
-    def remove_shape(_handle, _opts), do: :ok
-    def wait_for_restore(_opts), do: :ok
+
+    def add_shape(_stack_id, _handle, _shape), do: :ok
+    def remove_shape(_stack_id, _handle), do: :ok
+    def wait_for_restore(_stack_id, _opts), do: :ok
+
+    def start_link(stack_id) do
+      GenServer.start_link(__MODULE__, [],
+        name: Electric.Replication.PublicationManager.name(stack_id)
+      )
+    end
+
+    def init([]) do
+      {:ok, []}
+    end
+
+    def handle_call({:add_shape, _shape_handle, _pub_filter}, _from, state),
+      do: {:reply, :ok, state}
+
+    def handle_call({:remove_shape, _shape_handle}, _from, state),
+      do: {:reply, :ok, state}
+
+    def handle_call(:wait_for_restore, _from, state),
+      do: {:reply, :ok, state}
   end
 
   defmodule TestPublicationManager do
+    use GenServer
+
     @behaviour Electric.Replication.PublicationManager
-
-    def new do
-      {__MODULE__, %{parent: self()}}
+    def add_shape(stack_id, handle, shape) do
+      GenServer.call(
+        Electric.Replication.PublicationManager.name(stack_id),
+        {:add_shape, handle, shape}
+      )
     end
 
-    def add_shape(handle, shape, %{parent: parent}) do
-      send(parent, {TestPublicationManager, :add_shape, handle, shape})
-      :ok
+    def remove_shape(stack_id, handle) do
+      GenServer.call(
+        Electric.Replication.PublicationManager.name(stack_id),
+        {:remove_shape, handle}
+      )
     end
 
-    def remove_shape(handle, %{parent: parent}) do
-      send(parent, {TestPublicationManager, :remove_shape, handle})
-      :ok
+    def wait_for_restore(stack_id, _opts) do
+      GenServer.call(
+        Electric.Replication.PublicationManager.name(stack_id),
+        :wait_for_restore
+      )
     end
 
-    def wait_for_restore(%{parent: parent}) do
-      send(parent, {TestPublicationManager, :wait_for_restore})
-      :ok
+    def start_link(ctx) do
+      GenServer.start_link(__MODULE__, ctx.test_pid,
+        name: Electric.Replication.PublicationManager.name(ctx.stack_id)
+      )
+    end
+
+    def init(test_pid) do
+      {:ok, test_pid}
+    end
+
+    def handle_call({:add_shape, handle, shape}, _from, test_pid) do
+      send(test_pid, {TestPublicationManager, :add_shape, handle, shape})
+      {:reply, :ok, test_pid}
+    end
+
+    def handle_call({:remove_shape, handle}, _from, test_pid) do
+      send(test_pid, {TestPublicationManager, :remove_shape, handle})
+      {:reply, :ok, test_pid}
+    end
+
+    def handle_call(:wait_for_restore, _from, test_pid) do
+      send(test_pid, {TestPublicationManager, :wait_for_restore})
+      {:reply, :ok, test_pid}
     end
   end
 
   def with_stack_id_from_test(ctx) do
     stack_id = full_test_name(ctx)
     registry = start_supervised!({Electric.ProcessRegistry, stack_id: stack_id})
-    start_supervised!({Electric.StackConfig, stack_id: stack_id})
+
+    seed_config = Map.get(ctx, :stack_config_seed, [])
+
+    start_supervised!(
+      {Electric.StackConfig,
+       stack_id: stack_id,
+       seed_config:
+         Keyword.merge(
+           [
+             chunk_bytes_threshold:
+               Map.get(
+                 ctx,
+                 :chunk_bytes_threshold,
+                 Electric.ShapeCache.LogChunker.default_chunk_size_threshold()
+               ),
+             snapshot_timeout_to_first_data: :timer.seconds(30),
+             inspector: Map.get(ctx, :inspector, nil),
+             shape_changes_registry:
+               Map.get(ctx, :registry, Electric.StackSupervisor.registry_name(stack_id)),
+             shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000)
+           ],
+           seed_config
+         )}
+    )
+
     %{stack_id: stack_id, process_registry: registry}
   end
 
   def with_registry(ctx) do
-    registry_name = :"#{inspect(Registry.ShapeChanges)}:#{ctx.stack_id}"
+    registry_name = Electric.StackSupervisor.registry_name(ctx.stack_id)
+
     start_supervised!({Registry, keys: :duplicate, name: registry_name})
 
     %{registry: registry_name}
@@ -80,13 +155,15 @@ defmodule Support.ComponentSetup do
   end
 
   def with_in_memory_storage(ctx) do
-    storage_opts =
-      InMemoryStorage.shared_opts(
-        table_base_name: :"in_memory_storage_#{ctx.stack_id}",
-        stack_id: ctx.stack_id
+    storage =
+      Storage.shared_opts(
+        {InMemoryStorage,
+         table_base_name: :"in_memory_storage_#{ctx.stack_id}", stack_id: ctx.stack_id}
       )
 
-    %{storage: {InMemoryStorage, storage_opts}}
+    start_supervised!(Storage.stack_child_spec(storage), restart: :temporary)
+
+    %{storage: storage}
   end
 
   def with_tracing_storage(%{storage: storage}) do
@@ -125,7 +202,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_publication_manager(ctx) do
-    server = :"publication_manager_#{full_test_name(ctx)}"
+    server = Electric.Replication.PublicationManager.name(ctx.stack_id)
 
     start_supervised!(%{
       id: server,
@@ -153,11 +230,14 @@ defmodule Support.ComponentSetup do
     }
   end
 
-  def with_test_publication_manager(_ctx) do
-    %{publication_manager: TestPublicationManager.new()}
+  def with_test_publication_manager(ctx) do
+    publication_manager = start_supervised!({TestPublicationManager, ctx})
+
+    %{publication_manager: publication_manager}
   end
 
-  def with_noop_publication_manager(_ctx) do
+  def with_noop_publication_manager(ctx) do
+    start_supervised!({NoopPublicationManager, ctx.stack_id})
     %{publication_manager: {NoopPublicationManager, []}}
   end
 
@@ -201,8 +281,6 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_cache(ctx, additional_opts \\ []) do
-    server = :"shape_cache_#{full_test_name(ctx)}"
-
     start_supervised!(
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(ctx.stack_id, Electric.StackTaskSupervisor)}
@@ -212,37 +290,17 @@ defmodule Support.ComponentSetup do
     %{consumer_supervisor: consumer_supervisor} = with_dynamic_consumer_supervisor(ctx)
 
     start_opts =
-      [
-        name: server,
-        stack_id: ctx.stack_id,
-        inspector: ctx.inspector,
-        storage: ctx.storage,
-        publication_manager: ctx.publication_manager,
-        shape_hibernate_after: 1_000,
-        chunk_bytes_threshold: ctx.chunk_bytes_threshold,
-        db_pool: ctx.pool,
-        registry: ctx.registry,
-        consumer_supervisor: consumer_supervisor
-      ]
+      [stack_id: ctx.stack_id]
       |> Keyword.merge(additional_opts)
-      |> Keyword.merge(Map.get(ctx, :shape_cache_opts_overrides, []))
 
     start_supervised!(%{
-      id: start_opts[:name],
+      id: "shape_cache",
       start: {ShapeCache, :start_link, [start_opts]},
       restart: :temporary
     })
 
-    shape_cache_opts = [
-      stack_id: ctx.stack_id,
-      server: server,
-      storage: ctx.storage
-    ]
-
     %{
-      shape_cache_opts: shape_cache_opts,
-      shape_cache: {ShapeCache, shape_cache_opts},
-      shape_cache_server: server,
+      shape_cache: "shape_cache",
       consumer_supervisor: consumer_supervisor
     }
   end
@@ -310,6 +368,12 @@ defmodule Support.ComponentSetup do
 
     pg_inspector_table = EtsInspector.inspector_table(stack_id: ctx.stack_id)
 
+    Electric.StackConfig.put(
+      ctx.stack_id,
+      :inspector,
+      {EtsInspector, stack_id: ctx.stack_id, server: server}
+    )
+
     %{
       inspector: {EtsInspector, stack_id: ctx.stack_id, server: server},
       pg_inspector_table: pg_inspector_table,
@@ -348,24 +412,16 @@ defmodule Support.ComponentSetup do
         with_shape_status(Map.merge(ctx, %{storage: storage}))
       end)
 
-    publication_manager =
-      Map.get_lazy(ctx, :publication_manager, fn ->
-        %{publication_manager: publication_manager} = with_test_publication_manager(ctx)
-        publication_manager
-      end)
-
     start_supervised!(
       {Electric.Shapes.Monitor,
        Keyword.merge(monitor_config(ctx),
          stack_id: ctx.stack_id,
-         storage: storage,
-         publication_manager: publication_manager
+         storage: storage
        )}
     )
 
     %{
       storage: storage,
-      publication_manager: publication_manager,
       shape_status_owner: shape_status_owner
     }
   end

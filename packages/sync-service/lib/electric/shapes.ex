@@ -4,19 +4,22 @@ defmodule Electric.Shapes do
   alias Electric.ShapeCache
   alias Electric.Shapes.Shape
 
+  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type stack_id :: Electric.stack_id()
 
   @doc """
   Get the snapshot followed by the log.
   """
-  def get_merged_log_stream(config, shape_handle, opts) do
-    {shape_cache, shape_cache_opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-    storage = shape_storage(config, shape_handle)
+  def get_merged_log_stream(stack_id, shape_handle, opts)
+      when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     offset = Access.get(opts, :since, LogOffset.before_all())
     max_offset = Access.get(opts, :up_to, LogOffset.last())
 
-    if shape_cache.has_shape?(shape_handle, shape_cache_opts) do
-      with :started <- shape_cache.await_snapshot_start(shape_handle, shape_cache_opts) do
+    if ShapeCache.has_shape?(shape_handle, stack_id) do
+      with :started <- ShapeCache.await_snapshot_start(shape_handle, stack_id) do
+        storage = shape_storage(stack_id, shape_handle)
         {:ok, Storage.get_log_stream(offset, max_offset, storage)}
       end
     else
@@ -29,29 +32,26 @@ defmodule Electric.Shapes do
   @doc """
   Get the shape that corresponds to this shape definition and return it along with the latest offset of the shape
   """
-  @spec get_shape(Access.t(), Shape.t()) :: {shape_handle(), LogOffset.t()} | nil
-  def get_shape(config, shape_def) do
-    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-
-    shape_cache.get_shape(shape_def, opts)
+  @spec get_shape(stack_id(), Shape.t()) :: {shape_handle(), LogOffset.t()} | nil
+  def get_shape(stack_id, shape_def) when is_stack_id(stack_id) do
+    ShapeCache.get_shape(shape_def, stack_id)
   end
 
-  @spec fetch_shape_by_handle(Access.t(), shape_handle()) :: Shape.t() | nil
-  def fetch_shape_by_handle(config, shape_handle) do
-    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-    shape_cache.fetch_shape_by_handle(shape_handle, opts)
+  @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: Shape.t() | nil
+  def fetch_shape_by_handle(stack_id, shape_handle)
+      when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
+    ShapeCache.fetch_shape_by_handle(shape_handle, stack_id)
   end
 
   @doc """
   Get or create a shape handle and return it along with the latest offset of the shape
   """
-  @spec get_or_create_shape_handle(Access.t(), Shape.t()) :: {shape_handle(), LogOffset.t()}
-  def get_or_create_shape_handle(config, shape_def) do
-    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-
-    shape_cache.get_or_create_shape_handle(
+  @spec get_or_create_shape_handle(stack_id(), Shape.t()) :: {shape_handle(), LogOffset.t()}
+  def get_or_create_shape_handle(stack_id, shape_def) when is_stack_id(stack_id) do
+    ShapeCache.get_or_create_shape_handle(
       shape_def,
-      Keyword.put(opts, :otel_ctx, :otel_ctx.get_current())
+      stack_id,
+      otel_ctx: :otel_ctx.get_current()
     )
   end
 
@@ -60,47 +60,41 @@ defmodule Electric.Shapes do
 
   If `nil` is returned, chunk is not complete and the shape's latest offset should be used
   """
-  @spec get_chunk_end_log_offset(Access.t(), shape_handle(), LogOffset.t()) ::
-          LogOffset.t() | nil
-  def get_chunk_end_log_offset(config, shape_handle, offset) do
-    storage = shape_storage(config, shape_handle)
+  @spec get_chunk_end_log_offset(stack_id(), shape_handle(), LogOffset.t()) :: LogOffset.t() | nil
+  def get_chunk_end_log_offset(stack_id, shape_handle, offset) do
+    storage = shape_storage(stack_id, shape_handle)
     Storage.get_chunk_end_log_offset(offset, storage)
   end
 
   @doc """
   Check whether the log has an entry for a given shape handle
   """
-  @spec has_shape?(Access.t(), shape_handle()) :: boolean()
-  def has_shape?(config, shape_handle) do
-    {shape_cache, opts} = Access.get(config, :shape_cache, {ShapeCache, []})
-
-    shape_cache.has_shape?(shape_handle, opts)
+  @spec has_shape?(stack_id(), shape_handle()) :: boolean()
+  def has_shape?(stack_id, shape_handle) do
+    ShapeCache.has_shape?(shape_handle, stack_id)
   end
 
   @doc """
   Remove and clean up all data (meta data and shape log + snapshot) associated with
   the given shape handle
   """
-  @spec clean_shape(shape_handle(), Access.t()) :: :ok
-  def clean_shape(shape_handle, opts \\ []) do
-    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-    shape_cache.clean_shape(shape_handle, opts)
+  @spec clean_shape(stack_id(), shape_handle()) :: :ok
+  def clean_shape(stack_id, shape_handle) do
+    ShapeCache.clean_shape(shape_handle, stack_id)
     :ok
   end
 
-  @spec clean_shapes([shape_handle()], Access.t()) :: :ok
-  def clean_shapes(shape_handles, opts \\ []) do
-    {shape_cache, opts} = Access.get(opts, :shape_cache, {ShapeCache, []})
-
+  @spec clean_shapes(stack_id(), [shape_handle()]) :: :ok
+  def clean_shapes(stack_id, shape_handles) do
     for shape_handle <- shape_handles do
-      shape_cache.clean_shape(shape_handle, opts)
+      ShapeCache.clean_shape(shape_handle, stack_id)
     end
 
     :ok
   end
 
-  defp shape_storage(config, shape_handle) do
-    Storage.for_shape(shape_handle, Access.fetch!(config, :storage))
+  defp shape_storage(stack_id, shape_handle) do
+    Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
   end
 
   def query_subset(shape, subset, opts) do

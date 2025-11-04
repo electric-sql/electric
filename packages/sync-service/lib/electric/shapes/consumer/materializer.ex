@@ -22,9 +22,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Eval
-  import Electric.Replication.LogOffset
 
-  def name(stack_id, shape_handle) when is_binary(shape_handle) do
+  import Electric.Replication.LogOffset
+  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+
+  def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
@@ -81,9 +83,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {storage, opts} = Map.pop(opts, :storage)
-    shape_storage = Storage.for_shape(shape_handle, storage)
-
     state =
       Map.merge(opts, %{
         index: %{},
@@ -93,11 +92,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
         subscribers: MapSet.new()
       })
 
-    {:ok, state, {:continue, {:start_materializer, shape_storage}}}
+    {:ok, state, {:continue, :start_materializer}}
   end
 
-  def handle_continue({:start_materializer, storage}, state) do
+  def handle_continue(:start_materializer, state) do
     %{stack_id: stack_id, shape_handle: shape_handle} = state
+
+    stack_storage = Storage.for_stack(stack_id)
+    shape_storage = Storage.for_shape(shape_handle, stack_storage)
 
     :started = Consumer.await_snapshot_start(stack_id, shape_handle, :infinity)
 
@@ -107,7 +109,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
       tag: {:consumer_down, state.shape_handle}
     )
 
-    {:noreply, state, {:continue, {:read_stream, storage}}}
+    {:noreply, state, {:continue, {:read_stream, shape_storage}}}
   end
 
   def handle_continue({:read_stream, storage}, state) do

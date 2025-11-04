@@ -11,10 +11,8 @@ defmodule Electric.StackConfig do
 
   ###
 
-  def name(opts) when is_list(opts), do: name(Keyword.fetch!(opts, :stack_id))
-
-  def name(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   def table(stack_id) do
@@ -33,6 +31,7 @@ defmodule Electric.StackConfig do
 
     tab = table(stack_id)
     :ets.new(tab, [:public, :named_table, :set, read_concurrency: true])
+    :ets.insert(tab, Keyword.fetch!(opts, :seed_config))
 
     {:ok, nil}
   end

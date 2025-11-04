@@ -1,7 +1,6 @@
 defmodule Electric.Shapes.ApiTest do
   use ExUnit.Case, async: true
-  use Repatch.ExUnit
-  use Support.Mock
+  use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
@@ -9,8 +8,15 @@ defmodule Electric.Shapes.ApiTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1]
-  import Mox
+
+  import Support.TestUtils,
+    only: [
+      set_status_to_active: 1,
+      expect_storage: 1,
+      patch_storage: 1,
+      expect_shape_cache: 1,
+      patch_shape_cache: 1
+    ]
 
   @inspector Support.StubInspector.new(
                tables: ["users"],
@@ -46,8 +52,8 @@ defmodule Electric.Shapes.ApiTest do
       pg_id: @test_pg_id,
       stack_events_registry: Electric.stack_events_registry(),
       stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-      shape_cache: {Mock.ShapeCache, []},
-      storage: {Mock.Storage, []},
+      shape_cache: {Electric.ShapeCache, []},
+      storage: {Electric.ShapeCache.Storage.PureFileStorage, []},
       inspector: @inspector,
       registry: @registry,
       long_poll_timeout: long_poll_timeout(ctx),
@@ -61,7 +67,7 @@ defmodule Electric.Shapes.ApiTest do
   end
 
   defp ready_stack(ctx) do
-    {:via, _, {registry_name, registry_key}} = Electric.Shapes.Supervisor.name(ctx)
+    {:via, _, {registry_name, registry_key}} = Electric.Shapes.Supervisor.name(ctx.stack_id)
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
     Electric.LsnTracker.create_table(ctx.stack_id)
@@ -74,8 +80,6 @@ defmodule Electric.Shapes.ApiTest do
   defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
   defp send_cache_headers?(ctx), do: Access.get(ctx, :send_cache_headers?, true)
   defp api_encoder(ctx), do: Access.get(ctx, :api_encoder, Electric.Shapes.Api.Encoder.Term)
-
-  setup :verify_on_exit!
 
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -186,8 +190,9 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "returns error when offset is out of bounds", ctx do
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+      )
 
       invalid_offset = LogOffset.increment(@test_offset)
 
@@ -214,11 +219,12 @@ defmodule Electric.Shapes.ApiTest do
     test "the shape handle does not match the shape definition", ctx do
       request_handle = @test_shape_handle <> "-wrong"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> nil end)
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> nil end,
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
 
       assert {:error, %{status: 409} = response} =
                Api.validate(
@@ -237,8 +243,9 @@ defmodule Electric.Shapes.ApiTest do
     test "shape for handle does not match the shape definition", ctx do
       request_handle = @test_shape_handle <> "-wrong"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @before_all_offset} end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @before_all_offset} end
+      )
 
       assert {:error, %{status: 409} = response} =
                Api.validate(
@@ -257,8 +264,9 @@ defmodule Electric.Shapes.ApiTest do
     test "returns a 409 error when requested shape handle does not exist", ctx do
       request_handle = @test_shape_handle <> "-wrong"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @before_all_offset} end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @before_all_offset} end
+      )
 
       assert {:error, %{status: 409} = response} =
                Api.validate(
@@ -278,15 +286,16 @@ defmodule Electric.Shapes.ApiTest do
          ctx do
       new_shape_handle = "new-shape-handle"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> nil end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> false end)
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {new_shape_handle, @test_offset}
-      end)
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> false end)
 
-      Mock.Storage
-      |> stub(:for_shape, fn new_shape_handle, opts -> {new_shape_handle, opts} end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> nil end,
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {new_shape_handle, @test_offset}
+        end
+      )
+
+      patch_storage(for_shape: fn new_shape_handle, opts -> {new_shape_handle, opts} end)
 
       assert {:error, %{status: 409} = response} =
                Api.validate(
@@ -366,22 +375,25 @@ defmodule Electric.Shapes.ApiTest do
       test_shape_handle = "test-shape-without-deltas"
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn %{root_table: {"public", "users"}, replica: :full},
-                                                _opts ->
-        {test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn ^test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn ^test_shape_handle, _ -> :started end)
+      patch_shape_cache(has_shape?: fn ^test_shape_handle, _opts -> true end)
 
-      Mock.Storage
-      |> stub(:for_shape, fn ^test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        next_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
-      end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn %{root_table: {"public", "users"}, replica: :full},
+                                       _stack_id,
+                                       _opts ->
+          {test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn ^test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(for_shape: fn ^test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ -> next_offset end,
+        get_log_stream: fn @before_all_offset, _, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -413,22 +425,25 @@ defmodule Electric.Shapes.ApiTest do
       test_shape_handle = "test-shape-without-deltas"
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn %{root_table: {"public", "users"}, replica: :full},
-                                                _opts ->
-        {test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn ^test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn ^test_shape_handle, _ -> :started end)
+      patch_shape_cache(has_shape?: fn ^test_shape_handle, _opts -> true end)
 
-      Mock.Storage
-      |> stub(:for_shape, fn ^test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        next_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
-      end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn %{root_table: {"public", "users"}, replica: :full},
+                                       _stack_id,
+                                       _opts ->
+          {test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn ^test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(for_shape: fn ^test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ -> next_offset end,
+        get_log_stream: fn @before_all_offset, _, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -469,13 +484,13 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "accepts 'now' offset with valid handle", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, opts -> {@test_shape_handle, opts} end)
+      patch_storage(for_shape: fn @test_shape_handle, opts -> {@test_shape_handle, opts} end)
 
       assert {:ok, %{handle: @test_shape_handle}} =
                Api.validate(
@@ -489,14 +504,15 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "accepts 'now' offset without a handle", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @first_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @first_offset}
+        end
+      )
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
 
       assert {:ok, %{response: %{handle: @test_shape_handle, offset: @first_offset}}} =
                Api.validate(
@@ -537,8 +553,7 @@ defmodule Electric.Shapes.ApiTest do
     test "does not create a shape if one doesn't exist for the definition", ctx do
       %{admin_shape: admin_shape} = ctx
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn ^admin_shape, _opts -> nil end)
+      expect_shape_cache(get_shape: fn ^admin_shape, _opts -> nil end)
 
       assert {:error, %{status: 404} = _response} =
                Api.validate_for_delete(
@@ -555,8 +570,7 @@ defmodule Electric.Shapes.ApiTest do
 
       handle = "admin-shape-handle"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn ^admin_shape, _opts -> {handle, @before_all_offset} end)
+      expect_shape_cache(get_shape: fn ^admin_shape, _opts -> {handle, @before_all_offset} end)
 
       assert {:ok, %{handle: ^handle} = _response} =
                Api.validate_for_delete(
@@ -574,8 +588,7 @@ defmodule Electric.Shapes.ApiTest do
 
       handle = "admin-shape-handle"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn ^admin_shape, _opts -> {handle, @before_all_offset} end)
+      expect_shape_cache(get_shape: fn ^admin_shape, _opts -> {handle, @before_all_offset} end)
 
       assert {:error, %{status: 400} = _response} =
                Api.validate_for_delete(
@@ -591,8 +604,7 @@ defmodule Electric.Shapes.ApiTest do
     test "allows requests to delete by shape handle only", ctx do
       handle = "admin-shape-handle"
 
-      Mock.ShapeCache
-      |> expect(:has_shape?, fn ^handle, _opts -> true end)
+      expect_shape_cache(has_shape?: fn ^handle, _opts -> true end)
 
       assert {:ok, _request} =
                Api.validate_for_delete(
@@ -614,23 +626,27 @@ defmodule Electric.Shapes.ApiTest do
     setup [:ready_stack, :configure_request]
 
     test "returns snapshot when offset is -1", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
 
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        @first_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, @first_offset, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          @first_offset
+        end,
+        get_log_stream: fn @before_all_offset, @first_offset, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -658,25 +674,28 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "returns log when offset is >= 0", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
       next_offset = LogOffset.increment(@start_offset_50)
       next_next_offset = LogOffset.increment(next_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
-        next_next_offset
-      end)
-      |> expect(:get_log_stream, fn @start_offset_50, _, @test_opts ->
-        [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
-          Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
-        ]
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @start_offset_50, _ ->
+          next_next_offset
+        end,
+        get_log_stream: fn @start_offset_50, _, @test_opts ->
+          [
+            Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+            Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
+          ]
+        end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -714,15 +733,18 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "returns immediate up-to-date message when offset is 'now'", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
 
       assert {:ok, request} =
                Api.validate(
@@ -748,29 +770,28 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "handles live updates", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
       test_pid = self()
       next_offset = LogOffset.increment(@test_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, @test_offset, @test_opts ->
-        send(test_pid, :got_log_stream)
-        []
-      end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, ^next_offset, @test_opts ->
-        [Jason.encode!("test result")]
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, @test_offset, @test_opts ->
+          send(test_pid, :got_log_stream)
+          []
+        end,
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, ^next_offset, @test_opts ->
+          [Jason.encode!("test result")]
+        end
+      )
 
       task =
         Task.async(fn ->
@@ -825,29 +846,28 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "raises if body is read from a different process", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
       test_pid = self()
       next_offset = LogOffset.increment(@test_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, @test_offset, @test_opts ->
-        send(test_pid, :got_log_stream)
-        []
-      end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, ^next_offset, @test_opts ->
-        [Jason.encode!("test result")]
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, @test_offset, @test_opts ->
+          send(test_pid, :got_log_stream)
+          []
+        end,
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, ^next_offset, @test_opts ->
+          [Jason.encode!("test result")]
+        end
+      )
 
       task =
         Task.async(fn ->
@@ -893,47 +913,49 @@ defmodule Electric.Shapes.ApiTest do
         ctx.stack_id
       )
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, next_offset}
-      end)
-      |> stub(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, last_minute_next_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, next_offset} end,
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, last_minute_next_offset} end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
-        # Set last_seen_lsn to last_minute_next_offset immediately after retrieving
-        # the chunk end log offset, simulating the race where the next log entry
-        # arrives in between determining the the end point of the log to read
-        # and serving the log.
-        Electric.LsnTracker.set_last_processed_lsn(
-          last_minute_next_offset_lsn,
-          ctx.stack_id
-        )
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-        next_offset
-      end)
-      |> stub(:get_chunk_end_log_offset, fn @start_offset_50, _ -> last_minute_next_offset end)
-      |> expect(:get_log_stream, fn @start_offset_50, ^next_offset, @test_opts ->
-        [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
-        ]
-      end)
-      |> stub(:get_log_stream, fn @start_offset_50, _, @test_opts ->
-        [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
-          Jason.encode!(%{
-            key: "log2",
-            value: "bar",
-            headers: %{},
-            offset: last_minute_next_offset
-          })
-        ]
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @start_offset_50, _ ->
+          # Set last_seen_lsn to last_minute_next_offset immediately after retrieving
+          # the chunk end log offset, simulating the race where the next log entry
+          # arrives in between determining the the end point of the log to read
+          # and serving the log.
+          Electric.LsnTracker.set_last_processed_lsn(
+            last_minute_next_offset_lsn,
+            ctx.stack_id
+          )
+
+          next_offset
+        end,
+        get_chunk_end_log_offset: fn @start_offset_50, _ -> last_minute_next_offset end,
+        get_log_stream: fn @start_offset_50, ^next_offset, @test_opts ->
+          [
+            Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
+          ]
+        end,
+        get_log_stream: fn @start_offset_50, _, @test_opts ->
+          [
+            Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+            Jason.encode!(%{
+              key: "log2",
+              value: "bar",
+              headers: %{},
+              offset: last_minute_next_offset
+            })
+          ]
+        end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -1006,22 +1028,23 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "handles shape rotation", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
       test_pid = self()
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, _, @test_opts ->
-        send(test_pid, :got_log_stream)
-        []
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts ->
+          send(test_pid, :got_log_stream)
+          []
+        end
+      )
 
       task =
         Task.async(fn ->
@@ -1058,32 +1081,37 @@ defmodule Electric.Shapes.ApiTest do
     test "picks up changes missed between loading shape and listening for changes", ctx do
       next_offset = LogOffset.increment(@test_offset)
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        # Simulate new changes arriving the moment we load the shape
-        Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
-          send(pid, {ref, :new_changes, next_offset})
-        end)
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-        {@test_shape_handle, @test_offset}
-      end)
-      # any subsequent get shape calls should return the new offset
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, next_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      # # any subsequent get shape calls should return the new offset
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts ->
+          # Simulate new changes arriving the moment we load the shape
+          Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+            send(pid, {ref, :new_changes, next_offset})
+          end)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> stub(:get_chunk_end_log_offset, fn _, @test_opts -> nil end)
-      |> stub(:get_log_stream, fn
-        @test_offset, @test_offset, @test_opts ->
-          []
+          {@test_shape_handle, @test_offset}
+        end,
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, next_offset} end
+      )
 
-        @test_offset, ^next_offset, @test_opts ->
-          [
-            Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
-          ]
-      end)
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end,
+        get_log_stream: fn
+          @test_offset, @test_offset, @test_opts ->
+            []
+
+          @test_offset, ^next_offset, @test_opts ->
+            [
+              Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})
+            ]
+        end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -1108,24 +1136,28 @@ defmodule Electric.Shapes.ApiTest do
 
     @tag long_poll_timeout: 100
     test "picks up shape rotation missed between loading shape and listening for changes", ctx do
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        # Simulate shape rotating a moment after we load the shape
-        Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
-          send(pid, {ref, :shape_rotation})
-        end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts ->
+          # Simulate shape rotating a moment after we load the shape
+          Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+            send(pid, {ref, :shape_rotation})
+          end)
 
-        {@test_shape_handle, @test_offset}
-      end)
-      # subsequent calls to get shape should not return the shape as it is gone
-      |> stub(:get_shape, fn @test_shape, _opts -> nil end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+          {@test_shape_handle, @test_offset}
+        end,
+        get_shape: fn @test_shape, _opts -> nil end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> stub(:get_chunk_end_log_offset, fn _, @test_opts -> nil end)
-      |> stub(:get_log_stream, fn @test_offset, _, @test_opts -> [] end)
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -1145,19 +1177,18 @@ defmodule Electric.Shapes.ApiTest do
 
     @tag long_poll_timeout: 100
     test "sends an up-to-date response after a timeout if no changes are observed", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, _, @test_opts ->
-        []
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
 
       assert {:ok, request} =
                Api.validate(
@@ -1181,19 +1212,18 @@ defmodule Electric.Shapes.ApiTest do
 
     @tag long_poll_timeout: 100
     test "returns the latest lsn after the long poll timeout even if stack has failed", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, _, @test_opts ->
-        []
-      end)
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
 
       stack_id = ctx.stack_id
 
@@ -1260,16 +1290,14 @@ defmodule Electric.Shapes.ApiTest do
 
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn ^shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn ^shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn new_shape_handle, opts -> {new_shape_handle, opts} end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        next_offset
-      end)
+      patch_storage(for_shape: fn new_shape_handle, opts -> {new_shape_handle, opts} end)
+      expect_storage(get_chunk_end_log_offset: fn @before_all_offset, _ -> next_offset end)
 
       assert {:ok, request} =
                Api.validate(ctx.api, %{

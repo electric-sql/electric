@@ -20,12 +20,8 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @behaviour Electric.Postgres.Inspector
 
   ## Public API
-  def name(opts) do
-    Keyword.get(
-      opts,
-      :name,
-      Electric.ProcessRegistry.name(Keyword.fetch!(opts, :stack_id), __MODULE__)
-    )
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   def start_link(opts) do

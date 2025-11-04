@@ -19,7 +19,6 @@ defmodule Electric.Shapes.Api do
     inspector: [type: :mod_arg, required: true],
     pg_id: [type: {:or, [nil, :string]}],
     registry: [type: :atom, required: true],
-    shape_cache: [type: :mod_arg, required: true],
     stack_events_registry: [type: :atom, required: true],
     stack_id: [type: :string, required: true],
     storage: [type: :mod_arg, required: true],
@@ -56,7 +55,6 @@ defmodule Electric.Shapes.Api do
     :registry,
     :persistent_kv,
     :shape,
-    :shape_cache,
     :stack_events_registry,
     :stack_id,
     :storage,
@@ -228,7 +226,8 @@ defmodule Electric.Shapes.Api do
 
   @spec delete_shape(Request.t()) :: Response.t()
   def delete_shape(%Request{handle: handle} = request) when is_binary(handle) do
-    :ok = Shapes.clean_shape(handle, request.api)
+    %{api: %{stack_id: stack_id}} = request
+    :ok = Shapes.clean_shape(stack_id, handle)
 
     # Delete responses don't need to have cleanup operations appended
     # after the body has been read, so mark them as finalized
@@ -285,24 +284,24 @@ defmodule Electric.Shapes.Api do
   # No handle is provided so we can get the existing one for this shape
   # or create a new shape if it does not yet exist
   defp get_or_create_shape_handle(%Request{params: %{handle: nil}} = request) do
-    %{params: %{shape_definition: shape}, api: api} = request
-    Shapes.get_or_create_shape_handle(api, shape)
+    %{params: %{shape_definition: shape}, api: %{stack_id: stack_id}} = request
+    Shapes.get_or_create_shape_handle(stack_id, shape)
   end
 
   # A shape handle is provided so we need to return the shape that matches the
   # shape handle and the shape definition
   defp get_or_create_shape_handle(%Request{} = request) do
-    %{params: %{shape_definition: shape}, api: api} = request
-    Shapes.get_shape(api, shape)
+    %{params: %{shape_definition: shape}, api: %{stack_id: stack_id}} = request
+    Shapes.get_shape(stack_id, shape)
   end
 
   defp handle_shape_info(nil, %Request{} = request) do
-    %{params: %{shape_definition: shape}, api: api} = request
+    %{params: %{shape_definition: shape}, api: %{stack_id: stack_id}} = request
     # There is no shape that matches the shape definition (because shape info is `nil`).
     # Hence, create a new shape for this shape definition
     # and return a 409 with a redirect to the newly created shape.
     # (will be done by the recursive `handle_shape_info` call)
-    api
+    stack_id
     |> Shapes.get_or_create_shape_handle(shape)
     |> handle_shape_info(request)
   end
@@ -453,7 +452,7 @@ defmodule Electric.Shapes.Api do
       request
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(api, handle, offset) || last_offset
+      Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset) || last_offset
 
     Request.update_response(
       %{request | chunk_end_offset: chunk_end_offset},
@@ -622,11 +621,11 @@ defmodule Electric.Shapes.Api do
       chunk_end_offset: chunk_end_offset,
       global_last_seen_lsn: global_last_seen_lsn,
       params: %{offset: offset, live: live?, live_sse: in_sse?},
-      api: api,
+      api: %{stack_id: stack_id},
       response: response
     } = request
 
-    case Shapes.get_merged_log_stream(api, shape_handle,
+    case Shapes.get_merged_log_stream(stack_id, shape_handle,
            since: offset,
            up_to: chunk_end_offset,
            live_sse: in_sse?
@@ -734,7 +733,7 @@ defmodule Electric.Shapes.Api do
       "Client #{inspect(self())} is checking for any changes to #{shape_handle} since start of request"
     )
 
-    case Shapes.get_shape(api, shape_def) do
+    case Shapes.get_shape(api.stack_id, shape_def) do
       {^shape_handle, ^last_offset} ->
         # no-op, shape is still present and unchanged
         nil
@@ -851,6 +850,7 @@ defmodule Electric.Shapes.Api do
       request:
         %{
           api: %{
+            stack_id: stack_id,
             keepalive_interval: keepalive_interval
           },
           handle: shape_handle,
@@ -872,7 +872,7 @@ defmodule Electric.Shapes.Api do
         end_offset = updated_request.chunk_end_offset
 
         case Shapes.get_merged_log_stream(
-               updated_request.api,
+               stack_id,
                shape_handle,
                since: since_offset,
                up_to: end_offset,

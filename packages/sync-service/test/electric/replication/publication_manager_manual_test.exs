@@ -45,7 +45,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
       Electric.ShapeCache.ShapeCleaner,
       :remove_shapes_for_relations,
       [mode: :shared],
-      fn relations, _ ->
+      fn relations, _stack_id ->
         send(test_pid, {:remove_shapes_for_relations, relations})
       end
     )
@@ -66,7 +66,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
                    "Database table \"public.items\" is missing from the publication \"#{ctx.publication_name}\" and " <>
                      "the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it",
                    fn ->
-                     PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
+                     PublicationManager.add_shape(ctx.stack_id, @shape_handle, shape)
                    end
 
       assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}
@@ -80,7 +80,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
       assert_raise Electric.DbConfigurationError,
                    "Database table \"public.items\" does not have its replica identity set to FULL",
                    fn ->
-                     PublicationManager.add_shape(@shape_handle, shape, ctx.pub_mgr_opts)
+                     PublicationManager.add_shape(ctx.stack_id, @shape_handle, shape)
                    end
 
       assert_receive {:remove_shapes_for_relations, [{_oid, {"public", "items"}}]}

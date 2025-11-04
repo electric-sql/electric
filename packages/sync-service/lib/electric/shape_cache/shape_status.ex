@@ -1,6 +1,6 @@
 defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @moduledoc """
-  Behaviour defining the ShapeStatus functions to be used in mocks
+  Behaviour defining the ShapeStatus functions
   """
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
@@ -60,6 +60,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
+
+  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
 
   require Logger
 
@@ -233,12 +235,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
            2,
            nil
          ) do
-      nil -> nil
-      shape_handle when is_binary(shape_handle) -> get_existing_shape(stack_ref, shape_handle)
+      nil ->
+        nil
+
+      shape_handle when is_shape_handle(shape_handle) ->
+        get_existing_shape(stack_ref, shape_handle)
     end
   end
 
-  def get_existing_shape(stack_ref, shape_handle) when is_binary(shape_handle) do
+  def get_existing_shape(stack_ref, shape_handle) when is_shape_handle(shape_handle) do
     case :ets.lookup_element(
            shape_meta_table(stack_ref),
            {@shape_meta_data, shape_handle},
@@ -358,7 +363,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @impl true
   def shape_meta_table(table) when is_atom(table), do: table
   def shape_meta_table(opts) when is_list(opts), do: shape_meta_table(opts[:stack_id])
-  def shape_meta_table(stack_id) when is_binary(stack_id), do: :"#{stack_id}:shape_meta_table"
+
+  def shape_meta_table(stack_id) when is_stack_id(stack_id), do: :"#{stack_id}:shape_meta_table"
 
   if Mix.env() == :test do
     def shape_meta_table(state) when is_map(state), do: state.shape_meta_table
@@ -368,7 +374,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def shape_last_used_table(table) when is_atom(table), do: table
   def shape_last_used_table(opts) when is_list(opts), do: shape_last_used_table(opts[:stack_id])
 
-  def shape_last_used_table(stack_id) when is_binary(stack_id),
+  def shape_last_used_table(stack_id) when is_stack_id(stack_id),
     do: :"#{stack_id}:shape_last_used_table"
 
   if Mix.env() == :test do

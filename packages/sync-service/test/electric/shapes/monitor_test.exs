@@ -33,14 +33,14 @@ defmodule Electric.Shapes.MonitorTest do
 
     parent = self()
 
-    start_link_supervised!(
-      {Monitor,
-       stack_id: ctx.stack_id,
-       storage: ctx.storage,
-       publication_manager: ctx.publication_manager,
-       on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end,
-       on_cleanup: fn shape_handle -> send(parent, {:on_cleanup, shape_handle}) end}
-    )
+    start_link_supervised!({
+      Monitor,
+      # publication_manager: ctx.publication_manager,
+      stack_id: ctx.stack_id,
+      storage: ctx.storage,
+      on_remove: fn shape_handle, pid -> send(parent, {:remove, shape_handle, pid}) end,
+      on_cleanup: fn shape_handle -> send(parent, {:on_cleanup, shape_handle}) end
+    })
 
     :ok
   end

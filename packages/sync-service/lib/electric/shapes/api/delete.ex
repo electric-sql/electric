@@ -40,7 +40,7 @@ defmodule Electric.Shapes.Api.Delete do
 
   defp get_shape_handle(%Request{} = request) do
     %{params: %{shape_definition: shape}, api: api} = request
-    Shapes.get_shape(api, shape)
+    Shapes.get_shape(api.stack_id, shape)
   end
 
   # delete request that just has the shape handle

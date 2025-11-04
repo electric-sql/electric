@@ -73,7 +73,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       Electric.ShapeCache.ShapeCleaner,
       :remove_shapes_for_relations,
       [mode: :shared],
-      fn relations, _ ->
+      fn relations, _stack_id ->
         send(test_pid, {:remove_shapes_for_relations, relations})
       end
     )
@@ -99,14 +99,14 @@ defmodule Electric.Replication.PublicationManagerTest do
     @tag existing_where_clauses: []
     test "immediately completes if nothing to restore", ctx do
       notify_alter_queries()
-      assert :ok == PublicationManager.wait_for_restore(ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.wait_for_restore(ctx.stack_id)
       assert_pub_tables(ctx, [])
       refute_receive {:alter_publication, _, _}
     end
 
     @tag existing_where_clauses: [@where_clause_1]
     test "restores existing shapes", ctx do
-      assert :ok == PublicationManager.wait_for_restore(ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.wait_for_restore(ctx.stack_id)
       assert_pub_tables(ctx, [ctx.relation])
     end
   end
@@ -114,7 +114,7 @@ defmodule Electric.Replication.PublicationManagerTest do
   describe "add_shape/3" do
     test "adds a single relation", ctx do
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
 
       assert_pub_tables(ctx, [ctx.relation])
     end
@@ -130,13 +130,13 @@ defmodule Electric.Replication.PublicationManagerTest do
       }
 
       if supported_features.supports_generated_column_replication do
-        assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+        assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
         assert_pub_tables(ctx, [ctx.relation])
       else
         assert_raise Electric.DbConfigurationError,
                      ~r/does not publish generated columns/,
                      fn ->
-                       PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+                       PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
                      end
       end
     end
@@ -145,8 +145,8 @@ defmodule Electric.Replication.PublicationManagerTest do
       notify_alter_queries()
       shape1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
       shape2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, ctx.pub_mgr_opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape2, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape2)
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
@@ -166,10 +166,10 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
       shape2 = generate_shape({alt_relation_oid, alt_relation}, @where_clause_1)
 
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1)
       assert_pub_tables(ctx, [ctx.relation])
 
-      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape2)
       assert_pub_tables(ctx, [ctx.relation, alt_relation])
     end
 
@@ -180,9 +180,9 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
       shape3 = generate_shape(ctx.relation_with_oid, @where_clause_3)
 
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape1, ctx.pub_mgr_opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape2, ctx.pub_mgr_opts)
-      assert :ok == PublicationManager.add_shape(@shape_handle_3, shape3, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape2)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_3, shape3)
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
@@ -193,20 +193,20 @@ defmodule Electric.Replication.PublicationManagerTest do
          ctx do
       notify_alter_queries()
       shape_1 = generate_shape(ctx.relation_with_oid, @where_clause_1)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape_1)
       assert_receive {:alter_publication, _, _}
       assert_pub_tables(ctx, [ctx.relation])
 
       shape_2 = generate_shape(ctx.relation_with_oid, @where_clause_2)
-      assert :ok == PublicationManager.add_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape_2)
       refute_receive {:alter_publication, _, _}, 200
       assert_pub_tables(ctx, [ctx.relation])
 
-      assert :ok == PublicationManager.remove_shape(@shape_handle_2, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.remove_shape(ctx.stack_id, @shape_handle_2)
       refute_receive {:alter_publication, _, _}, 200
       assert_pub_tables(ctx, [ctx.relation])
 
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1)
       assert_receive {:alter_publication, _, _}
       assert_pub_tables(ctx, [])
     end
@@ -222,11 +222,11 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
 
       assert_raise RuntimeError, "some error", fn ->
-        PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+        PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
       end
 
       assert_raise RuntimeError, "some error", fn ->
-        PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+        PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
       end
     end
   end
@@ -234,25 +234,25 @@ defmodule Electric.Replication.PublicationManagerTest do
   describe "remove_shape/2" do
     test "removes single relation when last shape removed", ctx do
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
       assert_pub_tables(ctx, [ctx.relation])
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1)
       assert_pub_tables(ctx, [])
     end
 
     @tag update_debounce_timeout: 50
     test "subsequent additions should wait for reconfiguration", ctx do
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
-      assert :ok == PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
       assert_pub_tables(ctx, [ctx.relation])
 
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1)
       assert_pub_tables(ctx, [])
 
       test_pid = self()
 
       run_async(fn ->
-        res = PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+        res = PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
         send(test_pid, {:add_shape_result, res})
       end)
 
@@ -265,18 +265,18 @@ defmodule Electric.Replication.PublicationManagerTest do
     test "deduplicates shape handle operations", ctx do
       notify_alter_queries()
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
-      assert :ok = PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+      assert :ok = PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
 
       task1 =
         Task.async(fn ->
-          PublicationManager.add_shape(@shape_handle_2, shape, ctx.pub_mgr_opts)
+          PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape)
         end)
 
       task2 =
-        Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts) end)
+        Task.async(fn -> PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1) end)
 
       task3 =
-        Task.async(fn -> PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts) end)
+        Task.async(fn -> PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1) end)
 
       Task.await_many([task1, task2, task3])
 
@@ -294,17 +294,17 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       task1 =
         Task.async(fn ->
-          PublicationManager.add_shape(@shape_handle_1, shape1, ctx.pub_mgr_opts)
+          PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1)
         end)
 
       task2 =
         Task.async(fn ->
-          PublicationManager.add_shape(@shape_handle_2, shape2, ctx.pub_mgr_opts)
+          PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape2)
         end)
 
       task3 =
         Task.async(fn ->
-          PublicationManager.add_shape(@shape_handle_3, shape3, ctx.pub_mgr_opts)
+          PublicationManager.add_shape(ctx.stack_id, @shape_handle_3, shape3)
         end)
 
       Task.await_many([task1, task2, task3])
@@ -312,7 +312,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_pub_tables(ctx, [ctx.relation])
 
       # Remove one handle; relation should stay
-      assert :ok == PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
+      assert :ok == PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1)
       refute_receive {:alter_publication, _, _}
       assert_pub_tables(ctx, [ctx.relation])
     end
@@ -326,12 +326,12 @@ defmodule Electric.Replication.PublicationManagerTest do
       test_pid = self()
 
       run_async(fn ->
-        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, ctx.pub_mgr_opts)
+        :ok = PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1)
         send(test_pid, :task1_done)
       end)
 
       run_async(fn ->
-        :ok = PublicationManager.add_shape(@shape_handle_1, shape1, ctx.pub_mgr_opts)
+        :ok = PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1)
         send(test_pid, :task2_done)
       end)
 
@@ -354,14 +354,14 @@ defmodule Electric.Replication.PublicationManagerTest do
       add_task =
         Task.async(fn ->
           assert_raise RuntimeError, "Shape removed before updating publication", fn ->
-            PublicationManager.add_shape(@shape_handle_1, shape1, ctx.pub_mgr_opts)
+            PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape1)
           end
         end)
 
       remove_task =
         Task.async(fn ->
           Process.sleep(5)
-          :ok = PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts)
+          :ok = PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1)
         end)
 
       Task.await_many([add_task, remove_task])
@@ -393,7 +393,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_raise Electric.DbConfigurationError,
                    "Publication #{Utils.quote_name(ctx.publication_name)} not found in the database",
                    fn ->
-                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                     PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape_1)
                    end
 
       assert_receive :connection_subsystem_restarted
@@ -414,7 +414,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                    "Publication #{Utils.quote_name(ctx.publication_name)} does not " <>
                      "publish all required operations: INSERT, UPDATE, DELETE, TRUNCATE",
                    fn ->
-                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                     PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape_1)
                    end
 
       assert_receive :connection_subsystem_restarted
@@ -433,7 +433,7 @@ defmodule Electric.Replication.PublicationManagerTest do
                      "the publication #{Utils.quote_name(ctx.publication_name)} and " <>
                      "Electric lacks privileges to add it",
                    fn ->
-                     PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+                     PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape_1)
                    end
 
       assert_receive {:remove_shapes_for_relations, [^relation_with_oid]}
@@ -467,7 +467,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       shape_1 = generate_shape(relation_not_owned_with_oid, @where_clause_1)
 
       assert_raise Postgrex.Error, ~r/insufficient_privilege/, fn ->
-        PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+        PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape_1)
       end
 
       assert_receive {:remove_shapes_for_relations, [^relation_not_owned_with_oid]}
@@ -483,12 +483,12 @@ defmodule Electric.Replication.PublicationManagerTest do
       task =
         Task.async(fn ->
           assert_raise Postgrex.Error, ~r/insufficient_privilege/, fn ->
-            PublicationManager.add_shape(@shape_handle_1, shape_1, ctx.pub_mgr_opts)
+            PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape_1)
           end
         end)
 
       # this should succeed, even if the other one fails
-      assert :ok = PublicationManager.add_shape(@shape_handle_2, shape_2, ctx.pub_mgr_opts)
+      assert :ok = PublicationManager.add_shape(ctx.stack_id, @shape_handle_2, shape_2)
 
       Task.await(task)
 
@@ -506,7 +506,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       run_async(fn ->
         assert_raise RuntimeError, fn ->
-          PublicationManager.add_shape(shape_handle, shape, ctx.pub_mgr_opts)
+          PublicationManager.add_shape(ctx.stack_id, shape_handle, shape)
         end
       end)
 
@@ -519,7 +519,7 @@ defmodule Electric.Replication.PublicationManagerTest do
       assert_pub_tables(ctx, [ctx.relation])
 
       # after restart, the publication manager should repopulate the publication
-      PublicationManager.remove_shape(shape_handle, ctx.pub_mgr_opts)
+      PublicationManager.remove_shape(ctx.stack_id, shape_handle)
       assert_pub_tables(ctx, [])
     end
 
@@ -530,9 +530,9 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       configurator_name = PublicationManager.Configurator.name(ctx.stack_id)
 
-      assert :ok = PublicationManager.add_shape(@shape_handle_1, shape, ctx.pub_mgr_opts)
+      assert :ok = PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
       assert_pub_tables(ctx, [ctx.relation])
-      run_async(fn -> PublicationManager.remove_shape(@shape_handle_1, ctx.pub_mgr_opts) end)
+      run_async(fn -> PublicationManager.remove_shape(ctx.stack_id, @shape_handle_1) end)
       GenServer.stop(configurator_name)
       assert_pub_tables(ctx, [])
     end
