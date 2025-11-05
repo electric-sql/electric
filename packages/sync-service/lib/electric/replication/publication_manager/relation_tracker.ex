@@ -13,7 +13,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
-  alias Electric.Utils
 
   require Logger
 
@@ -66,12 +65,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     server = Access.get(opts, :server, name(opts))
     pub_filter = get_publication_filter_from_shape(shape)
 
-    case OpenTelemetry.with_span(
-           "publication_manager.add_shape",
-           [shape_handle: shape_handle, relation: Utils.relation_to_sql(shape.root_table)],
-           Access.get(opts, :stack_id),
-           fn -> GenServer.call(server, {:add_shape, shape_handle, pub_filter}) end
-         ) do
+    case GenServer.call(server, {:add_shape, shape_handle, pub_filter}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
