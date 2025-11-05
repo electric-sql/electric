@@ -18,6 +18,10 @@ defmodule Electric.Shapes.ConsumerSupervisor do
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: :timer.seconds(30)
             ],
+            snapshot_waiting_for_data_interval: [
+              type: :non_neg_integer,
+              default: :timer.seconds(5)
+            ],
             hibernate_after: [type: :integer, required: true],
             action: [type: {:in, [:restore, :create]}, default: :create],
             otel_ctx: [type: :any, required: false]
@@ -96,6 +100,7 @@ defmodule Electric.Shapes.ConsumerSupervisor do
          shape: config.shape,
          shape_handle: shape_handle,
          snapshot_timeout_to_first_data: config.snapshot_timeout_to_first_data,
+         snapshot_waiting_for_data_interval: config.snapshot_waiting_for_data_interval,
          stack_id: config.stack_id,
          storage: shape_storage
        }},

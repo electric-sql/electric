@@ -65,6 +65,10 @@ defmodule Electric.ShapeCache do
             snapshot_timeout_to_first_data: [
               type: {:or, [:non_neg_integer, {:in, [:infinity]}]},
               default: :timer.seconds(30)
+            ],
+            snapshot_waiting_for_data_interval: [
+              type: :non_neg_integer,
+              default: :timer.seconds(5)
             ]
           )
 
@@ -171,13 +175,16 @@ defmodule Electric.ShapeCache do
         try do
           Electric.Shapes.Consumer.await_snapshot_start(
             %{stack_id: stack_id, shape_handle: shape_handle},
-            15_000
+            Access.get(opts, :timeout, 15_000)
           )
         catch
           :exit, {:timeout, {GenServer, :call, _}} ->
             # Please note that :await_snapshot_start can also return a timeout error as well
             # as the call timing out and being handled here. A timeout error will be returned
-            # by :await_snapshot_start if the PublicationManager queries take longer than 5 seconds.
+            # by :await_snapshot_start if the PublicationManager queries take too long,
+            # or if the snapshot itself takes too long to return any data. If the call itself
+            # times out it is likely that there is a surge of new shapes and consumers are blocked
+            # on registering themselves with the shape log collector.
             Logger.error("Failed to await snapshot start for shape #{shape_handle}: timeout")
             {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
 
@@ -234,7 +241,8 @@ defmodule Electric.ShapeCache do
       consumer_supervisor: opts.consumer_supervisor,
       subscription: nil,
       shape_hibernate_after: opts.shape_hibernate_after,
-      snapshot_timeout_to_first_data: opts.snapshot_timeout_to_first_data
+      snapshot_timeout_to_first_data: opts.snapshot_timeout_to_first_data,
+      snapshot_waiting_for_data_interval: opts.snapshot_waiting_for_data_interval
     }
 
     {:ok, state, {:continue, :recover_shapes}}
@@ -400,6 +408,7 @@ defmodule Electric.ShapeCache do
            hibernate_after: state.shape_hibernate_after,
            otel_ctx: otel_ctx,
            snapshot_timeout_to_first_data: state.snapshot_timeout_to_first_data,
+           snapshot_waiting_for_data_interval: state.snapshot_waiting_for_data_interval,
            action: action
          ) do
       {:ok, supervisor_pid} ->

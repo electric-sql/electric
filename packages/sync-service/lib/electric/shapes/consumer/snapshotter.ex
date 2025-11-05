@@ -86,7 +86,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                       :db_pool,
                       :storage,
                       :chunk_bytes_threshold,
-                      :snapshot_timeout_to_first_data
+                      :snapshot_timeout_to_first_data,
+                      :snapshot_waiting_for_data_interval
                     ])
                   )
                 else
@@ -167,7 +168,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       end)
 
     ref = task.ref
-    timeout_to_first_data = Map.get(ctx, :snapshot_timeout_to_first_data, :timer.seconds(30))
+    timeout_to_first_data = Map.fetch!(ctx, :snapshot_timeout_to_first_data)
 
     receive do
       {:ready_to_stream, task_pid, start_time} ->
@@ -183,7 +184,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             Process.demonitor(ref, [:flush])
             Task.Supervisor.terminate_child(supervisor, task_pid)
 
-            raise SnapshotError.slow_snapshot_query(timeout_to_first_data)
+            raise SnapshotError.slow_snapshot_query(timeout_to_first_data, cancelled?: true)
 
           :data_received ->
             Task.await(task, :infinity) |> handle_task_exit()
@@ -224,7 +225,8 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           db_pool: db_pool,
           storage: storage,
           stack_id: stack_id,
-          chunk_bytes_threshold: chunk_bytes_threshold
+          chunk_bytes_threshold: chunk_bytes_threshold,
+          snapshot_waiting_for_data_interval: waiting_for_data_interval
         }
       ) do
     shape_attrs = shape_attrs(shape_handle, shape)
@@ -288,26 +290,39 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             stream =
               Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
               |> Stream.transform(
-                fn -> false end,
-                fn item, acc ->
-                  if not acc do
+                fn ->
+                  start_time = System.monotonic_time(:millisecond)
+
+                  {:ok, tref} =
+                    :timer.send_interval(
+                      waiting_for_data_interval,
+                      consumer,
+                      {:waiting_for_snapshot_data, start_time}
+                    )
+
+                  tref
+                end,
+                fn item, waiting_tref ->
+                  if waiting_tref do
+                    :timer.cancel(waiting_tref)
                     send(task_parent, :data_received)
                     GenServer.cast(consumer, {:snapshot_started, shape_handle})
                   end
 
-                  {[item], true}
+                  {[item], nil}
                 end,
-                fn acc ->
-                  if not acc do
+                fn waiting_tref ->
+                  if waiting_tref do
                     # The stream has been read to the end but we haven't seen a single item in
                     # it. Notify `consumer` anyway since an empty file will have been created by
                     # the storage implementation for the API layer to read the snapshot data
                     # from.
+                    :timer.cancel(waiting_tref)
                     send(task_parent, :data_received)
                     GenServer.cast(consumer, {:snapshot_started, shape_handle})
                   end
 
-                  {[], acc}
+                  {[], nil}
                 end,
                 fn acc ->
                   # noop after fun just to be able to specify the last fun which is only

@@ -284,6 +284,13 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
+  def handle_info({:waiting_for_snapshot_data, snapshot_start_time}, state) do
+    wait_duration_ms = System.monotonic_time() - snapshot_start_time
+    Logger.debug("Waiting for snapshot data for #{state.shape_handle} for #{wait_duration_ms}ms")
+    error = SnapshotError.slow_snapshot_query(wait_duration_ms, cancelled?: false)
+    {:noreply, reply_to_snapshot_waiters(state, {:error, error}), state.hibernate_after}
+  end
+
   # We're trapping exists so that `terminate` is called to clean up the writer,
   # otherwise we respect the OTP exit protocol.
   def handle_info({:EXIT, _from, reason}, state) do

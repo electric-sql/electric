@@ -17,11 +17,17 @@ defmodule Electric.SnapshotError do
     }
   end
 
-  def slow_snapshot_query(ttf_ms) do
+  def slow_snapshot_query(ttf_ms, cancelled?: cancelled?) do
+    message =
+      if cancelled?,
+        do: "Snapshot query took too long to return data (cancelled after #{ttf_ms}ms).",
+        else: "Snapshot query is taking a long time to return data (waiting for #{ttf_ms}ms)."
+
     %SnapshotError{
       type: :slow_snapshot_query,
       message:
-        "Snapshot query took too long to return data (cancelled after #{ttf_ms}ms). Please ensure snapshot queries are using an index to avoid taking up all database connections."
+        message <>
+          " Please ensure snapshot queries are using an index to avoid taking up all database connections."
     }
   end
 

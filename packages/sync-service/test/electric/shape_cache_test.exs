@@ -479,11 +479,16 @@ defmodule Electric.ShapeCacheTest do
              ] = stream_to_list(stream, "a")
     end
 
-    @tag shape_cache_opts_overrides: [snapshot_timeout_to_first_data: 500]
-    test "crashes when initial snapshot query fails to return data quickly enough", %{
-      shape_cache_opts: opts,
-      shape: shape
-    } do
+    @tag shape_cache_opts_overrides: [
+           snapshot_timeout_to_first_data: 500,
+           snapshot_waiting_for_data_interval: 250
+         ]
+    test "notifies and eventually crashes when initial snapshot query fails to return data quickly enough",
+         %{
+           stack_id: stack_id,
+           shape_cache_opts: opts,
+           shape: shape
+         } do
       alias Electric.Replication.Eval.Parser
       where_clause = Parser.parse_and_validate_expression!("TRUE", refs: %{})
       # Insert a fake slow query
@@ -492,8 +497,29 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
 
-      assert {:error, %Electric.SnapshotError{type: :slow_snapshot_query}} =
+      consumer_pid = Electric.Shapes.Consumer.whereis(stack_id, shape_handle)
+      consumer_ref = Process.monitor(consumer_pid)
+
+      # should first error after some time notifying that snapshot is taking too long,
+      # but not crash the snapshot process
+      assert {:error,
+              %Electric.SnapshotError{
+                type: :slow_snapshot_query,
+                message: "Snapshot query is taking a long time to return data (waiting for" <> _
+              }} =
                ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      refute_receive {:DOWN, ^consumer_ref, :process, _pid, _reason}, 50
+
+      # should eventually error out and crash the snapshot process with an appropriate error
+      assert {:error,
+              %Electric.SnapshotError{
+                type: :slow_snapshot_query,
+                message: "Snapshot query took too long to return data (cancelled after" <> _
+              }} =
+               ShapeCache.await_snapshot_start(shape_handle, opts)
+
+      assert_receive {:DOWN, ^consumer_ref, :process, _pid, _reason}, @shape_cleanup_timeout
     end
   end
 
@@ -915,6 +941,21 @@ defmodule Electric.ShapeCacheTest do
 
       assert {:error, %RuntimeError{message: "Shape meta tables not found"}} =
                Task.await(wait_task, 500)
+    end
+
+    test "should fail with runtime error if call times out", ctx do
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _, _ ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
+        Process.sleep(100)
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+
+      assert {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}} =
+               ShapeCache.await_snapshot_start(shape_handle, opts ++ [timeout: 50])
     end
   end
 
