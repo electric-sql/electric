@@ -31,15 +31,7 @@ defmodule Electric.Shapes.FilterTest do
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
         |> Filter.add_shape("s4", Shape.new!("t2", where: "id = 2", inspector: @inspector))
 
-      insert =
-        %Transaction{
-          changes: [
-            %NewRecord{
-              relation: {"public", "t1"},
-              record: %{"id" => "2"}
-            }
-          ]
-        }
+      insert = %NewRecord{relation: {"public", "t1"}, record: %{"id" => "2"}}
 
       assert Filter.affected_shapes(filter, insert) == MapSet.new(["s2"])
     end
@@ -52,15 +44,7 @@ defmodule Electric.Shapes.FilterTest do
         |> Filter.add_shape("s3", Shape.new!("t1", where: "id = 3", inspector: @inspector))
         |> Filter.add_shape("s4", Shape.new!("t2", where: "id = 2", inspector: @inspector))
 
-      delete =
-        %Transaction{
-          changes: [
-            %DeletedRecord{
-              relation: {"public", "t1"},
-              old_record: %{"id" => "2"}
-            }
-          ]
-        }
+      delete = %DeletedRecord{relation: {"public", "t1"}, old_record: %{"id" => "2"}}
 
       assert Filter.affected_shapes(filter, delete) == MapSet.new(["s2"])
     end
@@ -74,16 +58,11 @@ defmodule Electric.Shapes.FilterTest do
         |> Filter.add_shape("s4", Shape.new!("t1", where: "id = 4", inspector: @inspector))
         |> Filter.add_shape("s5", Shape.new!("t2", where: "id = 2", inspector: @inspector))
 
-      update =
-        %Transaction{
-          changes: [
-            %UpdatedRecord{
-              relation: {"public", "t1"},
-              record: %{"id" => "2"},
-              old_record: %{"id" => "3"}
-            }
-          ]
-        }
+      update = %UpdatedRecord{
+        relation: {"public", "t1"},
+        record: %{"id" => "2"},
+        old_record: %{"id" => "3"}
+      }
 
       assert Filter.affected_shapes(filter, update) == MapSet.new(["s2", "s3"])
     end
@@ -180,7 +159,7 @@ defmodule Electric.Shapes.FilterTest do
         |> Filter.add_shape("s7", Shape.new!("t2", where: "id > 7", inspector: @inspector))
         |> Filter.add_shape("s8", Shape.new!("t2", where: "id > 8", inspector: @inspector))
 
-      truncation = %Transaction{changes: [%TruncatedRelation{relation: {"public", "t1"}}]}
+      truncation = %TruncatedRelation{relation: {"public", "t1"}}
 
       assert Filter.affected_shapes(filter, truncation) == MapSet.new(["s1", "s2", "s3", "s4"])
     end
@@ -511,13 +490,9 @@ defmodule Electric.Shapes.FilterTest do
   end
 
   defp change(table, record) do
-    %Transaction{
-      changes: [
-        %NewRecord{
-          relation: {"public", table},
-          record: record
-        }
-      ]
+    %NewRecord{
+      relation: {"public", table},
+      record: record
     }
   end
 end

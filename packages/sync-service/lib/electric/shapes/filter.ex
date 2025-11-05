@@ -10,6 +10,7 @@ defmodule Electric.Shapes.Filter do
   the table specific logic to the `Filter.WhereCondition` module.
   """
 
+  alias Electric.Replication.Changes
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Relation
@@ -93,7 +94,7 @@ defmodule Electric.Shapes.Filter do
   Returns the shape IDs for all shapes that have been added to the filter
   that are affected by the given change.
   """
-  @spec affected_shapes(Filter.t(), Transaction.t() | Relation.t()) :: MapSet.t(shape_id())
+  @spec affected_shapes(Filter.t(), Changes.change() | Relation.t()) :: MapSet.t(shape_id())
   def affected_shapes(%Filter{} = filter, change) do
     OpenTelemetry.timed_fun("filter.affected_shapes.duration_µs", fn ->
       try do
@@ -121,12 +122,6 @@ defmodule Electric.Shapes.Filter do
         into: MapSet.new() do
       shape_id
     end
-  end
-
-  defp shapes_affected_by_change(%Filter{} = filter, %Transaction{changes: changes}) do
-    changes
-    |> Enum.map(&affected_shapes(filter, &1))
-    |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
   end
 
   defp shapes_affected_by_change(%Filter{} = filter, %NewRecord{
