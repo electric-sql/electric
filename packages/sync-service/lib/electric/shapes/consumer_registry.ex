@@ -88,7 +88,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @doc """
-  Calls many GenServers asynchronously with different messages and waits
+  Calls many GenServers asynchronously with their message and waits
   for their responses before returning.
 
   Returns `:ok` once all GenServers have responded or have died.
