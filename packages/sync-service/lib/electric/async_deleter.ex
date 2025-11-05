@@ -164,6 +164,9 @@ defmodule Electric.AsyncDeleter do
 
   @impl true
   def terminate(reason, state) do
+    # We want to avoid AsyncDeleter being brought back up while a cleanup task is still running,
+    # which could lead to concurrent `rm_rf` calls on the trash directory, so we explicitly kill
+    # it as part of this process termination.
     if not is_nil(state.cleanup_task) do
       Logger.debug("AsyncDeleter: terminating, killing cleanup task due to #{inspect(reason)}")
       {task, _start_time} = state.cleanup_task
