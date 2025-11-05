@@ -72,7 +72,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   end
 
   @impl Electric.Replication.PublicationManager
-  def remove_shape(shape_handle, opts) do
+  def remove_shape(shape_handle, opts \\ []) do
     server = Access.get(opts, :server, name(opts))
 
     case GenServer.call(server, {:remove_shape, shape_handle}) do
