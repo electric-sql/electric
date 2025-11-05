@@ -14,7 +14,6 @@ defmodule Electric.AsyncDeleter do
        first queued delete before the batch is removed. Defaults to 10000 ms.
   """
 
-
   use GenServer
   require Logger
 
