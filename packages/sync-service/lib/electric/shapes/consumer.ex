@@ -616,7 +616,12 @@ defmodule Electric.Shapes.Consumer do
 
   # Apply shape filter to keep only relevant changes, returning the list of changes.
   # Marks the last change, and infers the last offset after possible splits.
-  defp filter_changes(changes, shape, extra_refs, change_acc \\ [], total_ops_acc \\ 0)
+  defp filter_changes(changes, shape, extra_refs) do
+    OpenTelemetry.timed_fun("filter_changes.duration_µs", fn ->
+      filter_changes(changes, shape, extra_refs, [], 0)
+    end)
+  end
+
   defp filter_changes([], _shape, _, [], 0), do: {[], 0, nil}
 
   defp filter_changes([], _shape, _, [change | rest], total_ops),
