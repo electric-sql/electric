@@ -151,7 +151,7 @@ defmodule Electric.AsyncDeleter do
     {:noreply,
      %{
        state
-       | pending: Enum.concat(state.in_progress, state.pending),
+       | pending: state.in_progress ++ state.pending,
          in_progress: [],
          cleanup_task: nil
      }, {:continue, :schedule_cleanup}}
