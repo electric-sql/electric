@@ -66,16 +66,16 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.insert_new(table, [{shape_handle, pid}])
   end
 
-  @spec publish([shape_handle()], term(), t()) :: :ok
-  def publish(shape_handles, event, registry_state) do
+  @spec publish(%{shape_handle() => term()}, t()) :: :ok
+  def publish(handle_events, registry_state) do
     %{table: table} = registry_state
 
-    shape_handles
-    |> Enum.flat_map(fn handle ->
-      (consumer_pid(handle, table) || start_consumer!(handle, registry_state))
-      |> List.wrap()
-    end)
-    |> broadcast(event)
+    for {handle, event} <- handle_events,
+        pid = consumer_pid(handle, table) || start_consumer!(handle, registry_state),
+        pid != nil do
+      {pid, event}
+    end
+    |> broadcast()
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
@@ -88,7 +88,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @doc """
-  Calls many GenServers asynchronously with the same message and waits
+  Calls many GenServers asynchronously with different messages and waits
   for their responses before returning.
 
   Returns `:ok` once all GenServers have responded or have died.
@@ -96,12 +96,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
   There is no timeout so if the GenServers do not respond or die, this
   function will block indefinitely.
   """
-  @spec broadcast([pid()], term()) :: :ok
-  def broadcast(pids, message) do
+  @spec broadcast([{pid(), term()}]) :: :ok
+  def broadcast(pid_messages) do
     # Based on OTP GenServer.call, see:
     # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
-    pids
-    |> Enum.map(fn pid ->
+    pid_messages
+    |> Enum.map(fn {pid, message} ->
       ref = Process.monitor(pid)
       send(pid, {:"$gen_call", {self(), ref}, message})
       ref

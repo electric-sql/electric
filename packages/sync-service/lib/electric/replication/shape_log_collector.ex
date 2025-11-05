@@ -340,9 +340,9 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp publish(state, event) do
     OpenTelemetry.start_interval("shape_log_collector.affected_shapes")
 
-    affected_shapes = Filter.affected_shapes(state.filter, event)
+    event_by_shape_id = Filter.event_by_shape_id(state.filter, event)
 
-    affected_shape_count = MapSet.size(affected_shapes)
+    affected_shape_count = map_size(event_by_shape_id)
 
     OpenTelemetry.add_span_attributes(
       "shape_log_collector.affected_shape_count": affected_shape_count
@@ -351,9 +351,18 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval("shape_log_collector.publish")
     context = OpenTelemetry.get_current_context()
 
+    affected_shapes = event_by_shape_id |> Map.keys() |> MapSet.new()
+
     for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
       # Each publish is synchronous, so layers will be processed in order
-      ConsumerRegistry.publish(layer, {:handle_event, event, context}, state.registry_state)
+      handle_events =
+        event_by_shape_id
+        |> Map.take(MapSet.to_list(layer))
+        |> Map.new(fn {handle, shape_event} ->
+          {handle, {:handle_event, shape_event, context}}
+        end)
+
+      ConsumerRegistry.publish(handle_events, state.registry_state)
     end
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")

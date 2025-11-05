@@ -57,6 +57,21 @@ defmodule Electric.Shapes.FilterTest do
                }
              }
     end
+
+    test "returns a relation for all shapes it affects" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("A", Shape.new!("t1", where: "id = 1", inspector: @inspector))
+        |> Filter.add_shape("B", Shape.new!("t2", where: "id = 2", inspector: @inspector))
+        |> Filter.add_shape("C", Shape.new!("t1", where: "id = 3", inspector: @inspector))
+
+      relation_change = %Relation{schema: "public", table: "t1"}
+
+      assert Filter.event_by_shape_id(filter, relation_change) == %{
+               "A" => relation_change,
+               "C" => relation_change
+             }
+    end
   end
 
   describe "affected_shapes/2" do

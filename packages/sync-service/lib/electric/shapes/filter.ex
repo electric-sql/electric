@@ -90,8 +90,19 @@ defmodule Electric.Shapes.Filter do
     %Filter{filter | tables: tables, shapes: Map.delete(filter.shapes, shape_id)}
   end
 
+  @doc """
+  Returns a map of shape IDs to the event for that shape. Only shapes affected by the event
+  will be included in the returned map.
+  """
+  @spec event_by_shape_id(Filter.t(), Changes.event()) :: %{shape_id() => Changes.event()}
   def event_by_shape_id(%Filter{} = filter, %Transaction{} = transaction) do
     transaction_by_shape_id(filter, transaction)
+  end
+
+  def event_by_shape_id(%Filter{} = filter, %Relation{} = event) do
+    for shape_id <- affected_shapes(filter, event), into: %{} do
+      {shape_id, event}
+    end
   end
 
   @doc """

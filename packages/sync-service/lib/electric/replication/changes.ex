@@ -32,6 +32,7 @@ defmodule Electric.Replication.Changes do
           | Changes.DeletedRecord.t()
 
   @type change() :: data_change() | Changes.TruncatedRelation.t()
+  @type event() :: Changes.Transaction.t() | Changes.Relation.t()
 
   defmodule Transaction do
     alias Electric.Replication.Changes
