@@ -356,11 +356,10 @@ defmodule Electric.Replication.ShapeLogCollector do
     for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
       # Each publish is synchronous, so layers will be processed in order
       handle_events =
-        event_by_shape_id
-        |> Map.take(MapSet.to_list(layer))
-        |> Map.new(fn {handle, shape_event} ->
+        for handle <- layer do
+          shape_event = Map.fetch!(event_by_shape_id, handle)
           {handle, {:handle_event, shape_event, context}}
-        end)
+        end
 
       ConsumerRegistry.publish(handle_events, state.registry_state)
     end
