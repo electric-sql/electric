@@ -90,6 +90,10 @@ defmodule Electric.Shapes.Filter do
     %Filter{filter | tables: tables, shapes: Map.delete(filter.shapes, shape_id)}
   end
 
+  def event_by_shape_id(%Filter{} = filter, %Transaction{} = transaction) do
+    transaction_by_shape_id(filter, transaction)
+  end
+
   @doc """
   Returns the shape IDs for all shapes that have been added to the filter
   that are affected by the given change.
@@ -170,5 +174,29 @@ defmodule Electric.Shapes.Filter do
       nil -> MapSet.new()
       condition -> WhereCondition.all_shape_ids(condition)
     end
+  end
+
+  defp transaction_by_shape_id(filter, %Transaction{changes: changes}) do
+    transaction_by_shape_id(filter, Enum.reverse(changes), %{})
+  end
+
+  defp transaction_by_shape_id(_filter, [], transaction_map), do: transaction_map
+
+  defp transaction_by_shape_id(%Filter{} = filter, [change | changes], transaction_map) do
+    transaction_map =
+      filter
+      |> affected_shapes(change)
+      |> Enum.reduce(transaction_map, fn shape_id, transaction_map ->
+        Map.update(
+          transaction_map,
+          shape_id,
+          %Transaction{changes: [change]},
+          fn %Transaction{changes: existing} ->
+            %Transaction{changes: [change | existing]}
+          end
+        )
+      end)
+
+    transaction_by_shape_id(filter, changes, transaction_map)
   end
 end

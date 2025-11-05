@@ -22,6 +22,43 @@ defmodule Electric.Shapes.FilterTest do
                ]
              )
 
+  describe "event_by_shape_id/2" do
+    test "returns each shape_id that a transaction affects with the filtered event for it" do
+      filter =
+        Filter.new()
+        |> Filter.add_shape("A", Shape.new!("t1", where: "id in (1, 2)", inspector: @inspector))
+        |> Filter.add_shape("B", Shape.new!("t1", where: "id in (2, 3)", inspector: @inspector))
+        |> Filter.add_shape("C", Shape.new!("t1", where: "id in (3, 4)", inspector: @inspector))
+        |> Filter.add_shape("D", Shape.new!("t1", where: "id in (4, 5)", inspector: @inspector))
+
+      transaction = %Transaction{
+        changes: [
+          %NewRecord{relation: {"public", "t1"}, record: %{"id" => "3"}},
+          %NewRecord{relation: {"public", "t1"}, record: %{"id" => "4"}}
+        ]
+      }
+
+      assert Filter.event_by_shape_id(filter, transaction) == %{
+               "B" => %Transaction{
+                 changes: [
+                   %NewRecord{relation: {"public", "t1"}, record: %{"id" => "3"}}
+                 ]
+               },
+               "C" => %Transaction{
+                 changes: [
+                   %NewRecord{relation: {"public", "t1"}, record: %{"id" => "3"}},
+                   %NewRecord{relation: {"public", "t1"}, record: %{"id" => "4"}}
+                 ]
+               },
+               "D" => %Transaction{
+                 changes: [
+                   %NewRecord{relation: {"public", "t1"}, record: %{"id" => "4"}}
+                 ]
+               }
+             }
+    end
+  end
+
   describe "affected_shapes/2" do
     test "returns shapes affected by insert" do
       filter =
