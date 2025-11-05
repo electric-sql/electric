@@ -63,7 +63,14 @@ with_telemetry [Telemetry.Metrics, OtelMetricExporter] do
     end
 
     defp otel_reporter_child_spec(%{otel_metrics?: true} = opts) do
-      {OtelMetricExporter, metrics: otel_metrics(opts), export_period: opts.otel_export_period}
+      {OtelMetricExporter,
+       metrics: otel_metrics(opts),
+       export_period: opts.otel_export_period,
+       resource:
+         Map.merge(
+           %{instance: %{installation_id: Map.get(opts, :installation_id, "electric_default")}},
+           opts.otel_resource_attributes
+         )}
     end
 
     defp otel_reporter_child_spec(_), do: nil
