@@ -127,6 +127,11 @@ defmodule Electric.AsyncDeleter do
     {:noreply, %{state | timer_ref: nil}}
   end
 
+  def handle_info(:perform_delete, state) do
+    Logger.debug("AsyncDeleter: cleanup already in progress, skipping scheduled cleanup")
+    {:noreply, %{state | timer_ref: nil}}
+  end
+
   def handle_info({ref, :ok}, %{cleanup_task: {%Task{ref: ref}, start_time}} = state) do
     duration = System.monotonic_time(:millisecond) - start_time
 
