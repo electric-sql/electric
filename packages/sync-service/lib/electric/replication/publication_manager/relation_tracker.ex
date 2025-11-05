@@ -13,6 +13,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Utils
 
   require Logger
 
@@ -51,7 +52,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   @behaviour Electric.Replication.PublicationManager
 
-  def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
+  def name(stack_id) when is_binary(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
@@ -65,14 +66,19 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     server = Access.get(opts, :server, name(opts))
     pub_filter = get_publication_filter_from_shape(shape)
 
-    case GenServer.call(server, {:add_shape, shape_handle, pub_filter}) do
+    case OpenTelemetry.with_span(
+           "publication_manager.add_shape",
+           [shape_handle: shape_handle, relation: Utils.relation_to_sql(shape.root_table)],
+           Access.get(opts, :stack_id),
+           fn -> GenServer.call(server, {:add_shape, shape_handle, pub_filter}) end
+         ) do
       :ok -> :ok
       {:error, err} -> raise err
     end
   end
 
   @impl Electric.Replication.PublicationManager
-  def remove_shape(shape_handle, opts \\ []) do
+  def remove_shape(shape_handle, opts) do
     server = Access.get(opts, :server, name(opts))
 
     case GenServer.call(server, {:remove_shape, shape_handle}) do

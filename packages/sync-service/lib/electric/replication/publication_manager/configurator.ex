@@ -19,6 +19,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
   alias Electric.Replication.PublicationManager.RelationTracker
   alias Electric.Postgres.Configuration
   alias Electric.Utils
+  alias Electric.Telemetry.OpenTelemetry
 
   @enforce_keys [
     :stack_id,
@@ -215,57 +216,16 @@ defmodule Electric.Replication.PublicationManager.Configurator do
     {:noreply, state}
   end
 
-  def handle_continue({:perform_relation_actions, [{:add, filter} | rest]}, state) do
+  def handle_continue({:perform_relation_actions, [{action, filter} | rest]}, state) do
+    {_oid, rel} = filter
+
     res =
-      with :ok <-
-             Configuration.add_table_to_publication(state.db_pool, state.publication_name, filter) do
-        {:ok, :configured}
-      end
-
-    notify_filter_result(filter, res, state)
-
-    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
-  end
-
-  def handle_continue(
-        {:perform_relation_actions, [{:add_and_configure, filter} | rest]},
-        state
-      ) do
-    res =
-      with :ok <-
-             Configuration.configure_table_for_replication(
-               state.db_pool,
-               state.publication_name,
-               filter
-             ) do
-        {:ok, :configured}
-      end
-
-    notify_filter_result(filter, res, state)
-    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
-  end
-
-  def handle_continue({:perform_relation_actions, [{:configure, filter} | rest]}, state) do
-    res =
-      with :ok <- Configuration.set_table_replica_identity_full(state.db_pool, filter) do
-        {:ok, :configured}
-      end
-
-    notify_filter_result(filter, res, state)
-
-    {:noreply, state, {:continue, {:perform_relation_actions, rest}}}
-  end
-
-  def handle_continue({:perform_relation_actions, [{:drop, filter} | rest]}, state) do
-    res =
-      with :ok <-
-             Configuration.drop_table_from_publication(
-               state.db_pool,
-               state.publication_name,
-               filter
-             ) do
-        {:ok, :dropped}
-      end
+      OpenTelemetry.with_span(
+        "publication_manager.update_publication_relation",
+        [action: inspect(action), relation: Utils.relation_to_sql(rel)],
+        state.stack_id,
+        fn -> do_publication_update(action, filter, state) end
+      )
 
     notify_filter_result(filter, res, state)
 
@@ -308,6 +268,48 @@ defmodule Electric.Replication.PublicationManager.Configurator do
 
       {:ok, res}
     end)
+  end
+
+  @spec do_publication_update(
+          :add_and_configure | :add | :configure | :drop,
+          PublicationManager.RelationTracker.relation_filter(),
+          state()
+        ) :: {:ok, :configured | :dropped} | {:error, any()}
+  defp do_publication_update(action, filter, state)
+
+  defp do_publication_update(:add_and_configure, filter, state) do
+    with :ok <-
+           Configuration.configure_table_for_replication(
+             state.db_pool,
+             state.publication_name,
+             filter
+           ) do
+      {:ok, :configured}
+    end
+  end
+
+  defp do_publication_update(:add, filter, state) do
+    with :ok <-
+           Configuration.add_table_to_publication(state.db_pool, state.publication_name, filter) do
+      {:ok, :configured}
+    end
+  end
+
+  defp do_publication_update(:configure, filter, state) do
+    with :ok <- Configuration.set_table_replica_identity_full(state.db_pool, filter) do
+      {:ok, :configured}
+    end
+  end
+
+  defp do_publication_update(:drop, filter, state) do
+    with :ok <-
+           Configuration.drop_table_from_publication(
+             state.db_pool,
+             state.publication_name,
+             filter
+           ) do
+      {:ok, :dropped}
+    end
   end
 
   defp handle_publication_fatally_misconfigured(err, %{manual_table_publishing?: true}),
