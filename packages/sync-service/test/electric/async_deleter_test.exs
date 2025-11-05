@@ -26,12 +26,28 @@ defmodule Electric.AsyncDeleterTest do
   end
 
   setup ctx do
+    [trash_dir: AsyncDeleter.trash_dir(ctx.tmp_dir, ctx.stack_id)]
+  end
+
+  setup ctx do
+    if ctx[:add_initial_files] do
+      File.mkdir_p!(ctx.trash_dir)
+      # create some dummy files in trash dir
+      for i <- 1..3 do
+        create_temp_file(ctx.trash_dir, "file_#{i}.txt", "initial data #{i}")
+      end
+    end
+
+    :ok
+  end
+
+  setup ctx do
     start_link_supervised!(
       {AsyncDeleter,
        stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, cleanup_interval_ms: @interval}
     )
 
-    [trash_dir: AsyncDeleter.trash_dir!(ctx.stack_id)]
+    :ok
   end
 
   test "delete moves directory into trash and later removes it", %{
@@ -131,6 +147,13 @@ defmodule Electric.AsyncDeleterTest do
     # ensure all files are deleted
     Process.sleep(max_sleep_time + @interval + 30)
     assert File.ls!(d1) == []
+    assert File.ls!(trash_dir) == []
+  end
+
+  @tag add_initial_files: true
+  test "performs initial cleanup", %{trash_dir: trash_dir} do
+    # ensure no files exist after startup
+    Process.sleep(@interval + 30)
     assert File.ls!(trash_dir) == []
   end
 end

@@ -77,12 +77,14 @@ defmodule Electric.AsyncDeleter do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
+    trash_dir = trash_dir!(stack_id)
+    File.mkdir_p(trash_dir)
+
     state = %__MODULE__{
       stack_id: stack_id,
-      interval_ms: Keyword.get(opts, :cleanup_interval_ms, @default_cleanup_interval_ms)
+      interval_ms: Keyword.get(opts, :cleanup_interval_ms, @default_cleanup_interval_ms),
+      pending: File.ls!(trash_dir)
     }
-
-    File.mkdir_p(trash_dir!(stack_id))
 
     {:ok, state, {:continue, :initial_cleanup}}
   end
