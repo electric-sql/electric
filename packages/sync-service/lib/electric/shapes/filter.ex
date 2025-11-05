@@ -187,13 +187,18 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
-  defp transaction_by_shape_id(filter, %Transaction{changes: changes}) do
-    transaction_by_shape_id(filter, Enum.reverse(changes), %{})
+  defp transaction_by_shape_id(filter, %Transaction{changes: changes} = transaction) do
+    transaction_by_shape_id(filter, transaction, Enum.reverse(changes), %{})
   end
 
-  defp transaction_by_shape_id(_filter, [], transaction_map), do: transaction_map
+  defp transaction_by_shape_id(_, _, [], transaction_map), do: transaction_map
 
-  defp transaction_by_shape_id(%Filter{} = filter, [change | changes], transaction_map) do
+  defp transaction_by_shape_id(
+         %Filter{} = filter,
+         %Transaction{} = transaction,
+         [change | changes],
+         transaction_map
+       ) do
     transaction_map =
       filter
       |> affected_shapes(change)
@@ -201,13 +206,13 @@ defmodule Electric.Shapes.Filter do
         Map.update(
           transaction_map,
           shape_id,
-          %Transaction{changes: [change]},
-          fn %Transaction{changes: existing} ->
-            %Transaction{changes: [change | existing]}
+          %Transaction{transaction | changes: [change]},
+          fn %Transaction{changes: existing} = txn ->
+            %Transaction{txn | changes: [change | existing]}
           end
         )
       end)
 
-    transaction_by_shape_id(filter, changes, transaction_map)
+    transaction_by_shape_id(filter, transaction, changes, transaction_map)
   end
 end
