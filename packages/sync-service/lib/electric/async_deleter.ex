@@ -191,14 +191,15 @@ defmodule Electric.AsyncDeleter do
 
   defp do_cleanup(state) do
     start_time = System.monotonic_time(:millisecond)
+    stack_id = state.stack_id
 
     task =
       Task.async(fn ->
-        Process.set_label({:async_deleter_cleanup_task, state.stack_id})
-        Logger.metadata(stack_id: state.stack_id)
-        Electric.Telemetry.Sentry.set_tags_context(stack_id: state.stack_id)
+        Process.set_label({:async_deleter_cleanup_task, stack_id})
+        Logger.metadata(stack_id: stack_id)
+        Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-        trash_dir = trash_dir!(state.stack_id)
+        trash_dir = trash_dir!(stack_id)
         Logger.debug("AsyncDeleter: Cleaning trash directory #{inspect(trash_dir)}")
 
         try do
