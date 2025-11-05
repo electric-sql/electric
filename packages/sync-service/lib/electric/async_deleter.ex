@@ -1,6 +1,6 @@
 defmodule Electric.AsyncDeleter do
   @moduledoc """
-  A GenServer that batches file/directory deletions by first moving them into a
+  A service that batches file/directory deletions by first moving them into a
   per-stack trash directory and then, after a configurable interval, removing
   the trash directory contents in one `rm -rf` operation.
 
@@ -13,6 +13,7 @@ defmodule Electric.AsyncDeleter do
     * `:cleanup_interval_ms` - interval in milliseconds after the
        first queued delete before the batch is removed. Defaults to 10000 ms.
   """
+
   use GenServer
   require Logger
 
@@ -20,7 +21,9 @@ defmodule Electric.AsyncDeleter do
     :stack_id,
     :interval_ms,
     timer_ref: nil,
-    pending: []
+    cleanup_task: nil,
+    pending: [],
+    in_progress: []
   ]
 
   @trash_dir_base ".electric_trash"
@@ -28,8 +31,6 @@ defmodule Electric.AsyncDeleter do
 
   def name(stack_id) when is_binary(stack_id),
     do: Electric.ProcessRegistry.name(stack_id, __MODULE__)
-
-  def name(opts), do: name(opts[:stack_id])
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -70,17 +71,18 @@ defmodule Electric.AsyncDeleter do
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
-    Process.set_label({:async_deleter, stack_id})
+    Process.set_label({:async_deleter_request_handler, stack_id})
+    Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
+
+    trash_dir = trash_dir!(stack_id)
+    File.mkdir_p(trash_dir)
 
     state = %__MODULE__{
       stack_id: stack_id,
       interval_ms: Keyword.get(opts, :cleanup_interval_ms, @default_cleanup_interval_ms),
-      timer_ref: nil,
-      pending: []
+      pending: File.ls!(trash_dir)
     }
-
-    File.mkdir_p(trash_dir!(stack_id))
 
     {:ok, state, {:continue, :initial_cleanup}}
   end
@@ -90,8 +92,8 @@ defmodule Electric.AsyncDeleter do
     {:noreply, do_cleanup(state)}
   end
 
-  # schedule timer if not already running
-  def handle_continue(:schedule_cleanup, %{timer_ref: nil} = state) do
+  # schedule cleanup if not already scheduled and no cleanup is running
+  def handle_continue(:schedule_cleanup, %{timer_ref: nil, cleanup_task: nil} = state) do
     Logger.debug("AsyncDeleter: scheduling cleanup in #{state.interval_ms}ms")
 
     {:noreply,
@@ -118,8 +120,61 @@ defmodule Electric.AsyncDeleter do
   defp random_suffix, do: System.unique_integer([:positive]) |> to_string()
 
   @impl true
+  def handle_info(:perform_delete, %{cleanup_task: nil} = state) do
+    state = do_cleanup(state)
+    {:noreply, %{state | timer_ref: nil}}
+  end
+
   def handle_info(:perform_delete, state) do
-    {:noreply, do_cleanup(state)}
+    Logger.debug("AsyncDeleter: cleanup already in progress, skipping scheduled cleanup")
+    {:noreply, %{state | timer_ref: nil}}
+  end
+
+  def handle_info({ref, :ok}, %{cleanup_task: {%Task{ref: ref}, start_time}} = state) do
+    duration = System.monotonic_time(:millisecond) - start_time
+
+    Logger.debug(
+      "AsyncDeleter: deleted #{length(state.pending)} paths " <>
+        "for stack #{state.stack_id} in #{duration}ms"
+    )
+
+    {:noreply, %{state | in_progress: [], cleanup_task: nil}, {:continue, :schedule_cleanup}}
+  end
+
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{cleanup_task: {%Task{ref: ref}, start_time}} = state
+      ) do
+    duration = System.monotonic_time(:millisecond) - start_time
+
+    Logger.warning(
+      "AsyncDeleter: failed to delete #{length(state.pending)} paths " <>
+        "for stack #{state.stack_id} after #{duration}ms with reason: #{inspect(reason)}" <>
+        " - will retry on next scheduled cleanup."
+    )
+
+    {:noreply,
+     %{
+       state
+       | pending: state.in_progress ++ state.pending,
+         in_progress: [],
+         cleanup_task: nil
+     }, {:continue, :schedule_cleanup}}
+  end
+
+  # ignore down messages for normal task termination, already handled in result message
+  def handle_info({:DOWN, _ref, :process, _pid, :normal}, state), do: {:noreply, state}
+
+  @impl true
+  def terminate(reason, state) do
+    # We want to avoid AsyncDeleter being brought back up while a cleanup task is still running,
+    # which could lead to concurrent `rm_rf` calls on the trash directory, so we explicitly kill
+    # it as part of this process termination.
+    if not is_nil(state.cleanup_task) do
+      Logger.debug("AsyncDeleter: terminating, killing cleanup task due to #{inspect(reason)}")
+      {task, _start_time} = state.cleanup_task
+      Task.shutdown(task, 1_000)
+    end
   end
 
   def trash_dir!(stack_id) do
@@ -140,29 +195,39 @@ defmodule Electric.AsyncDeleter do
     end
   end
 
+  defp do_cleanup(%{pending: []} = state), do: state
+
   defp do_cleanup(state) do
-    # Remove the entire trash dir contents in one go
-    if state.pending != [] do
-      start_time = System.monotonic_time(:millisecond)
+    start_time = System.monotonic_time(:millisecond)
+    stack_id = state.stack_id
 
-      try do
-        clean_dir!(trash_dir!(state.stack_id))
-      rescue
-        e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
-      end
+    task =
+      Task.async(fn ->
+        Process.set_label({:async_deleter_cleanup_task, stack_id})
+        Logger.metadata(stack_id: stack_id)
+        Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-      duration = System.monotonic_time(:millisecond) - start_time
+        trash_dir = trash_dir!(stack_id)
+        Logger.debug("AsyncDeleter: Cleaning trash directory #{inspect(trash_dir)}")
 
-      Logger.debug(
-        "AsyncDeleter: deleted #{length(state.pending)} paths " <>
-          "for stack #{state.stack_id} in #{duration}ms"
-      )
-    end
+        try do
+          clean_dir!(trash_dir)
+        rescue
+          e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
+        end
+      end)
 
-    %{state | pending: [], timer_ref: nil}
+    Process.unlink(task.pid)
+
+    %{
+      state
+      | pending: [],
+        in_progress: state.pending,
+        cleanup_task: {task, start_time}
+    }
   end
 
-  def clean_dir!(path) do
+  defp clean_dir!(path) do
     path
     |> File.ls!()
     |> Enum.each(fn entry ->
