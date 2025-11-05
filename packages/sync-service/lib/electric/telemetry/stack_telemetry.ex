@@ -70,10 +70,14 @@ with_telemetry [OtelMetricExporter, Telemetry.Metrics] do
        name: :"stack_otel_telemetry_#{opts.stack_id}",
        metrics: otel_metrics(opts),
        export_period: opts.otel_export_period,
-       resource: %{
-         stack_id: opts.stack_id,
-         instance: %{installation_id: Map.get(opts, :installation_id, "electric_default")}
-       }}
+       resource:
+         Map.merge(
+           %{
+             stack_id: opts.stack_id,
+             instance: %{installation_id: Map.get(opts, :installation_id, "electric_default")}
+           },
+           opts.otel_resource_attributes
+         )}
     end
 
     defp otel_reporter_child_spec(_), do: nil
