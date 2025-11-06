@@ -489,6 +489,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseFallbackToLongPolling = false
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
+  #inFallbackMode = false // Whether server is in fallback mode (replication unavailable)
+  #statusPollInterval?: NodeJS.Timeout | number // Timer for status polling
+  #statusPollUrl?: string // URL for status endpoint
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -502,6 +505,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     )
     this.#onError = this.options.onError
     this.#mode = this.options.log ?? `full`
+
+    // Construct status endpoint URL from the shape URL
+    try {
+      const baseUrl = new URL(options.url)
+      baseUrl.pathname = baseUrl.pathname.replace(/\/v1\/shape.*/, `/v1/status`)
+      baseUrl.search = `` // Clear query params
+      this.#statusPollUrl = baseUrl.toString()
+    } catch {
+      // If URL construction fails, status polling won't be available
+      this.#statusPollUrl = undefined
+    }
 
     const baseFetchClient =
       options.fetchClient ??
@@ -843,6 +857,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
     this.#schema = this.#schema ?? getSchema()
 
+    // Check if server is in fallback mode (replication unavailable)
+    const fallbackMode = headers.get(FALLBACK_MODE_HEADER) === `true`
+    if (fallbackMode && !this.#inFallbackMode) {
+      // Entering fallback mode - start status polling
+      this.#inFallbackMode = true
+      this.#startStatusPolling()
+    } else if (!fallbackMode && this.#inFallbackMode) {
+      // Exiting fallback mode - stop status polling
+      this.#inFallbackMode = false
+      this.#stopStatusPolling()
+    }
+
     // NOTE: 204s are deprecated, the Electric server should not
     // send these in latest versions but this is here for backwards
     // compatibility
@@ -1066,6 +1092,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   unsubscribeAll(): void {
     this.#subscribers.clear()
+    this.#stopStatusPolling()
   }
 
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
@@ -1196,6 +1223,57 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   /**
+   * Start polling the status endpoint to detect when server exits fallback mode
+   * Polls every 60 seconds
+   */
+  #startStatusPolling() {
+    if (!this.#statusPollUrl) return // Status polling not available
+    if (this.#statusPollInterval) return // Already polling
+
+    const intervalMs = 60000 // 60 seconds
+
+    console.log(
+      `[Electric] Server in fallback mode. Polling status every 60s to detect when live replication is restored.`
+    )
+
+    const pollStatus = async () => {
+      try {
+        const response = await fetch(this.#statusPollUrl!)
+        if (response.ok) {
+          const status = await response.json()
+          if (status.replication_available && status.status === `live`) {
+            // Server is back to live mode - trigger a refresh to reconnect
+            console.log(
+              `[Electric] Server restored to live mode. Reconnecting...`
+            )
+            this.#stopStatusPolling()
+            this.#inFallbackMode = false
+            // Trigger a shape refresh to switch back to live replication
+            await this.forceDisconnectAndRefresh()
+          }
+        }
+      } catch (error) {
+        // Silently ignore errors - will retry on next interval
+        console.debug(`[Electric] Status poll failed:`, error)
+      }
+    }
+
+    // Poll immediately, then set up interval
+    pollStatus()
+    this.#statusPollInterval = setInterval(pollStatus, intervalMs)
+  }
+
+  /**
+   * Stop polling the status endpoint
+   */
+  #stopStatusPolling() {
+    if (this.#statusPollInterval) {
+      clearInterval(this.#statusPollInterval)
+      this.#statusPollInterval = undefined
+    }
+  }
+
+  /**
    * Resets the state of the stream, optionally with a provided
    * shape handle
    */
@@ -1211,6 +1289,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Reset SSE fallback state to try SSE again after reset
     this.#consecutiveShortSseConnections = 0
     this.#sseFallbackToLongPolling = false
+    // Reset fallback mode state
+    this.#inFallbackMode = false
+    this.#stopStatusPolling()
   }
 
   /**
