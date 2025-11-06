@@ -78,6 +78,7 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     acc = flush_buffer(acc, state)
 
     Tuple.to_list(open_files)
+    |> Enum.reject(&is_nil/1)
     |> Enum.each(&File.close/1)
 
     writer_acc(acc, open_files: open_files())
