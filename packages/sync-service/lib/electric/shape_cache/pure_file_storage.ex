@@ -42,7 +42,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   import LogOffset
   import Electric.ShapeCache.PureFileStorage.SharedRecords
-  import Electric.ShapeCache.PureFileStorage.WriteLoop, only: [writer_acc: 0]
 
   import File, only: [write!: 3]
 

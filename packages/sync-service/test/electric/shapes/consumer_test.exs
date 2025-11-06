@@ -171,7 +171,7 @@ defmodule Electric.Shapes.ConsumerTest do
               id: {Shapes.ConsumerSupervisor, shape_handle}
             )
 
-          assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, ^shape, _}
+          assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, ^shape}
           # Wait for the virtual snapshot to have started to avoid overriding any of the
           # defined Mox expectations
           :started =
