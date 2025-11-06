@@ -116,7 +116,7 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Close all active resources and persist any pending writes on system/process shutdown
   """
-  @callback terminate(writer_state()) :: term()
+  @callback terminate(writer_state()) :: any()
 
   @doc """
   Commit any pending writes to disk and close open resources that can be safely reopened later.

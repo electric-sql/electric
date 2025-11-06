@@ -516,24 +516,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   def terminate(writer_state(opts: opts) = state) do
-    writer_state(writer_acc: writer_acc) = close_all_files(state)
+    close_all_files(state)
 
     try do
-      case :ets.lookup(stack_ets(opts.stack_id), opts.shape_handle) do
-        [storage_meta] ->
-          storage_meta =
-            storage_meta
-            |> storage_meta(ets_table: nil)
-            |> storage_meta(compaction_started?: false)
-
-          :ets.delete(stack_ets(opts.stack_id), opts.shape_handle)
-          {opts.version, writer_acc, storage_meta}
-
-        [] ->
-          nil
-      end
+      :ets.delete(stack_ets(opts.stack_id), opts.shape_handle)
+      :ok
     rescue
-      ArgumentError -> nil
+      ArgumentError -> :ok
     end
   end
 
