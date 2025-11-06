@@ -55,12 +55,12 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def init_writer!({parent, shape_handle, init, storage}, shape_definition, recovery_state) do
-    send(parent, {__MODULE__, :init_writer!, shape_handle, shape_definition, recovery_state})
+  def init_writer!({parent, shape_handle, init, storage}, shape_definition) do
+    send(parent, {__MODULE__, :init_writer!, shape_handle, shape_definition})
 
     {module, opts} = storage
 
-    with state <- Storage.init_writer!(storage, shape_definition, recovery_state) do
+    with state <- Storage.init_writer!(storage, shape_definition) do
       for {name, args} <- init do
         apply(module, name, args ++ [opts])
       end

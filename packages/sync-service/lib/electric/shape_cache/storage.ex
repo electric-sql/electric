@@ -47,7 +47,7 @@ defmodule Electric.ShapeCache.Storage do
   @callback start_link(shape_opts()) :: GenServer.on_start()
 
   @doc "Prepare the in-process writer state, returning an accumulator."
-  @callback init_writer!(shape_opts(), shape_definition :: Shape.t(), term()) :: writer_state()
+  @callback init_writer!(shape_opts(), shape_definition :: Shape.t()) :: writer_state()
 
   @doc "Retrieve all stored shape handles"
   @callback get_all_stored_shape_handles(compiled_opts()) ::
@@ -116,7 +116,7 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Close all active resources and persist any pending writes on system/process shutdown
   """
-  @callback terminate(writer_state()) :: term()
+  @callback terminate(writer_state()) :: any()
 
   @doc """
   Commit any pending writes to disk and close open resources that can be safely reopened later.
@@ -200,8 +200,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def init_writer!({mod, shape_opts}, shape_definition, storage_recovery_state \\ nil) do
-    {mod, mod.init_writer!(shape_opts, shape_definition, storage_recovery_state)}
+  def init_writer!({mod, shape_opts}, shape_definition) do
+    {mod, mod.init_writer!(shape_opts, shape_definition)}
   end
 
   @impl __MODULE__

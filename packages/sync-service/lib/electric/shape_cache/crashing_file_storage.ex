@@ -42,7 +42,7 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
     |> Map.put(:extra_opts, %{num_calls_until_crash: Keyword.fetch!(opts, :num_calls_until_crash)})
   end
 
-  def init_writer!(opts, shape_definition, _storage_recovery_state) do
+  def init_writer!(opts, shape_definition) do
     Agent.update(stack_agent_name(opts), fn _ -> opts.extra_opts.num_calls_until_crash end)
     PureFileStorage.init_writer!(opts, shape_definition)
   end

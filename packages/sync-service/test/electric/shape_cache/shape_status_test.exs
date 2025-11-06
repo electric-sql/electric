@@ -354,26 +354,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   describe "shape storage and backup" do
-    test "can set and consume shape storage state", ctx do
-      {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-
-      assert :ok = ShapeStatus.set_shape_storage_state(state, shape_handle, %{foo: :bar})
-      assert %{foo: :bar} = ShapeStatus.consume_shape_storage_state(state, shape_handle)
-      # entry is deleted after consumption
-      assert nil == ShapeStatus.consume_shape_storage_state(state, shape_handle)
-
-      # unknown shape returns nil
-      assert nil == ShapeStatus.consume_shape_storage_state(state, "missing")
-    end
-
-    test "removing shape clears stored shape storage state", ctx do
-      {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-      assert :ok = ShapeStatus.set_shape_storage_state(state, shape_handle, :some_state)
-      assert {:ok, _shape} = ShapeStatus.remove_shape(state, shape_handle)
-      # cleanup removes backup entry so nothing to consume
-      assert nil == ShapeStatus.consume_shape_storage_state(state, shape_handle)
-    end
-
     test "terminate stores backup and initialise loads from backup instead of storage", _ctx do
       backup_base_dir =
         Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
