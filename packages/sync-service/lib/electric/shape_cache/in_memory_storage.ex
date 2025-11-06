@@ -93,7 +93,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def init_writer!(%MS{} = opts, _shape_definition, _storage_recovery_state), do: opts
+  def init_writer!(%MS{} = opts, _shape_definition), do: opts
 
   @impl Electric.ShapeCache.Storage
   def get_current_position(%MS{} = opts) do

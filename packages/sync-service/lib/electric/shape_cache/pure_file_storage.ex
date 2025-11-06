@@ -484,28 +484,19 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def start_link(_), do: :ignore
 
-  def init_writer!(shape_opts, shape_definition, storage_recovery_state \\ nil) do
+  def init_writer!(shape_opts, shape_definition) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix} =
-      case maybe_use_cached_writer(shape_opts, table, storage_recovery_state) do
-        {:ok, {acc, latest_name}} ->
-          {acc, latest_name}
+    {initial_acc, suffix} = initialise_filesystem!(shape_opts, shape_definition)
 
-        :cache_not_found ->
-          {initial_acc, suffix} = initialise_filesystem!(shape_opts, shape_definition)
-
-          register_with_stack(
-            shape_opts,
-            table,
-            WriteLoop.last_persisted_txn_offset(initial_acc),
-            compaction_boundary(shape_opts),
-            suffix,
-            WriteLoop.cached_chunk_boundaries(initial_acc)
-          )
-
-          {initial_acc, suffix}
-      end
+    register_with_stack(
+      shape_opts,
+      table,
+      WriteLoop.last_persisted_txn_offset(initial_acc),
+      compaction_boundary(shape_opts),
+      suffix,
+      WriteLoop.cached_chunk_boundaries(initial_acc)
+    )
 
     if shape_definition.storage.compaction == :enabled do
       {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
@@ -519,24 +510,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       ets: table
     )
   end
-
-  defp maybe_use_cached_writer(opts, table, {version, writer_acc() = acc, storage_meta() = meta})
-       when version == opts.version do
-    meta =
-      meta
-      |> storage_meta(ets_table: table)
-      |> storage_meta(compaction_started?: false)
-
-    :ets.insert(stack_ets(opts.stack_id), meta)
-
-    if not snapshot_complete?(opts) or is_nil(read_cached_metadata(opts, :pg_snapshot)) do
-      :cache_not_found
-    else
-      {:ok, {acc, storage_meta(meta, :latest_name)}}
-    end
-  end
-
-  defp maybe_use_cached_writer(_shape_opts, _table, _), do: :cache_not_found
 
   def hibernate(writer_state() = state) do
     close_all_files(state)

@@ -108,12 +108,7 @@ defmodule Electric.Shapes.Consumer do
       shape_status_mod: shape_status_mod
     } = state
 
-    writer =
-      ShapeCache.Storage.init_writer!(
-        storage,
-        state.shape,
-        shape_status_mod.consume_shape_storage_state(state.stack_id, state.shape_handle)
-      )
+    writer = ShapeCache.Storage.init_writer!(storage, state.shape)
 
     {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
 
