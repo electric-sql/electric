@@ -1,16 +1,12 @@
 defmodule Electric.Plug.DeleteShapePlugTest do
   use ExUnit.Case, async: true
-  use Support.Mock
+  use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1]
-
-  import Mox
-
-  setup :verify_on_exit!
+  import Support.TestUtils, only: [set_status_to_active: 1, expect_shape_cache: 1]
 
   @registry Registry.DeleteShapePlugTest
 
@@ -50,7 +46,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
         stack_events_registry: Electric.stack_events_registry(),
         stack_ready_timeout: 100,
         pg_id: @test_pg_id,
-        shape_cache: {Mock.ShapeCache, []},
+        shape_cache: {Electric.ShapeCache, []},
         storage: {Mock.Storage, []},
         inspector: {__MODULE__, []},
         registry: @registry,
@@ -73,7 +69,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       start_link_supervised!({Registry, keys: :duplicate, name: @registry})
 
       {:via, _, {registry_name, registry_key}} =
-        Electric.Shapes.Supervisor.name(ctx)
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
       set_status_to_active(ctx)
@@ -133,9 +129,10 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     end
 
     test "should clean shape based on shape definition", ctx do
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, 0} end)
-      |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, 0} end,
+        clean_shape: fn @test_shape_handle, _ -> :ok end
+      )
 
       conn =
         ctx
@@ -147,9 +144,10 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     end
 
     test "should clean shape based only on shape_handle", ctx do
-      Mock.ShapeCache
-      |> expect(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> expect(:clean_shape, fn @test_shape_handle, _ -> :ok end)
+      expect_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        clean_shape: fn @test_shape_handle, _ -> :ok end
+      )
 
       conn =
         ctx

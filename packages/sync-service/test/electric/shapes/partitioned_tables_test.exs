@@ -33,9 +33,9 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     {:ok, shape} = Shape.new("public.partitioned_items", inspector: ctx.inspector)
 
     {shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
 
-    :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
     assert [{_, {"public", "partitioned_items"}, _}] =
              Electric.Postgres.Configuration.get_publication_tables!(
@@ -58,9 +58,9 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     {:ok, shape} = Shape.new("public.partitioned_items", inspector: ctx.inspector)
 
     {shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
 
-    :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
     Postgrex.query!(
       ctx.db_conn,
@@ -83,9 +83,9 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     {:ok, shape} = Shape.new("public.partitioned_items_100", inspector: ctx.inspector)
 
     {shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
 
-    :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
     assert [{_, {"public", "partitioned_items_100"}, _}] =
              Electric.Postgres.Configuration.get_publication_tables!(
@@ -108,9 +108,9 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     {:ok, shape} = Shape.new("public.partitioned_items", inspector: ctx.inspector)
 
     {shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
 
-    :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
     {:ok, relation} = Inspector.load_relation_info(shape.root_table_id, ctx.inspector)
 
@@ -164,18 +164,18 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     {:ok, partition_shape} = Shape.new("public.partitioned_items_100", inspector: ctx.inspector)
 
     {shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
 
     {partition_shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(partition_shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(partition_shape, ctx.stack_id)
 
-    :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
-    :started = ShapeCache.await_snapshot_start(partition_shape_handle, stack_id: ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(partition_shape_handle, ctx.stack_id)
 
     ref = subscribe(shape_handle, ctx)
     partition_ref = subscribe(partition_shape_handle, ctx)
 
-    assert [_, _] = active_shapes = ShapeCache.list_shapes(stack_id: ctx.stack_id)
+    assert [_, _] = active_shapes = ShapeCache.list_shapes(ctx.stack_id)
 
     assert MapSet.equal?(
              MapSet.new(Enum.map(active_shapes, &elem(&1, 0))),
@@ -201,7 +201,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     assert_receive {Electric.Shapes.Monitor, :remove, ^shape_handle}, @shape_cleanup_timeout
     assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
 
-    assert [_] = active_shapes = ShapeCache.list_shapes(stack_id: ctx.stack_id)
+    assert [_] = active_shapes = ShapeCache.list_shapes(ctx.stack_id)
 
     assert MapSet.equal?(
              MapSet.new(Enum.map(active_shapes, &elem(&1, 0))),
@@ -216,13 +216,13 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     {:ok, partition_shape} = Shape.new("public.partitioned_items_100", inspector: ctx.inspector)
 
     {shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
 
     {partition_shape_handle, _} =
-      ShapeCache.get_or_create_shape_handle(partition_shape, stack_id: ctx.stack_id)
+      ShapeCache.get_or_create_shape_handle(partition_shape, ctx.stack_id)
 
-    :started = ShapeCache.await_snapshot_start(shape_handle, stack_id: ctx.stack_id)
-    :started = ShapeCache.await_snapshot_start(partition_shape_handle, stack_id: ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+    :started = ShapeCache.await_snapshot_start(partition_shape_handle, ctx.stack_id)
 
     assert [{_, {"public", "partitioned_items"}, _}, {_, {"public", "partitioned_items_100"}, _}] =
              Electric.Postgres.Configuration.get_publication_tables!(
@@ -233,7 +233,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     ref = subscribe(shape_handle, ctx)
     partition_ref = subscribe(partition_shape_handle, ctx)
 
-    assert [_, _] = ShapeCache.list_shapes(stack_id: ctx.stack_id)
+    assert [_, _] = ShapeCache.list_shapes(ctx.stack_id)
 
     Postgrex.query!(
       ctx.db_conn,
@@ -257,7 +257,7 @@ defmodule Electric.Shapes.PartitionedTablesTest do
     assert_receive {Electric.Shapes.Monitor, :cleanup, ^partition_shape_handle},
                    @shape_cleanup_timeout
 
-    assert [] = ShapeCache.list_shapes(stack_id: ctx.stack_id)
+    assert [] = ShapeCache.list_shapes(ctx.stack_id)
 
     wait_until_publication_tables(ctx, [])
   end

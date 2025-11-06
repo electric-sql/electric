@@ -133,10 +133,17 @@ defmodule Electric do
   @doc false
   defguard is_relation_id(oid) when is_integer(oid) and oid >= 0
 
+  @doc false
   defguard is_oid_relation(oid_relation)
            when is_tuple(oid_relation) and tuple_size(oid_relation) == 2 and
                   is_relation_id(elem(oid_relation, 0)) and
                   is_relation(elem(oid_relation, 1))
+
+  @doc false
+  defguard is_stack_id(stack_id) when is_binary(stack_id)
+
+  @doc false
+  defguard is_shape_handle(shape_handle) when is_binary(shape_handle)
 
   @current_vsn Mix.Project.config()[:version]
   def version do

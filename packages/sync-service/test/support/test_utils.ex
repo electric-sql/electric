@@ -156,6 +156,65 @@ defmodule Support.TestUtils do
     activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
   end
 
+  def patch_calls(module, global_opts \\ [], funs) do
+    Enum.each(funs, fn
+      {name, {fun, opts}} when is_function(fun) ->
+        Repatch.patch(
+          module,
+          name,
+          Electric.Utils.merge_all([[mode: :shared], global_opts, opts]),
+          fun
+        )
+
+      {name, fun} when is_function(fun) ->
+        Repatch.patch(module, name, Keyword.merge([mode: :shared], global_opts), fun)
+    end)
+  end
+
+  def expect_calls(module, global_opts \\ [], expectations) do
+    Enum.each(expectations, fn
+      {name, {fun, opts}} when is_function(fun) ->
+        Repatch.Expectations.expect(
+          module,
+          name,
+          Electric.Utils.merge_all([[mode: :shared], global_opts, opts]),
+          fun
+        )
+
+      {name, fun} when is_function(fun) ->
+        Repatch.Expectations.expect(
+          module,
+          name,
+          Keyword.merge([mode: :shared], global_opts),
+          fun
+        )
+    end)
+  end
+
+  def patch_shape_status(opts \\ [], funs) do
+    patch_calls(Electric.ShapeCache.ShapeStatus, opts, funs)
+  end
+
+  def expect_shape_status(opts \\ [], expectations) do
+    expect_calls(Electric.ShapeCache.ShapeStatus, opts, expectations)
+  end
+
+  def expect_storage(opts \\ [], expectations) do
+    expect_calls(Electric.ShapeCache.Storage, opts, expectations)
+  end
+
+  def patch_storage(opts \\ [], funs) do
+    patch_calls(Electric.ShapeCache.Storage, opts, funs)
+  end
+
+  def expect_shape_cache(opts \\ [], expectations) do
+    expect_calls(Electric.ShapeCache, opts, expectations)
+  end
+
+  def patch_shape_cache(opts \\ [], funs) do
+    patch_calls(Electric.ShapeCache, opts, funs)
+  end
+
   def activate_mocks_for_descendant_procs(mod) do
     self_pid = self()
 

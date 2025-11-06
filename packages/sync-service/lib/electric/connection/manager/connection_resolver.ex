@@ -19,8 +19,8 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     end
   end
 
-  def name(stack_id) when is_binary(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   def start_link(opts) do

@@ -44,10 +44,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
           scheduled_update_ref: nil | reference()
         }
 
-  def name(stack_id) when not is_map(stack_id) and not is_list(stack_id),
-    do: Electric.ProcessRegistry.name(stack_id, __MODULE__)
-
-  def name(opts), do: name(Access.fetch!(opts, :stack_id))
+  def name(stack_ref), do: Electric.ProcessRegistry.name(stack_ref, __MODULE__)
 
   def configure_publication(opts, filters) do
     GenServer.cast(name(opts), {:update_publication, filters})

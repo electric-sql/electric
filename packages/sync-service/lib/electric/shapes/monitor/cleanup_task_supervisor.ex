@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   require Logger
 
   alias Electric.ShapeCache.Storage
+  alias Electric.Replication.PublicationManager
 
   @env Mix.env()
 
@@ -27,7 +28,6 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   def cleanup_async(
         stack_id,
         storage_impl,
-        publication_manager_impl,
         shape_handle,
         on_cleanup \\ fn _ -> :ok end
       ) do
@@ -59,7 +59,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
           task4 =
             Task.Supervisor.async(name(stack_id), fn ->
               set_task_metadata(stack_id, shape_handle)
-              cleanup_publication_manager(publication_manager_impl, shape_handle)
+              cleanup_publication_manager(stack_id, shape_handle)
             end)
 
           try do
@@ -116,12 +116,10 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     )
   end
 
-  defp cleanup_publication_manager(publication_manager_impl, shape_handle) do
-    {publication_manager, publication_manager_opts} = publication_manager_impl
-
+  defp cleanup_publication_manager(stack_id, shape_handle) do
     perform_reporting_errors(
       fn ->
-        publication_manager.remove_shape(shape_handle, publication_manager_opts)
+        PublicationManager.remove_shape(stack_id, shape_handle)
       end,
       "Failed to remove shape #{shape_handle} from publication"
     )

@@ -26,8 +26,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
                    (is_tuple(reason) and elem(reason, 0) == :shutdown and
                       elem(reason, 1) != :cleanup)
 
-  def name(opts_or_stack_id) do
-    Electric.ProcessRegistry.name(opts_or_stack_id, __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   # the opts are validated by Monitor
@@ -126,7 +126,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     storage = Map.fetch!(opts, :storage)
-    publication_manager = Map.fetch!(opts, :publication_manager)
     on_remove = Map.get(opts, :on_remove) || fn _, _ -> :ok end
     on_cleanup = Map.get(opts, :on_cleanup) || fn _ -> :ok end
 
@@ -140,7 +139,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     state = %{
       stack_id: stack_id,
       storage: storage,
-      publication_manager: publication_manager,
       readers: %{},
       writers: %{},
       reader_table: reader_table,
@@ -219,7 +217,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
         state.stack_id,
         state.storage,
-        state.publication_manager,
         shape_handle,
         state.on_cleanup
       )
@@ -248,7 +245,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
       state.stack_id,
       state.storage,
-      state.publication_manager,
       handle,
       state.on_cleanup
     )

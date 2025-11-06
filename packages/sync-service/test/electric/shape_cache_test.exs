@@ -1,7 +1,6 @@
 defmodule Electric.ShapeCacheTest do
   use ExUnit.Case, async: true
-  use Support.Mock
-  use Repatch.ExUnit
+  use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
@@ -15,6 +14,7 @@ defmodule Electric.ShapeCacheTest do
   import Support.ComponentSetup
   import Support.DbSetup
   import Support.DbStructureSetup
+  import Support.TestUtils, only: [activate_mocks_for_descendant_procs: 1]
 
   @stub_inspector Support.StubInspector.new(
                     tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -68,7 +68,7 @@ defmodule Electric.ShapeCacheTest do
 
     def remove_shape(_handle, _opts), do: :ok
 
-    def wait_for_restore(opts) do
+    def wait_for_restore(_stack_id, opts) do
       send(opts[:test_pid], {:called, :wait_for_restore})
     end
   end
@@ -94,31 +94,29 @@ defmodule Electric.ShapeCacheTest do
     end
 
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_no_pool,
       :with_registry,
       :with_shape_log_collector,
-      :with_noop_publication_manager,
       :with_shape_cache
     ]
 
-    test "creates a new shape_handle", %{shape_cache_opts: opts} = ctx do
-      {shape_handle, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+    test "creates a new shape_handle", ctx do
+      {shape_handle, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
       assert is_binary(shape_handle)
       wait_shape_init(shape_handle, ctx)
     end
 
-    test "returns existing shape_handle", %{shape_cache_opts: opts} = ctx do
-      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+    test "returns existing shape_handle", ctx do
+      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
       assert shape_handle1 == shape_handle2
       wait_shape_init(shape_handle1, ctx)
     end
 
     test "should not return the same shape_handle for different shapes despite hash collision",
-         %{
-           shape_cache_opts: opts
-         } = ctx do
+         ctx do
       alias Electric.Replication.Eval.Parser
 
       shape1 = @shape
@@ -130,44 +128,43 @@ defmodule Electric.ShapeCacheTest do
 
       # We're forcing a hash collision here via a patch to avoid writing a brittle test.
       Repatch.patch(Shape, :hash, [mode: :shared], fn _ -> 1234 end)
-      Repatch.allow(self(), Process.whereis(opts[:server]))
+      Repatch.allow(self(), GenServer.whereis(ShapeCache.name(ctx.stack_id)))
 
       # Ensure there's a collision
       assert Shape.hash(shape1) == Shape.hash(shape2)
 
-      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape1, opts)
-      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, opts)
+      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape1, ctx.stack_id)
+      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, ctx.stack_id)
 
       assert shape_handle1 != shape_handle2
       wait_shape_init([shape_handle1, shape_handle2], ctx)
     end
 
-    test "should not return the same shape_handle for all columns and selected columns",
-         %{
-           shape_cache_opts: opts
-         } = ctx do
+    test "should not return the same shape_handle for all columns and selected columns", ctx do
       alias Electric.Replication.Eval.Parser
 
       shape1 = @shape
 
       shape2 = Shape.new!("items", inspector: @stub_inspector, columns: ["id", "value"])
 
-      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, opts)
-      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape1, opts)
+      {shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, ctx.stack_id)
+      {shape_handle1, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape1, ctx.stack_id)
 
       assert shape_handle1 != shape_handle2
 
-      assert {^shape_handle2, @zero_offset} = ShapeCache.get_or_create_shape_handle(shape2, opts)
+      assert {^shape_handle2, @zero_offset} =
+               ShapeCache.get_or_create_shape_handle(shape2, ctx.stack_id)
+
       wait_shape_init([shape_handle1, shape_handle2], ctx)
     end
   end
 
   describe "get_or_create_shape_handle/2 shape initialization" do
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
-      :with_shape_log_collector,
-      :with_noop_publication_manager
+      :with_shape_log_collector
     ]
 
     test "creates initial snapshot if one doesn't exist", %{storage: storage} = ctx do
@@ -177,11 +174,11 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      with_shape_cache(ctx)
 
-      {shape_handle, offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, offset} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
       assert offset == @zero_offset
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
       Process.sleep(100)
       shape_storage = Storage.for_shape(shape_handle, storage)
       assert Storage.snapshot_started?(shape_storage)
@@ -197,16 +194,32 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} =
-        with_shape_cache(ctx, publication_manager: {TempPubManager, [test_pid: test_pid]})
+      Support.TestUtils.patch_calls(Electric.Replication.PublicationManager,
+        wait_for_restore: fn _, _ ->
+          send(test_pid, {:called, :wait_for_restore})
+          :ok
+        end,
+        add_shape: fn _handle, _shape, _opts ->
+          send(test_pid, {:called, :prepare_tables_fn})
+          :ok
+        end
+      )
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      with_shape_cache(ctx)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
       # subsequent calls return the same shape_handle
       for _ <- 1..10,
-          do: assert({^shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts))
+          do:
+            assert(
+              {^shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+            )
 
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       assert_received {:called, :wait_for_restore}
       assert_received {:called, :prepare_tables_fn}
@@ -224,22 +237,24 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      with_shape_cache(ctx)
 
-      link_pid = Process.whereis(opts[:server])
+      link_pid = GenServer.whereis(ShapeCache.name(ctx.stack_id))
+
+      assert is_pid(link_pid)
 
       # suspend the genserver to simulate message queue buildup
       :sys.suspend(link_pid)
 
       create_call_1 =
         Task.async(fn ->
-          {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+          {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
           shape_handle
         end)
 
       create_call_2 =
         Task.async(fn ->
-          {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+          {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
           shape_handle
         end)
 
@@ -248,7 +263,7 @@ defmodule Electric.ShapeCacheTest do
       shape_handle = Task.await(create_call_1)
       assert shape_handle == Task.await(create_call_2)
 
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       # any queued calls should still return the existing shape_handle
       # after the snapshot has been created (simulated by directly
@@ -261,9 +276,9 @@ defmodule Electric.ShapeCacheTest do
 
     test "shape gets cleaned up if terminated unexpectedly", %{storage: storage} = ctx do
       Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      with_shape_cache(ctx)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
       consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
       consumer_ref = Process.monitor(consumer_pid)
@@ -312,6 +327,13 @@ defmodule Electric.ShapeCacheTest do
     end
 
     setup %{pool: pool} do
+      Repatch.patch(Electric.Connection.Manager, :snapshot_pool, [mode: :shared], fn _stack_id ->
+        pool
+      end)
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
+
       Postgrex.query!(pool, "INSERT INTO items (id, value) VALUES ($1, $2), ($3, $4)", [
         Ecto.UUID.dump!("721ae036-e620-43ee-a3ed-1aa3bb98e661"),
         "test1",
@@ -326,15 +348,15 @@ defmodule Electric.ShapeCacheTest do
       %{shape: Shape.new!("items", inspector: inspector)}
     end
 
-    test "creates initial snapshot from DB data", %{
-      storage: storage,
-      shape_cache_opts: opts,
-      shape: shape
-    } do
-      {shape_handle, _} =
-        ShapeCache.get_or_create_shape_handle(shape, opts)
+    test "creates initial snapshot from DB data",
+         %{
+           storage: storage,
+           shape: shape,
+           stack_id: stack_id
+         } do
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, stack_id)
 
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
       storage = Storage.for_shape(shape_handle, storage)
 
       stream =
@@ -361,8 +383,8 @@ defmodule Electric.ShapeCacheTest do
     test "uses correct display settings when querying initial data", %{
       pool: pool,
       storage: storage,
-      shape_cache_opts: opts,
-      shape: shape
+      shape: shape,
+      stack_id: stack_id
     } do
       shape = %{shape | selected_columns: ~w|id value date timestamptz float bytea interval|}
 
@@ -392,8 +414,8 @@ defmodule Electric.ShapeCacheTest do
         ]
       )
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, stack_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
       storage = Storage.for_shape(shape_handle, storage)
 
       stream =
@@ -419,7 +441,7 @@ defmodule Electric.ShapeCacheTest do
              } = map
     end
 
-    test "correctly propagates the error", %{shape_cache_opts: opts, shape: shape} do
+    test "correctly propagates the error", %{shape: shape} = ctx do
       shape = %{
         shape
         | root_table: {"public", "nonexistent"},
@@ -428,10 +450,10 @@ defmodule Electric.ShapeCacheTest do
 
       {shape_handle, log} =
         with_log(fn ->
-          {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
+          {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
 
           assert {:error, %Electric.SnapshotError{type: :schema_changed}} =
-                   ShapeCache.await_snapshot_start(shape_handle, opts)
+                   ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
           shape_handle
         end)
@@ -461,8 +483,8 @@ defmodule Electric.ShapeCacheTest do
           inspector: ctx.inspector
         )
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.shape_cache_opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.shape_cache_opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, ctx.stack_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
       storage = Storage.for_shape(shape_handle, ctx.storage)
 
       stream =
@@ -479,10 +501,10 @@ defmodule Electric.ShapeCacheTest do
              ] = stream_to_list(stream, "a")
     end
 
-    @tag shape_cache_opts_overrides: [snapshot_timeout_to_first_data: 500]
+    @tag stack_config_seed: [snapshot_timeout_to_first_data: 500]
     test "crashes when initial snapshot query fails to return data quickly enough", %{
-      shape_cache_opts: opts,
-      shape: shape
+      shape: shape,
+      stack_id: stack_id
     } do
       alias Electric.Replication.Eval.Parser
       where_clause = Parser.parse_and_validate_expression!("TRUE", refs: %{})
@@ -490,24 +512,24 @@ defmodule Electric.ShapeCacheTest do
       where_clause = %{where_clause | query: "PG_SLEEP(10)::text ILIKE ''"}
       shape = %{shape | where: where_clause}
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, stack_id)
 
       assert {:error, %Electric.SnapshotError{type: :slow_snapshot_query}} =
-               ShapeCache.await_snapshot_start(shape_handle, opts)
+               ShapeCache.await_snapshot_start(shape_handle, stack_id)
     end
   end
 
   describe "list_shapes/1" do
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
-      :with_shape_log_collector,
-      :with_noop_publication_manager
+      :with_shape_log_collector
     ]
 
     test "returns empty list initially", ctx do
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-      assert ShapeCache.list_shapes(opts) == []
+      with_shape_cache(ctx)
+      assert ShapeCache.list_shapes(ctx.stack_id) == []
     end
 
     test "lists the shape as active once there is a snapshot", ctx do
@@ -517,12 +539,12 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      with_shape_cache(ctx)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
       assert {:ok, 10} = ShapeStatus.snapshot_xmin(ctx.stack_id, shape_handle)
     end
 
@@ -538,28 +560,29 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      with_shape_cache(ctx)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
       # Wait until we get to the waiting point in the snapshot
       assert_receive {:waiting_point, ref, pid}
 
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
 
       send(pid, {:continue, ref})
 
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
     end
   end
 
   describe "count_shapes/1" do
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
-      :with_noop_publication_manager
+      :with_shape_cache
     ]
 
     test "returns the correct count of shapes", ctx do
@@ -570,16 +593,14 @@ defmodule Electric.ShapeCacheTest do
 
       num_shapes = :rand.uniform(100)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
       handles =
         Enum.map(1..num_shapes, fn i ->
           Shape.new!("items", inspector: @stub_inspector, where: "id = #{i}")
-          |> ShapeCache.get_or_create_shape_handle(opts)
+          |> ShapeCache.get_or_create_shape_handle(ctx.stack_id)
           |> elem(0)
         end)
 
-      assert num_shapes == ShapeCache.count_shapes(opts)
+      assert num_shapes == ShapeCache.count_shapes(ctx.stack_id)
 
       wait_shape_init(handles, ctx)
     end
@@ -587,10 +608,11 @@ defmodule Electric.ShapeCacheTest do
 
   describe "has_shape?/2" do
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
-      :with_noop_publication_manager
+      :with_shape_cache
     ]
 
     test "returns true for known shape handle", ctx do
@@ -599,12 +621,10 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
-      refute ShapeCache.has_shape?("some-random-id", opts)
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-      assert ShapeCache.has_shape?(shape_handle, opts)
+      refute ShapeCache.has_shape?("some-random-id", ctx.stack_id)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+      assert ShapeCache.has_shape?(shape_handle, ctx.stack_id)
 
       wait_shape_init(shape_handle, ctx)
     end
@@ -616,21 +636,24 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert ShapeCache.has_shape?(shape_handle, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      assert ShapeCache.has_shape?(shape_handle, ctx.stack_id)
 
       wait_shape_init(shape_handle, ctx)
     end
   end
 
   describe "await_snapshot_start/4" do
+    setup do
+      activate_mocks_for_descendant_procs(Electric.ShapeCache)
+    end
+
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
-      :with_noop_publication_manager
+      :with_shape_cache
     ]
 
     test "returns :started for snapshots that have started", ctx do
@@ -639,11 +662,9 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-
-      assert ShapeCache.await_snapshot_start(shape_handle, opts) == :started
+      assert ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id) == :started
     end
 
     test "returns an error if waiting is for an unknown shape handle", ctx do
@@ -656,9 +677,7 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
-      assert {:error, :unknown} = ShapeCache.await_snapshot_start(shape_handle, opts)
+      assert {:error, :unknown} = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       refute Storage.snapshot_started?(storage)
     end
@@ -679,16 +698,14 @@ defmodule Electric.ShapeCacheTest do
         Storage.make_new_snapshot!([[1], [2]], storage)
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
 
       tasks =
         for _id <- 1..10 do
           Task.async(fn ->
-            assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+            assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
             stream =
               Storage.get_log_stream(
@@ -730,16 +747,14 @@ defmodule Electric.ShapeCacheTest do
         Storage.make_new_snapshot!(stream_from_database, storage)
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
 
       tasks =
         for n <- 1..10 do
           Task.async(fn ->
-            :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+            :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
             stream =
               Storage.get_log_stream(
@@ -793,11 +808,9 @@ defmodule Electric.ShapeCacheTest do
         )
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-
-      task = Task.async(ShapeCache, :await_snapshot_start, [shape_handle, opts])
+      task = Task.async(ShapeCache, :await_snapshot_start, [shape_handle, ctx.stack_id])
 
       consumer_pid = GenServer.whereis(Electric.Shapes.Consumer.name(ctx.stack_id, shape_handle))
       await_for_consumer_to_have_waiters(consumer_pid)
@@ -810,14 +823,13 @@ defmodule Electric.ShapeCacheTest do
 
     test "should stop awaiting if shape process dies unexpectedly", ctx do
       Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
       task =
         Task.async(fn ->
           try do
-            ShapeCache.await_snapshot_start(shape_handle, opts)
+            ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
           catch
             :exit, {:some_reason, _} -> {:error, {:exited_with_reason, :some_reason}}
           end
@@ -847,8 +859,6 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
       start_consumer_delay = 500
 
       test_pid = self()
@@ -865,16 +875,18 @@ defmodule Electric.ShapeCacheTest do
         end
       )
 
-      Repatch.allow(self(), opts[:server])
+      activate_mocks_for_descendant_procs(Electric.ShapeCache)
 
-      creation_task = Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, opts) end)
+      creation_task =
+        Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end)
 
       {shape_handle, _} =
         receive do
-          :about_to_start_consumer -> ShapeCache.get_or_create_shape_handle(@shape, opts)
+          :about_to_start_consumer -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
         end
 
-      wait_task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+      wait_task =
+        Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id) end)
 
       # should delay in responding
       refute Task.yield(wait_task, 10)
@@ -883,9 +895,6 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "should stop waiting for consumer to come up if shape tables missing", ctx do
-      Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
       test_pid = self()
 
       Repatch.patch(
@@ -898,16 +907,19 @@ defmodule Electric.ShapeCacheTest do
         end
       )
 
-      Repatch.allow(self(), opts[:server])
-
-      start_supervised({Task, fn -> ShapeCache.get_or_create_shape_handle(@shape, opts) end})
+      start_supervised(
+        {Task, fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end}
+      )
 
       {shape_handle, _} =
         receive do
-          :about_to_start_consumer -> ShapeCache.get_or_create_shape_handle(@shape, opts)
+          :about_to_start_consumer -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+        after
+          1_000 -> flunk("No consumer process started")
         end
 
-      wait_task = Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, opts) end)
+      wait_task =
+        Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id) end)
 
       # should delay in responding
       refute Task.yield(wait_task, 10)
@@ -920,10 +932,10 @@ defmodule Electric.ShapeCacheTest do
 
   describe "after restart" do
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
-      :with_noop_publication_manager,
       :with_no_pool
     ]
 
@@ -939,54 +951,63 @@ defmodule Electric.ShapeCacheTest do
       with_shape_cache(ctx)
     end
 
-    test "restores shape_handles", %{shape_cache_opts: opts} = context do
-      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
-      restart_shape_cache(context)
-      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
+    test "restores shape_handles", ctx do
+      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle1, ctx.stack_id)
+      restart_shape_cache(ctx)
+      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
       assert shape_handle1 == shape_handle2
     end
 
-    test "restores snapshot xmins", %{shape_cache_opts: opts} = context do
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+    test "restores snapshot xmins", ctx do
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
 
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.stack_id, shape_handle)
+      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(ctx.stack_id, shape_handle)
       assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
 
-      %{shape_cache_opts: opts} = restart_shape_cache(context)
-      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      restart_shape_cache(ctx)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(opts)
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(context.stack_id, shape_handle)
+      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
+      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(ctx.stack_id, shape_handle)
       assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
     end
 
-    test "waits until publication filters are restored", %{shape_cache_opts: opts} = context do
-      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle1, opts)
+    test "waits until publication filters are restored", ctx do
+      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
-      restart_shape_cache(%{
-        context
-        | publication_manager: {TempPubManager, [test_pid: self()]}
-      })
+      :started = ShapeCache.await_snapshot_start(shape_handle1, ctx.stack_id)
+
+      test_pid = self()
+
+      Support.TestUtils.patch_calls(Electric.Replication.PublicationManager,
+        wait_for_restore: fn _, _ ->
+          send(test_pid, {:called, :wait_for_restore})
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      restart_shape_cache(ctx)
 
       assert_receive {:called, :wait_for_restore}
 
-      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
       assert shape_handle1 == shape_handle2
-      :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
     end
 
-    test "restores latest offset", %{shape_cache_opts: opts} = context do
+    test "restores latest offset", ctx do
       offset = @change_offset
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      ref = Shapes.Consumer.monitor(context.stack_id, shape_handle)
+      ref = Shapes.Consumer.monitor(ctx.stack_id, shape_handle)
 
       ShapeLogCollector.store_transaction(
         %Changes.Transaction{
@@ -997,12 +1018,12 @@ defmodule Electric.ShapeCacheTest do
           affected_relations: MapSet.new([{"public", "items"}]),
           commit_timestamp: DateTime.utc_now()
         },
-        context.shape_log_collector
+        ctx.shape_log_collector
       )
 
       assert_receive {Shapes.Consumer, ^ref, @xid}
 
-      {^shape_handle, ^offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
+      {^shape_handle, ^offset} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
       # without this sleep, this test becomes unreliable. I think maybe due to
       # delays in actually writing the data to cubdb/fsyncing the tx. I've
@@ -1010,41 +1031,21 @@ defmodule Electric.ShapeCacheTest do
       # reliable method is to wait just a little bit...
       Process.sleep(10)
 
-      restart_shape_cache(context)
+      restart_shape_cache(ctx)
 
-      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
-      assert {^shape_handle, ^offset} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-    end
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-    defmodule SlowPublicationManager do
-      @behaviour Electric.Replication.PublicationManager
-
-      use GenServer
-
-      def start_link(opts),
-        do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
-
-      def init(opts), do: {:ok, opts}
-
-      def remove_shape(_, opts), do: GenServer.call(opts[:server], :remove_shape, 0)
-
-      def add_shape(_, _, opts), do: GenServer.call(opts[:server], :add_shape, 0)
-
-      def wait_for_restore(_opts), do: :ok
-
-      def handle_call(_request, _from, state) do
-        Process.sleep(10)
-        {:reply, :ok, state}
-      end
+      assert {^shape_handle, ^offset} =
+               ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
     end
 
     test "restores shapes with subqueries and their materializers", ctx do
-      %{shape_cache_opts: opts} = ctx
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape_with_subquery, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
 
       # Materializer should be started
       assert Process.alive?(
@@ -1056,16 +1057,16 @@ defmodule Electric.ShapeCacheTest do
       # Register this test as the connection manager to get "consumers ready" notification
       restart_shape_cache(ctx)
 
-      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
     end
 
     test "restores shapes with subqueries and their materializers when backup missing", ctx do
-      %{shape_cache_opts: opts} = ctx
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape_with_subquery, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
 
       # Materializer should be started
       assert Process.alive?(
@@ -1076,30 +1077,30 @@ defmodule Electric.ShapeCacheTest do
 
       restart_shape_cache(ctx, remove_backup: true)
 
-      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
     end
 
-    defp restart_shape_cache(context, opts \\ []) do
-      stop_shape_cache(context)
+    defp restart_shape_cache(ctx, opts \\ []) do
+      stop_shape_cache(ctx)
 
       {remove_backup?, opts} = Keyword.pop(opts, :remove_backup, false)
 
       if remove_backup? do
-        File.rm_rf!(ShapeCache.ShapeStatus.backup_dir(context.storage))
+        File.rm_rf!(ShapeCache.ShapeStatus.backup_dir(ctx.storage))
       end
 
-      context =
-        context
-        |> Map.merge(with_shape_status(context))
-        |> Map.merge(with_shape_log_collector(context))
+      ctx =
+        ctx
+        |> Map.merge(with_shape_status(ctx))
+        |> Map.merge(with_shape_log_collector(ctx))
 
-      with_shape_cache(context, opts)
+      with_shape_cache(ctx, opts)
     end
 
     defp stop_shape_cache(ctx) do
       for name <-
             [
-              ctx.shape_cache_opts[:server],
+              ctx.shape_cache,
               ctx.consumer_supervisor,
               ctx.shape_log_collector,
               ctx.shape_status_owner,
@@ -1112,10 +1113,10 @@ defmodule Electric.ShapeCacheTest do
 
   describe "start_consumer_for_handle/2" do
     setup [
+      :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
       :with_shape_log_collector,
-      :with_noop_publication_manager,
       :with_no_pool
     ]
 
@@ -1132,40 +1133,33 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "starts a consumer plus dependencies", ctx do
-      %{shape_cache_opts: opts, stack_id: stack_id} = ctx
+      %{stack_id: stack_id} = ctx
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape_with_subquery, opts)
-      :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape_with_subquery, stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
 
-      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+      assert [{dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
 
       # Materializer should be started
       assert Process.alive?(
-               GenServer.whereis(
-                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
-               )
+               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
              )
 
       # Register this test as the connection manager to get "consumers ready" notification
       restart_shape_cache(ctx)
 
-      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(opts)
+      assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
 
       refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)
       refute Electric.Shapes.ConsumerRegistry.whereis(stack_id, dep_handle)
 
-      refute GenServer.whereis(
-               Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
-             )
+      refute GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
 
-      assert {:ok, _pid1} =
-               ShapeCache.start_consumer_for_handle(shape_handle, opts)
+      assert {:ok, _pid1} = ShapeCache.start_consumer_for_handle(shape_handle, stack_id)
 
       # Materializer should be started
       assert Process.alive?(
-               GenServer.whereis(
-                 Electric.Shapes.Consumer.Materializer.name(ctx.stack_id, dep_handle)
-               )
+               GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
              )
     end
   end
@@ -1203,6 +1197,7 @@ defmodule Electric.ShapeCacheTest do
   defp wait_shape_init(shape_handles, %{stack_id: stack_id}) do
     shape_handles
     |> List.wrap()
+    |> wait_snapshot()
     |> Enum.map(fn handle ->
       Task.async(fn ->
         Enum.reduce_while(1..1000, [], fn _, _ ->
@@ -1214,10 +1209,16 @@ defmodule Electric.ShapeCacheTest do
           end
         end)
       end)
-      |> tap(fn _ ->
-        assert_receive({:snapshot, ^handle})
-      end)
     end)
     |> Task.await_many()
+  end
+
+  defp wait_snapshot(handles) do
+    handles
+    |> List.wrap()
+    |> Enum.map(fn handle ->
+      assert_receive {:snapshot, ^handle}
+      handle
+    end)
   end
 end

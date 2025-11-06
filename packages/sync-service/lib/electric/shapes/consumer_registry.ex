@@ -2,6 +2,8 @@ defmodule Electric.Shapes.ConsumerRegistry do
   alias Electric.ShapeCache
   alias Electric.Telemetry.OpenTelemetry
 
+  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+
   require Logger
 
   defstruct table: nil,
@@ -15,11 +17,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
           stack_id: stack_id()
         }
 
-  def name(stack_id, shape_handle) do
+  def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     {:via, __MODULE__, {stack_id, shape_handle}}
   end
 
-  def register_name({stack_id, shape_handle}, pid) do
+  def register_name({stack_id, shape_handle}, pid)
+      when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     if register_consumer!(pid, shape_handle, ets_name(stack_id)), do: :yes, else: :no
   end
 
@@ -30,6 +33,11 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   def whereis_name({stack_id, shape_handle}) do
     whereis(stack_id, shape_handle) || :undefined
+  end
+
+  @spec whereis(stack_ref(), shape_handle()) :: pid() | nil
+  def whereis(stack_ref, shape_handle) when is_shape_handle(shape_handle) do
+    consumer_pid(shape_handle, ets_name(stack_ref))
   end
 
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
@@ -110,11 +118,6 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end)
   end
 
-  @spec whereis(stack_ref(), shape_handle()) :: pid() | nil
-  def whereis(stack_ref, shape_handle) do
-    consumer_pid(shape_handle, ets_name(stack_ref))
-  end
-
   defp consumer_pid(handle, table) do
     :ets.lookup_element(table, handle, 2, nil)
   end
@@ -160,7 +163,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     ets_name(Access.fetch!(opts, :stack_id))
   end
 
-  defp ets_name(stack_id) when is_binary(stack_id) do
+  defp ets_name(stack_id) when is_stack_id(stack_id) do
     :"Electric.Shapes.ConsumerRegistry-#{stack_id}"
   end
 end

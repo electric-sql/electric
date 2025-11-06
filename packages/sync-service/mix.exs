@@ -118,7 +118,6 @@ defmodule Electric.MixProject do
       {:dialyxir, "~> 1.4", only: [:test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false},
-      {:mox, "~> 1.1", only: [:test]},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:stream_data, "~> 1.2", only: [:dev, :test]},
       {:repatch, "~> 1.0", only: [:test]}

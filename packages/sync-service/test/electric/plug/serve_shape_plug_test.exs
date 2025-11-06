@@ -1,6 +1,6 @@
 defmodule Electric.Plug.ServeShapePlugTest do
   use ExUnit.Case, async: true
-  use Support.Mock
+  use Repatch.ExUnit, assert_expectations: true
 
   import Plug.Conn
 
@@ -11,11 +11,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1]
 
-  import Mox
-
-  setup :verify_on_exit!
+  import Support.TestUtils,
+    only: [
+      set_status_to_active: 1,
+      patch_shape_cache: 1,
+      expect_shape_cache: 1,
+      patch_storage: 1,
+      patch_storage: 2,
+      expect_storage: 1
+    ]
 
   @registry Registry.ServeShapePlugTest
 
@@ -65,7 +70,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         pg_id: @test_pg_id,
         stack_events_registry: Electric.stack_events_registry(),
         stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-        shape_cache: {Mock.ShapeCache, []},
+        shape_cache: {Electric.ShapeCache, []},
         storage: {Mock.Storage, []},
         inspector: @inspector,
         registry: @registry,
@@ -85,10 +90,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     setup ctx do
       {:via, _, {registry_name, registry_key}} =
-        Electric.Shapes.Supervisor.name(ctx)
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
       set_status_to_active(ctx)
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
       :ok
     end
 
@@ -179,8 +187,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "returns 400 when offset is out of bounds", ctx do
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+      )
 
       invalid_offset = LogOffset.increment(@test_offset)
 
@@ -224,23 +233,25 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "returns snapshot when offset is -1", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
 
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        @first_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, @first_offset, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          @first_offset
+        end,
+        get_log_stream: fn @before_all_offset, @first_offset, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
 
       conn =
         ctx
@@ -266,23 +277,25 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "snapshot has correct cache control headers", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
 
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        next_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          next_offset
+        end,
+        get_log_stream: fn @before_all_offset, _, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
 
       max_age = 62
       stale_age = 312
@@ -305,21 +318,23 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "sets correct CORS headers for Access-Control-Expose-Headers", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        @first_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        []
-      end)
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          @first_offset
+        end,
+        get_log_stream: fn @before_all_offset, _, @test_opts ->
+          []
+        end
+      )
 
       conn =
         ctx
@@ -347,23 +362,25 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "response has correct schema header", ctx do
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
 
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        next_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          next_offset
+        end,
+        get_log_stream: fn @before_all_offset, _, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
 
       conn =
         ctx
@@ -376,25 +393,26 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "returns log when offset is >= 0", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
       next_offset = LogOffset.increment(@start_offset_50)
       next_next_offset = LogOffset.increment(next_offset)
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
-        next_next_offset
-      end)
-      |> expect(:get_log_stream, fn @start_offset_50, _, @test_opts ->
-        [
-          Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
-          Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
-        ]
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @start_offset_50, _ ->
+          next_next_offset
+        end,
+        get_log_stream: fn @start_offset_50, _, @test_opts ->
+          [
+            Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset}),
+            Jason.encode!(%{key: "log2", value: "bar", headers: %{}, offset: next_next_offset})
+          ]
+        end
+      )
 
       conn =
         ctx
@@ -437,15 +455,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
          ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @start_offset_50, _ ->
-        @test_offset
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @start_offset_50, _ ->
+          @test_offset
+        end
+      )
 
       conn = get_shape_with_etag(ctx, @start_offset_50)
       assert conn.status == 304
@@ -453,17 +472,18 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "the 304 response includes caching headers that are appropriate for the offset", ctx do
-      Mock.ShapeCache
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ -> @test_offset end)
-      |> expect(:get_chunk_end_log_offset, 2, fn @start_offset_50, _ -> @test_offset end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ -> @test_offset end,
+        get_chunk_end_log_offset: {fn @start_offset_50, _ -> @test_offset end, exactly: 2}
+      )
 
       conn = get_shape_with_etag(ctx, @before_all_offset)
       assert conn.status == 304
@@ -489,30 +509,27 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "handles live updates", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
       test_pid = self()
       next_offset = LogOffset.increment(@test_offset)
       next_offset_str = "#{next_offset}"
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, @test_offset, @test_opts ->
-        send(test_pid, :got_log_stream)
-        []
-      end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, ^next_offset, @test_opts ->
-        [Jason.encode!("test result")]
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, @test_offset, @test_opts ->
+          send(test_pid, :got_log_stream)
+          []
+        end,
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, ^next_offset, @test_opts ->
+          [Jason.encode!("test result")]
+        end
+      )
 
       task =
         Task.async(fn ->
@@ -563,22 +580,23 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
 
     test "handles shape rotation", ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
       test_pid = self()
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, _, @test_opts ->
-        send(test_pid, :got_log_stream)
-        []
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ ->
+          nil
+        end,
+        get_log_stream: fn @test_offset, _, @test_opts ->
+          send(test_pid, :got_log_stream)
+          []
+        end
+      )
 
       task =
         Task.async(fn ->
@@ -609,19 +627,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "sends an up-to-date response after a timeout if no changes are observed",
          ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ ->
-        nil
-      end)
-      |> expect(:get_log_stream, fn @test_offset, _, @test_opts ->
-        []
-      end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
 
       ctx = Map.put(ctx, :long_poll_timeout, 100)
 
@@ -650,12 +665,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",
          ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn "foo", _opts -> false end)
-
-      Mock.Storage
-      |> stub(:for_shape, fn "foo", opts -> {"foo", opts} end)
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn "foo", _opts -> false end
+      )
 
       conn =
         ctx
@@ -677,15 +690,14 @@ defmodule Electric.Plug.ServeShapePlugTest do
          ctx do
       new_shape_handle = "new-shape-handle"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> nil end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> false end)
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {new_shape_handle, @test_offset}
-      end)
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> false end)
 
-      Mock.Storage
-      |> stub(:for_shape, fn new_shape_handle, opts -> {new_shape_handle, opts} end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> nil end,
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {new_shape_handle, @test_offset}
+        end
+      )
 
       conn =
         ctx
@@ -706,11 +718,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
          ctx do
       new_shape_handle = "new-shape-handle"
 
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts -> nil end)
-      |> expect(:get_or_create_shape_handle, fn @test_shape, _opts ->
-        {new_shape_handle, @test_offset}
-      end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> nil end,
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {new_shape_handle, @test_offset}
+        end
+      )
 
       conn =
         ctx
@@ -766,22 +779,29 @@ defmodule Electric.Plug.ServeShapePlugTest do
       test_shape_handle = "test-shape-without-deltas"
       next_offset = LogOffset.increment(@first_offset)
 
-      Mock.ShapeCache
-      |> expect(:get_or_create_shape_handle, fn %{root_table: {"public", "users"}, replica: :full},
-                                                _opts ->
-        {test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn ^test_shape_handle, _opts -> true end)
-      |> expect(:await_snapshot_start, fn ^test_shape_handle, _ -> :started end)
+      patch_shape_cache(has_shape?: fn ^test_shape_handle, _opts -> true end)
 
-      Mock.Storage
-      |> stub(:for_shape, fn ^test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @before_all_offset, _ ->
-        next_offset
-      end)
-      |> expect(:get_log_stream, fn @before_all_offset, _, @test_opts ->
-        [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
-      end)
+      expect_shape_cache(
+        get_or_create_shape_handle: fn %{root_table: {"public", "users"}, replica: :full},
+                                       _stack_id,
+                                       _opts ->
+          {test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn ^test_shape_handle, _ -> :started end
+      )
+
+      patch_storage([force: true],
+        for_shape: fn ^test_shape_handle, _opts -> @test_opts end
+      )
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          next_offset
+        end,
+        get_log_stream: fn @before_all_offset, _, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
 
       conn =
         ctx
@@ -812,26 +832,27 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     setup ctx do
       {:via, _, {registry_name, registry_key}} =
-        Electric.Shapes.Supervisor.name(ctx)
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
 
       {:ok, _} = Registry.register(registry_name, registry_key, nil)
       set_status_to_active(ctx)
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
       :ok
     end
 
-    test "returns proper SSE format response when live_sse=true and live=true",
-         ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+    test "returns proper SSE format response when live_sse=true and live=true", ctx do
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-      # Remove unused variable
-      # Set up storage mocks
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ -> nil end)
-      |> expect(:get_log_stream, fn @test_offset, @test_offset, @test_opts -> [] end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, @test_offset, @test_opts -> [] end
+      )
 
       # Use a short SSE timeout for the test
       ctx = Map.put(ctx, :sse_timeout, 100)
@@ -845,11 +866,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> call_serve_shape_plug(ctx)
 
-      # Validate response headers for SSE
       assert {"content-type", "text/event-stream"} in conn.resp_headers
       assert {"connection", "keep-alive"} in conn.resp_headers
 
-      # Verify cache control header for request collapsing
       cache_control =
         Enum.find_value(conn.resp_headers, fn
           {"cache-control", value} -> value
@@ -859,10 +878,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert cache_control =~ "public"
       assert cache_control =~ "max-age="
 
-      # Verify chunked transfer encoding
       assert conn.state == :chunked
 
-      # Verify response format (should be SSE events)
       assert conn.status == 200
       assert conn.state == :chunked
     end
@@ -891,20 +908,20 @@ defmodule Electric.Plug.ServeShapePlugTest do
       next_offset = LogOffset.increment(@test_offset)
       test_content = %{key: "test-key", value: "test-value", headers: %{}, offset: next_offset}
 
-      # Set up mocks
-      Mock.ShapeCache
-      |> expect(:get_shape, fn @test_shape, _opts ->
-        {@test_shape_handle, @test_offset}
-      end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ -> next_offset end)
-      |> expect(:get_log_stream, fn @test_offset, _, @test_opts -> [test_content] end)
+      expect_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+      )
 
-      # Make the request
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> next_offset end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [test_content] end
+      )
+
       %{resp_body: body} =
         ctx
         |> conn(
@@ -914,25 +931,22 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> call_serve_shape_plug(ctx)
 
-      # Verify the SSE formatted body
       assert body =~ "data:"
       assert body =~ "test-key"
       assert body =~ "test-value"
     end
 
-    test "works with deprecated experimental_live_sse=true",
-         ctx do
-      Mock.ShapeCache
-      |> stub(:get_shape, fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end)
-      |> stub(:has_shape?, fn @test_shape_handle, _opts -> true end)
-      |> stub(:await_snapshot_start, fn @test_shape_handle, _ -> :started end)
+    test "works with deprecated experimental_live_sse=true", ctx do
+      patch_shape_cache(
+        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
 
-      # Remove unused variable
-      # Set up storage mocks
-      Mock.Storage
-      |> stub(:for_shape, fn @test_shape_handle, _opts -> @test_opts end)
-      |> expect(:get_chunk_end_log_offset, fn @test_offset, _ -> nil end)
-      |> expect(:get_log_stream, fn @test_offset, @test_offset, @test_opts -> [] end)
+      expect_storage(
+        get_chunk_end_log_offset: fn @test_offset, _ -> nil end,
+        get_log_stream: fn @test_offset, @test_offset, @test_opts -> [] end
+      )
 
       # Use a short SSE timeout for the test
       ctx = Map.put(ctx, :sse_timeout, 100)
@@ -946,11 +960,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
         )
         |> call_serve_shape_plug(ctx)
 
-      # Validate response headers for SSE
       assert {"content-type", "text/event-stream"} in conn.resp_headers
       assert {"connection", "keep-alive"} in conn.resp_headers
 
-      # Verify cache control header for request collapsing
       cache_control =
         Enum.find_value(conn.resp_headers, fn
           {"cache-control", value} -> value
@@ -960,10 +972,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert cache_control =~ "public"
       assert cache_control =~ "max-age="
 
-      # Verify chunked transfer encoding
       assert conn.state == :chunked
 
-      # Verify response format (should be SSE events)
       assert conn.status == 200
       assert conn.state == :chunked
     end
