@@ -7,7 +7,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   # NOTES:
   # - Consumer does txn buffering until pg snapshot is known
-  use GenServer, restart: :transient
+
+  # The lifecycle of a materializer is linked to its source consumer. If the consumer
+  # goes down for any reason other than a clean supervisor/stack shutdown then we
+  # need to invalidate all dependent outer shapes.
+  #
+  # restart: :temporary because the materalizer crashing brings down dependent shapes
+  # and restarting would make no sense.
+  use GenServer, restart: :temporary
 
   alias Electric.Utils
   alias Electric.Replication.Changes
@@ -70,7 +77,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     %{stack_id: stack_id, shape_handle: shape_handle} = opts
 
     Process.set_label({:materializer, shape_handle})
-    Process.flag(:trap_exit, true)
     metadata = [stack_id: stack_id, shape_handle: shape_handle]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
@@ -93,7 +99,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   def handle_continue({:start_materializer, storage}, state) do
     %{stack_id: stack_id, shape_handle: shape_handle} = state
 
-    :started = Consumer.await_snapshot_start(stack_id, shape_handle)
+    :started = Consumer.await_snapshot_start(stack_id, shape_handle, :infinity)
 
     Consumer.subscribe_materializer(stack_id, shape_handle)
 
@@ -179,21 +185,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
   end
 
-  def handle_info({:EXIT, _, reason}, state) do
-    {:stop, reason, state}
-  end
-
-  # notify subscribers of the shape removal if the consumer exit reason is
-  # anything other than a clean supervisor shutdown.
+  # if the supervisor is going down then this process will also be taken down
+  # but let's state the dependency explictly.
   def handle_info({{:consumer_down, _}, _ref, :process, _pid, :shutdown}, state) do
-    {:noreply, state}
+    {:stop, :shutdown, state}
   end
 
   def handle_info({{:consumer_down, _}, _ref, :process, _pid, {:shutdown, reason}}, state)
       when reason != :cleanup do
-    {:noreply, state}
+    {:stop, :shutdown, state}
   end
 
+  # notify subscribers of the shape removal if the consumer exit reason is
+  # anything other than a clean supervisor shutdown.
   def handle_info({{:consumer_down, _}, _ref, :process, _pid, _reason}, state) do
     for pid <- state.subscribers do
       send(pid, {:materializer_shape_invalidated, state.shape_handle})
