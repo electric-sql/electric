@@ -101,7 +101,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
     :started = Consumer.await_snapshot_start(stack_id, shape_handle, :infinity)
 
-    Consumer.subscribe_materializer(stack_id, shape_handle)
+    Consumer.subscribe_materializer(stack_id, shape_handle, self())
 
     Process.monitor(Consumer.whereis(stack_id, shape_handle),
       tag: {:consumer_down, state.shape_handle}

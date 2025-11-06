@@ -41,10 +41,10 @@ defmodule Electric.Shapes.Consumer do
     |> GenServer.call(:await_snapshot_start, timeout)
   end
 
-  def subscribe_materializer(stack_id, shape_handle) do
+  def subscribe_materializer(stack_id, shape_handle, pid) do
     stack_id
     |> consumer_pid(shape_handle)
-    |> GenServer.call(:subscribe_materializer)
+    |> GenServer.call({:subscribe_materializer, pid})
   end
 
   @doc false
@@ -220,8 +220,9 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
-  def handle_call(:subscribe_materializer, _from, state) do
+  def handle_call({:subscribe_materializer, pid}, _from, state) do
     Logger.debug("Subscribing materializer for #{state.shape_handle}")
+    Process.monitor(pid, tag: :materializer_down)
     {:reply, :ok, %{state | materializer_subscribed?: true}, state.hibernate_after}
   end
 
@@ -312,17 +313,20 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, terminate_safely(state)}
   end
 
+  def handle_info({:materializer_down, _ref, :process, pid, reason}, state) do
+    Logger.warning(
+      "Materializer down for consumer: #{state.shape_handle} (#{inspect(pid)}) (#{inspect(reason)})"
+    )
+
+    handle_materializer_down(reason, state)
+  end
+
   def handle_info({{:dependency_materializer_down, handle}, _ref, :process, pid, reason}, state) do
     Logger.warning(
       "Materializer down for a dependency: #{handle} (#{inspect(pid)}) (#{inspect(reason)})"
     )
 
-    case {reason, state.terminating?} do
-      {_, true} -> {:noreply, state}
-      {{:shutdown, _}, false} -> {:stop, reason, state}
-      {:shutdown, false} -> {:stop, reason, state}
-      _ -> {:noreply, terminate_safely(state)}
-    end
+    handle_materializer_down(reason, state)
   end
 
   # We're trapping exists so that `terminate` is called to clean up the writer,
@@ -773,6 +777,15 @@ defmodule Electric.Shapes.Consumer do
           false
       end
     end)
+  end
+
+  defp handle_materializer_down(reason, state) do
+    case {reason, state.terminating?} do
+      {_, true} -> {:noreply, state}
+      {{:shutdown, _}, false} -> {:stop, reason, state}
+      {:shutdown, false} -> {:stop, reason, state}
+      _ -> {:noreply, terminate_safely(state)}
+    end
   end
 
   if Mix.env() == :test do

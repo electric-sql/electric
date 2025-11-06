@@ -351,6 +351,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
   defp respond_to_call(request, response) do
     receive do
+      {:"$gen_call", {from, ref}, {^request, _arg}} ->
+        send(from, {ref, response})
+
       {:"$gen_call", {from, ref}, ^request} ->
         send(from, {ref, response})
     end
