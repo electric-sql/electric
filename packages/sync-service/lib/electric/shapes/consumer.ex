@@ -21,7 +21,7 @@ defmodule Electric.Shapes.Consumer do
 
   require Logger
 
-  @default_snapshot_timeout 30_000
+  @default_snapshot_timeout 45_000
   @stop_and_clean_timeout 30_000
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
@@ -41,6 +41,7 @@ defmodule Electric.Shapes.Consumer do
     |> GenServer.call(:await_snapshot_start, timeout)
   end
 
+  @spec subscribe_materializer(Electric.stack_id(), ShapeCache.shape_handle(), pid()) :: :ok
   def subscribe_materializer(stack_id, shape_handle, pid) do
     stack_id
     |> consumer_pid(shape_handle)
