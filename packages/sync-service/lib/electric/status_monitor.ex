@@ -6,7 +6,8 @@ defmodule Electric.StatusMonitor do
 
   @type status() :: %{
           conn: :waiting_on_lock | :starting | :up | :sleeping,
-          shape: :starting | :up
+          shape: :starting | :up,
+          replication_available: boolean()
         }
 
   @conditions [
@@ -50,8 +51,9 @@ defmodule Electric.StatusMonitor do
       end
 
     shape_status = shape_status_from_results(results)
+    replication_available = replication_available_from_results(results)
 
-    %{conn: conn_status, shape: shape_status}
+    %{conn: conn_status, shape: shape_status, replication_available: replication_available}
   end
 
   defp conn_status_from_results(%{pg_lock_acquired: {false, _}}), do: :waiting_on_lock
@@ -73,6 +75,9 @@ defmodule Electric.StatusMonitor do
        do: :up
 
   defp shape_status_from_results(_), do: :starting
+
+  defp replication_available_from_results(%{replication_client_ready: {true, _}}), do: true
+  defp replication_available_from_results(_), do: false
 
   def database_connections_going_to_sleep(stack_id) do
     GenServer.cast(name(stack_id), :database_connections_going_to_sleep)

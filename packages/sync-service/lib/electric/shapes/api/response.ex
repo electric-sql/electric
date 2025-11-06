@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Api.Response do
   @electric_schema_header "electric-schema"
   @electric_up_to_date_header "electric-up-to-date"
   @electric_known_error_header "electric-internal-known-error"
+  @electric_fallback_mode_header "electric-fallback-mode"
 
   # List of all Electric-specific headers that may be included in API responses
   @electric_headers [
@@ -20,7 +21,8 @@ defmodule Electric.Shapes.Api.Response do
     @electric_offset_header,
     @electric_schema_header,
     @electric_up_to_date_header,
-    @electric_known_error_header
+    @electric_known_error_header,
+    @electric_fallback_mode_header
   ]
 
   defstruct [
@@ -38,7 +40,8 @@ defmodule Electric.Shapes.Api.Response do
     status: 200,
     trace_attrs: %{},
     body: [],
-    finalized?: false
+    finalized?: false,
+    fallback_mode: false
   ]
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
@@ -56,7 +59,8 @@ defmodule Electric.Shapes.Api.Response do
           trace_attrs: %{optional(atom()) => term()},
           body: Enum.t(),
           finalized?: boolean(),
-          response_type: :normal_log | :subset
+          response_type: :normal_log | :subset,
+          fallback_mode: boolean()
         }
 
   @shape_definition_mismatch %{
@@ -229,6 +233,7 @@ defmodule Electric.Shapes.Api.Response do
     |> put_offset_header(response)
     |> put_known_error_header(response)
     |> put_retry_after_header(response)
+    |> put_fallback_mode_header(response)
     |> put_sse_headers(response)
   end
 
@@ -387,6 +392,14 @@ defmodule Electric.Shapes.Api.Response do
 
   defp put_retry_after_header(conn, %__MODULE__{retry_after: seconds}) do
     Plug.Conn.put_resp_header(conn, "retry-after", "#{seconds}")
+  end
+
+  defp put_fallback_mode_header(conn, %__MODULE__{fallback_mode: true}) do
+    Plug.Conn.put_resp_header(conn, @electric_fallback_mode_header, "true")
+  end
+
+  defp put_fallback_mode_header(conn, %__MODULE__{fallback_mode: false}) do
+    conn
   end
 
   defp validate_response_finalized!(%__MODULE__{finalized?: false} = _response) do
