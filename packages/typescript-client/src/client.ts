@@ -1224,16 +1224,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /**
    * Start polling the status endpoint to detect when server exits fallback mode
-   * Polls every 60 seconds
+   * Polls every 10 seconds
    */
   #startStatusPolling() {
     if (!this.#statusPollUrl) return // Status polling not available
     if (this.#statusPollInterval) return // Already polling
 
-    const intervalMs = 60000 // 60 seconds
+    const intervalMs = 10000 // 10 seconds
 
     console.log(
-      `[Electric] Server in fallback mode. Polling status every 60s to detect when live replication is restored.`
+      `[Electric] Server in fallback mode. Polling status every 10s to detect when live replication is restored.`
     )
 
     const pollStatus = async () => {
