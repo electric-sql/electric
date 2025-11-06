@@ -6,7 +6,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   """
   use GenServer
 
-  alias Electric.Shapes.ConsumerSupervisor
+  alias Electric.Shapes.Consumer
   alias Electric.ShapeCache.ShapeStatus
 
   require Logger
@@ -17,25 +17,22 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
   # Public API
   @spec remove_shape(shape_handle(), Keyword.t()) :: :ok | {:error, term()}
-  def remove_shape(shape_handle, opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
+  def remove_shape(shape_handle, stack_id, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 15_000)
     GenServer.call(name(stack_id), {:remove_shape, shape_handle}, timeout)
   end
 
   @spec remove_shape(shape_handle(), Keyword.t()) :: :ok
-  def remove_shape_async(shape_handle, opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
+  def remove_shape_async(shape_handle, stack_id) do
     GenServer.cast(name(stack_id), {:remove_shape, shape_handle})
   end
 
   @spec remove_shapes_for_relations(list(Electric.oid_relation()), Keyword.t()) :: :ok
-  def remove_shapes_for_relations([], _opts) do
+  def remove_shapes_for_relations([], _stack_id) do
     :ok
   end
 
-  def remove_shapes_for_relations(relations, opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
+  def remove_shapes_for_relations(relations, stack_id) do
     # We don't want for this call to be blocking because it will be called in `PublicationManager`
     # if it notices a discrepancy in the schema
     GenServer.cast(name(stack_id), {:clean_all_shapes_for_relations, relations})
@@ -67,7 +64,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
   @impl true
   def handle_call({:remove_shape, shape_handle}, _from, state) do
-    :ok = stop_and_clean_shape(shape_handle, state)
+    :ok = stop_and_clean_shape(shape_handle, state.stack_id)
     {:reply, :ok, state}
   end
 
@@ -103,7 +100,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   def handle_cast(:remove_queued_shapes, %{queued_removals: [next_shape | rest]} = state) do
-    :ok = stop_and_clean_shape(next_shape, state)
+    :ok = stop_and_clean_shape(next_shape, state.stack_id)
     # schedule the next removal immediately via another cast to keep mailbox ordering
     if rest != [] do
       GenServer.cast(self(), :remove_queued_shapes)
@@ -115,20 +112,20 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @impl true
   def handle_info({:remove_shape, shape_handle}, state) do
     Logger.debug("Removing shape #{inspect(shape_handle)}")
-    :ok = stop_and_clean_shape(shape_handle, state)
+    :ok = stop_and_clean_shape(shape_handle, state.stack_id)
     {:noreply, state}
   end
 
-  defp stop_and_clean_shape(shape_handle, state) do
+  defp stop_and_clean_shape(shape_handle, stack_id) do
     Logger.debug("Removing shape #{inspect(shape_handle)}")
 
-    case ConsumerSupervisor.stop_and_clean(state.stack_id, shape_handle) do
+    case Consumer.stop_and_clean(stack_id, shape_handle) do
       :noproc ->
         # if the consumer isn't running then we can just delete things gratuitously,
         # starting with an immediate shape status removal
-        ShapeStatus.remove_shape(state.stack_id, shape_handle)
+        ShapeStatus.remove_shape(stack_id, shape_handle)
 
-        :ok = purge_shape(state.stack_id, shape_handle)
+        :ok = purge_shape(stack_id, shape_handle)
 
       :ok ->
         # if it is running then the stop_and_clean process will cleanup properly

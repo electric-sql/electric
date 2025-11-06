@@ -1,11 +1,10 @@
 defmodule Electric.ShapeCleanerTest do
   use ExUnit.Case, async: true
-  use Support.Mock
+  use Repatch.ExUnit, assert_expectations: true
 
   import ExUnit.CaptureLog
   import Support.ComponentSetup
   import Support.TestUtils
-  import Mox
 
   alias Electric.ShapeCache
   alias Electric.ShapeCache.Storage
@@ -25,8 +24,6 @@ defmodule Electric.ShapeCleanerTest do
   @pg_snapshot_xmin_10 {10, 11, [10]}
 
   @moduletag :tmp_dir
-
-  setup :verify_on_exit!
 
   # Provide an inspector for downstream setup helpers (shape log collector, etc.)
   setup do
@@ -55,14 +52,7 @@ defmodule Electric.ShapeCleanerTest do
         %{stack_id: stack_id} = ctx
         existing_shapes = Map.get(ctx, :restore_shapes, [])
 
-        Repatch.patch(
-          Electric.ShapeCache.ShapeStatus,
-          :list_shapes,
-          [mode: :shared],
-          fn ^stack_id ->
-            existing_shapes
-          end
-        )
+        patch_shape_status(list_shapes: fn ^stack_id -> existing_shapes end)
 
         Support.TestUtils.activate_mocks_for_descendant_procs(
           Electric.Replication.ShapeLogCollector
@@ -70,11 +60,9 @@ defmodule Electric.ShapeCleanerTest do
 
         parent = self()
 
-        Repatch.patch(
+        patch_calls(
           Electric.StatusMonitor,
-          :mark_shape_log_collector_ready,
-          [mode: :shared],
-          fn _, _ ->
+          mark_shape_log_collector_ready: fn _, _ ->
             send(parent, :shape_log_collector_ready)
             :ok
           end
@@ -111,10 +99,10 @@ defmodule Electric.ShapeCleanerTest do
           GenServer.cast(parent, {:snapshot_started, shape_handle})
         end)
 
-        %{shape_cache_opts: opts} = with_shape_cache(ctx)
+        with_shape_cache(ctx)
 
-        {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-        assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+        {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+        assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
         consumer_ref =
           Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
@@ -143,8 +131,8 @@ defmodule Electric.ShapeCleanerTest do
 
         assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
 
-        {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-        assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
+        {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+        assert :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
         assert shape_handle != shape_handle2
       end
 
@@ -154,7 +142,7 @@ defmodule Electric.ShapeCleanerTest do
 
         assert ["my-shape"] = ShapeLogCollector.active_shapes(ctx.stack_id)
 
-        :ok = ShapeCleaner.remove_shape("my-shape", stack_id: ctx.stack_id)
+        :ok = ShapeCleaner.remove_shape("my-shape", ctx.stack_id)
 
         assert_receive {Electric.Shapes.Monitor, :cleanup, "my-shape"}
         assert [] = ShapeLogCollector.active_shapes(ctx.stack_id)
@@ -172,10 +160,10 @@ defmodule Electric.ShapeCleanerTest do
           GenServer.cast(parent, {:snapshot_started, shape_handle})
         end)
 
-        %{shape_cache_opts: _opts} = with_shape_cache(ctx)
+        with_shape_cache(ctx)
 
         {:ok, _} =
-          with_log(fn -> ShapeCleaner.remove_shape(shape_handle, stack_id: ctx.stack_id) end)
+          with_log(fn -> ShapeCleaner.remove_shape(shape_handle, ctx.stack_id) end)
       end
     end
   end
@@ -195,14 +183,12 @@ defmodule Electric.ShapeCleanerTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      %{shape_cache_opts: opts} = with_shape_cache(ctx)
-
-      {:ok, %{shape_cache_opts: opts}}
+      with_shape_cache(ctx)
     end
 
-    test "cleans up shape data for relevant shapes", %{shape_cache_opts: opts} = ctx do
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle, opts)
+    test "cleans up shape data for relevant shapes", ctx do
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       consumer_ref =
         Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
@@ -231,7 +217,7 @@ defmodule Electric.ShapeCleanerTest do
       :ok =
         ShapeCleaner.remove_shapes_for_relations(
           [{@shape.root_table_id + 1, {"public", "different"}}],
-          stack_id: ctx.stack_id
+          ctx.stack_id
         )
 
       refute_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}, 100
@@ -242,14 +228,14 @@ defmodule Electric.ShapeCleanerTest do
       :ok =
         ShapeCleaner.remove_shapes_for_relations(
           [{@shape.root_table_id, {"public", "items"}}],
-          stack_id: ctx.stack_id
+          ctx.stack_id
         )
 
       # Allow asynchronous queued removal to complete
       assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}, 1_000
 
-      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, opts)
-      assert :started = ShapeCache.await_snapshot_start(shape_handle2, opts)
+      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      assert :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
       assert shape_handle != shape_handle2
     end
   end

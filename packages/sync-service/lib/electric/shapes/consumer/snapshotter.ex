@@ -7,22 +7,16 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   alias Electric.SnapshotError
   alias Electric.Telemetry.OpenTelemetry
 
+  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+
   require Logger
 
-  def name(%{
-        stack_id: stack_id,
-        shape_handle: shape_handle
-      }) do
+  def name(%{stack_id: stack_id, shape_handle: shape_handle}) do
     name(stack_id, shape_handle)
   end
 
-  def name(stack_id, shape_handle) when is_binary(shape_handle) do
+  def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
-  end
-
-  def start_snapshot(stack_id, shape_handle) do
-    # Low timeout because we expect the process to be present & the block to be short
-    GenServer.call(name(stack_id, shape_handle), :start_snapshot, 1_000)
   end
 
   def start_link(config) when is_map(config) do
@@ -37,18 +31,15 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {:ok, config}
-  end
-
-  def handle_call(:start_snapshot, _from, state) do
-    {:reply, :ok, state, {:continue, :start_snapshot}}
+    {:ok, config, {:continue, :start_snapshot}}
   end
 
   def handle_continue(:start_snapshot, state) do
     %{
       shape_handle: shape_handle,
       shape: shape,
-      stack_id: stack_id
+      stack_id: stack_id,
+      storage: storage
     } = state
 
     ctx_token = if not is_nil(state.otel_ctx), do: :otel_ctx.attach(state.otel_ctx)
@@ -56,39 +47,30 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     result =
       case Shapes.Consumer.whereis(stack_id, shape_handle) do
         consumer when is_pid(consumer) ->
-          %{
-            stack_id: stack_id,
-            publication_manager: {publication_manager, publication_manager_opts}
-          } = state
-
           OpenTelemetry.with_span(
             "shape_snapshot.create_snapshot_task",
-            shape_attrs(shape_handle, shape),
+            telemetry_shape_attrs(shape_handle, shape),
             stack_id,
             fn ->
               try do
                 OpenTelemetry.with_span(
                   "shape_snapshot.prepare_tables",
-                  shape_attrs(shape_handle, shape),
+                  telemetry_shape_attrs(shape_handle, shape),
                   stack_id,
                   fn ->
-                    publication_manager.add_shape(shape_handle, shape, publication_manager_opts)
+                    Electric.Replication.PublicationManager.add_shape(
+                      stack_id,
+                      shape_handle,
+                      shape
+                    )
                   end
                 )
 
                 if not Storage.snapshot_started?(state.storage) do
-                  start_streaming_snapshot_from_db(
-                    consumer,
-                    shape_handle,
-                    shape,
-                    Map.take(state, [
-                      :stack_id,
-                      :db_pool,
-                      :storage,
-                      :chunk_bytes_threshold,
-                      :snapshot_timeout_to_first_data
-                    ])
-                  )
+                  start_streaming_snapshot_from_db(consumer, shape_handle, shape, %{
+                    stack_id: stack_id,
+                    storage: storage
+                  })
                 else
                   # Let the shape cache know that the snapshot is available. When the
                   # shape cache starts and restores the shapes from disk, it doesn't
@@ -137,6 +119,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     supervisor = Electric.ProcessRegistry.name(ctx.stack_id, Electric.StackTaskSupervisor)
     self_pid = self()
 
+    snapshot_timeout_to_first_data =
+      Electric.StackConfig.lookup(ctx.stack_id, :snapshot_timeout_to_first_data)
+
+    # do this here to simplify mocking as the call is made in the Snapshotter
+    # not an ephemeral unnamed task process
+    db_pool = Electric.Connection.Manager.snapshot_pool(ctx.stack_id)
+
     # We're looking to avoid saturating the DB connection pool with queries that are "bad" - those that don't start
     # returning any data (likely because they're not using an index). To acheive that, we're running the query in a task,
     # and waiting for the task to (a) send us a message that it's ready to stream and (b) send us a message when it sees any data
@@ -155,7 +144,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               consumer,
               shape_handle,
               shape,
-              ctx
+              Map.put(ctx, :db_pool, db_pool)
             )
 
           {:ok, result}
@@ -167,14 +156,13 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
       end)
 
     ref = task.ref
-    timeout_to_first_data = Map.get(ctx, :snapshot_timeout_to_first_data, :timer.seconds(30))
 
     receive do
       {:ready_to_stream, task_pid, start_time} ->
         Process.send_after(
           self_pid,
           {:stream_timeout, task_pid},
-          start_time + timeout_to_first_data,
+          start_time + snapshot_timeout_to_first_data,
           abs: true
         )
 
@@ -183,7 +171,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             Process.demonitor(ref, [:flush])
             Task.Supervisor.terminate_child(supervisor, task_pid)
 
-            raise SnapshotError.slow_snapshot_query(timeout_to_first_data)
+            raise SnapshotError.slow_snapshot_query(snapshot_timeout_to_first_data)
 
           :data_received ->
             Task.await(task, :infinity) |> handle_task_exit()
@@ -220,14 +208,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         consumer,
         shape_handle,
         shape,
-        %{
-          db_pool: db_pool,
-          storage: storage,
-          stack_id: stack_id,
-          chunk_bytes_threshold: chunk_bytes_threshold
-        }
+        %{storage: storage, stack_id: stack_id, db_pool: db_pool}
       ) do
-    shape_attrs = shape_attrs(shape_handle, shape)
+    shape_attrs = telemetry_shape_attrs(shape_handle, shape)
+    chunk_bytes_threshold = Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold)
 
     Postgrex.transaction(
       db_pool,
@@ -275,7 +259,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
 
             # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
-            finishing_contol_message =
+            finishing_control_message =
               Jason.encode!(%{
                 headers: %{
                   control: "snapshot-end",
@@ -315,7 +299,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
                   acc
                 end
               )
-              |> Stream.concat([finishing_contol_message])
+              |> Stream.concat([finishing_control_message])
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
             # that way it has the relation, but it is still missing the pk_cols
@@ -339,7 +323,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     )
   end
 
-  defp shape_attrs(shape_handle, shape) do
+  defp telemetry_shape_attrs(shape_handle, shape) do
     [
       "shape.handle": shape_handle,
       "shape.root_table": shape.root_table,

@@ -44,14 +44,9 @@ defmodule Electric.Connection.ConnectionManagerTest do
       pool_opts: [pool_size: 2],
       connection_backoff: Connection.Manager.ConnectionBackoff.init(50, 50),
       timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
+      inspector: ctx.inspector,
       shape_cache_opts: [
-        stack_id: stack_id,
-        inspector: ctx.inspector,
-        consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-        storage: ctx.storage,
-        publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
-        chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-        registry: Electric.StackSupervisor.registry_name(stack_id)
+        stack_id: stack_id
       ],
       tweaks: [],
       max_shapes: nil,
@@ -147,7 +142,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       :ok =
         Supervisor.terminate_child(
-          Connection.Manager.Supervisor.name(stack_id: stack_id),
+          Connection.Manager.Supervisor.name(stack_id),
           Connection.Manager
         )
 
@@ -273,7 +268,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       :ok =
         Supervisor.terminate_child(
-          Connection.Manager.Supervisor.name(stack_id: stack_id),
+          Connection.Manager.Supervisor.name(stack_id),
           Connection.Manager
         )
 
@@ -309,7 +304,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
         :timer.tc(
           fn ->
             ExUnit.CaptureLog.capture_log(fn ->
-              :ok = Supervisor.stop(Connection.Manager.Supervisor.name(stack_id: ctx.stack_id))
+              :ok = Supervisor.stop(Connection.Manager.Supervisor.name(ctx.stack_id))
             end)
           end,
           :millisecond
@@ -332,7 +327,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
         :timer.tc(
           fn ->
             ExUnit.CaptureLog.capture_log(fn ->
-              :ok = Supervisor.stop(Connection.Manager.Supervisor.name(stack_id: ctx.stack_id))
+              :ok = Supervisor.stop(Connection.Manager.Supervisor.name(ctx.stack_id))
             end)
           end,
           :millisecond

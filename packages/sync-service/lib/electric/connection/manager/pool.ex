@@ -4,8 +4,12 @@ defmodule Electric.Connection.Manager.Pool do
   """
 
   use GenServer, shutdown: :infinity
-  require Logger
+
   alias Electric.DbConnectionError
+
+  import Electric, only: [is_stack_id: 1]
+
+  require Logger
 
   @type pool_status :: :starting | :ready | :repopulating
 
@@ -52,8 +56,7 @@ defmodule Electric.Connection.Manager.Pool do
             conn_opts: [type: :keyword_list, required: true]
           )
 
-  def name(stack_id, role)
-      when not is_map(stack_id) and not is_list(stack_id) and is_atom(role) do
+  def name(stack_id, role) when is_stack_id(stack_id) and is_atom(role) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, role)
   end
 

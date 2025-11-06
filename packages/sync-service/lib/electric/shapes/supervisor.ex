@@ -12,18 +12,17 @@ defmodule Electric.Shapes.Supervisor do
 
   require Logger
 
-  def name(stack_id) when is_binary(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
-
-  def name(opts), do: name(opts[:stack_id])
 
   def reset_storage(opts) do
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
-    storage = Keyword.fetch!(shape_cache_opts, :storage)
+    stack_id = Keyword.fetch!(shape_cache_opts, :stack_id)
+    stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
 
     Logger.info("Purging all shapes.")
-    Electric.ShapeCache.Storage.cleanup_all!(storage)
+    Electric.ShapeCache.Storage.cleanup_all!(stack_storage)
   end
 
   def start_link(opts) do

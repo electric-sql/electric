@@ -13,13 +13,8 @@ defmodule Electric.ShapeCache.ExpiryManager do
             stack_id: [type: :string, required: true]
           )
 
-  def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
-  end
-
-  def name(opts) do
-    stack_id = Access.fetch!(opts, :stack_id)
-    name(stack_id)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   def start_link(opts) do
@@ -103,8 +98,9 @@ defmodule Electric.ShapeCache.ExpiryManager do
         elapsed_minutes_since_use: shape.elapsed_minutes_since_use
       ],
       fn ->
-        Electric.ShapeCache.ShapeCleaner.remove_shape(shape.shape_handle,
-          stack_id: state.stack_id
+        Electric.ShapeCache.ShapeCleaner.remove_shape(
+          shape.shape_handle,
+          state.stack_id
         )
       end
     )

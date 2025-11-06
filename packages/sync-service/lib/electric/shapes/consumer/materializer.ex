@@ -7,7 +7,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   # NOTES:
   # - Consumer does txn buffering until pg snapshot is known
-  use GenServer
+
+  # The lifecycle of a materializer is linked to its source consumer. If the consumer
+  # goes down for any reason other than a clean supervisor/stack shutdown then we
+  # need to invalidate all dependent outer shapes.
+  #
+  # restart: :temporary because the materalizer crashing brings down dependent shapes
+  # and restarting would make no sense.
+  use GenServer, restart: :temporary
 
   alias Electric.Utils
   alias Electric.Replication.Changes
@@ -15,9 +22,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Eval
-  import Electric.Replication.LogOffset
 
-  def name(stack_id, shape_handle) when is_binary(shape_handle) do
+  import Electric.Replication.LogOffset
+  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+
+  def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
@@ -70,13 +79,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
     %{stack_id: stack_id, shape_handle: shape_handle} = opts
 
     Process.set_label({:materializer, shape_handle})
-    Process.flag(:trap_exit, true)
     metadata = [stack_id: stack_id, shape_handle: shape_handle]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
-
-    {storage, opts} = Map.pop(opts, :storage)
-    shape_storage = Storage.for_shape(shape_handle, storage)
 
     state =
       Map.merge(opts, %{
@@ -87,18 +92,24 @@ defmodule Electric.Shapes.Consumer.Materializer do
         subscribers: MapSet.new()
       })
 
-    {:ok, state, {:continue, {:start_materializer, shape_storage}}}
+    {:ok, state, {:continue, :start_materializer}}
   end
 
-  def handle_continue({:start_materializer, storage}, state) do
-    _ = Consumer.await_snapshot_start(state)
-    Consumer.subscribe_materializer(state)
+  def handle_continue(:start_materializer, state) do
+    %{stack_id: stack_id, shape_handle: shape_handle} = state
 
-    Process.monitor(GenServer.whereis(Consumer.name(state)),
+    stack_storage = Storage.for_stack(stack_id)
+    shape_storage = Storage.for_shape(shape_handle, stack_storage)
+
+    :started = Consumer.await_snapshot_start(stack_id, shape_handle, :infinity)
+
+    Consumer.subscribe_materializer(stack_id, shape_handle, self())
+
+    Process.monitor(Consumer.whereis(stack_id, shape_handle),
       tag: {:consumer_down, state.shape_handle}
     )
 
-    {:noreply, state, {:continue, {:read_stream, storage}}}
+    {:noreply, state, {:continue, {:read_stream, shape_storage}}}
   end
 
   def handle_continue({:read_stream, storage}, state) do
@@ -176,20 +187,25 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
   end
 
-  def handle_info({:EXIT, _, reason}, state) do
-    {:stop, reason, state}
+  # if the supervisor is going down then this process will also be taken down
+  # but let's state the dependency explictly.
+  def handle_info({{:consumer_down, _}, _ref, :process, _pid, :shutdown}, state) do
+    {:stop, :shutdown, state}
   end
 
-  def handle_info({{:consumer_down, _}, _ref, :process, _pid, {:shutdown, :cleanup}}, state) do
+  def handle_info({{:consumer_down, _}, _ref, :process, _pid, {:shutdown, reason}}, state)
+      when reason != :cleanup do
+    {:stop, :shutdown, state}
+  end
+
+  # notify subscribers of the shape removal if the consumer exit reason is
+  # anything other than a clean supervisor shutdown.
+  def handle_info({{:consumer_down, _}, _ref, :process, _pid, _reason}, state) do
     for pid <- state.subscribers do
       send(pid, {:materializer_shape_invalidated, state.shape_handle})
     end
 
-    {:noreply, state}
-  end
-
-  def handle_info({{:consumer_down, _}, _ref, :process, _pid, _reason}, state) do
-    {:noreply, state}
+    {:stop, :shutdown, state}
   end
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do

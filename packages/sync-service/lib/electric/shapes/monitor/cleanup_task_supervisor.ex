@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   require Logger
 
   alias Electric.ShapeCache.Storage
+  alias Electric.Replication.PublicationManager
 
   @env Mix.env()
 
@@ -27,7 +28,6 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
   def cleanup_async(
         stack_id,
         storage_impl,
-        publication_manager_impl,
         shape_handle,
         on_cleanup \\ fn _ -> :ok end
       ) do
@@ -59,7 +59,7 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
           task4 =
             Task.Supervisor.async(name(stack_id), fn ->
               set_task_metadata(stack_id, shape_handle)
-              cleanup_publication_manager(publication_manager_impl, shape_handle)
+              cleanup_publication_manager(stack_id, shape_handle)
             end)
 
           try do
@@ -116,12 +116,10 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     )
   end
 
-  defp cleanup_publication_manager(publication_manager_impl, shape_handle) do
-    {publication_manager, publication_manager_opts} = publication_manager_impl
-
+  defp cleanup_publication_manager(stack_id, shape_handle) do
     perform_reporting_errors(
       fn ->
-        publication_manager.remove_shape(shape_handle, publication_manager_opts)
+        PublicationManager.remove_shape(stack_id, shape_handle)
       end,
       "Failed to remove shape #{shape_handle} from publication"
     )
@@ -144,8 +142,15 @@ defmodule Electric.Shapes.Monitor.CleanupTaskSupervisor do
     end
   end
 
+  # race conditions mean that the consumer pid can still be registered even if
+  # the consumer is down
   defp consumer_alive?(stack_id, shape_handle) do
-    !is_nil(Electric.Shapes.Consumer.whereis(stack_id, shape_handle))
+    stack_id
+    |> Electric.Shapes.Consumer.whereis(shape_handle)
+    |> case do
+      nil -> false
+      pid when is_pid(pid) -> Process.alive?(pid)
+    end
   end
 
   if @env == :test do

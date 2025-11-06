@@ -51,42 +51,31 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   @behaviour Electric.Replication.PublicationManager
 
-  def name(stack_id) when is_binary(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
-  end
-
-  def name(opts) do
-    stack_id = Access.fetch!(opts, :stack_id)
-    name(stack_id)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   @impl Electric.Replication.PublicationManager
-  def add_shape(shape_handle, shape, opts \\ []) do
-    server = Access.get(opts, :server, name(opts))
+  def add_shape(stack_id, shape_handle, shape) do
     pub_filter = get_publication_filter_from_shape(shape)
 
-    case GenServer.call(server, {:add_shape, shape_handle, pub_filter}) do
+    case GenServer.call(name(stack_id), {:add_shape, shape_handle, pub_filter}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
   end
 
   @impl Electric.Replication.PublicationManager
-  def remove_shape(shape_handle, opts \\ []) do
-    server = Access.get(opts, :server, name(opts))
-
-    case GenServer.call(server, {:remove_shape, shape_handle}) do
+  def remove_shape(stack_id, shape_handle) do
+    case GenServer.call(name(stack_id), {:remove_shape, shape_handle}) do
       :ok -> :ok
       {:error, err} -> raise err
     end
   end
 
   @impl Electric.Replication.PublicationManager
-  def wait_for_restore(opts \\ []) do
-    server = Access.get(opts, :server, name(opts))
-
-    GenServer.call(server, :wait_for_restore, Keyword.get(opts, :timeout, :infinity))
-    :ok
+  def wait_for_restore(stack_id, opts \\ []) do
+    GenServer.call(name(stack_id), :wait_for_restore, Keyword.get(opts, :timeout, :infinity))
   end
 
   @spec notify_relation_configuration_result(

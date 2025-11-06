@@ -19,14 +19,13 @@ defmodule Electric.StackSupervisor do
       1. `Electric.Postgres.ReplicationClient` - connects to PG in replication mod, sets up slots, _does not start streaming_ until requested
       2. `Postgrex` connection pool is started for querying initial snapshots & info about the DB
   4. `Electric.Shapes.Supervisor` is a supervisor responsible for taking the replication log from the replication client and shoving it into storage appropriately. It starts 3 things in one-for-all mode:
-      1. `Electric.Shapes.DynamicConsumerSupervisor` is DynamicSupervisor. It oversees a per-shape storage & replication log consumer
-          1. `Electric.Shapes.ConsumerSupervisor` supervises the "consumer" part of the replication process, starting 3 children. These are started for each shape.
-              1. `Electric.ShapeCache.Storage` is a process that knows how to write to disk. Takes configuration options for the underlying storage, is an end point
-              2. `Electric.Shapes.Consumer` is a consumer subscribing to `LogCollector`, which acts a shared producer for all shapes. It passes any incoming operation along to the storage.
-              3. `Electric.Shapes.Consumer.Snapshotter` is a temporary GenServer that executes initial snapshot query and writes that to storage
-      3. `Electric.Replication.PublicationManager` manages all filters on the publication for the replication
-      2. `Electric.Replication.ShapeLogCollector` collects transactions from the replication connection, fanning them out to `Electric.Shapes.Consumer` (4.1.1.2)
-      3. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
+      1. `Electric.Shapes.DynamicConsumerSupervisor` is DynamicSupervisor. It oversees various per-shape processes
+          1. `Electric.Shapes.Consumer` is a consumer subscribing to `LogCollector`, which acts a shared producer for all shapes. It passes any incoming operation along to the storage.
+          2. `Electric.Shapes.Consumer.Snapshotter` is a temporary GenServer that executes initial snapshot query and writes that to storage
+          3. `Electric.Shapes.Consumer.Materializer` monitors a sub-shape in order to invalidate dependent shapes
+      2. `Electric.Replication.PublicationManager` manages all filters on the publication for the replication
+      3. `Electric.Replication.ShapeLogCollector` collects transactions from the replication connection, fanning them out to `Electric.Shapes.Consumer` (4.1.1.2)
+      4. `Electric.ShapeCache` coordinates shape creation and handle allocation, shape metadata
   """
 
   opts =
@@ -279,7 +278,7 @@ defmodule Electric.StackSupervisor do
       fn ->
         {Electric.Postgres.Inspector.EtsInspector,
          stack_id: config.stack_id,
-         server: Electric.Postgres.Inspector.EtsInspector.name(stack_id: config.stack_id)}
+         server: Electric.Postgres.Inspector.EtsInspector.name(config.stack_id)}
       end
     )
   end
@@ -302,14 +301,7 @@ defmodule Electric.StackSupervisor do
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
 
     shape_cache_opts = [
-      stack_id: stack_id,
-      storage: storage,
-      inspector: inspector,
-      publication_manager: {Electric.Replication.PublicationManager, stack_id: stack_id},
-      chunk_bytes_threshold: config.chunk_bytes_threshold,
-      consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
-      registry: shape_changes_registry_name,
-      shape_hibernate_after: shape_hibernate_after
+      stack_id: stack_id
     ]
 
     {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])
@@ -337,6 +329,7 @@ defmodule Electric.StackSupervisor do
       ],
       persistent_kv: config.persistent_kv,
       shape_cache_opts: shape_cache_opts,
+      inspector: inspector,
       max_shapes: config.max_shapes,
       tweaks: tweaks,
       manual_table_publishing?: config.manual_table_publishing?
@@ -363,7 +356,15 @@ defmodule Electric.StackSupervisor do
       telemetry_children ++
         [
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
-          {Electric.StackConfig, stack_id: stack_id},
+          {Electric.StackConfig,
+           stack_id: stack_id,
+           seed_config: [
+             chunk_bytes_threshold: config.chunk_bytes_threshold,
+             snapshot_timeout_to_first_data: :timer.seconds(30),
+             inspector: inspector,
+             shape_changes_registry: shape_changes_registry_name,
+             shape_hibernate_after: shape_hibernate_after
+           ]},
           {Electric.AsyncDeleter,
            stack_id: stack_id,
            storage_dir: config.storage_dir,
@@ -374,11 +375,10 @@ defmodule Electric.StackSupervisor do
           {Electric.Postgres.Inspector.EtsInspector,
            stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
           {Electric.Shapes.Monitor,
-           Electric.Utils.merge_all([
+           Keyword.merge(
              [stack_id: stack_id, storage: storage],
-             Keyword.take(monitor_opts, [:on_remove, :on_cleanup]),
-             Keyword.take(shape_cache_opts, [:publication_manager])
-           ])},
+             Keyword.take(monitor_opts, [:on_remove, :on_cleanup])
+           )},
           {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
           {Electric.MonitoredCoreSupervisor,
            stack_id: stack_id, connection_manager_opts: connection_manager_opts}

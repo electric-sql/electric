@@ -105,6 +105,7 @@ defmodule Electric.Connection.Manager do
       :stack_id,
       # Registry used for stack events
       :stack_events_registry,
+      :inspector,
       :tweaks,
       :max_shapes,
       :persistent_kv,
@@ -158,12 +159,8 @@ defmodule Electric.Connection.Manager do
     GenServer.start_link(__MODULE__, opts, name: name(opts))
   end
 
-  def name(stack_id) when not is_map(stack_id) and not is_list(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
-  end
-
-  def name(opts) do
-    name(Access.fetch!(opts, :stack_id))
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   @db_pool_ephemeral_module_name Electric.DbPool
@@ -284,6 +281,7 @@ defmodule Electric.Connection.Manager do
         current_step: {:start_replication_client, nil},
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
+        inspector: Keyword.fetch!(opts, :inspector),
         shape_cache_opts: shape_cache_opts,
         connection_backoff: {connection_backoff, nil},
         stack_id: stack_id,
@@ -476,6 +474,7 @@ defmodule Electric.Connection.Manager do
     repl_sup_opts = [
       stack_id: state.stack_id,
       shape_cache_opts: state.shape_cache_opts,
+      inspector: state.inspector,
       pool_opts: state.pool_opts,
       replication_opts: state.replication_opts,
       tweaks: state.tweaks,

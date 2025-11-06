@@ -8,8 +8,8 @@ defmodule Electric.CoreSupervisor do
 
   use Supervisor, restart: :transient, significant: true
 
-  def name(opts) do
-    Electric.ProcessRegistry.name(opts[:stack_id], __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   def start_link(opts) do
@@ -41,7 +41,7 @@ defmodule Electric.CoreSupervisor do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
-    inspector = Keyword.fetch!(shape_cache_opts, :inspector)
+    inspector = Keyword.fetch!(opts, :inspector)
     persistent_kv = Keyword.fetch!(opts, :persistent_kv)
     tweaks = Keyword.fetch!(opts, :tweaks)
 

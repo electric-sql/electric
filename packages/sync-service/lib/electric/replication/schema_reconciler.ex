@@ -93,7 +93,7 @@ defmodule Electric.Replication.SchemaReconciler do
 
   defp handle_diverged_relations({:ok, diverged_relations}, state) do
     with :ok <-
-           ShapeCleaner.remove_shapes_for_relations(diverged_relations, stack_id: state.stack_id),
+           ShapeCleaner.remove_shapes_for_relations(diverged_relations, state.stack_id),
          :ok <-
            Enum.each(diverged_relations, fn {oid, _} -> Inspector.clean(oid, state.inspector) end) do
       :ok

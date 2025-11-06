@@ -29,8 +29,7 @@ defmodule Electric.AsyncDeleter do
   @trash_dir_base ".electric_trash"
   @default_cleanup_interval_ms 10_000
 
-  def name(stack_id) when is_binary(stack_id),
-    do: Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  def name(stack_id), do: Electric.ProcessRegistry.name(stack_id, __MODULE__)
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)

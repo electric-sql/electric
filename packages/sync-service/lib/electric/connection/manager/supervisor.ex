@@ -5,8 +5,8 @@ defmodule Electric.Connection.Manager.Supervisor do
 
   use Supervisor
 
-  def name(opts) do
-    Electric.ProcessRegistry.name(opts[:stack_id], __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   def start_link(opts) do

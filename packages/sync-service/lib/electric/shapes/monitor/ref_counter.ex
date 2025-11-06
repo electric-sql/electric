@@ -14,7 +14,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   use GenServer
 
   alias Electric.Shapes.Monitor
-  alias Electric.Shapes.ConsumerSupervisor
   alias Electric.Replication.ShapeLogCollector
 
   require Logger
@@ -27,8 +26,8 @@ defmodule Electric.Shapes.Monitor.RefCounter do
                    (is_tuple(reason) and elem(reason, 0) == :shutdown and
                       elem(reason, 1) != :cleanup)
 
-  def name(opts_or_stack_id) do
-    Electric.ProcessRegistry.name(opts_or_stack_id, __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
   # the opts are validated by Monitor
@@ -127,7 +126,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     storage = Map.fetch!(opts, :storage)
-    publication_manager = Map.fetch!(opts, :publication_manager)
     on_remove = Map.get(opts, :on_remove) || fn _, _ -> :ok end
     on_cleanup = Map.get(opts, :on_cleanup) || fn _ -> :ok end
 
@@ -141,14 +139,12 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     state = %{
       stack_id: stack_id,
       storage: storage,
-      publication_manager: publication_manager,
       readers: %{},
       writers: %{},
       reader_table: reader_table,
       on_remove: on_remove,
       on_cleanup: on_cleanup,
-      termination_watchers: %{},
-      cleanup_handles: MapSet.new()
+      termination_watchers: %{}
     }
 
     # log some debug stats
@@ -187,32 +183,28 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     {:reply, :ok, state}
   end
 
-  def handle_call({:notify_reader_termination, shape_handle, pid, reason}, _from, state) do
-    if supervisor_pid = ConsumerSupervisor.whereis(state.stack_id, shape_handle) do
-      %{stack_id: stack_id} = state
+  def handle_call({:notify_reader_termination, shape_handle, consumer_pid, reason}, _from, state) do
+    %{stack_id: stack_id} = state
 
-      case state.writers do
-        %{^pid => ^shape_handle} ->
-          # make this idempotent
-          {:reply, :ok, state}
+    case state.writers do
+      %{^consumer_pid => ^shape_handle} ->
+        # make this idempotent
+        {:reply, :ok, state}
 
-        _writers ->
-          state = monitor_consumer_processes(state, pid, supervisor_pid, shape_handle)
+      _writers ->
+        state = monitor_consumer_process(state, consumer_pid, shape_handle)
 
-          state =
-            case reader_count(stack_id, shape_handle) do
-              {:ok, 0} ->
-                do_notify_reader_termination({pid, reason}, shape_handle)
-                state
+        state =
+          case reader_count(stack_id, shape_handle) do
+            {:ok, 0} ->
+              do_notify_reader_termination({consumer_pid, reason}, shape_handle)
+              state
 
-              {:ok, _} ->
-                add_reader_termination_watcher(shape_handle, pid, reason, state)
-            end
+            {:ok, _} ->
+              add_reader_termination_watcher(shape_handle, consumer_pid, reason, state)
+          end
 
-          {:reply, :ok, state}
-      end
-    else
-      {:reply, {:error, "no supervisor registered for consumer"}, state}
+        {:reply, :ok, state}
     end
   end
 
@@ -225,7 +217,6 @@ defmodule Electric.Shapes.Monitor.RefCounter do
       Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
         state.stack_id,
         state.storage,
-        state.publication_manager,
         shape_handle,
         state.on_cleanup
       )
@@ -240,7 +231,7 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     # notify_reader_termination
     state =
       if !Map.has_key?(state.writers, shape_handle) do
-        monitor_consumer_processes(state, consumer_pid, shape_handle)
+        monitor_consumer_process(state, consumer_pid, shape_handle)
       else
         state
       end
@@ -251,42 +242,22 @@ defmodule Electric.Shapes.Monitor.RefCounter do
   @impl GenServer
   def handle_info({{:down, :writer, handle}, _ref, :process, pid, reason}, state)
       when not is_consumer_shutdown_with_data_retention?(reason) do
-    {:noreply,
-     %{state | writers: Map.delete(state.writers, pid)}
-     |> notify_remove(handle, pid)
-     |> Map.update!(:cleanup_handles, &MapSet.put(&1, handle))
-     |> remove_reader_termination_watcher(handle, pid)}
+    Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
+      state.stack_id,
+      state.storage,
+      handle,
+      state.on_cleanup
+    )
+
+    {:noreply, remove_writer_process(state, pid, handle)}
   end
 
   def handle_info({{:down, :writer, handle}, _ref, :process, pid, _reason}, state) do
-    {:noreply,
-     %{state | writers: Map.delete(state.writers, pid)}
-     |> notify_remove(handle, pid)
-     |> remove_reader_termination_watcher(handle, pid)}
-  end
-
-  def handle_info(
-        {{:down, :writer_supervisor, handle}, _ref, :process, _pid, _reason},
-        state
-      ) do
-    if MapSet.member?(state.cleanup_handles, handle) do
-      Electric.Shapes.Monitor.CleanupTaskSupervisor.cleanup_async(
-        state.stack_id,
-        state.storage,
-        state.publication_manager,
-        handle,
-        state.on_cleanup
-      )
-
-      {:noreply, Map.update!(state, :cleanup_handles, &MapSet.delete(&1, handle))}
-    else
-      {:noreply, state}
-    end
+    {:noreply, remove_writer_process(state, pid, handle)}
   end
 
   def handle_info({{:down, :reader}, _ref, :process, pid, _reason}, state) do
     state = delete_reader_process(pid, state)
-
     {:noreply, state}
   end
 
@@ -298,23 +269,13 @@ defmodule Electric.Shapes.Monitor.RefCounter do
     {:noreply, state}
   end
 
-  defp monitor_consumer_processes(state, consumer_pid, shape_handle) do
-    monitor_consumer_processes(
-      state,
-      consumer_pid,
-      ConsumerSupervisor.whereis(state.stack_id, shape_handle),
-      shape_handle
-    )
+  defp remove_writer_process(state, pid, handle) do
+    %{state | writers: Map.delete(state.writers, pid)}
+    |> notify_remove(handle, pid)
+    |> remove_reader_termination_watcher(handle, pid)
   end
 
-  defp monitor_consumer_processes(state, consumer_pid, supervisor_pid, shape_handle) do
-    if !supervisor_pid,
-      do:
-        raise(RuntimeError,
-          message: "No ConsumerSupervisor process found for shape #{shape_handle}"
-        )
-
-    Process.monitor(supervisor_pid, tag: {:down, :writer_supervisor, shape_handle})
+  defp monitor_consumer_process(state, consumer_pid, shape_handle) do
     Process.monitor(consumer_pid, tag: {:down, :writer, shape_handle})
 
     %{state | writers: Map.put(state.writers, consumer_pid, shape_handle)}

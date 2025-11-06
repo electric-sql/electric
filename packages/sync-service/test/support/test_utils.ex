@@ -141,23 +141,92 @@ defmodule Support.TestUtils do
   end
 
   def patch_snapshotter(fun) do
+    test_pid = self()
+
     Repatch.patch(
       Electric.Shapes.Consumer.Snapshotter,
       :start_streaming_snapshot_from_db,
       [mode: :shared],
-      fun
+      fn consumer, shape_handle, shape, ctx ->
+        send(test_pid, {:snapshot, shape_handle})
+        fun.(consumer, shape_handle, shape, ctx)
+      end
     )
 
     activate_mocks_for_descendant_procs(Electric.Shapes.Consumer.Snapshotter)
   end
 
+  def patch_calls(module, global_opts \\ [], funs) do
+    Enum.each(funs, fn
+      {name, {fun, opts}} when is_function(fun) ->
+        Repatch.patch(
+          module,
+          name,
+          Electric.Utils.merge_all([[mode: :shared], global_opts, opts]),
+          fun
+        )
+
+      {name, fun} when is_function(fun) ->
+        Repatch.patch(module, name, Keyword.merge([mode: :shared], global_opts), fun)
+    end)
+  end
+
+  def expect_calls(module, global_opts \\ [], expectations) do
+    Enum.each(expectations, fn
+      {name, {fun, opts}} when is_function(fun) ->
+        Repatch.Expectations.expect(
+          module,
+          name,
+          Electric.Utils.merge_all([[mode: :shared], global_opts, opts]),
+          fun
+        )
+
+      {name, fun} when is_function(fun) ->
+        Repatch.Expectations.expect(
+          module,
+          name,
+          Keyword.merge([mode: :shared], global_opts),
+          fun
+        )
+    end)
+  end
+
+  def patch_shape_status(opts \\ [], funs) do
+    patch_calls(Electric.ShapeCache.ShapeStatus, opts, funs)
+  end
+
+  def expect_shape_status(opts \\ [], expectations) do
+    expect_calls(Electric.ShapeCache.ShapeStatus, opts, expectations)
+  end
+
+  def expect_storage(opts \\ [], expectations) do
+    expect_calls(Electric.ShapeCache.Storage, opts, expectations)
+  end
+
+  def patch_storage(opts \\ [], funs) do
+    patch_calls(Electric.ShapeCache.Storage, opts, funs)
+  end
+
+  def expect_shape_cache(opts \\ [], expectations) do
+    expect_calls(Electric.ShapeCache, opts, expectations)
+  end
+
+  def patch_shape_cache(opts \\ [], funs) do
+    patch_calls(Electric.ShapeCache, opts, funs)
+  end
+
   def activate_mocks_for_descendant_procs(mod) do
     self_pid = self()
-    callback_fun = fn pid -> Repatch.allow(self_pid, pid) end
 
-    # The descendant process running module `mod` will look up this callback in its root ancestor and execute it.
-    old_cbs = Process.get(:callbacks_for_descendant_procs) || []
-    Process.put(:callbacks_for_descendant_procs, [{mod, callback_fun} | old_cbs])
+    callback_fun = fn pid ->
+      Repatch.allow(self_pid, pid)
+    end
+
+    callbacks = Process.get(:callback_for_descendant_procs, %{})
+
+    # The descendant process running module `mod` will look up this callback in
+    # its root ancestor and execute it.
+    Process.put(:callback_for_descendant_procs, Map.put(callbacks, mod, callback_fun))
 
     :ok
   end
@@ -169,14 +238,11 @@ defmodule Support.TestUtils do
   # function under the `:callback_for_descendant_procs` key matching the caller's module (if
   # any).
   def activate_mocked_functions_for_module(caller_mod) do
-    {:dictionary, test_process_dict} =
-      Process.get(:"$ancestors")
-      |> List.last()
-      |> Process.info(:dictionary)
-
-    case Keyword.get(test_process_dict, :callbacks_for_descendant_procs) do
-      cbs when is_list(cbs) -> for {^caller_mod, fun} <- cbs, do: fun.(self())
-      _ -> :noop
+    with {:dictionary, test_process_dict} <-
+           Process.get(:"$ancestors") |> List.last() |> Process.info(:dictionary),
+         %{^caller_mod => fun} <-
+           Keyword.get(test_process_dict, :callback_for_descendant_procs) do
+      fun.(self())
     end
   end
 end

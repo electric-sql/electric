@@ -6,15 +6,13 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   alias Electric.LogItems
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.Storage
-  alias Electric.Shapes.Consumer
+  alias Electric.Shapes.ConsumerRegistry
   alias Electric.Shapes.Consumer.Materializer
 
-  setup [:with_stack_id_from_test, :with_in_memory_storage]
+  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_consumer_registry]
 
   setup %{storage: storage, stack_id: stack_id} = ctx do
-    {:via, Registry, {registry_name, key}} = Consumer.name(stack_id, "test")
-
-    Registry.register(registry_name, key, :consumer)
+    ConsumerRegistry.register_consumer(self(), "test", stack_id)
 
     Storage.for_shape("test", storage) |> Storage.start_link()
     Storage.for_shape("test", storage) |> Storage.mark_snapshot_as_started()
@@ -45,7 +43,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:await_snapshot_start, :started)
     respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -62,7 +60,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: {:array, :int8}
       })
 
-    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:await_snapshot_start, :started)
     respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -353,6 +351,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
   defp respond_to_call(request, response) do
     receive do
+      {:"$gen_call", {from, ref}, {^request, _arg}} ->
+        send(from, {ref, response})
+
       {:"$gen_call", {from, ref}, ^request} ->
         send(from, {ref, response})
     end
@@ -368,7 +369,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         materialized_type: Keyword.get(opts, :materialized_type, {:array, :int8})
       })
 
-    respond_to_call(:await_snapshot_start, :ok)
+    respond_to_call(:await_snapshot_start, :started)
     respond_to_call(:subscribe_materializer, :ok)
 
     assert Materializer.wait_until_ready(ctx) == :ok

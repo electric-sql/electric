@@ -16,11 +16,9 @@ defmodule Electric.Connection.Restarter do
 
   alias Electric.StatusMonitor
 
-  def name(stack_id) when is_binary(stack_id) do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  def name(stack_ref) do
+    Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
-
-  def name(opts), do: name(opts[:stack_id])
 
   @doc """
   Stop the connection subsystem, closing all database connections.

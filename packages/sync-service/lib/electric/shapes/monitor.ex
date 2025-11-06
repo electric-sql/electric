@@ -9,7 +9,6 @@ defmodule Electric.Shapes.Monitor do
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
             storage: [type: :mod_arg, required: true],
-            publication_manager: [type: :mod_arg, required: true],
             on_remove: [type: {:or, [nil, {:fun, 2}]}],
             on_cleanup: [type: {:or, [nil, {:fun, 1}]}]
           )
@@ -87,8 +86,7 @@ defmodule Electric.Shapes.Monitor do
   def init(opts) do
     %{
       stack_id: stack_id,
-      storage: storage,
-      publication_manager: publication_manager
+      storage: storage
     } = opts
 
     Process.set_label({:shapes_monitor, stack_id})
@@ -98,7 +96,6 @@ defmodule Electric.Shapes.Monitor do
       {__MODULE__.RefCounter,
        stack_id: stack_id,
        storage: storage,
-       publication_manager: publication_manager,
        on_remove: Map.get(opts, :on_remove),
        on_cleanup: Map.get(opts, :on_cleanup)}
     ]
