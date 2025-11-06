@@ -311,17 +311,7 @@ defmodule Electric.Shapes.Consumer do
       end
     end)
 
-    if is_map_key(state, :writer) do
-      storage_recovery_state = ShapeCache.Storage.terminate(state.writer)
-
-      if not is_nil(state.shape_status_mod.get_existing_shape(state.stack_id, state.shape_handle)) do
-        state.shape_status_mod.set_shape_storage_state(
-          state.stack_id,
-          state.shape_handle,
-          storage_recovery_state
-        )
-      end
-    end
+    if is_map_key(state, :writer), do: ShapeCache.Storage.terminate(state.writer)
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end

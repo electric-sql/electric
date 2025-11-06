@@ -37,9 +37,6 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
   @callback reset(stack_ref()) :: :ok
 
-  @callback set_shape_storage_state(stack_ref(), shape_handle(), term()) :: :ok
-  @callback consume_shape_storage_state(stack_ref(), shape_handle()) :: term() | nil
-
   @callback shape_meta_table(stack_ref()) :: atom()
   @callback shape_last_used_table(stack_ref()) :: atom()
 end
@@ -79,7 +76,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_data :shape_meta_data
   @shape_hash_lookup :shape_hash_lookup
   @shape_relation_lookup :shape_relation_lookup
-  @shape_storage_state_backup :shape_storage_state_backup
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
   @shape_meta_latest_offset_pos 4
@@ -203,7 +199,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # select_delete can lead to inconsistent state
       :ets.delete(meta_table, {@shape_hash_lookup, Shape.comparable(shape)})
       :ets.delete(meta_table, {@shape_meta_data, shape_handle})
-      :ets.delete(meta_table, {@shape_storage_state_backup, shape_handle})
       :ets.delete(meta_table, {@snapshot_started, shape_handle})
 
       Enum.each(Shape.list_relations(shape), fn {oid, _} ->
@@ -358,26 +353,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def mark_snapshot_started(stack_ref, shape_handle) do
     :ets.insert(shape_meta_table(stack_ref), {{@snapshot_started, shape_handle}, true})
     :ok
-  end
-
-  @impl true
-  def set_shape_storage_state(stack_ref, shape_handle, storage_state) do
-    :ets.insert(
-      shape_meta_table(stack_ref),
-      {{@shape_storage_state_backup, shape_handle}, storage_state}
-    )
-
-    :ok
-  end
-
-  @impl true
-  def consume_shape_storage_state(stack_ref, shape_handle) do
-    meta_table = shape_meta_table(stack_ref)
-    res = :ets.lookup_element(meta_table, {@shape_storage_state_backup, shape_handle}, 2)
-    :ets.delete(meta_table, {@shape_storage_state_backup, shape_handle})
-    res
-  rescue
-    ArgumentError -> nil
   end
 
   @impl true

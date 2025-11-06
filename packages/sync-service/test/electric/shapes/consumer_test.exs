@@ -98,7 +98,6 @@ defmodule Electric.Shapes.ConsumerTest do
   defp stub_shape_status_shutdown(shape_handle, ctx) do
     Mock.ShapeStatus
     |> stub(:get_existing_shape, fn _, _ -> {shape_handle, @shape1} end)
-    |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
     |> allow(self(), Consumer.whereis(ctx.stack_id, shape_handle))
   end
 
@@ -148,7 +147,6 @@ defmodule Electric.Shapes.ConsumerTest do
       consumers =
         for {shape_handle, shape} <- ctx.shapes do
           Mock.ShapeStatus
-          |> stub(:consume_shape_storage_state, fn _, ^shape_handle -> nil end)
           |> expect(:initialise_shape, 1, fn _, ^shape_handle, _, _ -> :ok end)
           |> expect(:set_snapshot_xmin, 1, fn _, ^shape_handle, _ -> :ok end)
           |> expect(:mark_snapshot_started, 1, fn _, ^shape_handle -> :ok end)
@@ -411,7 +409,6 @@ defmodule Electric.Shapes.ConsumerTest do
       Mock.ShapeStatus
       |> expect(:remove_shape, fn _, @shape_handle1 -> :ok end)
       |> stub(:get_existing_shape, fn _, @shape_handle1 -> {@shape_handle1, @shape1} end)
-      |> stub(:set_shape_storage_state, fn _, @shape_handle1, _ -> :ok end)
       |> allow(
         self(),
         Shapes.Consumer.whereis(ctx.stack_id, @shape_handle1)
@@ -479,13 +476,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Mock.ShapeStatus
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
-      |> expect(:set_shape_storage_state, 0, fn _, _, _ -> :ok end)
       |> stub(:get_existing_shape, fn _, _ -> {@shape_handle1, @shape1} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
       |> stub(:get_existing_shape, fn _, _ -> {@shape_handle2, @shape2} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
@@ -521,11 +515,9 @@ defmodule Electric.Shapes.ConsumerTest do
       Mock.ShapeStatus
       |> expect(:remove_shape, 1, fn _, @shape_handle1 -> :ok end)
       |> stub(:get_existing_shape, fn _, @shape_handle1 -> {@shape_handle1, @shape1} end)
-      |> expect(:set_shape_storage_state, 1, fn _, @shape_handle1, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
       |> stub(:get_existing_shape, fn _, _ -> {@shape_handle2, @shape2} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel, ctx.producer)
@@ -564,11 +556,9 @@ defmodule Electric.Shapes.ConsumerTest do
       Mock.ShapeStatus
       |> expect(:remove_shape, 1, fn _, _ -> :ok end)
       |> stub(:get_existing_shape, fn _, @shape_handle1 -> {@shape_handle1, @shape1} end)
-      |> expect(:set_shape_storage_state, 1, fn _, @shape_handle1, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle1))
       |> expect(:remove_shape, 0, fn _, _ -> :ok end)
       |> stub(:get_existing_shape, fn _, _ -> {@shape_handle2, @shape2} end)
-      |> stub(:set_shape_storage_state, fn _, _, _ -> :ok end)
       |> allow(self(), Consumer.whereis(ctx.stack_id, @shape_handle2))
 
       assert :ok = ShapeLogCollector.handle_relation_msg(rel_changed, ctx.producer)
