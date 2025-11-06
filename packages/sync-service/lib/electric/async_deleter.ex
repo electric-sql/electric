@@ -109,7 +109,7 @@ defmodule Electric.AsyncDeleter do
   defp unique_destination(trash_dir, base) do
     attempt = Path.join(trash_dir, base <> "_" <> random_suffix())
 
-    if File.exists?(attempt) do
+    if File.exists?(attempt, [:raw]) do
       unique_destination(trash_dir, base)
     else
       attempt
