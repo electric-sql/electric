@@ -157,7 +157,7 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   def for_stack(stack_id) do
-    Electric.StackConfig.lookup(stack_id, Electric.ShapeCache.Storage)
+    Electric.StackConfig.fetch!(stack_id, Electric.ShapeCache.Storage)
   end
 
   @spec child_spec(shape_storage()) :: Supervisor.child_spec()
