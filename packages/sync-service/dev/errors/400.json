@@ -1,0 +1,5 @@
+{
+  "error": "Bad Request",
+  "message": "Invalid parameters provided",
+  "details": "The request is missing required parameters or contains invalid values. Required: table, offset"
+}
