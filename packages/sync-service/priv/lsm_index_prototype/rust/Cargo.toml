@@ -1,0 +1,31 @@
+[package]
+name = "lsm_index_nif"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "lsm_index_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.34"
+siphasher = "1.0"
+ahash = "0.8"
+parking_lot = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+memmap2 = "0.9"
+# For MPH - we'll use ph (perfect hashing) crate as a simple MPH implementation
+# In production you'd want RecSplit or BBHash, but this is fine for prototype
+ph = "0.8"
+# For jump consistent hash
+fasthash = "0.4"
+# For xor filters (optional)
+xorf = "0.11"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "lsm_bench"
+harness = false
