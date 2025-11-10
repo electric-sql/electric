@@ -88,7 +88,7 @@ with_telemetry Telemetry.Metrics do
       groups = Enum.group_by(metrics, & &1.event_name)
 
       aggregates_table = create_table(name, :set)
-      summary_table = create_table(String.to_atom("#{name}_summary"), :duplicate_bag)
+      summary_table = create_table(:"#{name}_summary", :duplicate_bag)
 
       context = %{
         table: aggregates_table,
