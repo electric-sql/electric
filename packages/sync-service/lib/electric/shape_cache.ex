@@ -137,7 +137,7 @@ defmodule Electric.ShapeCache do
 
       true ->
         try do
-          Electric.Shapes.Consumer.await_snapshot_start(stack_id, shape_handle, 15_000)
+          Electric.Shapes.Consumer.await_snapshot_start(stack_id, shape_handle)
         catch
           :exit, {:timeout, {GenServer, :call, _}} ->
             # Please note that :await_snapshot_start can also return a timeout error as well
