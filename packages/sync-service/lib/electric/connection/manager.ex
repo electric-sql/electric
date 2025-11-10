@@ -393,12 +393,24 @@ defmodule Electric.Connection.Manager do
           |> Enum.reduce(state, fn pool_role, state ->
             pool_size = Map.fetch!(pool_sizes, pool_role)
 
+            # The snapshot pool connections might run for long periods of time
+            # depending on the nature of the query, and during bursts it is preferred
+            # to have new queries queued for a longer time than failing them continuously
+            pool_queue_config =
+              if pool_role == :snapshot,
+                do: [queue_target: 5_000, queue_interval: 10_000],
+                else: []
+
             {:ok, pool_pid} =
               Electric.Connection.Manager.Pool.start_link(
                 stack_id: state.stack_id,
                 role: pool_role,
                 connection_manager: self(),
-                pool_opts: Keyword.put(state.pool_opts, :pool_size, pool_size),
+                pool_opts:
+                  Keyword.merge(
+                    state.pool_opts,
+                    [pool_size: pool_size] ++ pool_queue_config
+                  ),
                 conn_opts: conn_opts
               )
 
