@@ -150,10 +150,8 @@ defmodule Electric do
     @current_vsn
   end
 
-  @telemetry_enabled? Mix.target() == Electric.MixProject.telemetry_target()
-  def telemetry_enabled? do
-    @telemetry_enabled?
-  end
+  @telemetry_enabled? Application.compile_env(:electric_telemetry, :enabled?)
+  def telemetry_enabled?, do: @telemetry_enabled?
 
   def stack_events_registry do
     Electric.StackEventsRegistry

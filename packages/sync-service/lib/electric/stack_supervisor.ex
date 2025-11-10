@@ -342,22 +342,8 @@ defmodule Electric.StackSupervisor do
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
 
-    telemetry_children =
-      if Code.ensure_loaded?(Electric.Telemetry.StackTelemetry) do
-        [
-          {Electric.Telemetry.StackTelemetry,
-           config.telemetry_opts ++
-             [
-               stack_id: stack_id,
-               slot_name: config.replication_opts[:slot_name]
-             ]}
-        ]
-      else
-        []
-      end
-
     children =
-      telemetry_children ++
+      telemetry_children(config) ++
         [
           {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
           {Electric.StackConfig,
@@ -395,5 +381,102 @@ defmodule Electric.StackSupervisor do
         )
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
+  end
+
+  defp telemetry_children(%{stack_telemetry: stack_telemetry}), do: [stack_telemetry]
+
+  defp telemetry_children(config) do
+    if Code.ensure_loaded?(Electric.Telemetry.StackTelemetry) do
+      telemetry_opts =
+        config.telemetry_opts
+        |> Keyword.put(:stack_id, config.stack_id)
+        # Use user-provided periodic measurements or default ones otherwise
+        |> Keyword.update(
+          :periodic_measurements,
+          default_periodic_measurements(config),
+          & &1
+        )
+
+      [{Electric.Telemetry.StackTelemetry, telemetry_opts}]
+    else
+      []
+    end
+  end
+
+  defp default_periodic_measurements(%{stack_id: stack_id} = config) do
+    [
+      {__MODULE__, :count_shapes, [stack_id]},
+      {__MODULE__, :count_active_shapes, [stack_id]},
+      {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]}
+    ]
+  end
+
+  def count_shapes(stack_id, _telemetry_opts) do
+    # Telemetry is started before everything else in the stack, so we need to handle
+    # the case where the shape cache is not started yet.
+    case Electric.ShapeCache.count_shapes(stack_id) do
+      :error ->
+        :ok
+
+      num_shapes ->
+        Electric.Telemetry.OpenTelemetry.execute(
+          [:electric, :shapes, :total_shapes],
+          %{count: num_shapes},
+          %{stack_id: stack_id}
+        )
+    end
+  end
+
+  def count_active_shapes(stack_id, _telemetry_opts) do
+    Electric.Telemetry.OpenTelemetry.execute(
+      [:electric, :shapes, :active_shapes],
+      %{count: Electric.Shapes.ConsumerRegistry.active_consumer_count(stack_id)},
+      %{stack_id: stack_id}
+    )
+  end
+
+  @retained_wal_size_query """
+  SELECT
+    pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8
+  FROM
+    pg_replication_slots
+  WHERE
+    slot_name = $1
+  """
+
+  @doc false
+  @spec report_retained_wal_size(Electric.stack_id(), binary(), map()) :: :ok
+  def report_retained_wal_size(stack_id, slot_name, _telemetry_opts) do
+    try do
+      %Postgrex.Result{rows: [[wal_size]]} =
+        Postgrex.query!(
+          Electric.Connection.Manager.admin_pool(stack_id),
+          @retained_wal_size_query,
+          [slot_name],
+          timeout: 3_000,
+          deadline: 3_000
+        )
+
+      # The query above can return `-1` which I'm assuming means "up-to-date".
+      # This is a confusing stat if we're measuring in bytes, so normalise to
+      # [0, :infinity)
+
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :postgres, :replication],
+        %{wal_size: max(0, wal_size)},
+        %{stack_id: stack_id}
+      )
+    catch
+      :exit, {:noproc, _} ->
+        :ok
+
+      # catch all errors to not log them as errors, those are reporing issues at best
+      type, reason ->
+        Logger.warning(
+          "Failed to query retained WAL size\nError: #{Exception.format(type, reason)}",
+          stack_id: stack_id,
+          slot_name: slot_name
+        )
+    end
   end
 end

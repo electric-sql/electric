@@ -37,10 +37,6 @@ if config_env() == :test do
   config :logger, :default_handler, level: test_log_level
 end
 
-# Disable the default telemetry_poller process since we start our own in
-# `Electric.Telemetry.{ApplicationTelemetry, StackTelemetry}`.
-config :telemetry_poller, default: false
-
 service_name = env!("ELECTRIC_SERVICE_NAME", :string, "electric")
 instance_id = env!("ELECTRIC_INSTANCE_ID", :string, Electric.Utils.uuid4())
 
@@ -277,6 +273,10 @@ config :electric,
     )
 
 if Electric.telemetry_enabled?() do
+  # Disable the default telemetry_poller process since we start our own in
+  # `Electric.Telemetry.{ApplicationTelemetry, StackTelemetry}`.
+  config :telemetry_poller, default: false
+
   config :sentry,
     environment_name: config_env(),
     client: Electric.Telemetry.SentryReqHTTPClient
@@ -289,30 +289,7 @@ if Electric.telemetry_enabled?() do
   end
 
   otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
-  otel_debug = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
-
-  otel_batch_processor =
-    if otlp_endpoint do
-      {:otel_batch_processor, %{}}
-    end
-
-  otel_simple_processor =
-    if otel_debug do
-      # In this mode, each span is printed to stdout as soon as it ends, without batching.
-      {:otel_simple_processor, %{exporter: {:otel_exporter_stdout, []}}}
-    end
-
-  config :opentelemetry,
-    resource_detectors: [
-      :otel_resource_env_var,
-      :otel_resource_app_env,
-      Electric.Telemetry.OpenTelemetry.ResourceDetector
-    ],
-    resource: %{
-      service: %{name: service_name, version: Electric.version()},
-      instance: %{id: instance_id}
-    },
-    processors: [otel_batch_processor, otel_simple_processor] |> Enum.reject(&is_nil/1)
+  otel_debug? = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
 
   if otlp_endpoint do
     # Shortcut config for Honeycomb.io:
@@ -322,7 +299,7 @@ if Electric.telemetry_enabled?() do
     honeycomb_api_key = env!("ELECTRIC_HNY_API_KEY", :string, nil)
     honeycomb_dataset = env!("ELECTRIC_HNY_DATASET", :string, nil)
 
-    headers =
+    otlp_headers =
       Enum.reject(
         [
           {"x-honeycomb-team", honeycomb_api_key},
@@ -331,22 +308,27 @@ if Electric.telemetry_enabled?() do
         fn {_, val} -> is_nil(val) end
       )
 
-    config :opentelemetry_exporter,
-      otlp_protocol: :http_protobuf,
-      otlp_endpoint: otlp_endpoint,
-      otlp_headers: headers,
-      otlp_compression: :gzip
+    resource = %{
+      service: %{name: service_name, version: Electric.version()},
+      instance: %{id: instance_id}
+    }
 
-    config :otel_metric_exporter,
-      otlp_protocol: :http_protobuf,
+    config :electric_telemetry,
+      otel_opts: [
+        otlp_endpoint: otlp_endpoint,
+        otlp_headers: Map.new(otlp_headers),
+        # The `name` resource attribute will be inherited by both metric and log events. This is
+        # an artifact of otel_metric_exporter's implementation. With some more effort, we could
+        # allow setting different names for the two types of events.
+        resource: Map.put(resource, :name, "metrics")
+      ]
+
+    Electric.Telemetry.OpenTelemetry.Config.configure(
       otlp_endpoint: otlp_endpoint,
-      otlp_headers: Map.new(headers),
-      otlp_compression: :gzip,
-      resource: %{
-        name: "metrics",
-        service: %{name: service_name, version: Electric.version()},
-        instance: %{id: instance_id}
-      }
+      otlp_headers: otlp_headers,
+      otel_resource: resource,
+      otel_debug?: otel_debug?
+    )
 
     config :electric, :logger, [
       {:handler, :otel_log_handler, OtelMetricExporter.LogHandler,

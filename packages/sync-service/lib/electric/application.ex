@@ -334,20 +334,27 @@ defmodule Electric.Application do
     [
       instance_id: Keyword.fetch!(opts, :instance_id),
       installation_id: Keyword.fetch!(opts, :installation_id),
-      system_metrics_poll_interval: get_env(opts, :system_metrics_poll_interval),
-      statsd_host: get_env(opts, :telemetry_statsd_host),
-      prometheus?: not is_nil(get_env(opts, :prometheus_port)),
-      call_home_telemetry?: get_env(opts, :call_home_telemetry?),
-      otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint)),
-      otel_export_period: get_env(opts, :otel_export_period),
-      otel_per_process_metrics?: get_env(opts, :otel_per_process_metrics?),
-      top_process_count: get_env(opts, :telemetry_top_process_count),
-      long_gc_threshold: get_env(opts, :telemetry_long_gc_threshold),
-      long_schedule_threshold: get_env(opts, :telemetry_long_schedule_threshold),
-      long_message_queue_enable_threshold:
-        get_env(opts, :telemetry_long_message_queue_enable_threshold),
-      long_message_queue_disable_threshold:
-        get_env(opts, :telemetry_long_message_queue_disable_threshold)
+      version: Electric.version(),
+      intervals_and_thresholds: [
+        system_metrics_poll_interval: get_env(opts, :system_metrics_poll_interval),
+        long_gc_threshold: get_env(opts, :telemetry_long_gc_threshold),
+        long_schedule_threshold: get_env(opts, :telemetry_long_schedule_threshold),
+        long_message_queue_enable_threshold:
+          get_env(opts, :telemetry_long_message_queue_enable_threshold),
+        long_message_queue_disable_threshold:
+          get_env(opts, :telemetry_long_message_queue_disable_threshold),
+        top_process_count: get_env(opts, :telemetry_top_process_count)
+      ],
+      reporters: [
+        statsd_host: get_env(opts, :telemetry_statsd_host),
+        prometheus?: not is_nil(get_env(opts, :prometheus_port)),
+        call_home_url:
+          if(get_env(opts, :call_home_telemetry?), do: get_env(opts, :telemetry_url)),
+        otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
+      ],
+      otel_opts: [
+        export_period: get_env(opts, :otel_export_period)
+      ]
     ]
   end
 end

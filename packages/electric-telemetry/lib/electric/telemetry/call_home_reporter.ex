@@ -24,33 +24,49 @@ with_telemetry Telemetry.Metrics do
       static_info = Keyword.get(opts, :static_info, %{})
       first_report_in = cast_time_to_ms(Keyword.fetch!(opts, :first_report_in))
       reporting_period = cast_time_to_ms(Keyword.fetch!(opts, :reporting_period))
-      reporter_fn = Keyword.get(opts, :reporter_fn, &report_home/1)
+      reporter_fn = Keyword.get(opts, :reporter_fn, &report_home/2)
       stack_id = Keyword.get(opts, :stack_id)
+      telemetry_url = Keyword.fetch!(opts, :call_home_url)
 
-      GenServer.start_link(
-        __MODULE__,
-        %{
-          metrics: metrics,
-          first_report_in: first_report_in,
-          reporting_period: reporting_period,
-          name: name,
-          static_info: static_info,
-          reporter_fn: reporter_fn,
-          stack_id: stack_id
-        },
-        name: name
-      )
+      init_opts = %{
+        metrics: metrics,
+        first_report_in: first_report_in,
+        reporting_period: reporting_period,
+        name: name,
+        static_info: static_info,
+        reporter_fn: reporter_fn,
+        stack_id: stack_id,
+        telemetry_url: telemetry_url
+      }
+
+      GenServer.start_link(__MODULE__, init_opts, name: name)
     end
 
-    def report_home(results) do
-      url = telemetry_url()
+    def static_info(opts) do
+      {total_mem, _, _} = :memsup.get_memory_data()
+      processors = :erlang.system_info(:logical_processors)
+      {os_family, os_name} = :os.type()
+      arch = :erlang.system_info(:system_architecture)
+
+      %{
+        electric_version: opts.version,
+        environment: %{
+          os: %{family: os_family, name: os_name},
+          arch: to_string(arch),
+          cores: processors,
+          ram: total_mem,
+          electric_instance_id: Map.fetch!(opts, :instance_id),
+          electric_installation_id: Map.fetch!(opts, :installation_id)
+        }
+      }
+    end
+
+    def report_home(telemetry_url, results) do
       # Isolate the request in a separate task to avoid blocking and
       # to not receive any messages from the HTTP pool internals
-      Task.start(fn -> Req.post!(url, json: results, retry: :transient) end)
+      Task.start(fn -> Req.post!(telemetry_url, json: results, retry: :transient) end)
       :ok
     end
-
-    defp telemetry_url, do: Electric.Config.get_env(:telemetry_url)
 
     def print_stats(name \\ __MODULE__) do
       GenServer.call(name, :print_stats)
@@ -82,7 +98,7 @@ with_telemetry Telemetry.Metrics do
       end
 
       Logger.notice(
-        "Starting telemetry reporter. Electric will send anonymous usage data to #{telemetry_url()}. " <>
+        "Starting telemetry reporter. Electric will send anonymous usage data to #{opts.telemetry_url}. " <>
           "You can configure this with `ELECTRIC_USAGE_REPORTING` environment variable, " <>
           "see https://electric-sql.com/docs/reference/telemetry for more information."
       )
@@ -122,6 +138,7 @@ with_telemetry Telemetry.Metrics do
 
       {:ok,
        %{
+         telemetry_url: opts.telemetry_url,
          measurement_ctx: measurement_ctx,
          handler_ids: handler_ids,
          summary_types: summary_types,
@@ -141,7 +158,7 @@ with_telemetry Telemetry.Metrics do
       end
 
       # On shutdown try to push all the data we still can.
-      state.reporter_fn.(build_report(state))
+      state.reporter_fn.(state.telemetry_url, build_report(state))
     end
 
     @impl GenServer
@@ -155,7 +172,7 @@ with_telemetry Telemetry.Metrics do
 
       state =
         try do
-          :ok = state.reporter_fn.(full_report)
+          :ok = state.reporter_fn.(state.telemetry_url, full_report)
           clear_stats(%{state | last_reported: full_report.timestamp})
         rescue
           e ->
