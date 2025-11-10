@@ -30,12 +30,7 @@ defmodule Electric.MixProject do
         "coveralls.cobertura": :test,
         "coveralls.lcov": :test
       ],
-      releases: [
-        electric: [
-          applications: [electric: :permanent] ++ telemetry_applications_in_release(),
-          include_executables_for: [:unix]
-        ]
-      ],
+      releases: [electric: [include_executables_for: [:unix]]],
       default_release: :electric,
       test_coverage: [
         tool: ExCoveralls,
@@ -124,47 +119,20 @@ defmodule Electric.MixProject do
     ]
   end
 
-  defp telemetry_applications_in_release do
-    if Mix.target() == @telemetry_target do
-      # This order of application is important to ensure proper startup sequence of
-      # application dependencies, namely, inets.
-      [
-        opentelemetry_exporter: :permanent,
-        opentelemetry: :temporary
-      ]
-    else
-      []
-    end
-  end
-
-  defp telemetry_deps() do
+  defp telemetry_deps do
     [
-      {:sentry, "~> 11.0"},
-      {:opentelemetry, "~> 1.6"},
-      {:opentelemetry_exporter, "~> 1.8"},
-      {:otel_metric_exporter, "~> 0.3.11"},
-      # For debugging the otel_metric_exporter check it out locally and uncomment the line below
-      # {:otel_metric_exporter, path: "../../../elixir-otel-metric-exporter"},
-      {:telemetry_metrics_prometheus_core, "~> 1.1"},
-      {:telemetry_metrics_statsd, "~> 0.7"}
+      {:electric_telemetry,
+       github: "electric-sql/electric-telemetry",
+       ref: "7d8d2250f6e56b5afefaabf2d75c12a0d99cf183",
+       optional: true},
+      # For debugging, check it out locally and uncomment the line below
+      # {:electric_telemetry, path: "../../../electric_telemetry"},
+      {:opentelemetry_exporter, "~> 1.10.0", targets: @telemetry_target, optional: true},
+      {:sentry, "~> 11.0", targets: @telemetry_target, optional: true}
     ]
-    |> Enum.map(fn
-      {package, version} when is_binary(version) ->
-        {package, version, telemetry_dep_opts([])}
-
-      {package, opts} when is_list(opts) ->
-        {package, telemetry_dep_opts(opts)}
-
-      {package, version, opts} when is_binary(version) and is_list(opts) ->
-        {package, version, telemetry_dep_opts(opts)}
-    end)
   end
 
-  defp telemetry_dep_opts(source_opts) do
-    Keyword.merge(source_opts, targets: @telemetry_target, optional: true)
-  end
-
-  defp aliases() do
+  defp aliases do
     [
       start_dev: "cmd --cd dev docker compose up -d",
       stop_dev: "cmd --cd dev docker compose down -v",
