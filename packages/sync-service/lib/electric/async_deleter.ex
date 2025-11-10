@@ -133,7 +133,7 @@ defmodule Electric.AsyncDeleter do
     duration = System.monotonic_time(:millisecond) - start_time
 
     Logger.debug(
-      "AsyncDeleter: deleted #{length(state.pending)} paths " <>
+      "AsyncDeleter: deleted #{length(state.in_progress)} paths " <>
         "for stack #{state.stack_id} in #{duration}ms"
     )
 
