@@ -45,7 +45,7 @@ defmodule Electric.SnapshotError do
   def from_error(%Postgrex.Error{postgres: %{code: :insufficient_privilege}} = error) do
     %SnapshotError{
       type: :missing_privilege,
-      message: error.postgres.message,
+      message: "Unable to create initial snapshot: " <> error.postgres.message,
       original_error: error
     }
   end
