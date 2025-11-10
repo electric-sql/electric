@@ -209,7 +209,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     marker_file_path = deletion_marker_path(stack_opts.base_path, shape_handle)
 
     try do
-      case File.touch(marker_file_path) do
+      case :file.write_file(marker_file_path, <<>>, [:raw]) do
         :ok ->
           Electric.AsyncDeleter.delete(shape_data_dir(stack_opts.base_path, shape_handle),
             stack_id: stack_opts.stack_id
@@ -223,7 +223,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
           raise File.Error, reason: reason, path: marker_file_path
       end
     after
-      File.rm(marker_file_path)
+      :file.delete(marker_file_path, [:raw])
     end
   end
 

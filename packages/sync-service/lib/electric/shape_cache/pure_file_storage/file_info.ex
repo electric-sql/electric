@@ -41,7 +41,7 @@ defmodule Electric.ShapeCache.PureFileStorage.FileInfo do
       else
         _ = mkdir_p(parent)
 
-        case :file.make_dir(path) do
+        case :prim_file.make_dir(path) do
           {:error, :eexist} = error ->
             if dir?(path), do: :ok, else: error
 
