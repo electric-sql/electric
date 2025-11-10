@@ -58,21 +58,6 @@ defmodule Electric.ShapeCacheTest do
 
   @moduletag :tmp_dir
 
-  defmodule TempPubManager do
-    @behaviour Electric.Replication.PublicationManager
-
-    def add_shape(_handle, _, opts) do
-      send(opts[:test_pid], {:called, :prepare_tables_fn})
-      :ok
-    end
-
-    def remove_shape(_handle, _opts), do: :ok
-
-    def wait_for_restore(_stack_id, opts) do
-      send(opts[:test_pid], {:called, :wait_for_restore})
-    end
-  end
-
   setup do
     %{inspector: @stub_inspector, pool: nil}
   end
