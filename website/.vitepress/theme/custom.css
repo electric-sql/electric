@@ -168,6 +168,10 @@
   --icon: url('/img/icons/tanstack-social.svg') !important;
 }
 
+.vpi-social-linkedin {
+  --icon: url('/img/icons/linkedin.svg') !important;
+}
+
 .feature-cta a .count {
   margin-left: 0.25rem;
   min-width: 55px;
