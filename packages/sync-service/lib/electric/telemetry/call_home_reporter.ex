@@ -114,9 +114,9 @@ with_telemetry Telemetry.Metrics do
 
       all_paths = Enum.map(metrics, &get_result_path/1)
 
-      persisted_paths =
+      clearable_paths =
         metrics
-        |> Enum.filter(&Keyword.get(&1.reporter_options, :persist_between_sends, false))
+        |> Enum.reject(&Keyword.get(&1.reporter_options, :persist_between_sends, false))
         |> Enum.map(&get_result_path/1)
 
       Process.send_after(self(), :report, first_report_in)
@@ -128,7 +128,7 @@ with_telemetry Telemetry.Metrics do
          all_paths: all_paths,
          reporting_period: reporting_period,
          static_info: static_info,
-         persisted_paths: persisted_paths,
+         clearable_paths: clearable_paths,
          reporter_fn: reporter_fn,
          last_reported: DateTime.utc_now()
        })}
@@ -212,7 +212,7 @@ with_telemetry Telemetry.Metrics do
     end
 
     defp clear_stats(state) do
-      for key <- state.all_paths -- state.persisted_paths do
+      for key <- state.clearable_paths do
         table =
           if(is_map_key(Map.new(state.summary_types), key),
             do: state.summary_table,
