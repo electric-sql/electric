@@ -46,7 +46,7 @@ defmodule Electric.SnapshotErrorTest do
 
       assert %SnapshotError{
                type: :missing_privilege,
-               message: "permission denied for table items",
+               message: "Unable to create initial snapshot: permission denied for table items",
                original_error: ^error
              } = SnapshotError.from_error(error)
     end
