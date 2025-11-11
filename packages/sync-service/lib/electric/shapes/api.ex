@@ -187,6 +187,7 @@ defmodule Electric.Shapes.Api do
   def validate(%Api{} = api, params) when is_configured(api) do
     with :ok <- hold_until_stack_ready(api),
          {:ok, request} <- validate_params(api, params),
+         request <- check_fallback_mode(request),
          {:ok, request} <- load_shape_info(request) do
       {:ok, seek(request)}
     end
@@ -212,6 +213,19 @@ defmodule Electric.Shapes.Api do
         }
       )
     end
+  end
+
+  defp check_fallback_mode(%Request{api: api} = request) do
+    status = Electric.StatusMonitor.status(api.stack_id)
+    fallback_mode = not status.replication_available
+
+    if fallback_mode do
+      Logger.info("Serving request in fallback mode (replication not available)")
+    end
+
+    request
+    |> Map.put(:fallback_mode, fallback_mode)
+    |> Request.update_response(&%{&1 | fallback_mode: fallback_mode})
   end
 
   @doc false
@@ -536,6 +550,41 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  defp serve_fallback_response(%Request{} = request) do
+    %{response: response, params: %{shape_definition: shape_definition}} = request
+
+    Logger.info("Serving fallback response by querying database directly")
+
+    # Query the database for the current snapshot data
+    # Using subset query with an empty subset (which returns all data)
+    case Shapes.query_subset(shape_definition, nil, request.api) do
+      {:ok, {_metadata, data_stream}} ->
+        # Convert the data stream to log format (insert operations)
+        log_stream =
+          data_stream
+          |> Stream.map(fn row ->
+            %{
+              "headers" => %{"operation" => "insert"},
+              "offset" => "-1",
+              "value" => row
+            }
+          end)
+
+        %{
+          response
+          | chunked: true,
+            body: encode_log(request, log_stream),
+            status: 200,
+            up_to_date: true
+        }
+        |> Response.final()
+
+      {:error, reason} ->
+        Logger.error("Failed to query database in fallback mode: #{inspect(reason)}")
+        Response.error(request, "Database query failed: #{inspect(reason)}", status: 503, retry_after: 5)
+    end
+  end
+
   @doc """
   Return shape log data.
   """
@@ -613,6 +662,11 @@ defmodule Electric.Shapes.Api do
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)]),
         finalized?: true
     }
+  end
+
+  defp do_serve_shape_log(%Request{fallback_mode: true} = request) do
+    # In fallback mode, query the database directly for current data
+    serve_fallback_response(request)
   end
 
   defp do_serve_shape_log(%Request{} = request) do

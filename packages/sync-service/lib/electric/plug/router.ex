@@ -43,6 +43,8 @@ defmodule Electric.Plug.Router do
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 
+  get "/v1/status", to: Electric.Plug.StatusPlug
+
   match _, do: send_resp(conn, 404, "Not found")
 
   def server_header(conn, version),

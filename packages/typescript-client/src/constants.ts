@@ -3,6 +3,7 @@ export const SHAPE_HANDLE_HEADER = `electric-handle`
 export const CHUNK_LAST_OFFSET_HEADER = `electric-offset`
 export const SHAPE_SCHEMA_HEADER = `electric-schema`
 export const CHUNK_UP_TO_DATE_HEADER = `electric-up-to-date`
+export const FALLBACK_MODE_HEADER = `electric-fallback-mode`
 export const COLUMNS_QUERY_PARAM = `columns`
 export const LIVE_CACHE_BUSTER_QUERY_PARAM = `cursor`
 export const EXPIRED_HANDLE_QUERY_PARAM = `expired_handle`

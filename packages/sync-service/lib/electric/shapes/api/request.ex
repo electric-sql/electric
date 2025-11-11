@@ -11,7 +11,8 @@ defmodule Electric.Shapes.Api.Request do
     :new_changes_pid,
     api: %Api{},
     params: %Api.Params{},
-    response: %Api.Response{}
+    response: %Api.Response{},
+    fallback_mode: false
   ]
 
   @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
@@ -24,7 +25,8 @@ defmodule Electric.Shapes.Api.Request do
           new_changes_pid: nil | pid(),
           api: Api.t(),
           params: Api.Params.t(),
-          response: Api.Response.t()
+          response: Api.Response.t(),
+          fallback_mode: boolean()
         }
 
   @spec update_response(t(), (Api.Response.t() -> Api.Response.t())) :: t()
