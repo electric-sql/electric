@@ -13,13 +13,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
 
-  alias Electric.Replication.Changes.{
-    Relation,
-    DeletedRecord,
-    NewRecord,
-    Transaction,
-    UpdatedRecord
-  }
+  alias Electric.Replication.Changes.Begin
+  alias Electric.Replication.Changes.Commit
+  alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.DeletedRecord
+  alias Electric.Replication.Changes.NewRecord
+  alias Electric.Replication.Changes.UpdatedRecord
 
   # Larger than average timeout for assertions that require
   # seeing changes back from the database, as it can be especially
@@ -108,8 +107,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: ctx.slot_name,
         try_creating_publication?: true,
         slot_name: ctx.slot_name,
-        transaction_received: nil,
-        relation_received: nil,
+        handle_operations: nil,
         connection_manager: connection_manager
       ]
 
@@ -204,7 +202,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       interrupt_val = "interrupt #{inspect(pid)}"
       insert_item(conn, interrupt_val)
-      refute_received {:from_replication, _}, 50
+      assert_receive {:from_replication, [%Begin{}]}
+      refute_receive {:from_replication, _}, 50
       Process.exit(pid, :some_reason)
 
       assert_receive {:DOWN, ^monitor, :process, ^pid, :some_reason}, @assert_receive_db_timeout
@@ -223,8 +222,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       refute_receive _
     end
 
-    @tag transaction_received: {MockTransactionProcessor, :process_transaction, []}
-    @tag relation_received: {MockTransactionProcessor, :process_transaction, []}
+    @tag handle_operations: {MockTransactionProcessor, :process_transaction, []}
     test "holds processing of transaction until ready", %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)
 
@@ -248,8 +246,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
-    @tag transaction_received: {MockTransactionProcessor, :process_transaction, []}
-    @tag relation_received: {MockTransactionProcessor, :process_transaction, []}
+    @tag handle_operations: {MockTransactionProcessor, :process_transaction, []}
     test "aborts held processing of transaction on exit", %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)
       insert_item(conn, "test value 1")
@@ -268,7 +265,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
       num_txn = 2
       num_ops = 8
       max_sleep = 20
-      receive_timeout = max((num_txn + num_ops) * max_sleep * 2, @assert_receive_db_timeout)
 
       # Insert `num_txn` transactions, each in a separate process. Every transaction has
       # `num_ops` INSERTs with a random delay between each operation.
@@ -291,7 +287,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       # Receive every transaction sent by ReplicationClient to the test process.
       set =
         Enum.reduce(1..num_txn, MapSet.new(1..num_txn), fn _, set ->
-          assert_receive {:from_replication, %Transaction{changes: records}}, receive_timeout
+          {_lsn, records} = receive_transaction()
           assert num_ops == length(records)
 
           [%NewRecord{record: %{"value" => val}} | _] = records
@@ -664,8 +660,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     state =
       ReplicationClient.State.new(
         stack_id: ctx.stack_id,
-        transaction_received: nil,
-        relation_received: nil,
+        handle_operations: nil,
         publication_name: "",
         try_creating_publication?: false,
         slot_name: "",
@@ -702,18 +697,20 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: ctx.slot_name,
         try_creating_publication?: false,
         slot_name: ctx.slot_name,
-        transaction_received:
-          Map.get(ctx, :transaction_received, {__MODULE__, :test_transaction_received, [self()]}),
-        relation_received:
-          Map.get(ctx, :relation_received, {__MODULE__, :test_relation_received, [self()]}),
+        handle_operations:
+          Map.get(
+            ctx,
+            :handle_operations,
+            {__MODULE__, :test_handle_operations, [self()]}
+          ),
         connection_manager: ctx.connection_manager
       ]
     }
   end
 
   # Special handling for the items table to enable testing of various edge cases that depend on the result of transaction processing.
-  def test_transaction_received(
-        %Transaction{changes: [%NewRecord{relation: {"public", "items"}} = change]} = transaction,
+  def test_handle_operations(
+        [%NewRecord{relation: {"public", "items"}} = change] = changes,
         test_pid
       ) do
     case Map.fetch!(change.record, "value") do
@@ -723,22 +720,22 @@ defmodule Electric.Postgres.ReplicationClientTest do
         if pid == self() do
           raise "Interrupting transaction processing abnormally"
         else
-          send(test_pid, {:from_replication, transaction})
+          send(test_pid, {:from_replication, changes})
           :ok
         end
 
       _ ->
-        send(test_pid, {:from_replication, transaction})
+        send(test_pid, {:from_replication, changes})
         :ok
     end
   end
 
-  def test_transaction_received(transaction, test_pid) do
-    send(test_pid, {:from_replication, transaction})
+  def test_handle_operations(changes, test_pid) when is_list(changes) do
+    send(test_pid, {:from_replication, changes})
     :ok
   end
 
-  def test_relation_received(_change, _test_pid) do
+  def test_handle_operations(%Relation{}, _test_pid) do
     :ok
   end
 
@@ -774,24 +771,32 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   defp receive_rel_change do
-    assert_receive {:from_replication, %Relation{} = change},
+    assert_receive {:from_replication, [%Relation{} = change]},
                    @assert_receive_db_timeout
 
     change
   end
 
   defp receive_tx_change do
-    assert_receive {:from_replication, %Transaction{changes: [change]}},
-                   @assert_receive_db_timeout
-
+    {_lsn, change} = receive_tx_change_with_lsn()
     change
   end
 
   defp receive_tx_change_with_lsn do
-    assert_receive {:from_replication, %Transaction{lsn: lsn, changes: [change]}},
-                   @assert_receive_db_timeout
-
+    {lsn, [change]} = receive_transaction()
     {lsn, change}
+  end
+
+  defp receive_transaction(changes \\ nil) do
+    receive do
+      {:from_replication, [%Begin{}]} -> receive_transaction([])
+      {:from_replication, [%Relation{}]} -> receive_transaction(changes)
+      {:from_replication, [%Commit{lsn: lsn}]} -> {lsn, Enum.reverse(changes)}
+      {:from_replication, [change]} -> receive_transaction([change | changes])
+    after
+      @assert_receive_db_timeout ->
+        raise "Expected transaction but got #{inspect(Enum.reverse(changes), pretty: true)}"
+    end
   end
 
   defp start_client(ctx, overrides \\ []) do

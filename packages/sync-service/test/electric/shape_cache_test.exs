@@ -37,16 +37,14 @@ defmodule Electric.ShapeCacheTest do
   @lsn Electric.Postgres.Lsn.from_integer(13)
   @change_offset LogOffset.new(@lsn, 2)
   @xid 99
-  @changes [
-    Changes.fill_key(
-      %Changes.NewRecord{
-        relation: {"public", "items"},
-        record: %{"id" => "123", "value" => "Test"},
-        log_offset: @change_offset
-      },
-      ["id"]
-    )
-  ]
+  @change Changes.fill_key(
+            %Changes.NewRecord{
+              relation: {"public", "items"},
+              record: %{"id" => "123", "value" => "Test"},
+              log_offset: @change_offset
+            },
+            ["id"]
+          )
 
   @zero_offset LogOffset.last_before_real_offsets()
 
@@ -993,15 +991,12 @@ defmodule Electric.ShapeCacheTest do
 
       ref = Shapes.Consumer.monitor(ctx.stack_id, shape_handle)
 
-      ShapeLogCollector.store_transaction(
-        %Changes.Transaction{
-          changes: @changes,
-          xid: @xid,
-          last_log_offset: @change_offset,
-          lsn: @lsn,
-          affected_relations: MapSet.new([{"public", "items"}]),
-          commit_timestamp: DateTime.utc_now()
-        },
+      ShapeLogCollector.handle_operations(
+        [
+          %Changes.Begin{xid: @xid},
+          @change,
+          %Changes.Commit{lsn: @lsn, commit_timestamp: DateTime.utc_now()}
+        ],
         ctx.shape_log_collector
       )
 

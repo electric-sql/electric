@@ -32,6 +32,26 @@ defmodule Electric.Replication.Changes do
           | Changes.DeletedRecord.t()
 
   @type change() :: data_change() | Changes.TruncatedRelation.t()
+  @type operation() :: Changes.Begin.t() | Changes.Commit.t() | change() | Changes.Relation.t()
+  @type action() :: Changes.Transaction.t() | Changes.Relation.t()
+
+  defmodule Begin do
+    @type t() :: %__MODULE__{
+            xid: Changes.xid()
+          }
+
+    defstruct [:xid]
+  end
+
+  defmodule Commit do
+    @type t() :: %__MODULE__{
+            lsn: Electric.Postgres.Lsn.t(),
+            commit_timestamp: DateTime.t() | nil,
+            transaction_size: non_neg_integer()
+          }
+
+    defstruct [:lsn, :commit_timestamp, transaction_size: 0]
+  end
 
   defmodule Transaction do
     alias Electric.Replication.Changes
