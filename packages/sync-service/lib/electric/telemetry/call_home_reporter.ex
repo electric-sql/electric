@@ -13,6 +13,7 @@ with_telemetry Telemetry.Metrics do
     require Logger
 
     alias Telemetry.Metrics
+    alias Electric.Telemetry.Measurement
 
     @type metric :: Telemetry.Metrics.t()
     @type report_format :: keyword(metric() | report_format())
@@ -87,19 +88,13 @@ with_telemetry Telemetry.Metrics do
 
       groups = Enum.group_by(metrics, & &1.event_name)
 
-      aggregates_table = create_table(name, :set)
-      summary_table = create_table(:"#{name}_summary", :duplicate_bag)
-
-      context = %{
-        table: aggregates_table,
-        summary_table: summary_table
-      }
+      measurement_ctx = Measurement.init(name)
 
       # Attach a listener per event
       handler_ids =
         for {event, metrics} <- groups do
           id = {__MODULE__, event, self()}
-          :telemetry.attach(id, event, &__MODULE__.handle_event/4, {metrics, context})
+          :telemetry.attach(id, event, &__MODULE__.handle_event/4, {metrics, measurement_ctx})
           id
         end
 
@@ -111,6 +106,7 @@ with_telemetry Telemetry.Metrics do
           %Metrics.Summary{} = m -> [{get_result_path(m), :summary}]
           _ -> []
         end)
+        |> Map.new()
 
       all_paths = Enum.map(metrics, &get_result_path/1)
 
@@ -122,7 +118,8 @@ with_telemetry Telemetry.Metrics do
       Process.send_after(self(), :report, first_report_in)
 
       {:ok,
-       Map.merge(context, %{
+       %{
+         measurement_ctx: measurement_ctx,
          handler_ids: handler_ids,
          summary_types: summary_types,
          all_paths: all_paths,
@@ -131,7 +128,7 @@ with_telemetry Telemetry.Metrics do
          clearable_paths: clearable_paths,
          reporter_fn: reporter_fn,
          last_reported: DateTime.utc_now()
-       })}
+       }}
     end
 
     @impl GenServer
@@ -143,14 +140,6 @@ with_telemetry Telemetry.Metrics do
       # On shutdown try to push all the data we still can.
       state.reporter_fn.(build_report(state))
     end
-
-    @empty_summary %{
-      min: 0,
-      max: 0,
-      mean: 0,
-      median: 0,
-      mode: nil
-    }
 
     @impl GenServer
     def handle_call(:print_stats, _from, state) do
@@ -197,126 +186,48 @@ with_telemetry Telemetry.Metrics do
     end
 
     defp build_stats(state) do
-      result = empty_result(state.all_paths, Map.new(state.summary_types))
-
-      result =
-        :ets.tab2list(state.table)
-        |> fill_map_from_path_tuples(result)
-
-      result =
-        state.summary_types
-        |> Enum.map(&{elem(&1, 0), calculate_summary(&1, state.summary_table)})
-        |> fill_map_from_path_tuples(result)
-
-      deep_merge(result, state.static_info)
+      state.all_paths
+      |> Enum.map(fn path ->
+        {path, Measurement.calc_metric(state.measurement_ctx, path, state.summary_types[path])}
+      end)
+      |> Enum.reduce(tuples, %{}, fn {path, val}, acc ->
+        path = path |> Tuple.to_list() |> Enum.map(&Access.key(&1, %{}))
+        put_in(acc, path, val)
+      end)
+      |> deep_merge(state.static_info)
     end
 
     defp clear_stats(state) do
       for key <- state.clearable_paths do
-        table =
-          if(is_map_key(Map.new(state.summary_types), key),
-            do: state.summary_table,
-            else: state.table
-          )
-
-        :ets.delete(table, key)
+        Measurement.clear_metric(state.measurement_ctx, key, state.summary_types[key])
       end
 
       state
     end
 
-    defp calculate_summary({path, :count_unique}, table) do
-      :ets.lookup_element(table, path, 2)
-      |> Enum.uniq()
-      |> Enum.count()
-    rescue
-      ArgumentError -> 0
-    end
-
-    defp calculate_summary({path, :summary}, table) do
-      items = :ets.lookup_element(table, path, 2)
-
-      length = length(items)
-
-      {min, max} = Enum.min_max(items)
-
-      %{
-        min: min,
-        max: max,
-        mean: mean(items, length),
-        median: median(items, length),
-        mode: mode(items)
-      }
-    rescue
-      [ArgumentError, Enum.EmptyError, ArithmeticError] ->
-        # Enum.EmptyError may be raised when there are no elements in the ETS table under the key `path`
-        # ArithmeticError may be raised when an element in the ETS table is `nil`
-        @empty_summary
-    end
-
-    defp mean(elements, length), do: Enum.sum(elements) / length
-
-    defp median(elements, length) when rem(length, 2) == 1 do
-      Enum.at(elements, div(length, 2))
-    end
-
-    defp median(elements, length) when rem(length, 2) == 0 do
-      Enum.slice(elements, div(length, 2) - 1, 2) |> mean(length)
-    end
-
-    defp mode(elements), do: Enum.frequencies(elements) |> Enum.max_by(&elem(&1, 1)) |> elem(0)
-
-    defp empty_result(all_paths, summary_types) do
-      all_paths
-      |> Enum.map(fn path ->
-        case summary_types do
-          %{^path => :summary} -> {path, @empty_summary}
-          %{^path => :unique_count} -> {path, 0}
-          _ -> {path, 0}
-        end
-      end)
-      |> fill_map_from_path_tuples()
-    end
-
-    @spec fill_map_from_path_tuples([{tuple(), term()}], map()) :: map()
-    defp fill_map_from_path_tuples(tuples, into \\ %{}) do
-      Enum.reduce(tuples, into, fn {path, val}, acc ->
-        path = path |> Tuple.to_list() |> Enum.map(&Access.key(&1, %{}))
-        put_in(acc, path, val)
-      end)
-    end
-
-    @spec create_table(name :: atom, type :: atom) :: :ets.tid() | atom
-    defp create_table(name, type) do
-      :ets.new(name, [:named_table, :public, type, {:write_concurrency, :auto}])
-    end
-
-    def handle_event(_event_name, measurements, metadata, {metrics, context}) do
+    def handle_event(_event_name, measurements, metadata, {metrics, measurement_ctx}) do
       for %{reporter_options: opts} = metric <- metrics, keep?(metric, metadata) do
         path = Keyword.fetch!(opts, :result_path)
         measurement = extract_measurement(metric, measurements, metadata)
 
         case metric do
           %Metrics.Counter{} ->
-            :ets.update_counter(context.table, path, 1, {path, 0})
+            Measurement.handle_counter(measurement_ctx, path)
 
           %Metrics.Sum{} ->
-            :ets.update_counter(context.table, path, measurement, {path, 0})
+            Measurement.handle_sum(measurement_ctx, path, measurement)
 
           %Metrics.LastValue{} ->
-            :ets.insert(context.table, {path, measurement})
+            Measurement.handle_last_value(measurement_ctx, path, measurement)
 
           %Metrics.Summary{unit: :unique} ->
-            add_to_summary(path, context, metadata[Keyword.fetch!(opts, :count_unique)])
+            value = metadata[Keyword.fetch!(opts, :count_unique)]
+            Measurement.handle_unique_count(measurement_ctx, path, value)
 
           %Metrics.Summary{} ->
-            add_to_summary(path, context, measurement)
+            Measurement.handle_summary(measurement_ctx, path, measurement)
         end
       end
-    end
-
-    defp add_to_summary(path, %{summary_table: tbl}, value) do
-      :ets.insert(tbl, {path, value})
     end
 
     defp keep?(%{keep: nil}, _metadata), do: true
