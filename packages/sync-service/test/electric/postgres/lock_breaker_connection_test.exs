@@ -78,8 +78,7 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
            publication_name: ctx.slot_name,
            try_creating_publication?: false,
            slot_name: ctx.slot_name,
-           transaction_received: nil,
-           relation_received: nil,
+           handle_operations: nil,
            connection_manager: self()
          ]}
       )
