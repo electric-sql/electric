@@ -196,7 +196,7 @@ with_telemetry Telemetry.Metrics do
 
         {path, Measurement.calc_metric(state.measurement_ctx, path, default)}
       end)
-      |> Enum.reduce(tuples, %{}, fn {path, val}, acc ->
+      |> Enum.reduce(%{}, fn {path, val}, acc ->
         path = path |> Tuple.to_list() |> Enum.map(&Access.key(&1, %{}))
         put_in(acc, path, val)
       end)
@@ -205,7 +205,7 @@ with_telemetry Telemetry.Metrics do
 
     defp clear_stats(state) do
       for key <- state.clearable_paths do
-        Measurement.clear_metric(state.measurement_ctx, key, state.summary_types[key])
+        Measurement.clear_metric(state.measurement_ctx, key)
       end
 
       state
