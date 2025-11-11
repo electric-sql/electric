@@ -52,12 +52,20 @@ defmodule Electric.Plug.ServeShapePlugTest do
   # Higher timeout is needed for some tests that tend to run slower on CI.
   @receive_timeout 2000
 
+  @moduletag :tmp_dir
+
   setup do
     start_link_supervised!({Registry, keys: :duplicate, name: @registry})
     :ok
   end
 
-  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor, :with_shape_monitor]
+  setup [
+    :with_persistent_kv,
+    :with_stack_id_from_test,
+    :with_pure_file_storage,
+    :with_status_monitor,
+    :with_shape_cleaner
+  ]
 
   def conn(_ctx, method, params, "?" <> _ = query_string) do
     Plug.Test.conn(method, "/" <> query_string, params)
@@ -71,7 +79,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         stack_events_registry: Electric.stack_events_registry(),
         stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
         shape_cache: {Electric.ShapeCache, []},
-        storage: {Mock.Storage, []},
+        storage: {Electric.ShapeCache.Storage.PureFileStorage, []},
         inspector: @inspector,
         registry: @registry,
         long_poll_timeout: long_poll_timeout(ctx),

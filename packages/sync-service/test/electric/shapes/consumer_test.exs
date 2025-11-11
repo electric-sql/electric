@@ -94,9 +94,9 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_shape_status,
       :with_persistent_kv,
       :with_status_monitor,
-      :with_shape_monitor,
       :with_dynamic_consumer_supervisor,
-      :with_noop_publication_manager
+      :with_noop_publication_manager,
+      :with_shape_cleaner
     ]
 
     setup(ctx) do
@@ -352,8 +352,10 @@ defmodule Electric.Shapes.ConsumerTest do
         assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
       end)
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
-      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
+                     @shape_cleanup_timeout
+
+      refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
 
     defp assert_consumer_shutdown(stack_id, shape_handle, fun) do
@@ -410,8 +412,11 @@ defmodule Electric.Shapes.ConsumerTest do
       end)
 
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
-      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
+
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
+                     @shape_cleanup_timeout
+
+      refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
 
     test "notifies listeners of new changes", ctx do
@@ -489,7 +494,9 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
+
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
+                     @shape_cleanup_timeout
     end
 
     test "cleans shapes affected by a relation change", ctx do
@@ -524,8 +531,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
-      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
+
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
+                     @shape_cleanup_timeout
+
+      refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
 
     test "notifies live listeners when invalidated", ctx do
@@ -561,7 +571,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       assert_receive {^live_ref, :shape_rotation}
-      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
+      refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
 
     test "unexpected error while handling events stops affected consumer and cleans affected shape",
@@ -569,7 +579,8 @@ defmodule Electric.Shapes.ConsumerTest do
       expect_shape_status(
         set_latest_offset: fn _, @shape_handle1, _ ->
           raise "The unexpected error"
-        end
+        end,
+        remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
       )
 
       lsn = Lsn.from_string("0/10")
@@ -595,18 +606,24 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
-      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
+                     @shape_cleanup_timeout
+
+      refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
 
     test "consumer crashing stops affected consumer", ctx do
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
+      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle1}, @shape_cleanup_timeout
-      refute_receive {Electric.Shapes.Monitor, :cleanup, @shape_handle2}
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
+                     @shape_cleanup_timeout
+
+      refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
 
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -630,8 +647,7 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_shape_cleaner,
       :with_shape_log_collector,
       :with_noop_publication_manager,
-      :with_status_monitor,
-      :with_shape_monitor
+      :with_status_monitor
     ]
 
     setup(ctx) do

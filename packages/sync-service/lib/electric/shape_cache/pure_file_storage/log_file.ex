@@ -1,14 +1,16 @@
 defmodule Electric.ShapeCache.PureFileStorage.LogFile do
   @moduledoc false
+  alias Electric.ShapeCache.PureFileStorage, as: PFS
   alias Electric.ShapeCache.PureFileStorage.ActionFile
   alias Electric.ShapeCache.PureFileStorage.KeyIndex
-  alias Electric.LogItems
   alias Electric.ShapeCache.PureFileStorage.ActionFile
   alias Electric.ShapeCache.PureFileStorage.ChunkIndex
+  alias Electric.LogItems
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.LogChunker
 
   import Electric.Replication.LogOffset, only: :macros
+  import Electric.ShapeCache.PureFileStorage, only: [stream_open_file!: 3]
 
   # 16 bytes offset + 4 bytes key size + 1 byte op type + 1 byte processed flag + 8 bytes json size = 30 bytes
   @line_overhead 16 + 4 + 1 + 1 + 8
@@ -138,28 +140,12 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     current_position + key_size + @line_overhead
   end
 
-  @doc """
-  Read a chunk of the log file from the given offset.
-
-  Returns a stream of json strings.
-  """
-  @spec read_chunk(log :: log_and_supporting(), LogOffset.t()) :: Enumerable.t(String.t())
-  def read_chunk({log_file_path, chunk_index_path, _key_index_path}, %LogOffset{} = offset) do
-    case ChunkIndex.fetch_chunk(chunk_index_path, offset) do
-      {:ok, _max_offset, {start_position, end_position}} ->
-        stream_jsons(log_file_path, start_position, end_position, offset)
-
-      :error ->
-        []
-    end
-  end
-
   @spec stream_entries(
           log_file_path :: String.t(),
           start_position :: non_neg_integer(),
           excl_end_pos :: non_neg_integer() | :eof
-        ) ::
-          Enumerable.t({log_item_with_sizes(), non_neg_integer()})
+        ) :: Enumerable.t({log_item_with_sizes(), non_neg_integer()})
+  # compaction only
   def stream_entries(log_file_path, start_position, end_position \\ :eof) do
     Stream.resource(
       fn ->
@@ -188,30 +174,41 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     )
   end
 
-  def stream_jsons(log_file_path, start_position, end_position, exclusive_min_offset) do
+  def stream_jsons(
+        %PFS{} = opts,
+        log_file_path,
+        start_position,
+        end_position,
+        exclusive_min_offset
+      ) do
     # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
-    file = File.open!(log_file_path, [:read, :raw])
+    case stream_open_file!(opts, log_file_path, [:read, :raw]) do
+      {:halt, :shape_gone} ->
+        []
 
-    try do
-      with {:ok, data} <- :file.pread(file, start_position, end_position - start_position) do
-        {jsons, _} = extract_jsons_from_binary(data, exclusive_min_offset, nil)
-        jsons
-      else
-        :eof ->
-          raise "unexpected end of file"
+      {:ok, file} ->
+        try do
+          with {:ok, data} <- :file.pread(file, start_position, end_position - start_position) do
+            {jsons, _} = extract_jsons_from_binary(data, exclusive_min_offset, nil)
+            jsons
+          else
+            :eof ->
+              raise "unexpected end of file"
 
-        {:error, reason} ->
-          raise File.Error,
-            path: log_file_path,
-            reason: reason,
-            action: "pread(#{start_position}, #{end_position - start_position})"
-      end
-    after
-      File.close(file)
+            {:error, reason} ->
+              raise File.Error,
+                path: log_file_path,
+                reason: reason,
+                action: "pread(#{start_position}, #{end_position - start_position})"
+          end
+        after
+          File.close(file)
+        end
     end
   end
 
   def stream_jsons_until_offset(
+        %PFS{} = opts,
         log_file_path,
         start_position,
         exclusive_min_offset,
@@ -219,11 +216,19 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
       ) do
     Stream.resource(
       fn ->
-        file = File.open!(log_file_path, [:read, :raw])
-        {:ok, ^start_position} = :file.position(file, start_position)
-        {file, ""}
+        case stream_open_file!(opts, log_file_path, [:read, :raw]) do
+          {:ok, file} ->
+            {:ok, ^start_position} = :file.position(file, start_position)
+            {file, ""}
+
+          {:halt, :shape_gone} ->
+            :halt
+        end
       end,
       fn
+        :halt ->
+          {:halt, []}
+
         {file, binary_rest} ->
           case :file.read(file, 4096) do
             {:ok, data} ->
@@ -240,7 +245,10 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
               {:halt, {file, binary_rest}}
           end
       end,
-      &File.close(elem(&1, 0))
+      fn
+        [] -> :ok
+        {file, _} -> File.close(file)
+      end
     )
   end
 

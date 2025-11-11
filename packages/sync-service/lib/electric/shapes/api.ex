@@ -262,7 +262,6 @@ defmodule Electric.Shapes.Api do
 
   defp seek(%Request{} = request) do
     request
-    |> register_shape_subscriber()
     |> listen_for_new_changes()
     |> determine_global_last_seen_lsn()
     |> determine_log_chunk_offset()
@@ -394,19 +393,6 @@ defmodule Electric.Shapes.Api do
         Logger.warning("Stack not ready after #{opts[:timeout]}ms. Reason: #{message}")
         {:error, Response.error(api, message, status: 503, retry_after: 5)}
     end
-  end
-
-  defp register_shape_subscriber(%Request{handle: nil} = request) do
-    request
-  end
-
-  defp register_shape_subscriber(%Request{} = request) do
-    %{api: %{stack_id: stack_id}, handle: handle} = request
-    :ok = Electric.Shapes.Monitor.register_reader(stack_id, handle)
-
-    Logger.debug(fn -> "Registering subscriber for shape #{inspect(handle)}" end)
-
-    request
   end
 
   defp listen_for_new_changes(%Request{params: %{live: false}} = request) do

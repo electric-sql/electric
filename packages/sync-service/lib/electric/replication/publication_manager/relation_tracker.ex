@@ -259,7 +259,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     state = reply_to_relation_waiters(oid_rel, {:error, error}, state)
 
     if not is_struct(error, DBConnection.ConnectionError) do
-      ShapeCleaner.remove_shapes_for_relations([oid_rel], stack_id: state.stack_id)
+      ShapeCleaner.remove_shapes_for_relations(state.stack_id, [oid_rel])
     end
 
     {:noreply, state, state.publication_refresh_period}
