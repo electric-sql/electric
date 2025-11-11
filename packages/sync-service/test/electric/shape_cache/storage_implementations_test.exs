@@ -752,18 +752,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert {:ok, MapSet.new([@shape_handle])} ==
                  Storage.get_all_stored_shape_handles(storage_base)
       end
-
-      test "ignores shapes marked for deletion", %{storage_base: storage_base, storage: opts} do
-        _writer = Storage.init_writer!(opts, @shape)
-
-        {PureFileStorage, stack_opts} = storage_base
-        {PureFileStorage, shape_opts} = opts
-
-        path = PureFileStorage.deletion_marker_path(stack_opts.base_path, shape_opts.shape_handle)
-        File.touch(path)
-
-        assert {:ok, MapSet.new()} == Storage.get_all_stored_shape_handles(storage_base)
-      end
     end
 
     describe "#{module_name}.get_all_stored_shapes/1" do

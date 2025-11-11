@@ -197,7 +197,11 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_cleaner(ctx) do
-    start_supervised!({Electric.ShapeCache.ShapeCleaner, stack_id: ctx.stack_id})
+    start_supervised!(
+      {Electric.ShapeCache.ShapeCleaner,
+       Keyword.merge(shape_cleaner_opts(ctx), stack_id: ctx.stack_id)}
+    )
+
     :ok
   end
 
@@ -398,48 +402,15 @@ defmodule Support.ComponentSetup do
     def remove_shape(_, _), do: {:ok, nil}
   end
 
-  def with_shape_monitor(ctx) do
-    storage =
-      Map.get_lazy(ctx, :storage, fn ->
-        %{storage: storage} = with_in_memory_storage(ctx)
-
-        storage
-      end)
-
-    # Initialize shape status
-    shape_status_owner =
-      Map.get_lazy(ctx, :shape_status_owner, fn ->
-        with_shape_status(Map.merge(ctx, %{storage: storage}))
-      end)
-
-    start_supervised!(
-      {Electric.Shapes.Monitor,
-       Keyword.merge(monitor_config(ctx),
-         stack_id: ctx.stack_id,
-         storage: storage
-       )}
-    )
-
-    %{
-      storage: storage,
-      shape_status_owner: shape_status_owner
-    }
-  end
-
-  defp monitor_config(ctx) do
+  def shape_cleaner_opts(ctx) do
     parent = self()
-
-    on_remove =
-      Map.get(ctx, :on_shape_remove, fn handle, _pid ->
-        send(parent, {Electric.Shapes.Monitor, :remove, handle})
-      end)
 
     on_cleanup =
       Map.get(ctx, :on_shape_cleanup, fn handle ->
-        send(parent, {Electric.Shapes.Monitor, :cleanup, handle})
+        send(parent, {Electric.ShapeCache.ShapeCleaner, :cleanup, handle})
       end)
 
-    [on_remove: on_remove, on_cleanup: on_cleanup]
+    [on_cleanup: on_cleanup]
   end
 
   def with_complete_stack(ctx) do
@@ -495,7 +466,7 @@ defmodule Support.ComponentSetup do
          ],
          tweaks: [
            registry_partitions: 1,
-           monitor_opts: monitor_config(ctx)
+           shape_cleaner_opts: shape_cleaner_opts(ctx)
          ],
          manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false)},
         restart: :temporary,

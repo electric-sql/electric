@@ -5,8 +5,16 @@ defmodule Electric.StackConfig do
     :ets.insert(table(stack_id), {key, val})
   end
 
-  def lookup(stack_id, key) do
+  def lookup(stack_id, key, default \\ nil) do
+    :ets.lookup_element(table(stack_id), key, 2, default)
+  end
+
+  def lookup!(stack_id, key) do
     :ets.lookup_element(table(stack_id), key, 2)
+  rescue
+    ArgumentError ->
+      raise RuntimeError,
+        message: "stack config value #{inspect(key)} is missing for stack #{stack_id}"
   end
 
   ###
