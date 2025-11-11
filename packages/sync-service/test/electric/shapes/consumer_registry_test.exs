@@ -39,7 +39,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     Repatch.patch(
       Electric.ShapeCache,
       :start_consumer_for_handle,
-      fn handle, stack_id: ^stack_id ->
+      fn handle, ^stack_id ->
         send(parent, {:start_consumer, handle})
 
         {:ok, pid} =
