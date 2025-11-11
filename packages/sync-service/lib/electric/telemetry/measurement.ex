@@ -2,11 +2,10 @@ defmodule Electric.Telemetry.Measurement do
   @moduledoc false
 
   @type t() :: %__MODULE__{
-          table: :ets.table(),
-          summary_table: :ets.table()
+          table: :ets.table()
         }
 
-  @required_keys [:table, :summary_table]
+  @required_keys [:table]
   defstruct @required_keys
 
   @empty_summary %{
@@ -28,15 +27,7 @@ defmodule Electric.Telemetry.Measurement do
   def init(name) do
     table = :ets.new(name, [:named_table, :public, :set, {:write_concurrency, :auto}])
 
-    summary_table =
-      :ets.new(:"#{name}_summary", [
-        :named_table,
-        :public,
-        :duplicate_bag,
-        {:write_concurrency, :auto}
-      ])
-
-    %__MODULE__{table: table, summary_table: summary_table}
+    %__MODULE__{table: table}
   end
 
   def handle_counter(%__MODULE__{table: table}, key) do
@@ -74,8 +65,42 @@ defmodule Electric.Telemetry.Measurement do
     end
   end
 
-  def handle_summary(%__MODULE__{summary_table: summary_table}, key, value) do
-    :ets.insert(summary_table, {key, value})
+  def handle_summary(%__MODULE__{table: table}, key, value) do
+    # Use :ets.select_replace to atomically update running tallies: {key, min, max, count, sum}
+    match_spec = [
+      {
+        {key, :"$1", :"$2", :"$3", :"$4"},
+        [],
+        [
+          {
+            {
+              {:const, key},
+              {:min, :"$1", {:const, value}},
+              {:max, :"$2", {:const, value}},
+              {:+, :"$3", 1},
+              {:+, :"$4", {:const, value}}
+            }
+          }
+        ]
+      }
+    ]
+
+    case :ets.select_replace(table, match_spec) do
+      1 ->
+        :ok
+
+      0 ->
+        # Key doesn't exist, try to initialize with first value
+        case :ets.insert_new(table, {key, value, value, 1, value}) do
+          true ->
+            :ok
+
+          false ->
+            # Another process initialized it, retry the update
+            :ets.select_replace(table, match_spec)
+            :ok
+        end
+    end
   end
 
   def calc_metric(opts, key, key_type \\ nil)
@@ -122,24 +147,26 @@ defmodule Electric.Telemetry.Measurement do
     ArgumentError -> 0
   end
 
-  def calc_metric(%__MODULE__{summary_table: table}, key, :summary) do
-    items = :ets.lookup_element(table, key, 2)
+  def calc_metric(%__MODULE__{table: table}, key, :summary) do
+    case :ets.lookup(table, key) do
+      [] ->
+        @empty_summary
 
-    length = length(items)
+      [{^key, min, max, count, sum}] ->
+        mean = sum / count
 
-    {min, max} = Enum.min_max(items)
-
-    %{
-      min: min,
-      max: max,
-      mean: mean(items, length),
-      median: median(items, length),
-      mode: mode(items)
-    }
+        %{
+          min: min,
+          max: max,
+          mean: mean,
+          median: 0,
+          mode: nil
+        }
+    end
   rescue
-    [ArgumentError, Enum.EmptyError, ArithmeticError] ->
-      # Enum.EmptyError may be raised when there are no elements in the ETS table under the key `path`
-      # ArithmeticError may be raised when an element in the ETS table is `nil`
+    [ArgumentError, ArithmeticError] ->
+      # ArgumentError when key doesn't exist
+      # ArithmeticError when dividing by zero or invalid values
       @empty_summary
   end
 
@@ -155,20 +182,8 @@ defmodule Electric.Telemetry.Measurement do
     :ok
   end
 
-  def clear_metric(%__MODULE__{summary_table: table}, key, :summary) do
+  def clear_metric(%__MODULE__{table: table}, key, :summary) do
     :ets.delete(table, key)
     :ok
   end
-
-  defp mean(elements, length), do: Enum.sum(elements) / length
-
-  defp median(elements, length) when rem(length, 2) == 1 do
-    Enum.at(elements, div(length, 2))
-  end
-
-  defp median(elements, length) when rem(length, 2) == 0 do
-    Enum.slice(elements, div(length, 2) - 1, 2) |> mean(length)
-  end
-
-  defp mode(elements), do: Enum.frequencies(elements) |> Enum.max_by(&elem(&1, 1)) |> elem(0)
 end

@@ -8,15 +8,13 @@ defmodule Electric.Telemetry.MeasurementTest do
       name = :test_measurement_init
       measurement = Measurement.init(name)
 
-      assert %Measurement{table: table, summary_table: summary_table} = measurement
+      assert %Measurement{table: table} = measurement
 
-      # Tables are atoms when named_table is used
+      # Table is atom when named_table is used
       assert is_atom(table)
-      assert is_atom(summary_table)
 
       # Verify table exists and has correct type
       assert :ets.info(table)[:type] == :set
-      assert :ets.info(summary_table)[:type] == :duplicate_bag
     end
 
     test "creates named tables" do
@@ -24,7 +22,6 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.init(name)
 
       assert :ets.whereis(name) != :undefined
-      assert :ets.whereis(:"#{name}_summary") != :undefined
     end
   end
 
@@ -66,7 +63,7 @@ defmodule Electric.Telemetry.MeasurementTest do
     end
 
     test "calc_metric returns 0 if table doesn't exist" do
-      fake_measurement = %Measurement{table: :nonexistent_table, summary_table: :also_nonexistent}
+      fake_measurement = %Measurement{table: :nonexistent_table}
       assert Measurement.calc_metric(fake_measurement, :any_key) == 0
     end
 
@@ -342,35 +339,33 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 10
       assert summary.max == 50
       assert summary.mean == 30.0
-      assert summary.median == 30
-      assert summary.mode == 10
+      # median and mode cannot be calculated from running tallies
+      assert summary.median == 0
+      assert summary.mode == nil
     end
 
-    test "calc_metric calculates median for odd number of elements", %{measurement: measurement} do
+    test "calc_metric calculates min/max/mean for odd number of elements", %{
+      measurement: measurement
+    } do
       values = [1, 2, 3, 4, 5]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :odd, v) end)
 
       summary = Measurement.calc_metric(measurement, :odd, :summary)
-      assert summary.median == 3
+      assert summary.min == 1
+      assert summary.max == 5
+      assert summary.mean == 3.0
     end
 
-    test "calc_metric calculates median for even number of elements", %{measurement: measurement} do
+    test "calc_metric calculates min/max/mean for even number of elements", %{
+      measurement: measurement
+    } do
       values = [1, 2, 3, 4]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :even, v) end)
 
       summary = Measurement.calc_metric(measurement, :even, :summary)
-      # Median calculation uses mean(elements, length) which divides by total length
-      # So it takes avg of middle 2 elements but passes total length
-      # This gives (2 + 3) / 4 = 1.25
-      assert summary.median == 1.25
-    end
-
-    test "calc_metric calculates mode correctly", %{measurement: measurement} do
-      values = [1, 2, 2, 3, 3, 3, 4]
-      Enum.each(values, fn v -> Measurement.handle_summary(measurement, :mode_test, v) end)
-
-      summary = Measurement.calc_metric(measurement, :mode_test, :summary)
-      assert summary.mode == 3
+      assert summary.min == 1
+      assert summary.max == 4
+      assert summary.mean == 2.5
     end
 
     test "calc_metric handles single value", %{measurement: measurement} do
@@ -380,8 +375,8 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 42
       assert summary.max == 42
       assert summary.mean == 42.0
-      assert summary.median == 42
-      assert summary.mode == 42
+      assert summary.median == 0
+      assert summary.mode == nil
     end
 
     test "calc_metric handles two values", %{measurement: measurement} do
@@ -392,8 +387,8 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 10
       assert summary.max == 20
       assert summary.mean == 15.0
-      assert summary.median == 15.0
-      assert summary.mode in [10, 20]
+      assert summary.median == 0
+      assert summary.mode == nil
     end
 
     test "calc_metric returns empty summary for nonexistent key", %{measurement: measurement} do
@@ -440,7 +435,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.max == 0
       assert summary.mean == 0.0
       assert summary.median == 0
-      assert summary.mode == 0
+      assert summary.mode == nil
     end
 
     test "calc_metric handles duplicate values", %{measurement: measurement} do
@@ -451,25 +446,18 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 5
       assert summary.max == 5
       assert summary.mean == 5.0
-      assert summary.median == 5
-      assert summary.mode == 5
+      assert summary.median == 0
+      assert summary.mode == nil
     end
 
-    test "calc_metric median calculation with unsorted values", %{measurement: measurement} do
+    test "calc_metric min/max/mean with unsorted values", %{measurement: measurement} do
       values = [50, 10, 30, 20, 40]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :unsorted, v) end)
 
       summary = Measurement.calc_metric(measurement, :unsorted, :summary)
-      assert summary.median == 30
-    end
-
-    test "calc_metric mode with tied frequencies picks one", %{measurement: measurement} do
-      # Both 1 and 2 appear twice
-      values = [1, 1, 2, 2, 3]
-      Enum.each(values, fn v -> Measurement.handle_summary(measurement, :tied, v) end)
-
-      summary = Measurement.calc_metric(measurement, :tied, :summary)
-      assert summary.mode in [1, 2]
+      assert summary.min == 10
+      assert summary.max == 50
+      assert summary.mean == 30.0
     end
 
     test "calc_metric returns empty summary when values include nil" do
@@ -493,6 +481,24 @@ defmodule Electric.Telemetry.MeasurementTest do
       # Should return empty summary due to ArithmeticError
       summary = Measurement.calc_metric(measurement, :mixed, :summary)
       assert summary == %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
+    end
+
+    test "summary updates are atomic under concurrent access" do
+      measurement = Measurement.init(:test_summary_atomic)
+
+      # Simulate concurrent summary updates
+      tasks =
+        for i <- 1..100 do
+          Task.async(fn -> Measurement.handle_summary(measurement, :concurrent_summary, i) end)
+        end
+
+      # Wait for all tasks to complete
+      Enum.each(tasks, &Task.await/1)
+
+      summary = Measurement.calc_metric(measurement, :concurrent_summary, :summary)
+      assert summary.min == 1
+      assert summary.max == 100
+      assert summary.mean == 50.5
     end
   end
 
