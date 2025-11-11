@@ -25,17 +25,20 @@ defmodule Electric.Telemetry.Measurement do
 
   def handle_counter(%__MODULE__{table: table}, key) do
     :ets.update_counter(table, key, 1, {key, 0})
+    :ok
   end
 
   def handle_sum(%__MODULE__{table: table}, key, value) do
     :ets.update_counter(table, key, value, {key, 0})
+    :ok
   end
 
   def handle_last_value(%__MODULE__{table: table}, key, value) do
     :ets.insert(table, {key, value})
+    :ok
   end
 
-  def handle_unique_count(%__MODULE__{table: table}, key, value) do
+  def handle_unique_count(%__MODULE__{table: table} = m, key, value) do
     # Use linear probabilistic counting with a bitmap stored as a tuple
     # Hash the value to get which position in the tuple (0..m-1)
     bit_position = :erlang.phash2(value, @unique_bitmap_size)
@@ -53,16 +56,15 @@ defmodule Electric.Telemetry.Measurement do
         initial_tuple =
           :erlang.make_tuple(@unique_bitmap_size + 1, nil, [{1, key}, {ets_position, true}])
 
-        if not :ets.insert_new(table, initial_tuple) do
+        case :ets.insert_new(table, initial_tuple) do
+          true -> :ok
           # Another process initialized it, retry the update
-          :ets.update_element(table, key, {ets_position, true})
+          false -> handle_unique_count(m, key, value)
         end
-
-        :ok
     end
   end
 
-  def handle_summary(%__MODULE__{table: table}, key, value) do
+  def handle_summary(%__MODULE__{table: table} = m, key, value) do
     # Use :ets.select_replace to atomically update running tallies: {key, min, max, count, sum}
     match_spec = [
       {
@@ -88,12 +90,11 @@ defmodule Electric.Telemetry.Measurement do
 
       0 ->
         # Key doesn't exist, try to initialize with first value
-        if not :ets.insert_new(table, {key, value, value, 1, value}) do
+        case :ets.insert_new(table, {key, value, value, 1, value}) do
+          true -> :ok
           # Another process initialized it, retry the update
-          :ets.select_replace(table, match_spec)
+          false -> handle_summary(m, key, value)
         end
-
-        :ok
     end
   end
 

@@ -32,15 +32,15 @@ defmodule Electric.Telemetry.MeasurementTest do
     end
 
     test "increments counter from 0 to 1", %{measurement: measurement} do
-      result = Measurement.handle_counter(measurement, :my_counter)
-      assert result == 1
+      Measurement.handle_counter(measurement, :my_counter)
+      assert Measurement.calc_metric(measurement, :my_counter) == 1
     end
 
     test "increments counter multiple times", %{measurement: measurement} do
       Measurement.handle_counter(measurement, :my_counter)
       Measurement.handle_counter(measurement, :my_counter)
-      result = Measurement.handle_counter(measurement, :my_counter)
-      assert result == 3
+      Measurement.handle_counter(measurement, :my_counter)
+      assert Measurement.calc_metric(measurement, :my_counter) == 3
     end
 
     test "maintains separate counters for different keys", %{measurement: measurement} do
@@ -90,21 +90,21 @@ defmodule Electric.Telemetry.MeasurementTest do
     test "adds positive values", %{measurement: measurement} do
       Measurement.handle_sum(measurement, :my_sum, 10)
       Measurement.handle_sum(measurement, :my_sum, 20)
-      result = Measurement.handle_sum(measurement, :my_sum, 30)
-      assert result == 60
+      Measurement.handle_sum(measurement, :my_sum, 30)
+      assert Measurement.calc_metric(measurement, :my_sum) == 60
     end
 
     test "handles negative values", %{measurement: measurement} do
       Measurement.handle_sum(measurement, :my_sum, 100)
       Measurement.handle_sum(measurement, :my_sum, -30)
-      result = Measurement.handle_sum(measurement, :my_sum, -20)
-      assert result == 50
+      Measurement.handle_sum(measurement, :my_sum, -20)
+      assert Measurement.calc_metric(measurement, :my_sum) == 50
     end
 
     test "handles zero values", %{measurement: measurement} do
       Measurement.handle_sum(measurement, :my_sum, 0)
-      result = Measurement.handle_sum(measurement, :my_sum, 0)
-      assert result == 0
+      Measurement.handle_sum(measurement, :my_sum, 0)
+      assert Measurement.calc_metric(measurement, :my_sum) == 0
     end
 
     test "maintains separate sums for different keys", %{measurement: measurement} do
