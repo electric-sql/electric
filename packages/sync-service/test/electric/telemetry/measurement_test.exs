@@ -52,17 +52,11 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert Measurement.calc_metric(measurement, :counter_b) == 1
     end
 
-    test "calc_metric returns 0 for nonexistent counter", %{measurement: measurement} do
+    test "calc_metric returns default for nonexistent counter", %{measurement: measurement} do
       assert Measurement.calc_metric(measurement, :nonexistent, 0) == 0
     end
 
-    test "calc_metric retrieves stored counter value", %{measurement: measurement} do
-      Measurement.handle_counter(measurement, :my_key)
-      Measurement.handle_counter(measurement, :my_key)
-      assert Measurement.calc_metric(measurement, :my_key) == 2
-    end
-
-    test "calc_metric returns 0 if table doesn't exist" do
+    test "calc_metric returns default if table doesn't exist" do
       fake_measurement = %Measurement{table: :nonexistent_table}
       assert Measurement.calc_metric(fake_measurement, :any_key, 0) == 0
     end
@@ -114,12 +108,6 @@ defmodule Electric.Telemetry.MeasurementTest do
 
       assert Measurement.calc_metric(measurement, :sum_a) == 15
       assert Measurement.calc_metric(measurement, :sum_b) == 20
-    end
-
-    test "calc_metric retrieves sum value", %{measurement: measurement} do
-      Measurement.handle_sum(measurement, :my_sum, 10)
-      Measurement.handle_sum(measurement, :my_sum, 20)
-      assert Measurement.calc_metric(measurement, :my_sum) == 30
     end
 
     test "handles very large numbers" do
@@ -193,11 +181,6 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert Measurement.calc_metric(measurement, :value_a) == 100
       assert Measurement.calc_metric(measurement, :value_b) == 200
     end
-
-    test "calc_metric retrieves last stored value", %{measurement: measurement} do
-      Measurement.handle_last_value(measurement, :my_key, 42)
-      assert Measurement.calc_metric(measurement, :my_key) == 42
-    end
   end
 
   describe "handle_unique_count/3" do
@@ -206,7 +189,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       %{measurement: measurement}
     end
 
-    test "stores values for unique counting", %{measurement: measurement} do
+    test "counts unique strings correctly", %{measurement: measurement} do
       Measurement.handle_unique_count(measurement, :unique_key, "value1")
       Measurement.handle_unique_count(measurement, :unique_key, "value2")
       Measurement.handle_unique_count(measurement, :unique_key, "value1")
@@ -216,7 +199,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert count >= 1 and count <= 3
     end
 
-    test "counts unique values correctly", %{measurement: measurement} do
+    test "counts unique integers correctly", %{measurement: measurement} do
       Measurement.handle_unique_count(measurement, :unique_key, 1)
       Measurement.handle_unique_count(measurement, :unique_key, 2)
       Measurement.handle_unique_count(measurement, :unique_key, 3)
@@ -228,33 +211,11 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert count >= 2 and count <= 4
     end
 
-    test "calc_metric counts unique string values", %{measurement: measurement} do
-      Measurement.handle_unique_count(measurement, :users, "alice")
-      Measurement.handle_unique_count(measurement, :users, "bob")
-      Measurement.handle_unique_count(measurement, :users, "alice")
-      Measurement.handle_unique_count(measurement, :users, "charlie")
-      Measurement.handle_unique_count(measurement, :users, "bob")
-
-      # Probabilistic counting - estimate should be close to 3
-      count = Measurement.calc_metric(measurement, :users)
-      assert count >= 2 and count <= 4
-    end
-
-    test "calc_metric counts unique integer values", %{measurement: measurement} do
-      Measurement.handle_unique_count(measurement, :numbers, 1)
-      Measurement.handle_unique_count(measurement, :numbers, 2)
-      Measurement.handle_unique_count(measurement, :numbers, 1)
-
-      # Probabilistic counting - estimate should be close to 2
-      count = Measurement.calc_metric(measurement, :numbers)
-      assert count >= 1 and count <= 3
-    end
-
-    test "calc_metric returns 0 for nonexistent key", %{measurement: measurement} do
+    test "calc_metric returns default for nonexistent key", %{measurement: measurement} do
       assert Measurement.calc_metric(measurement, :nonexistent, 0) == 0
     end
 
-    test "calc_metric counts single unique value", %{measurement: measurement} do
+    test "counts single unique value", %{measurement: measurement} do
       Measurement.handle_unique_count(measurement, :single, "value")
       Measurement.handle_unique_count(measurement, :single, "value")
 
@@ -263,7 +224,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert count >= 1 and count <= 2
     end
 
-    test "calc_metric estimates large number of unique values", %{measurement: measurement} do
+    test "estimates large number of unique values", %{measurement: measurement} do
       # Add 100 unique values
       for i <- 1..100 do
         Measurement.handle_unique_count(measurement, :large_set, i)
@@ -460,7 +421,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary == nil
     end
 
-    test "calc_metric handles mixed valid and nil values gracefully" do
+    test "calc_metric returns default when mixed valid and nil values coexist" do
       measurement = Measurement.init(:test_mixed_nil)
       Measurement.handle_summary(measurement, :mixed, 5)
       Measurement.handle_summary(measurement, :mixed, nil)
