@@ -107,16 +107,9 @@ defmodule Electric.AsyncDeleter do
   end
 
   defp unique_destination(trash_dir, base) do
-    attempt = Path.join(trash_dir, base <> "_" <> random_suffix())
-
-    if File.exists?(attempt, [:raw]) do
-      unique_destination(trash_dir, base)
-    else
-      attempt
-    end
+    suffix = System.unique_integer([:positive]) |> to_string()
+    Path.join(trash_dir, base <> "_" <> suffix)
   end
-
-  defp random_suffix, do: System.unique_integer([:positive]) |> to_string()
 
   @impl true
   def handle_info(:perform_delete, %{cleanup_task: nil} = state) do
@@ -186,11 +179,15 @@ defmodule Electric.AsyncDeleter do
 
   def trash_dir(storage_dir, stack_id), do: Path.join([storage_dir, @trash_dir_base, stack_id])
 
-  defp do_rename(path, trash_dir) do
+  defp do_rename(path, trash_dir, attempts \\ 3) do
     dest = unique_destination(trash_dir, Path.basename(path))
 
-    with :ok <- :prim_file.rename(path, dest) do
-      {:ok, dest}
+    case :prim_file.rename(path, dest) do
+      :ok -> {:ok, dest}
+      # in the unlikely event of a name collision, retry with a new name
+      # rather than incur the cost of ensuring uniqueness on every rename
+      {:error, :eexist} when attempts > 0 -> do_rename(path, trash_dir, attempts - 1)
+      {:error, reason} -> {:error, reason}
     end
   end
 
