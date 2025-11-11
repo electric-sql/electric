@@ -188,7 +188,13 @@ with_telemetry Telemetry.Metrics do
     defp build_stats(state) do
       state.all_paths
       |> Enum.map(fn path ->
-        {path, Measurement.calc_metric(state.measurement_ctx, path, state.summary_types[path])}
+        default =
+          case state.summary_types[path] do
+            :summary -> %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
+            _ -> 0
+          end
+
+        {path, Measurement.calc_metric(state.measurement_ctx, path, default)}
       end)
       |> Enum.reduce(tuples, %{}, fn {path, val}, acc ->
         path = path |> Tuple.to_list() |> Enum.map(&Access.key(&1, %{}))

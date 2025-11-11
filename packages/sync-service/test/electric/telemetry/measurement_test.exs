@@ -53,7 +53,7 @@ defmodule Electric.Telemetry.MeasurementTest do
     end
 
     test "calc_metric returns 0 for nonexistent counter", %{measurement: measurement} do
-      assert Measurement.calc_metric(measurement, :nonexistent) == 0
+      assert Measurement.calc_metric(measurement, :nonexistent, 0) == 0
     end
 
     test "calc_metric retrieves stored counter value", %{measurement: measurement} do
@@ -64,7 +64,7 @@ defmodule Electric.Telemetry.MeasurementTest do
 
     test "calc_metric returns 0 if table doesn't exist" do
       fake_measurement = %Measurement{table: :nonexistent_table}
-      assert Measurement.calc_metric(fake_measurement, :any_key) == 0
+      assert Measurement.calc_metric(fake_measurement, :any_key, 0) == 0
     end
 
     test "counter increments are atomic" do
@@ -212,7 +212,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :unique_key, "value1")
 
       # Probabilistic counting - estimate should be close to 2
-      count = Measurement.calc_metric(measurement, :unique_key, :count_unique)
+      count = Measurement.calc_metric(measurement, :unique_key)
       assert count >= 1 and count <= 3
     end
 
@@ -224,7 +224,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :unique_key, 2)
 
       # Probabilistic counting - estimate should be close to 3
-      count = Measurement.calc_metric(measurement, :unique_key, :count_unique)
+      count = Measurement.calc_metric(measurement, :unique_key)
       assert count >= 2 and count <= 4
     end
 
@@ -236,7 +236,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :users, "bob")
 
       # Probabilistic counting - estimate should be close to 3
-      count = Measurement.calc_metric(measurement, :users, :count_unique)
+      count = Measurement.calc_metric(measurement, :users)
       assert count >= 2 and count <= 4
     end
 
@@ -246,12 +246,12 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :numbers, 1)
 
       # Probabilistic counting - estimate should be close to 2
-      count = Measurement.calc_metric(measurement, :numbers, :count_unique)
+      count = Measurement.calc_metric(measurement, :numbers)
       assert count >= 1 and count <= 3
     end
 
     test "calc_metric returns 0 for nonexistent key", %{measurement: measurement} do
-      assert Measurement.calc_metric(measurement, :nonexistent, :count_unique) == 0
+      assert Measurement.calc_metric(measurement, :nonexistent, 0) == 0
     end
 
     test "calc_metric counts single unique value", %{measurement: measurement} do
@@ -259,7 +259,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :single, "value")
 
       # Probabilistic counting - estimate should be close to 1
-      count = Measurement.calc_metric(measurement, :single, :count_unique)
+      count = Measurement.calc_metric(measurement, :single)
       assert count >= 1 and count <= 2
     end
 
@@ -269,7 +269,7 @@ defmodule Electric.Telemetry.MeasurementTest do
         Measurement.handle_unique_count(measurement, :large_set, i)
       end
 
-      count = Measurement.calc_metric(measurement, :large_set, :count_unique)
+      count = Measurement.calc_metric(measurement, :large_set)
       # With 1024-bit bitmap, estimate should be reasonably accurate for 100 unique values
       # Allow 20% error margin
       assert count >= 80 and count <= 120
@@ -288,7 +288,7 @@ defmodule Electric.Telemetry.MeasurementTest do
 
       Task.await_many(tasks)
 
-      count = Measurement.calc_metric(measurement, :concurrent_unique, :count_unique)
+      count = Measurement.calc_metric(measurement, :concurrent_unique)
       # Should estimate around 10k unique values (allow margin for probabilistic counting)
       assert count >= 9_900 and count <= 10_100
     end
@@ -308,7 +308,7 @@ defmodule Electric.Telemetry.MeasurementTest do
 
       Task.await_many(tasks)
 
-      count = Measurement.calc_metric(measurement, :same_values, :count_unique)
+      count = Measurement.calc_metric(measurement, :same_values)
       # Should estimate around 3 unique values despite many concurrent inserts
       assert count >= 2 and count <= 5
     end
@@ -325,7 +325,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_summary(measurement, :summary_key, 20)
       Measurement.handle_summary(measurement, :summary_key, 30)
 
-      summary = Measurement.calc_metric(measurement, :summary_key, :summary)
+      summary = Measurement.calc_metric(measurement, :summary_key)
       assert summary.min == 10
       assert summary.max == 30
     end
@@ -334,7 +334,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       values = [10, 20, 30, 40, 50]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :stats, v) end)
 
-      summary = Measurement.calc_metric(measurement, :stats, :summary)
+      summary = Measurement.calc_metric(measurement, :stats)
 
       assert summary.min == 10
       assert summary.max == 50
@@ -350,7 +350,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       values = [1, 2, 3, 4, 5]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :odd, v) end)
 
-      summary = Measurement.calc_metric(measurement, :odd, :summary)
+      summary = Measurement.calc_metric(measurement, :odd)
       assert summary.min == 1
       assert summary.max == 5
       assert summary.mean == 3.0
@@ -362,7 +362,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       values = [1, 2, 3, 4]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :even, v) end)
 
-      summary = Measurement.calc_metric(measurement, :even, :summary)
+      summary = Measurement.calc_metric(measurement, :even)
       assert summary.min == 1
       assert summary.max == 4
       assert summary.mean == 2.5
@@ -371,7 +371,7 @@ defmodule Electric.Telemetry.MeasurementTest do
     test "calc_metric handles single value", %{measurement: measurement} do
       Measurement.handle_summary(measurement, :single, 42)
 
-      summary = Measurement.calc_metric(measurement, :single, :summary)
+      summary = Measurement.calc_metric(measurement, :single)
       assert summary.min == 42
       assert summary.max == 42
       assert summary.mean == 42.0
@@ -383,7 +383,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_summary(measurement, :two, 10)
       Measurement.handle_summary(measurement, :two, 20)
 
-      summary = Measurement.calc_metric(measurement, :two, :summary)
+      summary = Measurement.calc_metric(measurement, :two)
       assert summary.min == 10
       assert summary.max == 20
       assert summary.mean == 15.0
@@ -391,17 +391,17 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.mode == nil
     end
 
-    test "calc_metric returns empty summary for nonexistent key", %{measurement: measurement} do
-      summary = Measurement.calc_metric(measurement, :nonexistent, :summary)
+    test "calc_metric returns nil for nonexistent key", %{measurement: measurement} do
+      result = Measurement.calc_metric(measurement, :nonexistent)
 
-      assert summary == %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
+      assert result == nil
     end
 
     test "calc_metric handles negative numbers", %{measurement: measurement} do
       values = [-50, -20, 0, 20, 50]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :negative, v) end)
 
-      summary = Measurement.calc_metric(measurement, :negative, :summary)
+      summary = Measurement.calc_metric(measurement, :negative)
       assert summary.min == -50
       assert summary.max == 50
       assert summary.mean == 0.0
@@ -411,7 +411,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       values = [1.5, 2.5, 3.5]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :float, v) end)
 
-      summary = Measurement.calc_metric(measurement, :float, :summary)
+      summary = Measurement.calc_metric(measurement, :float)
       assert summary.min == 1.5
       assert summary.max == 3.5
       assert_in_delta summary.mean, 2.5, 0.001
@@ -421,7 +421,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       values = 1..100 |> Enum.to_list()
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :large, v) end)
 
-      summary = Measurement.calc_metric(measurement, :large, :summary)
+      summary = Measurement.calc_metric(measurement, :large)
       assert summary.min == 1
       assert summary.max == 100
       assert summary.mean == 50.5
@@ -430,7 +430,7 @@ defmodule Electric.Telemetry.MeasurementTest do
     test "calc_metric handles zero-only summary", %{measurement: measurement} do
       Enum.each([0, 0, 0], fn v -> Measurement.handle_summary(measurement, :zeros, v) end)
 
-      summary = Measurement.calc_metric(measurement, :zeros, :summary)
+      summary = Measurement.calc_metric(measurement, :zeros)
       assert summary.min == 0
       assert summary.max == 0
       assert summary.mean == 0.0
@@ -442,7 +442,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       values = [5, 5, 5, 5, 5]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :duplicates, v) end)
 
-      summary = Measurement.calc_metric(measurement, :duplicates, :summary)
+      summary = Measurement.calc_metric(measurement, :duplicates)
       assert summary.min == 5
       assert summary.max == 5
       assert summary.mean == 5.0
@@ -454,21 +454,21 @@ defmodule Electric.Telemetry.MeasurementTest do
       values = [50, 10, 30, 20, 40]
       Enum.each(values, fn v -> Measurement.handle_summary(measurement, :unsorted, v) end)
 
-      summary = Measurement.calc_metric(measurement, :unsorted, :summary)
+      summary = Measurement.calc_metric(measurement, :unsorted)
       assert summary.min == 10
       assert summary.max == 50
       assert summary.mean == 30.0
     end
 
-    test "calc_metric returns empty summary when values include nil" do
+    test "calc_metric returns default when values include nil" do
       measurement = Measurement.init(:test_nil_summary)
       Measurement.handle_summary(measurement, :with_nil, 10)
       Measurement.handle_summary(measurement, :with_nil, nil)
       Measurement.handle_summary(measurement, :with_nil, 20)
 
       # ArithmeticError is caught and empty summary is returned
-      summary = Measurement.calc_metric(measurement, :with_nil, :summary)
-      assert summary == %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
+      summary = Measurement.calc_metric(measurement, :with_nil, nil)
+      assert summary == nil
     end
 
     test "calc_metric handles mixed valid and nil values gracefully" do
@@ -479,8 +479,8 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_summary(measurement, :mixed, 10)
 
       # Should return empty summary due to ArithmeticError
-      summary = Measurement.calc_metric(measurement, :mixed, :summary)
-      assert summary == %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
+      summary = Measurement.calc_metric(measurement, :mixed, nil)
+      assert summary == nil
     end
 
     test "summary updates are atomic under concurrent access" do
@@ -495,7 +495,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       # Wait for all tasks to complete
       Enum.each(tasks, &Task.await/1)
 
-      summary = Measurement.calc_metric(measurement, :concurrent_summary, :summary)
+      summary = Measurement.calc_metric(measurement, :concurrent_summary)
       assert summary.min == 1
       assert summary.max == 100
       assert summary.mean == 50.5
@@ -514,7 +514,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert Measurement.calc_metric(measurement, :counter) == 2
 
       Measurement.clear_metric(measurement, :counter)
-      assert Measurement.calc_metric(measurement, :counter) == 0
+      assert Measurement.calc_metric(measurement, :counter, 0) == 0
     end
 
     test "clears last_value metric", %{measurement: measurement} do
@@ -522,7 +522,7 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert Measurement.calc_metric(measurement, :value) == 42
 
       Measurement.clear_metric(measurement, :value)
-      assert Measurement.calc_metric(measurement, :value) == 0
+      assert Measurement.calc_metric(measurement, :value, 0) == 0
     end
 
     test "clears sum metric", %{measurement: measurement} do
@@ -531,27 +531,28 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert Measurement.calc_metric(measurement, :sum) == 30
 
       Measurement.clear_metric(measurement, :sum)
-      assert Measurement.calc_metric(measurement, :sum) == 0
+      assert Measurement.calc_metric(measurement, :sum, 0) == 0
     end
 
     test "clears unique_count metric", %{measurement: measurement} do
       Measurement.handle_unique_count(measurement, :unique, "a")
       Measurement.handle_unique_count(measurement, :unique, "b")
-      assert Measurement.calc_metric(measurement, :unique, :count_unique) == 2
+      assert Measurement.calc_metric(measurement, :unique) == 2
 
-      Measurement.clear_metric(measurement, :unique, :count_unique)
-      assert Measurement.calc_metric(measurement, :unique, :count_unique) == 0
+      Measurement.clear_metric(measurement, :unique)
+      assert Measurement.calc_metric(measurement, :unique, 0) == 0
     end
 
     test "clears summary metric", %{measurement: measurement} do
       Measurement.handle_summary(measurement, :summary, 10)
       Measurement.handle_summary(measurement, :summary, 20)
-      summary = Measurement.calc_metric(measurement, :summary, :summary)
+      summary = Measurement.calc_metric(measurement, :summary)
       assert summary.min == 10
 
-      Measurement.clear_metric(measurement, :summary, :summary)
-      summary = Measurement.calc_metric(measurement, :summary, :summary)
-      assert summary == %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
+      Measurement.clear_metric(measurement, :summary)
+      result = Measurement.calc_metric(measurement, :summary, 0)
+      # After clearing, nonexistent key returns the default value
+      assert result == 0
     end
 
     test "clearing nonexistent key doesn't cause errors", %{measurement: measurement} do
@@ -578,9 +579,9 @@ defmodule Electric.Telemetry.MeasurementTest do
 
       # Each should work independently
       assert Measurement.calc_metric(measurement, :metric) == 2
-      assert Measurement.calc_metric(measurement, :metric_unique, :count_unique) == 2
+      assert Measurement.calc_metric(measurement, :metric_unique) == 2
 
-      summary = Measurement.calc_metric(measurement, :metric_summary, :summary)
+      summary = Measurement.calc_metric(measurement, :metric_summary)
       assert summary.min == 100
       assert summary.max == 200
     end
@@ -590,12 +591,12 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :unique_key, "value")
       Measurement.handle_summary(measurement, :summary_key, 100)
 
-      Measurement.clear_metric(measurement, :counter_key, nil)
+      Measurement.clear_metric(measurement, :counter_key)
 
-      assert Measurement.calc_metric(measurement, :counter_key) == 0
-      assert Measurement.calc_metric(measurement, :unique_key, :count_unique) == 1
+      assert Measurement.calc_metric(measurement, :counter_key, 0) == 0
+      assert Measurement.calc_metric(measurement, :unique_key) == 1
 
-      summary = Measurement.calc_metric(measurement, :summary_key, :summary)
+      summary = Measurement.calc_metric(measurement, :summary_key)
       assert summary.min == 100
     end
   end

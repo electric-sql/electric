@@ -8,14 +8,6 @@ defmodule Electric.Telemetry.Measurement do
   @required_keys [:table]
   defstruct @required_keys
 
-  @empty_summary %{
-    min: 0,
-    max: 0,
-    mean: 0,
-    median: 0,
-    mode: nil
-  }
-
   # Bitmap size for unique counting (m)
   # Setting this to ~64 kbits provides a ~0.3% error rate for
   # cardinalities up to ~100k unique items.
@@ -60,7 +52,11 @@ defmodule Electric.Telemetry.Measurement do
         initial_tuple =
           :erlang.make_tuple(@unique_bitmap_size + 1, nil, [{1, key}, {ets_position, true}])
 
-        :ets.insert_new(table, initial_tuple)
+        if not :ets.insert_new(table, initial_tuple) do
+          # Another process initialized it, retry the update
+          :ets.update_element(table, key, {ets_position, true})
+        end
+
         :ok
     end
   end
@@ -91,35 +87,42 @@ defmodule Electric.Telemetry.Measurement do
 
       0 ->
         # Key doesn't exist, try to initialize with first value
-        case :ets.insert_new(table, {key, value, value, 1, value}) do
-          true ->
-            :ok
-
-          false ->
-            # Another process initialized it, retry the update
-            :ets.select_replace(table, match_spec)
-            :ok
+        if not :ets.insert_new(table, {key, value, value, 1, value}) do
+          # Another process initialized it, retry the update
+          :ets.select_replace(table, match_spec)
         end
+
+        :ok
     end
   end
 
-  def calc_metric(opts, key, key_type \\ nil)
-
-  def calc_metric(%__MODULE__{table: table}, key, nil) do
-    case :ets.lookup(table, key) do
-      [] -> 0
-      [{^key, value}] -> value
-    end
-  rescue
-    ArgumentError -> 0
-  end
-
-  def calc_metric(%__MODULE__{table: table}, key, :count_unique) do
+  def calc_metric(%__MODULE__{table: table}, key, default \\ nil) do
     case :ets.lookup(table, key) do
       [] ->
-        0
+        default
+
+      [{^key, value}] ->
+        # 2-element tuple: counter, sum, or last_value
+        value
+
+      [{^key, min, max, count, sum}] ->
+        # 5-element tuple: summary with running tallies
+        try do
+          mean = sum / count
+
+          %{
+            min: min,
+            max: max,
+            mean: mean,
+            median: 0,
+            mode: nil
+          }
+        rescue
+          ArithmeticError -> default
+        end
 
       [bitmap_tuple] ->
+        # Large tuple: unique count bitmap
         # Bitmap tuple is {key, bit0, bit1, ..., bit_m-1}
         # Count set bits (truthy values, excluding nil and the key)
         set_bits =
@@ -144,45 +147,10 @@ defmodule Electric.Telemetry.Measurement do
         end
     end
   rescue
-    ArgumentError -> 0
+    ArgumentError -> default
   end
 
-  def calc_metric(%__MODULE__{table: table}, key, :summary) do
-    case :ets.lookup(table, key) do
-      [] ->
-        @empty_summary
-
-      [{^key, min, max, count, sum}] ->
-        mean = sum / count
-
-        %{
-          min: min,
-          max: max,
-          mean: mean,
-          median: 0,
-          mode: nil
-        }
-    end
-  rescue
-    [ArgumentError, ArithmeticError] ->
-      # ArgumentError when key doesn't exist
-      # ArithmeticError when dividing by zero or invalid values
-      @empty_summary
-  end
-
-  def clear_metric(opts, key, key_type \\ nil)
-
-  def clear_metric(%__MODULE__{table: table}, key, nil) do
-    :ets.delete(table, key)
-    :ok
-  end
-
-  def clear_metric(%__MODULE__{table: table}, key, :count_unique) do
-    :ets.delete(table, key)
-    :ok
-  end
-
-  def clear_metric(%__MODULE__{table: table}, key, :summary) do
+  def clear_metric(%__MODULE__{table: table}, key) do
     :ets.delete(table, key)
     :ok
   end
