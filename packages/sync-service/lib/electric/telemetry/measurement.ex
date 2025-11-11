@@ -9,8 +9,9 @@ defmodule Electric.Telemetry.Measurement do
   defstruct @required_keys
 
   # Bitmap size for unique counting (m)
-  # Setting this to ~64 kbits provides a ~0.3% error rate for
-  # cardinalities up to ~100k unique items.
+  # Setting this to ~64 kbits (~8kb) provides a ~0.3% error
+  # rate for cardinalities up to ~100k unique items.
+  #
   # standard_error = sqrt(m * (e^t - t - 1)) / n
   # n - the maximum expected cardinality of the dataset
   # t - n/m
@@ -113,9 +114,7 @@ defmodule Electric.Telemetry.Measurement do
           %{
             min: min,
             max: max,
-            mean: mean,
-            median: 0,
-            mode: nil
+            mean: mean
           }
         rescue
           ArithmeticError -> default

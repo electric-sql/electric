@@ -190,7 +190,7 @@ with_telemetry Telemetry.Metrics do
       |> Enum.map(fn path ->
         default =
           case state.summary_types[path] do
-            :summary -> %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
+            :summary -> %{min: 0, max: 0, mean: 0}
             _ -> 0
           end
 

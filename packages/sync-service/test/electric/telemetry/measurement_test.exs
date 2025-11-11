@@ -339,9 +339,6 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 10
       assert summary.max == 50
       assert summary.mean == 30.0
-      # median and mode cannot be calculated from running tallies
-      assert summary.median == 0
-      assert summary.mode == nil
     end
 
     test "calc_metric calculates min/max/mean for odd number of elements", %{
@@ -375,8 +372,6 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 42
       assert summary.max == 42
       assert summary.mean == 42.0
-      assert summary.median == 0
-      assert summary.mode == nil
     end
 
     test "calc_metric handles two values", %{measurement: measurement} do
@@ -387,8 +382,6 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 10
       assert summary.max == 20
       assert summary.mean == 15.0
-      assert summary.median == 0
-      assert summary.mode == nil
     end
 
     test "calc_metric returns nil for nonexistent key", %{measurement: measurement} do
@@ -434,8 +427,6 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 0
       assert summary.max == 0
       assert summary.mean == 0.0
-      assert summary.median == 0
-      assert summary.mode == nil
     end
 
     test "calc_metric handles duplicate values", %{measurement: measurement} do
@@ -446,8 +437,6 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert summary.min == 5
       assert summary.max == 5
       assert summary.mean == 5.0
-      assert summary.median == 0
-      assert summary.mode == nil
     end
 
     test "calc_metric min/max/mean with unsorted values", %{measurement: measurement} do
