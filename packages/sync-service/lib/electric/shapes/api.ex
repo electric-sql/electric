@@ -667,9 +667,6 @@ defmodule Electric.Shapes.Api do
         Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
         Response.error(request, error.message, status: error.status)
 
-      {:error, %SnapshotError{type: :publication_missing_generated_columns} = error} ->
-        Response.error(request, error.message, status: 400, known_error: true)
-
       {:error, %SnapshotError{} = error} ->
         Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
 

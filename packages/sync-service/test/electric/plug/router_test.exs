@@ -763,7 +763,7 @@ defmodule Electric.Plug.RouterTest do
         conn =
           conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
 
-        assert %{status: 400} = conn
+        assert %{status: 503} = conn
 
         assert Jason.decode!(conn.resp_body) ==
                  %{
