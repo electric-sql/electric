@@ -17,6 +17,14 @@ defmodule Electric.Telemetry.Measurement do
     mode: nil
   }
 
+  # Bitmap size for unique counting (m)
+  # Setting this to ~64 kbits provides a ~0.3% error rate for
+  # cardinalities up to ~100k unique items.
+  # standard_error = sqrt(m * (e^t - t - 1)) / n
+  # n - the maximum expected cardinality of the dataset
+  # t - n/m
+  @unique_bitmap_size 2 ** 16
+
   def init(name) do
     table = :ets.new(name, [:named_table, :public, :set, {:write_concurrency, :auto}])
 
@@ -43,8 +51,27 @@ defmodule Electric.Telemetry.Measurement do
     :ets.insert(table, {key, value})
   end
 
-  def handle_unique_count(%__MODULE__{summary_table: summary_table}, key, value) do
-    :ets.insert(summary_table, {key, value})
+  def handle_unique_count(%__MODULE__{table: table}, key, value) do
+    # Use linear probabilistic counting with a bitmap stored as a tuple
+    # Hash the value to get which position in the tuple (0..m-1)
+    bit_position = :erlang.phash2(value, @unique_bitmap_size)
+
+    # Position in ETS tuple: position 1 is key, positions 2..m+1 are bitmap bits
+    ets_position = bit_position + 2
+
+    case :ets.update_element(table, key, {ets_position, true}) do
+      true ->
+        :ok
+
+      false ->
+        # Key doesn't exist, initialize tuple: {key, nil, nil, ..., nil}
+        # Set the current bit position to true
+        initial_tuple =
+          :erlang.make_tuple(@unique_bitmap_size + 1, nil, [{1, key}, {ets_position, true}])
+
+        :ets.insert_new(table, initial_tuple)
+        :ok
+    end
   end
 
   def handle_summary(%__MODULE__{summary_table: summary_table}, key, value) do
@@ -62,10 +89,35 @@ defmodule Electric.Telemetry.Measurement do
     ArgumentError -> 0
   end
 
-  def calc_metric(%__MODULE__{summary_table: table}, key, :count_unique) do
-    :ets.lookup_element(table, key, 2)
-    |> Enum.uniq()
-    |> Enum.count()
+  def calc_metric(%__MODULE__{table: table}, key, :count_unique) do
+    case :ets.lookup(table, key) do
+      [] ->
+        0
+
+      [bitmap_tuple] ->
+        # Bitmap tuple is {key, bit0, bit1, ..., bit_m-1}
+        # Count set bits (truthy values, excluding nil and the key)
+        set_bits =
+          bitmap_tuple
+          |> Tuple.to_list()
+          # Remove the key
+          |> tl()
+          # Count truthy values (true bits, nil is falsy)
+          |> Enum.count(& &1)
+
+        # Use linear probabilistic counting formula: -m * ln(V/m)
+        # where m is bitmap size (@unique_bitmap_size) and V is number of zero bits
+        m = @unique_bitmap_size
+        v = m - set_bits
+
+        if v == 0 do
+          # All bits set, estimate is very high
+          round(m * :math.log(m))
+        else
+          # Linear probabilistic counting estimate
+          round(-m * :math.log(v / m))
+        end
+    end
   rescue
     ArgumentError -> 0
   end
@@ -98,7 +150,12 @@ defmodule Electric.Telemetry.Measurement do
     :ok
   end
 
-  def clear_metric(%__MODULE__{summary_table: table}, key, _key_type) do
+  def clear_metric(%__MODULE__{table: table}, key, :count_unique) do
+    :ets.delete(table, key)
+    :ok
+  end
+
+  def clear_metric(%__MODULE__{summary_table: table}, key, :summary) do
     :ets.delete(table, key)
     :ok
   end

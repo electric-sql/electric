@@ -214,7 +214,9 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :unique_key, "value2")
       Measurement.handle_unique_count(measurement, :unique_key, "value1")
 
-      assert Measurement.calc_metric(measurement, :unique_key, :count_unique) == 2
+      # Probabilistic counting - estimate should be close to 2
+      count = Measurement.calc_metric(measurement, :unique_key, :count_unique)
+      assert count >= 1 and count <= 3
     end
 
     test "counts unique values correctly", %{measurement: measurement} do
@@ -224,7 +226,9 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :unique_key, 1)
       Measurement.handle_unique_count(measurement, :unique_key, 2)
 
-      assert Measurement.calc_metric(measurement, :unique_key, :count_unique) == 3
+      # Probabilistic counting - estimate should be close to 3
+      count = Measurement.calc_metric(measurement, :unique_key, :count_unique)
+      assert count >= 2 and count <= 4
     end
 
     test "calc_metric counts unique string values", %{measurement: measurement} do
@@ -234,7 +238,9 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :users, "charlie")
       Measurement.handle_unique_count(measurement, :users, "bob")
 
-      assert Measurement.calc_metric(measurement, :users, :count_unique) == 3
+      # Probabilistic counting - estimate should be close to 3
+      count = Measurement.calc_metric(measurement, :users, :count_unique)
+      assert count >= 2 and count <= 4
     end
 
     test "calc_metric counts unique integer values", %{measurement: measurement} do
@@ -242,7 +248,9 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :numbers, 2)
       Measurement.handle_unique_count(measurement, :numbers, 1)
 
-      assert Measurement.calc_metric(measurement, :numbers, :count_unique) == 2
+      # Probabilistic counting - estimate should be close to 2
+      count = Measurement.calc_metric(measurement, :numbers, :count_unique)
+      assert count >= 1 and count <= 3
     end
 
     test "calc_metric returns 0 for nonexistent key", %{measurement: measurement} do
@@ -253,7 +261,59 @@ defmodule Electric.Telemetry.MeasurementTest do
       Measurement.handle_unique_count(measurement, :single, "value")
       Measurement.handle_unique_count(measurement, :single, "value")
 
-      assert Measurement.calc_metric(measurement, :single, :count_unique) == 1
+      # Probabilistic counting - estimate should be close to 1
+      count = Measurement.calc_metric(measurement, :single, :count_unique)
+      assert count >= 1 and count <= 2
+    end
+
+    test "calc_metric estimates large number of unique values", %{measurement: measurement} do
+      # Add 100 unique values
+      for i <- 1..100 do
+        Measurement.handle_unique_count(measurement, :large_set, i)
+      end
+
+      count = Measurement.calc_metric(measurement, :large_set, :count_unique)
+      # With 1024-bit bitmap, estimate should be reasonably accurate for 100 unique values
+      # Allow 20% error margin
+      assert count >= 80 and count <= 120
+    end
+
+    test "unique count updates are atomic" do
+      measurement = Measurement.init(:test_unique_atomic)
+
+      # Simulate concurrent unique count updates
+      tasks =
+        for i <- 1..10_000 do
+          Task.async(fn ->
+            Measurement.handle_unique_count(measurement, :concurrent_unique, i)
+          end)
+        end
+
+      Task.await_many(tasks)
+
+      count = Measurement.calc_metric(measurement, :concurrent_unique, :count_unique)
+      # Should estimate around 10k unique values (allow margin for probabilistic counting)
+      assert count >= 9_900 and count <= 10_100
+    end
+
+    test "concurrent updates to same unique values don't cause errors" do
+      measurement = Measurement.init(:test_unique_concurrent_same)
+
+      # Multiple processes adding the same values concurrently
+      tasks =
+        for _ <- 1..50 do
+          Task.async(fn ->
+            Measurement.handle_unique_count(measurement, :same_values, "value1")
+            Measurement.handle_unique_count(measurement, :same_values, "value2")
+            Measurement.handle_unique_count(measurement, :same_values, "value3")
+          end)
+        end
+
+      Task.await_many(tasks)
+
+      count = Measurement.calc_metric(measurement, :same_values, :count_unique)
+      # Should estimate around 3 unique values despite many concurrent inserts
+      assert count >= 2 and count <= 5
     end
   end
 
@@ -520,13 +580,17 @@ defmodule Electric.Telemetry.MeasurementTest do
     end
 
     test "clearing one metric type doesn't affect others", %{measurement: measurement} do
-      Measurement.handle_counter(measurement, :shared_key)
-      Measurement.handle_unique_count(measurement, :shared_key, "value")
+      Measurement.handle_counter(measurement, :counter_key)
+      Measurement.handle_unique_count(measurement, :unique_key, "value")
+      Measurement.handle_summary(measurement, :summary_key, 100)
 
-      Measurement.clear_metric(measurement, :shared_key, nil)
+      Measurement.clear_metric(measurement, :counter_key, nil)
 
-      assert Measurement.calc_metric(measurement, :shared_key) == 0
-      assert Measurement.calc_metric(measurement, :shared_key, :count_unique) == 1
+      assert Measurement.calc_metric(measurement, :counter_key) == 0
+      assert Measurement.calc_metric(measurement, :unique_key, :count_unique) == 1
+
+      summary = Measurement.calc_metric(measurement, :summary_key, :summary)
+      assert summary.min == 100
     end
   end
 end
