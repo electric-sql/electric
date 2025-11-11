@@ -95,10 +95,12 @@ defmodule Electric.Telemetry.Measurement do
 
   def clear_metric(%__MODULE__{table: table}, key, nil) do
     :ets.delete(table, key)
+    :ok
   end
 
   def clear_metric(%__MODULE__{summary_table: table}, key, _key_type) do
     :ets.delete(table, key)
+    :ok
   end
 
   defp mean(elements, length), do: Enum.sum(elements) / length
