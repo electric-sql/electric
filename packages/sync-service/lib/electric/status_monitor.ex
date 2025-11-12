@@ -288,7 +288,7 @@ defmodule Electric.StatusMonitor do
     :ets.match_delete(ets_table(state.stack_id), {:_, {true, %{process: pid}}})
 
     Logger.warning(
-      "#{__MODULE__} condition failed: #{inspect(condition)}. Status #{inspect(status(state.stack_id))}"
+      "#{inspect(__MODULE__)} condition failed: #{inspect(condition)}. Status #{inspect(status(state.stack_id))}"
     )
 
     {:noreply, state}

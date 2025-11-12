@@ -166,6 +166,6 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   defp ets_name(stack_id) when is_stack_id(stack_id) do
-    :"Electric.Shapes.ConsumerRegistry-#{stack_id}"
+    :"#{inspect(__MODULE__)}:#{stack_id}"
   end
 end

@@ -12,7 +12,7 @@ defmodule Electric.Shapes.Api.Encoder do
       invalid ->
         raise ArgumentError,
           message:
-            "Expected a module that implements the #{__MODULE__} protocol. Got #{inspect(invalid)}"
+            "Expected a module that implements the #{inspect(__MODULE__)} protocol. Got #{inspect(invalid)}"
     end
   end
 end

@@ -149,7 +149,7 @@ defmodule Electric.ShapeCache.Storage do
   Apply a message to the writer state.
 
   In-process writer may send messages to self, in the form of
-  `{#{__MODULE__}, message}`, which must be handled using this function
+  `{#{inspect(__MODULE__)}, message}`, which must be handled using this function
   and the return of the function must be used as the new writer state.
   """
   def apply_message({mod, writer_state}, {m, f, a}) do

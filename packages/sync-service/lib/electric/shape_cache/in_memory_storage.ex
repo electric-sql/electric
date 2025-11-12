@@ -29,7 +29,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   @impl Electric.ShapeCache.Storage
   def shared_opts(opts) do
     stack_id = Access.fetch!(opts, :stack_id)
-    table_base_name = Access.get(opts, :table_base_name, __MODULE__)
+    table_base_name = Access.get(opts, :table_base_name, inspect(__MODULE__))
 
     %{
       table_base_name: table_base_name,

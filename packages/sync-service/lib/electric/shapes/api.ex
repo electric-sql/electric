@@ -1055,11 +1055,11 @@ defmodule Electric.Shapes.Api do
 
   @impl Access
   def get_and_update(%__MODULE__{} = _config, _key, _function) do
-    raise RuntimeError, message: "Cannot get_and_update a #{__MODULE__} struct"
+    raise RuntimeError, message: "Cannot get_and_update a #{inspect(__MODULE__)} struct"
   end
 
   @impl Access
   def pop(%__MODULE__{} = _config, _key) do
-    raise RuntimeError, message: "Cannot pop a #{__MODULE__} struct"
+    raise RuntimeError, message: "Cannot pop a #{inspect(__MODULE__)} struct"
   end
 end
