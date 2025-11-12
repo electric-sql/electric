@@ -128,6 +128,9 @@ defmodule Electric.MixProject do
       # For debugging, check it out locally and uncomment the line below
       # {:electric_telemetry, path: "../../../electric_telemetry"},
       {:opentelemetry_exporter, "~> 1.10.0", targets: @telemetry_target, optional: true},
+      # Pin protobuf to v0.13.x because starting with v0.14.0 it includes modules that conflict
+      # with those of Protox (which itself is brought in by pg_query_ex).
+      {:protobuf, "~> 0.13.0", optional: true, override: true},
       {:sentry, "~> 11.0", targets: @telemetry_target, optional: true}
     ]
   end
