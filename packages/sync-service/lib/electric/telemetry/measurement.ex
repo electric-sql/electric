@@ -113,7 +113,6 @@ defmodule Electric.Telemetry.Measurement do
           {
             {
               {:const, key},
-              :"$1",
               {:min, :"$2", {:const, value}},
               {:max, :"$3", {:const, value}},
               {:+, :"$4", 1},
@@ -144,11 +143,9 @@ defmodule Electric.Telemetry.Measurement do
         default
 
       [{^key, type, value}] when type in [:counter, :sum, :last_value] ->
-        # 2-element tuple: counter, sum, or last_value
         value
 
       [{^key, :summary, min, max, count, sum}] ->
-        # 5-element tuple: summary with running tallies
         try do
           mean = sum / count
 
@@ -162,9 +159,8 @@ defmodule Electric.Telemetry.Measurement do
         end
 
       [bitmap_tuple] when elem(bitmap_tuple, 1) == :unique_count ->
-        # Large tuple: unique count bitmap
-        # Bitmap tuple is {key, bit0, bit1, ..., bit_m-1}
-        # Count set bits (truthy values, excluding nil and the key)
+        # Bitmap tuple is {key, type, bit0, bit1, ..., bit_m-1}
+        # Count set bits (truthy values, excluding nil and key+type)
         set_bits =
           bitmap_tuple
           |> Tuple.to_list()
