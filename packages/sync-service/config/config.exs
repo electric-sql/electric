@@ -2,6 +2,8 @@ import Config
 
 telemetry_enabled? = Mix.target() == Electric.MixProject.telemetry_target()
 
+config :electric_telemetry, enabled?: telemetry_enabled?
+
 if telemetry_enabled? do
   # Sentry's source-context-related options need to be set in compile-time config files
   # cf. https://hexdocs.pm/sentry/Mix.Tasks.Sentry.PackageSourceCode.html
