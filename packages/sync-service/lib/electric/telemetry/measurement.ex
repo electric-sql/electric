@@ -113,6 +113,7 @@ defmodule Electric.Telemetry.Measurement do
           {
             {
               {:const, key},
+              :"$1",
               {:min, :"$2", {:const, value}},
               {:max, :"$3", {:const, value}},
               {:+, :"$4", 1},
