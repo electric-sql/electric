@@ -24,7 +24,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
-  def remove_shape(stack_id, shape_handle) do
+  def remove_shape(stack_id, shape_handle, reason \\ {:shutdown, :cleanup}) do
     OpenTelemetry.with_span(
       "shape_cleaner.remove_shape",
       [shape_handle: shape_handle],
@@ -34,7 +34,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
         OpenTelemetry.start_interval("remove_shape.remove_shape_immediate")
 
-        case remove_shape_immediate(stack_id, shape_handle) do
+        case remove_shape_immediate(stack_id, shape_handle, reason) do
           :ok ->
             OpenTelemetry.start_interval("remove_shape.remove_shape_deferred")
             remove_shape_deferred(stack_id, shape_handle)
@@ -56,12 +56,14 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     end)
   end
 
-  @spec remove_shapes_for_relations(list(Electric.oid_relation()), stack_id()) :: :ok
-  def remove_shapes_for_relations(_stack_id, []) do
+  @spec remove_shapes_for_relations(list(Electric.oid_relation()), stack_id(), term()) :: :ok
+  def remove_shapes_for_relations(stack_id, relations, reason \\ {:shutdown, :cleanup})
+
+  def remove_shapes_for_relations(_stack_id, [], _reason) do
     :ok
   end
 
-  def remove_shapes_for_relations(stack_id, relations) do
+  def remove_shapes_for_relations(stack_id, relations, reason) do
     # We don't want for this call to be blocking because it will be called in `PublicationManager`
     # if it notices a discrepancy in the schema
 
@@ -73,7 +75,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
       end)
 
       Enum.each(affected_shapes, fn shape_handle ->
-        remove_shape(stack_id, shape_handle)
+        remove_shape(stack_id, shape_handle, reason)
       end)
     end)
   end
@@ -103,7 +105,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     :removed
   end
 
-  defp remove_shape_immediate(stack_id, shape_handle) do
+  defp remove_shape_immediate(stack_id, shape_handle, reason) do
     OpenTelemetry.start_interval("remove_shape.shape_status_remove")
 
     case Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle) do
@@ -113,7 +115,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
         stack_storage = Storage.for_stack(stack_id)
 
         with result when result in [:noproc, :ok] <-
-               Consumer.stop(stack_id, shape_handle, {:shutdown, :cleanup}),
+               Consumer.stop(stack_id, shape_handle, reason),
              OpenTelemetry.start_interval("remove_shape.storage_cleanup"),
              :ok <- Storage.cleanup!(stack_storage, shape_handle),
              OpenTelemetry.start_interval("remove_shape.shape_log_collector_remove"),
