@@ -146,7 +146,10 @@ defmodule Electric.MixProject do
       # For debugging the otel_metric_exporter check it out locally and uncomment the line below
       # {:otel_metric_exporter, path: "../../../elixir-otel-metric-exporter"},
       {:telemetry_metrics_prometheus_core, "~> 1.1"},
-      {:telemetry_metrics_statsd, "~> 0.7"}
+      {:telemetry_metrics_statsd, "~> 0.7"},
+      # Pin protobuf to v0.13.x because starting with v0.14.0 it includes modules that conflict
+      # with those of Protox (which itself is brought in by pg_query_ex).
+      {:protobuf, "~> 0.13.0", optional: true, override: true}
     ]
     |> Enum.map(fn
       {package, version} when is_binary(version) ->
