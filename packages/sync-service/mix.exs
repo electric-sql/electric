@@ -142,7 +142,7 @@ defmodule Electric.MixProject do
       {:sentry, "~> 11.0"},
       {:opentelemetry, "~> 1.6"},
       {:opentelemetry_exporter, "~> 1.8"},
-      {:otel_metric_exporter, "~> 0.3.11"},
+      {:otel_metric_exporter, "~> 0.4.1"},
       # For debugging the otel_metric_exporter check it out locally and uncomment the line below
       # {:otel_metric_exporter, path: "../../../elixir-otel-metric-exporter"},
       {:telemetry_metrics_prometheus_core, "~> 1.1"},
