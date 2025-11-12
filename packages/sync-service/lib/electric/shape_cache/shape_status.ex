@@ -364,7 +364,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def shape_meta_table(table) when is_atom(table), do: table
   def shape_meta_table(opts) when is_list(opts), do: shape_meta_table(opts[:stack_id])
 
-  def shape_meta_table(stack_id) when is_stack_id(stack_id), do: :"#{stack_id}:shape_meta_table"
+  def shape_meta_table(stack_id) when is_stack_id(stack_id), do: :"shape_meta_table:#{stack_id}"
 
   if Mix.env() == :test do
     def shape_meta_table(state) when is_map(state), do: state.shape_meta_table
@@ -375,7 +375,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def shape_last_used_table(opts) when is_list(opts), do: shape_last_used_table(opts[:stack_id])
 
   def shape_last_used_table(stack_id) when is_stack_id(stack_id),
-    do: :"#{stack_id}:shape_last_used_table"
+    do: :"shape_last_used_table:#{stack_id}"
 
   if Mix.env() == :test do
     def shape_last_used_table(state) when is_map(state), do: state.shape_last_used_table

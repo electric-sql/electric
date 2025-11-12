@@ -389,5 +389,5 @@ defmodule Electric.StatusMonitor do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  defp ets_table(stack_id), do: :"#{stack_id}:status_monitor"
+  defp ets_table(stack_id), do: :"#{inspect(__MODULE__)}:#{stack_id}"
 end
