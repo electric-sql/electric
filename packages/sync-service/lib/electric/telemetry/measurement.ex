@@ -24,17 +24,17 @@ defmodule Electric.Telemetry.Measurement do
   end
 
   def handle_counter(%__MODULE__{table: table}, key) do
-    :ets.update_counter(table, key, 1, {key, 0})
+    :ets.update_counter(table, key, {3, 1}, {key, :counter, 0})
     :ok
   end
 
   def handle_sum(%__MODULE__{table: table}, key, value) do
-    :ets.update_counter(table, key, value, {key, 0})
+    :ets.update_counter(table, key, {3, value}, {key, :sum, 0})
     :ok
   end
 
   def handle_last_value(%__MODULE__{table: table}, key, value) do
-    :ets.insert(table, {key, value})
+    :ets.insert(table, {key, :last_value, value})
     :ok
   end
 
@@ -43,8 +43,11 @@ defmodule Electric.Telemetry.Measurement do
     # Hash the value to get which position in the tuple (0..m-1)
     bit_position = :erlang.phash2(value, @unique_bitmap_size)
 
-    # Position in ETS tuple: position 1 is key, positions 2..m+1 are bitmap bits
-    ets_position = bit_position + 2
+    # Position in ETS tuple:
+    # position 1 is key
+    # position 2 is type
+    # positions 3..m+2 are bitmap bits
+    ets_position = bit_position + 3
 
     case :ets.update_element(table, key, {ets_position, true}) do
       true ->
@@ -54,7 +57,11 @@ defmodule Electric.Telemetry.Measurement do
         # Key doesn't exist, initialize tuple: {key, nil, nil, ..., nil}
         # Set the current bit position to true
         initial_tuple =
-          :erlang.make_tuple(@unique_bitmap_size + 1, nil, [{1, key}, {ets_position, true}])
+          :erlang.make_tuple(@unique_bitmap_size + 2, nil, [
+            {1, key},
+            {2, :unique_count},
+            {ets_position, true}
+          ])
 
         case :ets.insert_new(table, initial_tuple) do
           true -> :ok
@@ -65,19 +72,21 @@ defmodule Electric.Telemetry.Measurement do
   end
 
   def handle_summary(%__MODULE__{table: table} = m, key, value) do
-    # Use :ets.select_replace to atomically update running tallies: {key, min, max, count, sum}
+    # Use :ets.select_replace to atomically update running tallies:
+    # {key, :summary, min, max, count, sum}
     match_spec = [
       {
-        {key, :"$1", :"$2", :"$3", :"$4"},
+        {key, :"$1", :"$2", :"$3", :"$4", :"$5"},
         [],
         [
           {
             {
               {:const, key},
-              {:min, :"$1", {:const, value}},
-              {:max, :"$2", {:const, value}},
-              {:+, :"$3", 1},
-              {:+, :"$4", {:const, value}}
+              :"$1",
+              {:min, :"$2", {:const, value}},
+              {:max, :"$3", {:const, value}},
+              {:+, :"$4", 1},
+              {:+, :"$5", {:const, value}}
             }
           }
         ]
@@ -90,7 +99,7 @@ defmodule Electric.Telemetry.Measurement do
 
       0 ->
         # Key doesn't exist, try to initialize with first value
-        case :ets.insert_new(table, {key, value, value, 1, value}) do
+        case :ets.insert_new(table, {key, :summary, value, value, 1, value}) do
           true -> :ok
           # Another process initialized it, retry the update
           false -> handle_summary(m, key, value)
@@ -103,11 +112,11 @@ defmodule Electric.Telemetry.Measurement do
       [] ->
         default
 
-      [{^key, value}] ->
+      [{^key, type, value}] when type in [:counter, :sum, :last_value] ->
         # 2-element tuple: counter, sum, or last_value
         value
 
-      [{^key, min, max, count, sum}] ->
+      [{^key, :summary, min, max, count, sum}] ->
         # 5-element tuple: summary with running tallies
         try do
           mean = sum / count
@@ -121,15 +130,15 @@ defmodule Electric.Telemetry.Measurement do
           ArithmeticError -> default
         end
 
-      [bitmap_tuple] ->
+      [bitmap_tuple] when elem(bitmap_tuple, 1) == :unique_count ->
         # Large tuple: unique count bitmap
         # Bitmap tuple is {key, bit0, bit1, ..., bit_m-1}
         # Count set bits (truthy values, excluding nil and the key)
         set_bits =
           bitmap_tuple
           |> Tuple.to_list()
-          # Remove the key
-          |> tl()
+          # Remove the key and type
+          |> Enum.drop(2)
           # Count truthy values (true bits, nil is falsy)
           |> Enum.count(& &1)
 
