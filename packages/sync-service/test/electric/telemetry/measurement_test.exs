@@ -121,7 +121,7 @@ defmodule Electric.Telemetry.MeasurementTest do
 
     test "sum additions are atomic" do
       measurement = Measurement.init(:test_sum_atomic)
-      # Simulate concurrent sums
+
       tasks =
         for i <- 1..50 do
           Task.async(fn -> Measurement.handle_sum(measurement, :concurrent_sum, i) end)
@@ -129,8 +129,7 @@ defmodule Electric.Telemetry.MeasurementTest do
 
       Task.await_many(tasks)
 
-      # Sum of 1..50 is 1275
-      assert Measurement.calc_metric(measurement, :concurrent_sum) == 1275
+      assert Measurement.calc_metric(measurement, :concurrent_sum) == Enum.sum(1..50)
     end
 
     test "raises error when summing nil values" do
@@ -231,8 +230,8 @@ defmodule Electric.Telemetry.MeasurementTest do
       end
 
       count = Measurement.calc_metric(measurement, :large_set)
-      # With 1024-bit bitmap, estimate should be reasonably accurate for 100 unique values
-      # Allow 20% error margin
+      # With the ~64kbit bitmap, estimate should be reasonably accurate for
+      # 100 unique values. Allow 20% error margin
       assert count >= 80 and count <= 120
     end
 
