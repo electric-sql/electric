@@ -42,7 +42,10 @@ with_telemetry Telemetry.Metrics do
     end
 
     def report_home(results) do
-      Req.post!(telemetry_url(), json: results, retry: :transient)
+      url = telemetry_url()
+      # Isolate the request in a separate task to avoid blocking and
+      # to not receive any messages from the HTTP pool internals
+      Task.start(fn -> Req.post!(url, json: results, retry: :transient) end)
       :ok
     end
 
