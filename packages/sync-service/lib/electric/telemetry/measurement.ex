@@ -1,5 +1,36 @@
 defmodule Electric.Telemetry.Measurement do
-  @moduledoc false
+  @moduledoc """
+  Module for handling telemetry measurements using ETS for storage.
+  Supports counters, sums, last values, unique counts, and summaries.
+  Uses ETS tables for efficient concurrent updates and storage.
+
+  Counters, sums, and last values are stored as simple ETS entries that
+  can be atomically updated, and the result is read out directly.
+
+  Unique counts are implemented using a bitmap stored in an ETS tuple,
+  allowing efficient linear probabilistic counting of unique items.
+  The accuracy of the estimate depends on the size of the bitmap used, so
+  a balance between memory usage and accuracy is maintained with a fixed
+  size that can accommodate at least ~100k unique items with low error.
+
+  For updating unique counts, entries are hashed in the range of the size
+  of the bitmap, and the corresponding bit is set. The unique count is
+  estimated using the linear probabilistic counting formula based on the
+  proportion of unset bits in the bitmap.
+
+  Summaries only contain min, max, and mean, and they are calculated by
+  keeping running tallies of min, max, count, and sum, which are updated
+  atomically using :ets.select_replace. This allows efficient computation
+  of summary statistics without storing all individual measurements.
+
+  In order to implement a fixed-memory calculation of the median or other
+  percentiles, approaches like a t-digest or P^2 quantile estimation could
+  be used, but they would require a linearised, in-process handling of the
+  stream of measurements, rather than concurrent updates on an ETS table.
+
+  Similarly for the mode, a fixed-memory approach like a Count-Min Sketch or
+  space saving algorithm can be used but not with the current ETS-based design.
+  """
 
   @type t() :: %__MODULE__{
           table: :ets.table()
