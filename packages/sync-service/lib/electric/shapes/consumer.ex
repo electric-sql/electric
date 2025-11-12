@@ -244,7 +244,8 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_call({:stop, reason}, _from, state) do
-    {:stop, reason, :ok, terminate_writer(state)}
+    {reason, state} = stop_with_reason(reason, state)
+    {:stop, reason, :ok, state}
   end
 
   @impl GenServer
@@ -303,7 +304,8 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:stop, reason}, state) do
-    {:stop, reason, terminate_writer(state)}
+    {reason, state} = stop_with_reason(reason, state)
+    {:stop, reason, state}
   end
 
   @impl GenServer
@@ -637,6 +639,17 @@ defmodule Electric.Shapes.Consumer do
     end
 
     state
+  end
+
+  defp stop_with_reason(reason, state) do
+    {reason, state} =
+      case reason do
+        # map reason to a clean shutdown to avoid exceptions/errors
+        {:error, _} = error -> {{:shutdown, :cleanup}, reply_to_snapshot_waiters(state, error)}
+        reason -> {reason, state}
+      end
+
+    {reason, terminate_writer(state)}
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do

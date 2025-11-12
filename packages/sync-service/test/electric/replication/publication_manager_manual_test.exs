@@ -45,7 +45,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
       Electric.ShapeCache.ShapeCleaner,
       :remove_shapes_for_relations,
       [mode: :shared],
-      fn _stack_id, relations ->
+      fn _stack_id, relations, _reason ->
         send(test_pid, {:remove_shapes_for_relations, relations})
       end
     )
