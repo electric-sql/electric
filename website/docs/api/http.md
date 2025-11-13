@@ -216,7 +216,7 @@ curl -i 'http://localhost:3000/v1/shape?table=foo&offset=123_4&handle=abc-123&su
 The subset parameters include:
 
 - `subset__where` - Additional WHERE clause to filter the subset
-- `subset__params` - Parameters for the subset WHERE clause (using exploded object syntax)
+- `subset__params` - Parameters for the subset WHERE clause as a JSON-encoded object (e.g., `{"1":"value1","2":"value2"}` for `$1` and `$2`)
 - `subset__limit` - Maximum number of rows to return
 - `subset__offset` - Number of rows to skip (for pagination)
 - `subset__order_by` - ORDER BY clause (required when using limit/offset)

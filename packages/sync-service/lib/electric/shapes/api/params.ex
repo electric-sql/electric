@@ -39,6 +39,54 @@ defmodule Electric.Shapes.Api.Params do
     end
   end
 
+  defmodule JsonOrMapStringParams do
+    @moduledoc """
+    Custom Ecto type that accepts params as either:
+    1. A JSON string (e.g., "{\"1\":\"value1\",\"2\":\"value2\"}")
+    2. A map with string values (for backwards compatibility)
+    """
+    use Ecto.Type
+
+    def type, do: {:map, :string}
+
+    def cast(params) when is_binary(params) do
+      case Jason.decode(params) do
+        {:ok, decoded} when is_map(decoded) ->
+          # Ensure all values are strings
+          string_map =
+            Enum.into(decoded, %{}, fn {k, v} ->
+              {to_string(k), to_string(v)}
+            end)
+
+          {:ok, string_map}
+
+        {:ok, _} ->
+          {:error, message: "params must be a JSON object"}
+
+        {:error, _} ->
+          {:error, message: "params must be valid JSON"}
+      end
+    end
+
+    def cast(params) when is_map(params) do
+      # Backwards compatibility: accept map directly
+      string_map =
+        Enum.into(params, %{}, fn {k, v} ->
+          {to_string(k), to_string(v)}
+        end)
+
+      {:ok, string_map}
+    end
+
+    def cast(_), do: :error
+
+    def load(data) when is_map(data), do: {:ok, data}
+    def load(_), do: :error
+
+    def dump(data) when is_map(data), do: {:ok, data}
+    def dump(_), do: :error
+  end
+
   defmodule SubsetParams do
     use Ecto.Schema
     alias Electric.Shapes.Shape
@@ -48,7 +96,7 @@ defmodule Electric.Shapes.Api.Params do
       field(:limit, :integer)
       field(:offset, :integer)
       field(:where, :string)
-      field(:params, {:map, :string}, default: %{})
+      field(:params, JsonOrMapStringParams, default: %{})
 
       field(:result, :any, virtual: true)
     end
