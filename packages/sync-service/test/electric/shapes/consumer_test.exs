@@ -34,13 +34,13 @@ defmodule Electric.Shapes.ConsumerTest do
                       %{name: "id", type: "int8", pk_position: 0}
                     ]
                   )
-  @shape_handle1 "#{__MODULE__}-shape1"
+  @shape_handle1 "#{inspect(__MODULE__)}-shape1"
   @shape1 Shape.new!("public.test_table", inspector: @base_inspector)
 
-  @shape_handle2 "#{__MODULE__}-shape2"
+  @shape_handle2 "#{inspect(__MODULE__)}-shape2"
   @shape2 Shape.new!("public.other_table", inspector: @base_inspector)
 
-  @shape_handle3 "#{__MODULE__}-shape3"
+  @shape_handle3 "#{inspect(__MODULE__)}-shape3"
   @shape3 Shape.new!("public.test_table",
             inspector: @base_inspector,
             where: "id = 1"

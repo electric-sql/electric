@@ -38,6 +38,6 @@ defmodule Electric.LsnTracker do
   end
 
   defp table(stack_id) do
-    :"#{stack_id}:lsn_tracker"
+    :"#{inspect(__MODULE__)}:#{stack_id}"
   end
 end

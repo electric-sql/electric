@@ -312,7 +312,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
 
   def inspector_table(opts) do
     stack_id = Access.fetch!(opts, :stack_id)
-    :"#{stack_id}:inspector_table"
+    :"EtsInspector:#{stack_id}"
   end
 
   defp relation_to_oid_key(rel), do: {:relation_to_oid, rel}

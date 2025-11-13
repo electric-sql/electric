@@ -102,7 +102,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   @log_dir "log"
 
   @doc false
-  def stack_ets(stack_id), do: :"#{__MODULE__}:#{stack_id}"
+  def stack_ets(stack_id), do: :"#{inspect(__MODULE__)}:#{stack_id}"
 
   defp stack_task_supervisor(stack_id),
     do: ProcessRegistry.name(stack_id, __MODULE__.TaskSupervisor)

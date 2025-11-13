@@ -29,7 +29,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   defp table_name,
-    do: :"#{__MODULE__}-#{System.unique_integer([:positive, :monotonic])}"
+    do: :"#{inspect(__MODULE__)}-#{System.unique_integer([:positive, :monotonic])}"
 
   defp last_used_table_name(meta_table),
     do: String.to_atom(Atom.to_string(meta_table) <> ":last_used")
