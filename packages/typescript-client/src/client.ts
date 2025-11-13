@@ -752,7 +752,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (subsetParams.where)
         setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, subsetParams.where)
       if (subsetParams.params)
-        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE_PARAMS, subsetParams.params)
+        // Serialize params as JSON to keep the parameter name constant for proxy configs
+        fetchUrl.searchParams.set(
+          SUBSET_PARAM_WHERE_PARAMS,
+          JSON.stringify(subsetParams.params)
+        )
       if (subsetParams.limit)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
       if (subsetParams.offset)
