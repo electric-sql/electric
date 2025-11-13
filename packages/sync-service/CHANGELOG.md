@@ -1,5 +1,27 @@
 # @core/sync-service
 
+## 1.2.5
+
+### Patch Changes
+
+- 58853d2: Remove shape storage metadata backup mechanism now that shape lazy loading is in place.
+- 2747a71: Reduce consumers to a single process instead of a supervisor & children
+- 6cbcbd6: Isolate call home reporter HTTP request to avoid interference from HTTP pool messages.
+- e04af96: Return 503 instead of 400 in case generated column replication is not enabled for PG >=18.
+- c4d0ea4: Update `otel_metric_exporter` dependency to fix issues with event handler detachments.
+- 55c7ca1: Speed up shape metadata removal
+- 4036fb6: Ensure per-shape file operations do not go through Erlang file server to avoid bottlenecks.
+- 0c619e6: Support externally defined OTEL resource attributes in the metrics exported from ApplicationTelemetry and StackTelemetry
+- 4df1fba: Ensure async deletion requests don't clog up as removal is taking place by moving removal to asynchronous task.
+- e204906: Simplify API handling of snapshot errors that result in 503 responses.
+- 68b686b: Avoid additionaly syscall when asynchronously deleting things by assuming uniqueness with strong fallback.
+- d413fc5: Ensure consumer registry does not crash on a lookup when registry table is missing.
+- 9eccb89: Allow snapshot query connection pool to queue up requests for connections for longer to smoothen out bursts.
+- 526e379: Fix incorrect run_queue_length metric definition that prevented individual scheduler queue lengths from getting exported.
+- f1a5f4f: Fix function arguments for ShapeCache.start_consumer_for_handle/2
+- 84c7119: Instrument publication relation updates with appropriate telemetry.
+- 766a375: Use longer timeout when waiting for snapshots to start in requests.
+
 ## 1.2.4
 
 ### Patch Changes
