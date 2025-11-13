@@ -18,42 +18,43 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type stack_id() :: Electric.stack_id()
 
-  # Public API
   def child_spec(args) do
     CleanupTaskSupervisor.child_spec(args)
   end
 
-  @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
-  def remove_shape(stack_id, shape_handle, reason \\ {:shutdown, :cleanup}) do
+  # Public API
+
+  @spec remove_shapes(stack_id(), [shape_handle()], term()) :: :ok | {:error, term()}
+  def remove_shapes(stack_id, shape_handles, reason \\ {:shutdown, :cleanup})
+      when is_list(shape_handles) do
     OpenTelemetry.with_span(
-      "shape_cleaner.remove_shape",
-      [shape_handle: shape_handle],
+      "shape_cleaner.remove_shapes",
+      [],
       stack_id,
       fn ->
-        Logger.debug("Removing shape #{inspect(shape_handle)}")
-
-        OpenTelemetry.start_interval("remove_shape.remove_shape_immediate")
-
-        case remove_shape_immediate(stack_id, shape_handle, reason) do
-          :ok ->
-            OpenTelemetry.start_interval("remove_shape.remove_shape_deferred")
-            remove_shape_deferred(stack_id, shape_handle)
-
-          {:error, :shape_gone} ->
-            :ok
-        end
-        |> tap(fn _ ->
-          OpenTelemetry.stop_and_save_intervals(total_attribute: "remove_shape.total_duration_µs")
-        end)
+        valid_handles = remove_shapes_immediate(stack_id, shape_handles, reason)
+        remove_shapes_deferred(stack_id, valid_handles)
+        OpenTelemetry.stop_and_save_intervals(total_attribute: "remove_shape.total_duration_µs")
+        :ok
       end
     )
   end
 
+  @spec remove_shape(stack_id(), shape_handle(), term()) :: :ok | {:error, term()}
+  def remove_shape(stack_id, shape_handle, reason \\ {:shutdown, :cleanup}) do
+    remove_shapes(stack_id, List.wrap(shape_handle), reason)
+  end
+
+  @spec remove_shapes_async(stack_id(), [shape_handle()]) :: :ok
+  def remove_shapes_async(stack_id, shape_handles) do
+    CleanupTaskSupervisor.perform_async(stack_id, fn ->
+      remove_shapes(stack_id, shape_handles)
+    end)
+  end
+
   @spec remove_shape_async(stack_id(), shape_handle()) :: :ok
   def remove_shape_async(stack_id, shape_handle) do
-    CleanupTaskSupervisor.perform_async(stack_id, fn ->
-      remove_shape(stack_id, shape_handle)
-    end)
+    remove_shapes_async(stack_id, List.wrap(shape_handle))
   end
 
   @spec remove_shapes_for_relations(list(Electric.oid_relation()), stack_id(), term()) :: :ok
@@ -74,9 +75,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
         "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
       end)
 
-      Enum.each(affected_shapes, fn shape_handle ->
-        remove_shape(stack_id, shape_handle, reason)
-      end)
+      remove_shapes(stack_id, affected_shapes, reason)
     end)
   end
 
@@ -105,6 +104,22 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     :removed
   end
 
+  defp remove_shapes_immediate(stack_id, shape_handles, reason) when is_list(shape_handles) do
+    Enum.flat_map(shape_handles, fn shape_handle ->
+      OpenTelemetry.with_span(
+        "shape_cleaner.remove_shapes.remove_shape_immediate",
+        [shape_handle: shape_handle],
+        stack_id,
+        fn ->
+          case remove_shape_immediate(stack_id, shape_handle, reason) do
+            :ok -> [shape_handle]
+            {:error, :shape_gone} -> []
+          end
+        end
+      )
+    end)
+  end
+
   defp remove_shape_immediate(stack_id, shape_handle, reason) do
     OpenTelemetry.start_interval("remove_shape.shape_status_remove")
 
@@ -114,8 +129,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
         stack_storage = Storage.for_stack(stack_id)
 
-        with result when result in [:noproc, :ok] <-
-               Consumer.stop(stack_id, shape_handle, reason),
+        with :ok <- Consumer.stop(stack_id, shape_handle, reason),
              OpenTelemetry.start_interval("remove_shape.storage_cleanup"),
              :ok <- Storage.cleanup!(stack_storage, shape_handle),
              OpenTelemetry.start_interval("remove_shape.shape_log_collector_remove"),
@@ -128,7 +142,8 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     end
   end
 
-  defp remove_shape_deferred(stack_id, shape_handle) do
-    :ok = CleanupTaskSupervisor.cleanup_async(stack_id, shape_handle)
+  defp remove_shapes_deferred(stack_id, shape_handles) when is_list(shape_handles) do
+    OpenTelemetry.start_interval("remove_shape.remove_shapes_deferred")
+    :ok = CleanupTaskSupervisor.cleanup_async(stack_id, shape_handles)
   end
 end
