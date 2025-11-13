@@ -659,7 +659,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (e instanceof FetchBackoffAbortError) {
         if (
           requestAbortController.signal.aborted &&
-          requestAbortController.signal.reason === PAUSE_STREAM
+          requestAbortController.signal.reason === PAUSE_STREAM &&
+          this.#state === `pause-requested`
         ) {
           this.#state = `paused`
         }
