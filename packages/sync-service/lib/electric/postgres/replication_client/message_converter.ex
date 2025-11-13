@@ -52,7 +52,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
 
   def convert(%{bytes: bytes} = _msg, %__MODULE__{max_tx_size: max, tx_size: tx_size} = state)
       when not is_nil(max) and tx_size + bytes > max do
-    {:error, {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max} bytes."}, state}
+    {:error, {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max} bytes."},
+     state}
   end
 
   def convert(
@@ -79,7 +80,13 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
 
     {
-      [%NewRecord{relation: {relation.namespace, relation.name}, record: data, log_offset: current_offset(state)}],
+      [
+        %NewRecord{
+          relation: {relation.namespace, relation.name},
+          record: data,
+          log_offset: current_offset(state)
+        }
+      ],
       state |> increment_op_index() |> increment_tx_size(msg.bytes)
     }
   end
@@ -149,14 +156,22 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
     truncated =
       msg.truncated_relations
       |> Enum.map(&Map.get(state.relations, &1))
-      |> Enum.map(&%TruncatedRelation{relation: {&1.namespace, &1.name}, log_offset: current_offset(state)})
+      |> Enum.map(
+        &%TruncatedRelation{relation: {&1.namespace, &1.name}, log_offset: current_offset(state)}
+      )
 
     {truncated, increment_op_index(state)}
   end
 
   def convert(%LR.Commit{} = msg, %__MODULE__{} = state) do
     {
-      [%Commit{lsn: msg.lsn, commit_timestamp: msg.commit_timestamp, transaction_size: state.tx_size}],
+      [
+        %Commit{
+          lsn: msg.lsn,
+          commit_timestamp: msg.commit_timestamp,
+          transaction_size: state.tx_size
+        }
+      ],
       %{state | current_lsn: nil, tx_op_index: nil, tx_size: 0}
     }
   end
