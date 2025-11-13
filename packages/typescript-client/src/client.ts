@@ -657,10 +657,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       if (e instanceof FetchBackoffAbortError) {
+        // Check current state - it may have changed due to concurrent pause/resume calls
+        // from the visibility change handler during the async fetch operation.
+        // TypeScript's flow analysis doesn't account for concurrent state changes.
+        const currentState = this.#state as
+          | `active`
+          | `pause-requested`
+          | `paused`
         if (
           requestAbortController.signal.aborted &&
           requestAbortController.signal.reason === PAUSE_STREAM &&
-          this.#state === `pause-requested`
+          currentState === `pause-requested`
         ) {
           this.#state = `paused`
         }
