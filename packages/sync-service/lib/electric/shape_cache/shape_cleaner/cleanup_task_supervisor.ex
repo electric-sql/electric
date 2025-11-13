@@ -46,13 +46,15 @@ defmodule Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor do
     end
   end
 
-  def cleanup_async(stack_id, shape_handle) do
+  def cleanup_async(stack_id, shape_handles) when is_list(shape_handles) do
     perform_async(stack_id, fn ->
-      set_task_metadata(stack_id, shape_handle)
+      cleanup_callback = on_cleanup_callback(stack_id)
+
+      set_task_metadata(stack_id)
 
       tasks = [
-        async(stack_id, shape_handle, &notify_shape_rotation/2),
-        async(stack_id, shape_handle, &cleanup_publication_manager/2)
+        async(stack_id, shape_handles, &notify_shape_rotation/2),
+        async(stack_id, shape_handles, &cleanup_publication_manager/2)
       ]
 
       try do
@@ -60,58 +62,53 @@ defmodule Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor do
       catch
         :exit, {:timeout, _} ->
           Logger.warning(
-            "Shape cleanup tasks for shape #{shape_handle} timed out after #{@cleanup_timeout}ms"
+            "Shape cleanup tasks for #{length(shape_handles)} shapes timed out after #{@cleanup_timeout}ms"
           )
 
           :ok
       after
-        on_cleanup_callback(stack_id).(shape_handle)
+        Enum.each(shape_handles, cleanup_callback)
       end
     end)
   end
 
-  defp notify_shape_rotation(stack_id, shape_handle) do
-    Registry.dispatch(
-      Electric.StackSupervisor.registry_name(stack_id),
-      shape_handle,
-      fn registered ->
-        Logger.debug(fn ->
-          "Notifying ~#{length(registered)} clients about removal of shape #{shape_handle}"
-        end)
+  defp notify_shape_rotation(stack_id, shape_handles) do
+    Enum.each(shape_handles, fn shape_handle ->
+      Registry.dispatch(
+        Electric.StackSupervisor.registry_name(stack_id),
+        shape_handle,
+        fn registered ->
+          Logger.debug(fn ->
+            "Notifying ~#{length(registered)} clients about removal of shape #{shape_handle}"
+          end)
 
-        for {pid, ref} <- registered, do: send(pid, {ref, :shape_rotation})
-      end
-    )
+          for {pid, ref} <- registered, do: send(pid, {ref, :shape_rotation})
+        end
+      )
+    end)
   end
 
-  defp cleanup_publication_manager(stack_id, shape_handle) do
-    perform_reporting_errors(
-      fn ->
-        Electric.Replication.PublicationManager.remove_shape(stack_id, shape_handle)
-      end,
-      "Failed to remove shape #{shape_handle} from publication"
-    )
+  defp cleanup_publication_manager(stack_id, shape_handles) do
+    Enum.each(shape_handles, fn shape_handle ->
+      perform_reporting_errors(
+        fn ->
+          Electric.Replication.PublicationManager.remove_shape(stack_id, shape_handle)
+        end,
+        "Failed to remove shape #{shape_handle} from publication"
+      )
+    end)
   end
 
-  defp async(stack_id, shape_handle, fun) do
+  defp async(stack_id, shape_handles, fun) do
     Task.Supervisor.async(name(stack_id), fn ->
-      set_task_metadata(stack_id, shape_handle)
-      fun.(stack_id, shape_handle)
+      set_task_metadata(stack_id)
+      fun.(stack_id, shape_handles)
     end)
   end
 
   defp set_task_metadata(stack_id) do
-    set_process_metadata(stack_id: stack_id)
-  end
-
-  defp set_task_metadata(stack_id, shape_handle) do
-    Process.flag(:priority, :low)
-    set_process_metadata(stack_id: stack_id, shape_handle: shape_handle)
-  end
-
-  defp set_process_metadata(metadata) do
-    Logger.metadata(metadata)
-    Electric.Telemetry.Sentry.set_tags_context(metadata)
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
   end
 
   defp perform_reporting_errors(fun, message) do

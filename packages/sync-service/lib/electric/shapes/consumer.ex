@@ -67,7 +67,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def stop(nil, _reason) do
-    :noproc
+    :ok
   end
 
   def stop(pid, reason) when is_pid(pid) do
@@ -373,9 +373,12 @@ defmodule Electric.Shapes.Consumer do
       end
     end)
 
-    case ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason) do
-      :ok -> terminate_writer(state)
-      :removed -> :ok
+    # clean shutdown so no need to do any cleanup even if the reason is an error
+    if !state.terminating? do
+      case ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason) do
+        :ok -> terminate_writer(state)
+        :removed -> :ok
+      end
     end
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
@@ -649,7 +652,7 @@ defmodule Electric.Shapes.Consumer do
         reason -> {reason, state}
       end
 
-    {reason, terminate_writer(state)}
+    {reason, terminate_writer(%{state | terminating?: true})}
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
