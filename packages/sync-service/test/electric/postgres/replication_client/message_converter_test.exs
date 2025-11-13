@@ -261,7 +261,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
     {changes, updated_converter} = MessageConverter.convert(commit_msg, converter)
 
-    assert [%Commit{lsn: @test_lsn, commit_timestamp: ~U[2024-01-01 00:00:00Z], transaction_size: 10}] = changes
+    assert [
+             %Commit{
+               lsn: @test_lsn,
+               commit_timestamp: ~U[2024-01-01 00:00:00Z],
+               transaction_size: 10
+             }
+           ] = changes
+
     assert updated_converter.current_lsn == nil
     assert updated_converter.tx_op_index == nil
     assert updated_converter.tx_size == 0
