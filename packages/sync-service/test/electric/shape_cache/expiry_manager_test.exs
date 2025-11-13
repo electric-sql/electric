@@ -24,8 +24,8 @@ defmodule Electric.ExpiryManagerTest do
     expiry_manager =
       start_supervised!({ExpiryManager, max_shapes: @max_shapes, period: 1, stack_id: stack_id})
 
-    Repatch.patch(ShapeCleaner, :remove_shape, [mode: :shared], fn stack_id, shape_handle ->
-      ShapeStatus.remove_shape(stack_id, shape_handle)
+    Repatch.patch(ShapeCleaner, :remove_shapes, [mode: :shared], fn stack_id, shape_handles ->
+      Enum.each(shape_handles, &ShapeStatus.remove_shape(stack_id, &1))
     end)
 
     Repatch.allow(self(), expiry_manager)
@@ -40,7 +40,7 @@ defmodule Electric.ExpiryManagerTest do
         ShapeStatus.add_shape(ctx.stack_id, Fixtures.Shape.new(i))
       end
 
-      assert RepatchExt.called_within_ms?(ShapeCleaner, :remove_shape, 2, 50, ctx.expiry_manager)
+      assert RepatchExt.called_within_ms?(ShapeCleaner, :remove_shapes, 2, 50, ctx.expiry_manager)
     end
 
     test "does not expires shapes if shape count has not gone over max_shapes", ctx do
@@ -48,7 +48,7 @@ defmodule Electric.ExpiryManagerTest do
         ShapeStatus.add_shape(ctx.stack_id, Fixtures.Shape.new(i))
       end
 
-      refute RepatchExt.called_within_ms?(ShapeCleaner, :remove_shape, 2, 50, ctx.expiry_manager)
+      refute RepatchExt.called_within_ms?(ShapeCleaner, :remove_shapes, 2, 50, ctx.expiry_manager)
     end
   end
 
@@ -58,7 +58,7 @@ defmodule Electric.ExpiryManagerTest do
         ShapeStatus.add_shape(ctx.stack_id, Fixtures.Shape.new(i))
       end
 
-      refute RepatchExt.called_within_ms?(ShapeCleaner, :remove_shape, 2, 50, ctx.expiry_manager)
+      refute RepatchExt.called_within_ms?(ShapeCleaner, :remove_shapes, 2, 50, ctx.expiry_manager)
     end
   end
 end
