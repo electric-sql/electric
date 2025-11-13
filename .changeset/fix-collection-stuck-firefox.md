@@ -11,6 +11,7 @@ Fix race condition where collections get stuck and stop reconnecting after rapid
 2. Stale abort completions could overwrite the `active` state after `#resume()` has already started a new request.
 
 **State machine flow:**
+
 ```
 Normal pause:
   active → pause() → pause-requested → abort completes → paused
