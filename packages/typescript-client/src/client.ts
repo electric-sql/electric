@@ -489,6 +489,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseFallbackToLongPolling = false
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
+  #unsubscribeFromVisibilityChanges?: () => void
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -656,9 +657,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       if (e instanceof FetchBackoffAbortError) {
+        // Check current state - it may have changed due to concurrent pause/resume calls
+        // from the visibility change handler during the async fetch operation.
+        // TypeScript's flow analysis doesn't account for concurrent state changes.
+        const currentState = this.#state as
+          | `active`
+          | `pause-requested`
+          | `paused`
         if (
           requestAbortController.signal.aborted &&
-          requestAbortController.signal.reason === PAUSE_STREAM
+          requestAbortController.signal.reason === PAUSE_STREAM &&
+          currentState === `pause-requested`
         ) {
           this.#state = `paused`
         }
@@ -1045,7 +1054,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   #resume() {
-    if (this.#started && this.#state === `paused`) {
+    if (
+      this.#started &&
+      (this.#state === `paused` || this.#state === `pause-requested`)
+    ) {
+      // If we're resuming from pause-requested state, we need to set state back to active
+      // to prevent the pause from completing
+      if (this.#state === `pause-requested`) {
+        this.#state = `active`
+      }
       this.#start()
     }
   }
@@ -1066,6 +1083,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   unsubscribeAll(): void {
     this.#subscribers.clear()
+    this.#unsubscribeFromVisibilityChanges?.()
   }
 
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
@@ -1192,6 +1210,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       document.addEventListener(`visibilitychange`, visibilityHandler)
+
+      // Store cleanup function to remove the event listener
+      this.#unsubscribeFromVisibilityChanges = () => {
+        document.removeEventListener(`visibilitychange`, visibilityHandler)
+      }
     }
   }
 
