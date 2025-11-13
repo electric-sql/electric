@@ -9,6 +9,7 @@ import {
   SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
+import { ColumnMapper, encodeWhereClause } from './column-mapper'
 import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
 import {
   FetchError,
@@ -292,7 +293,55 @@ export interface ShapeStreamOptions<T = never> {
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
+
+  /**
+   * @deprecated Use `columnMapper` instead for bidirectional column name transformation.
+   * `transformer` only handles decoding (database → application) but cannot encode
+   * WHERE clauses. `columnMapper` handles both directions automatically.
+   *
+   * For snake_case ↔ camelCase conversion, use:
+   * ```typescript
+   * import { snakeCamelMapper } from '@electric-sql/client'
+   * const stream = new ShapeStream({ columnMapper: snakeCamelMapper() })
+   * ```
+   */
   transformer?: TransformFunction<T>
+
+  /**
+   * Bidirectional column name mapper for transforming between database column names
+   * (e.g., snake_case) and application column names (e.g., camelCase).
+   *
+   * The mapper handles both:
+   * - **Decoding**: Database → Application (applied to query results)
+   * - **Encoding**: Application → Database (applied to WHERE clauses)
+   *
+   * @example
+   * ```typescript
+   * // Most common case: snake_case ↔ camelCase
+   * import { snakeCamelMapper } from '@electric-sql/client'
+   *
+   * const stream = new ShapeStream({
+   *   url: 'http://localhost:3000/v1/shape',
+   *   params: { table: 'todos' },
+   *   columnMapper: snakeCamelMapper()
+   * })
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Custom mapping
+   * import { createColumnMapper } from '@electric-sql/client'
+   *
+   * const stream = new ShapeStream({
+   *   columnMapper: createColumnMapper({
+   *     user_id: 'userId',
+   *     project_id: 'projectId',
+   *     created_at: 'createdAt'
+   *   })
+   * })
+   * ```
+   */
+  columnMapper?: ColumnMapper<T>
 
   /**
    * A function for handling shapestream errors.
@@ -496,10 +545,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
-    this.#messageParser = new MessageParser<T>(
-      options.parser,
-      options.transformer
-    )
+
+    // Use columnMapper.decode if provided, otherwise fall back to transformer
+    const transformer = options.columnMapper?.decode ?? options.transformer
+    this.#messageParser = new MessageParser<T>(options.parser, transformer)
+
     this.#onError = this.options.onError
     this.#mode = this.options.log ?? `full`
 
@@ -728,7 +778,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Add PostgreSQL-specific parameters
     if (params) {
       if (params.table) setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
-      if (params.where) setQueryParam(fetchUrl, WHERE_QUERY_PARAM, params.where)
+      if (params.where) {
+        // Apply column name encoding if columnMapper is provided
+        const encodedWhere = this.options.columnMapper
+          ? encodeWhereClause(params.where, this.options.columnMapper.encode)
+          : params.where
+        setQueryParam(fetchUrl, WHERE_QUERY_PARAM, encodedWhere)
+      }
       if (params.columns)
         setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
       if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
@@ -749,16 +805,29 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (subsetParams) {
-      if (subsetParams.where)
-        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, subsetParams.where)
+      if (subsetParams.where) {
+        // Apply column name encoding if columnMapper is provided
+        const encodedWhere = this.options.columnMapper
+          ? encodeWhereClause(subsetParams.where, this.options.columnMapper.encode)
+          : subsetParams.where
+        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, encodedWhere)
+      }
       if (subsetParams.params)
         setQueryParam(fetchUrl, SUBSET_PARAM_WHERE_PARAMS, subsetParams.params)
       if (subsetParams.limit)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
       if (subsetParams.offset)
         setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
-      if (subsetParams.orderBy)
-        setQueryParam(fetchUrl, SUBSET_PARAM_ORDER_BY, subsetParams.orderBy)
+      if (subsetParams.orderBy) {
+        // Apply column name encoding to ORDER BY clause if columnMapper is provided
+        const encodedOrderBy = this.options.columnMapper
+          ? encodeWhereClause(
+              subsetParams.orderBy,
+              this.options.columnMapper.encode
+            )
+          : subsetParams.orderBy
+        setQueryParam(fetchUrl, SUBSET_PARAM_ORDER_BY, encodedOrderBy)
+      }
     }
 
     // Add Electric's internal parameters
