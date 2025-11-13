@@ -1,7 +1,10 @@
 defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
+  @moduledoc false
+
   alias Electric.ShapeCache.PureFileStorage, as: ST
   alias Electric.ShapeCache.Storage
-  @moduledoc false
+
+  import Electric.ShapeCache.PureFileStorage, only: [stream_open_file!: 4]
 
   @write_buffer_size 64 * 1024
 
@@ -88,69 +91,89 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
     path = chunk_file_path(opts, chunk_num)
 
     Stream.resource(
-      fn -> {wait_and_open!(path, [:raw, :read, :read_ahead]), nil, ""} end,
-      fn {file, eof_seen, incomplete_line} ->
-        case IO.binread(file, :line) do
-          {:error, reason} ->
-            raise Storage.Error, message: "failed to read #{inspect(path)}: #{inspect(reason)}"
+      fn ->
+        case stream_open_file!(
+               opts,
+               path,
+               [:raw, :read, :read_ahead],
+               &wait_and_open(&1, &2, opts.snapshot_file_timeout)
+             ) do
+          {:ok, file} ->
+            {file, nil, ""}
 
-          :eof ->
-            cond do
-              is_nil(eof_seen) ->
-                # First time we see eof after any valid lines, we store a timestamp
-                {[], {file, System.monotonic_time(:millisecond), incomplete_line}}
-
-              # If it's been 90s without any new lines, and also we've not seen <<4>>,
-              # then likely something is wrong
-              System.monotonic_time(:millisecond) - eof_seen > 90_000 ->
-                raise Storage.Error, message: "Snapshot hasn't updated in 90s"
-
-              true ->
-                # Sleep a little and check for new lines
-                Process.sleep(20)
-                {[], {file, eof_seen, incomplete_line}}
-            end
-
-          # The 4 byte marker (ASCII "end of transmission") indicates the end of the snapshot file.
-          <<4::utf8>> ->
-            {:halt, {file, nil, ""}}
-
-          line ->
-            cond do
-              :binary.last(line) != ?\n ->
-                # Not a full line
-                {[], {file, nil, incomplete_line <> line}}
-
-              line == "\n" ->
-                {[binary_slice(incomplete_line, 0..-2//1)], {file, nil, ""}}
-
-              true ->
-                {[incomplete_line <> binary_slice(line, 0..-3//1)], {file, nil, ""}}
-            end
+          {:halt, :shape_gone} ->
+            :halt
         end
       end,
-      &File.close(elem(&1, 0))
+      fn
+        :halt ->
+          {:halt, []}
+
+        {file, eof_seen, incomplete_line} ->
+          case IO.binread(file, :line) do
+            {:error, reason} ->
+              raise Storage.Error,
+                message: "failed to read #{inspect(path)}: #{inspect(reason)}"
+
+            :eof ->
+              cond do
+                is_nil(eof_seen) ->
+                  # First time we see eof after any valid lines, we store a timestamp
+                  {[], {file, System.monotonic_time(:millisecond), incomplete_line}}
+
+                # If it's been 90s without any new lines, and also we've not seen <<4>>,
+                # then likely something is wrong
+                System.monotonic_time(:millisecond) - eof_seen > 90_000 ->
+                  raise Storage.Error, message: "Snapshot hasn't updated in 90s"
+
+                true ->
+                  # Sleep a little and check for new lines
+                  Process.sleep(20)
+                  {[], {file, eof_seen, incomplete_line}}
+              end
+
+            # The 4 byte marker (ASCII "end of transmission") indicates the end of the snapshot file.
+            <<4::utf8>> ->
+              {:halt, {file, nil, ""}}
+
+            line ->
+              cond do
+                :binary.last(line) != ?\n ->
+                  # Not a full line
+                  {[], {file, nil, incomplete_line <> line}}
+
+                line == "\n" ->
+                  {[binary_slice(incomplete_line, 0..-2//1)], {file, nil, ""}}
+
+                true ->
+                  {[incomplete_line <> binary_slice(line, 0..-3//1)], {file, nil, ""}}
+              end
+          end
+      end,
+      fn
+        [] -> :ok
+        {file, _, _} -> File.close(file)
+      end
     )
   end
 
-  defp wait_and_open!(path, modes, time_left \\ :timer.seconds(5))
+  defp wait_and_open(_path, _, time_left) when time_left <= 0 do
+    {:error, :enoent}
+  end
 
-  defp wait_and_open!(path, _, time_left) when time_left <= 0,
-    do: raise(Storage.Error, message: "failed to open #{path}: :enoent")
-
-  defp wait_and_open!(path, modes, time_left) do
+  defp wait_and_open(path, modes, time_left) do
     start = System.monotonic_time(:millisecond)
 
     case File.open(path, modes) do
       {:ok, file} ->
-        file
+        {:ok, file}
 
       {:error, :enoent} ->
         Process.sleep(20)
-        wait_and_open!(path, modes, time_left - (System.monotonic_time(:millisecond) - start))
+        wait_and_open(path, modes, time_left - (System.monotonic_time(:millisecond) - start))
 
-      {:error, reason} ->
-        raise(Storage.Error, message: "failed to open #{path}: #{inspect(reason)}")
+      {:error, _reason} = error ->
+        error
     end
   end
 end

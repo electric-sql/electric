@@ -40,10 +40,12 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def for_shape(shape_handle, {parent, init, storage}) do
+  def for_shape(shape_handle, {parent, init, stack_storage}) do
     send(parent, {__MODULE__, :for_shape, shape_handle})
     shape_init = Map.get(init, shape_handle, [])
-    {parent, shape_handle, shape_init, Storage.for_shape(shape_handle, storage)}
+
+    {parent, shape_handle, {shape_init, stack_storage},
+     Storage.for_shape(shape_handle, stack_storage)}
   end
 
   @impl Electric.ShapeCache.Storage
@@ -55,7 +57,7 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def init_writer!({parent, shape_handle, init, storage}, shape_definition) do
+  def init_writer!({parent, shape_handle, {init, _} = storage_init, storage}, shape_definition) do
     send(parent, {__MODULE__, :init_writer!, shape_handle, shape_definition})
 
     {module, opts} = storage
@@ -65,7 +67,7 @@ defmodule Support.TestStorage do
         apply(module, name, args ++ [opts])
       end
 
-      {parent, shape_handle, init, state}
+      {parent, shape_handle, storage_init, state}
     end
   end
 
@@ -143,14 +145,14 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def cleanup!({_, shape_handle, _, _} = opts) do
-    cleanup!(opts, shape_handle)
+  def cleanup!({parent, shape_handle, {init, stack_storage}, _storage}) do
+    cleanup!({parent, init, stack_storage}, shape_handle)
   end
 
   @impl Electric.ShapeCache.Storage
-  def cleanup!({parent, _, _, storage}, shape_handle) do
+  def cleanup!({parent, _, storage}, shape_handle) do
     send(parent, {__MODULE__, :cleanup!, shape_handle})
-    Storage.cleanup!(storage)
+    Storage.cleanup!(storage, shape_handle)
   end
 
   @impl Electric.ShapeCache.Storage

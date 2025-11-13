@@ -119,7 +119,7 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   def clean_shape(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    ShapeCleaner.remove_shape(shape_handle, stack_id)
+    ShapeCleaner.remove_shape(stack_id, shape_handle)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -278,7 +278,7 @@ defmodule Electric.ShapeCache do
                 " returned error from get_current_position: #{inspect(reason)}"
               ])
 
-              ShapeCleaner.remove_shape(shape_handle, stack_id)
+              ShapeCleaner.remove_shape(stack_id, shape_handle)
 
               {shape_handle, :error}
           end
@@ -355,7 +355,7 @@ defmodule Electric.ShapeCache do
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
         # purge because we know the consumer isn't running
-        ShapeCleaner.remove_shape(shape_handle, stack_id)
+        ShapeCleaner.remove_shape(stack_id, shape_handle)
         :error
     end
   end
@@ -394,7 +394,7 @@ defmodule Electric.ShapeCache do
 
           # If we got an error starting any of the dependent shapes then we
           # remove the outer shape too
-          ShapeCleaner.remove_shape(shape_handle, state.stack_id)
+          ShapeCleaner.remove_shape(state.stack_id, shape_handle)
         end
 
         {:error, "Failed to start consumer for #{shape_handle}"}

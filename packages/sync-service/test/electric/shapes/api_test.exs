@@ -46,6 +46,8 @@ defmodule Electric.Shapes.ApiTest do
   # Higher timeout is needed for some tests that tend to run slower on CI.
   @receive_timeout 1000
 
+  @moduletag :tmp_dir
+
   defp configure_request(ctx) do
     Api.plug_opts(
       stack_id: ctx.stack_id,
@@ -86,7 +88,13 @@ defmodule Electric.Shapes.ApiTest do
     :ok
   end
 
-  setup [:with_persistent_kv, :with_stack_id_from_test, :with_status_monitor, :with_shape_monitor]
+  setup [
+    :with_persistent_kv,
+    :with_stack_id_from_test,
+    :with_pure_file_storage,
+    :with_status_monitor,
+    :with_shape_cleaner
+  ]
 
   describe "validate/2" do
     setup [:ready_stack, :configure_request]
@@ -836,8 +844,6 @@ defmodule Electric.Shapes.ApiTest do
              ]
 
       assert_receive {:DOWN, ^ref, :process, _pid, _reason}
-
-      assert_receive {Electric.Shapes.Monitor, :remove, @test_shape_handle}
 
       assert response.offset == next_offset
       assert response.up_to_date

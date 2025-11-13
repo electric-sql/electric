@@ -59,7 +59,7 @@ defmodule Electric.Postgres.Inspector do
   @type inspector :: {module(), opts :: term()}
 
   def for_stack(stack_id) do
-    Electric.StackConfig.lookup(stack_id, :inspector)
+    Electric.StackConfig.lookup!(stack_id, :inspector)
   end
 
   @doc """

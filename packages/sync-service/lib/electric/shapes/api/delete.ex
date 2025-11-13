@@ -49,7 +49,7 @@ defmodule Electric.Shapes.Api.Delete do
          %Request{params: %{table: nil, handle: handle}} = request
        )
        when is_binary(handle) do
-    if Shapes.has_shape?(request.api, handle) do
+    if Shapes.has_shape?(request.api.stack_id, handle) do
       {:ok,
        Map.update!(
          %{request | handle: handle},

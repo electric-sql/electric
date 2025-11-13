@@ -120,7 +120,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     self_pid = self()
 
     snapshot_timeout_to_first_data =
-      Electric.StackConfig.lookup(ctx.stack_id, :snapshot_timeout_to_first_data)
+      Electric.StackConfig.lookup!(ctx.stack_id, :snapshot_timeout_to_first_data)
 
     # do this here to simplify mocking as the call is made in the Snapshotter
     # not an ephemeral unnamed task process

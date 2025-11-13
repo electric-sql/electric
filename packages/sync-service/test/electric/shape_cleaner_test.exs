@@ -37,7 +37,6 @@ defmodule Electric.ShapeCleanerTest do
     :with_pure_file_storage,
     :with_shape_status,
     :with_status_monitor,
-    :with_shape_monitor,
     :with_shape_cleaner
   ]
 
@@ -67,6 +66,20 @@ defmodule Electric.ShapeCleanerTest do
             :ok
           end
         )
+
+        existing_shape_map = Map.new(existing_shapes)
+
+        if map_size(existing_shape_map) > 0 do
+          patch_calls(Electric.ShapeCache.ShapeStatus,
+            remove_shape: fn _stack_id, handle ->
+              if shape = Map.get(existing_shape_map, handle) do
+                {:ok, shape}
+              else
+                {:error, "invalid shape #{handle}"}
+              end
+            end
+          )
+        end
 
         :ok
       end
@@ -108,6 +121,7 @@ defmodule Electric.ShapeCleanerTest do
           Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
           |> Process.monitor()
 
+        {_, storage_opts} = ctx.storage
         storage = Storage.for_shape(shape_handle, ctx.storage)
         writer = Storage.init_writer!(storage, @shape)
 
@@ -123,15 +137,34 @@ defmodule Electric.ShapeCleanerTest do
         )
 
         assert Storage.snapshot_started?(storage)
+        assert File.exists?(Path.join(storage_opts.base_path, shape_handle))
 
         assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
                  1
 
-        :ok = @cleanup_fn.(shape_handle, stack_id: ctx.stack_id)
+        registry_ref = make_ref()
+        Registry.register(ctx.registry, shape_handle, registry_ref)
+
+        expect_calls(Electric.Replication.PublicationManager,
+          remove_shape: fn _, ^shape_handle -> :ok end
+        )
+
+        expect_calls(Electric.Replication.ShapeLogCollector,
+          remove_shape: fn _, ^shape_handle -> :ok end
+        )
+
+        :ok = @cleanup_fn.(ctx.stack_id, shape_handle)
 
         assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
 
+        assert_receive {ShapeCleaner, :cleanup, ^shape_handle}
+
+        assert_receive {^registry_ref, :shape_rotation}
+
+        refute File.exists?(Path.join(storage_opts.base_path, shape_handle))
+
         {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+
         assert :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
         assert shape_handle != shape_handle2
       end
@@ -142,9 +175,9 @@ defmodule Electric.ShapeCleanerTest do
 
         assert ["my-shape"] = ShapeLogCollector.active_shapes(ctx.stack_id)
 
-        :ok = ShapeCleaner.remove_shape("my-shape", ctx.stack_id)
+        :ok = ShapeCleaner.remove_shape(ctx.stack_id, "my-shape")
 
-        assert_receive {Electric.Shapes.Monitor, :cleanup, "my-shape"}
+        assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, "my-shape"}
         assert [] = ShapeLogCollector.active_shapes(ctx.stack_id)
       end
 
@@ -163,7 +196,7 @@ defmodule Electric.ShapeCleanerTest do
         with_shape_cache(ctx)
 
         {:ok, _} =
-          with_log(fn -> ShapeCleaner.remove_shape(shape_handle, ctx.stack_id) end)
+          with_log(fn -> ShapeCleaner.remove_shape(ctx.stack_id, shape_handle) end)
       end
     end
   end
@@ -216,8 +249,8 @@ defmodule Electric.ShapeCleanerTest do
       # Cleaning unrelated relations should not affect the shape
       :ok =
         ShapeCleaner.remove_shapes_for_relations(
-          [{@shape.root_table_id + 1, {"public", "different"}}],
-          ctx.stack_id
+          ctx.stack_id,
+          [{@shape.root_table_id + 1, {"public", "different"}}]
         )
 
       refute_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}, 100
@@ -227,8 +260,8 @@ defmodule Electric.ShapeCleanerTest do
 
       :ok =
         ShapeCleaner.remove_shapes_for_relations(
-          [{@shape.root_table_id, {"public", "items"}}],
-          ctx.stack_id
+          ctx.stack_id,
+          [{@shape.root_table_id, {"public", "items"}}]
         )
 
       # Allow asynchronous queued removal to complete
