@@ -1,7 +1,10 @@
 defmodule Support.TransactionConsumer do
   use GenServer, restart: :temporary
 
-  alias Electric.Replication.Changes.{Transaction, Relation}
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.Begin
+  alias Electric.Replication.TransactionBuilder
 
   import ExUnit.Assertions
 
@@ -32,6 +35,11 @@ defmodule Support.TransactionConsumer do
           %Relation{} = expected ->
             assert expected.id == received.id
             received.id
+
+          [%Begin{xid: xid} | _] ->
+            assert %Transaction{} = received
+            assert xid == received.xid
+            received.xid
         end
       end)
     end
@@ -63,8 +71,21 @@ defmodule Support.TransactionConsumer do
     {:ok, %{id: id, producer: producer, parent: parent, shape_handle: shape_handle}}
   end
 
-  def handle_call({:handle_event, txn, _ctx}, _from, state) do
+  def handle_call({:handle_event, %Transaction{} = txn, _ctx}, _from, state) do
     send(state.parent, {__MODULE__, {state.id, self()}, [txn]})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:handle_event, changes, _ctx}, _from, state) when is_list(changes) do
+    # Build Transaction from list of changes
+    builder = TransactionBuilder.new()
+    {results, _builder} = TransactionBuilder.build(changes, builder)
+    send(state.parent, {__MODULE__, {state.id, self()}, results})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:handle_event, %Relation{} = relation, _ctx}, _from, state) do
+    send(state.parent, {__MODULE__, {state.id, self()}, [relation]})
     {:reply, :ok, state}
   end
 
