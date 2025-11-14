@@ -1239,7 +1239,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   /**
    * Request a snapshot for subset of data.
    *
-   * Only available when mode is `changes_only`.
    * Returns the insertion point & the data, but more importantly injects the data
    * into the subscribed data stream. Returned value is unlikely to be useful for the caller,
    * unless the caller has complicated additional logic.
@@ -1254,11 +1253,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
   }> {
-    if (this.#mode === `full`) {
-      throw new Error(
-        `Snapshot requests are not supported in ${this.#mode} mode, as the consumer is guaranteed to observe all data`
-      )
-    }
     // We shouldn't be getting a snapshot on a shape that's not started
     if (!this.#started) await this.#start()
 
