@@ -20,7 +20,8 @@ defmodule Electric.Shapes.Api.Response do
     @electric_offset_header,
     @electric_schema_header,
     @electric_up_to_date_header,
-    @electric_known_error_header
+    @electric_known_error_header,
+    "retry-after"
   ]
 
   defstruct [
