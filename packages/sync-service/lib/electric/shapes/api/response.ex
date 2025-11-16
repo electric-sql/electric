@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Api.Response do
   @electric_schema_header "electric-schema"
   @electric_up_to_date_header "electric-up-to-date"
   @electric_known_error_header "electric-internal-known-error"
+  @retry_after_header "retry-after"
 
   # List of all Electric-specific headers that may be included in API responses
   @electric_headers [
@@ -21,7 +22,7 @@ defmodule Electric.Shapes.Api.Response do
     @electric_schema_header,
     @electric_up_to_date_header,
     @electric_known_error_header,
-    "retry-after"
+    @retry_after_header
   ]
 
   defstruct [
