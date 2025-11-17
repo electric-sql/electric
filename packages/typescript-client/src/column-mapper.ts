@@ -55,11 +55,11 @@ export interface ColumnMapper<Extensions = never> {
  */
 export function snakeToCamel(str: string): string {
   // Preserve leading underscores
-  const leadingUnderscores = str.match(/^_+/)?.[0] ?? ''
+  const leadingUnderscores = str.match(/^_+/)?.[0] ?? ``
   const withoutLeading = str.slice(leadingUnderscores.length)
 
   // Remove trailing underscores and convert to lowercase
-  const normalized = withoutLeading.replace(/_+$/, '').toLowerCase()
+  const normalized = withoutLeading.replace(/_+$/, ``).toLowerCase()
 
   // Convert snake_case to camelCase (handling multiple underscores)
   const camelCased = normalized.replace(/_+([a-z])/g, (_, letter) =>
@@ -88,10 +88,10 @@ export function camelToSnake(str: string): string {
     str
       // Insert underscore before uppercase letters that follow lowercase letters
       // e.g., userId -> user_Id
-      .replace(/([a-z])([A-Z])/g, '$1_$2')
+      .replace(/([a-z])([A-Z])/g, `$1_$2`)
       // Insert underscore before uppercase letters that are followed by lowercase letters
       // This handles acronyms: userID -> user_ID, but parseHTMLString -> parse_HTML_String
-      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, `$1_$2`)
       .toLowerCase()
   )
 }
@@ -175,7 +175,7 @@ export function encodeWhereClause(
   whereClause: string | undefined,
   encode?: (columnName: string) => string
 ): string {
-  if (!whereClause || !encode) return whereClause ?? ''
+  if (!whereClause || !encode) return whereClause ?? ``
 
   // SQL keywords that should not be transformed (common ones)
   const sqlKeywords = new Set([
@@ -301,6 +301,8 @@ export function encodeWhereClause(
  *   - Complex nested expressions
  *   - Custom operators or functions
  *   - Column names that conflict with SQL keywords
+ *   - Quoted identifiers (e.g., `"$price"`, `"user-id"`) - not supported
+ *   - Column names with special characters (non-alphanumeric except underscore)
  * - **Acronym ambiguity**: `userID` → `user_id` → `userId` (ID becomes Id after roundtrip)
  *   Use `createColumnMapper()` with explicit mapping if you need exact control
  * - **Type conversion**: This only renames columns, not values. Use `parser` for type conversion
@@ -309,6 +311,7 @@ export function encodeWhereClause(
  * - You have column names that don't follow snake_case/camelCase patterns
  * - You need exact control over mappings (e.g., `id` → `identifier`)
  * - Your WHERE clauses are complex and automatic encoding fails
+ * - You have quoted identifiers or column names with special characters
  *
  * @param schema - Optional database schema to constrain mapping to known columns
  * @returns A ColumnMapper for snake_case ↔ camelCase conversion

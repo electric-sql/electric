@@ -477,37 +477,77 @@ shape.subscribe((data) => {
 })
 ```
 
-**Transformer**
+**Column Mapping**
 
-While the parser operates on individual fields, the transformer allows you to modify the entire record after the parser has run.
-
-This can be used to convert field names to camelCase or rename fields.
+For transforming column names between database format (e.g., snake_case) and application format (e.g., camelCase), use the `columnMapper` option. This provides bidirectional transformation, automatically encoding column names in WHERE clauses and decoding them in query results.
 
 ```ts
+import { ShapeStream, snakeCamelMapper } from '@electric-sql/client'
+
 type CustomRow = {
   id: number
   postTitle: string // post_title in database
   createdAt: Date // created_at in database
 }
 
-// transformer example: camelCaseKeys
-const toCamelCase = (str: string) =>
-  str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
-
-const camelCaseKeys: TransformFunction = (row) =>
-  Object.fromEntries(Object.entries(row).map(([k, v]) => [toCamelCase(k), v]))
-
 const stream = new ShapeStream<CustomRow>({
   url: 'http://localhost:3000/v1/shape',
   params: {
     table: 'posts',
   },
-  transformer: camelCaseKeys,
+  parser: {
+    timestamptz: (date: string) => new Date(date), // Type conversion
+  },
+  columnMapper: snakeCamelMapper(), // Column name transformation
 })
 
-const shape = new Shape(stream)
-shape.subscribe((data) => {
-  console.log(Object.keys(data)) // [id, postTitle, createdAt]
+// Now you can use camelCase in WHERE clauses too:
+await stream.requestSnapshot({
+  where: "postTitle LIKE $1", // Automatically encoded to: post_title LIKE $1
+  params: { "1": "%electric%" },
+  orderBy: "createdAt DESC", // Automatically encoded to: created_at DESC
+  limit: 10,
+})
+```
+
+For custom mappings, use `createColumnMapper`:
+
+```ts
+import { createColumnMapper } from '@electric-sql/client'
+
+const mapper = createColumnMapper({
+  post_title: 'postTitle',
+  created_at: 'createdAt',
+})
+
+const stream = new ShapeStream<CustomRow>({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'posts' },
+  columnMapper: mapper,
+})
+```
+
+**Transformer**
+
+While the parser operates on individual fields and columnMapper renames columns, the transformer allows you to modify the entire record for value transformations like client-side decryption of end-to-end encrypted data, computing derived fields, or other data processing.
+
+**Note:** For column name transformations (snake_case ↔ camelCase), use `columnMapper` instead. The transformer is specifically for transforming values, not column names.
+
+```ts
+type CustomRow = {
+  id: number
+  title: string
+  encryptedData: string
+}
+
+const stream = new ShapeStream<CustomRow>({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'posts' },
+  columnMapper: snakeCamelMapper(), // Rename columns
+  transformer: (row) => ({
+    ...row,
+    encryptedData: decrypt(row.encryptedData), // Transform values
+  }),
 })
 ```
 
