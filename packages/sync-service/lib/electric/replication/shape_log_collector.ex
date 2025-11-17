@@ -60,7 +60,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   # determining how long a write should reasonably take and if that fails
   # it should raise.
   @spec handle_operations([Changes.operation()], any()) :: :ok | {:error, any()}
-  def handle_operations([], server), do: :ok
+  def handle_operations([], _server), do: :ok
 
   def handle_operations(operations, server) when is_list(operations) do
     trace_context = OpenTelemetry.get_current_context()
