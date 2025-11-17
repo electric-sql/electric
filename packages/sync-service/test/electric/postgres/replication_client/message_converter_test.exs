@@ -356,5 +356,28 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                log_offset: ^log_offset_3
              } = delete_change
     end
+
+    test "returns error when transaction size exceeds max_tx_size limit" do
+      converter = %MessageConverter{max_tx_size: 10}
+      {[_relation], converter} = MessageConverter.convert(@relation, converter)
+
+      {[_begin], converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          converter
+        )
+
+      # First insert is under the limit
+      insert_msg1 = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 5}
+      {[_change], converter} = MessageConverter.convert(insert_msg1, converter)
+      assert converter.tx_size == 5
+
+      # Second insert exceeds the limit (5 + 10 = 15 > 10)
+      insert_msg2 = %LR.Insert{relation_id: 1, tuple_data: ["456"], bytes: 10}
+      result = MessageConverter.convert(insert_msg2, converter)
+
+      assert {:error, {:exceeded_max_tx_size, message}, ^converter} = result
+      assert message == "Collected transaction exceeds limit of 10 bytes."
+    end
   end
 end
