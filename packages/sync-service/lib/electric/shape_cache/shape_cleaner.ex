@@ -1,11 +1,7 @@
 defmodule Electric.ShapeCache.ShapeCleaner do
   @moduledoc """
   Removes a shape (consumer, status entry, on-disk data and publication entry) on demand.
-
-  This process ensures removing of shapes does not block critical path of shape creation.
   """
-
-  # use GenServer
 
   alias Electric.Shapes.Consumer
   alias Electric.ShapeCache.ShapeStatus
@@ -19,10 +15,6 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @type stack_id() :: Electric.stack_id()
 
   @shutdown_cleanup {:shutdown, :cleanup}
-
-  def child_spec(args) do
-    CleanupTaskSupervisor.child_spec(args)
-  end
 
   # Public API
   def consumer_cleanup_reason, do: @shutdown_cleanup
@@ -126,7 +118,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
         fn ->
           case remove_shape_immediate(stack_id, shape_handle, reason) do
             :ok -> [shape_handle]
-            {:error, :shape_gone} -> []
+            {:error, :data_removed} -> []
           end
         end
       )
@@ -152,7 +144,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
         end
 
       {:error, _reason} ->
-        {:error, :shape_gone}
+        {:error, :data_removed}
     end
   end
 

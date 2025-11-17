@@ -101,7 +101,7 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
           {:ok, file} ->
             {file, nil, ""}
 
-          {:halt, :shape_gone} ->
+          {:halt, :data_removed} ->
             :halt
         end
       end,

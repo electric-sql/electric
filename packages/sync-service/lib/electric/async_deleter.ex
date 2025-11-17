@@ -45,9 +45,8 @@ defmodule Electric.AsyncDeleter do
   @doc """
   Deletes the given directory by first renaming it into the stack's trash directory
   then asynchronously removing the trash entry using rm -rf.
-
-  Returns `:ok` on success or `{:error, reason}` on failure.
   """
+  @spec delete(Electric.stack_id(), Path.t()) :: :ok | {:error, term()}
   def delete(stack_id, path) when is_stack_id(stack_id) and is_binary(path) do
     trash_dir = trash_dir!(stack_id)
 

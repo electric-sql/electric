@@ -849,7 +849,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     snapshot_started = Keyword.get(metadata, :snapshot_started?) || false
     last_snapshot_chunk = Keyword.get(metadata, :last_snapshot_chunk)
 
-    if not snapshot_started, do: raise(Storage.Error, message: "Snapshot not started")
+    if !snapshot_started && !shape_gone?(opts) do
+      raise(Storage.Error, message: "Snapshot not started")
+    end
 
     case {last_snapshot_chunk, min_offset} do
       {_, x} when is_min_offset(x) ->
@@ -936,7 +938,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         []
 
       true ->
-        if shape_gone?(opts.stack_id, opts.shape_handle) do
+        if shape_gone?(opts) do
           []
         else
           Process.sleep(50)
@@ -1150,19 +1152,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
   @doc false
   def tmp_file(%__MODULE__{} = opts, filename), do: Path.join(tmp_dir(opts), filename)
 
+  @type file_opener() :: (Path.t(), [File.mode()] ->
+                            {:ok, File.file_descriptor()} | {:error, File.posix()})
   @doc false
-  # Safely opens a shape file checking for shape presence if the file is not found
-  def open_file_stream(%__MODULE__{} = opts, path, modes, open_fun \\ &File.open/2, stream_fun)
-      when is_function(stream_fun, 1) do
-    case open_fun.(path, modes) do
-      {:ok, file} ->
-        stream_fun.(file)
-
-      {:error, _reason} = error ->
-        handle_open_error!(opts, path, error)
-    end
-  end
-
+  # Open a file for streaming. Returns `{:halt, :data_removed}` if the shape data has been
+  # removed (i.e. the shape itself has been removed). Streaming functions should return
+  # an empty stream rather than raise if this returns `{:halt, :data_removed}`.
+  @spec stream_open_file!(%__MODULE__{}, Path.t(), file_opener()) ::
+          {:ok, File.file_descriptor()} | {:halt, :data_removed} | no_return()
   def stream_open_file!(%__MODULE__{} = opts, path, modes, open_fun \\ &File.open/2) do
     case open_fun.(path, modes) do
       {:ok, file} ->
@@ -1174,8 +1171,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp handle_open_error!(%__MODULE__{} = opts, path, {:error, :enoent}) do
-    if shape_gone?(opts.stack_id, opts.shape_handle) do
-      {:halt, :shape_gone}
+    if shape_gone?(opts) do
+      {:halt, :data_removed}
     else
       raise File.Error, path: path, reason: :enoent
     end
@@ -1185,13 +1182,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     raise File.Error, path: path, reason: reason
   end
 
-  defp shape_gone?(stack_id, shape_handle) do
-    case Electric.ShapeCache.ShapeStatus.get_existing_shape(stack_id, shape_handle) do
-      {^shape_handle, _offset} ->
-        false
-
-      nil ->
-        true
-    end
+  defp shape_gone?(%__MODULE__{} = opts) do
+    !File.exists?(shape_data_dir(opts))
   end
 end

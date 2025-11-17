@@ -183,7 +183,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
       ) do
     # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
     case stream_open_file!(opts, log_file_path, [:read, :raw]) do
-      {:halt, :shape_gone} ->
+      {:halt, :data_removed} ->
         []
 
       {:ok, file} ->
@@ -221,7 +221,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
             {:ok, ^start_position} = :file.position(file, start_position)
             {file, ""}
 
-          {:halt, :shape_gone} ->
+          {:halt, :data_removed} ->
             :halt
         end
       end,

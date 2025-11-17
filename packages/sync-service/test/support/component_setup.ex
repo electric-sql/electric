@@ -198,7 +198,7 @@ defmodule Support.ComponentSetup do
 
   def with_shape_cleaner(ctx) do
     start_supervised!(
-      {Electric.ShapeCache.ShapeCleaner,
+      {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
        Keyword.merge(shape_cleaner_opts(ctx), stack_id: ctx.stack_id)}
     )
 
