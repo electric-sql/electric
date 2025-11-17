@@ -20,7 +20,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     explicitly_selected_columns: ["id"],
     flags: %{selects_all_columns: true}
   }
-  @test_shape_handle "test-shape-handle"
   @test_pg_id "12345"
 
   def load_column_info(@users_oid, _),
@@ -63,7 +62,13 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   setup :with_persistent_kv
 
   describe "DeleteShapePlug" do
-    setup [:with_stack_id_from_test, :with_status_monitor]
+    setup [
+      :with_stack_id_from_test,
+      :with_in_memory_storage,
+      :with_status_monitor,
+      :with_shape_status,
+      :with_shape_cache
+    ]
 
     setup ctx do
       start_link_supervised!({Registry, keys: :duplicate, name: @registry})
@@ -129,10 +134,11 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     end
 
     test "should clean shape based on shape definition", ctx do
-      expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, 0} end,
-        clean_shape: fn @test_shape_handle, _ -> :ok end
-      )
+      %{stack_id: stack_id} = ctx
+
+      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
+
+      expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 
       conn =
         ctx
@@ -144,14 +150,18 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     end
 
     test "should clean shape based only on shape_handle", ctx do
-      expect_shape_cache(
-        has_shape?: fn @test_shape_handle, _opts -> true end,
-        clean_shape: fn @test_shape_handle, _ -> :ok end
-      )
+      %{stack_id: stack_id} = ctx
+
+      {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
+
+      :ok =
+        Electric.ShapeCache.ShapeStatus.initialise_shape(stack_id, shape_handle, 1234, :something)
+
+      expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 
       conn =
         ctx
-        |> conn(:delete, "?handle=#{@test_shape_handle}")
+        |> conn(:delete, "?handle=#{shape_handle}")
         |> call_delete_shape_plug(ctx)
 
       assert conn.status == 202
