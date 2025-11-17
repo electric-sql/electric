@@ -150,15 +150,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  # def handle_info({ref, :new_changes, log_offset}, %{offset: offset, ref: ref} = state)
-  #     when is_log_offset_lte(log_offset, offset) do
-  #   {:noreply, state}
-  # end
-
-  # def handle_info({ref, :new_changes, _}, %{ref: ref} = state) do
-  #   {:noreply, state, {:continue, :read_stream}}
-  # end
-
   def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
     values = MapSet.new(Map.keys(value_counts))
 
@@ -249,18 +240,16 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
           {index, increment_value(counts_and_events, value, original_string)}
 
-        %Changes.UpdatedRecord{key: key, record: record, old_record: old_record},
-        {index, counts_and_events} ->
+        %Changes.UpdatedRecord{key: key, record: record}, {index, counts_and_events} ->
           # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
           if Enum.any?(state.columns, &is_map_key(record, &1)) do
             {value, original_string} = cast!(record, state)
-            {_, old_original_string} = cast!(old_record, state)
             old_value = Map.fetch!(index, key)
             index = Map.put(index, key, value)
 
             {index,
              counts_and_events
-             |> decrement_value(old_value, old_original_string)
+             |> decrement_value(old_value, value_to_string(old_value, state))
              |> increment_value(value, original_string)}
           else
             # Nothing relevant to this materializer has been updated

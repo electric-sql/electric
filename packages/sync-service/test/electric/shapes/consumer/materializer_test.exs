@@ -84,7 +84,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1])
 
-      assert_receive {:materializer_changes, _, move_in: 1}
+      assert_receive {:materializer_changes, _, %{move_in: ["1"]}}
     end
 
     @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
@@ -113,7 +113,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([11])
 
-      assert_receive {:materializer_changes, _, move_out: 10, move_in: 11}
+      assert_receive {:materializer_changes, _, %{move_out: ["10"], move_in: ["11"]}}
     end
 
     @tag snapshot_data: [
@@ -140,7 +140,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([])
 
-      assert_receive {:materializer_changes, _, move_out: 10}
+      assert_receive {:materializer_changes, _, %{move_out: ["10"]}}
     end
 
     @tag snapshot_data: [
@@ -191,7 +191,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
 
-      assert_received {:materializer_changes, _, move_out: 10}
+      assert_received {:materializer_changes, _, %{move_out: ["10"]}}
     end
 
     @tag snapshot_data: [
@@ -216,7 +216,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
 
-      assert_received {:materializer_changes, _, move_in: 20}
+      assert_received {:materializer_changes, _, %{move_in: ["20"]}}
     end
 
     @tag snapshot_data: [
@@ -331,7 +331,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 2])
 
-      assert_receive {:materializer_changes, _, move_in: 1, move_in: 2}
+      assert_receive {:materializer_changes, _, %{move_in: ["2", "1"]}}
 
       Materializer.new_changes(ctx, [
         %Changes.UpdatedRecord{
@@ -345,7 +345,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 3])
 
-      assert_receive {:materializer_changes, _, move_out: 2, move_in: 3}
+      assert_receive {:materializer_changes, _, %{move_out: ["2"], move_in: ["3"]}}
     end
   end
 

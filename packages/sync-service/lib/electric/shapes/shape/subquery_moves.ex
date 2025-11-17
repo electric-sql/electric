@@ -56,12 +56,21 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       Walker.reduce(
         shape.where.eval,
         fn
-          %Eval.Parser.Func{name: "sublink_membership_check", args: [ref, _]},
+          %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, _]},
           [current_tag | others],
           _ ->
-            %Eval.Parser.Ref{path: [column_name]} = ref
+            case testexpr do
+              %Eval.Parser.Ref{path: [column_name]} ->
+                {:ok, [[column_name | current_tag] | others]}
 
-            {:ok, [[column_name | current_tag] | others]}
+              %Eval.Parser.RowExpr{elements: elements} ->
+                elements =
+                  Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
+                    column_name
+                  end)
+
+                {:ok, [[elements | current_tag] | others]}
+            end
 
           _, acc, _ ->
             {:ok, acc}

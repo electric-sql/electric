@@ -7,33 +7,41 @@ defmodule Electric.Shapes.PartialModes do
 
   def query_subset(shape_handle, %Shape{} = shape, subset, opts) do
     pool = Manager.pool_name(opts[:stack_id], :snapshot)
-    headers = %{snapshot_mark: Enum.random(1..(2 ** 31))}
+    mark = Enum.random(1..(2 ** 31))
+    headers = %{snapshot_mark: mark}
 
-    result =
-      SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
-        snapshot_info_fn: fn _, pg_snapshot, lsn ->
-          send(self(), {:pg_snapshot_info, pg_snapshot, lsn})
-        end,
-        query_fn: fn conn, _, _ ->
-          Querying.query_subset(conn, shape, subset, headers)
-          |> Enum.to_list()
-        end,
-        stack_id: opts[:stack_id],
-        query_reason: "subset_query"
-      )
+    SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
+      snapshot_info_fn: fn _, pg_snapshot, lsn ->
+        send(self(), {:pg_snapshot_info, pg_snapshot, lsn})
+      end,
+      query_fn: fn conn, _, _ ->
+        Querying.query_subset(conn, shape, subset, headers)
+        |> Enum.to_list()
+      end,
+      stack_id: opts[:stack_id],
+      query_reason: "subset_query"
+    )
+    |> case do
+      {:ok, result} ->
+        metadata =
+          receive(
+            do: ({:pg_snapshot_info, pg_snapshot, lsn} -> make_metadata(pg_snapshot, lsn, mark))
+          )
 
-    metadata =
-      receive(do: ({:pg_snapshot_info, pg_snapshot, lsn} -> make_metadata(pg_snapshot, lsn)))
+        {:ok, {metadata, result}}
 
-    {metadata, result}
+      {:error, error} ->
+        {:error, error}
+    end
   end
 
-  defp make_metadata({xmin, xmax, xip_list}, lsn) do
+  defp make_metadata({xmin, xmax, xip_list}, lsn, mark) do
     %{
       xmin: xmin,
       xmax: xmax,
       xip_list: xip_list,
-      database_lsn: to_string(Lsn.to_integer(lsn))
+      database_lsn: to_string(Lsn.to_integer(lsn)),
+      snapshot_mark: mark
     }
   end
 

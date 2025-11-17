@@ -214,7 +214,7 @@ defmodule Electric.Replication.LogOffset do
   """
   def increment(log_offset, increment \\ 1)
 
-  def increment(log_offset, increment) when increment > 0 and is_virtual_offset(log_offset) do
+  def increment(%LogOffset{op_offset: :infinity} = log_offset, increment) when increment > 0 do
     %{log_offset | tx_offset: 1, op_offset: increment - 1}
   end
 

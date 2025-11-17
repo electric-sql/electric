@@ -158,6 +158,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_continue(:consume_buffer, %State{buffer: buffer} = state) do
+    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
     state = %{state | buffer: [], buffering?: false}
     {:noreply, handle_txns(Enum.reverse(buffer), state), state.hibernate_after}
   end
@@ -275,6 +276,10 @@ defmodule Electric.Shapes.Consumer do
         {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}},
         state
       ) do
+    Logger.debug(fn ->
+      "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs in it's #{dep_handle} dependency"
+    end)
+
     {state, notification} =
       state
       |> MoveHandling.process_move_ins(dep_handle, move_in)
@@ -286,6 +291,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:query_move_in_complete, name, key_set}, state) do
+    Logger.debug(fn ->
+      "Consumer query move in complete for #{name} with #{length(key_set)} keys"
+    end)
+
     {state, notification} = MoveHandling.query_complete(state, name, key_set)
     state = notify_new_changes(state, notification)
 

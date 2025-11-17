@@ -126,7 +126,7 @@ defmodule Electric.Shapes.Querying do
        ) do
     additional_headers =
       Shape.SubqueryMoves.move_in_tag_structure(shape)
-      |> Enum.map(&Enum.map(&1, fn column_name -> "$${#{column_name}}" end))
+      |> Electric.Utils.deep_map(fn column_name -> "$${#{column_name}}" end)
       |> case do
         [] -> additional_headers
         tag_structure -> additional_headers |> Map.new() |> Map.put(:tags, tag_structure)

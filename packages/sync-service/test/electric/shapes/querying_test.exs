@@ -5,239 +5,285 @@ defmodule Electric.Shapes.QueryingTest do
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Querying
 
-  test "should give information about the table and the result stream", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        value INTEGER
-      )
-      """,
-      []
-    )
-
-    Postgrex.query!(conn, "INSERT INTO items (value) VALUES (1), (2), (3), (4), (5)", [])
-    shape = Shape.new!("items", inspector: {DirectInspector, conn})
-
-    assert [
-             %{
-               key: ~S["public"."items"/"1"],
-               value: %{id: "1", value: "1"},
-               headers: %{operation: "insert", relation: ["public", "items"]}
-             },
-             %{
-               key: ~S["public"."items"/"2"],
-               value: %{id: "2", value: "2"},
-               headers: %{operation: "insert", relation: ["public", "items"]}
-             },
-             %{
-               key: ~S["public"."items"/"3"],
-               value: %{id: "3", value: "3"},
-               headers: %{operation: "insert", relation: ["public", "items"]}
-             },
-             %{
-               key: ~S["public"."items"/"4"],
-               value: %{id: "4", value: "4"},
-               headers: %{operation: "insert", relation: ["public", "items"]}
-             },
-             %{
-               key: ~S["public"."items"/"5"],
-               value: %{id: "5", value: "5"},
-               headers: %{operation: "insert", relation: ["public", "items"]}
-             }
-           ] == decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
-  end
-
-  test "respects the where clauses", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        value INTEGER
-      )
-      """,
-      []
-    )
-
-    Postgrex.query!(conn, "INSERT INTO items (value) VALUES (1), (2), (3), (4), (5)", [])
-    shape = Shape.new!("items", where: "value > 3", inspector: {DirectInspector, conn})
-
-    assert [
-             %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
-             %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
-           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
-  end
-
-  test "respects the where clauses with params", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        value INTEGER,
-        test INTEGER[]
-      )
-      """,
-      []
-    )
-
-    Postgrex.query!(
-      conn,
-      "INSERT INTO items (value, test) VALUES (1, '{1,2,3}'), (2, '{4,5,6}'), (3, '{7,8,9}'), (4, '{10,11,12}'), (5, '{12,14,15}')",
-      []
-    )
-
-    shape =
-      Shape.new!("items",
-        where: "test @> $1",
-        inspector: {DirectInspector, conn},
-        params: %{"1" => "{12}"}
+  describe "stream_initial_data/4" do
+    test "should give information about the table and the result stream", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          value INTEGER
+        )
+        """,
+        []
       )
 
-    assert [
-             %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
-             %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
-           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
-  end
+      Postgrex.query!(conn, "INSERT INTO items (value) VALUES (1), (2), (3), (4), (5)", [])
+      shape = Shape.new!("items", inspector: {DirectInspector, conn})
 
-  test "allows column names to have special characters", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        "col with ""' in it" INTEGER
+      assert [
+               %{
+                 key: ~S["public"."items"/"1"],
+                 value: %{id: "1", value: "1"},
+                 headers: %{operation: "insert", relation: ["public", "items"]}
+               },
+               %{
+                 key: ~S["public"."items"/"2"],
+                 value: %{id: "2", value: "2"},
+                 headers: %{operation: "insert", relation: ["public", "items"]}
+               },
+               %{
+                 key: ~S["public"."items"/"3"],
+                 value: %{id: "3", value: "3"},
+                 headers: %{operation: "insert", relation: ["public", "items"]}
+               },
+               %{
+                 key: ~S["public"."items"/"4"],
+                 value: %{id: "4", value: "4"},
+                 headers: %{operation: "insert", relation: ["public", "items"]}
+               },
+               %{
+                 key: ~S["public"."items"/"5"],
+                 value: %{id: "5", value: "5"},
+                 headers: %{operation: "insert", relation: ["public", "items"]}
+               }
+             ] == decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
+
+    test "respects the where clauses", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          value INTEGER
+        )
+        """,
+        []
       )
-      """,
-      []
-    )
 
-    Postgrex.query!(
-      conn,
-      ~s|INSERT INTO items ("col with ""' in it") VALUES (1)|,
-      []
-    )
+      Postgrex.query!(conn, "INSERT INTO items (value) VALUES (1), (2), (3), (4), (5)", [])
+      shape = Shape.new!("items", where: "value > 3", inspector: {DirectInspector, conn})
 
-    shape = Shape.new!("items", inspector: {DirectInspector, conn})
+      assert [
+               %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
+               %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
 
-    assert [
-             %{key: ~S["public"."items"/"1"], value: %{"col with \"' in it": "1"}}
-           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
-  end
-
-  test "works with composite PKs", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id1 INTEGER,
-        id2 INTEGER,
-        "test" INTEGER,
-        PRIMARY KEY (id1, id2)
+    test "respects the where clauses with params", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          value INTEGER,
+          test INTEGER[]
+        )
+        """,
+        []
       )
-      """,
-      []
-    )
 
-    Postgrex.query!(
-      conn,
-      ~s|INSERT INTO items (id1, id2, "test") VALUES (1, 2, 1), (3,4, 2)|,
-      []
-    )
-
-    shape = Shape.new!("items", inspector: {DirectInspector, conn})
-
-    assert [
-             %{key: ~S["public"."items"/"1"/"2"], value: %{test: "1"}},
-             %{key: ~S["public"."items"/"3"/"4"], value: %{test: "2"}}
-           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
-  end
-
-  test "works with null values when no PK constraint is present", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id INTEGER,
-        val TEXT
+      Postgrex.query!(
+        conn,
+        "INSERT INTO items (value, test) VALUES (1, '{1,2,3}'), (2, '{4,5,6}'), (3, '{7,8,9}'), (4, '{10,11,12}'), (5, '{12,14,15}')",
+        []
       )
-      """,
-      []
-    )
 
-    Postgrex.query!(
-      conn,
-      "INSERT INTO items (id, val) VALUES (1, ''), (2, null), (null, ''), (null, null)",
-      []
-    )
+      shape =
+        Shape.new!("items",
+          where: "test @> $1",
+          inspector: {DirectInspector, conn},
+          params: %{"1" => "{12}"}
+        )
 
-    shape = Shape.new!("items", inspector: {DirectInspector, conn})
+      assert [
+               %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
+               %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
 
-    assert [
-             %{key: ~S["public"."items"/"1"/""], value: %{id: "1", val: ""}},
-             %{key: ~S["public"."items"/"2"/_], value: %{id: "2", val: nil}},
-             %{key: ~S["public"."items"/_/""], value: %{id: nil, val: ""}},
-             %{key: ~S["public"."items"/_/_], value: %{id: nil, val: nil}}
-           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
-  end
-
-  test "works with null values & values with special characters", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        value TEXT
+    test "allows column names to have special characters", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          "col with ""' in it" INTEGER
+        )
+        """,
+        []
       )
-      """,
-      []
-    )
 
-    Postgrex.query!(
-      conn,
-      ~s|INSERT INTO items (value) VALUES ('1'), (NULL), ('"test\\x0001\n"')|,
-      []
-    )
-
-    shape = Shape.new!("items", inspector: {DirectInspector, conn})
-
-    assert [
-             %{key: ~S["public"."items"/"1"], value: %{value: "1"}},
-             %{key: ~S["public"."items"/"2"], value: %{value: nil}},
-             %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}}
-           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
-  end
-
-  test "splits the result into chunks according to the chunk size threshold", %{db_conn: conn} do
-    Postgrex.query!(
-      conn,
-      """
-      CREATE TABLE items (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        value TEXT
+      Postgrex.query!(
+        conn,
+        ~s|INSERT INTO items ("col with ""' in it") VALUES (1)|,
+        []
       )
-      """,
-      []
-    )
 
-    Postgrex.query!(
-      conn,
-      ~s|INSERT INTO items (value) VALUES ('1'), (NULL), ('"test\\x0001\n"')|,
-      []
-    )
+      shape = Shape.new!("items", inspector: {DirectInspector, conn})
 
-    shape = Shape.new!("items", inspector: {DirectInspector, conn})
+      assert [
+               %{key: ~S["public"."items"/"1"], value: %{"col with \"' in it": "1"}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
 
-    assert [
-             %{key: ~S["public"."items"/"1"], value: %{value: "1"}},
-             :chunk_boundary,
-             %{key: ~S["public"."items"/"2"], value: %{value: nil}},
-             :chunk_boundary,
-             %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}},
-             :chunk_boundary
-           ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape, 10))
+    test "works with composite PKs", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id1 INTEGER,
+          id2 INTEGER,
+          "test" INTEGER,
+          PRIMARY KEY (id1, id2)
+        )
+        """,
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        ~s|INSERT INTO items (id1, id2, "test") VALUES (1, 2, 1), (3,4, 2)|,
+        []
+      )
+
+      shape = Shape.new!("items", inspector: {DirectInspector, conn})
+
+      assert [
+               %{key: ~S["public"."items"/"1"/"2"], value: %{test: "1"}},
+               %{key: ~S["public"."items"/"3"/"4"], value: %{test: "2"}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
+
+    test "works with null values when no PK constraint is present", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id INTEGER,
+          val TEXT
+        )
+        """,
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        "INSERT INTO items (id, val) VALUES (1, ''), (2, null), (null, ''), (null, null)",
+        []
+      )
+
+      shape = Shape.new!("items", inspector: {DirectInspector, conn})
+
+      assert [
+               %{key: ~S["public"."items"/"1"/""], value: %{id: "1", val: ""}},
+               %{key: ~S["public"."items"/"2"/_], value: %{id: "2", val: nil}},
+               %{key: ~S["public"."items"/_/""], value: %{id: nil, val: ""}},
+               %{key: ~S["public"."items"/_/_], value: %{id: nil, val: nil}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
+
+    test "works with null values & values with special characters", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          value TEXT
+        )
+        """,
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        ~s|INSERT INTO items (value) VALUES ('1'), (NULL), ('"test\\x0001\n"')|,
+        []
+      )
+
+      shape = Shape.new!("items", inspector: {DirectInspector, conn})
+
+      assert [
+               %{key: ~S["public"."items"/"1"], value: %{value: "1"}},
+               %{key: ~S["public"."items"/"2"], value: %{value: nil}},
+               %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
+
+    test "splits the result into chunks according to the chunk size threshold", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE items (
+          id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+          value TEXT
+        )
+        """,
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        ~s|INSERT INTO items (value) VALUES ('1'), (NULL), ('"test\\x0001\n"')|,
+        []
+      )
+
+      shape = Shape.new!("items", inspector: {DirectInspector, conn})
+
+      assert [
+               %{key: ~S["public"."items"/"1"], value: %{value: "1"}},
+               :chunk_boundary,
+               %{key: ~S["public"."items"/"2"], value: %{value: nil}},
+               :chunk_boundary,
+               %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}},
+               :chunk_boundary
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape, 10))
+    end
+
+    test "if shape has a subquery, tags the results", %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE parent (id SERIAL PRIMARY KEY, value INTEGER)",
+            "CREATE TABLE child (id SERIAL PRIMARY KEY, value INTEGER, parent_id INTEGER REFERENCES parent(id))",
+            "INSERT INTO parent (value) VALUES (1), (2), (3)",
+            "INSERT INTO child (value, parent_id) VALUES (4, 1), (5, 2), (6, 3)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "parent_id IN (SELECT id FROM parent)",
+          inspector: {DirectInspector, conn}
+        )
+
+      assert [
+               %{value: %{value: "4"}, headers: %{tags: [["1"]]}},
+               %{value: %{value: "5"}, headers: %{tags: [["2"]]}},
+               %{value: %{value: "6"}, headers: %{tags: [["3"]]}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
+
+    test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE parent (id1 SERIAL, id2 SERIAL, value INTEGER, PRIMARY KEY (id1, id2))",
+            "CREATE TABLE child (id1 SERIAL, id2 SERIAL, value INTEGER, parent_id1 INTEGER, parent_id2 INTEGER, PRIMARY KEY (id1, id2), FOREIGN KEY (parent_id1, parent_id2) REFERENCES parent(id1, id2))",
+            "INSERT INTO parent (value) VALUES (1), (2), (3)",
+            "INSERT INTO child (value, parent_id1, parent_id2) VALUES (4, 1, 1), (5, 2, 2), (6, 3, 3)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "(parent_id1, parent_id2) IN (SELECT id1, id2 FROM parent)",
+          inspector: {DirectInspector, conn}
+        )
+
+      assert [
+               %{value: %{value: "4"}, headers: %{tags: [[["1", "1"]]]}},
+               %{value: %{value: "5"}, headers: %{tags: [[["2", "2"]]]}},
+               %{value: %{value: "6"}, headers: %{tags: [[["3", "3"]]]}}
+             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+    end
   end
 
   defp decode_stream(stream),
