@@ -119,7 +119,8 @@ defmodule Electric.Postgres.ReplicationClient do
         __MODULE__,
         opts ++
           [
-            message_converter: %MessageConverter{max_tx_size: max_txn_size},
+            message_converter:
+              MessageConverter.new(max_tx_size: max_txn_size, stack_id: opts[:stack_id]),
             operation_batcher: OperationBatcher.new(@max_operation_batch_size)
           ]
       )

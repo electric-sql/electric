@@ -20,15 +20,30 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
     Column
   }
 
-  defstruct relations: %{}, current_lsn: nil, tx_op_index: nil, tx_size: 0, max_tx_size: nil
+  defstruct relations: %{},
+            current_lsn: nil,
+            tx_op_index: nil,
+            change_count: 0,
+            tx_size: 0,
+            max_tx_size: nil,
+            stack_id: nil
 
   @type t() :: %__MODULE__{
           relations: %{optional(LR.relation_id()) => LR.Relation.t()},
           current_lsn: Electric.Postgres.Lsn.t() | nil,
           tx_op_index: non_neg_integer() | nil,
+          change_count: non_neg_integer(),
           tx_size: non_neg_integer(),
-          max_tx_size: non_neg_integer() | nil
+          max_tx_size: non_neg_integer() | nil,
+          stack_id: String.t() | nil
         }
+
+  def new(opts) do
+    %__MODULE__{
+      max_tx_size: Keyword.get(opts, :max_tx_size),
+      stack_id: Keyword.get(opts, :stack_id)
+    }
+  end
 
   @doc """
   Convert incoming logical replication messages to internal change representation.
@@ -44,7 +59,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   end
 
   def convert(%LR.Begin{} = msg, %__MODULE__{} = state) do
-    {[%Begin{xid: msg.xid}], %{state | current_lsn: msg.final_lsn, tx_op_index: 0, tx_size: 0}}
+    {[%Begin{xid: msg.xid}],
+     %{state | current_lsn: msg.final_lsn, tx_op_index: 0, tx_size: 0, change_count: 0}}
   end
 
   def convert(%LR.Origin{} = _msg, state), do: {[], state}
@@ -87,7 +103,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           log_offset: current_offset(state)
         }
       ],
-      state |> increment_op_index() |> increment_tx_size(msg.bytes)
+      change_received(state, msg.bytes)
     }
   end
 
@@ -132,7 +148,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           log_offset: current_offset(state)
         )
       ],
-      state |> increment_op_index() |> increment_tx_size(msg.bytes)
+      change_received(state, msg.bytes)
     }
   end
 
@@ -148,7 +164,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           log_offset: current_offset(state)
         }
       ],
-      state |> increment_op_index() |> increment_tx_size(msg.bytes)
+      change_received(state, msg.bytes)
     }
   end
 
@@ -160,10 +176,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
         &%TruncatedRelation{relation: {&1.namespace, &1.name}, log_offset: current_offset(state)}
       )
 
-    {truncated, increment_op_index(state)}
+    {truncated, change_received(state, _size = 0)}
   end
 
   def convert(%LR.Commit{} = msg, %__MODULE__{} = state) do
+    log_txn_received(msg, state)
+
     {
       [
         %Commit{
@@ -172,9 +190,11 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           transaction_size: state.tx_size
         }
       ],
-      %{state | current_lsn: nil, tx_op_index: nil, tx_size: 0}
+      %{state | current_lsn: nil, tx_op_index: nil, tx_size: 0, change_count: 0}
     }
   end
+
+  defguard in_transaction?(converter) when not is_nil(converter.current_lsn)
 
   @spec data_tuple_to_map([LR.Relation.Column.t()], list(String.t())) :: %{
           String.t() => String.t()
@@ -198,15 +218,34 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
     LogOffset.new(state.current_lsn, state.tx_op_index)
   end
 
-  defp increment_op_index(%__MODULE__{tx_op_index: tx_op_index} = state) do
-    # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
-    # This gives us headroom for splitting any operation into 2.
-    %{state | tx_op_index: tx_op_index + 2}
+  defp change_received(%__MODULE__{} = state, bytes) do
+    %{
+      state
+      | tx_size: state.tx_size + bytes,
+        change_count: state.change_count + 1,
+
+        # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
+        # This gives us headroom for splitting any operation into 2.
+        tx_op_index: state.tx_op_index + 2
+    }
   end
 
-  defp increment_tx_size(%__MODULE__{tx_size: tx_size} = state, bytes) do
-    %{state | tx_size: tx_size + bytes}
-  end
+  defp log_txn_received(%LR.Commit{} = msg, %__MODULE__{} = state) do
+    alias Electric.Telemetry.Sampler
+    alias Electric.Telemetry.OpenTelemetry
 
-  defguard in_transaction?(converter) when not is_nil(converter.current_lsn)
+    if Sampler.sample_metrics?() do
+      OpenTelemetry.execute(
+        [:electric, :postgres, :replication, :transaction_received],
+        %{
+          monotonic_time: System.monotonic_time(),
+          receive_lag: DateTime.diff(DateTime.utc_now(), msg.commit_timestamp, :millisecond),
+          bytes: state.tx_size,
+          count: 1,
+          operations: state.change_count
+        },
+        %{stack_id: state.stack_id}
+      )
+    end
+  end
 end

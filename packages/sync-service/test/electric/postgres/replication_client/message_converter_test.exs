@@ -32,7 +32,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
   }
 
   setup do
-    converter = %MessageConverter{}
+    converter = MessageConverter.new()
     {[_relation], converter} = MessageConverter.convert(@relation, converter)
     {:ok, converter: converter}
   end
