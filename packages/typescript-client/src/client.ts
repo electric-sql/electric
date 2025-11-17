@@ -841,7 +841,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (subsetParams) {
-      if (subsetParams.where) {
+      if (subsetParams.where && typeof subsetParams.where === `string`) {
         const encodedWhere = encodeWhereClause(
           subsetParams.where,
           this.options.columnMapper?.encode
@@ -854,7 +854,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
       if (subsetParams.offset)
         setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
-      if (subsetParams.orderBy) {
+      if (subsetParams.orderBy && typeof subsetParams.orderBy === `string`) {
         const encodedOrderBy = encodeWhereClause(
           subsetParams.orderBy,
           this.options.columnMapper?.encode

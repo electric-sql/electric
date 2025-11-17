@@ -58,15 +58,24 @@ export function snakeToCamel(str: string): string {
   const leadingUnderscores = str.match(/^_+/)?.[0] ?? ``
   const withoutLeading = str.slice(leadingUnderscores.length)
 
-  // Remove trailing underscores and convert to lowercase
-  const normalized = withoutLeading.replace(/_+$/, ``).toLowerCase()
+  // Preserve trailing underscores for round-trip safety
+  const trailingUnderscores = withoutLeading.match(/_+$/)?.[0] ?? ``
+  const core = trailingUnderscores
+    ? withoutLeading.slice(
+        0,
+        withoutLeading.length - trailingUnderscores.length
+      )
+    : withoutLeading
+
+  // Convert to lowercase
+  const normalized = core.toLowerCase()
 
   // Convert snake_case to camelCase (handling multiple underscores)
   const camelCased = normalized.replace(/_+([a-z])/g, (_, letter) =>
     letter.toUpperCase()
   )
 
-  return leadingUnderscores + camelCased
+  return leadingUnderscores + camelCased + trailingUnderscores
 }
 
 /**
@@ -222,19 +231,21 @@ export function encodeWhereClause(
     `NULLIF`,
   ])
 
-  // Track positions of quoted strings to skip them
+  // Track positions of quoted strings and double-quoted identifiers to skip them
   const quotedRanges: Array<{ start: number; end: number }> = []
 
-  // Find all single-quoted strings
+  // Find all single-quoted strings and double-quoted identifiers
   let pos = 0
   while (pos < whereClause.length) {
-    if (whereClause[pos] === `'`) {
+    const ch = whereClause[pos]
+    if (ch === `'` || ch === `"`) {
       const start = pos
+      const quoteChar = ch
       pos++ // Skip opening quote
-      // Find closing quote, handling escaped quotes ('')
+      // Find closing quote, handling escaped quotes ('' or "")
       while (pos < whereClause.length) {
-        if (whereClause[pos] === `'`) {
-          if (whereClause[pos + 1] === `'`) {
+        if (whereClause[pos] === quoteChar) {
+          if (whereClause[pos + 1] === quoteChar) {
             pos += 2 // Skip escaped quote
           } else {
             pos++ // Skip closing quote
@@ -250,7 +261,7 @@ export function encodeWhereClause(
     }
   }
 
-  // Helper to check if position is within a quoted string
+  // Helper to check if position is within a quoted string or double-quoted identifier
   const isInQuotedString = (pos: number): boolean => {
     return quotedRanges.some((range) => pos >= range.start && pos < range.end)
   }

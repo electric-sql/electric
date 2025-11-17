@@ -32,10 +32,10 @@ describe(`snakeToCamel`, () => {
     expect(snakeToCamel(`__private`)).toBe(`__private`)
   })
 
-  it(`should drop trailing underscores`, () => {
-    expect(snakeToCamel(`user_`)).toBe(`user`)
-    expect(snakeToCamel(`user_id_`)).toBe(`userId`)
-    expect(snakeToCamel(`user_id__`)).toBe(`userId`)
+  it(`should preserve trailing underscores`, () => {
+    expect(snakeToCamel(`user_`)).toBe(`user_`)
+    expect(snakeToCamel(`user_id_`)).toBe(`userId_`)
+    expect(snakeToCamel(`user_id__`)).toBe(`userId__`)
   })
 
   it(`should collapse multiple consecutive underscores`, () => {
@@ -95,6 +95,16 @@ describe(`roundtrip conversions`, () => {
       `created_at`,
       `user_profile_image_url`,
     ]
+
+    for (const original of testCases) {
+      const camelCase = snakeToCamel(original)
+      const backToSnake = camelToSnake(camelCase)
+      expect(backToSnake).toBe(original)
+    }
+  })
+
+  it(`should roundtrip with trailing underscores`, () => {
+    const testCases = [`user_id_`, `metric__`, `data_point_value_`]
 
     for (const original of testCases) {
       const camelCase = snakeToCamel(original)
@@ -323,6 +333,28 @@ describe(`encodeWhereClause`, () => {
         encode
       )
     ).toBe(`first_name = 'John' AND last_name = 'Doe' AND user_id = $1`)
+  })
+
+  it(`should not transform double-quoted identifiers`, () => {
+    // Postgres uses double quotes for case-sensitive identifiers
+    expect(encodeWhereClause(`"userId" = $1`, encode)).toBe(`"userId" = $1`)
+
+    expect(encodeWhereClause(`"User"."createdAt" = $1`, encode)).toBe(
+      `"User"."createdAt" = $1`
+    )
+  })
+
+  it(`should handle escaped double quotes in identifiers`, () => {
+    // Postgres uses "" to escape double quotes in identifiers
+    expect(encodeWhereClause(`"column""name" = $1`, encode)).toBe(
+      `"column""name" = $1`
+    )
+  })
+
+  it(`should handle mixed quoted and unquoted identifiers`, () => {
+    expect(
+      encodeWhereClause(`userId = $1 AND "CaseSensitive" = $2`, encode)
+    ).toBe(`user_id = $1 AND "CaseSensitive" = $2`)
   })
 })
 
