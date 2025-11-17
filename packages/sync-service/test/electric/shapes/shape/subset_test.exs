@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.ShapeTest do
+defmodule Electric.Shapes.Shape.SubsetTest do
   use ExUnit.Case, async: true
 
   alias Electric.Shapes.Shape
