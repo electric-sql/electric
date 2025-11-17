@@ -645,6 +645,10 @@ defmodule Electric.Shapes.Consumer do
     {reason, state}
   end
 
+  defp stop_and_clean(state) do
+    {:stop, @stop_and_clean_reason, mark_for_removal(state)}
+  end
+
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
     state
   end
@@ -803,10 +807,6 @@ defmodule Electric.Shapes.Consumer do
       {:shutdown, false} -> {:stop, reason, state}
       _ -> stop_and_clean(state)
     end
-  end
-
-  defp stop_and_clean(state) do
-    {:stop, @stop_and_clean_reason, mark_for_removal(state)}
   end
 
   defp terminate_writer(state) do

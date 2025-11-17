@@ -846,10 +846,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
     metadata =
       read_multiple_cached_metadata(opts, [:snapshot_started?, :last_snapshot_chunk])
 
-    snapshot_started = Keyword.get(metadata, :snapshot_started?) || false
+    snapshot_started? = Keyword.get(metadata, :snapshot_started?) || false
     last_snapshot_chunk = Keyword.get(metadata, :last_snapshot_chunk)
 
-    if !snapshot_started && !shape_gone?(opts) do
+    if not snapshot_started? and not shape_gone?(opts) do
       raise(Storage.Error, message: "Snapshot not started")
     end
 
