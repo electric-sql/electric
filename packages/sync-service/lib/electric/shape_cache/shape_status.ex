@@ -313,26 +313,28 @@ defmodule Electric.ShapeCache.ShapeStatus do
     # entire table into memory and without sorting on every iteration
     tree =
       :ets.foldl(
-        fn {handle, last_read}, acc ->
-          case :gb_trees.size(acc) do
-            size when size < shape_count ->
-              :gb_trees.insert(last_read, handle, acc)
+        fn {handle, last_read}, tree ->
+          if :gb_trees.size(tree) < shape_count do
+            # Insert into the tree until we reach the desired size
+            :gb_trees.insert(last_read, handle, tree)
+          else
+            # If entry being examined was used less recently than the
+            # most recently used tracked entry in the tree so far, replace it
+            {most_recent_tracked, _handle} = :gb_trees.largest(tree)
 
-            ^shape_count ->
-              {max_time, _max_handle} = :gb_trees.largest(acc)
-
-              if last_read < max_time do
-                acc = :gb_trees.delete(max_time, acc)
-                :gb_trees.insert(last_read, handle, acc)
-              else
-                acc
-              end
+            if last_read < most_recent_tracked do
+              tree = :gb_trees.delete(most_recent_tracked, tree)
+              :gb_trees.insert(last_read, handle, tree)
+            else
+              tree
+            end
           end
         end,
         :gb_trees.empty(),
         table
       )
 
+    # Convert tree to list and compute elapsed time since last use
     :gb_trees.to_list(tree)
     |> Enum.map(fn {last_read, handle} ->
       %{
