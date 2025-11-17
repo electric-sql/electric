@@ -60,5 +60,19 @@
   [invoke shape_get items $handle $offset]
   ??HTTP/1.1 200 OK
 
+
+# Recovered shape should handle new data
+[shell psql]
+  """!
+  INSERT INTO items (id, val)
+  VALUES (gen_random_uuid(), '# new test val');
+  """
+  ??INSERT 0 1
+
+[shell client]
+  [invoke shape_get_live items $handle $offset]
+  ??HTTP/1.1 200 OK
+  ??"val":"# new test val"
+
 [cleanup]
   [invoke teardown]
