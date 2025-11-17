@@ -306,16 +306,41 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   def least_recently_used(stack_ref, shape_count) do
-    :ets.tab2list(shape_last_used_table(stack_ref))
-    |> Enum.sort_by(fn {_handle, last_read} -> last_read end)
-    |> Stream.map(fn {handle, last_read} ->
+    now = System.monotonic_time()
+    table = shape_last_used_table(stack_ref)
+
+    # Use :ets.foldl with gb_trees to efficiently maintain top N without copying
+    # entire table into memory and without sorting on every iteration
+    tree =
+      :ets.foldl(
+        fn {handle, last_read}, acc ->
+          case :gb_trees.size(acc) do
+            size when size < shape_count ->
+              :gb_trees.insert(last_read, handle, acc)
+
+            ^shape_count ->
+              {max_time, _max_handle} = :gb_trees.largest(acc)
+
+              if last_read < max_time do
+                acc = :gb_trees.delete(max_time, acc)
+                :gb_trees.insert(last_read, handle, acc)
+              else
+                acc
+              end
+          end
+        end,
+        :gb_trees.empty(),
+        table
+      )
+
+    :gb_trees.to_list(tree)
+    |> Enum.map(fn {last_read, handle} ->
       %{
         shape_handle: handle,
         elapsed_minutes_since_use:
-          System.convert_time_unit(System.monotonic_time() - last_read, :native, :second) / 60
+          System.convert_time_unit(now - last_read, :native, :second) / 60
       }
     end)
-    |> Enum.take(shape_count)
   end
 
   def latest_offset!(stack_ref, shape_handle) do

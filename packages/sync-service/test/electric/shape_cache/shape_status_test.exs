@@ -316,6 +316,66 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       assert [] == ShapeStatus.least_recently_used(state, _count = 1)
     end
+
+    test "returns all shapes when count exceeds total shapes", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      result = ShapeStatus.least_recently_used(state, _count = 100)
+      assert length(result) == 2
+      handles = Enum.map(result, & &1.shape_handle)
+      assert shape1 in handles
+      assert shape2 in handles
+    end
+
+    test "returns correct N shapes when N < total shapes", ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      # Add 5 shapes with staggered updates
+      shapes =
+        for i <- 1..5 do
+          {:ok, handle} = ShapeStatus.add_shape(state, shape!("test_#{i}"))
+          Process.sleep(5)
+          ShapeStatus.update_last_read_time_to_now(state, handle)
+          handle
+        end
+
+      # Request the 3 least recently used (should be the first 3)
+      result = ShapeStatus.least_recently_used(state, _count = 3)
+      assert length(result) == 3
+
+      result_handles = Enum.map(result, & &1.shape_handle)
+
+      assert Enum.at(shapes, 0) in result_handles
+      assert Enum.at(shapes, 1) in result_handles
+      assert Enum.at(shapes, 2) in result_handles
+
+      refute Enum.at(shapes, 3) in result_handles
+      refute Enum.at(shapes, 4) in result_handles
+    end
+
+    test "returns shapes in order from least to most recently used", ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!("oldest"))
+      Process.sleep(5)
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape!("middle"))
+      Process.sleep(5)
+      {:ok, shape3} = ShapeStatus.add_shape(state, shape!("newest"))
+
+      result = ShapeStatus.least_recently_used(state, _count = 3)
+
+      assert [
+               %{shape_handle: ^shape1},
+               %{shape_handle: ^shape2},
+               %{shape_handle: ^shape3}
+             ] = result
+
+      # Verify elapsed time is in ascending order (oldest has most elapsed time)
+      times = Enum.map(result, & &1.elapsed_minutes_since_use)
+      assert times == Enum.sort(times, :desc)
+    end
   end
 
   describe "high concurrency" do
