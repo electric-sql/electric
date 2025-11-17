@@ -2542,27 +2542,8 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
-      assert {_, 409, _} = Task.await(task)
-
-      # And new shape should have the correct data
-      assert {_, 200, response} = shape_req(base_req, ctx.opts)
-
-      # Should contain 3 data records and the snapshot-end control message
-      assert length(response) == 4
-
-      # Filter out control messages to get just the data records
-      data = Enum.filter(response, &Map.has_key?(&1, "key"))
-      assert length(data) == 3
-
-      assert [
-               %{"value" => %{"id" => "1", "value" => "10"}},
-               %{"value" => %{"id" => "2", "value" => "10"}},
-               %{"value" => %{"id" => "3", "value" => "20"}}
-             ] = Enum.sort_by(data, & &1["value"]["id"])
-
-      # Also verify the control message is present
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
+      assert {_, 200, [%{"headers" => %{"tags" => [["20"]]}, "value" => %{"id" => "3"}}, _]} =
+               Task.await(task)
     end
   end
 

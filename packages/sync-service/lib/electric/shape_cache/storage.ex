@@ -115,7 +115,7 @@ defmodule Electric.ShapeCache.Storage do
   and the range is returned. Range is a tuple of {starting_offset, ending_offset}, with starting offset
   being right before the control message to match usage of `get_log_stream/3`
   """
-  @callback append_control_message!(control_message :: map(), writer_state()) ::
+  @callback append_control_message!(control_message :: map() | binary(), writer_state()) ::
               {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
 
   @doc """
@@ -159,7 +159,7 @@ defmodule Electric.ShapeCache.Storage do
   Is expected to be only called once the storage has been stopped.
   """
   @callback cleanup!(shape_opts()) :: any()
-  @callback cleanup!(map(), binary()) :: any()
+  @callback cleanup!(compiled_opts(), shape_handle()) :: any()
 
   @doc """
   Cleanup all shape data and metadata from storage.
@@ -296,7 +296,8 @@ defmodule Electric.ShapeCache.Storage do
     append_control_message!(Jason.encode!(control_message), state)
   end
 
-  def append_control_message!(control_message, {mod, writer_state}) do
+  def append_control_message!(control_message, {mod, writer_state})
+      when is_binary(control_message) do
     {inserted_range, new_writer_state} =
       mod.append_control_message!(control_message, writer_state)
 

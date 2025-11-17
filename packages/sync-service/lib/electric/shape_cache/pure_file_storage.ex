@@ -905,11 +905,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {inserted_range, state}
   end
 
-  def append_control_message!(control_message, state)
-      when is_map(control_message) do
-    append_control_message!(Jason.encode!(control_message), state)
-  end
-
   def append_control_message!(control_message, writer_state(writer_acc: acc) = state)
       when is_binary(control_message) do
     offset = WriteLoop.last_seen_offset(acc)

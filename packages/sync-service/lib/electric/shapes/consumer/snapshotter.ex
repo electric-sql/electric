@@ -210,7 +210,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         shape,
         %{storage: storage, stack_id: stack_id, db_pool: db_pool}
       ) do
-    shape_attrs = telemetry_shape_attrs(shape_handle, shape)
     chunk_bytes_threshold = Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold)
 
     Electric.Postgres.SnapshotQuery.execute_for_shape(db_pool, shape_handle, shape,
