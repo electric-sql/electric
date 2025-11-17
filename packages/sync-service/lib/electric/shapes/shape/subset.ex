@@ -76,6 +76,7 @@ defmodule Electric.Shapes.Shape.Subset do
          {:ok, where} <- Validators.validate_where_return_type(where) do
       {:ok, where}
     else
+      {:error, {part, reason}} -> {:error, {part, reason}}
       {:error, reason} -> {:error, {:where, reason}}
     end
   end
