@@ -156,6 +156,36 @@ describe(`createFetchWithBackoff`, () => {
     expect(mockFetchClient).toHaveBeenCalledTimes(1)
   })
 
+  it(`should honor retry-after header from 503 response`, async () => {
+    const retryAfterSeconds = 2
+    const mockErrorResponse = new Response(null, {
+      status: 503,
+      statusText: `Service Unavailable`,
+      headers: new Headers({ 'retry-after': `${retryAfterSeconds}` }),
+    })
+    const mockSuccessResponse = new Response(null, {
+      status: 200,
+      statusText: `OK`,
+    })
+    mockFetchClient
+      .mockResolvedValueOnce(mockErrorResponse)
+      .mockResolvedValueOnce(mockSuccessResponse)
+
+    const fetchWithBackoff = createFetchWithBackoff(mockFetchClient, {
+      ...BackoffDefaults,
+      initialDelay: 1, // Very short client delay
+    })
+
+    const startTime = Date.now()
+    const result = await fetchWithBackoff(`https://example.com`)
+    const elapsed = Date.now() - startTime
+
+    // Should have waited at least retryAfterSeconds (minus small tolerance for test execution)
+    expect(elapsed).toBeGreaterThanOrEqual(retryAfterSeconds * 1000 - 100)
+    expect(mockFetchClient).toHaveBeenCalledTimes(2)
+    expect(result.ok).toBe(true)
+  })
+
   // it(`should retry multiple times and eventually throw if no success`, async () => {
   //   const mockErrorResponse = new Response(null, { status: 500 })
   //   mockFetchClient.mockImplementation(
