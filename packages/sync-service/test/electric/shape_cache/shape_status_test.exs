@@ -345,14 +345,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       result = ShapeStatus.least_recently_used(state, _count = 3)
       assert length(result) == 3
 
+      expected_handles = Enum.take(shapes, 3)
       result_handles = Enum.map(result, & &1.shape_handle)
-
-      assert Enum.at(shapes, 0) in result_handles
-      assert Enum.at(shapes, 1) in result_handles
-      assert Enum.at(shapes, 2) in result_handles
-
-      refute Enum.at(shapes, 3) in result_handles
-      refute Enum.at(shapes, 4) in result_handles
+      assert expected_handles == result_handles
     end
 
     test "returns shapes in order from least to most recently used", ctx do
