@@ -583,7 +583,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       options.columnMapper && options.transformer
         ? (row: Row<GetExtensions<T>>) =>
             options.transformer!(options.columnMapper!.decode(row))
-        : options.columnMapper?.decode ?? options.transformer
+        : (options.columnMapper?.decode ?? options.transformer)
     this.#messageParser = new MessageParser<T>(options.parser, transformer)
 
     this.#onError = this.options.onError

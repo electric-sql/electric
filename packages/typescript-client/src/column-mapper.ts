@@ -263,7 +263,8 @@ export function encodeWhereClause(
   // This avoids matching:
   // - Parts of longer identifiers
   // - SQL keywords (handled by checking if result differs from input)
-  const identifierPattern = /(?<![a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_]*)(?![a-zA-Z0-9_])/g
+  const identifierPattern =
+    /(?<![a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_]*)(?![a-zA-Z0-9_])/g
 
   return whereClause.replace(identifierPattern, (match, _p1, offset) => {
     // Don't transform if inside quoted string

@@ -104,8 +104,9 @@ describe(`createColumnMapper`, () => {
       created_at: `createdAt`,
     })
 
-    expect(mapper.decode({ user_id: 1, project_id: 2, created_at: `2025-01-01` }))
-      .toEqual({ userId: 1, projectId: 2, createdAt: `2025-01-01` })
+    expect(
+      mapper.decode({ user_id: 1, project_id: 2, created_at: `2025-01-01` })
+    ).toEqual({ userId: 1, projectId: 2, createdAt: `2025-01-01` })
 
     expect(mapper.encode(`userId`)).toBe(`user_id`)
     expect(mapper.encode(`projectId`)).toBe(`project_id`)
@@ -117,8 +118,11 @@ describe(`createColumnMapper`, () => {
       user_id: `userId`,
     })
 
-    expect(mapper.decode({ user_id: 1, name: `John`, age: 30 }))
-      .toEqual({ userId: 1, name: `John`, age: 30 })
+    expect(mapper.decode({ user_id: 1, name: `John`, age: 30 })).toEqual({
+      userId: 1,
+      name: `John`,
+      age: 30,
+    })
   })
 
   it(`should provide reverse mapping`, () => {
@@ -146,8 +150,10 @@ describe(`snakeCamelMapper`, () => {
   it(`should create a dynamic mapper without schema`, () => {
     const mapper = snakeCamelMapper()
 
-    expect(mapper.decode({ user_id: 1, project_id: 2 }))
-      .toEqual({ userId: 1, projectId: 2 })
+    expect(mapper.decode({ user_id: 1, project_id: 2 })).toEqual({
+      userId: 1,
+      projectId: 2,
+    })
 
     expect(mapper.encode(`userId`)).toBe(`user_id`)
     expect(mapper.encode(`projectId`)).toBe(`project_id`)
@@ -162,8 +168,9 @@ describe(`snakeCamelMapper`, () => {
 
     const mapper = snakeCamelMapper(schema)
 
-    expect(mapper.decode({ user_id: 1, project_id: 2, created_at: `2025-01-01` }))
-      .toEqual({ userId: 1, projectId: 2, createdAt: `2025-01-01` })
+    expect(
+      mapper.decode({ user_id: 1, project_id: 2, created_at: `2025-01-01` })
+    ).toEqual({ userId: 1, projectId: 2, createdAt: `2025-01-01` })
 
     expect(mapper.encode(`userId`)).toBe(`user_id`)
     expect(mapper.encode(`projectId`)).toBe(`project_id`)
@@ -183,30 +190,31 @@ describe(`encodeWhereClause`, () => {
   })
 
   it(`should encode simple WHERE clauses`, () => {
-    expect(encodeWhereClause(`userId = $1`, encode))
-      .toBe(`user_id = $1`)
+    expect(encodeWhereClause(`userId = $1`, encode)).toBe(`user_id = $1`)
 
-    expect(encodeWhereClause(`projectId = $1 AND userId = $2`, encode))
-      .toBe(`project_id = $1 AND user_id = $2`)
+    expect(encodeWhereClause(`projectId = $1 AND userId = $2`, encode)).toBe(
+      `project_id = $1 AND user_id = $2`
+    )
   })
 
   it(`should not encode SQL keywords`, () => {
-    expect(encodeWhereClause(`userId IS NULL`, encode))
-      .toBe(`user_id IS NULL`)
+    expect(encodeWhereClause(`userId IS NULL`, encode)).toBe(`user_id IS NULL`)
 
-    expect(encodeWhereClause(`userId IN ($1, $2)`, encode))
-      .toBe(`user_id IN ($1, $2)`)
+    expect(encodeWhereClause(`userId IN ($1, $2)`, encode)).toBe(
+      `user_id IN ($1, $2)`
+    )
 
-    expect(encodeWhereClause(`userId LIKE $1`, encode))
-      .toBe(`user_id LIKE $1`)
+    expect(encodeWhereClause(`userId LIKE $1`, encode)).toBe(`user_id LIKE $1`)
   })
 
   it(`should handle function calls`, () => {
-    expect(encodeWhereClause(`LOWER(userName) = $1`, encode))
-      .toBe(`LOWER(user_name) = $1`)
+    expect(encodeWhereClause(`LOWER(userName) = $1`, encode)).toBe(
+      `LOWER(user_name) = $1`
+    )
 
-    expect(encodeWhereClause(`COALESCE(userId, $1) = $2`, encode))
-      .toBe(`COALESCE(user_id, $1) = $2`)
+    expect(encodeWhereClause(`COALESCE(userId, $1) = $2`, encode)).toBe(
+      `COALESCE(user_id, $1) = $2`
+    )
   })
 
   it(`should handle complex expressions`, () => {
@@ -219,29 +227,30 @@ describe(`encodeWhereClause`, () => {
   })
 
   it(`should handle ORDER BY clauses`, () => {
-    expect(encodeWhereClause(`createdAt ASC`, encode))
-      .toBe(`created_at ASC`)
+    expect(encodeWhereClause(`createdAt ASC`, encode)).toBe(`created_at ASC`)
 
-    expect(encodeWhereClause(`userId DESC, createdAt ASC`, encode))
-      .toBe(`user_id DESC, created_at ASC`)
+    expect(encodeWhereClause(`userId DESC, createdAt ASC`, encode)).toBe(
+      `user_id DESC, created_at ASC`
+    )
   })
 
   it(`should not transform parameter placeholders`, () => {
     // Parameter placeholders ($1, $2, etc.) don't match identifier pattern
-    expect(encodeWhereClause(`userId = $1`, encode))
-      .toBe(`user_id = $1`)
+    expect(encodeWhereClause(`userId = $1`, encode)).toBe(`user_id = $1`)
   })
 
   it(`should handle qualified column names`, () => {
     // Note: This will transform both table and column names
     // For table.column, both parts get transformed
-    expect(encodeWhereClause(`todos.userId = $1`, encode))
-      .toBe(`todos.user_id = $1`)
+    expect(encodeWhereClause(`todos.userId = $1`, encode)).toBe(
+      `todos.user_id = $1`
+    )
   })
 
   it(`should handle BETWEEN operator`, () => {
-    expect(encodeWhereClause(`createdAt BETWEEN $1 AND $2`, encode))
-      .toBe(`created_at BETWEEN $1 AND $2`)
+    expect(encodeWhereClause(`createdAt BETWEEN $1 AND $2`, encode)).toBe(
+      `created_at BETWEEN $1 AND $2`
+    )
   })
 
   it(`should handle CASE expressions`, () => {
@@ -254,8 +263,9 @@ describe(`encodeWhereClause`, () => {
   })
 
   it(`should preserve boolean literals`, () => {
-    expect(encodeWhereClause(`isActive = TRUE AND isDeleted = FALSE`, encode))
-      .toBe(`is_active = TRUE AND is_deleted = FALSE`)
+    expect(
+      encodeWhereClause(`isActive = TRUE AND isDeleted = FALSE`, encode)
+    ).toBe(`is_active = TRUE AND is_deleted = FALSE`)
   })
 
   it(`should not break on empty strings`, () => {
@@ -263,24 +273,27 @@ describe(`encodeWhereClause`, () => {
   })
 
   it(`should handle mixed case SQL keywords`, () => {
-    expect(encodeWhereClause(`userId is null`, encode))
-      .toBe(`user_id is null`)
+    expect(encodeWhereClause(`userId is null`, encode)).toBe(`user_id is null`)
 
-    expect(encodeWhereClause(`userName like $1`, encode))
-      .toBe(`user_name like $1`)
+    expect(encodeWhereClause(`userName like $1`, encode)).toBe(
+      `user_name like $1`
+    )
   })
 
   it(`should not transform quoted string literals`, () => {
-    expect(encodeWhereClause(`userId = 'user_id'`, encode))
-      .toBe(`user_id = 'user_id'`)
+    expect(encodeWhereClause(`userId = 'user_id'`, encode)).toBe(
+      `user_id = 'user_id'`
+    )
 
-    expect(encodeWhereClause(`name = 'John Doe' AND userId = $1`, encode))
-      .toBe(`name = 'John Doe' AND user_id = $1`)
+    expect(encodeWhereClause(`name = 'John Doe' AND userId = $1`, encode)).toBe(
+      `name = 'John Doe' AND user_id = $1`
+    )
   })
 
   it(`should handle escaped quotes in strings`, () => {
-    expect(encodeWhereClause(`name = 'O''Brien' AND userId = $1`, encode))
-      .toBe(`name = 'O''Brien' AND user_id = $1`)
+    expect(encodeWhereClause(`name = 'O''Brien' AND userId = $1`, encode)).toBe(
+      `name = 'O''Brien' AND user_id = $1`
+    )
   })
 
   it(`should handle multiple quoted strings`, () => {
