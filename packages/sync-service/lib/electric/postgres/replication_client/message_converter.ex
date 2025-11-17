@@ -38,7 +38,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           stack_id: String.t() | nil
         }
 
-  def new(opts) do
+  def new(opts \\ []) do
     %__MODULE__{
       max_tx_size: Keyword.get(opts, :max_tx_size),
       stack_id: Keyword.get(opts, :stack_id)
@@ -169,14 +169,24 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   end
 
   def convert(%LR.Truncate{} = msg, state) do
-    truncated =
-      msg.truncated_relations
-      |> Enum.map(&Map.get(state.relations, &1))
-      |> Enum.map(
-        &%TruncatedRelation{relation: {&1.namespace, &1.name}, log_offset: current_offset(state)}
+    {truncated, state} =
+      Enum.reduce(
+        msg.truncated_relations,
+        {[], state},
+        fn relation_id, {changes, state} ->
+          relation = state.relations[relation_id]
+
+          {[
+             %TruncatedRelation{
+               relation: {relation.namespace, relation.name},
+               log_offset: current_offset(state)
+             }
+             | changes
+           ], change_received(state, _size = 0)}
+        end
       )
 
-    {truncated, change_received(state, _size = 0)}
+    {Enum.reverse(truncated), state}
   end
 
   def convert(%LR.Commit{} = msg, %__MODULE__{} = state) do
