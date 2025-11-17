@@ -314,15 +314,16 @@ describe(`columnMapper and transformer together`, () => {
     })
 
     // Simulating what ShapeStream does
-    const transformer = (row: Record<string, unknown>) => ({
+    type TestRow = { userId?: string; createdAt?: string | Date }
+    const transformer = (row: TestRow) => ({
       ...row,
       // Transform the value (after column rename)
       createdAt: new Date(row.createdAt as string),
     })
 
     // Chained: columnMapper first, then transformer
-    const chained = (row: Record<string, unknown>) =>
-      transformer(mapper.decode(row))
+    const chained = (row: Record<string, string>) =>
+      transformer(mapper.decode(row) as TestRow)
 
     const result = chained({
       user_id: `123`,
