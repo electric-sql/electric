@@ -114,7 +114,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         consumer,
         shape_handle,
         shape,
-        ctx
+        %{stack_id: stack_id} = ctx
       ) do
     supervisor = Electric.ProcessRegistry.name(ctx.stack_id, Electric.StackTaskSupervisor)
     self_pid = self()
@@ -137,9 +137,12 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
 
     task =
       Task.Supervisor.async_nolink(supervisor, fn ->
+        snapshot_fun =
+          Electric.StackConfig.lookup(stack_id, :create_snapshot_fn, &stream_snapshot_from_db/5)
+
         try do
           result =
-            stream_snapshot_from_db(
+            snapshot_fun.(
               self_pid,
               consumer,
               shape_handle,
@@ -211,7 +214,6 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         %{storage: storage, stack_id: stack_id, db_pool: db_pool}
       ) do
     shape_attrs = telemetry_shape_attrs(shape_handle, shape)
-    chunk_bytes_threshold = Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold)
 
     Postgrex.transaction(
       db_pool,
@@ -270,35 +272,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
               })
 
             stream =
-              Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
-              |> Stream.transform(
-                fn -> false end,
-                fn item, acc ->
-                  if not acc do
-                    send(task_parent, :data_received)
-                    GenServer.cast(consumer, {:snapshot_started, shape_handle})
-                  end
-
-                  {[item], true}
-                end,
-                fn acc ->
-                  if not acc do
-                    # The stream has been read to the end but we haven't seen a single item in
-                    # it. Notify `consumer` anyway since an empty file will have been created by
-                    # the storage implementation for the API layer to read the snapshot data
-                    # from.
-                    send(task_parent, :data_received)
-                    GenServer.cast(consumer, {:snapshot_started, shape_handle})
-                  end
-
-                  {[], acc}
-                end,
-                fn acc ->
-                  # noop after fun just to be able to specify the last fun which is only
-                  # available in `Stream.transoform/5`.
-                  acc
-                end
-              )
+              stream_initial_data(task_parent, consumer, conn, stack_id, shape, shape_handle)
               |> Stream.concat([finishing_control_message])
 
             # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
@@ -312,6 +286,42 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
   catch
     :exit, {_, {DBConnection.Holder, :checkout, _}} ->
       raise SnapshotError.connection_not_available()
+  end
+
+  @doc false
+  # Used by Phoenix.Sync
+  def stream_initial_data(task_parent, consumer, conn, stack_id, shape, shape_handle) do
+    chunk_bytes_threshold = Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold)
+
+    Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
+    |> Stream.transform(
+      fn -> false end,
+      fn item, acc ->
+        if not acc do
+          send(task_parent, :data_received)
+          GenServer.cast(consumer, {:snapshot_started, shape_handle})
+        end
+
+        {[item], true}
+      end,
+      fn acc ->
+        if not acc do
+          # The stream has been read to the end but we haven't seen a single item in
+          # it. Notify `consumer` anyway since an empty file will have been created by
+          # the storage implementation for the API layer to read the snapshot data
+          # from.
+          send(task_parent, :data_received)
+          GenServer.cast(consumer, {:snapshot_started, shape_handle})
+        end
+
+        {[], acc}
+      end,
+      fn acc ->
+        # noop after fun just to be able to specify the last fun which is only
+        # available in `Stream.transoform/5`.
+        acc
+      end
+    )
   end
 
   defp query_span!(conn, span_name, span_attrs, query, params, stack_id) do
