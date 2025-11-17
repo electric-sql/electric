@@ -10,7 +10,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
   alias Electric.ShapeCache.LogChunker
 
   import Electric.Replication.LogOffset, only: :macros
-  import Electric.ShapeCache.PureFileStorage, only: [stream_open_file!: 3]
+  import Electric.ShapeCache.PureFileStorage, only: [safely_open_file!: 3]
 
   # 16 bytes offset + 4 bytes key size + 1 byte op type + 1 byte processed flag + 8 bytes json size = 30 bytes
   @line_overhead 16 + 4 + 1 + 1 + 8
@@ -140,12 +140,12 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
     current_position + key_size + @line_overhead
   end
 
+  # compaction only
   @spec stream_entries(
           log_file_path :: String.t(),
           start_position :: non_neg_integer(),
           excl_end_pos :: non_neg_integer() | :eof
         ) :: Enumerable.t({log_item_with_sizes(), non_neg_integer()})
-  # compaction only
   def stream_entries(log_file_path, start_position, end_position \\ :eof) do
     Stream.resource(
       fn ->
@@ -182,7 +182,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
         exclusive_min_offset
       ) do
     # We can read ahead entire chunk into memory since chunk sizes are expected to be ~10MB by default,
-    case stream_open_file!(opts, log_file_path, [:read, :raw]) do
+    case safely_open_file!(opts, log_file_path, [:read, :raw]) do
       {:halt, :data_removed} ->
         []
 
@@ -216,7 +216,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
       ) do
     Stream.resource(
       fn ->
-        case stream_open_file!(opts, log_file_path, [:read, :raw]) do
+        case safely_open_file!(opts, log_file_path, [:read, :raw]) do
           {:ok, file} ->
             {:ok, ^start_position} = :file.position(file, start_position)
             {file, ""}

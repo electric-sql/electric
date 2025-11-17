@@ -4,7 +4,7 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
   alias Electric.ShapeCache.PureFileStorage, as: ST
   alias Electric.ShapeCache.Storage
 
-  import Electric.ShapeCache.PureFileStorage, only: [stream_open_file!: 4]
+  import Electric.ShapeCache.PureFileStorage, only: [safely_open_file!: 4]
 
   @write_buffer_size 64 * 1024
 
@@ -92,7 +92,7 @@ defmodule Electric.ShapeCache.PureFileStorage.Snapshot do
 
     Stream.resource(
       fn ->
-        case stream_open_file!(
+        case safely_open_file!(
                opts,
                path,
                [:raw, :read, :read_ahead],
