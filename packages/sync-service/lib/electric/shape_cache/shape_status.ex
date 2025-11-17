@@ -301,8 +301,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
+  @doc """
+  Updates the last read time for the given shape to the current time.
+  """
   def update_last_read_time_to_now(stack_ref, shape_handle) do
-    :ets.insert(shape_last_used_table(stack_ref), {shape_handle, System.monotonic_time()})
+    update_last_read_time(stack_ref, shape_handle, System.monotonic_time())
+  end
+
+  @doc """
+  Sets the last read time for the given shape to the provided time.
+
+  Used for tests, otherwise prefer `update_last_read_time_to_now/2`.
+  """
+  def update_last_read_time(stack_ref, shape_handle, time) do
+    :ets.insert(shape_last_used_table(stack_ref), {shape_handle, time})
   end
 
   def least_recently_used(stack_ref, shape_count) do

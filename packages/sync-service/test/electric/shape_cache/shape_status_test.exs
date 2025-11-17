@@ -286,9 +286,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       {:ok, state, []} = new_state(ctx)
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
-      ShapeStatus.update_last_read_time_to_now(state, shape2)
-      Process.sleep(10)
-      ShapeStatus.update_last_read_time_to_now(state, shape1)
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
 
       assert [%{shape_handle: ^shape2}] = ShapeStatus.least_recently_used(state, _count = 1)
     end
@@ -333,11 +334,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       {:ok, state, []} = new_state(ctx)
 
       # Add 5 shapes with staggered updates
+      now = System.monotonic_time()
+
       shapes =
         for i <- 1..5 do
           {:ok, handle} = ShapeStatus.add_shape(state, shape!("test_#{i}"))
-          Process.sleep(5)
-          ShapeStatus.update_last_read_time_to_now(state, handle)
+          ShapeStatus.update_last_read_time(state, handle, now + i * 10)
           handle
         end
 
@@ -353,11 +355,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     test "returns shapes in order from least to most recently used", ctx do
       {:ok, state, []} = new_state(ctx)
 
+      now = System.monotonic_time()
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!("oldest"))
-      Process.sleep(5)
       {:ok, shape2} = ShapeStatus.add_shape(state, shape!("middle"))
-      Process.sleep(5)
       {:ok, shape3} = ShapeStatus.add_shape(state, shape!("newest"))
+
+      ShapeStatus.update_last_read_time(state, shape1, now)
+      ShapeStatus.update_last_read_time(state, shape2, now + 5)
+      ShapeStatus.update_last_read_time(state, shape3, now + 10)
 
       result = ShapeStatus.least_recently_used(state, _count = 3)
 
