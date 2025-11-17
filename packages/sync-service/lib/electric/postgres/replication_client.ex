@@ -44,7 +44,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_name,
       :slot_temporary?,
       :display_settings,
-      :txn_collector,
+      :message_converter,
       :operation_batcher,
       :publication_owner?,
       :replication_idle_timeout,
@@ -76,7 +76,7 @@ defmodule Electric.Postgres.ReplicationClient do
             slot_name: String.t(),
             slot_temporary?: boolean(),
             display_settings: [String.t()],
-            txn_collector: MessageConverter.t(),
+            message_converter: MessageConverter.t(),
             operation_batcher: OperationBatcher.t(),
             publication_owner?: boolean(),
             replication_idle_timeout: non_neg_integer(),
@@ -119,7 +119,7 @@ defmodule Electric.Postgres.ReplicationClient do
         __MODULE__,
         opts ++
           [
-            txn_collector: %MessageConverter{max_tx_size: max_txn_size},
+            message_converter: %MessageConverter{max_tx_size: max_txn_size},
             operation_batcher: OperationBatcher.new(@max_operation_batch_size)
           ]
       )
@@ -334,7 +334,7 @@ defmodule Electric.Postgres.ReplicationClient do
     end)
 
     case reply do
-      1 when MessageConverter.in_transaction?(state.txn_collector) ->
+      1 when MessageConverter.in_transaction?(state.message_converter) ->
         {:noreply, [encode_standby_status_update(state)], state}
 
       # if we are not in a transaction, advance the replication slot
@@ -344,7 +344,7 @@ defmodule Electric.Postgres.ReplicationClient do
         state = update_stored_wals(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
 
-      0 when MessageConverter.in_transaction?(state.txn_collector) ->
+      0 when MessageConverter.in_transaction?(state.message_converter) ->
         {:noreply, [], state}
 
       0 ->
@@ -369,14 +369,14 @@ defmodule Electric.Postgres.ReplicationClient do
     #     message_type <> " :: " <> inspect(Map.from_struct(msg))
     # )
 
-    case MessageConverter.convert(msg, state.txn_collector) do
+    case MessageConverter.convert(msg, state.message_converter) do
       {:error, reason, _} ->
         {:disconnect, {:irrecoverable_slot, reason}}
 
-      {operations, txn_collector} ->
+      {operations, message_converter} ->
         {batch, batcher} = OperationBatcher.batch(operations, state.operation_batcher)
 
-        state = %{state | txn_collector: txn_collector, operation_batcher: batcher}
+        state = %{state | message_converter: message_converter, operation_batcher: batcher}
 
         {m, f, args} = state.handle_operations
 
@@ -389,7 +389,7 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   defp maybe_update_flush_up_to_date(state) do
-    if MessageConverter.in_transaction?(state.txn_collector) do
+    if MessageConverter.in_transaction?(state.message_converter) do
       %{state | flush_up_to_date?: false}
     else
       state
