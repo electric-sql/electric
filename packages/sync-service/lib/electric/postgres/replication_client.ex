@@ -9,6 +9,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
+  alias Electric.Replication.OperationBatcher
 
   require Logger
   require MessageConverter
@@ -44,6 +45,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_temporary?,
       :display_settings,
       :txn_collector,
+      :operation_batcher,
       :publication_owner?,
       :replication_idle_timeout,
       step: :disconnected,
@@ -75,6 +77,7 @@ defmodule Electric.Postgres.ReplicationClient do
             slot_temporary?: boolean(),
             display_settings: [String.t()],
             txn_collector: MessageConverter.t(),
+            operation_batcher: OperationBatcher.t(),
             publication_owner?: boolean(),
             replication_idle_timeout: non_neg_integer(),
             step: Electric.Postgres.ReplicationClient.step(),
@@ -102,6 +105,8 @@ defmodule Electric.Postgres.ReplicationClient do
                    max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
                  )
 
+    @max_operation_batch_size 4
+
     @spec new(Access.t()) :: t()
     def new(opts) do
       opts = NimbleOptions.validate!(opts, @opts_schema)
@@ -112,7 +117,11 @@ defmodule Electric.Postgres.ReplicationClient do
 
       struct!(
         __MODULE__,
-        opts ++ [txn_collector: %MessageConverter{max_tx_size: max_txn_size}]
+        opts ++
+          [
+            txn_collector: %MessageConverter{max_tx_size: max_txn_size},
+            operation_batcher: OperationBatcher.new(@max_operation_batch_size)
+          ]
       )
     end
   end
@@ -364,11 +373,14 @@ defmodule Electric.Postgres.ReplicationClient do
       {:error, reason, _} ->
         {:disconnect, {:irrecoverable_slot, reason}}
 
-      {changes, txn_collector} ->
-        state = %{state | txn_collector: txn_collector}
+      {operations, txn_collector} ->
+        {batch, batcher} = OperationBatcher.batch(operations, state.operation_batcher)
+
+        state = %{state | txn_collector: txn_collector, operation_batcher: batcher}
+
         {m, f, args} = state.handle_operations
 
-        apply_with_retries({m, f, [changes | args]}, state)
+        apply_with_retries({m, f, [batch | args]}, state)
 
         state
         |> maybe_update_flush_up_to_date()

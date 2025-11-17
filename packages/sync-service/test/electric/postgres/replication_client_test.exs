@@ -202,7 +202,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       interrupt_val = "interrupt #{inspect(pid)}"
       insert_item(conn, interrupt_val)
-      assert_receive {:from_replication, [%Begin{}]}
       refute_receive {:from_replication, _}, 50
       Process.exit(pid, :some_reason)
 
@@ -234,7 +233,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
       start_supervised({MockTransactionProcessor, self()})
 
       # once we start streaming we should see it processed
-      assert %Relation{table: "items", columns: [_, _]} = receive_rel_change()
       assert %NewRecord{record: %{"value" => "test value 1"}} = receive_tx_change()
 
       # should have same behaviour mid-processing
@@ -710,7 +708,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
   # Special handling for the items table to enable testing of various edge cases that depend on the result of transaction processing.
   def test_handle_operations(
-        [%NewRecord{relation: {"public", "items"}} = change] = changes,
+        [%Begin{}, %NewRecord{relation: {"public", "items"}} = change, %Commit{}] = changes,
         test_pid
       ) do
     case Map.fetch!(change.record, "value") do
@@ -730,12 +728,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
   end
 
-  def test_handle_operations(changes, test_pid) when is_list(changes) do
-    send(test_pid, {:from_replication, changes})
-    :ok
-  end
+  def test_handle_operations([], _test_pid), do: :ok
 
-  def test_handle_operations(%Relation{}, _test_pid) do
+  def test_handle_operations(operations, test_pid) when is_list(operations) do
+    send(test_pid, {:from_replication, operations})
     :ok
   end
 
@@ -770,13 +766,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
     {id, bin_uuid}
   end
 
-  defp receive_rel_change do
-    assert_receive {:from_replication, [%Relation{} = change]},
-                   @assert_receive_db_timeout
-
-    change
-  end
-
   defp receive_tx_change do
     {_lsn, change} = receive_tx_change_with_lsn()
     change
@@ -787,15 +776,23 @@ defmodule Electric.Postgres.ReplicationClientTest do
     {lsn, change}
   end
 
-  defp receive_transaction(changes \\ nil) do
+  defp receive_transaction(acc \\ [])
+
+  defp receive_transaction([%Commit{lsn: lsn} | operations]) do
+    [%Begin{} | changes] =
+      operations
+      |> Enum.reject(&match?(%Relation{}, &1))
+      |> Enum.reverse()
+
+    {lsn, changes}
+  end
+
+  defp receive_transaction(acc) do
     receive do
-      {:from_replication, [%Begin{}]} -> receive_transaction([])
-      {:from_replication, [%Relation{}]} -> receive_transaction(changes)
-      {:from_replication, [%Commit{lsn: lsn}]} -> {lsn, Enum.reverse(changes)}
-      {:from_replication, [change]} -> receive_transaction([change | changes])
+      {:from_replication, operations} -> receive_transaction(Enum.reverse(operations) ++ acc)
     after
       @assert_receive_db_timeout ->
-        raise "Expected transaction but got #{inspect(Enum.reverse(changes), pretty: true)}"
+        raise "Expected transaction but got #{inspect(Enum.reverse(acc), pretty: true)}"
     end
   end
 
