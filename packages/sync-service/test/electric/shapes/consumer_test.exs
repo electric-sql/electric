@@ -18,7 +18,12 @@ defmodule Electric.Shapes.ConsumerTest do
   import Support.ComponentSetup
 
   import Support.TestUtils,
-    only: [expect_calls: 2, patch_shape_status: 1, expect_shape_status: 1, patch_snapshotter: 1]
+    only: [
+      expect_calls: 2,
+      patch_shape_status: 1,
+      expect_shape_status: 1,
+      patch_snapshotter: 1
+    ]
 
   @receive_timeout 1_000
   @shape_cleanup_timeout 5_000
@@ -147,6 +152,7 @@ defmodule Electric.Shapes.ConsumerTest do
       )
 
       Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer)
+      Support.TestUtils.activate_mocks_for_descendant_procs(Electric.ShapeCache.ShapeCleaner)
 
       consumers =
         for {shape_handle, shape} <- ctx.shapes do

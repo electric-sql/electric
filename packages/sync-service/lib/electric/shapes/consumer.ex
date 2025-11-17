@@ -24,6 +24,7 @@ defmodule Electric.Shapes.Consumer do
 
   @default_snapshot_timeout 45_000
   @stop_and_clean_timeout 30_000
+  @stop_and_clean_reason ShapeCleaner.consumer_cleanup_reason()
 
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
     ConsumerRegistry.name(stack_id, shape_handle)
@@ -71,17 +72,13 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def stop(pid, reason) when is_pid(pid) do
-    # consumers call ShapeCleaner.remove_shape themselves, in which case a call
-    # here would deadlock because the consumer would be calling itself (and in
-    # fact the beam/elixir prevents a process calling itself) so instead we
-    # cast here
-    if pid == self() do
-      GenServer.cast(pid, {:stop, reason})
-    else
+    if Process.alive?(pid) do
       GenServer.call(pid, {:stop, reason}, @stop_and_clean_timeout)
+    else
+      :ok
     end
   catch
-    :exit, ^reason -> :ok
+    :exit, _reason -> :ok
   end
 
   def stop(stack_id, shape_handle, reason) do
@@ -206,8 +203,12 @@ defmodule Electric.Shapes.Consumer do
 
       {:noreply, state}
     else
-      {:noreply, terminate_safely(state)}
+      stop_and_clean(state)
     end
+  end
+
+  def handle_continue(:stop_and_clean, state) do
+    stop_and_clean(state)
   end
 
   @impl GenServer
@@ -234,7 +235,14 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_call({:handle_event, event, trace_context}, _from, state) do
     OpenTelemetry.set_current_context(trace_context)
-    {:reply, :ok, handle_event(event, state), state.hibernate_after}
+
+    case handle_event(event, state) do
+      %{terminating?: true} = state ->
+        {:reply, :ok, state, {:continue, :stop_and_clean}}
+
+      state ->
+        {:reply, :ok, state, state.hibernate_after}
+    end
   end
 
   def handle_call({:subscribe_materializer, pid}, _from, state) do
@@ -266,7 +274,13 @@ defmodule Electric.Shapes.Consumer do
       }
       |> set_pg_snapshot(state)
 
-    {:noreply, handle_txns(state.buffer, %{state | buffer: []}), state.hibernate_after}
+    case handle_txns(state.buffer, %{state | buffer: []}) do
+      %{terminating?: true} = state ->
+        stop_and_clean(state)
+
+      state ->
+        {:noreply, state, state.hibernate_after}
+    end
   end
 
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
@@ -286,12 +300,9 @@ defmodule Electric.Shapes.Consumer do
       clean_table(root_table_id, state)
     end
 
-    state =
-      state
-      |> reply_to_snapshot_waiters({:error, error})
-      |> terminate_safely()
-
-    {:noreply, state}
+    state
+    |> reply_to_snapshot_waiters({:error, error})
+    |> stop_and_clean()
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
@@ -301,11 +312,6 @@ defmodule Electric.Shapes.Consumer do
       |> set_snapshot_started()
 
     {:noreply, state, state.hibernate_after}
-  end
-
-  def handle_cast({:stop, reason}, state) do
-    {reason, state} = stop_with_reason(reason, state)
-    {:stop, reason, state}
   end
 
   @impl GenServer
@@ -323,12 +329,12 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_info({:materializer_changes, shape_handle, events}, state) do
     Logger.debug("Materializer changes for #{shape_handle}: #{inspect(events)}")
-    {:noreply, terminate_safely(state)}
+    stop_and_clean(state)
   end
 
   def handle_info({:materializer_shape_invalidated, shape_handle}, state) do
     Logger.warning("Materializer shape invalidated for #{shape_handle}")
-    {:noreply, terminate_safely(state)}
+    stop_and_clean(state)
   end
 
   def handle_info({:materializer_down, _ref, :process, pid, reason}, state) do
@@ -373,12 +379,9 @@ defmodule Electric.Shapes.Consumer do
       end
     end)
 
-    # clean shutdown so no need to do any cleanup even if the reason is an error
-    if !state.terminating? do
-      case ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason) do
-        :ok -> terminate_writer(state)
-        :removed -> :ok
-      end
+    case ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason) do
+      :ok -> terminate_writer(state)
+      :removed -> :ok
     end
 
     reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
@@ -399,7 +402,7 @@ defmodule Electric.Shapes.Consumer do
 
     state
     |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
-    |> terminate_safely()
+    |> mark_for_removal()
   end
 
   # Buffer incoming transactions until we know our pg_snapshot
@@ -504,7 +507,7 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        terminate_safely(state)
+        state = mark_for_removal(state)
 
         {:halt, notify(txn, state)}
 
@@ -618,41 +621,28 @@ defmodule Electric.Shapes.Consumer do
   # 2. request a notification when all active shape data reads are complete
   # 3. exit the process when we receive that notification
 
-  defp terminate_safely(%{terminating?: true} = state) do
+  defp mark_for_removal(%{terminating?: true} = state) do
     state
   end
 
-  defp terminate_safely(state) do
-    %{stack_id: stack_id, shape_handle: shape_handle} = state
-
-    ShapeCleaner.remove_shape(stack_id, shape_handle)
-
-    %{state | terminating?: true}
-  end
-
-  defp terminate_writer(state) do
-    {writer, state} = Map.pop(state, :writer)
-
-    try do
-      if writer, do: ShapeCache.Storage.terminate(writer)
-    rescue
-      # In the case of shape removal, the deletion of the storage directory
-      # may happen before we have a chance to terminate the storage
-      File.Error -> :ok
-    end
-
-    state
+  defp mark_for_removal(state) do
+    # remove the writer state to save on a pointless Storage.terminate/1 call
+    Map.delete(%{state | terminating?: true}, :writer)
   end
 
   defp stop_with_reason(reason, state) do
     {reason, state} =
       case reason do
         # map reason to a clean shutdown to avoid exceptions/errors
-        {:error, _} = error -> {{:shutdown, :cleanup}, reply_to_snapshot_waiters(state, error)}
-        reason -> {reason, state}
+        {:error, _} = error ->
+          state = state |> reply_to_snapshot_waiters(error) |> mark_for_removal()
+          {@stop_and_clean_reason, state}
+
+        reason ->
+          {reason, %{state | terminating?: true}}
       end
 
-    {reason, terminate_writer(%{state | terminating?: true})}
+    {reason, state}
   end
 
   defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
@@ -811,8 +801,26 @@ defmodule Electric.Shapes.Consumer do
       {_, true} -> {:noreply, state}
       {{:shutdown, _}, false} -> {:stop, reason, state}
       {:shutdown, false} -> {:stop, reason, state}
-      _ -> {:noreply, terminate_safely(state)}
+      _ -> stop_and_clean(state)
     end
+  end
+
+  defp stop_and_clean(state) do
+    {:stop, @stop_and_clean_reason, mark_for_removal(state)}
+  end
+
+  defp terminate_writer(state) do
+    {writer, state} = Map.pop(state, :writer)
+
+    try do
+      if writer, do: ShapeCache.Storage.terminate(writer)
+    rescue
+      # In the case of shape removal, the deletion of the storage directory
+      # may happen before we have a chance to terminate the storage
+      File.Error -> :ok
+    end
+
+    state
   end
 
   if Mix.env() == :test do

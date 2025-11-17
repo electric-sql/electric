@@ -18,14 +18,17 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type stack_id() :: Electric.stack_id()
 
+  @shutdown_cleanup {:shutdown, :cleanup}
+
   def child_spec(args) do
     CleanupTaskSupervisor.child_spec(args)
   end
 
   # Public API
+  def consumer_cleanup_reason, do: @shutdown_cleanup
 
   @spec remove_shapes(stack_id(), [shape_handle()], term()) :: :ok | {:error, term()}
-  def remove_shapes(stack_id, shape_handles, reason \\ {:shutdown, :cleanup})
+  def remove_shapes(stack_id, shape_handles, reason \\ @shutdown_cleanup)
       when is_list(shape_handles) do
     OpenTelemetry.with_span(
       "shape_cleaner.remove_shapes",
@@ -41,13 +44,15 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   @spec remove_shape(stack_id(), shape_handle(), term()) :: :ok | {:error, term()}
-  def remove_shape(stack_id, shape_handle, reason \\ {:shutdown, :cleanup}) do
+  def remove_shape(stack_id, shape_handle, reason \\ @shutdown_cleanup) do
     remove_shapes(stack_id, List.wrap(shape_handle), reason)
   end
 
   @spec remove_shapes_async(stack_id(), [shape_handle()]) :: :ok
   def remove_shapes_async(stack_id, shape_handles) do
     CleanupTaskSupervisor.perform_async(stack_id, fn ->
+      activate_mocked_functions_from_test_process()
+
       remove_shapes(stack_id, shape_handles)
     end)
   end
@@ -58,7 +63,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   @spec remove_shapes_for_relations(list(Electric.oid_relation()), stack_id(), term()) :: :ok
-  def remove_shapes_for_relations(stack_id, relations, reason \\ {:shutdown, :cleanup})
+  def remove_shapes_for_relations(stack_id, relations, reason \\ @shutdown_cleanup)
 
   def remove_shapes_for_relations(_stack_id, [], _reason) do
     :ok
@@ -77,6 +82,14 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
       remove_shapes(stack_id, affected_shapes, reason)
     end)
+  end
+
+  def handle_writer_termination(stack_id, shape_handle, @shutdown_cleanup) do
+    Logger.info("Removing shape #{inspect(shape_handle)}")
+
+    remove_shape_async(stack_id, shape_handle)
+
+    :removed
   end
 
   def handle_writer_termination(_stack_id, _shape_handle, reason)
@@ -99,7 +112,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
       "Removing shape #{inspect(shape_handle)} due to abnormal shutdown: #{reason_message}"
     )
 
-    remove_shape(stack_id, shape_handle)
+    remove_shape_async(stack_id, shape_handle)
 
     :removed
   end
@@ -133,7 +146,8 @@ defmodule Electric.ShapeCache.ShapeCleaner do
              OpenTelemetry.start_interval("remove_shape.storage_cleanup"),
              :ok <- Storage.cleanup!(stack_storage, shape_handle),
              OpenTelemetry.start_interval("remove_shape.shape_log_collector_remove"),
-             :ok <- Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle) do
+             :ok <-
+               Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle) do
           :ok
         end
 
@@ -145,5 +159,13 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   defp remove_shapes_deferred(stack_id, shape_handles) when is_list(shape_handles) do
     OpenTelemetry.start_interval("remove_shape.remove_shapes_deferred")
     :ok = CleanupTaskSupervisor.cleanup_async(stack_id, shape_handles)
+  end
+
+  if Mix.env() == :test do
+    def activate_mocked_functions_from_test_process do
+      Support.TestUtils.activate_mocked_functions_for_module(__MODULE__)
+    end
+  else
+    def activate_mocked_functions_from_test_process, do: :noop
   end
 end
