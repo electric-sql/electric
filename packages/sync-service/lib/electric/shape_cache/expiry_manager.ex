@@ -72,9 +72,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
 
   defp expire_shapes(shape_count, state) do
     number_to_expire = shape_count - state.max_shapes
-    shapes_to_expire = least_recently_used(state, number_to_expire)
-
-    latest = Enum.at(shapes_to_expire, -1)
+    {handles_to_expire, min_age} = least_recently_used(state, number_to_expire)
 
     Logger.info(
       "Expiring #{number_to_expire} shapes as the number of shapes " <>
@@ -87,13 +85,10 @@ defmodule Electric.ShapeCache.ExpiryManager do
         max_shapes: state.max_shapes,
         shape_count: shape_count,
         number_to_expire: number_to_expire,
-        elapsed_minutes_since_use: latest.elapsed_minutes_since_use
+        elapsed_minutes_since_use: min_age
       ],
       fn ->
-        Electric.ShapeCache.ShapeCleaner.remove_shapes(
-          state.stack_id,
-          Enum.map(shapes_to_expire, & &1.shape_handle)
-        )
+        Electric.ShapeCache.ShapeCleaner.remove_shapes(state.stack_id, handles_to_expire)
       end
     )
   end
