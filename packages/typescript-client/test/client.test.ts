@@ -1711,6 +1711,44 @@ describe.for(fetchAndSse)(
       expect(titles).toEqual([`c`, `b`])
     })
 
+    it(`requestSnapshot works in full mode (progressive sync)`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `A` }, { title: `B` }, { title: `C` })
+
+      // Create a shape in full mode (default/progressive sync)
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        // No log parameter = full mode (default)
+        liveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Wait for initial sync to complete
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(3)
+      })
+
+      // Verify mode is full
+      expect(shape.mode).toBe(`full`)
+
+      // Request a subset snapshot while in full mode
+      // This should work after our fix (previously threw an error)
+      const { data } = await shapeStream.requestSnapshot({
+        where: `title = 'B'`,
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+
+      // Verify we got the correct subset
+      const titles = data.map((m) => m.value.title)
+      expect(titles).toEqual([`B`])
+    })
+
     it(`should stream updates after snapshot completes`, async ({
       issuesTableUrl,
       insertIssues,
