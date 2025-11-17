@@ -1,13 +1,32 @@
 import { Row, Schema } from './types'
 
 /**
- * A bidirectional column mapper that handles transforming column names
+ * A bidirectional column mapper that handles transforming column **names**
  * between database format (e.g., snake_case) and application format (e.g., camelCase).
+ *
+ * **Important**: ColumnMapper only transforms column names, not column values or types.
+ * For type conversions (e.g., string → Date), use the `parser` option.
+ * For value transformations (e.g., encryption), use the `transformer` option.
+ *
+ * @example
+ * ```typescript
+ * // Column name transformation only
+ * const mapper = snakeCamelMapper()
+ * mapper.decode({ user_id: '123' }) // { userId: '123' } - name changed, value unchanged
+ *
+ * // For type conversion, use parser
+ * const stream = new ShapeStream({
+ *   parser: { timestamptz: (str) => new Date(str) }, // Type conversion
+ *   columnMapper: snakeCamelMapper() // Column renaming
+ * })
+ * ```
  */
 export interface ColumnMapper<Extensions = never> {
   /**
    * Transform a row from database format to application format (decode).
    * Applied to data received from Electric.
+   *
+   * Only renames columns - does not transform values.
    */
   decode: (row: Row<Extensions>) => Row<Extensions>
 
@@ -276,14 +295,29 @@ export function encodeWhereClause(
  * When a schema is provided, it will only map columns that exist in the schema.
  * Otherwise, it will map any column name it encounters.
  *
+ * **⚠️ Limitations and Edge Cases:**
+ * - **WHERE clause encoding**: Uses regex-based parsing which may not handle all complex
+ *   SQL expressions. Test thoroughly with your queries, especially those with:
+ *   - Complex nested expressions
+ *   - Custom operators or functions
+ *   - Column names that conflict with SQL keywords
+ * - **Acronym ambiguity**: `userID` → `user_id` → `userId` (ID becomes Id after roundtrip)
+ *   Use `createColumnMapper()` with explicit mapping if you need exact control
+ * - **Type conversion**: This only renames columns, not values. Use `parser` for type conversion
+ *
+ * **When to use explicit mapping instead:**
+ * - You have column names that don't follow snake_case/camelCase patterns
+ * - You need exact control over mappings (e.g., `id` → `identifier`)
+ * - Your WHERE clauses are complex and automatic encoding fails
+ *
  * @param schema - Optional database schema to constrain mapping to known columns
  * @returns A ColumnMapper for snake_case ↔ camelCase conversion
  *
  * @example
- * // Without schema - maps any column
+ * // Basic usage
  * const mapper = snakeCamelMapper()
  *
- * // With schema - only maps columns in schema
+ * // With schema - only maps columns in schema (recommended)
  * const mapper = snakeCamelMapper(schema)
  *
  * // Use with ShapeStream
@@ -291,6 +325,13 @@ export function encodeWhereClause(
  *   url: 'http://localhost:3000/v1/shape',
  *   params: { table: 'todos' },
  *   columnMapper: snakeCamelMapper()
+ * })
+ *
+ * @example
+ * // If automatic encoding fails, fall back to manual column names in WHERE clauses:
+ * stream.requestSnapshot({
+ *   where: "user_id = $1", // Use database column names directly if needed
+ *   params: { "1": "123" }
  * })
  */
 export function snakeCamelMapper<Extensions = never>(

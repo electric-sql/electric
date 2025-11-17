@@ -577,8 +577,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
 
-    // Use columnMapper.decode if provided, otherwise fall back to transformer
-    const transformer = options.columnMapper?.decode ?? options.transformer
+    // Chain columnMapper.decode and transformer if both are provided
+    // Execution order: columnMapper.decode runs first, then transformer
+    const transformer =
+      options.columnMapper && options.transformer
+        ? (row: Row<GetExtensions<T>>) =>
+            options.transformer!(options.columnMapper!.decode(row))
+        : options.columnMapper?.decode ?? options.transformer
     this.#messageParser = new MessageParser<T>(options.parser, transformer)
 
     this.#onError = this.options.onError

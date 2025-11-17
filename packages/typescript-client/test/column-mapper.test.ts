@@ -292,3 +292,33 @@ describe(`encodeWhereClause`, () => {
     ).toBe(`first_name = 'John' AND last_name = 'Doe' AND user_id = $1`)
   })
 })
+
+describe(`columnMapper and transformer together`, () => {
+  it(`should chain columnMapper.decode and transformer`, () => {
+    const mapper = createColumnMapper({
+      user_id: `userId`,
+      created_at: `createdAt`,
+    })
+
+    // Simulating what ShapeStream does
+    const transformer = (row: Record<string, unknown>) => ({
+      ...row,
+      // Transform the value (after column rename)
+      createdAt: new Date(row.createdAt as string),
+    })
+
+    // Chained: columnMapper first, then transformer
+    const chained = (row: Record<string, unknown>) =>
+      transformer(mapper.decode(row))
+
+    const result = chained({
+      user_id: `123`,
+      created_at: `2025-01-17T00:00:00Z`,
+    })
+
+    expect(result).toEqual({
+      userId: `123`, // Column renamed by mapper
+      createdAt: new Date(`2025-01-17T00:00:00Z`), // Value transformed by transformer
+    })
+  })
+})
