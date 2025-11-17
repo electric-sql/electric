@@ -286,9 +286,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       {:ok, state, []} = new_state(ctx)
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
-      ShapeStatus.update_last_read_time_to_now(state, shape2)
-      Process.sleep(10)
-      ShapeStatus.update_last_read_time_to_now(state, shape1)
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
 
       assert [%{shape_handle: ^shape2}] = ShapeStatus.least_recently_used(state, _count = 1)
     end
@@ -315,6 +316,65 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       ShapeStatus.remove_shape(state, shape2)
 
       assert [] == ShapeStatus.least_recently_used(state, _count = 1)
+    end
+
+    test "returns all shapes when count exceeds total shapes", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      result = ShapeStatus.least_recently_used(state, _count = 100)
+      assert length(result) == 2
+      handles = Enum.map(result, & &1.shape_handle)
+      assert shape1 in handles
+      assert shape2 in handles
+    end
+
+    test "returns correct N shapes when N < total shapes", ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      # Add 5 shapes with staggered updates
+      now = System.monotonic_time()
+
+      shapes =
+        for i <- 1..5 do
+          {:ok, handle} = ShapeStatus.add_shape(state, shape!("test_#{i}"))
+          ShapeStatus.update_last_read_time(state, handle, now + i * 10)
+          handle
+        end
+
+      # Request the 3 least recently used (should be the first 3)
+      result = ShapeStatus.least_recently_used(state, _count = 3)
+      assert length(result) == 3
+
+      expected_handles = Enum.take(shapes, 3)
+      result_handles = Enum.map(result, & &1.shape_handle)
+      assert expected_handles == result_handles
+    end
+
+    test "returns shapes in order from least to most recently used", ctx do
+      {:ok, state, []} = new_state(ctx)
+
+      now = System.monotonic_time()
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!("oldest"))
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape!("middle"))
+      {:ok, shape3} = ShapeStatus.add_shape(state, shape!("newest"))
+
+      ShapeStatus.update_last_read_time(state, shape1, now)
+      ShapeStatus.update_last_read_time(state, shape2, now + 5)
+      ShapeStatus.update_last_read_time(state, shape3, now + 10)
+
+      result = ShapeStatus.least_recently_used(state, _count = 3)
+
+      assert [
+               %{shape_handle: ^shape1},
+               %{shape_handle: ^shape2},
+               %{shape_handle: ^shape3}
+             ] = result
+
+      # Verify elapsed time is in ascending order (oldest has most elapsed time)
+      times = Enum.map(result, & &1.elapsed_minutes_since_use)
+      assert times == Enum.sort(times, :desc)
     end
   end
 

@@ -301,21 +301,60 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
+  @doc """
+  Updates the last read time for the given shape to the current time.
+  """
   def update_last_read_time_to_now(stack_ref, shape_handle) do
-    :ets.insert(shape_last_used_table(stack_ref), {shape_handle, System.monotonic_time()})
+    update_last_read_time(stack_ref, shape_handle, System.monotonic_time())
+  end
+
+  @doc """
+  Sets the last read time for the given shape to the provided time.
+
+  Used for tests, otherwise prefer `update_last_read_time_to_now/2`.
+  """
+  def update_last_read_time(stack_ref, shape_handle, time) do
+    :ets.insert(shape_last_used_table(stack_ref), {shape_handle, time})
   end
 
   def least_recently_used(stack_ref, shape_count) do
-    :ets.tab2list(shape_last_used_table(stack_ref))
-    |> Enum.sort_by(fn {_handle, last_read} -> last_read end)
-    |> Stream.map(fn {handle, last_read} ->
+    now = System.monotonic_time()
+    table = shape_last_used_table(stack_ref)
+
+    # Use :ets.foldl with gb_trees to efficiently maintain top N without copying
+    # entire table into memory and without sorting on every iteration
+    tree =
+      :ets.foldl(
+        fn {handle, last_read}, tree ->
+          if :gb_trees.size(tree) < shape_count do
+            # Insert into the tree until we reach the desired size
+            :gb_trees.insert(last_read, handle, tree)
+          else
+            # If entry being examined was used less recently than the
+            # most recently used tracked entry in the tree so far, replace it
+            {most_recent_tracked, _handle} = :gb_trees.largest(tree)
+
+            if last_read < most_recent_tracked do
+              tree = :gb_trees.delete(most_recent_tracked, tree)
+              :gb_trees.insert(last_read, handle, tree)
+            else
+              tree
+            end
+          end
+        end,
+        :gb_trees.empty(),
+        table
+      )
+
+    # Convert tree to list and compute elapsed time since last use
+    :gb_trees.to_list(tree)
+    |> Enum.map(fn {last_read, handle} ->
       %{
         shape_handle: handle,
         elapsed_minutes_since_use:
-          System.convert_time_unit(System.monotonic_time() - last_read, :native, :second) / 60
+          System.convert_time_unit(now - last_read, :native, :second) / 60
       }
     end)
-    |> Enum.take(shape_count)
   end
 
   def latest_offset!(stack_ref, shape_handle) do
