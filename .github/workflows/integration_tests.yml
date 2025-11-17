@@ -60,7 +60,7 @@ jobs:
         working-directory: packages/sync-service
 
       - name: Compile
-        run: mix compile --force --all-warnings --warnings-as-errors
+        run: mix compile
         working-directory: packages/sync-service
 
       - name: Setup lux

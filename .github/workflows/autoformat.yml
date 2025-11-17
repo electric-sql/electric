@@ -1,0 +1,74 @@
+name: Autoformat & Linting
+
+on:
+  push:
+    branches: ['main']
+    paths-ignore:
+      - 'website/**'
+      - '**/README.md'
+  pull_request:
+    paths-ignore:
+      - 'website/**'
+      - '**/README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  autoformat:
+    name: Check formatting and linting
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # TypeScript/JavaScript formatting and linting
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Prettier formatting
+        run: pnpm run format:check
+
+      - name: Check ESLint (all packages)
+        run: pnpm run stylecheck-all
+
+      # Elixir formatting and compilation warnings
+      - name: Setup Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: '.tool-versions'
+
+      - name: Restore Elixir dependencies cache
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/sync-service/deps
+          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-sync-service-deps-
+
+      - name: Install Elixir dependencies
+        run: mix deps.get
+        working-directory: packages/sync-service
+
+      - name: Check Elixir formatting
+        run: mix format --check-formatted
+        working-directory: packages/sync-service
+
+      - name: Check Elixir compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors
+        working-directory: packages/sync-service

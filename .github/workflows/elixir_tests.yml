@@ -136,38 +136,3 @@ jobs:
           # Upload all PR test results to single branch - requires overriding branch and commit
           override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
           override_commit: ${{ github.event_name == 'pull_request' && env.DUMMY_COMMIT_SHA || '' }}
-
-  formatting:
-    name: Check formatting for sync-service
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/sync-service
-    env:
-      MIX_ENV: test
-      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: erlef/setup-beam@v1
-        with:
-          version-type: strict
-          version-file: '.tool-versions'
-
-      - name: Restore dependencies cache
-        uses: actions/cache/restore@v4
-        with:
-          path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-deps-
-
-      - run: mix deps.get
-
-      - name: Check formatting
-        run: mix format --check-formatted
-
-      - name: Compiles without warnings
-        run: mix compile --force --all-warnings --warnings-as-errors
