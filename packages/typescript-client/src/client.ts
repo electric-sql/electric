@@ -295,14 +295,45 @@ export interface ShapeStreamOptions<T = never> {
   parser?: Parser<T>
 
   /**
-   * @deprecated Use `columnMapper` instead for bidirectional column name transformation.
-   * `transformer` only handles decoding (database → application) but cannot encode
-   * WHERE clauses. `columnMapper` handles both directions automatically.
+   * Function to transform rows after parsing (e.g., for encryption, type coercion).
+   * Applied to data received from Electric.
    *
-   * For snake_case ↔ camelCase conversion, use:
+   * **Note**: If you're using `transformer` solely for column name transformation
+   * (e.g., snake_case → camelCase), consider using `columnMapper` instead, which
+   * provides bidirectional transformation and automatically encodes WHERE clauses.
+   *
+   * **Execution order** when both are provided:
+   * 1. `columnMapper.decode` runs first (renames columns)
+   * 2. `transformer` runs second (transforms values)
+   *
+   * @example
    * ```typescript
+   * // For column renaming only - use columnMapper
    * import { snakeCamelMapper } from '@electric-sql/client'
    * const stream = new ShapeStream({ columnMapper: snakeCamelMapper() })
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // For value transformation (encryption, etc.) - use transformer
+   * const stream = new ShapeStream({
+   *   transformer: (row) => ({
+   *     ...row,
+   *     encrypted_field: decrypt(row.encrypted_field)
+   *   })
+   * })
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Use both together
+   * const stream = new ShapeStream({
+   *   columnMapper: snakeCamelMapper(), // Runs first: renames columns
+   *   transformer: (row) => ({         // Runs second: transforms values
+   *     ...row,
+   *     encryptedData: decrypt(row.encryptedData)
+   *   })
+   * })
    * ```
    */
   transformer?: TransformFunction<T>
@@ -778,11 +809,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Add PostgreSQL-specific parameters
     if (params) {
       if (params.table) setQueryParam(fetchUrl, TABLE_QUERY_PARAM, params.table)
-      if (params.where) {
-        // Apply column name encoding if columnMapper is provided
-        const encodedWhere = this.options.columnMapper
-          ? encodeWhereClause(params.where, this.options.columnMapper.encode)
-          : params.where
+      if (params.where && typeof params.where === `string`) {
+        const encodedWhere = encodeWhereClause(
+          params.where,
+          this.options.columnMapper?.encode
+        )
         setQueryParam(fetchUrl, WHERE_QUERY_PARAM, encodedWhere)
       }
       if (params.columns)
@@ -806,10 +837,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     if (subsetParams) {
       if (subsetParams.where) {
-        // Apply column name encoding if columnMapper is provided
-        const encodedWhere = this.options.columnMapper
-          ? encodeWhereClause(subsetParams.where, this.options.columnMapper.encode)
-          : subsetParams.where
+        const encodedWhere = encodeWhereClause(
+          subsetParams.where,
+          this.options.columnMapper?.encode
+        )
         setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, encodedWhere)
       }
       if (subsetParams.params)
@@ -819,13 +850,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (subsetParams.offset)
         setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
       if (subsetParams.orderBy) {
-        // Apply column name encoding to ORDER BY clause if columnMapper is provided
-        const encodedOrderBy = this.options.columnMapper
-          ? encodeWhereClause(
-              subsetParams.orderBy,
-              this.options.columnMapper.encode
-            )
-          : subsetParams.orderBy
+        const encodedOrderBy = encodeWhereClause(
+          subsetParams.orderBy,
+          this.options.columnMapper?.encode
+        )
         setQueryParam(fetchUrl, SUBSET_PARAM_ORDER_BY, encodedOrderBy)
       }
     }

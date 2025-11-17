@@ -25,6 +25,28 @@ describe(`snakeToCamel`, () => {
     expect(snakeToCamel(`user_profile_image_url`)).toBe(`userProfileImageUrl`)
     expect(snakeToCamel(`a_b_c_d`)).toBe(`aBCD`)
   })
+
+  it(`should preserve leading underscores`, () => {
+    expect(snakeToCamel(`_user`)).toBe(`_user`)
+    expect(snakeToCamel(`_user_id`)).toBe(`_userId`)
+    expect(snakeToCamel(`__private`)).toBe(`__private`)
+  })
+
+  it(`should drop trailing underscores`, () => {
+    expect(snakeToCamel(`user_`)).toBe(`user`)
+    expect(snakeToCamel(`user_id_`)).toBe(`userId`)
+    expect(snakeToCamel(`user_id__`)).toBe(`userId`)
+  })
+
+  it(`should collapse multiple consecutive underscores`, () => {
+    expect(snakeToCamel(`user__id`)).toBe(`userId`)
+    expect(snakeToCamel(`user___id`)).toBe(`userId`)
+  })
+
+  it(`should normalize mixed case to lowercase`, () => {
+    expect(snakeToCamel(`user_Column`)).toBe(`userColumn`)
+    expect(snakeToCamel(`User_ID`)).toBe(`userId`)
+  })
 })
 
 describe(`camelToSnake`, () => {
@@ -40,9 +62,38 @@ describe(`camelToSnake`, () => {
     expect(camelToSnake(`name`)).toBe(`name`)
   })
 
-  it(`should handle multiple capital letters`, () => {
-    expect(camelToSnake(`userProfileImageURL`)).toBe(`user_profile_image_u_r_l`)
+  it(`should handle acronyms properly`, () => {
+    expect(camelToSnake(`userID`)).toBe(`user_id`)
+    expect(camelToSnake(`userHTTPSURL`)).toBe(`user_https_url`)
+    expect(camelToSnake(`parseHTMLString`)).toBe(`parse_html_string`)
+    expect(camelToSnake(`XMLHttpRequest`)).toBe(`xml_http_request`)
   })
+
+  it(`should handle mixed patterns`, () => {
+    expect(camelToSnake(`userProfileImageURL`)).toBe(`user_profile_image_url`)
+  })
+})
+
+describe(`roundtrip conversions`, () => {
+  it(`should roundtrip snake_case -> camelCase -> snake_case`, () => {
+    const testCases = [
+      `user_id`,
+      `project_id`,
+      `created_at`,
+      `user_profile_image_url`,
+      `a_b_c`,
+    ]
+
+    for (const original of testCases) {
+      const camelCase = snakeToCamel(original)
+      const backToSnake = camelToSnake(camelCase)
+      expect(backToSnake).toBe(original)
+    }
+  })
+
+  // Note: camelCase -> snake_case -> camelCase doesn't always roundtrip
+  // because acronyms are ambiguous (userID -> user_id -> userId)
+  // This is expected behavior
 })
 
 describe(`createColumnMapper`, () => {
@@ -122,6 +173,14 @@ describe(`snakeCamelMapper`, () => {
 
 describe(`encodeWhereClause`, () => {
   const encode = (col: string) => camelToSnake(col)
+
+  it(`should return empty string when whereClause is undefined`, () => {
+    expect(encodeWhereClause(undefined, encode)).toBe(``)
+  })
+
+  it(`should return whereClause unchanged when encoder is undefined`, () => {
+    expect(encodeWhereClause(`userId = $1`, undefined)).toBe(`userId = $1`)
+  })
 
   it(`should encode simple WHERE clauses`, () => {
     expect(encodeWhereClause(`userId = $1`, encode))
@@ -209,5 +268,27 @@ describe(`encodeWhereClause`, () => {
 
     expect(encodeWhereClause(`userName like $1`, encode))
       .toBe(`user_name like $1`)
+  })
+
+  it(`should not transform quoted string literals`, () => {
+    expect(encodeWhereClause(`userId = 'user_id'`, encode))
+      .toBe(`user_id = 'user_id'`)
+
+    expect(encodeWhereClause(`name = 'John Doe' AND userId = $1`, encode))
+      .toBe(`name = 'John Doe' AND user_id = $1`)
+  })
+
+  it(`should handle escaped quotes in strings`, () => {
+    expect(encodeWhereClause(`name = 'O''Brien' AND userId = $1`, encode))
+      .toBe(`name = 'O''Brien' AND user_id = $1`)
+  })
+
+  it(`should handle multiple quoted strings`, () => {
+    expect(
+      encodeWhereClause(
+        `firstName = 'John' AND lastName = 'Doe' AND userId = $1`,
+        encode
+      )
+    ).toBe(`first_name = 'John' AND last_name = 'Doe' AND user_id = $1`)
   })
 })

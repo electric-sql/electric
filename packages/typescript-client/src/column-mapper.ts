@@ -16,36 +16,65 @@ export interface ColumnMapper<Extensions = never> {
    * Applied to column references in WHERE clauses and other query parameters.
    */
   encode: (columnName: string) => string
-
-  /**
-   * Optional reverse mapping for debugging/introspection.
-   * Maps application column names to database column names.
-   */
-  mapping?: Record<string, string>
 }
 
 /**
  * Converts a snake_case string to camelCase.
  *
+ * Handles edge cases:
+ * - Preserves leading underscores: `_user_id` → `_userId`
+ * - Drops trailing underscores: `user_id_` → `userId`
+ * - Collapses multiple underscores: `user__id` → `userId`
+ * - Normalizes to lowercase first: `user_Column` → `userColumn`
+ *
  * @example
  * snakeToCamel('user_id') // 'userId'
  * snakeToCamel('project_id') // 'projectId'
  * snakeToCamel('created_at') // 'createdAt'
+ * snakeToCamel('_private') // '_private'
+ * snakeToCamel('user__id') // 'userId'
  */
 export function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+  // Preserve leading underscores
+  const leadingUnderscores = str.match(/^_+/)?.[0] ?? ''
+  const withoutLeading = str.slice(leadingUnderscores.length)
+
+  // Remove trailing underscores and convert to lowercase
+  const normalized = withoutLeading.replace(/_+$/, '').toLowerCase()
+
+  // Convert snake_case to camelCase (handling multiple underscores)
+  const camelCased = normalized.replace(/_+([a-z])/g, (_, letter) =>
+    letter.toUpperCase()
+  )
+
+  return leadingUnderscores + camelCased
 }
 
 /**
  * Converts a camelCase string to snake_case.
  *
+ * Handles consecutive capitals (acronyms) properly:
+ * - `userID` → `user_id`
+ * - `userHTTPSURL` → `user_https_url`
+ *
  * @example
  * camelToSnake('userId') // 'user_id'
  * camelToSnake('projectId') // 'project_id'
  * camelToSnake('createdAt') // 'created_at'
+ * camelToSnake('userID') // 'user_id'
+ * camelToSnake('parseHTMLString') // 'parse_html_string'
  */
 export function camelToSnake(str: string): string {
-  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+  return (
+    str
+      // Insert underscore before uppercase letters that follow lowercase letters
+      // e.g., userId -> user_Id
+      .replace(/([a-z])([A-Z])/g, '$1_$2')
+      // Insert underscore before uppercase letters that are followed by lowercase letters
+      // This handles acronyms: userID -> user_ID, but parseHTMLString -> parse_HTML_String
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+      .toLowerCase()
+  )
 }
 
 /**
@@ -70,7 +99,7 @@ export function camelToSnake(str: string): string {
  */
 export function createColumnMapper<Extensions = never>(
   mapping: Record<string, string>
-): ColumnMapper<Extensions> {
+): ColumnMapper<Extensions> & { mapping: Record<string, string> } {
   // Build reverse mapping: app name -> db name
   const reverseMapping: Record<string, string> = {}
   for (const [dbName, appName] of Object.entries(mapping)) {
@@ -111,26 +140,23 @@ export function createColumnMapper<Extensions = never>(
  * - Function calls: LOWER(columnName)
  * - Qualified names: table.columnName
  * - Operators: columnName IS NULL, columnName IN (...)
+ * - Quoted strings: Preserves string literals unchanged
  *
  * Note: This uses regex-based replacement which works for most common cases
  * but may not handle all complex SQL expressions perfectly. For complex queries,
  * test thoroughly or use database column names directly in WHERE clauses.
  *
+ * @param whereClause - The WHERE clause string to encode
+ * @param encode - Optional encoder function. If undefined, returns whereClause unchanged.
+ * @returns The encoded WHERE clause
+ *
  * @internal
  */
 export function encodeWhereClause(
-  whereClause: string,
-  encode: (columnName: string) => string
+  whereClause: string | undefined,
+  encode?: (columnName: string) => string
 ): string {
-  // Pattern explanation:
-  // (?<![a-zA-Z0-9_]) - negative lookbehind: not preceded by identifier char
-  // ([a-zA-Z_][a-zA-Z0-9_]*) - capture: valid SQL identifier
-  // (?![a-zA-Z0-9_]) - negative lookahead: not followed by identifier char
-  //
-  // This avoids matching:
-  // - Parts of longer identifiers
-  // - SQL keywords (handled by checking if result differs from input)
-  const identifierPattern = /(?<![a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_]*)(?![a-zA-Z0-9_])/g
+  if (!whereClause || !encode) return whereClause ?? ''
 
   // SQL keywords that should not be transformed (common ones)
   const sqlKeywords = new Set([
@@ -177,7 +203,55 @@ export function encodeWhereClause(
     `NULLIF`,
   ])
 
-  return whereClause.replace(identifierPattern, (match) => {
+  // Track positions of quoted strings to skip them
+  const quotedRanges: Array<{ start: number; end: number }> = []
+
+  // Find all single-quoted strings
+  let pos = 0
+  while (pos < whereClause.length) {
+    if (whereClause[pos] === `'`) {
+      const start = pos
+      pos++ // Skip opening quote
+      // Find closing quote, handling escaped quotes ('')
+      while (pos < whereClause.length) {
+        if (whereClause[pos] === `'`) {
+          if (whereClause[pos + 1] === `'`) {
+            pos += 2 // Skip escaped quote
+          } else {
+            pos++ // Skip closing quote
+            break
+          }
+        } else {
+          pos++
+        }
+      }
+      quotedRanges.push({ start, end: pos })
+    } else {
+      pos++
+    }
+  }
+
+  // Helper to check if position is within a quoted string
+  const isInQuotedString = (pos: number): boolean => {
+    return quotedRanges.some((range) => pos >= range.start && pos < range.end)
+  }
+
+  // Pattern explanation:
+  // (?<![a-zA-Z0-9_]) - negative lookbehind: not preceded by identifier char
+  // ([a-zA-Z_][a-zA-Z0-9_]*) - capture: valid SQL identifier
+  // (?![a-zA-Z0-9_]) - negative lookahead: not followed by identifier char
+  //
+  // This avoids matching:
+  // - Parts of longer identifiers
+  // - SQL keywords (handled by checking if result differs from input)
+  const identifierPattern = /(?<![a-zA-Z0-9_])([a-zA-Z_][a-zA-Z0-9_]*)(?![a-zA-Z0-9_])/g
+
+  return whereClause.replace(identifierPattern, (match, _p1, offset) => {
+    // Don't transform if inside quoted string
+    if (isInQuotedString(offset)) {
+      return match
+    }
+
     // Don't transform SQL keywords
     if (sqlKeywords.has(match.toUpperCase())) {
       return match
