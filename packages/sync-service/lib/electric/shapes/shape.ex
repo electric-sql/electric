@@ -41,6 +41,8 @@ defmodule Electric.Shapes.Shape do
     replica: @default_replica
   ]
 
+  @type handle() :: String.t()
+
   @type replica() :: :full | :default
   @type table_info() :: %{
           columns: [Inspector.column_info(), ...],

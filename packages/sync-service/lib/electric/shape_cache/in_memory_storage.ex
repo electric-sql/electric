@@ -314,6 +314,55 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
+    stream
+    |> Stream.map(fn {key, json} -> {{:movein, {name, key}}, json} end)
+    |> Stream.chunk_every(500)
+    |> Stream.each(&:ets.insert(log_table, &1))
+    |> Stream.run()
+
+    :ok
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def append_control_message!(control_message, %MS{log_table: log_table} = opts) do
+    initial_offset = current_offset(opts)
+    new_offset = LogOffset.increment(initial_offset)
+
+    :ets.insert(log_table, {{:offset, storage_offset(new_offset)}, control_message})
+    :ets.insert(opts.snapshot_table, {@latest_offset_key, new_offset})
+
+    {{initial_offset, new_offset}, opts}
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def append_move_in_snapshot_to_log!(name, %MS{log_table: log_table} = opts) do
+    initial_offset = current_offset(opts)
+    ref = make_ref()
+
+    Stream.unfold(initial_offset, fn offset ->
+      case :ets.next_lookup(log_table, {:movein, {name, nil}}) do
+        {{:movein, {^name, _}}, [{_, item}]} ->
+          offset = LogOffset.increment(offset)
+          {{{:offset, storage_offset(offset)}, item}, offset}
+
+        _ ->
+          send(self(), {ref, offset})
+          nil
+      end
+    end)
+    |> Stream.chunk_every(500)
+    |> Stream.each(&:ets.insert(log_table, &1))
+    |> Stream.run()
+
+    :ets.match_delete(log_table, {{:movein, {name, :_}}, :_})
+
+    resulting_offset = receive(do: ({^ref, offset} -> offset))
+
+    {{initial_offset, resulting_offset}, opts}
+  end
+
+  @impl Electric.ShapeCache.Storage
   def cleanup!(%MS{} = opts) do
     cleanup!(opts, opts.shape_handle)
   end

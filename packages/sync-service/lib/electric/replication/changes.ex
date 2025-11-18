@@ -12,9 +12,10 @@ defmodule Electric.Replication.Changes do
 
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
+  alias Electric.Postgres.Xid
 
   @type db_identifier() :: String.t()
-  @type xid() :: non_neg_integer()
+  @type xid() :: Xid.anyxid()
   @type relation_name() :: {schema :: db_identifier(), table :: db_identifier()}
   @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
@@ -41,7 +42,7 @@ defmodule Electric.Replication.Changes do
             changes: [Changes.change()],
             num_changes: non_neg_integer(),
             affected_relations: MapSet.t(Changes.relation_name()),
-            commit_timestamp: DateTime.t(),
+            commit_timestamp: DateTime.t() | nil,
             lsn: Electric.Postgres.Lsn.t(),
             last_log_offset: LogOffset.t()
           }
@@ -84,6 +85,24 @@ defmodule Electric.Replication.Changes do
         | last_log_offset: last_offset,
           changes: Enum.reverse(changes)
       }
+    end
+
+    @doc """
+    Check if a transaction is visible in a snapshot.
+    """
+    @spec visible_in_snapshot?(
+            t() | Xid.anyxid(),
+            %{xmin: Xid.anyxid(), xmax: Xid.anyxid(), xip_list: [Xid.anyxid()]}
+            | {Xid.anyxid(), Xid.anyxid(), [Xid.anyxid()]}
+          ) :: boolean()
+    def visible_in_snapshot?(%__MODULE__{xid: xid}, %{xmin: xmin, xmax: xmax, xip_list: xip_list}),
+        do: visible_in_snapshot?(xid, {xmin, xmax, xip_list})
+
+    def visible_in_snapshot?(%__MODULE__{xid: xid}, snapshot) when is_tuple(snapshot),
+      do: visible_in_snapshot?(xid, snapshot)
+
+    def visible_in_snapshot?(xid, {xmin, xmax, xip_list}) when is_integer(xid) do
+      Xid.compare(xid, xmin) == :lt or (Xid.compare(xid, xmax) == :lt and xid not in xip_list)
     end
   end
 
