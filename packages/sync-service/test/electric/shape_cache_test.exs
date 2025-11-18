@@ -68,6 +68,7 @@ defmodule Electric.ShapeCacheTest do
     :with_async_deleter,
     :with_pure_file_storage,
     :with_shape_status,
+    :with_lsn_tracker,
     :with_shape_cleaner,
     :with_status_monitor
   ]
@@ -1073,6 +1074,8 @@ defmodule Electric.ShapeCacheTest do
         File.rm_rf!(ShapeCache.ShapeStatus.backup_dir(ctx.storage))
       end
 
+      with_lsn_tracker(ctx)
+
       ctx =
         ctx
         |> Map.merge(with_shape_status(ctx))
@@ -1100,6 +1103,7 @@ defmodule Electric.ShapeCacheTest do
       :with_noop_publication_manager,
       :with_log_chunking,
       :with_registry,
+      :with_lsn_tracker,
       :with_shape_log_collector,
       :with_no_pool
     ]

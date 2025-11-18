@@ -27,11 +27,9 @@ end
 defmodule Electric.ShapeCache do
   use GenServer
 
-  alias Electric.Postgres.Lsn
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
-  alias Electric.ShapeCache
   alias Electric.Shapes
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
@@ -201,23 +199,23 @@ defmodule Electric.ShapeCache do
   @impl GenServer
   def handle_continue(:recover_shapes, state) do
     start_time = System.monotonic_time()
-    {last_processed_lsn, total_recovered, total_failed_to_recover} = recover_shapes(state)
+    total_recovered = recover_shapes(state)
 
     Electric.Replication.PublicationManager.wait_for_restore(state.stack_id)
 
     # Let ShapeLogCollector that it can start processing after finishing this function so that
     # we're subscribed to the producer before it starts forwarding its demand.
-    ShapeLogCollector.set_last_processed_lsn(state.stack_id, last_processed_lsn)
+    ShapeLogCollector.mark_as_ready(state.stack_id)
 
     duration = System.monotonic_time() - start_time
 
     Logger.notice(
-      "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
+      "Consumers ready in #{System.convert_time_unit(duration, :native, :millisecond)}ms (#{total_recovered} shapes)"
     )
 
     Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :connection, :consumers_ready],
-      %{duration: duration, total: total_recovered, failed_to_recover: total_failed_to_recover},
+      %{duration: duration, total: total_recovered},
       %{stack_id: state.stack_id}
     )
 
@@ -256,52 +254,19 @@ defmodule Electric.ShapeCache do
   end
 
   defp recover_shapes(%{stack_id: stack_id} = _state) do
-    import Electric.Postgres.Lsn, only: [is_larger: 2]
-
     start_time = System.monotonic_time()
-    storage = ShapeCache.Storage.for_stack(stack_id)
     all_handles_and_shapes = ShapeStatus.list_shapes(stack_id)
-
-    {max_lsn, total_recovered} =
-      all_handles_and_shapes
-      |> Task.async_stream(
-        fn {shape_handle, shape} ->
-          shape_storage = ShapeCache.Storage.for_shape(shape_handle, storage)
-
-          case ShapeCache.Storage.get_current_position(shape_storage) do
-            {:ok, latest_offset, _pg_snapshot} ->
-              {shape_handle, LogOffset.extract_lsn(latest_offset)}
-
-            {:error, reason} ->
-              Logger.error([
-                "shape #{inspect(shape)} (#{inspect(shape_handle)})",
-                " returned error from get_current_position: #{inspect(reason)}"
-              ])
-
-              ShapeCleaner.remove_shape(stack_id, shape_handle)
-
-              {shape_handle, :error}
-          end
-        end,
-        ordered: false
-      )
-      |> Enum.reduce({Lsn.from_integer(0), 0}, fn
-        {:ok, {_handle, :error}}, acc -> acc
-        {:ok, {_handle, lsn}}, {max, recovered} when is_larger(lsn, max) -> {lsn, recovered + 1}
-        _, {max, recovered} -> {max, recovered + 1}
-      end)
-
-    total_failed_to_recover = length(all_handles_and_shapes) - total_recovered
+    total_recovered = length(all_handles_and_shapes)
 
     duration = System.monotonic_time() - start_time
 
     Logger.info([
-      "Restored LSN position #{max_lsn} in",
+      "Restored in",
       " #{System.convert_time_unit(duration, :native, :millisecond)}ms",
-      " (#{total_recovered} shapes, #{total_failed_to_recover} failed to recover)"
+      " (#{total_recovered} shapes)"
     ])
 
-    {max_lsn, total_recovered, total_failed_to_recover}
+    total_recovered
   end
 
   defp maybe_create_shape(shape, otel_ctx, %{stack_id: stack_id} = state) do

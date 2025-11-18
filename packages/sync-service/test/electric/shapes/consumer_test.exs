@@ -97,6 +97,7 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_registry,
       :with_in_memory_storage,
       :with_shape_status,
+      :with_lsn_tracker,
       :with_persistent_kv,
       :with_status_monitor,
       :with_dynamic_consumer_supervisor,
@@ -117,7 +118,7 @@ defmodule Electric.Shapes.ConsumerTest do
           stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
         })
 
-      ShapeLogCollector.set_last_processed_lsn(producer, Lsn.from_integer(0))
+      ShapeLogCollector.mark_as_ready(producer)
 
       [producer: producer]
     end
@@ -647,6 +648,7 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_registry,
       :with_pure_file_storage,
       :with_shape_status,
+      :with_lsn_tracker,
       :with_log_chunking,
       :with_persistent_kv,
       :with_async_deleter,
@@ -721,9 +723,6 @@ defmodule Electric.Shapes.ConsumerTest do
       assert [op1, op2] =
                Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
                |> Enum.map(&Jason.decode!/1)
-
-      # Reset LSN to re-send transaction
-      ShapeLogCollector.set_last_processed_lsn(ctx.producer, Lsn.increment(lsn, -1))
 
       # If we encounter & store the same transaction, log stream should be stable
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)

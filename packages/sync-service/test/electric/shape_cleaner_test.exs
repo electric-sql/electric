@@ -36,6 +36,7 @@ defmodule Electric.ShapeCleanerTest do
     :with_async_deleter,
     :with_pure_file_storage,
     :with_shape_status,
+    :with_lsn_tracker,
     :with_status_monitor,
     :with_shape_cleaner
   ]
@@ -92,10 +93,7 @@ defmodule Electric.ShapeCleanerTest do
       ]
 
       setup(ctx) do
-        Electric.Replication.ShapeLogCollector.set_last_processed_lsn(
-          ctx.stack_id,
-          Electric.Postgres.Lsn.from_integer(100)
-        )
+        Electric.Replication.ShapeLogCollector.mark_as_ready(ctx.stack_id)
 
         assert_receive :shape_log_collector_ready, 1000
 
