@@ -24,10 +24,7 @@ export function prepareElectricUrl(requestUrl: string): URL {
   // Add Electric Cloud authentication if configured
   if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SOURCE_SECRET) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
-    originUrl.searchParams.set(
-      `secret`,
-      process.env.ELECTRIC_SOURCE_SECRET
-    )
+    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
   }
 
   return originUrl

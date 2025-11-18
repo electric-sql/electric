@@ -138,7 +138,7 @@ app.get(`/api/todos`, async (req, res) => {
     const response = await fetch(electricUrl)
 
     if (!response.ok) {
-      const errorText = await response.text()
+      const _errorText = await response.text()
       res.writeHead(response.status, { 'Content-Type': `application/json` })
       res.end(JSON.stringify({ error: `Electric error: ${response.status}` }))
       return

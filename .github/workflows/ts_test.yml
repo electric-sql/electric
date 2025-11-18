@@ -54,10 +54,7 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
-      - run: pnpm run stylecheck
       - run: pnpm run typecheck
-      - run: pnpm run format:check
-        working-directory: .
 
   build_and_test_packages:
     name: Test TS packages against sync-service
@@ -182,4 +179,3 @@ jobs:
       - run: pnpm --if-present run typecheck
       - run: pnpm --if-present run build
       - run: pnpm --if-present run test
-      - run: pnpm --if-present run stylecheck

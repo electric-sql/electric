@@ -1,0 +1,136 @@
+name: Autoformat & Linting
+
+# Note: For pull requests, GitHub Actions automatically creates a merge commit
+# between your branch and the target branch (usually main), then runs checks on
+# that merged state. This ensures the code will be properly formatted after merge.
+# If this check fails, you may need to merge main into your branch first.
+
+on:
+  push:
+    branches: ['main']
+    paths-ignore:
+      - 'website/**'
+      - '**/README.md'
+  pull_request:
+    paths-ignore:
+      - 'website/**'
+      - '**/README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  typescript_formatting:
+    name: TypeScript formatting and linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Prettier formatting
+        run: pnpm run format:check
+        continue-on-error: true
+        id: prettier_check
+
+      - name: Show formatting help message
+        if: steps.prettier_check.outcome == 'failure'
+        run: |
+          echo "::error::Prettier formatting check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch is formatted correctly,"
+          echo "you may need to merge or rebase main into your branch first."
+          echo ""
+          echo "To fix formatting issues, run: pnpm run format"
+          exit 1
+
+      - name: Check ESLint (all packages)
+        run: pnpm run stylecheck-all
+        continue-on-error: true
+        id: eslint_check
+
+      - name: Show ESLint help message
+        if: steps.eslint_check.outcome == 'failure'
+        run: |
+          echo "::error::ESLint check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch passes linting,"
+          echo "you may need to merge or rebase main into your branch first."
+          exit 1
+
+  elixir_formatting:
+    name: Elixir formatting and linting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sync-service
+    env:
+      MIX_ENV: test
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: '.tool-versions'
+
+      - name: Restore dependencies cache
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/sync-service/deps
+          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-sync-service-deps-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check Elixir formatting
+        run: mix format --check-formatted
+        continue-on-error: true
+        id: elixir_format_check
+
+      - name: Show Elixir formatting help message
+        if: steps.elixir_format_check.outcome == 'failure'
+        run: |
+          echo "::error::Elixir formatting check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch is formatted correctly,"
+          echo "you may need to merge or rebase main into your branch first."
+          echo ""
+          echo "To fix formatting issues, run: mix format"
+          exit 1
+
+      - name: Check Elixir compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors
+        continue-on-error: true
+        id: elixir_compile_check
+
+      - name: Show Elixir compilation help message
+        if: steps.elixir_compile_check.outcome == 'failure'
+        run: |
+          echo "::error::Elixir compilation warnings check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch compiles cleanly,"
+          echo "you may need to merge or rebase main into your branch first."
+          exit 1
