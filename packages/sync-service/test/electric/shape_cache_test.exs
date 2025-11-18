@@ -494,7 +494,7 @@ defmodule Electric.ShapeCacheTest do
       alias Electric.Replication.Eval.Parser
       where_clause = Parser.parse_and_validate_expression!("TRUE", refs: %{})
       # Insert a fake slow query
-      where_clause = %{where_clause | query: "PG_SLEEP(10)::text ILIKE ''"}
+      where_clause = %{where_clause | query: "PG_SLEEP(2)::text ILIKE ''"}
       shape = %{shape | where: where_clause}
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, stack_id)
