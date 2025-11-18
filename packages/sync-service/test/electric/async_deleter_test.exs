@@ -75,9 +75,8 @@ defmodule Electric.AsyncDeleterTest do
     assert moved_entries_before != []
 
     # After interval passes, cleanup should have run and trash dir should be empty again
-    Process.sleep(@interval + 30)
     assert File.dir?(trash_dir)
-    assert File.ls!(trash_dir) == []
+    assert_dir_empty(trash_dir)
   end
 
   test "multiple deletes are batched into single cleanup", %{
@@ -106,10 +105,8 @@ defmodule Electric.AsyncDeleterTest do
     entries = File.ls!(trash_dir)
     assert length(entries) >= 2
 
-    Process.sleep(@interval + 30)
-
     # After cleanup interval, trash dir should be empty
-    assert File.ls!(trash_dir) == []
+    assert_dir_empty(trash_dir)
   end
 
   test "deleting missing path returns ok and does nothing", %{
@@ -122,8 +119,7 @@ defmodule Electric.AsyncDeleterTest do
 
     assert :ok = AsyncDeleter.delete(stack_id, path)
     # nothing to assert further; just ensure no crash and no entries after interval
-    Process.sleep(@interval + 30)
-    assert File.ls!(trash_dir) == []
+    assert_dir_empty(trash_dir)
   end
 
   test "can manage concurrent deletes while cleaning up", %{
@@ -145,15 +141,25 @@ defmodule Electric.AsyncDeleterTest do
     {:ok, max_sleep_time} = Enum.to_list(stream) |> Enum.max()
 
     # ensure all files are deleted
-    Process.sleep(max_sleep_time + @interval + 30)
-    assert File.ls!(d1) == []
-    assert File.ls!(trash_dir) == []
+    assert_dir_empty(d1, 0)
+    assert_dir_empty(trash_dir, max_sleep_time + 500)
   end
 
   @tag add_initial_files: true
   test "performs initial cleanup", %{trash_dir: trash_dir} do
     # ensure no files exist after startup
-    Process.sleep(@interval + 30)
-    assert File.ls!(trash_dir) == []
+    assert_dir_empty(trash_dir)
+  end
+
+  defp assert_dir_empty(dir, timeout \\ 500) do
+    assert File.ls!(dir) == []
+  rescue
+    e in ExUnit.AssertionError ->
+      if timeout <= 0 do
+        reraise e, __STACKTRACE__
+      else
+        Process.sleep(@interval)
+        assert_dir_empty(dir, timeout - @interval)
+      end
   end
 end
