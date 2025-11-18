@@ -2,17 +2,16 @@ defmodule Electric.Replication.OperationBatcher do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Commit, Relation}
 
-  defstruct [:max_batch_size, :buffer, :flush?]
+  defstruct [:buffer, :flush?]
 
   @type t() :: %__MODULE__{
-          max_batch_size: non_neg_integer(),
           buffer: [Changes.operation()],
           flush?: boolean()
         }
 
-  @spec new(non_neg_integer()) :: t()
-  def new(max_batch_size) do
-    %__MODULE__{max_batch_size: max_batch_size, buffer: [], flush?: false}
+  @spec new() :: t()
+  def new do
+    %__MODULE__{buffer: [], flush?: false}
   end
 
   @doc """
@@ -22,25 +21,28 @@ defmodule Electric.Replication.OperationBatcher do
   - A batch is flushed when the max batch size is reached
   Returns a tuple of {batched_operations, updated_batcher}
   """
-  @spec batch([Changes.operation()], t()) :: {[Changes.operation()], t()}
-  def batch([operation | operations], %{buffer: buffer} = batcher) do
+  @spec batch([Changes.operation()], non_neg_integer(), t()) :: {[Changes.operation()], t()}
+  def batch([operation | operations], max_batch_size, %{buffer: buffer} = batcher) do
     batcher = %{batcher | buffer: [operation | buffer]}
 
-    batch(operations, %{batcher | flush?: flush?(operation, batcher)})
+    batch(operations, max_batch_size, %{
+      batcher
+      | flush?: flush?(operation, max_batch_size, batcher)
+    })
   end
 
-  def batch([], %{flush?: true} = batcher) do
+  def batch([], _, %{flush?: true} = batcher) do
     {Enum.reverse(batcher.buffer), %{batcher | buffer: [], flush?: false}}
   end
 
-  def batch([], batcher), do: {[], batcher}
+  def batch([], _, batcher), do: {[], batcher}
 
-  defp flush?(_, %{flush?: true}), do: true
-  defp flush?(%Commit{}, _), do: true
-  defp flush?(%Relation{}, _), do: true
+  defp flush?(_, _, %{flush?: true}), do: true
+  defp flush?(%Commit{}, _, _), do: true
+  defp flush?(%Relation{}, _, _), do: true
 
-  defp flush?(_, %{buffer: buffer, max_batch_size: max_batch_size})
+  defp flush?(_, max_batch_size, %{buffer: buffer})
        when length(buffer) >= max_batch_size, do: true
 
-  defp flush?(_, _), do: false
+  defp flush?(_, _, _), do: false
 end

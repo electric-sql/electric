@@ -15,34 +15,35 @@ defmodule Electric.Replication.OperationBatcherTest do
 
   describe "batch/2" do
     test "returns a batch as soon as a commit is seen" do
-      batcher = OperationBatcher.new(@max_batch_size)
+      batcher = OperationBatcher.new()
 
-      assert {[], batcher} = OperationBatcher.batch([%Begin{}], batcher)
-      assert {[], batcher} = OperationBatcher.batch([%NewRecord{}], batcher)
+      assert {[], batcher} = OperationBatcher.batch([%Begin{}], @max_batch_size, batcher)
+      assert {[], batcher} = OperationBatcher.batch([%NewRecord{}], @max_batch_size, batcher)
 
       assert {[%Begin{}, %NewRecord{}, %Commit{}], _batcher} =
-               OperationBatcher.batch([%Commit{}], batcher)
+               OperationBatcher.batch([%Commit{}], @max_batch_size, batcher)
     end
 
     test "returns a batch as soon as a relation is seen" do
-      batcher = OperationBatcher.new(@max_batch_size)
+      batcher = OperationBatcher.new()
 
-      assert {[%Relation{}], _batcher} = OperationBatcher.batch([%Relation{}], batcher)
+      assert {[%Relation{}], _batcher} =
+               OperationBatcher.batch([%Relation{}], @max_batch_size, batcher)
     end
 
     test "returns a batch once the max batch size has been reached" do
-      batcher = OperationBatcher.new(@max_batch_size)
+      batcher = OperationBatcher.new()
 
-      assert {[], batcher} = OperationBatcher.batch([%Begin{}], batcher)
-      assert {[], batcher} = OperationBatcher.batch([%NewRecord{}], batcher)
-      assert {[], batcher} = OperationBatcher.batch([%NewRecord{}], batcher)
+      assert {[], batcher} = OperationBatcher.batch([%Begin{}], @max_batch_size, batcher)
+      assert {[], batcher} = OperationBatcher.batch([%NewRecord{}], @max_batch_size, batcher)
+      assert {[], batcher} = OperationBatcher.batch([%NewRecord{}], @max_batch_size, batcher)
 
       assert {[%Begin{}, %NewRecord{}, %NewRecord{}, %NewRecord{}], _batcher} =
-               OperationBatcher.batch([%NewRecord{}], batcher)
+               OperationBatcher.batch([%NewRecord{}], @max_batch_size, batcher)
     end
 
     test "returns all operations it is given even if that's over the max batch size" do
-      batcher = OperationBatcher.new(@max_batch_size)
+      batcher = OperationBatcher.new()
 
       operations = [
         %Begin{},
@@ -53,7 +54,8 @@ defmodule Electric.Replication.OperationBatcherTest do
         %NewRecord{}
       ]
 
-      assert {^operations, _batcher} = OperationBatcher.batch(operations, batcher)
+      assert {^operations, _batcher} =
+               OperationBatcher.batch(operations, @max_batch_size, batcher)
     end
   end
 end

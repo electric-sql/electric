@@ -46,6 +46,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :display_settings,
       :message_converter,
       :operation_batcher,
+      :max_operation_batch_size,
       :publication_owner?,
       :replication_idle_timeout,
       step: :disconnected,
@@ -78,6 +79,7 @@ defmodule Electric.Postgres.ReplicationClient do
             display_settings: [String.t()],
             message_converter: MessageConverter.t(),
             operation_batcher: OperationBatcher.t(),
+            max_operation_batch_size: non_neg_integer(),
             publication_owner?: boolean(),
             replication_idle_timeout: non_neg_integer(),
             step: Electric.Postgres.ReplicationClient.step(),
@@ -105,7 +107,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
                  )
 
-    @max_operation_batch_size 3
+    @default_max_operation_batch_size 100
 
     @spec new(Access.t()) :: t()
     def new(opts) do
@@ -121,7 +123,8 @@ defmodule Electric.Postgres.ReplicationClient do
           [
             message_converter:
               MessageConverter.new(max_tx_size: max_txn_size, stack_id: opts[:stack_id]),
-            operation_batcher: OperationBatcher.new(@max_operation_batch_size)
+            operation_batcher: OperationBatcher.new(),
+            max_operation_batch_size: @default_max_operation_batch_size
           ]
       )
     end
@@ -375,7 +378,12 @@ defmodule Electric.Postgres.ReplicationClient do
         {:disconnect, {:irrecoverable_slot, reason}}
 
       {operations, message_converter} ->
-        {batch, batcher} = OperationBatcher.batch(operations, state.operation_batcher)
+        {batch, batcher} =
+          OperationBatcher.batch(
+            operations,
+            state.max_operation_batch_size,
+            state.operation_batcher
+          )
 
         state = %{state | message_converter: message_converter, operation_batcher: batcher}
 
