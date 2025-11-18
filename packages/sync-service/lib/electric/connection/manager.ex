@@ -880,7 +880,8 @@ defmodule Electric.Connection.Manager do
 
     # drop publication before replication client so that we ensure anyone
     # acquiring the lock next will recreate the replication slot
-    if state.drop_slot_requested, do: drop_publication(state)
+    # Always perform defensive cleanup during graceful shutdown
+    drop_publication(state)
 
     if is_pid(replication_client_pid) do
       # if we are acquiring the lock, we should kill the replication client brutally
@@ -897,7 +898,8 @@ defmodule Electric.Connection.Manager do
     # to ensure dropping the slot is possible if requested
     state = kill_replication_backend(state)
 
-    if state.drop_slot_requested, do: drop_slot(state)
+    # Always perform defensive slot cleanup during graceful shutdown
+    drop_slot(state)
 
     # kill the admin pool last as it is used to perform cleanup operations
     with {admin_pool_pid, _} when is_pid(admin_pool_pid) <- admin_pool,

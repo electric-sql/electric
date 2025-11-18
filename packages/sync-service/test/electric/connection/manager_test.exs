@@ -253,6 +253,49 @@ defmodule Electric.Connection.ConnectionManagerTest do
     setup [:start_connection_manager]
 
     @tag slot_temporary?: false
+    test "drops replication slot on shutdown without explicit request", ctx do
+      %{
+        db_conn: db_conn,
+        stack_id: stack_id,
+        connection_opts: connection_opts,
+        replication_opts: replication_opts
+      } = ctx
+
+      wait_until_active(stack_id)
+
+      # Verify slot exists before shutdown
+      assert %{rows: [_]} =
+               Postgrex.query!(
+                 db_conn,
+                 "SELECT slot_name FROM pg_replication_slots WHERE slot_name = $1",
+                 [replication_opts[:slot_name]]
+               )
+
+      # Stop without requesting explicit slot drop
+      :ok =
+        Supervisor.terminate_child(
+          Connection.Manager.Supervisor.name(stack_id),
+          Connection.Manager
+        )
+
+      # Verify slot was dropped defensively
+      assert %{rows: []} =
+               Postgrex.query!(
+                 db_conn,
+                 "SELECT slot_name FROM pg_replication_slots WHERE slot_name = $1",
+                 [replication_opts[:slot_name]]
+               )
+
+      # Verify publication was also dropped defensively
+      assert %{rows: []} =
+               Postgrex.query!(
+                 db_conn,
+                 "SELECT pubname FROM pg_publication WHERE pubname = $1",
+                 [replication_opts[:publication_name]]
+               )
+    end
+
+    @tag slot_temporary?: false
     test "handles dropping slot on termination", ctx do
       %{
         db_conn: db_conn,
