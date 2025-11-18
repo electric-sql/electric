@@ -4,7 +4,7 @@ defmodule Electric.Telemetry.MixProject do
   def project do
     [
       app: :electric_telemetry,
-      version: "0.1.0",
+      version: version(),
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -41,5 +41,18 @@ defmodule Electric.Telemetry.MixProject do
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
+  end
+
+  defp version(default \\ "0.0.0") do
+    with :error <- version_from_package_json() do
+      default
+    end
+  end
+
+  defp version_from_package_json do
+    case File.read("./package.json") do
+      {:ok, binary} -> binary |> :json.decode() |> Map.fetch!("version")
+      {:error, _} -> :error
+    end
   end
 end
