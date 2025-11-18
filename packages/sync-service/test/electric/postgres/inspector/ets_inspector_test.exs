@@ -575,7 +575,10 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
                busy_pool,
                fn _conn ->
                  send(test_pid, :pool_busy)
-                 Process.sleep(5_000)
+
+                 receive do
+                   _ -> :ok
+                 end
                end,
                timeout: :infinity
              )

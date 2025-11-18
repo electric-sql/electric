@@ -123,7 +123,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                  send(test_pid, :table_locked)
 
                  receive do
-                   msg -> send(self(), msg)
+                   _ -> :ok
                  end
                end
              )
