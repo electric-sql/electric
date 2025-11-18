@@ -105,7 +105,7 @@ defmodule Electric.Postgres.ReplicationClient do
                    max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
                  )
 
-    @max_operation_batch_size 4
+    @max_operation_batch_size 3
 
     @spec new(Access.t()) :: t()
     def new(opts) do
