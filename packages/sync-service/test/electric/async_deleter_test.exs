@@ -60,7 +60,7 @@ defmodule Electric.AsyncDeleterTest do
 
     assert File.exists?(file_path)
 
-    assert :ok = AsyncDeleter.delete(dir, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(stack_id, dir)
 
     # Original dir should no longer exist (moved)
     refute File.exists?(dir)
@@ -94,9 +94,9 @@ defmodule Electric.AsyncDeleterTest do
     assert File.exists?(f1)
     assert File.exists?(f2)
 
-    assert :ok = AsyncDeleter.delete(d1, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(stack_id, d1)
     # quickly queue second before cleanup interval
-    assert :ok = AsyncDeleter.delete(d2, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(stack_id, d2)
 
     # Both originals gone
     refute File.exists?(d1)
@@ -120,7 +120,7 @@ defmodule Electric.AsyncDeleterTest do
     path = Path.join(base, "nonexistent_#{System.unique_integer()}")
     refute File.exists?(path)
 
-    assert :ok = AsyncDeleter.delete(path, stack_id: stack_id)
+    assert :ok = AsyncDeleter.delete(stack_id, path)
     # nothing to assert further; just ensure no crash and no entries after interval
     Process.sleep(@interval + 30)
     assert File.ls!(trash_dir) == []
@@ -138,7 +138,7 @@ defmodule Electric.AsyncDeleterTest do
         f = create_temp_file(d1, "tmp_#{i}")
         sleep_time = round(Enum.random(1..10) * 0.1 * (2 * @interval))
         Process.sleep(sleep_time)
-        assert :ok = AsyncDeleter.delete(f, stack_id: stack_id)
+        assert :ok = AsyncDeleter.delete(stack_id, f)
         sleep_time
       end)
 

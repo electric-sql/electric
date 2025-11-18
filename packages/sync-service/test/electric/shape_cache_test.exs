@@ -69,8 +69,7 @@ defmodule Electric.ShapeCacheTest do
     :with_pure_file_storage,
     :with_shape_status,
     :with_shape_cleaner,
-    :with_status_monitor,
-    :with_shape_monitor
+    :with_status_monitor
   ]
 
   describe "get_or_create_shape_handle/2" do
@@ -271,7 +270,8 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^consumer_ref, :process, _pid, :some_reason}
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle},
+                     @shape_cleanup_timeout
 
       # should have cleaned up the shape
       assert nil == ShapeStatus.get_existing_shape(ctx.stack_id, shape_handle)
@@ -748,20 +748,18 @@ defmodule Electric.ShapeCacheTest do
                 storage
               )
 
-            Electric.Shapes.Monitor.register_reader(ctx.stack_id, shape_handle)
+            # this no longer errors because we're handling the removal of the shape
+            # data in the storage
+            send(test_pid, {:read_start, n})
+            receive(do: (:continue -> n))
 
-            assert_raise Storage.Error, fn ->
-              send(test_pid, {:read_start, n})
-              receive(do: (:continue -> n))
-
-              stream
-              |> Stream.transform(
-                fn -> n end,
-                fn elem, acc -> {[elem], acc} end,
-                fn _ -> :ok end
-              )
-              |> Stream.run()
-            end
+            stream
+            |> Stream.transform(
+              fn -> n end,
+              fn elem, acc -> {[elem], acc} end,
+              fn _ -> :ok end
+            )
+            |> Stream.run()
           end)
         end
 
@@ -775,7 +773,8 @@ defmodule Electric.ShapeCacheTest do
 
       Task.await_many(tasks, 10_000)
 
-      assert_receive {Electric.Shapes.Monitor, :cleanup, ^shape_handle}, @shape_cleanup_timeout
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle},
+                     @shape_cleanup_timeout
     end
 
     test "propagates error in snapshot creation to listeners", ctx do

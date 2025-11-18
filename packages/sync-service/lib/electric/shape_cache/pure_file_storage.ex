@@ -27,16 +27,16 @@ defmodule Electric.ShapeCache.PureFileStorage do
   - In case the writer is offline and in-memory ETS/buffer is not present, reads still succeed using on-disk information (i.e. last persisted full txn offset).
   """
 
-  alias Electric.ShapeCache.PureFileStorage.WriteLoop
   alias Electric.ProcessRegistry
-  alias Electric.ShapeCache.PureFileStorage.ActionFile
-  alias Electric.ShapeCache.PureFileStorage.KeyIndex
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.LogChunker
+  alias Electric.ShapeCache.PureFileStorage.ActionFile
   alias Electric.ShapeCache.PureFileStorage.ChunkIndex
   alias Electric.ShapeCache.PureFileStorage.FileInfo
+  alias Electric.ShapeCache.PureFileStorage.KeyIndex
   alias Electric.ShapeCache.PureFileStorage.LogFile
   alias Electric.ShapeCache.PureFileStorage.Snapshot
+  alias Electric.ShapeCache.PureFileStorage.WriteLoop
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape
 
@@ -56,6 +56,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :chunk_bytes_threshold,
     :shape_handle,
     :stack_id,
+    snapshot_file_timeout: :timer.seconds(5),
     version: @version
   ]
 
@@ -157,7 +158,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       {:ok, shape_handles} ->
         shape_handles
         |> Enum.reject(&String.starts_with?(&1, "."))
-        |> Enum.reject(&File.exists?(deletion_marker_path(base_path, &1), [:raw]))
         |> then(&{:ok, MapSet.new(&1)})
 
       {:error, :enoent} ->
@@ -200,35 +200,22 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   def cleanup!(%__MODULE__{} = shape_opts) do
-    {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
-    cleanup!(stack_opts, shape_opts.shape_handle)
+    stack_storage = Storage.for_stack(shape_opts.stack_id)
+    Storage.cleanup!(stack_storage, shape_opts.shape_handle)
   end
 
   def cleanup!(stack_opts, shape_handle) do
-    # do a quick touch operation to exclude this directory from `get_all_stored_shapes`
-    marker_file_path = deletion_marker_path(stack_opts.base_path, shape_handle)
-
-    try do
-      case :file.write_file(marker_file_path, <<>>, [:raw]) do
-        :ok ->
-          Electric.AsyncDeleter.delete(shape_data_dir(stack_opts.base_path, shape_handle),
-            stack_id: stack_opts.stack_id
-          )
-
-        # nothing to delete, no-op
-        {:error, :enoent} ->
-          :ok
-
-        {:error, reason} ->
-          raise File.Error, reason: reason, path: marker_file_path
-      end
-    after
-      :file.delete(marker_file_path, [:raw])
-    end
+    # This call renames the `shape_data_dir` out of the shape storage path. On
+    # linux renames are atomic so there's no need for a marker to catch
+    # half-deleted data
+    Electric.AsyncDeleter.delete(
+      stack_opts.stack_id,
+      shape_data_dir(stack_opts.base_path, shape_handle)
+    )
   end
 
   def cleanup_all!(%{stack_id: stack_id, base_path: base_path}) do
-    Electric.AsyncDeleter.delete(base_path, stack_id: stack_id)
+    Electric.AsyncDeleter.delete(stack_id, base_path)
   end
 
   def schedule_compaction(compaction_config) do
@@ -411,11 +398,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       latest_name: new_latest_suffix,
       writer_acc: WriteLoop.adjust_write_positions(writer_acc, -log_file_pos)
     )
-  end
-
-  @doc false
-  def deletion_marker_path(base_path, shape_handle) when is_binary(base_path) do
-    Path.join(base_path, ".#{shape_handle}-deleted")
   end
 
   def get_total_disk_usage(%{base_path: base_path}),
@@ -864,10 +846,12 @@ defmodule Electric.ShapeCache.PureFileStorage do
     metadata =
       read_multiple_cached_metadata(opts, [:snapshot_started?, :last_snapshot_chunk])
 
-    snapshot_started = Keyword.get(metadata, :snapshot_started?) || false
+    snapshot_started? = Keyword.get(metadata, :snapshot_started?) || false
     last_snapshot_chunk = Keyword.get(metadata, :last_snapshot_chunk)
 
-    if not snapshot_started, do: raise(Storage.Error, message: "Snapshot not started")
+    if not snapshot_started? and not shape_gone?(opts) do
+      raise(Storage.Error, message: "Snapshot not started")
+    end
 
     case {last_snapshot_chunk, min_offset} do
       {_, x} when is_min_offset(x) ->
@@ -954,14 +938,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
         []
 
       true ->
-        Process.sleep(50)
+        if shape_gone?(opts) do
+          []
+        else
+          Process.sleep(50)
 
-        wait_for_chunk_file_or_snapshot_end(
-          opts,
-          chunk_number,
-          max_wait_time,
-          total_wait_time + 50
-        )
+          wait_for_chunk_file_or_snapshot_end(
+            opts,
+            chunk_number,
+            max_wait_time,
+            total_wait_time + 50
+          )
+        end
     end
   end
 
@@ -996,11 +984,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     case fetch_chunk(min_offset, opts, boundary_info) do
       {:ok, chunk_end_offset, {start_pos, end_pos}} when not is_nil(end_pos) ->
-        LogFile.stream_jsons(json_file(opts, suffix), start_pos, end_pos, min_offset)
+        LogFile.stream_jsons(
+          opts,
+          json_file(opts, suffix),
+          start_pos,
+          end_pos,
+          min_offset
+        )
         |> Stream.concat(stream_from_disk(opts, chunk_end_offset, max_offset, boundary_info))
 
       {:ok, nil, {start_pos, nil}} ->
         LogFile.stream_jsons_until_offset(
+          opts,
           json_file(opts, suffix),
           start_pos,
           min_offset,
@@ -1156,4 +1151,38 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   @doc false
   def tmp_file(%__MODULE__{} = opts, filename), do: Path.join(tmp_dir(opts), filename)
+
+  @type file_opener() :: (Path.t(), [File.mode()] ->
+                            {:ok, File.file_descriptor()} | {:error, File.posix()})
+  @doc false
+  # Open a file for streaming. Returns `{:halt, :data_removed}` if the shape data has been
+  # removed (i.e. the shape itself has been removed). Streaming functions should return
+  # an empty stream rather than raise if this returns `{:halt, :data_removed}`.
+  @spec safely_open_file!(%__MODULE__{}, Path.t(), file_opener()) ::
+          {:ok, File.file_descriptor()} | {:halt, :data_removed} | no_return()
+  def safely_open_file!(%__MODULE__{} = opts, path, modes, open_fun \\ &File.open/2) do
+    case open_fun.(path, modes) do
+      {:ok, file} ->
+        {:ok, file}
+
+      {:error, _reason} = error ->
+        handle_open_error!(opts, path, error)
+    end
+  end
+
+  defp handle_open_error!(%__MODULE__{} = opts, path, {:error, :enoent}) do
+    if shape_gone?(opts) do
+      {:halt, :data_removed}
+    else
+      raise File.Error, path: path, reason: :enoent
+    end
+  end
+
+  defp handle_open_error!(%__MODULE__{}, path, {:error, reason}) do
+    raise File.Error, path: path, reason: reason
+  end
+
+  defp shape_gone?(%__MODULE__{} = opts) do
+    !File.exists?(shape_data_dir(opts))
+  end
 end

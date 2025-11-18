@@ -315,13 +315,21 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def cleanup!(%MS{} = opts) do
-    cleanup!(opts, opts.shape_handle)
+    for table <- tables(opts),
+        do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
+
+    :ok
   end
 
   @impl Electric.ShapeCache.Storage
-  def cleanup!(%MS{} = opts, _shape_handle) do
-    for table <- tables(opts),
-        do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
+  def cleanup!(%MS{shape_handle: shape_handle} = opts, shape_handle) do
+    cleanup!(opts)
+  end
+
+  def cleanup!(%{table_base_name: _table_base_name, stack_id: _stack_id} = opts, shape_handle) do
+    shape_handle
+    |> for_shape(opts)
+    |> cleanup!()
   end
 
   @impl Electric.ShapeCache.Storage

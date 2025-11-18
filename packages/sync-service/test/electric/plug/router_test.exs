@@ -2541,8 +2541,7 @@ defmodule Electric.Plug.RouterTest do
         "UPDATE members SET flag = TRUE WHERE (user_id, team_id) = (2, 2)"
       )
 
-      assert {_, 409, _} =
-               Task.await(task)
+      assert {_, 409, _} = Task.await(task)
 
       # And new shape should have the correct data
       assert {_, 200, response} = shape_req(orig_req, ctx.opts)
@@ -2782,7 +2781,7 @@ defmodule Electric.Plug.RouterTest do
             stack_events_registry: Electric.stack_events_registry(),
             stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
             shape_cache: {Mock.ShapeCache, []},
-            storage: {Mock.Storage, []},
+            storage: {Electric.ShapeCache.Storage.PureFileStorage, []},
             inspector: {__MODULE__, []},
             registry: Registry.ServeShapePlugTest,
             long_poll_timeout: 20_000,
