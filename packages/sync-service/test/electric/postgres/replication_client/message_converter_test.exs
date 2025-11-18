@@ -379,5 +379,55 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       assert {:error, {:exceeded_max_tx_size, message}, ^converter} = result
       assert message == "Collected transaction exceeds limit of 10 bytes."
     end
+
+    test "replaces :unchanged_toast with actual values from old_data in updates" do
+      # Set up a relation with multiple columns
+      multi_col_relation = %LR.Relation{
+        id: 2,
+        namespace: "public",
+        name: "posts",
+        replica_identity: :full,
+        columns: [
+          %LR.Relation.Column{name: "id", flags: [:key], type_oid: 23, type_modifier: -1},
+          %LR.Relation.Column{name: "title", flags: [], type_oid: 25, type_modifier: -1},
+          %LR.Relation.Column{name: "content", flags: [], type_oid: 25, type_modifier: -1}
+        ]
+      }
+
+      converter = MessageConverter.new()
+      {[_relation], converter} = MessageConverter.convert(multi_col_relation, converter)
+
+      {[_begin], converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          converter
+        )
+
+      # Update where only 'title' changed, 'content' is unchanged_toast
+      update_msg = %LR.Update{
+        relation_id: 2,
+        old_tuple_data: ["1", "Old Title", "Long content that was toasted"],
+        tuple_data: ["1", "New Title", :unchanged_toast],
+        bytes: 10
+      }
+
+      {changes, _converter} = MessageConverter.convert(update_msg, converter)
+
+      assert [
+               %UpdatedRecord{
+                 relation: {"public", "posts"},
+                 old_record: %{
+                   "id" => "1",
+                   "title" => "Old Title",
+                   "content" => "Long content that was toasted"
+                 },
+                 record: %{
+                   "id" => "1",
+                   "title" => "New Title",
+                   "content" => "Long content that was toasted"
+                 }
+               }
+             ] = changes
+    end
   end
 end
