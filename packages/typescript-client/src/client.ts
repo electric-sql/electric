@@ -372,7 +372,7 @@ export interface ShapeStreamOptions<T = never> {
    * })
    * ```
    */
-  columnMapper?: ColumnMapper<T>
+  columnMapper?: ColumnMapper
 
   /**
    * A function for handling shapestream errors.
@@ -582,8 +582,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const transformer =
       options.columnMapper && options.transformer
         ? (row: Row<GetExtensions<T>>) =>
-            options.transformer!(options.columnMapper!.decode(row))
-        : (options.columnMapper?.decode ?? options.transformer)
+            options.transformer!(
+              options.columnMapper!.decode(row) as Row<GetExtensions<T>>
+            )
+        : options.columnMapper
+          ? (row: Row<GetExtensions<T>>) =>
+              options.columnMapper!.decode(row) as Row<GetExtensions<T>>
+          : options.transformer
     this.#messageParser = new MessageParser<T>(options.parser, transformer)
 
     this.#onError = this.options.onError

@@ -21,14 +21,12 @@ import { Row, Schema } from './types'
  * })
  * ```
  */
-export interface ColumnMapper<Extensions = never> {
+export interface ColumnMapper {
   /**
    * Transform a row from database format to application format (decode).
    * Applied to data received from Electric.
-   *
-   * Only renames columns - does not transform values.
    */
-  decode: (row: Row<Extensions>) => Row<Extensions>
+  decode: (row: Record<string, unknown>) => Record<string, unknown>
 
   /**
    * Transform column names from application format to database format (encode).
@@ -125,9 +123,9 @@ export function camelToSnake(str: string): string {
  *   columnMapper: mapper
  * })
  */
-export function createColumnMapper<Extensions = never>(
+export function createColumnMapper(
   mapping: Record<string, string>
-): ColumnMapper<Extensions> & { mapping: Record<string, string> } {
+): ColumnMapper & { mapping: Record<string, string> } {
   // Build reverse mapping: app name -> db name
   const reverseMapping: Record<string, string> = {}
   for (const [dbName, appName] of Object.entries(mapping)) {
@@ -135,8 +133,8 @@ export function createColumnMapper<Extensions = never>(
   }
 
   return {
-    decode: (row: Row<Extensions>) => {
-      const result: Row<Extensions> = {}
+    decode: (row: Record<string, unknown>) => {
+      const result: Record<string, unknown> = {}
       for (const [dbKey, appKey] of Object.entries(mapping)) {
         if (dbKey in row) {
           result[appKey] = row[dbKey]
@@ -349,9 +347,7 @@ export function encodeWhereClause(
  *   params: { "1": "123" }
  * })
  */
-export function snakeCamelMapper<Extensions = never>(
-  schema?: Schema
-): ColumnMapper<Extensions> {
+export function snakeCamelMapper(schema?: Schema): ColumnMapper {
   // If schema provided, build explicit mapping
   if (schema) {
     const mapping: Record<string, string> = {}
@@ -363,8 +359,8 @@ export function snakeCamelMapper<Extensions = never>(
 
   // Otherwise, map dynamically
   return {
-    decode: (row: Row<Extensions>) => {
-      const result: Row<Extensions> = {}
+    decode: (row: Record<string, unknown>) => {
+      const result: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(row)) {
         result[snakeToCamel(key)] = value
       }
