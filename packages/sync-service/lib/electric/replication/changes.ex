@@ -107,14 +107,15 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule NewRecord do
-    defstruct [:relation, :record, :log_offset, :key, last?: false]
+    defstruct [:relation, :record, :log_offset, :key, last?: false, move_tags: []]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
             record: Changes.record(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
-            last?: boolean()
+            last?: boolean(),
+            move_tags: [Changes.tag()]
           }
   end
 
@@ -126,7 +127,8 @@ defmodule Electric.Replication.Changes do
       :log_offset,
       :key,
       :old_key,
-      tags: [],
+      move_tags: [],
+      removed_move_tags: [],
       changed_columns: MapSet.new(),
       last?: false
     ]
@@ -138,7 +140,8 @@ defmodule Electric.Replication.Changes do
             log_offset: LogOffset.t(),
             key: String.t() | nil,
             old_key: String.t() | nil,
-            tags: [Changes.tag()],
+            move_tags: [Changes.tag()],
+            removed_move_tags: [Changes.tag()],
             changed_columns: MapSet.t(),
             last?: boolean()
           }
@@ -176,14 +179,14 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule DeletedRecord do
-    defstruct [:relation, :old_record, :log_offset, :key, tags: [], last?: false]
+    defstruct [:relation, :old_record, :log_offset, :key, move_tags: [], last?: false]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
             old_record: Changes.record(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
-            tags: [Changes.tag()],
+            move_tags: [Changes.tag()],
             last?: boolean()
           }
   end
@@ -343,7 +346,7 @@ defmodule Electric.Replication.Changes do
       old_record: change.old_record,
       key: change.old_key || change.key,
       log_offset: change.log_offset,
-      tags: change.tags
+      move_tags: change.move_tags
     }
   end
 

@@ -476,8 +476,6 @@ defmodule Electric.Shapes.Consumer do
           actual_num_changes: num_changes
         })
 
-        ShapeCache.ShapeStatus.set_latest_offset(state.stack_id, shape_handle, last_log_offset)
-
         notify_new_changes(state, changes, last_log_offset)
 
         lag = calculate_replication_lag(txn)
@@ -517,6 +515,12 @@ defmodule Electric.Shapes.Consumer do
           latest_log_offset :: LogOffset.t()
         ) :: map()
   defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
+    ShapeCache.ShapeStatus.set_latest_offset(
+      state.stack_id,
+      state.shape_handle,
+      latest_log_offset
+    )
+
     if state.materializer_subscribed? do
       Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
     end
