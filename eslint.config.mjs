@@ -16,6 +16,7 @@ export default [
       `**/.vitepress/dist/**`,
       `**/sst-env.d.ts`,
       `**/sst.config.ts`,
+      `website/src/partials/**`,
     ],
   },
   {

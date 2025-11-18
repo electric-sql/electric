@@ -28,7 +28,6 @@ await pg.electric.syncShapeToTable({
 
 // Bind data to your components using live queries
 // against the local embedded database
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const Component = () => {
   const items = useLiveQuery(`SELECT * FROM items;`)
 

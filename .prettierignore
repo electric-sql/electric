@@ -19,6 +19,9 @@ website/**/*.md
 # Ignore CSS file with unstable Prettier formatting
 website/.vitepress/theme/custom.css
 
+# Ignore website partials (documentation code snippets)
+website/src/partials/**
+
 # Ignore Elixir projects
 packages/sync-service
 packages/elixir-client
