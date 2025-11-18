@@ -33,4 +33,44 @@ defmodule Electric.LsnTrackerTest do
       assert LsnTracker.get_last_processed_lsn(stack_id) == lsn
     end
   end
+
+  describe "initialize_last_processed_lsn/2" do
+    setup ctx do
+      LsnTracker.initialize(ctx.stack_id)
+      :ok
+    end
+
+    test "sets lsn when not previously set", %{stack_id: stack_id} do
+      lsn = Lsn.from_integer(42)
+      assert :ok = LsnTracker.initialize_last_processed_lsn(lsn, stack_id)
+      assert LsnTracker.get_last_processed_lsn(stack_id) == lsn
+    end
+
+    test "accepts integer and converts to Lsn", %{stack_id: stack_id} do
+      assert :ok = LsnTracker.initialize_last_processed_lsn(100, stack_id)
+      assert LsnTracker.get_last_processed_lsn(stack_id) == Lsn.from_integer(100)
+    end
+
+    test "does not overwrite existing lsn", %{stack_id: stack_id} do
+      initial_lsn = Lsn.from_integer(50)
+      LsnTracker.set_last_processed_lsn(initial_lsn, stack_id)
+
+      new_lsn = Lsn.from_integer(100)
+      assert :ok = LsnTracker.initialize_last_processed_lsn(new_lsn, stack_id)
+
+      # Should still be the initial LSN, not the new one
+      assert LsnTracker.get_last_processed_lsn(stack_id) == initial_lsn
+    end
+
+    test "is idempotent - can be called multiple times", %{stack_id: stack_id} do
+      lsn1 = Lsn.from_integer(10)
+      lsn2 = Lsn.from_integer(20)
+
+      assert :ok = LsnTracker.initialize_last_processed_lsn(lsn1, stack_id)
+      assert :ok = LsnTracker.initialize_last_processed_lsn(lsn2, stack_id)
+
+      # First call wins
+      assert LsnTracker.get_last_processed_lsn(stack_id) == lsn1
+    end
+  end
 end
