@@ -91,7 +91,6 @@ defmodule Electric.Telemetry.CallHomeReporter do
 
     if stack_id do
       Logger.metadata(stack_id: stack_id)
-      Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
     end
 
     Logger.notice(

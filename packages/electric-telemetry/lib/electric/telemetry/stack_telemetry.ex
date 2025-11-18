@@ -32,7 +32,6 @@ defmodule Electric.Telemetry.StackTelemetry do
   def init(%{stack_id: stack_id} = opts) do
     Process.set_label({:stack_telemetry_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
-    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     children =
       [

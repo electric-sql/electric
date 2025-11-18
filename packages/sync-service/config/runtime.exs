@@ -281,11 +281,8 @@ if Electric.telemetry_enabled?() do
     environment_name: config_env(),
     client: Electric.Telemetry.SentryReqHTTPClient
 
-  sentry_dsn = env!("SENTRY_DSN", :string, nil)
-
-  if !is_nil(sentry_dsn) do
-    config :sentry,
-      dsn: sentry_dsn
+  if sentry_dsn = env!("SENTRY_DSN", :string, nil) do
+    config :sentry, dsn: sentry_dsn
   end
 
   otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)

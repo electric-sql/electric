@@ -49,7 +49,3 @@ At a high level, the library includes these modules:
   Electric stack: shape stats, replication client stats, etc. No builtin measurements are defines here.
 
   - Reporter modules. These are enabled individually and are used for exporting metrics to the corresponding destination.
-
-  - `Electric.Telemetry.Sentry`. This is primarily used by the Electric app but a couple of
-  modules in the electric-telemetry proper rely on it as well. Hence the inclusion of this
-  module in the library.
