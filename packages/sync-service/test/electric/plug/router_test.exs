@@ -1692,20 +1692,30 @@ defmodule Electric.Plug.RouterTest do
       db_conn: db_conn
     } do
       # Start a transaction that has a lock on `items`.
-      %{pid: child} =
-        Task.async(fn ->
-          Postgrex.transaction(db_conn, fn tx_conn ->
-            Postgrex.query!(
-              tx_conn,
-              "INSERT INTO items VALUES (gen_random_uuid(), 'test value')",
-              []
-            )
+      child =
+        start_supervised!(
+          Supervisor.child_spec(
+            {
+              Task,
+              fn ->
+                Postgrex.transaction(
+                  db_conn,
+                  fn tx_conn ->
+                    Postgrex.query!(
+                      tx_conn,
+                      "INSERT INTO items VALUES (gen_random_uuid(), 'test value')",
+                      []
+                    )
 
-            receive do
-              :continue -> :ok
-            end
-          end)
-        end)
+                    receive(do: (:continue -> :ok))
+                  end,
+                  timeout: :infinity
+                )
+              end
+            },
+            restart: :temporary
+          )
+        )
 
       # This can't alter the publication, so crashes
       assert %{status: 503, resp_body: body} =
@@ -1716,7 +1726,12 @@ defmodule Electric.Plug.RouterTest do
                Jason.decode!(body)
 
       # Now we can continue
+      ref = Process.monitor(child)
       send(child, :continue)
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}
+
+      # TODO: fix issue with shape crashing before it is initialised
+      Process.sleep(100)
 
       # This should work now
       assert %{status: 200, resp_body: body} =
