@@ -121,9 +121,11 @@ defmodule Electric.Postgres.ConfigurationTest do
                fn conn ->
                  Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
                  send(test_pid, :table_locked)
-                 Process.sleep(5_000)
-               end,
-               timeout: 15_000
+
+                 receive do
+                   msg -> send(self(), msg)
+                 end
+               end
              )
            end},
           restart: :temporary
@@ -136,7 +138,7 @@ defmodule Electric.Postgres.ConfigurationTest do
               %DBConnection.ConnectionError{
                 message: "connection is closed because of an error, disconnect or timeout"
               }} =
-               Configuration.add_table_to_publication(conn, publication, oid_rel, 500)
+               Configuration.add_table_to_publication(conn, publication, oid_rel, 50)
     end
   end
 

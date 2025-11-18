@@ -269,7 +269,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
 
   @spec do_publication_update(
           :add_and_configure | :add | :configure | :drop,
-          PublicationManager.RelationTracker.relation_filter(),
+          Electric.oid_relation(),
           state()
         ) :: {:ok, :configured | :dropped} | {:error, any()}
   defp do_publication_update(action, filter, state)
