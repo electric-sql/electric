@@ -217,13 +217,20 @@ defmodule Electric.Shapes.Consumer.Materializer do
         Eval.Env.parse_const(Eval.Env.new(), const, type)
       end)
 
-    {List.to_tuple(values), original_strings}
+    {List.to_tuple(values), List.to_tuple(original_strings)}
   end
 
   defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
     original_string = Map.fetch!(record, column)
     {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), original_string, type)
     {value, original_string}
+  end
+
+  defp value_to_string(value, %{materialized_type: {:array, {:row, type}}}) do
+    value
+    |> Tuple.to_list()
+    |> Enum.zip_with(type, &Eval.Env.const_to_pg_string(Eval.Env.new(), &1, &2))
+    |> List.to_tuple()
   end
 
   defp value_to_string(value, %{materialized_type: {:array, type}}) do

@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.QueryingTest do
   use Support.TransactionCase, async: true
 
+  alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Postgres.Inspector.DirectInspector
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Querying
@@ -286,6 +287,76 @@ defmodule Electric.Shapes.QueryingTest do
     end
   end
 
+  describe "query_move_in/5 with SubqueryMoves.move_in_where_clause/3" do
+    test "builds the correct query which executes", %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE parent (id SERIAL PRIMARY KEY, value INTEGER)",
+            "CREATE TABLE child (id SERIAL PRIMARY KEY, value INTEGER, parent_id INTEGER REFERENCES parent(id))",
+            "INSERT INTO parent (value) VALUES (1), (2), (3)",
+            "INSERT INTO child (value, parent_id) VALUES (4, 1), (5, 2), (6, 3)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "parent_id IN (SELECT id FROM parent)",
+          inspector: {DirectInspector, conn}
+        )
+        |> fill_handles()
+
+      move_in_values = ["1", "2"]
+
+      assert {where, params} =
+               SubqueryMoves.move_in_where_clause(
+                 shape,
+                 hd(shape.shape_dependencies_handles),
+                 move_in_values
+               )
+
+      assert [
+               %{value: %{value: "4"}, headers: %{tags: [["1"]]}},
+               %{value: %{value: "5"}, headers: %{tags: [["2"]]}}
+             ] =
+               Querying.query_move_in(conn, shape, {where, params})
+               |> Enum.map(fn [_key, json] -> json end)
+               |> decode_stream()
+    end
+
+    test "builds the correct query which executes with a composite PK", %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE parent (id1 SERIAL, id2 SERIAL, value INTEGER, PRIMARY KEY (id1, id2))",
+            "CREATE TABLE child (id1 SERIAL, id2 SERIAL, value INTEGER, parent_id1 INTEGER, parent_id2 INTEGER, PRIMARY KEY (id1, id2), FOREIGN KEY (parent_id1, parent_id2) REFERENCES parent(id1, id2))",
+            "INSERT INTO parent (value) VALUES (1), (2), (3)",
+            "INSERT INTO child (value, parent_id1, parent_id2) VALUES (4, 1, 1), (5, 2, 2), (6, 3, 3)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "(parent_id1, parent_id2) IN (SELECT id1, id2 FROM parent)",
+          inspector: {DirectInspector, conn}
+        )
+        |> fill_handles()
+
+      move_in_values = [{"1", "1"}, {"2", "2"}]
+
+      assert {where, params} =
+               SubqueryMoves.move_in_where_clause(
+                 shape,
+                 hd(shape.shape_dependencies_handles),
+                 move_in_values
+               )
+
+      assert [
+               %{value: %{value: "4"}, headers: %{tags: [[["1", "1"]]]}},
+               %{value: %{value: "5"}, headers: %{tags: [[["2", "2"]]]}}
+             ] =
+               Querying.query_move_in(conn, shape, {where, params})
+               |> Enum.map(fn [_key, json] -> json end)
+               |> decode_stream()
+    end
+  end
+
   defp decode_stream(stream),
     do:
       stream
@@ -294,4 +365,10 @@ defmodule Electric.Shapes.QueryingTest do
         :chunk_boundary -> :chunk_boundary
         json_item -> Jason.decode!(json_item, keys: :atoms)
       end)
+
+  defp fill_handles(shape) do
+    filled_deps = Enum.map(shape.shape_dependencies, &fill_handles/1)
+    handles = Enum.map(filled_deps, &Shape.generate_id/1)
+    %{shape | shape_dependencies: filled_deps, shape_dependencies_handles: handles}
+  end
 end

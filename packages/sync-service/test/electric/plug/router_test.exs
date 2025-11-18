@@ -2483,28 +2483,15 @@ defmodule Electric.Plug.RouterTest do
         "UPDATE members SET flag = TRUE WHERE (user_id, team_id) = (2, 2)"
       )
 
-      assert {_, 409, _} =
+      assert {_, 200,
+              [
+                %{
+                  "headers" => %{"tags" => [[["2", "2"]]]},
+                  "value" => %{"id" => "2", "role" => "Member"}
+                },
+                _
+              ]} =
                Task.await(task)
-
-      # And new shape should have the correct data
-      assert {_, 200, response} = shape_req(orig_req, ctx.opts)
-
-      # Should contain 2 data records and the snapshot-end control message
-      assert length(response) == 3
-
-      # Filter out control messages to get just the data records
-      data = Enum.filter(response, &Map.has_key?(&1, "key"))
-      assert length(data) == 2
-
-      assert [
-               %{"value" => %{"id" => "1", "role" => "Admin"}},
-               %{"value" => %{"id" => "2", "role" => "Member"}}
-             ] =
-               Enum.sort_by(data, & &1["value"]["id"])
-
-      # Also verify the control message is present
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
 
     @tag with_sql: [

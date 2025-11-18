@@ -14,12 +14,30 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       ) do
     index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
     target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
-    type = used_refs[["$sublink", "#{index}"]] |> Electric.Replication.Eval.type_to_pg_cast()
-    {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+
+    case used_refs[["$sublink", "#{index}"]] do
+      {:array, {:row, cols}} ->
+        unnest_sections =
+          cols
+          |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
+          |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
+          |> Enum.join(", ")
+
+        {String.replace(query, target_section, "IN (SELECT * FROM unnest(#{unnest_sections}))"),
+         Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
+
+      col ->
+        type = Electric.Replication.Eval.type_to_pg_cast(col)
+        {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+    end
   end
 
   defp rebuild_subquery_section(shape) do
-    ~s|IN (SELECT #{Enum.join(shape.explicitly_selected_columns, ", ")} FROM #{Electric.Utils.relation_to_sql(shape.root_table)} WHERE #{shape.where.query})|
+    base =
+      ~s|IN (SELECT #{Enum.join(shape.explicitly_selected_columns, ", ")} FROM #{Electric.Utils.relation_to_sql(shape.root_table)}|
+
+    where = if shape.where, do: " WHERE #{shape.where.query}", else: ""
+    base <> where <> ")"
   end
 
   @doc """
