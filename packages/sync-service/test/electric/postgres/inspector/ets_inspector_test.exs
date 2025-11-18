@@ -551,7 +551,7 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
     setup %{pooled_db_config: conn_opts} = ctx do
       conn_opts =
         conn_opts
-        |> Keyword.merge(pool_size: 1, queue_target: 50, queue_interval: 100)
+        |> Keyword.merge(pool_size: 1, queue_target: 100, queue_interval: 500)
         |> Electric.Utils.deobfuscate_password()
 
       busy_pool =
@@ -568,16 +568,20 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       test_pid = self()
 
       start_link_supervised!(
-        {Task,
-         fn ->
-           DBConnection.run(
-             busy_pool,
-             fn conn ->
-               send(test_pid, :pool_busy)
-               Postgrex.query!(conn, "SELECT PG_SLEEP(10)", [])
-             end
-           )
-         end}
+        Supervisor.child_spec(
+          {Task,
+           fn ->
+             DBConnection.run(
+               busy_pool,
+               fn _conn ->
+                 send(test_pid, :pool_busy)
+                 Process.sleep(5_000)
+               end,
+               timeout: :infinity
+             )
+           end},
+          restart: :temporary
+        )
       )
 
       assert_receive :pool_busy

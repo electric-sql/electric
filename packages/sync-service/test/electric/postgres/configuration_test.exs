@@ -112,15 +112,22 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel = {oid, {"public", "items"}}
       test_pid = self()
 
-      start_supervised(
-        {Task,
-         fn ->
-           Postgrex.transaction(conn, fn conn ->
-             Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
-             send(test_pid, :table_locked)
-             Postgrex.query!(conn, "SELECT PG_SLEEP(10)", [])
-           end)
-         end}
+      start_supervised!(
+        Supervisor.child_spec(
+          {Task,
+           fn ->
+             Postgrex.transaction(
+               conn,
+               fn conn ->
+                 Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
+                 send(test_pid, :table_locked)
+                 Process.sleep(5_000)
+               end,
+               timeout: 15_000
+             )
+           end},
+          restart: :temporary
+        )
       )
 
       assert_receive :table_locked
