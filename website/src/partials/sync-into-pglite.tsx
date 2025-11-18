@@ -28,7 +28,7 @@ await pg.electric.syncShapeToTable({
 
 // Bind data to your components using live queries
 // against the local embedded database
-const Component = () => {
+const _Component = () => {
   const items = useLiveQuery(`SELECT * FROM items;`)
 
   return <pre>{JSON.stringify(items)}</pre>
