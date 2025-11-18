@@ -263,25 +263,55 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp handle_action(%Relation{} = rel, state) do
-    Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
-    Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
+    OpenTelemetry.with_span(
+      "pg_txn.replication_client.relation_received",
+      ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
+      state.stack_id,
+      fn ->
+        Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
+        Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
 
-    handle_relation(state, rel)
+        result = handle_relation(state, rel)
+
+        OpenTelemetry.wipe_interval_timer()
+
+        result
+      end
+    )
   end
 
   defp handle_action(%Transaction{} = txn, state) do
-    Logger.debug(
+    OpenTelemetry.with_span(
+      "pg_txn.replication_client.transaction_received",
+      [
+        num_changes: txn.num_changes,
+        num_relations: MapSet.size(txn.affected_relations),
+        xid: txn.xid
+      ],
+      state.stack_id,
       fn ->
-        "Received transaction #{txn.xid} (#{txn.num_changes} changes) from Postgres at #{txn.lsn}"
-      end,
-      received_transaction_xid: txn.xid,
-      received_transaction_num_changes: txn.num_changes,
-      received_transaction_lsn: txn.lsn
+        OpenTelemetry.start_interval("shape_log_collector.logging")
+
+        Logger.debug(
+          fn ->
+            "Received transaction #{txn.xid} (#{txn.num_changes} changes) from Postgres at #{txn.lsn}"
+          end,
+          received_transaction_xid: txn.xid,
+          received_transaction_num_changes: txn.num_changes,
+          received_transaction_lsn: txn.lsn
+        )
+
+        Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
+
+        result = handle_transaction(state, txn)
+
+        OpenTelemetry.stop_and_save_intervals(
+          total_attribute: :"shape_log_collector.transaction.total_duration_µs"
+        )
+
+        result
+      end
     )
-
-    Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
-
-    handle_transaction(state, txn)
   end
 
   # If no-one is listening to the replication stream, then just return without
