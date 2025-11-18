@@ -78,6 +78,17 @@ jobs:
             ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-
             ${{ runner.os }}-${{ matrix.package }}-deps-
 
+      - name: Restore compiled code
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/sync-service/_build/*/lib
+          key: '${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}'
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-${{ matrix.package }}-build-
+
       - name: Install dependencies
         run: mix deps.get
 
