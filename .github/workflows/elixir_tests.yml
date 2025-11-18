@@ -95,25 +95,15 @@ jobs:
             ${{ runner.os }}-sync-service-build-
 
       - name: Install dependencies
-        run: |
-          mix deps.get
-          mix deps.compile
-          MIX_TARGET=application mix deps.compile
+        run: mix do deps.get + deps.compile
 
       - name: Compile
         # don't bail on compile warnings - let's get the results of the tests
         # and let the formatting task check for compilation warnings
-        run: |
-          mix compile
-          MIX_TARGET=application mix compile
+        run: mix compile
 
       - name: Run tests
         run: mix coveralls.json --include slow --cover --export-coverage test
-
-      - name: Run telemetry tests
-        env:
-          MIX_TARGET: application
-        run: mix coveralls.json --only telemetry_target --import-cover cover
 
       - name: Upload coverage reports to CodeCov
         uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d

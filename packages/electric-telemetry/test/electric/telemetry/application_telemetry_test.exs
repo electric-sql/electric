@@ -3,8 +3,6 @@ defmodule Electric.TelemetryTest do
 
   alias Electric.Telemetry.ApplicationTelemetry
 
-  @moduletag :telemetry_target
-
   describe "get_system_memory_usage" do
     test "returns calculated memory stats" do
       case :os.type() do
