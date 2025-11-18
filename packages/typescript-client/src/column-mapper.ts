@@ -1,4 +1,4 @@
-import { Row, Schema } from './types'
+import { Schema } from './types'
 
 /**
  * A bidirectional column mapper that handles transforming column **names**
