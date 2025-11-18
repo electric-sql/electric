@@ -1,0 +1,92 @@
+[doc Verify that consumer processes suspend and resume correctly]
+
+[include _macros.luxinc]
+
+[global pg_container_name=db-connection-scaledown__pg]
+[global database_url=postgresql://electric_test:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+###
+
+# Start Postgres and create an additional role that will be used by Electric in this test
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e INIT_DB_SQL=\"\
+    CREATE ROLE electric_test LOGIN PASSWORD 'password' REPLICATION;\
+    GRANT CREATE ON DATABASE electric TO electric_test\"" \
+  "" \
+  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
+
+# Create a table for subsequent shape requests
+[invoke start_psql]
+
+[shell psql]
+  !create table items(val text);
+  ??CREATE
+
+  !insert into items values ('1'), ('2');
+  ??INSERT
+
+  !alter table items owner to electric_test;
+  ??ALTER TABLE
+
+# Start Electric and wait for it to finish initialization.
+# Set a very small hibernation timeout so consumers will shutdown quickly
+[invoke setup_electric_with_env "ELECTRIC_SHAPE_HIBERNATE_AFTER=200ms"]
+[shell electric]
+  [timeout 10]
+  ??[debug] Replication client started streaming
+
+# Start a live shape request
+[shell client]
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&offset=-1"]
+
+  ??HTTP/1.1 200 OK
+
+  ?electric-handle: ([\d-]+)
+  [global handle=$1]
+
+  ??electric-offset: 0_0
+
+  ??[{"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"1\"","value":{"val":"1"}},\
+     {"headers":{"operation":"insert","relation":["public","items"]},"key":"\"public\".\"items\"/\"2\"","value":{"val":"2"}},\
+     {"headers":{"control":"snapshot-end"
+
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=0_0&live"]
+
+# Check that the consumer process for the given handle has suspended itself
+[shell electric]
+  [sleep 1]
+
+  ??[debug] Suspending consumer $handle
+  !{:active_consumer_count, Electric.Shapes.ConsumerRegistry.active_consumer_count("single_stack")}
+  ?{:active_consumer_count, 0}
+
+# Verify that writes to the handle re-create the consumer process
+[shell psql]
+  !insert into items values ('3');
+  ??INSERT
+
+
+[shell electric]
+  ??[info] Started consumer for existing handle $handle
+  !{:active_consumer_count, Electric.Shapes.ConsumerRegistry.active_consumer_count("single_stack")}
+  ?{:active_consumer_count, 1}
+
+[shell client]
+  [timeout 1]
+
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=0_0&live"]
+
+  ??HTTP/1.1 200
+
+  ??transfer-encoding: chunked
+  ?electric-offset: ([0-9]+)_0
+  [local global_last_seen_lsn=$1]
+
+  ??"headers":{"last":true,"lsn":"$global_last_seen_lsn","op_position":0,"operation":"insert","relation":["public","items"],"txids":
+  ??"key":"\"public\".\"items\"/\"3\"","value":{"val":"3"}
+  ??"headers":{"control":"up-to-date","global_last_seen_lsn":"$global_last_seen_lsn"}
+
+
+[cleanup]
+  [invoke teardown]

@@ -362,9 +362,23 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info(:timeout, state) do
-    state = %{state | writer: ShapeCache.Storage.hibernate(state.writer)}
+    # we can only suspend (terminate) the consumer process if
+    # 1. we're not waiting for snapshot information
+    # 2. we are not part of a subquery dependency tree, that is either
+    #   a. we have no dependent shapes
+    #   b. we don't have a materializer subscribed
+    can_suspend? =
+      state.snapshot_started and Enum.empty?(state.shape.shape_dependencies_handles) and
+        not state.materializer_subscribed?
 
-    {:noreply, state, :hibernate}
+    if can_suspend? do
+      Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
+      {:stop, ShapeCleaner.consumer_suspend_reason(), state}
+    else
+      state = %{state | writer: ShapeCache.Storage.hibernate(state.writer)}
+
+      {:noreply, state, :hibernate}
+    end
   end
 
   @impl GenServer

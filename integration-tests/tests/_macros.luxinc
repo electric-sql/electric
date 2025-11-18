@@ -186,7 +186,7 @@
 
 [macro start_electric_script shell_name port env]
   [shell $shell_name]
-    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh
+    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh --no-color
 [endmacro]
 
 [macro stop_electric]
