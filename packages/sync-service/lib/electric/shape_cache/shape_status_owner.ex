@@ -41,8 +41,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     :ok = ShapeStatus.initialize_from_storage(stack_id, config.storage)
-
-    Electric.LsnTracker.create_table(stack_id)
+    :ok = Electric.LsnTracker.initialize(stack_id)
 
     {:ok, %{stack_id: stack_id, backup_dir: ShapeStatus.backup_dir(config.storage)}}
   end

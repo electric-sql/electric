@@ -9,7 +9,7 @@ defmodule Electric.LsnTrackerTest do
 
   describe "get_last_processed_lsn/1" do
     setup ctx do
-      LsnTracker.create_table(ctx.stack_id)
+      LsnTracker.initialize(ctx.stack_id)
       :ok
     end
 
