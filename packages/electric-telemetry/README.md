@@ -39,13 +39,13 @@ but the majority of the supported configuration options are passed as keyword li
 
 At a high level, the library includes these modules:
 
-  - `Electric.Telemetry` as the top-level interface for determining whether telemetry
+- `Electric.Telemetry` as the top-level interface for determining whether telemetry
   collection and/or export is enabled. Defines macros that are used to conditionally compile
   other collecting and exporting modules.
 
-  - `Electric.Telemetry.ApplicationTelemetry` defines metrics and periodic measurements that apply to BEAM as a whole.
+- `Electric.Telemetry.ApplicationTelemetry` defines metrics and periodic measurements that apply to BEAM as a whole.
 
-  - `Electric.Telemetry.StackTelemetry` defines metrics that are specific to the notion of an
+- `Electric.Telemetry.StackTelemetry` defines metrics that are specific to the notion of an
   Electric stack: shape stats, replication client stats, etc. No builtin measurements are defines here.
 
-  - Reporter modules. These are enabled individually and are used for exporting metrics to the corresponding destination.
+- Reporter modules. These are enabled individually and are used for exporting metrics to the corresponding destination.
