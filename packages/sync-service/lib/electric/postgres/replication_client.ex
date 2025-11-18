@@ -26,6 +26,7 @@ defmodule Electric.Postgres.ReplicationClient do
           | :check_if_publication_exists
           | :drop_slot
           | :create_slot
+          | :query_slot_flushed_lsn
           | :set_display_setting
           | :ready_to_stream
           | :start_streaming
@@ -60,7 +61,7 @@ defmodule Electric.Postgres.ReplicationClient do
       # end LSN of the last transaction that we have successfully processed and persisted in the
       # shape log storage.
       received_wal: 0,
-      flushed_wal: 0,
+      flushed_wal: nil,
       last_seen_txn_lsn: Lsn.from_integer(0),
       last_seen_txn_timestamp: nil,
       flush_up_to_date?: true
@@ -232,8 +233,15 @@ defmodule Electric.Postgres.ReplicationClient do
       end
     end
 
-    if current_step == :create_slot and extra_info == :created_new_slot,
-      do: notify_created_new_slot(state)
+    # for new slots, always reset the last processed LSN
+    if current_step == :create_slot and extra_info == :created_new_slot do
+      Electric.LsnTracker.set_last_processed_lsn(state.flushed_wal, state.stack_id)
+      notify_created_new_slot(state)
+    end
+
+    # for existing slots, populate the last processed LSN if not present
+    if current_step == :query_slot_flushed_lsn,
+      do: Electric.LsnTracker.initialize_last_processed_lsn(state.flushed_wal, state.stack_id)
 
     if next_step == :ready_to_stream,
       do: notify_ready_to_stream(state)
