@@ -16,12 +16,6 @@ end
 
 ## Configuration
 
-Telemetry must be enabled at compile time by placing the following line in your app's `config/config.exs` file:
-
-```elixir
-config :electric_telemetry, enabled?: true
-```
-
 Runtime configuration can partially be done via app env
 
 ```elixir
