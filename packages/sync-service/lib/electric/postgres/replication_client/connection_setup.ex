@@ -391,7 +391,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp next_step(%{step: :drop_slot}),
     do: :create_slot
 
-  defp next_step(%{step: :create_slot, flushed_wal: nil}),
+  defp next_step(%{step: :create_slot, flushed_wal: 0}),
     do: :query_slot_flushed_lsn
 
   defp next_step(%{step: :create_slot}),

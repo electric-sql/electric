@@ -61,7 +61,7 @@ defmodule Electric.Postgres.ReplicationClient do
       # end LSN of the last transaction that we have successfully processed and persisted in the
       # shape log storage.
       received_wal: 0,
-      flushed_wal: nil,
+      flushed_wal: 0,
       last_seen_txn_lsn: Lsn.from_integer(0),
       last_seen_txn_timestamp: nil,
       flush_up_to_date?: true

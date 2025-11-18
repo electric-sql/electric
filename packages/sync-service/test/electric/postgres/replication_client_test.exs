@@ -4,7 +4,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
   import ExUnit.CaptureLog
 
   import Support.ComponentSetup,
-    only: [with_stack_id_from_test: 1, with_status_monitor: 1, with_slot_name: 1]
+    only: [
+      with_stack_id_from_test: 1,
+      with_status_monitor: 1,
+      with_slot_name: 1,
+      with_lsn_tracker: 1
+    ]
 
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
@@ -98,7 +103,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   setup :with_slot_name
 
   describe "ReplicationClient init" do
-    setup [:with_unique_db, :with_basic_tables, :with_status_monitor]
+    setup [:with_unique_db, :with_basic_tables, :with_status_monitor, :with_lsn_tracker]
 
     test "creates an empty publication on startup if requested",
          %{db_conn: conn, connection_manager: connection_manager, slot_name: slot_name} = ctx do
@@ -128,7 +133,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
       :with_basic_tables,
       :with_publication,
       :with_replication_opts,
-      :with_status_monitor
+      :with_status_monitor,
+      :with_lsn_tracker
     ]
 
     test "calls a provided function when receiving it from the PG", %{db_conn: conn} = ctx do
@@ -518,7 +524,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
       :with_basic_tables,
       :with_publication,
       :with_replication_opts,
-      :with_status_monitor
+      :with_status_monitor,
+      :with_lsn_tracker
     ]
 
     setup %{db_conn: conn} = ctx do
@@ -598,7 +605,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
       :with_basic_tables,
       :with_publication,
       :with_replication_opts,
-      :with_status_monitor
+      :with_status_monitor,
+      :with_lsn_tracker
     ]
 
     test "should acquire an advisory lock on startup", ctx do
@@ -631,11 +639,13 @@ defmodule Electric.Postgres.ReplicationClientTest do
       # try to grab the same lock using a different connection
       new_stack_id = ctx.stack_id <> "_new"
       start_link_supervised!({Electric.ProcessRegistry, stack_id: new_stack_id})
+      with_lsn_tracker(%{ctx | stack_id: new_stack_id})
 
       start_client(
         ctx,
         id: :lock_client2,
         stack_id: new_stack_id,
+        replication_opts: Keyword.put(ctx.replication_opts, :stack_id, new_stack_id),
         wait_for_start: false
       )
 
@@ -645,6 +655,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       # should immediately grab it once previous lock is released
       stop_supervised!(:lock_client1)
       assert_receive :lock_acquired
+      stop_supervised(:lock_client2)
     end
 
     test "should exit if timed out on connection ", ctx do
