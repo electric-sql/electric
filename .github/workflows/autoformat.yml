@@ -41,22 +41,22 @@ jobs:
 
       - name: Check Prettier formatting
         run: pnpm run format:check
-        continue-on-error: true
-        id: prettier_check
 
       - name: Check ESLint (all packages)
         run: pnpm run stylecheck-all
-        continue-on-error: true
-        id: eslint_check
 
   elixir_formatting:
+    strategy:
+      matrix:
+        package: [sync-service, elixir-client]
     name: Elixir formatting and linting
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: packages/sync-service
+        working-directory: packages/${{ matrix.package }}
     env:
       MIX_ENV: test
+      MIX_TARGET: application
       MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
     steps:
       - name: Checkout
@@ -71,22 +71,18 @@ jobs:
       - name: Restore dependencies cache
         uses: actions/cache/restore@v4
         with:
-          path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          path: packages/${{ matrix.package }}/deps
+          key: "${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-deps-
+            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}
+            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-${{ matrix.package }}-deps-
 
       - name: Install dependencies
         run: mix deps.get
 
       - name: Check Elixir formatting
         run: mix format --check-formatted
-        continue-on-error: true
-        id: elixir_format_check
 
       - name: Check Elixir compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
-        continue-on-error: true
-        id: elixir_compile_check
