@@ -68,10 +68,10 @@ jobs:
           path: |
             packages/elixir-client/_build/*/lib
             !packages/elixir-client/_build/*/lib/electric_client
-          key: '${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-${{ github.sha }}'
+          key: "${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-${{ github.sha }}
-            ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-
             ${{ runner.os }}-elixir-client-build-
 
       - name: Install dependencies

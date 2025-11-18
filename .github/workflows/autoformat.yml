@@ -81,11 +81,14 @@ jobs:
       - name: Restore compiled code
         uses: actions/cache/restore@v4
         with:
-          path: packages/sync-service/_build/*/lib
-          key: '${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}'
+          path: |
+            packages/${{ matrix.package }}/_build/*/lib
+            !packages/${{ matrix.package }}/_build/*/lib/electric
+            !packages/${{ matrix.package }}/_build/*/lib/electric_client
+            !packages/${{ matrix.package }}/_build/*/lib/electric_telemetry
+          key: "${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
-            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}
             ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-
             ${{ runner.os }}-${{ matrix.package }}-build-
 
