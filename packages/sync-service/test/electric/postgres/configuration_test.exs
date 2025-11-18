@@ -118,7 +118,7 @@ defmodule Electric.Postgres.ConfigurationTest do
            Postgrex.transaction(conn, fn conn ->
              Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
              send(test_pid, :table_locked)
-             Process.sleep(:infinity)
+             Postgrex.query!(conn, "SELECT PG_SLEEP(10)", [])
            end)
          end}
       )
