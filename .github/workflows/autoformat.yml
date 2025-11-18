@@ -1,5 +1,10 @@
 name: Autoformat & Linting
 
+# Note: For pull requests, GitHub Actions automatically creates a merge commit
+# between your branch and the target branch (usually main), then runs checks on
+# that merged state. This ensures the code will be properly formatted after merge.
+# If this check fails, you may need to merge main into your branch first.
+
 on:
   push:
     branches: ['main']
@@ -34,34 +39,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Debug - Show prettier version
-        run: pnpm exec prettier --version
-
       - name: Check Prettier formatting
         run: pnpm run format:check
-        continue-on-error: true
-        id: prettier_check
-
-      - name: Debug - Show what prettier would change
-        if: steps.prettier_check.outcome == 'failure'
-        run: |
-          echo "Files that would be changed by prettier:"
-          pnpm exec prettier --list-different . || true
-          echo "---"
-          echo "Showing diff for first failing file:"
-          FIRST_FILE=$(pnpm exec prettier --list-different . 2>/dev/null | head -1)
-          if [ -n "$FIRST_FILE" ]; then
-            echo "File: $FIRST_FILE"
-            pnpm exec prettier --check "$FIRST_FILE" || true
-            echo "--- Current content (first 50 lines): ---"
-            head -50 "$FIRST_FILE"
-            echo "--- What prettier wants (first 50 lines): ---"
-            pnpm exec prettier "$FIRST_FILE" | head -50
-          fi
-
-      - name: Fail if prettier check failed
-        if: steps.prettier_check.outcome == 'failure'
-        run: exit 1
 
       - name: Check ESLint (all packages)
         run: pnpm run stylecheck-all
