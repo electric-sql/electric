@@ -487,6 +487,13 @@ defmodule Electric.Shapes.Consumer do
     )
   end
 
+  defp do_handle_txn(%Transaction{} = txn, state)
+       when LogOffset.is_log_offset_lte(txn.last_log_offset, state.latest_offset) do
+    Logger.debug(fn -> "Skipping already processed txn #{txn.xid}" end)
+
+    {:cont, consider_flushed(state, txn)}
+  end
+
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
     %{
       shape: shape,
@@ -552,6 +559,7 @@ defmodule Electric.Shapes.Consumer do
          notify(txn, %{
            state
            | writer: writer,
+             latest_offset: last_log_offset,
              txn_offset_mapping:
                state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
          })}

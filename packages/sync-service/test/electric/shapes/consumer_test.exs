@@ -722,6 +722,9 @@ defmodule Electric.Shapes.ConsumerTest do
                Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
                |> Enum.map(&Jason.decode!/1)
 
+      # Reset LSN to re-send transaction
+      ShapeLogCollector.set_last_processed_lsn(ctx.producer, Lsn.increment(lsn, -1))
+
       # If we encounter & store the same transaction, log stream should be stable
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
