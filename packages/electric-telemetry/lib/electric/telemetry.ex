@@ -4,7 +4,7 @@ defmodule ElectricTelemetry do
     Enum.map(1..num_schedulers, &:"normal_#{&1}") ++ [:cpu, :io]
   end
 
-  @opts_schema NimbleOptions.new!(Electric.Telemetry.Opts.schema())
+  @opts_schema NimbleOptions.new!(ElectricTelemetry.Opts.schema())
 
   def validate_options(user_opts) do
     with {:ok, validated_opts} <- NimbleOptions.validate(user_opts, @opts_schema) do

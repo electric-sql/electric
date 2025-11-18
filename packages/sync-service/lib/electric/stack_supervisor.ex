@@ -386,7 +386,7 @@ defmodule Electric.StackSupervisor do
   defp telemetry_children(%{stack_telemetry: stack_telemetry}), do: [stack_telemetry]
 
   defp telemetry_children(config) do
-    if Code.ensure_loaded?(Electric.Telemetry.StackTelemetry) do
+    if Code.ensure_loaded?(ElectricTelemetry.StackTelemetry) do
       telemetry_opts =
         config.telemetry_opts
         |> Keyword.put(:stack_id, config.stack_id)
@@ -397,7 +397,7 @@ defmodule Electric.StackSupervisor do
           & &1
         )
 
-      [{Electric.Telemetry.StackTelemetry, telemetry_opts}]
+      [{ElectricTelemetry.StackTelemetry, telemetry_opts}]
     else
       []
     end

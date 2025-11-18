@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.SystemMonitor do
+defmodule ElectricTelemetry.SystemMonitor do
   @moduledoc """
   Application-wide process that initializes Erlang's system monitor and consumes monitoring events.
 
@@ -12,7 +12,7 @@ defmodule Electric.Telemetry.SystemMonitor do
 
   use GenServer
 
-  import Electric.Telemetry.Processes, only: [proc_type: 1]
+  import ElectricTelemetry.Processes, only: [proc_type: 1]
 
   require Logger
 

@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.Reporters.Prometheus do
+defmodule ElectricTelemetry.Reporters.Prometheus do
   def child_spec(telemetry_opts, reporter_opts) do
     if get_in(telemetry_opts, [:reporters, :prometheus?]) do
       {TelemetryMetricsPrometheus.Core, add_buckets_to_distribution_metrics(reporter_opts)}

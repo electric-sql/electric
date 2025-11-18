@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.ApplicationTelemetry do
+defmodule ElectricTelemetry.ApplicationTelemetry do
   @moduledoc """
   Collects and exports application level telemetry such as CPU, memory and BEAM metrics.
 
@@ -8,11 +8,11 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
 
   import Telemetry.Metrics
 
-  alias Electric.Telemetry.Reporters
+  alias ElectricTelemetry.Reporters
 
   require Logger
 
-  @behaviour Electric.Telemetry.Poller
+  @behaviour ElectricTelemetry.Poller
 
   def start_link(opts) do
     with {:ok, opts} <- ElectricTelemetry.validate_options(opts) do
@@ -30,8 +30,8 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
   def init(opts) do
     children =
       [
-        {Electric.Telemetry.SystemMonitor, opts},
-        Electric.Telemetry.Poller.child_spec(opts, callback_module: __MODULE__)
+        {ElectricTelemetry.SystemMonitor, opts},
+        ElectricTelemetry.Poller.child_spec(opts, callback_module: __MODULE__)
         | exporter_child_specs(opts)
       ]
       |> Enum.reject(&is_nil/1)
@@ -53,7 +53,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
     ]
   end
 
-  @impl Electric.Telemetry.Poller
+  @impl ElectricTelemetry.Poller
   def builtin_periodic_measurements(telemetry_opts) do
     [
       # Measurements included with the telemetry_poller application.
@@ -178,7 +178,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
       last_value("system.swap.free"),
       last_value("system.swap.used")
     ]
-    |> Electric.Telemetry.Reporters.Statsd.add_instance_id_tag()
+    |> ElectricTelemetry.Reporters.Statsd.add_instance_id_tag()
   end
 
   ###
@@ -191,7 +191,7 @@ defmodule Electric.Telemetry.ApplicationTelemetry do
 
   def process_memory(%{intervals_and_thresholds: %{top_process_count: process_count}}) do
     for %{type: type, memory: memory} <-
-          Electric.Telemetry.Processes.top_memory_by_type(process_count) do
+          ElectricTelemetry.Processes.top_memory_by_type(process_count) do
       :telemetry.execute([:process, :memory], %{total: memory}, %{process_type: to_string(type)})
     end
   end

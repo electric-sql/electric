@@ -233,8 +233,8 @@ defmodule Electric.Application do
   end
 
   defp application_telemetry(config) do
-    if Code.ensure_loaded?(Electric.Telemetry.ApplicationTelemetry) do
-      [{Electric.Telemetry.ApplicationTelemetry, Keyword.fetch!(config, :telemetry_opts)}]
+    if Code.ensure_loaded?(ElectricTelemetry.ApplicationTelemetry) do
+      [{ElectricTelemetry.ApplicationTelemetry, Keyword.fetch!(config, :telemetry_opts)}]
     else
       []
     end

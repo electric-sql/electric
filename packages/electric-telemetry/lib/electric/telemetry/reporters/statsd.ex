@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.Reporters.Statsd do
+defmodule ElectricTelemetry.Reporters.Statsd do
   def child_spec(telemetry_opts, reporter_opts) do
     if host = get_in(telemetry_opts, [:reporters, :statsd_host]) do
       start_opts =

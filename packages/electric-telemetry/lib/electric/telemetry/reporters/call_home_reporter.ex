@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.Reporters.CallHomeReporter do
+defmodule ElectricTelemetry.Reporters.CallHomeReporter do
   import Telemetry.Metrics
 
   def child_spec(telemetry_opts, reporter_opts) do
@@ -14,7 +14,7 @@ defmodule Electric.Telemetry.Reporters.CallHomeReporter do
           reporter_opts
         )
 
-      {Electric.Telemetry.CallHomeReporter, start_opts}
+      {ElectricTelemetry.CallHomeReporter, start_opts}
     end
   end
 

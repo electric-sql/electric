@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.Poller do
+defmodule ElectricTelemetry.Poller do
   @callback builtin_periodic_measurements(map) :: list()
 
   def child_spec(telemetry_opts, poller_opts) do

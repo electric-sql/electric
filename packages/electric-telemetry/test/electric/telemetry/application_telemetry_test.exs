@@ -1,7 +1,7 @@
-defmodule Electric.TelemetryTest do
+defmodule ElectricTelemetry.ApplicationTelemetryTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Telemetry.ApplicationTelemetry
+  alias ElectricTelemetry.ApplicationTelemetry
 
   describe "get_system_memory_usage" do
     test "returns calculated memory stats" do

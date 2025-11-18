@@ -1,7 +1,7 @@
-defmodule Electric.Telemetry.MeasurementTest do
+defmodule ElectricTelemetry.MeasurementTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Telemetry.Measurement
+  alias ElectricTelemetry.Measurement
 
   setup(ctx) do
     [table_name: :"#{Path.basename(ctx.file)}:#{ctx.line}"]

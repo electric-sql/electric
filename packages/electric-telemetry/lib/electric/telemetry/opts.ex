@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.Opts do
+defmodule ElectricTelemetry.Opts do
   def schema do
     [
       instance_id: [type: :string, required: true],

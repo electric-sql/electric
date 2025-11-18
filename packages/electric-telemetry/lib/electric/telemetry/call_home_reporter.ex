@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.CallHomeReporter do
+defmodule ElectricTelemetry.CallHomeReporter do
   @moduledoc """
   Reporter that collects runtime telemetry information and sends it to a configured
   home server once in a while. The information is aggregated over a period of time,
@@ -10,7 +10,7 @@ defmodule Electric.Telemetry.CallHomeReporter do
   require Logger
 
   alias Telemetry.Metrics
-  alias Electric.Telemetry.Measurement
+  alias ElectricTelemetry.Measurement
 
   @type metric :: Telemetry.Metrics.t()
   @type report_format :: keyword(metric() | report_format())

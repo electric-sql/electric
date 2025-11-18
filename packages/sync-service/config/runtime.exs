@@ -274,7 +274,7 @@ config :electric,
 
 if Electric.telemetry_enabled?() do
   # Disable the default telemetry_poller process since we start our own in
-  # `Electric.Telemetry.{ApplicationTelemetry, StackTelemetry}`.
+  # `ElectricTelemetry.{ApplicationTelemetry, StackTelemetry}`.
   config :telemetry_poller, default: false
 
   config :sentry,

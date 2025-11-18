@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.StackTelemetry do
+defmodule ElectricTelemetry.StackTelemetry do
   @moduledoc """
   Collects and exports stack level telemetry such as database and shape metrics.
 
@@ -10,11 +10,11 @@ defmodule Electric.Telemetry.StackTelemetry do
 
   import Telemetry.Metrics
 
-  alias Electric.Telemetry.Reporters
+  alias ElectricTelemetry.Reporters
 
   require Logger
 
-  @behaviour Electric.Telemetry.Poller
+  @behaviour ElectricTelemetry.Poller
 
   def start_link(opts) do
     with {:ok, opts} <- ElectricTelemetry.validate_options(opts) do
@@ -35,7 +35,7 @@ defmodule Electric.Telemetry.StackTelemetry do
 
     children =
       [
-        Electric.Telemetry.Poller.child_spec(opts,
+        ElectricTelemetry.Poller.child_spec(opts,
           callback_module: __MODULE__,
           init_delay: :timer.seconds(3)
         )
@@ -68,7 +68,7 @@ defmodule Electric.Telemetry.StackTelemetry do
     ]
   end
 
-  @impl Electric.Telemetry.Poller
+  @impl ElectricTelemetry.Poller
   def builtin_periodic_measurements(_), do: []
 
   def metrics(telemetry_opts) do
@@ -134,7 +134,7 @@ defmodule Electric.Telemetry.StackTelemetry do
       last_value("electric.connection.consumers_ready.total"),
       last_value("electric.connection.consumers_ready.before_recovery")
     ]
-    |> Electric.Telemetry.Reporters.Statsd.add_instance_id_tag()
+    |> ElectricTelemetry.Reporters.Statsd.add_instance_id_tag()
     |> keep_for_stack(stack_id)
   end
 

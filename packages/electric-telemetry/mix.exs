@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.MixProject do
+defmodule ElectricTelemetry.MixProject do
   use Mix.Project
 
   def project do
@@ -15,7 +15,7 @@ defmodule Electric.Telemetry.MixProject do
   def application do
     [
       extra_applications: [:logger, :os_mon, :runtime_tools],
-      mod: {Electric.Telemetry.Application, []}
+      mod: {ElectricTelemetry.Application, []}
     ]
   end
 
