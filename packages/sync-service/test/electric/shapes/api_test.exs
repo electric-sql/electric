@@ -73,7 +73,7 @@ defmodule Electric.Shapes.ApiTest do
 
     {:ok, _} = Registry.register(registry_name, registry_key, nil)
     Electric.LsnTracker.initialize(ctx.stack_id)
-    Electric.LsnTracker.set_last_processed_lsn(Lsn.from_integer(0), ctx.stack_id)
+    Electric.LsnTracker.set_last_processed_lsn(ctx.stack_id, Lsn.from_integer(0))
     set_status_to_active(ctx)
   end
 
@@ -915,8 +915,8 @@ defmodule Electric.Shapes.ApiTest do
       # Initially set the last_processed_lsn to next_offset_lsn, with this being
       # the last seen log entry at the start of the request
       Electric.LsnTracker.set_last_processed_lsn(
-        next_offset_lsn,
-        ctx.stack_id
+        ctx.stack_id,
+        next_offset_lsn
       )
 
       expect_shape_cache(
@@ -938,8 +938,8 @@ defmodule Electric.Shapes.ApiTest do
           # arrives in between determining the the end point of the log to read
           # and serving the log.
           Electric.LsnTracker.set_last_processed_lsn(
-            last_minute_next_offset_lsn,
-            ctx.stack_id
+            ctx.stack_id,
+            last_minute_next_offset_lsn
           )
 
           next_offset

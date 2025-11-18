@@ -223,7 +223,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
-    LsnTracker.set_last_processed_lsn(lsn, state.stack_id)
+    LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
   end
@@ -358,7 +358,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
 
-    LsnTracker.set_last_processed_lsn(state.last_processed_lsn, state.stack_id)
+    LsnTracker.set_last_processed_lsn(state.stack_id, state.last_processed_lsn)
 
     flush_tracker =
       if is_struct(event, Transaction) do

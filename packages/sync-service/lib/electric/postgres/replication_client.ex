@@ -235,13 +235,13 @@ defmodule Electric.Postgres.ReplicationClient do
 
     # for new slots, always reset the last processed LSN
     if current_step == :create_slot and extra_info == :created_new_slot do
-      Electric.LsnTracker.set_last_processed_lsn(state.flushed_wal, state.stack_id)
+      Electric.LsnTracker.set_last_processed_lsn(state.stack_id, state.flushed_wal)
       notify_created_new_slot(state)
     end
 
     # for existing slots, populate the last processed LSN if not present
     if current_step == :query_slot_flushed_lsn,
-      do: Electric.LsnTracker.initialize_last_processed_lsn(state.flushed_wal, state.stack_id)
+      do: Electric.LsnTracker.initialize_last_processed_lsn(state.stack_id, state.flushed_wal)
 
     if next_step == :ready_to_stream,
       do: notify_ready_to_stream(state)
