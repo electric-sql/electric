@@ -22,6 +22,16 @@ defmodule Support.DbSetup do
     db_name = "#{db_name_hash} ~ #{String.slice(full_db_name, 0..50)}"
 
     escaped_db_name = :binary.replace(db_name, ~s'"', ~s'""', [:global])
+
+    # Terminate any active connections to the database
+    Postgrex.query!(
+      utility_pool,
+      "SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE datname = $1 AND pid <> pg_backend_pid();",
+      [db_name]
+    )
+
     Postgrex.query!(utility_pool, "DROP DATABASE IF EXISTS \"#{escaped_db_name}\"", [])
     Postgrex.query!(utility_pool, "CREATE DATABASE \"#{escaped_db_name}\"", [])
 
