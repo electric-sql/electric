@@ -157,7 +157,7 @@ defmodule Electric.MixProject do
   end
 
   defp telemetry_dep_opts(source_opts) do
-    Keyword.merge(source_opts, targets: @telemetry_target, optional: true)
+    Keyword.merge(source_opts, targets: @telemetry_target)
   end
 
   defp aliases do
