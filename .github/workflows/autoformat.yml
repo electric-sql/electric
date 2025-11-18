@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   typescript_formatting:
-    name: TypeScript/JavaScript formatting and linting
+    name: TypeScript formatting and linting
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
