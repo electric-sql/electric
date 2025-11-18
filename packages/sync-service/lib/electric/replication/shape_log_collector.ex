@@ -262,8 +262,27 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
-  defp handle_action(%Relation{} = rel, state), do: handle_relation(state, rel)
-  defp handle_action(%Transaction{} = txn, state), do: handle_transaction(state, txn)
+  defp handle_action(%Relation{} = rel, state) do
+    Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
+    Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
+
+    handle_relation(state, rel)
+  end
+
+  defp handle_action(%Transaction{} = txn, state) do
+    Logger.debug(
+      fn ->
+        "Received transaction #{txn.xid} (#{txn.num_changes} changes) from Postgres at #{txn.lsn}"
+      end,
+      received_transaction_xid: txn.xid,
+      received_transaction_num_changes: txn.num_changes,
+      received_transaction_lsn: txn.lsn
+    )
+
+    Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
+
+    handle_transaction(state, txn)
+  end
 
   # If no-one is listening to the replication stream, then just return without
   # emitting the transaction.
