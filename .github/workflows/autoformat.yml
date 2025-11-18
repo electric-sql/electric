@@ -41,9 +41,35 @@ jobs:
 
       - name: Check Prettier formatting
         run: pnpm run format:check
+        continue-on-error: true
+        id: prettier_check
+
+      - name: Show formatting help message
+        if: steps.prettier_check.outcome == 'failure'
+        run: |
+          echo "::error::Prettier formatting check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch is formatted correctly,"
+          echo "you may need to merge or rebase main into your branch first."
+          echo ""
+          echo "To fix formatting issues, run: pnpm run format"
+          exit 1
 
       - name: Check ESLint (all packages)
         run: pnpm run stylecheck-all
+        continue-on-error: true
+        id: eslint_check
+
+      - name: Show ESLint help message
+        if: steps.eslint_check.outcome == 'failure'
+        run: |
+          echo "::error::ESLint check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch passes linting,"
+          echo "you may need to merge or rebase main into your branch first."
+          exit 1
 
   elixir_formatting:
     name: Elixir formatting and linting
@@ -79,6 +105,32 @@ jobs:
 
       - name: Check Elixir formatting
         run: mix format --check-formatted
+        continue-on-error: true
+        id: elixir_format_check
+
+      - name: Show Elixir formatting help message
+        if: steps.elixir_format_check.outcome == 'failure'
+        run: |
+          echo "::error::Elixir formatting check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch is formatted correctly,"
+          echo "you may need to merge or rebase main into your branch first."
+          echo ""
+          echo "To fix formatting issues, run: mix format"
+          exit 1
 
       - name: Check Elixir compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
+        continue-on-error: true
+        id: elixir_compile_check
+
+      - name: Show Elixir compilation help message
+        if: steps.elixir_compile_check.outcome == 'failure'
+        run: |
+          echo "::error::Elixir compilation warnings check failed"
+          echo ""
+          echo "Note: For pull requests, this check runs on a merge commit between"
+          echo "your branch and main. If this fails but your branch compiles cleanly,"
+          echo "you may need to merge or rebase main into your branch first."
+          exit 1
