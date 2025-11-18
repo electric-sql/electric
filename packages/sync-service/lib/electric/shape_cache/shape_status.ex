@@ -346,15 +346,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
         table
       )
 
-    # Convert tree to list and compute elapsed time since last use
-    :gb_trees.to_list(tree)
-    |> Enum.map(fn {last_read, handle} ->
-      %{
-        shape_handle: handle,
-        elapsed_minutes_since_use:
-          System.convert_time_unit(now - last_read, :native, :second) / 60
-      }
-    end)
+    # get a reversed iterator so the final handle list is in least- to
+    # most-recently used order after the accumulator
+    {handles, last_read} = lru_to_list(:gb_trees.iterator(tree, :reversed), [], nil)
+
+    {handles, System.convert_time_unit(now - (last_read || now), :native, :second) / 60}
+  end
+
+  defp lru_to_list(iterator, handles, largest_last_read) do
+    case :gb_trees.next(iterator) do
+      {last_read, handle, iter} ->
+        lru_to_list(iter, [handle | handles], largest_last_read || last_read)
+
+      :none ->
+        {handles, largest_last_read}
+    end
   end
 
   def latest_offset!(stack_ref, shape_handle) do

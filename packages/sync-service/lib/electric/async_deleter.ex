@@ -15,7 +15,10 @@ defmodule Electric.AsyncDeleter do
   """
 
   use GenServer
+
   require Logger
+
+  import Electric, only: [is_stack_id: 1]
 
   defstruct [
     :stack_id,
@@ -40,20 +43,16 @@ defmodule Electric.AsyncDeleter do
   end
 
   @doc """
-  Deletes a file or directory using rm -rf.
-  Returns {:ok, output} on success or {:error, reason} on failure.
+  Deletes the given directory by first renaming it into the stack's trash directory
+  then asynchronously removing the trash entry using rm -rf.
   """
-  def delete(path, opts) when is_binary(path) do
-    stack_id =
-      opts[:stack_id] ||
-        raise ArgumentError, message: "Missing required :stack_id in opts: #{inspect(opts)}"
-
+  @spec delete(Electric.stack_id(), Path.t()) :: :ok | {:error, term()}
+  def delete(stack_id, path) when is_stack_id(stack_id) and is_binary(path) do
     trash_dir = trash_dir!(stack_id)
 
     case do_rename(path, trash_dir) do
       {:ok, _dest} ->
-        server = opts[:server] || name(stack_id)
-        GenServer.cast(server, {:schedule_cleanup, path})
+        GenServer.cast(name(stack_id), {:schedule_cleanup, path})
         :ok
 
       {:error, :enoent} ->
@@ -61,7 +60,9 @@ defmodule Electric.AsyncDeleter do
         :ok
 
       {:error, reason} ->
-        Logger.warning("AsyncDeleter: rename failed for #{path}: #{inspect(reason)}")
+        # If this is happening then there's something bad going on and our
+        # storage is just accruing.
+        Logger.error("AsyncDeleter: rename failed for #{path}: #{inspect(reason)}")
         {:error, reason}
     end
   end
@@ -170,11 +171,7 @@ defmodule Electric.AsyncDeleter do
   end
 
   def trash_dir!(stack_id) do
-    Electric.StackConfig.lookup(stack_id, {__MODULE__, :trash_dir})
-  rescue
-    ArgumentError ->
-      raise RuntimeError,
-        message: "#{inspect(__MODULE__)} config is missing for stack #{stack_id}"
+    Electric.StackConfig.lookup!(stack_id, {__MODULE__, :trash_dir})
   end
 
   def trash_dir(storage_dir, stack_id), do: Path.join([storage_dir, @trash_dir_base, stack_id])

@@ -291,7 +291,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       ShapeStatus.update_last_read_time(state, shape2, now)
       ShapeStatus.update_last_read_time(state, shape1, now + 10)
 
-      assert [%{shape_handle: ^shape2}] = ShapeStatus.least_recently_used(state, _count = 1)
+      assert {[^shape2], +0.0} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
     test "returns shape first created if update_last_read_time_to_now has not been called", ctx do
@@ -299,13 +299,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
 
-      assert [%{shape_handle: ^shape1}] = ShapeStatus.least_recently_used(state, _count = 1)
+      assert {[^shape1], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
     test "returns empty list if no shapes have been added", ctx do
       {:ok, state, []} = new_state(ctx)
 
-      assert [] == ShapeStatus.least_recently_used(state, _count = 1)
+      assert {[], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
     test "returns empty list if all shapes have been deleted", ctx do
@@ -315,7 +315,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       ShapeStatus.remove_shape(state, shape1)
       ShapeStatus.remove_shape(state, shape2)
 
-      assert [] == ShapeStatus.least_recently_used(state, _count = 1)
+      assert {[], +0.0} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
     test "returns all shapes when count exceeds total shapes", ctx do
@@ -323,9 +323,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
 
-      result = ShapeStatus.least_recently_used(state, _count = 100)
-      assert length(result) == 2
-      handles = Enum.map(result, & &1.shape_handle)
+      {handles, _} = ShapeStatus.least_recently_used(state, _count = 100)
+      assert length(handles) == 2
       assert shape1 in handles
       assert shape2 in handles
     end
@@ -344,11 +343,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         end
 
       # Request the 3 least recently used (should be the first 3)
-      result = ShapeStatus.least_recently_used(state, _count = 3)
-      assert length(result) == 3
+      {result_handles, _} = ShapeStatus.least_recently_used(state, _count = 3)
+      assert length(result_handles) == 3
 
       expected_handles = Enum.take(shapes, 3)
-      result_handles = Enum.map(result, & &1.shape_handle)
       assert expected_handles == result_handles
     end
 
@@ -364,17 +362,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       ShapeStatus.update_last_read_time(state, shape2, now + 5)
       ShapeStatus.update_last_read_time(state, shape3, now + 10)
 
-      result = ShapeStatus.least_recently_used(state, _count = 3)
-
-      assert [
-               %{shape_handle: ^shape1},
-               %{shape_handle: ^shape2},
-               %{shape_handle: ^shape3}
-             ] = result
-
-      # Verify elapsed time is in ascending order (oldest has most elapsed time)
-      times = Enum.map(result, & &1.elapsed_minutes_since_use)
-      assert times == Enum.sort(times, :desc)
+      assert {[^shape1, ^shape2, ^shape3], _} = ShapeStatus.least_recently_used(state, _count = 3)
     end
   end
 

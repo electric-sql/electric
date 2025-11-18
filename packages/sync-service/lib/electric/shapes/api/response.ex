@@ -186,7 +186,6 @@ defmodule Electric.Shapes.Api.Response do
   defp clean_up(response) do
     response
     |> clean_up_change_listener()
-    |> clean_up_shape_subscriber()
   end
 
   defp clean_up_change_listener(%__MODULE__{handle: shape_handle} = response)
@@ -200,16 +199,6 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   defp clean_up_change_listener(%__MODULE__{} = response), do: response
-
-  defp clean_up_shape_subscriber(%__MODULE__{handle: nil} = response) do
-    response
-  end
-
-  defp clean_up_shape_subscriber(%__MODULE__{} = response) do
-    %{api: %{stack_id: stack_id}, handle: handle} = response
-    :ok = Electric.Shapes.Monitor.unregister_reader(stack_id, handle)
-    response
-  end
 
   defp put_resp_headers(conn, %__MODULE__{response_type: :subset} = response) do
     conn

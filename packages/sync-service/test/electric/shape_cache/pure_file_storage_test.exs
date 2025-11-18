@@ -11,7 +11,10 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   alias Electric.Shapes.Shape
 
   @moduletag :tmp_dir
-  setup :with_stack_id_from_test
+  setup [
+    :with_stack_id_from_test,
+    :with_async_deleter
+  ]
 
   @shape_handle "the-shape-handle"
   @shape %Shape{
@@ -80,6 +83,81 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       assert PureFileStorage.get_log_stream(LogOffset.new(0, 0), LogOffset.last(), opts)
              |> Enum.to_list() == [~S|{"test": 1}|, ~S|{"test": 2}|]
+    end
+
+    test "reads survive the later deletion of the snapshot file", %{
+      opts: opts,
+      base_opts: base_opts
+    } do
+      opts = %{opts | snapshot_file_timeout: 50}
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([~S|{"test": 1}|, ~S|{"test": 2}|], opts)
+      PureFileStorage.terminate(writer)
+
+      stream =
+        PureFileStorage.get_log_stream(
+          LogOffset.before_all(),
+          LogOffset.last_before_real_offsets(),
+          opts
+        )
+
+      File.rename!(
+        Path.join(base_opts.base_path, @shape_handle),
+        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+      )
+
+      assert Enum.to_list(stream) == []
+    end
+
+    test "reads to a deleted shape do not raise", %{opts: opts, base_opts: base_opts} do
+      opts = %{opts | snapshot_file_timeout: 50}
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([~S|{"test": 1}|, ~S|{"test": 2}|], opts)
+      PureFileStorage.terminate(writer)
+
+      File.rename!(
+        Path.join(base_opts.base_path, @shape_handle),
+        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+      )
+
+      stream =
+        PureFileStorage.get_log_stream(
+          LogOffset.before_all(),
+          LogOffset.last_before_real_offsets(),
+          opts
+        )
+
+      assert Enum.to_list(stream) == []
+    end
+
+    test "enoent returned from an existing shape does raise", %{opts: opts} do
+      opts = %{opts | snapshot_file_timeout: 50}
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([~S|{"test": 1}|, ~S|{"test": 2}|], opts)
+      PureFileStorage.terminate(writer)
+
+      chunk_file_path = PureFileStorage.Snapshot.chunk_file_path(opts, 0)
+
+      File.rm!(chunk_file_path)
+
+      patch_calls(Electric.ShapeCache.ShapeStatus,
+        get_existing_shape: fn _, shape_handle -> {shape_handle, nil} end
+      )
+
+      assert_raise File.Error, fn ->
+        PureFileStorage.get_log_stream(
+          LogOffset.before_all(),
+          LogOffset.last_before_real_offsets(),
+          opts
+        )
+        |> Enum.to_list()
+      end
     end
   end
 
@@ -201,6 +279,125 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       assert PureFileStorage.get_log_stream(LogOffset.new(11, 0), LogOffset.new(12, 0), opts)
              |> Enum.to_list() == [~s|{"test":"#{long_word}3"}|]
+    end
+
+    test "survive the deletion of the chunk file mid stream", %{
+      writer: writer,
+      opts: opts,
+      base_opts: base_opts
+    } do
+      long_word = String.duplicate("0", 100)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(10, 0), "test_key", :insert, ~s|{"test":"#{long_word}1"}|},
+            {LogOffset.new(11, 0), "test_key", :update, ~s|{"test":"#{long_word}2"}|},
+            {LogOffset.new(12, 0), "test_key", :delete, ~s|{"test":"#{long_word}3"}|}
+          ],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+
+      patch_calls(Electric.ShapeCache.ShapeStatus,
+        get_existing_shape: fn _, _shape_handle -> nil end
+      )
+
+      stream = PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.last(), opts)
+
+      File.rename!(
+        Path.join(base_opts.base_path, @shape_handle),
+        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+      )
+
+      assert Enum.to_list(stream) == []
+    end
+
+    test "returns an empty stream if the files have been deleted", %{writer: writer, opts: opts} do
+      long_word = String.duplicate("0", 100)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(10, 0), "test_key", :insert, ~s|{"test":"#{long_word}1"}|},
+            {LogOffset.new(11, 0), "test_key", :update, ~s|{"test":"#{long_word}2"}|},
+            {LogOffset.new(12, 0), "test_key", :delete, ~s|{"test":"#{long_word}3"}|}
+          ],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+
+      chunk_file = PureFileStorage.chunk_file(opts, "latest.0")
+      json_file = PureFileStorage.json_file(opts, "latest.0")
+
+      File.rm!(chunk_file)
+      File.rm!(json_file)
+
+      assert [] = PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.last(), opts)
+    end
+
+    test "raises if the files are gone but the shape still exists", %{writer: writer, opts: opts} do
+      long_word = String.duplicate("0", 100)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(10, 0), "test_key", :insert, ~s|{"test":"#{long_word}1"}|},
+            {LogOffset.new(11, 0), "test_key", :update, ~s|{"test":"#{long_word}2"}|},
+            {LogOffset.new(12, 0), "test_key", :delete, ~s|{"test":"#{long_word}3"}|}
+          ],
+          writer
+        )
+
+      patch_calls(Electric.ShapeCache.ShapeStatus,
+        get_existing_shape: fn _, shape_handle -> {shape_handle, nil} end
+      )
+
+      PureFileStorage.terminate(writer)
+
+      json_file = PureFileStorage.json_file(opts, "latest.0")
+
+      File.rm!(json_file)
+
+      assert_raise File.Error, fn ->
+        PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.last(), opts)
+        |> Enum.to_list()
+      end
+    end
+
+    test "returns empty stream if some files deleted and the shape has gone", %{
+      writer: writer,
+      opts: opts,
+      base_opts: base_opts
+    } do
+      long_word = String.duplicate("0", 100)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(10, 0), "test_key", :insert, ~s|{"test":"#{long_word}1"}|},
+            {LogOffset.new(11, 0), "test_key", :update, ~s|{"test":"#{long_word}2"}|},
+            {LogOffset.new(12, 0), "test_key", :delete, ~s|{"test":"#{long_word}3"}|}
+          ],
+          writer
+        )
+
+      patch_calls(Electric.ShapeCache.ShapeStatus,
+        get_existing_shape: fn _, _shape_handle -> nil end
+      )
+
+      PureFileStorage.terminate(writer)
+
+      File.rename!(
+        Path.join(base_opts.base_path, @shape_handle),
+        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+      )
+
+      assert [] =
+               PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.last(), opts)
+               |> Enum.to_list()
     end
   end
 

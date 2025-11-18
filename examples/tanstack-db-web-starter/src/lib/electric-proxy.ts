@@ -25,7 +25,7 @@ export function prepareElectricUrl(requestUrl: string): URL {
   if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SOURCE_SECRET) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
     originUrl.searchParams.set(
-      `source_secret`,
+      `secret`,
       process.env.ELECTRIC_SOURCE_SECRET
     )
   }

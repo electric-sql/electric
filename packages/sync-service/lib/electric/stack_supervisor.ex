@@ -111,11 +111,10 @@ defmodule Electric.StackSupervisor do
                      publication_alter_debounce_ms: [type: :non_neg_integer, default: 0],
                      cleanup_interval_ms: [type: :non_neg_integer, default: 10_000],
                      registry_partitions: [type: :non_neg_integer, required: false],
-                     monitor_opts: [
+                     shape_cleaner_opts: [
                        type: :keyword_list,
                        required: false,
                        keys: [
-                         on_remove: [type: {:fun, 2}],
                          on_cleanup: [type: {:fun, 1}]
                        ]
                      ],
@@ -124,6 +123,10 @@ defmodule Electric.StackSupervisor do
                      shape_hibernate_after: [
                        type: :integer,
                        default: Electric.Config.default(:shape_hibernate_after)
+                     ],
+                     snapshot_timeout_to_first_data: [
+                       type: :pos_integer,
+                       default: Electric.Config.default(:snapshot_timeout_to_first_data)
                      ]
                    ]
                  ],
@@ -304,8 +307,6 @@ defmodule Electric.StackSupervisor do
       stack_id: stack_id
     ]
 
-    {monitor_opts, tweaks} = Keyword.pop(config.tweaks, :monitor_opts, [])
-
     shape_log_collector =
       Electric.Replication.ShapeLogCollector.name(stack_id)
 
@@ -331,7 +332,7 @@ defmodule Electric.StackSupervisor do
       shape_cache_opts: shape_cache_opts,
       inspector: inspector,
       max_shapes: config.max_shapes,
-      tweaks: tweaks,
+      tweaks: config.tweaks,
       manual_table_publishing?: config.manual_table_publishing?
     ]
 
@@ -360,7 +361,7 @@ defmodule Electric.StackSupervisor do
            stack_id: stack_id,
            seed_config: [
              chunk_bytes_threshold: config.chunk_bytes_threshold,
-             snapshot_timeout_to_first_data: :timer.seconds(30),
+             snapshot_timeout_to_first_data: config.tweaks[:snapshot_timeout_to_first_data],
              inspector: inspector,
              shape_changes_registry: shape_changes_registry_name,
              shape_hibernate_after: shape_hibernate_after
@@ -374,11 +375,6 @@ defmodule Electric.StackSupervisor do
           Electric.ShapeCache.Storage.stack_child_spec(storage),
           {Electric.Postgres.Inspector.EtsInspector,
            stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
-          {Electric.Shapes.Monitor,
-           Keyword.merge(
-             [stack_id: stack_id, storage: storage],
-             Keyword.take(monitor_opts, [:on_remove, :on_cleanup])
-           )},
           {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
           {Electric.MonitoredCoreSupervisor,
            stack_id: stack_id, connection_manager_opts: connection_manager_opts}
