@@ -52,56 +52,46 @@ defmodule ElectricTelemetry.Reporters.CallHomeReporter do
   # IMPORTANT: these metrics are validated on the receiver side, so if you change them,
   #            make sure you also change the receiver
   def stack_metrics(stack_id) do
-    for_stack = fn metadata -> metadata[:stack_id] == stack_id end
-
     [
-      environment: [
-        pg_version:
-          last_value("electric.postgres.info_looked_up.pg_version",
-            reporter_options: [persist_between_sends: true],
-            keep: for_stack
-          )
-      ],
-      usage: [
-        inbound_bytes:
-          sum("electric.postgres.replication.transaction_received.bytes",
-            unit: :byte,
-            keep: for_stack
-          ),
-        inbound_transactions:
-          sum("electric.postgres.replication.transaction_received.count", keep: for_stack),
-        inbound_operations:
-          sum("electric.postgres.replication.transaction_received.operations", keep: for_stack),
-        stored_bytes:
-          sum("electric.storage.transaction_stored.bytes", unit: :byte, keep: for_stack),
-        stored_transactions: sum("electric.storage.transaction_stored.count", keep: for_stack),
-        stored_operations: sum("electric.storage.transaction_stored.operations", keep: for_stack),
-        total_used_storage_kb:
-          last_value("electric.storage.used", unit: {:byte, :kilobyte}, keep: for_stack),
-        total_shapes: last_value("electric.shapes.total_shapes.count", keep: for_stack),
-        active_shapes:
-          summary("electric.plug.serve_shape.monotonic_time",
-            unit: :unique,
-            reporter_options: [count_unique: :shape_handle],
-            keep: &(&1.status < 300 && for_stack.(&1))
-          ),
-        unique_clients:
-          summary("electric.plug.serve_shape.monotonic_time",
-            unit: :unique,
-            reporter_options: [count_unique: :client_ip],
-            keep: &(&1.status < 300 && for_stack.(&1))
-          ),
-        sync_requests:
-          counter("electric.plug.serve_shape.monotonic_time",
-            keep: &(&1[:live] != true && for_stack.(&1))
-          ),
-        live_requests:
-          counter("electric.plug.serve_shape.monotonic_time",
-            keep: &(&1[:live] && for_stack.(&1))
-          ),
-        served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte, keep: for_stack),
-        wal_size: summary("electric.postgres.replication.wal_size", unit: :byte, keep: for_stack)
-      ]
+      environment:
+        [
+          pg_version:
+            last_value("electric.postgres.info_looked_up.pg_version",
+              reporter_options: [persist_between_sends: true]
+            )
+        ]
+        |> ElectricTelemetry.keep_for_stack(stack_id),
+      usage:
+        [
+          inbound_bytes:
+            sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
+          inbound_transactions: sum("electric.postgres.replication.transaction_received.count"),
+          inbound_operations:
+            sum("electric.postgres.replication.transaction_received.operations"),
+          stored_bytes: sum("electric.storage.transaction_stored.bytes", unit: :byte),
+          stored_transactions: sum("electric.storage.transaction_stored.count"),
+          stored_operations: sum("electric.storage.transaction_stored.operations"),
+          total_used_storage_kb: last_value("electric.storage.used", unit: {:byte, :kilobyte}),
+          total_shapes: last_value("electric.shapes.total_shapes.count"),
+          active_shapes:
+            summary("electric.plug.serve_shape.monotonic_time",
+              unit: :unique,
+              reporter_options: [count_unique: :shape_handle],
+              keep: &(&1.status < 300)
+            ),
+          unique_clients:
+            summary("electric.plug.serve_shape.monotonic_time",
+              unit: :unique,
+              reporter_options: [count_unique: :client_ip],
+              keep: &(&1.status < 300)
+            ),
+          sync_requests:
+            counter("electric.plug.serve_shape.monotonic_time", keep: &(&1[:live] != true)),
+          live_requests: counter("electric.plug.serve_shape.monotonic_time", keep: & &1[:live]),
+          served_bytes: sum("electric.plug.serve_shape.bytes", unit: :byte),
+          wal_size: summary("electric.postgres.replication.wal_size", unit: :byte)
+        ]
+        |> ElectricTelemetry.keep_for_stack(stack_id)
     ]
   end
 

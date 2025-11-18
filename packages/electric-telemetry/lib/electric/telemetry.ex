@@ -4,6 +4,20 @@ defmodule ElectricTelemetry do
     Enum.map(1..num_schedulers, &:"normal_#{&1}") ++ [:cpu, :io]
   end
 
+  def keep_for_stack(metrics, stack_id) do
+    Enum.map(metrics, fn
+      {key, metric} -> {key, filter_metric(metric, stack_id)}
+      metric when is_map(metric) -> filter_metric(metric, stack_id)
+    end)
+  end
+
+  defp filter_metric(metric, stack_id) do
+    Map.update!(metric, :keep, fn
+      nil -> fn metadata -> metadata[:stack_id] == stack_id end
+      fun -> fn metadata -> fun.(metadata) && metadata[:stack_id] == stack_id end
+    end)
+  end
+
   @opts_schema NimbleOptions.new!(ElectricTelemetry.Opts.schema())
 
   def validate_options(user_opts) do

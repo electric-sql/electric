@@ -64,7 +64,7 @@ defmodule ElectricTelemetry.StackTelemetry do
         name: :"stack_prometheus_telemetry_#{stack_id}",
         metrics: metrics
       ),
-      Reporters.Statsd.child_spec(opts, metrics: statsd_metrics(opts.stack_id))
+      Reporters.Statsd.child_spec(opts, metrics: Reporters.Statsd.stack_metrics(opts.stack_id))
     ]
   end
 
@@ -105,45 +105,9 @@ defmodule ElectricTelemetry.StackTelemetry do
       sum("electric.admission_control.reject.count")
       | additional_metrics(telemetry_opts)
     ]
-    |> keep_for_stack(telemetry_opts.stack_id)
+    |> ElectricTelemetry.keep_for_stack(telemetry_opts.stack_id)
   end
 
   def additional_metrics(%{additional_metrics: metrics}), do: metrics
   def additional_metrics(_), do: []
-
-  def statsd_metrics(stack_id) do
-    [
-      summary("plug.router_dispatch.stop.duration",
-        tags: [:route],
-        unit: {:native, :millisecond}
-      ),
-      summary("plug.router_dispatch.exception.duration",
-        tags: [:route],
-        unit: {:native, :millisecond}
-      ),
-      summary("electric.shape_cache.create_snapshot_task.stop.duration",
-        unit: {:native, :millisecond}
-      ),
-      summary("electric.storage.make_new_snapshot.stop.duration",
-        unit: {:native, :millisecond}
-      ),
-      summary("electric.querying.stream_initial_data.stop.duration",
-        unit: {:native, :millisecond}
-      ),
-      last_value("electric.connection.consumers_ready.duration", unit: {:native, :millisecond}),
-      last_value("electric.connection.consumers_ready.total"),
-      last_value("electric.connection.consumers_ready.before_recovery")
-    ]
-    |> ElectricTelemetry.Reporters.Statsd.add_instance_id_tag()
-    |> keep_for_stack(stack_id)
-  end
-
-  defp keep_for_stack(metrics, stack_id) do
-    Enum.map(metrics, fn metric ->
-      Map.update!(metric, :keep, fn
-        nil -> fn metadata -> metadata[:stack_id] == stack_id end
-        fun -> fn metadata -> fun.(metadata) && metadata[:stack_id] == stack_id end
-      end)
-    end)
-  end
 end

@@ -49,7 +49,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       ),
       Reporters.Otel.child_spec(opts, metrics: metrics),
       Reporters.Prometheus.child_spec(opts, metrics: metrics),
-      Reporters.Statsd.child_spec(opts, metrics: statsd_metrics())
+      Reporters.Statsd.child_spec(opts, metrics: Reporters.Statsd.application_metrics())
     ]
   end
 
@@ -160,26 +160,6 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
 
   def additional_metrics(%{additional_metrics: metrics}), do: metrics
   def additional_metrics(_), do: []
-
-  def statsd_metrics do
-    [
-      last_value("vm.memory.total", unit: :byte),
-      last_value("vm.memory.processes_used", unit: :byte),
-      last_value("vm.memory.binary", unit: :byte),
-      last_value("vm.memory.ets", unit: :byte),
-      last_value("vm.total_run_queue_lengths.total"),
-      last_value("vm.total_run_queue_lengths.cpu"),
-      last_value("vm.total_run_queue_lengths.io"),
-      last_value("system.load_percent.avg1"),
-      last_value("system.load_percent.avg5"),
-      last_value("system.load_percent.avg15"),
-      last_value("system.memory.free_memory"),
-      last_value("system.memory.used_memory"),
-      last_value("system.swap.free"),
-      last_value("system.swap.used")
-    ]
-    |> ElectricTelemetry.Reporters.Statsd.add_instance_id_tag()
-  end
 
   ###
 
