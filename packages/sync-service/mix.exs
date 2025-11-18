@@ -10,6 +10,20 @@ defmodule Electric.MixProject do
   # make the metrics-enabled target available to the rest of the app
   def telemetry_target, do: @telemetry_target
 
+  # Necessary boilerplate because opentelemetry doesn't mention opentelemetry_exporter in
+  # its list of dependency but actually expects it to be started before itself at runtime.
+  if Mix.target() == @telemetry_target do
+    @extra_telemetry_applications [:opentelemetry_exporter]
+
+    @telemetry_applications_in_release [
+      opentelemetry_exporter: :permanent,
+      opentelemetry: :temporary
+    ]
+  else
+    @extra_telemetry_applications []
+    @telemetry_applications_in_release []
+  end
+
   def project do
     [
       app: :electric,
@@ -32,11 +46,10 @@ defmodule Electric.MixProject do
       ],
       releases: [
         electric: [
-          applications: [electric: :permanent] ++ telemetry_applications_in_release(),
+          applications: @telemetry_applications_in_release,
           include_executables_for: [:unix]
         ]
       ],
-      default_release: :electric,
       test_coverage: [
         tool: ExCoveralls,
         ignore_modules: [
@@ -61,9 +74,7 @@ defmodule Electric.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :os_mon, :runtime_tools],
-      # Using a compile-time flag to select the application module or lack thereof allows
-      # using this app as a dependency with this additional flag
+      extra_applications: [:logger, :os_mon, :runtime_tools] ++ @extra_telemetry_applications,
       mod: {Electric.Application, []}
     ]
   end
@@ -119,19 +130,6 @@ defmodule Electric.MixProject do
       {:stream_data, "~> 1.2", only: [:dev, :test]},
       {:repatch, "~> 1.0", only: [:test]}
     ]
-  end
-
-  defp telemetry_applications_in_release do
-    if Mix.target() == @telemetry_target do
-      # Necessary boilerplate to ensure the inets application is started by the time
-      # opentelemetry_exporter starts.
-      [
-        opentelemetry_exporter: :permanent,
-        opentelemetry: :temporary
-      ]
-    else
-      []
-    end
   end
 
   defp telemetry_deps do
