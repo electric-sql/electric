@@ -1,5 +1,12 @@
 # @electric-sql/experimental
 
+## 2.0.5
+
+### Patch Changes
+
+- Updated dependencies [aacfba4]
+  - @electric-sql/client@1.1.5
+
 ## 2.0.4
 
 ### Patch Changes
