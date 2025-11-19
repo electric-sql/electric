@@ -390,18 +390,6 @@ defmodule Support.ComponentSetup do
     %{}
   end
 
-  defmodule NoopShapeStatus do
-    def initialise(_), do: {:ok, []}
-    def list_shapes(_), do: []
-    def get_existing_shape(_, _), do: nil
-    def add_shape(_, _), do: {:ok, "handle"}
-    def initialise_shape(_, _, _, _), do: :ok
-    def set_snapshot_xmin(_, _, _), do: :ok
-    def mark_snapshot_started(_, _), do: :ok
-    def snapshot_started?(_, _), do: false
-    def remove_shape(_, _), do: {:ok, nil}
-  end
-
   def shape_cleaner_opts(ctx) do
     parent = self()
 

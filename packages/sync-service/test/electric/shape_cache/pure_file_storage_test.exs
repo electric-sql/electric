@@ -146,10 +146,6 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       File.rm!(chunk_file_path)
 
-      patch_calls(Electric.ShapeCache.ShapeStatus,
-        get_existing_shape: fn _, shape_handle -> {shape_handle, nil} end
-      )
-
       assert_raise File.Error, fn ->
         PureFileStorage.get_log_stream(
           LogOffset.before_all(),
@@ -300,10 +296,6 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       PureFileStorage.terminate(writer)
 
-      patch_calls(Electric.ShapeCache.ShapeStatus,
-        get_existing_shape: fn _, _shape_handle -> nil end
-      )
-
       stream = PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.last(), opts)
 
       File.rename!(
@@ -351,10 +343,6 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
           writer
         )
 
-      patch_calls(Electric.ShapeCache.ShapeStatus,
-        get_existing_shape: fn _, shape_handle -> {shape_handle, nil} end
-      )
-
       PureFileStorage.terminate(writer)
 
       json_file = PureFileStorage.json_file(opts, "latest.0")
@@ -383,10 +371,6 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
           ],
           writer
         )
-
-      patch_calls(Electric.ShapeCache.ShapeStatus,
-        get_existing_shape: fn _, _shape_handle -> nil end
-      )
 
       PureFileStorage.terminate(writer)
 
