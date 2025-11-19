@@ -193,13 +193,14 @@ defmodule Electric.ShapeCache do
       subscription: nil
     }
 
-    {:ok, state, {:continue, :recover_shapes}}
+    {:ok, state, {:continue, :wait_for_restore}}
   end
 
   @impl GenServer
-  def handle_continue(:recover_shapes, state) do
+  def handle_continue(:wait_for_restore, state) do
     start_time = System.monotonic_time()
-    total_recovered = recover_shapes(state)
+
+    total_recovered = ShapeStatus.count_shapes(state.stack_id)
 
     Electric.Replication.PublicationManager.wait_for_restore(state.stack_id)
 
@@ -251,22 +252,6 @@ defmodule Electric.ShapeCache do
       :error ->
         {:reply, {:error, :no_shape}, state}
     end
-  end
-
-  defp recover_shapes(%{stack_id: stack_id} = _state) do
-    start_time = System.monotonic_time()
-    all_handles_and_shapes = ShapeStatus.list_shapes(stack_id)
-    total_recovered = length(all_handles_and_shapes)
-
-    duration = System.monotonic_time() - start_time
-
-    Logger.info([
-      "Restored in",
-      " #{System.convert_time_unit(duration, :native, :millisecond)}ms",
-      " (#{total_recovered} shapes)"
-    ])
-
-    total_recovered
   end
 
   defp maybe_create_shape(shape, otel_ctx, %{stack_id: stack_id} = state) do
