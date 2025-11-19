@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build_and_test:
     name: Build and test elixir-client
     runs-on: ubuntu-latest
     defaults:
@@ -68,17 +68,19 @@ jobs:
           path: |
             packages/elixir-client/_build/*/lib
             !packages/elixir-client/_build/*/lib/electric_client
-          key: '${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-${{ github.sha }}'
+          key: "${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-${{ github.sha }}
-            ${{ runner.os }}-elixir-client-build-[${{ github.ref_name }}]-
+            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-
             ${{ runner.os }}-elixir-client-build-
 
       - name: Install dependencies
         run: mix do deps.get + deps.compile
 
-      - name: Compiles without warnings
-        run: mix compile --force --all-warnings --warnings-as-errors
+      - name: Compile
+        # don't bail on compile warnings - let's get the results of the tests
+        # and let the formatting task check for compilation warnings
+        run: mix compile
 
       - name: Run tests
         run: mix coveralls.json
@@ -103,33 +105,3 @@ jobs:
           # Upload all PR test results to single branch - requires overriding branch and commit
           override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
           override_commit: ${{ github.event_name == 'pull_request' && env.DUMMY_COMMIT_SHA || '' }}
-
-  formatting:
-    name: Check formatting for elixir-client
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/elixir-client
-    env:
-      MIX_ENV: test
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: erlef/setup-beam@v1
-        with:
-          version-type: strict
-          version-file: '.tool-versions'
-
-      - name: Cache dependencies
-        id: cache-deps
-        uses: actions/cache/restore@v4
-        with:
-          path: packages/elixir-client/deps
-          key: ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
-            ${{ runner.os }}-elixir-client-deps-
-
-      - run: mix deps.get
-
-      - run: mix format --check-formatted
