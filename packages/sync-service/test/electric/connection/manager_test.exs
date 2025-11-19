@@ -33,7 +33,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
       publication_name: publication_name,
       try_creating_publication?: true,
       slot_temporary?: Map.get(ctx, :slot_temporary?, true),
-      handle_operations: nil
+      transaction_received: nil,
+      relation_received: nil
     ]
 
     connection_manager_opts = [

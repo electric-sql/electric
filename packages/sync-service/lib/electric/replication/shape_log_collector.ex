@@ -14,12 +14,12 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.{Relation, Transaction}
-  alias Electric.Replication.TransactionBuilder
   alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.DependencyLayers
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.IntervalTimer
   alias Electric.Shapes.ConsumerRegistry
 
   import Electric.Utils, only: [map_while_ok: 2, map_if_ok: 2]
@@ -59,12 +59,23 @@ defmodule Electric.Replication.ShapeLogCollector do
   # the new txn to disk, instead the storage backend is responsible for
   # determining how long a write should reasonably take and if that fails
   # it should raise.
-  @spec handle_operations([Changes.operation()], any()) :: :ok | {:error, any()}
-  def handle_operations([], _server), do: :ok
+  def store_transaction(%Transaction{} = txn, server) do
+    timer =
+      OpenTelemetry.extract_interval_timer()
+      |> IntervalTimer.start_interval("shape_log_collector.transaction_message")
 
-  def handle_operations(operations, server) when is_list(operations) do
     trace_context = OpenTelemetry.get_current_context()
-    GenServer.call(server, {:handle_operations, operations, trace_context}, :infinity)
+
+    {response, timer} = GenServer.call(server, {:new_txn, txn, trace_context, timer}, :infinity)
+
+    OpenTelemetry.set_interval_timer(timer)
+
+    response
+  end
+
+  def handle_relation_msg(%Changes.Relation{} = rel, server) do
+    trace_context = OpenTelemetry.get_current_context()
+    :ok = GenServer.call(server, {:relation_msg, rel, trace_context}, :infinity)
   end
 
   # shapes that are being restored are already in the filters
@@ -140,8 +151,7 @@ defmodule Electric.Replication.ShapeLogCollector do
               end
             end
           ),
-        registry_state: registry_state,
-        transaction_builder: TransactionBuilder.new()
+        registry_state: registry_state
       })
 
     {:ok, state, {:continue, :restore_shapes}}
@@ -218,18 +228,50 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
   end
 
-  def handle_call({:handle_operations, _, _}, _from, state)
-      when not is_ready_to_process(state) do
+  def handle_call({:new_txn, _, _, timer}, _from, state) when not is_ready_to_process(state) do
+    {:reply, {{:error, :not_ready}, timer}, state}
+  end
+
+  def handle_call(
+        {:new_txn, %Transaction{xid: xid, lsn: lsn} = txn, trace_context, timer},
+        _from,
+        state
+      ) do
+    OpenTelemetry.set_interval_timer(timer)
+
+    OpenTelemetry.start_interval("shape_log_collector.set_current_context")
+    OpenTelemetry.set_current_context(trace_context)
+
+    OpenTelemetry.start_interval("shape_log_collector.logging")
+
+    Logger.debug(
+      fn ->
+        "Received transaction #{xid} (#{txn.num_changes} changes) from Postgres at #{lsn}"
+      end,
+      received_transaction_xid: xid,
+      received_transaction_num_changes: txn.num_changes,
+      received_transaction_lsn: lsn
+    )
+
+    Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
+
+    {response, state} = handle_transaction(state, txn)
+
+    OpenTelemetry.start_interval("shape_log_collector.transaction_message_response")
+
+    {:reply, {response, OpenTelemetry.extract_interval_timer()}, state}
+  end
+
+  def handle_call({:relation_msg, _, _}, _from, state) when not is_ready_to_process(state) do
     {:reply, {:error, :not_ready}, state}
   end
 
-  def handle_call({:handle_operations, operations, trace_context}, _from, state) do
+  def handle_call({:relation_msg, %Relation{} = rel, trace_context}, from, state) do
     OpenTelemetry.set_current_context(trace_context)
+    Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
+    Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
 
-    {actions, state} = build_db_actions(operations, state)
-
-    {response, state} = handle_actions(actions, state)
-
+    {response, state} = handle_relation(rel, from, state)
     {:reply, response, state}
   end
 
@@ -251,67 +293,6 @@ defmodule Electric.Replication.ShapeLogCollector do
       end
 
     {:noreply, state}
-  end
-
-  defp handle_actions([], state), do: {:ok, state}
-
-  defp handle_actions([action | rest], state) do
-    case handle_action(action, state) do
-      {:ok, state} -> handle_actions(rest, state)
-      {{:error, error}, state} -> {{:error, error}, state}
-    end
-  end
-
-  defp handle_action(%Relation{} = rel, state) do
-    OpenTelemetry.with_span(
-      "pg_txn.replication_client.relation_received",
-      ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
-      state.stack_id,
-      fn ->
-        Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
-        Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
-
-        result = handle_relation(state, rel)
-
-        OpenTelemetry.wipe_interval_timer()
-
-        result
-      end
-    )
-  end
-
-  defp handle_action(%Transaction{} = txn, state) do
-    OpenTelemetry.with_span(
-      "pg_txn.replication_client.transaction_received",
-      [
-        num_changes: txn.num_changes,
-        num_relations: MapSet.size(txn.affected_relations),
-        xid: txn.xid
-      ],
-      state.stack_id,
-      fn ->
-        OpenTelemetry.start_interval("shape_log_collector.logging")
-
-        Logger.debug(
-          fn ->
-            "Received transaction #{txn.xid} (#{txn.num_changes} changes) from Postgres at #{txn.lsn}"
-          end,
-          received_transaction_xid: txn.xid,
-          received_transaction_num_changes: txn.num_changes,
-          received_transaction_lsn: txn.lsn
-        )
-
-        Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
-
-        result = handle_transaction(state, txn)
-
-        OpenTelemetry.stop_and_save_intervals(
-          total_attribute: :"shape_log_collector.transaction.total_duration_µs"
-        )
-
-        result
-      end
-    )
   end
 
   # If no-one is listening to the replication stream, then just return without
@@ -389,7 +370,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     %{state | flush_tracker: flush_tracker}
   end
 
-  defp handle_relation(state, rel) do
+  defp handle_relation(rel, _from, state) do
     OpenTelemetry.add_span_attributes("rel.is_dropped": false)
 
     {updated_rel, tracker_state} =
@@ -542,11 +523,5 @@ defmodule Electric.Replication.ShapeLogCollector do
          {:ok, info} <- Inspector.load_column_info(oid, state.inspector) do
       {:ok, Inspector.get_pk_cols(info)}
     end
-  end
-
-  defp build_db_actions(operations, state) do
-    {actions, builder} = TransactionBuilder.build(operations, state.transaction_builder)
-
-    {actions, %{state | transaction_builder: builder}}
   end
 end

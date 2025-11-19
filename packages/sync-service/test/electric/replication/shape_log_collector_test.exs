@@ -5,9 +5,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
   alias Electric.Replication.ShapeLogCollector
-  alias Electric.Replication.Changes.Relation
-  alias Electric.Replication.Changes.Begin
-  alias Electric.Replication.Changes.Commit
+  alias Electric.Replication.Changes.{Transaction, Relation}
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Shape
@@ -118,17 +116,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       :ok =
         Electric.Shapes.ConsumerRegistry.register_consumer(consumer, @shape_handle, ctx.stack_id)
 
-      txn = [
-        %Begin{xid: xmin},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+          record: %{"id" => "2", "name" => "foo"}
+        })
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
 
       xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
       assert xids == [xmin]
@@ -181,17 +176,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      txn = [
-        %Begin{xid: xmin},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+          record: %{"id" => "2", "name" => "foo"}
+        })
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
       assert_receive {:start_consumer, @shape_handle, id, pid}
       xids = Support.TransactionConsumer.assert_consume([{id, pid}], [txn])
       assert xids == [xmin]
@@ -204,17 +196,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       Process.monitor(ctx.server)
 
-      txn = [
-        %Begin{xid: xmin},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+          record: %{"id" => "2", "name" => "foo"}
+        })
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
       assert_receive {:start_consumer, @shape_handle, id, consumer_pid}
       ref = Process.monitor(consumer_pid)
       xids = Support.TransactionConsumer.assert_consume([{id, consumer_pid}], [txn])
@@ -226,7 +215,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _}
 
       # the shape has been removed from the filters
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
       refute_receive {:start_consumer, @shape_handle, _id, _consumer_pid}
     end
   end
@@ -239,7 +228,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     expect_calls(Electric.Postgres.Inspector, expectations)
   end
 
-  describe "handle_operations/2 with transactions" do
+  describe "store_transaction/2" do
     setup :setup_log_collector
 
     setup ctx do
@@ -290,34 +279,28 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       next_lsn = Lsn.increment(lsn, 1)
       last_log_offset = LogOffset.new(lsn, 0)
 
-      txn = [
-        %Begin{xid: xmin},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+          record: %{"id" => "2", "name" => "foo"}
+        })
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
 
       xids =
         Support.TransactionConsumer.assert_consume(ctx.consumers, [txn])
 
       assert xids == [xmin]
 
-      txn2 = [
-        %Begin{xid: xid},
-        %Changes.NewRecord{
+      txn2 =
+        %Transaction{xid: xid, lsn: next_lsn, last_log_offset: last_log_offset}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "bar"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: next_lsn}
-      ]
+          record: %{"id" => "2", "name" => "bar"}
+        })
 
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
 
       xids = Support.TransactionConsumer.assert_consume(ctx.consumers, [txn2])
 
@@ -327,6 +310,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     @transaction_timeout 5
     @num_comparisons 10
     test "drops transactions if already processed", ctx do
+      change = %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: %{"id" => "2", "name" => "foo"}
+      }
+
       1..@num_comparisons
       |> Enum.reduce({1, 0, 1, 0}, fn _, {xid, prev_xid, lsn_int, prev_lsn_int} ->
         # advance xid and lsn randomly along their potential values to simulate
@@ -338,42 +326,28 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         lsn = Lsn.from_integer(lsn_int)
         prev_lsn = Lsn.from_integer(prev_lsn_int)
 
-        txn = [
-          %Begin{xid: xid},
-          %Changes.NewRecord{
-            relation: {"public", "test_table"},
-            record: %{"id" => "2", "name" => "foo"},
-            log_offset: LogOffset.new(lsn, 0)
-          },
-          %Commit{lsn: lsn}
-        ]
+        txn =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
 
-        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+        assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
 
         Support.TransactionConsumer.assert_consume(ctx.consumers, [txn], @transaction_timeout)
 
-        txn2 = [
-          %Begin{xid: xid},
-          %Changes.NewRecord{
-            relation: {"public", "test_table"},
-            record: %{"id" => "2", "name" => "foo"},
-            log_offset: LogOffset.new(lsn, 0)
-          },
-          %Commit{lsn: lsn}
-        ]
+        txn2 =
+          %Transaction{xid: xid, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
+          |> Transaction.prepend_change(change)
 
-        txn3 = [
-          %Begin{xid: prev_xid},
-          %Changes.NewRecord{
-            relation: {"public", "test_table"},
-            record: %{"id" => "2", "name" => "foo"},
-            log_offset: LogOffset.new(prev_lsn, 0)
-          },
-          %Commit{lsn: prev_lsn}
-        ]
+        txn3 =
+          %Transaction{
+            xid: prev_xid,
+            lsn: prev_lsn,
+            last_log_offset: LogOffset.new(prev_lsn, 0)
+          }
+          |> Transaction.prepend_change(change)
 
-        assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.server)
-        assert :ok = ShapeLogCollector.handle_operations(txn3, ctx.server)
+        assert :ok = ShapeLogCollector.store_transaction(txn2, ctx.server)
+        assert :ok = ShapeLogCollector.store_transaction(txn3, ctx.server)
         Support.TransactionConsumer.refute_consume(ctx.consumers, @transaction_timeout * 2)
         {xid, prev_xid, lsn_int, prev_lsn_int}
       end)
@@ -388,55 +362,49 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            end, force: true}
       )
 
-      txn = [
-        %Begin{xid: 1},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => nil, "name" => "foo"},
-          log_offset: LogOffset.new(1, 0)
-        },
-        %Commit{lsn: 1}
-      ]
+      change = %Changes.NewRecord{
+        relation: {"public", "test_table"},
+        record: %{"id" => nil, "name" => "foo"}
+      }
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      txn =
+        %Transaction{xid: 1, lsn: 1, last_log_offset: LogOffset.new(1, 0)}
+        |> Transaction.prepend_change(change)
+
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
     end
 
     test "correctly handles flush notifications", ctx do
       lsn = Lsn.from_string("0/10")
       prev_lsn = Lsn.increment(lsn, -1)
-      last_log_offset = LogOffset.new(lsn, 0)
 
       {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
 
       Registry.register(name, key, nil)
 
-      irrelevant_txn = [
-        %Begin{xid: 99},
-        %Commit{lsn: prev_lsn}
-      ]
+      irrelevant_txn = %Transaction{xid: 99, lsn: prev_lsn} |> Transaction.finalize()
 
-      assert :ok = ShapeLogCollector.handle_operations(irrelevant_txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(irrelevant_txn, ctx.server)
       expected_lsn = Lsn.to_integer(prev_lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 50
 
-      txn = [
-        %Begin{xid: 100},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "2", "name" => "foo"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+          log_offset: LogOffset.new(lsn, 0)
+        })
+        |> Transaction.finalize()
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
       refute_receive {:flush_boundary_updated, _}, 50
 
-      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-1", last_log_offset)
+      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-1", txn.last_log_offset)
       refute_receive {:flush_boundary_updated, _}, 50
-      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-2", last_log_offset)
+      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-2", txn.last_log_offset)
       refute_receive {:flush_boundary_updated, _}, 50
-      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-3", last_log_offset)
+      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-3", txn.last_log_offset)
 
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 100
@@ -463,17 +431,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       lsn = Lsn.from_integer(55)
 
-      txn = [
-        %Begin{xid: 100},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "irrelevant_table"},
           record: %{"id" => "2", "name" => "foo"},
           log_offset: LogOffset.new(lsn, 0)
-        },
-        %Commit{lsn: lsn}
-      ]
+        })
+        |> Transaction.finalize()
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
       assert_receive {:flush_boundary_updated, 55}, 50
     end
 
@@ -485,17 +452,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       lsn = Lsn.from_integer(20)
 
-      txn = [
-        %Begin{xid: 100},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "irrelevant_table"},
           record: %{"id" => "2", "name" => "foo"},
           log_offset: LogOffset.new(lsn, 0)
-        },
-        %Commit{lsn: lsn}
-      ]
+        })
+        |> Transaction.finalize()
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
       assert_receive {:flush_boundary_updated, 20}, 50
     end
 
@@ -505,17 +471,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       lsn = Lsn.from_integer(20)
 
-      txn = [
-        %Begin{xid: 100},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: 100, lsn: lsn}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "2"},
           log_offset: LogOffset.new(lsn, 0)
-        },
-        %Commit{lsn: lsn}
-      ]
+        })
+        |> Transaction.finalize()
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
 
       for {id, pid} <- ctx.consumers do
         Process.unlink(pid)
@@ -532,22 +497,19 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         end
       )
 
-      txn = [
-        %Begin{xid: 100},
-        %Changes.NewRecord{
+      txn =
+        %Transaction{xid: 100, lsn: 1, last_log_offset: LogOffset.new(1, 0)}
+        |> Transaction.prepend_change(%Changes.NewRecord{
           relation: {"public", "test_table"},
-          record: %{"id" => "2", "name" => "foo"},
-          log_offset: LogOffset.new(1, 0)
-        },
-        %Commit{lsn: 1}
-      ]
+          record: %{"id" => "2", "name" => "foo"}
+        })
 
       assert {:error, :connection_not_available} =
-               ShapeLogCollector.handle_operations(txn, ctx.server)
+               ShapeLogCollector.store_transaction(txn, ctx.server)
     end
   end
 
-  describe "handle_operations/2 with relations" do
+  describe "handle_relation_msg/2" do
     setup :setup_log_collector
 
     setup ctx do
@@ -616,11 +578,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       relation1 = %Relation{id: id, table: "test_table", schema: "public", columns: []}
 
-      assert :ok = ShapeLogCollector.handle_operations([relation1], ctx.server)
+      assert :ok = ShapeLogCollector.handle_relation_msg(relation1, ctx.server)
 
       relation2 = %Relation{id: id, table: "bar", schema: "public", columns: []}
 
-      assert :ok = ShapeLogCollector.handle_operations([relation2], ctx.server)
+      assert :ok = ShapeLogCollector.handle_relation_msg(relation2, ctx.server)
 
       Support.TransactionConsumer.assert_consume(ctx.consumers, [relation1, relation2])
     end
@@ -642,18 +604,17 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     test "rejects new transactions", ctx do
       lsn = Lsn.from_string("0/10")
 
-      txn = [
-        %Begin{xid: 100},
-        %Commit{lsn: lsn}
-      ]
+      txn = %Transaction{xid: 100, lsn: lsn, last_log_offset: LogOffset.new(lsn, 0)}
 
-      assert {:error, :not_ready} = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert {:error, :not_ready} = ShapeLogCollector.store_transaction(txn, ctx.server)
     end
 
     test "rejects relation messages", ctx do
       relation = %Relation{id: 1234, table: "test_table", schema: "public", columns: []}
 
-      assert {:error, :not_ready} = ShapeLogCollector.handle_operations([relation], ctx.server)
+      assert_raise MatchError, fn ->
+        ShapeLogCollector.handle_relation_msg(relation, ctx.server)
+      end
     end
   end
 
@@ -661,19 +622,17 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ctx = setup_log_collector(ctx)
     xmin = 100
     lsn = Lsn.from_string("0/10")
+    last_log_offset = LogOffset.new(lsn, 0)
 
-    txn = [
-      %Begin{xid: xmin},
-      %Changes.NewRecord{
+    txn =
+      %Transaction{xid: xmin, lsn: lsn, last_log_offset: last_log_offset}
+      |> Transaction.prepend_change(%Changes.NewRecord{
         relation: {"public", "test_table"},
-        record: %{"id" => "1"},
-        log_offset: LogOffset.new(lsn, 0)
-      },
-      %Commit{lsn: lsn}
-    ]
+        record: %{"id" => "1"}
+      })
 
     # this call should return immediately
-    assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+    assert :ok = ShapeLogCollector.store_transaction(txn, ctx.server)
   end
 
   test "initializes with provided LSN", ctx do
@@ -731,35 +690,29 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     assert start_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
 
-    txn_to_drop = [
-      %Begin{xid: 99},
-      %Changes.NewRecord{
+    txn_to_drop =
+      %Transaction{xid: 99, lsn: prev_lsn, last_log_offset: LogOffset.new(prev_lsn, 0)}
+      |> Transaction.prepend_change(%Changes.NewRecord{
         relation: {"public", "test_table"},
-        record: %{"id" => "1"},
-        log_offset: LogOffset.new(prev_lsn, 0)
-      },
-      %Commit{lsn: prev_lsn}
-    ]
+        record: %{"id" => "1"}
+      })
 
     # this call should return immediately
-    assert :ok = ShapeLogCollector.handle_operations(txn_to_drop, pid)
+    assert :ok = ShapeLogCollector.store_transaction(txn_to_drop, pid)
 
     # should drop the transaction and not update the lsn
     Support.TransactionConsumer.refute_consume(consumers)
     assert start_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
 
     # should accept a transaction with a higher LSN and update it
-    txn_to_process = [
-      %Begin{xid: 101},
-      %Changes.NewRecord{
+    txn_to_process =
+      %Transaction{xid: 101, lsn: next_lsn, last_log_offset: LogOffset.new(next_lsn, 0)}
+      |> Transaction.prepend_change(%Changes.NewRecord{
         relation: {"public", "test_table"},
-        record: %{"id" => "3"},
-        log_offset: LogOffset.new(next_lsn, 0)
-      },
-      %Commit{lsn: next_lsn}
-    ]
+        record: %{"id" => "3"}
+      })
 
-    assert :ok = ShapeLogCollector.handle_operations(txn_to_process, pid)
+    assert :ok = ShapeLogCollector.store_transaction(txn_to_process, pid)
     Support.TransactionConsumer.assert_consume(consumers, [txn_to_process])
     assert next_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
   end
