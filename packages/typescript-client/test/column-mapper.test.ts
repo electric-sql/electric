@@ -250,6 +250,23 @@ describe(`encodeWhereClause`, () => {
     )
   })
 
+  it(`should handle ORDER BY with NULLS FIRST/LAST`, () => {
+    expect(encodeWhereClause(`createdAt DESC NULLS LAST`, encode)).toBe(
+      `created_at DESC NULLS LAST`
+    )
+
+    expect(encodeWhereClause(`userId ASC NULLS FIRST`, encode)).toBe(
+      `user_id ASC NULLS FIRST`
+    )
+
+    expect(
+      encodeWhereClause(
+        `userId DESC NULLS LAST, createdAt ASC NULLS FIRST`,
+        encode
+      )
+    ).toBe(`user_id DESC NULLS LAST, created_at ASC NULLS FIRST`)
+  })
+
   it(`should not transform parameter placeholders`, () => {
     // Parameter placeholders ($1, $2, etc.) don't match identifier pattern
     expect(encodeWhereClause(`userId = $1`, encode)).toBe(`user_id = $1`)

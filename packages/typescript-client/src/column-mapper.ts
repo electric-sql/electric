@@ -34,7 +34,7 @@ export interface ColumnMapper {
  *
  * Handles edge cases:
  * - Preserves leading underscores: `_user_id` → `_userId`
- * - Drops trailing underscores: `user_id_` → `userId`
+ * - Preserves trailing underscores: `user_id_` → `userId_`
  * - Collapses multiple underscores: `user__id` → `userId`
  * - Normalizes to lowercase first: `user_Column` → `userColumn`
  *
@@ -44,6 +44,7 @@ export interface ColumnMapper {
  * snakeToCamel('created_at') // 'createdAt'
  * snakeToCamel('_private') // '_private'
  * snakeToCamel('user__id') // 'userId'
+ * snakeToCamel('user_id_') // 'userId_'
  */
 export function snakeToCamel(str: string): string {
   // Preserve leading underscores
@@ -175,6 +176,9 @@ export function encodeWhereClause(
     `IN`,
     `IS`,
     `NULL`,
+    `NULLS`,
+    `FIRST`,
+    `LAST`,
     `TRUE`,
     `FALSE`,
     `LIKE`,
