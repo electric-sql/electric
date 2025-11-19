@@ -452,6 +452,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       assert :ok = ShapeStatus.initialize_from_storage(state2, state2.storage)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state2)
+      assert {^shape_handle, _offset} = ShapeStatus.get_existing_shape(state2, shape)
+      assert ShapeStatus.count_shapes(state2) == 1
       # consuming backup directory should have removed it after load
       refute File.exists?(backup_dir)
     end
