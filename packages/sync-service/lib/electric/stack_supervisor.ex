@@ -367,7 +367,8 @@ defmodule Electric.StackSupervisor do
              snapshot_timeout_to_first_data: config.tweaks[:snapshot_timeout_to_first_data],
              inspector: inspector,
              shape_hibernate_after: shape_hibernate_after,
-             shape_enable_suspend?: shape_enable_suspend?
+             shape_enable_suspend?: shape_enable_suspend?,
+             feature_flags: Map.get(config, :feature_flags, [])
            ]},
           {Electric.AsyncDeleter,
            stack_id: stack_id,

@@ -38,7 +38,7 @@ defmodule Electric.Config do
 
   @build_env Mix.env()
 
-  @known_feature_flags ~w[allow_subqueries]
+  @known_feature_flags ~w[allow_subqueries suspend_consumers]
 
   @defaults [
     ## Database

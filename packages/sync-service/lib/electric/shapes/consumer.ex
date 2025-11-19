@@ -370,12 +370,7 @@ defmodule Electric.Shapes.Consumer do
     #   a. we have no dependent shapes
     #   b. we don't have a materializer subscribed
 
-    can_suspend? =
-      Electric.StackConfig.lookup(state.stack_id, :shape_enable_suspend?, true) and
-        state.snapshot_started and Enum.empty?(state.shape.shape_dependencies_handles) and
-        not state.materializer_subscribed?
-
-    if can_suspend? do
+    if consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
       Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
       {:stop, ShapeCleaner.consumer_suspend_reason(), state}
     else
@@ -383,6 +378,17 @@ defmodule Electric.Shapes.Consumer do
 
       {:noreply, state, :hibernate}
     end
+  end
+
+  defp consumer_suspend_enabled?(%{stack_id: stack_id}) do
+    # TODO: remove additional feature flag check once feature is stabilised
+    Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true) and
+      "suspend_consumers" in Electric.StackConfig.lookup(stack_id, :feature_flags, [])
+  end
+
+  defp consumer_can_suspend?(state) do
+    state.snapshot_started and Enum.empty?(state.shape.shape_dependencies_handles) and
+      not state.materializer_subscribed?
   end
 
   @impl GenServer
