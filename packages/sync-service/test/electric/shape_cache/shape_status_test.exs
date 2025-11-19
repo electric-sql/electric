@@ -9,60 +9,21 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
   import Support.TestUtils, only: [expect_calls: 3, patch_calls: 3]
 
-  @inspector {__MODULE__, []}
+  @inspector Support.StubInspector.new(
+               tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
+               columns: [
+                 %{
+                   name: "id",
+                   type: "int8",
+                   type_id: {20, 1},
+                   pk_position: 0,
+                   is_generated: false
+                 },
+                 %{name: "value", type: "text", type_id: {25, 1}, is_generated: false}
+               ]
+             )
 
   setup :with_stack_id_from_test
-
-  defp shape!, do: shape!("test")
-
-  defp shape!(val) do
-    where = "value = '#{val}'"
-
-    assert {:ok, %Shape{where: %{query: ^where}} = shape} =
-             Shape.new("other_table", inspector: {__MODULE__, []}, where: where)
-
-    shape
-  end
-
-  defp shape2! do
-    assert {:ok, %Shape{where: nil} = shape} =
-             Shape.new("public.table", inspector: {__MODULE__, []})
-
-    shape
-  end
-
-  defp new_state(ctx, opts \\ []) do
-    stub_storage([force: true], metadata_backup_dir: fn _ -> nil end)
-
-    expect_storage(
-      get_all_stored_shapes: fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end
-    )
-
-    state = %{
-      storage: {Mock.Storage, []},
-      stack_id: ctx.stack_id
-    }
-
-    :ok = ShapeStatus.initialize_from_storage(state, state.storage)
-
-    shapes = Keyword.get(opts, :shapes, [])
-
-    shape_handles =
-      for shape <- shapes do
-        {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-        shape_handle
-      end
-
-    {:ok, state, shape_handles}
-  end
-
-  defp stub_storage(opts \\ [], stubs) do
-    patch_calls(Electric.ShapeCache.Storage, opts, stubs)
-  end
-
-  defp expect_storage(opts \\ [], expectations) do
-    expect_calls(Electric.ShapeCache.Storage, opts, expectations)
-  end
 
   test "starts empty", ctx do
     {:ok, state, []} = new_state(ctx)
@@ -208,15 +169,16 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       outer =
         %{shape_dependencies: [inner]} =
-        Shape.new!("public.table",
+        Shape.new!("public.items",
           where: "id IN (SELECT id FROM other_table)",
           inspector: @inspector
         )
 
-      {:ok, shape2} = ShapeStatus.add_shape(state, outer)
-      {:ok, shape1} = ShapeStatus.add_shape(state, inner)
+      {:ok, inner_handle} = ShapeStatus.add_shape(state, inner)
+      outer = %{outer | shape_dependencies_handles: [inner_handle]}
+      {:ok, outer_handle} = ShapeStatus.add_shape(state, outer)
 
-      assert [{^shape1, _}, {^shape2, _}] = ShapeStatus.list_shapes(state)
+      assert [{^inner_handle, _}, {^outer_handle, _}] = ShapeStatus.list_shapes(state)
     end
   end
 
@@ -439,21 +401,54 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
   end
 
-  def load_column_info(1338, _),
-    do:
-      {:ok,
-       [
-         %{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0, is_generated: false},
-         %{name: "value", type: :text, type_id: {2, 2}, pk_position: nil, is_generated: false}
-       ]}
+  defp shape!, do: shape!("test")
 
-  def load_column_info(1337, _),
-    do: {:ok, [%{name: "id", type: :int8, type_id: {1, 1}, pk_position: 0, is_generated: false}]}
+  defp shape!(val) do
+    where = "value = '#{val}'"
 
-  def load_relation_oid({"public", "table"}, _), do: {:ok, {1337, {"public", "table"}}}
+    assert {:ok, %Shape{where: %{query: ^where}} = shape} =
+             Shape.new("items", inspector: @inspector, where: where)
 
-  def load_relation_oid({"public", "other_table"}, _),
-    do: {:ok, {1338, {"public", "other_table"}}}
+    shape
+  end
 
-  def load_supported_features(_), do: {:ok, %{supports_generated_column_replication: true}}
+  defp shape2! do
+    assert {:ok, %Shape{where: nil} = shape} =
+             Shape.new("public.other_table", inspector: @inspector)
+
+    shape
+  end
+
+  defp new_state(ctx, opts \\ []) do
+    stub_storage([force: true], metadata_backup_dir: fn _ -> nil end)
+
+    expect_storage(
+      get_all_stored_shapes: fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end
+    )
+
+    state = %{
+      storage: {Mock.Storage, []},
+      stack_id: ctx.stack_id
+    }
+
+    :ok = ShapeStatus.initialize_from_storage(state, state.storage)
+
+    shapes = Keyword.get(opts, :shapes, [])
+
+    shape_handles =
+      for shape <- shapes do
+        {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+        shape_handle
+      end
+
+    {:ok, state, shape_handles}
+  end
+
+  defp stub_storage(opts \\ [], stubs) do
+    patch_calls(Electric.ShapeCache.Storage, opts, stubs)
+  end
+
+  defp expect_storage(opts \\ [], expectations) do
+    expect_calls(Electric.ShapeCache.Storage, opts, expectations)
+  end
 end
