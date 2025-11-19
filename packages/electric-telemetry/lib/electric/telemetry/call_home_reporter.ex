@@ -39,25 +39,6 @@ defmodule ElectricTelemetry.CallHomeReporter do
     GenServer.start_link(__MODULE__, init_opts, name: name)
   end
 
-  def static_info(opts) do
-    {total_mem, _, _} = :memsup.get_memory_data()
-    processors = :erlang.system_info(:logical_processors)
-    {os_family, os_name} = :os.type()
-    arch = :erlang.system_info(:system_architecture)
-
-    %{
-      electric_version: opts.version,
-      environment: %{
-        os: %{family: os_family, name: os_name},
-        arch: to_string(arch),
-        cores: processors,
-        ram: total_mem,
-        electric_instance_id: Map.fetch!(opts, :instance_id),
-        electric_installation_id: Map.fetch!(opts, :installation_id)
-      }
-    }
-  end
-
   def report_home(telemetry_url, results) do
     # Isolate the request in a separate task to avoid blocking and
     # to not receive any messages from the HTTP pool internals
