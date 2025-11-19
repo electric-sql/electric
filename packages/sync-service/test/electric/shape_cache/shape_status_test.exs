@@ -224,27 +224,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert ShapeStatus.latest_offset(table_name, shape_handle) == {:ok, offset}
   end
 
-  test "initialise_shape/4", ctx do
+  test "initialise_shape/3", ctx do
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
     offset = LogOffset.new(100, 3)
-    assert :ok = ShapeStatus.initialise_shape(state, shape_handle, 1234, offset)
+    assert :ok = ShapeStatus.initialise_shape(state, shape_handle, offset)
     assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
-    assert ShapeStatus.snapshot_xmin(state, shape_handle) == {:ok, 1234}
-  end
-
-  test "snapshot_xmin/2", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-
-    # set_snapshot_xmin for an unknown shape silently does nothing
-    # this is because real-world race conditions mean that we may
-    # still receive updates on a shape that is in the process of
-    # being deleted
-    assert ShapeStatus.set_snapshot_xmin(state, "sdfsodf", 1234)
-
-    assert :error = ShapeStatus.snapshot_xmin(state, "sdfsodf")
-    assert {:ok, nil} == ShapeStatus.snapshot_xmin(state, shape_handle)
-    assert ShapeStatus.set_snapshot_xmin(state, shape_handle, 1234)
-    assert {:ok, 1234} == ShapeStatus.snapshot_xmin(state, shape_handle)
   end
 
   test "snapshot_started?/2", ctx do

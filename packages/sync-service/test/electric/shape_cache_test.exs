@@ -529,7 +529,6 @@ defmodule Electric.ShapeCacheTest do
       assert :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
       assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
-      assert {:ok, 10} = ShapeStatus.snapshot_xmin(ctx.stack_id, shape_handle)
     end
 
     test "lists the shape even if we don't know xmin", ctx do
@@ -954,23 +953,6 @@ defmodule Electric.ShapeCacheTest do
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
       :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
       assert shape_handle1 == shape_handle2
-    end
-
-    test "restores snapshot xmins", ctx do
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
-      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
-
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
-
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(ctx.stack_id, shape_handle)
-      assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
-
-      restart_shape_cache(ctx)
-      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
-
-      assert [{^shape_handle, @shape}] = ShapeCache.list_shapes(ctx.stack_id)
-      {:ok, snapshot_xmin} = ShapeStatus.snapshot_xmin(ctx.stack_id, shape_handle)
-      assert snapshot_xmin == elem(@pg_snapshot_xmin_10, 0)
     end
 
     test "waits until publication filters are restored", ctx do

@@ -30,8 +30,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
               {shape_handle(), LogOffset.t()} | nil
   @callback fetch_shape_by_handle(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | :error
   @callback add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
-  @callback initialise_shape(stack_ref(), shape_handle(), xmin(), LogOffset.t()) :: :ok
-  @callback set_snapshot_xmin(stack_ref(), shape_handle(), xmin()) :: :ok
+  @callback initialise_shape(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
   @callback set_latest_offset(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
   @callback mark_snapshot_started(stack_ref(), shape_handle()) :: :ok
   @callback snapshot_started?(stack_ref(), shape_handle()) :: boolean()
@@ -80,8 +79,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_relation_lookup :shape_relation_lookup
   @shape_meta_shape_pos 2
   @shape_meta_snapshot_started_pos 3
-  @shape_meta_xmin_pos 4
-  @shape_meta_latest_offset_pos 5
+  @shape_meta_latest_offset_pos 4
 
   @impl true
   def initialize_from_storage(stack_ref, storage) do
@@ -265,13 +263,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def initialise_shape(stack_ref, shape_handle, snapshot_xmin, latest_offset) do
+  def initialise_shape(stack_ref, shape_handle, latest_offset) do
     true =
       :ets.update_element(
         shape_meta_table(stack_ref),
         {@shape_meta_data, shape_handle},
         [
-          {@shape_meta_xmin_pos, snapshot_xmin},
           {@shape_meta_latest_offset_pos, latest_offset}
         ]
       )
@@ -285,17 +282,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
       shape_meta_table(stack_ref),
       {@shape_meta_data, shape_handle},
       {@shape_meta_snapshot_started_pos, true}
-    )
-
-    :ok
-  end
-
-  @impl true
-  def set_snapshot_xmin(stack_ref, shape_handle, snapshot_xmin) do
-    :ets.update_element(
-      shape_meta_table(stack_ref),
-      {@shape_meta_data, shape_handle},
-      {@shape_meta_xmin_pos, snapshot_xmin}
     )
 
     :ok
@@ -388,16 +374,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
         shape_meta_table(stack_ref),
         {@shape_meta_data, shape_handle},
         @shape_meta_latest_offset_pos
-      )
-    end)
-  end
-
-  def snapshot_xmin(stack_ref, shape_handle) do
-    turn_raise_into_error(fn ->
-      :ets.lookup_element(
-        shape_meta_table(stack_ref),
-        {@shape_meta_data, shape_handle},
-        @shape_meta_xmin_pos
       )
     end)
   end
