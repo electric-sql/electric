@@ -79,9 +79,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_data :shape_meta_data
   @shape_relation_lookup :shape_relation_lookup
   @shape_meta_shape_pos 2
-  @shape_meta_xmin_pos 3
-  @shape_meta_latest_offset_pos 4
-  @snapshot_started :snapshot_started
+  @shape_meta_snapshot_started_pos 3
+  @shape_meta_xmin_pos 4
+  @shape_meta_latest_offset_pos 5
 
   @impl true
   def initialize_from_storage(stack_ref, storage) do
@@ -122,7 +122,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert_new(
         shape_meta_table(stack_ref),
         [
-          {{@shape_meta_data, shape_handle}, shape, nil, offset}
+          {{@shape_meta_data, shape_handle}, shape, false, nil, offset}
           | Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
               {{@shape_relation_lookup, oid, shape_handle}, true}
             end)
@@ -149,7 +149,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     shape_meta_table(stack_ref)
     |> :ets.select([
       {
-        {{@shape_meta_data, :"$1"}, :"$2", :_, :_},
+        {{@shape_meta_data, :"$1"}, :"$2", :_, :_, :_},
         [],
         [{{:"$1", :"$2"}}]
       }
@@ -211,7 +211,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.delete(shape_hash_lookup_table(stack_ref), Shape.comparable(shape))
 
       :ets.delete(meta_table, {@shape_meta_data, shape_handle})
-      :ets.delete(meta_table, {@snapshot_started, shape_handle})
 
       Enum.each(Shape.list_relations(shape), fn {oid, _} ->
         :ets.delete(meta_table, {@shape_relation_lookup, oid, shape_handle})
@@ -281,19 +280,34 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
+  def mark_snapshot_started(stack_ref, shape_handle) do
+    :ets.update_element(
+      shape_meta_table(stack_ref),
+      {@shape_meta_data, shape_handle},
+      {@shape_meta_snapshot_started_pos, true}
+    )
+
+    :ok
+  end
+
+  @impl true
   def set_snapshot_xmin(stack_ref, shape_handle, snapshot_xmin) do
-    :ets.update_element(shape_meta_table(stack_ref), {@shape_meta_data, shape_handle}, [
+    :ets.update_element(
+      shape_meta_table(stack_ref),
+      {@shape_meta_data, shape_handle},
       {@shape_meta_xmin_pos, snapshot_xmin}
-    ])
+    )
 
     :ok
   end
 
   @impl true
   def set_latest_offset(stack_ref, shape_handle, latest_offset) do
-    :ets.update_element(shape_meta_table(stack_ref), {@shape_meta_data, shape_handle}, [
+    :ets.update_element(
+      shape_meta_table(stack_ref),
+      {@shape_meta_data, shape_handle},
       {@shape_meta_latest_offset_pos, latest_offset}
-    ])
+    )
 
     :ok
   end
@@ -390,16 +404,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def snapshot_started?(stack_ref, shape_handle) do
-    case :ets.lookup(shape_meta_table(stack_ref), {@snapshot_started, shape_handle}) do
-      [] -> false
-      [{{@snapshot_started, ^shape_handle}, started?}] -> started?
-    end
-  end
-
-  @impl true
-  def mark_snapshot_started(stack_ref, shape_handle) do
-    :ets.insert(shape_meta_table(stack_ref), {{@snapshot_started, shape_handle}, true})
-    :ok
+    :ets.lookup_element(
+      shape_meta_table(stack_ref),
+      {@shape_meta_data, shape_handle},
+      @shape_meta_snapshot_started_pos
+    )
+  rescue
+    ArgumentError -> false
   end
 
   @impl true
@@ -491,8 +502,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
           meta_tuples =
             [
-              {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()},
-              {{@snapshot_started, shape_handle}, snapshot_started?}
+              {{@shape_meta_data, shape_handle}, shape, snapshot_started?, nil,
+               LogOffset.last_before_real_offsets()}
               | Enum.map(relations, fn {oid, _} ->
                   {{@shape_relation_lookup, oid, shape_handle}, true}
                 end)
