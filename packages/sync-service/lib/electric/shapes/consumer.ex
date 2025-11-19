@@ -597,7 +597,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp set_snapshot_started(%{shape_handle: shape_handle} = state) do
-    :ok = ShapeCache.ShapeStatus.mark_snapshot_started(state.stack_id, shape_handle)
+    :ok = ShapeCache.ShapeStatus.mark_snapshot_as_started(state.stack_id, shape_handle)
     reply_to_snapshot_waiters(state, :started)
   end
 

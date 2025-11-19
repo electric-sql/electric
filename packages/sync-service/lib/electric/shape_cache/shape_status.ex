@@ -32,7 +32,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   @callback initialise_shape(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
   @callback set_latest_offset(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
-  @callback mark_snapshot_started(stack_ref(), shape_handle()) :: :ok
+  @callback mark_snapshot_as_started(stack_ref(), shape_handle()) :: :ok
   @callback snapshot_started?(stack_ref(), shape_handle()) :: boolean()
   @callback remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
   @callback reset(stack_ref()) :: :ok
@@ -277,7 +277,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def mark_snapshot_started(stack_ref, shape_handle) do
+  def mark_snapshot_as_started(stack_ref, shape_handle) do
     :ets.update_element(
       shape_meta_table(stack_ref),
       {@shape_meta_data, shape_handle},

@@ -238,7 +238,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     refute ShapeStatus.snapshot_started?(state.shape_meta_table, "sdfsodf")
     refute ShapeStatus.snapshot_started?(state, shape_handle)
 
-    ShapeStatus.mark_snapshot_started(state, shape_handle)
+    ShapeStatus.mark_snapshot_as_started(state, shape_handle)
 
     assert ShapeStatus.snapshot_started?(state, shape_handle)
     assert ShapeStatus.snapshot_started?(state.shape_meta_table, shape_handle)
