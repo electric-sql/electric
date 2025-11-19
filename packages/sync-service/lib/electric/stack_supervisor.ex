@@ -361,7 +361,6 @@ defmodule Electric.StackSupervisor do
              chunk_bytes_threshold: config.chunk_bytes_threshold,
              snapshot_timeout_to_first_data: config.tweaks[:snapshot_timeout_to_first_data],
              inspector: inspector,
-             shape_changes_registry: shape_changes_registry_name,
              shape_hibernate_after: shape_hibernate_after
            ]},
           {Electric.AsyncDeleter,

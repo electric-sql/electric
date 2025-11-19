@@ -14,7 +14,7 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
   """
   def child_spec(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    name = Keyword.get(opts, :name, name(stack_id))
+    {name, opts} = Keyword.pop(opts, :name, name(stack_id))
 
     # We're overriding Electric.Shapes.DynamicConsumerSupervisor's child_spec() function here
     # to make the usage of PartitionSupervisor transparent to the callers. As a consequence, we
