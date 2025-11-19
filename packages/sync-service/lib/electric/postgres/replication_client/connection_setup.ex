@@ -9,6 +9,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   """
   alias Electric.Utils
   alias Electric.Postgres.ReplicationClient.State
+  alias Electric.Postgres.Lsn
 
   require Logger
 
@@ -263,8 +264,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
     } = result
 
     Logger.debug("Created new slot at lsn=#{lsn_str}")
+    lsn = lsn_str |> Lsn.from_string() |> Lsn.to_integer()
 
-    {:created_new_slot, state}
+    {:created_new_slot, %{state | flushed_wal: lsn}}
   end
 
   defp create_slot_result(%Postgrex.Error{} = error, state) do
@@ -280,6 +282,32 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
         # Unexpected error, fail loudly.
         raise error
     end
+  end
+
+  ###
+
+  defp query_slot_flushed_lsn_query(%State{slot_name: slot_name} = state) do
+    Logger.debug("ReplicationClient step: query_slot_flushed_lsn")
+
+    query = """
+      SELECT confirmed_flush_lsn
+      FROM pg_replication_slots
+      WHERE slot_name = #{Utils.quote_string(slot_name)}
+    """
+
+    {:query, query, state}
+  end
+
+  defp query_slot_flushed_lsn_result([%Postgrex.Result{} = result], state) do
+    %{rows: [[lsn_str]]} = result
+    Logger.debug("Queried existing slot flushed lsn=#{lsn_str}")
+    lsn = lsn_str |> Lsn.from_string() |> Lsn.to_integer()
+    %{state | flushed_wal: lsn}
+  end
+
+  defp query_slot_flushed_lsn_result(%Postgrex.Error{} = error, _state) do
+    # Unexpected error, fail loudly.
+    raise error
   end
 
   ###
@@ -363,7 +391,13 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp next_step(%{step: :drop_slot}),
     do: :create_slot
 
+  defp next_step(%{step: :create_slot, flushed_wal: 0}),
+    do: :query_slot_flushed_lsn
+
   defp next_step(%{step: :create_slot}),
+    do: :set_display_setting
+
+  defp next_step(%{step: :query_slot_flushed_lsn}),
     do: :set_display_setting
 
   defp next_step(%{step: :set_display_setting, display_settings: queries}) when queries != [],
@@ -392,6 +426,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp query_for_step(:drop_slot, state), do: drop_slot_query(state)
   defp query_for_step(:create_slot, state), do: create_slot_query(state)
+  defp query_for_step(:query_slot_flushed_lsn, state), do: query_slot_flushed_lsn_query(state)
   defp query_for_step(:set_display_setting, state), do: set_display_setting_query(state)
   defp query_for_step(:ready_to_stream, state), do: ready_to_stream(state)
   defp query_for_step(:start_streaming, state), do: start_replication_slot_query(state)
@@ -423,6 +458,9 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   defp dispatch_query_result(:create_slot, result, state),
     do: create_slot_result(result, state)
+
+  defp dispatch_query_result(:query_slot_flushed_lsn, result, state),
+    do: query_slot_flushed_lsn_result(result, state)
 
   defp dispatch_query_result(:set_display_setting, result, state),
     do: set_display_setting_result(result, state)

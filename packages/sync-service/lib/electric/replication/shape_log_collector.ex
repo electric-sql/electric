@@ -47,8 +47,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def set_last_processed_lsn(server_ref, last_processed_lsn) do
-    GenServer.call(server(server_ref), {:set_last_processed_lsn, last_processed_lsn})
+  def mark_as_ready(server_ref) do
+    GenServer.call(server(server_ref), :mark_as_ready)
   end
 
   # use `GenServer.call/2` here to make the event processing synchronous.
@@ -212,8 +212,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  def handle_call({:set_last_processed_lsn, lsn}, _from, state) do
-    LsnTracker.set_last_processed_lsn(lsn, state.stack_id)
+  def handle_call(:mark_as_ready, _from, state) do
+    lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
   end
@@ -377,7 +377,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
 
-    LsnTracker.set_last_processed_lsn(state.last_processed_lsn, state.stack_id)
+    LsnTracker.set_last_processed_lsn(state.stack_id, state.last_processed_lsn)
 
     flush_tracker =
       if is_struct(event, Transaction) do

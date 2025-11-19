@@ -9,6 +9,7 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
   setup [
     :with_unique_db,
     :with_stack_id_from_test,
+    :with_lsn_tracker,
     :with_slot_name
   ]
 
@@ -102,5 +103,6 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
 
     assert_receive {:DOWN, ^ref2, :process, ^pid, _reason}
     refute_received {:DOWN, ^ref1, :process, _, _reason}
+    stop_supervised(ReplicationClient)
   end
 end

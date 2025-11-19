@@ -310,8 +310,8 @@ defmodule Support.ComponentSetup do
   end
 
   def with_lsn_tracker(%{stack_id: stack_id}) do
-    Electric.LsnTracker.create_table(stack_id)
-    Electric.LsnTracker.set_last_processed_lsn(Electric.Postgres.Lsn.from_integer(0), stack_id)
+    Electric.LsnTracker.initialize(stack_id)
+    Electric.LsnTracker.set_last_processed_lsn(stack_id, Electric.Postgres.Lsn.from_integer(0))
     :ok
   end
 

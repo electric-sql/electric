@@ -18,19 +18,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   import Support.TestUtils, only: [patch_calls: 3, expect_calls: 2]
 
-  import Support.ComponentSetup,
-    only: [
-      with_in_memory_storage: 1,
-      with_shape_status: 1,
-      with_stack_id_from_test: 1,
-      with_noop_publication_manager: 1,
-      with_persistent_kv: 1
-    ]
+  import Support.ComponentSetup
 
   setup [
     :with_stack_id_from_test,
     :with_in_memory_storage,
     :with_shape_status,
+    :with_lsn_tracker,
     :with_noop_publication_manager,
     :with_persistent_kv
   ]
@@ -481,7 +475,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
       Registry.register(name, key, nil)
 
-      assert :ok = ShapeLogCollector.set_last_processed_lsn(ctx.server, Lsn.from_integer(50))
+      LsnTracker.set_last_processed_lsn(ctx.stack_id, Lsn.from_integer(50))
+      assert :ok = ShapeLogCollector.mark_as_ready(ctx.server)
 
       lsn = Lsn.from_integer(20)
 
@@ -727,9 +722,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     prev_lsn = Lsn.increment(start_lsn, -1)
     next_lsn = Lsn.increment(start_lsn, +1)
 
-    ShapeLogCollector.set_last_processed_lsn(pid, start_lsn)
-
-    assert start_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
+    LsnTracker.set_last_processed_lsn(ctx.stack_id, start_lsn)
+    ShapeLogCollector.mark_as_ready(pid)
 
     txn_to_drop = [
       %Begin{xid: 99},
