@@ -119,31 +119,37 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {state, _} =
       stream
       |> Stream.map(&Jason.decode!/1)
-      |> Enum.filter(fn decoded -> Map.has_key?(decoded, "key") end)
-      |> Enum.map(fn %{
-                       "key" => key,
-                       "value" => value,
-                       "headers" => %{"operation" => operation} = headers
-                     } ->
-        case operation do
-          "insert" ->
-            %Changes.NewRecord{key: key, record: value, move_tags: Map.get(headers, "tags", [])}
+      |> Enum.filter(fn decoded ->
+        Map.has_key?(decoded, "key") || Map.has_key?(decoded["headers"], "event")
+      end)
+      |> Enum.map(fn
+        %{
+          "key" => key,
+          "value" => value,
+          "headers" => %{"operation" => operation} = headers
+        } ->
+          case operation do
+            "insert" ->
+              %Changes.NewRecord{key: key, record: value, move_tags: Map.get(headers, "tags", [])}
 
-          "update" ->
-            %Changes.UpdatedRecord{
-              key: key,
-              record: value,
-              move_tags: Map.get(headers, "tags", []),
-              removed_move_tags: Map.get(headers, "removed_tags", [])
-            }
+            "update" ->
+              %Changes.UpdatedRecord{
+                key: key,
+                record: value,
+                move_tags: Map.get(headers, "tags", []),
+                removed_move_tags: Map.get(headers, "removed_tags", [])
+              }
 
-          "delete" ->
-            %Changes.DeletedRecord{
-              key: key,
-              old_record: value,
-              move_tags: Map.get(headers, "tags", [])
-            }
-        end
+            "delete" ->
+              %Changes.DeletedRecord{
+                key: key,
+                old_record: value,
+                move_tags: Map.get(headers, "tags", [])
+              }
+          end
+
+        %{"headers" => %{"event" => "move_out", "patterns" => patterns}} ->
+          %{headers: %{event: "move_out", patterns: patterns}}
       end)
       |> apply_changes(state)
 

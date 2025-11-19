@@ -48,6 +48,7 @@ defmodule Electric.LogItems do
              op_position: change.log_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
        }}
     ]
   end
