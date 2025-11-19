@@ -306,19 +306,23 @@ paths:
             to get data that doesn't match the main shape's WHERE clause.
         - name: subset__params
           in: query
-          style: deepObject
-          explode: true
           schema:
-            type: object
-            patternProperties:
-              '^\d+$':
-                type: string
+            type: string
+            format: json
           description: |-
-            Parameters for the subset WHERE clause. Uses the same "exploded object"
-            syntax as the main `params` parameter.
+            Parameters for the subset WHERE clause as a JSON string.
+            The JSON should be an object mapping positional parameter numbers to their values,
+            for example: `{"1":"value1","2":"value2"}` to replace `$1` and `$2` in the subset WHERE clause.
 
             Presence of this or other `subset__*` parameters in the request makes the server
             return a subset snapshot instead of the regular shape sync.
+          examples:
+            single_param:
+              value: '{"1":"high"}'
+              summary: Replace $1 in subset WHERE clause with "high"
+            multiple_params:
+              value: '{"1":"active","2":"100"}'
+              summary: Replace $1 with "active" and $2 with "100"
         - name: subset__limit
           in: query
           schema:
