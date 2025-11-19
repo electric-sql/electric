@@ -13,14 +13,14 @@ defmodule Electric.ExpiryManagerTest do
 
   setup [
     :with_stack_id_from_test,
-    :with_status_monitor
+    :with_status_monitor,
+    :with_in_memory_storage,
+    :with_shape_status
   ]
 
   @max_shapes 10
 
   setup %{stack_id: stack_id} do
-    ShapeStatus.initialize_empty(stack_id)
-
     expiry_manager =
       start_supervised!({ExpiryManager, max_shapes: @max_shapes, period: 1, stack_id: stack_id})
 

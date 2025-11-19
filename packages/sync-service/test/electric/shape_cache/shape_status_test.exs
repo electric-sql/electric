@@ -431,10 +431,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       # Persist backup
       assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
 
-      backup_file =
-        Path.join([backup_base_dir, "shape_status_backups", "shape_status_v1.ets.backup"])
-
-      assert File.exists?(backup_file)
+      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
+      assert File.exists?(backup_dir)
 
       # Simulate restart: remove ETS table (would be removed with process exit in real system)
       delete_tables(table)
@@ -455,7 +453,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert :ok = ShapeStatus.initialize_from_storage(state2, state2.storage)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state2)
       # consuming backup directory should have removed it after load
-      refute File.exists?(backup_file)
+      refute File.exists?(backup_dir)
     end
 
     test "backup restore aborted on storage integrity failure", _ctx do
@@ -480,10 +478,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
       assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
 
-      backup_file =
-        Path.join([backup_base_dir, "shape_status_backups", "shape_status_v1.ets.backup"])
-
-      assert File.exists?(backup_file)
+      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
+      assert File.exists?(backup_dir)
 
       delete_tables(table)
 
@@ -498,7 +494,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert :ok = ShapeStatus.initialize_from_storage(state2, state2.storage)
       # Shape from backup should NOT be present after failed integrity
       assert [] == ShapeStatus.list_shapes(state2)
-      refute File.exists?(backup_file)
+      refute File.exists?(backup_dir)
     end
   end
 
