@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.8.0
+
+### Minor Changes
+
+- b94f236: Update electric dependency to support 1.2
+
 ## 0.7.3
 
 ### Patch Changes
