@@ -591,6 +591,8 @@ defmodule Electric.Shapes.Consumer do
     %{state | pg_snapshot: pg_snapshot}
   end
 
+  defp set_pg_snapshot(_, state), do: state
+
   defp set_snapshot_started(%{snapshot_started: false} = state) do
     ShapeCache.Storage.mark_snapshot_as_started(state.storage)
     set_snapshot_started(%{state | snapshot_started: true})
