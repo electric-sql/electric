@@ -182,7 +182,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.new(ets_name(stack_id), [
       :public,
       :named_table,
-      write_concurrency: true,
+      write_concurrency: :auto,
       read_concurrency: true
     ])
   end
