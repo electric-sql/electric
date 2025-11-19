@@ -120,7 +120,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert_new(
         shape_meta_table(stack_ref),
         [
-          {{@shape_meta_data, shape_handle}, shape, false, nil, offset}
+          {{@shape_meta_data, shape_handle}, shape, false, offset}
           | Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
               {{@shape_relation_lookup, oid, shape_handle}, true}
             end)
@@ -147,7 +147,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     shape_meta_table(stack_ref)
     |> :ets.select([
       {
-        {{@shape_meta_data, :"$1"}, :"$2", :_, :_, :_},
+        {{@shape_meta_data, :"$1"}, :"$2", :_, :_},
         [],
         [{{:"$1", :"$2"}}]
       }
@@ -232,6 +232,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.delete_all_objects(shape_hash_lookup_table(stack_ref))
     :ets.delete_all_objects(shape_meta_table(stack_ref))
     :ets.delete_all_objects(shape_last_used_table(stack_ref))
+    :ok
+  end
+
+  @doc """
+  Removes all ETS tables associated with the given stack reference.
+  Used in tests for tearing down.
+  """
+  def remove(stack_ref) do
+    try(do: :ets.delete(shape_hash_lookup_table(stack_ref)), rescue: (_ in ArgumentError -> :ok))
+    try(do: :ets.delete(shape_meta_table(stack_ref)), rescue: (_ in ArgumentError -> :ok))
+    try(do: :ets.delete(shape_last_used_table(stack_ref)), rescue: (_ in ArgumentError -> :ok))
     :ok
   end
 
@@ -392,37 +403,28 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @impl true
   def shape_hash_lookup_table(table) when is_atom(table), do: table
 
-  def shape_hash_lookup_table(opts) when is_list(opts),
-    do: shape_hash_lookup_table(opts[:stack_id])
+  def shape_hash_lookup_table(opts) when is_list(opts) or is_map(opts),
+    do: shape_hash_lookup_table(Access.fetch!(opts, :stack_id))
 
   def shape_hash_lookup_table(stack_id) when is_stack_id(stack_id),
     do: :"shape_hash_lookup_table:#{stack_id}"
 
-  if Mix.env() == :test do
-    def shape_hash_lookup_table(state) when is_map(state), do: state.shape_hash_lookup_table
-  end
-
   @impl true
-  @spec shape_meta_table(atom() | binary() | maybe_improper_list() | map()) :: any()
   def shape_meta_table(table) when is_atom(table), do: table
-  def shape_meta_table(opts) when is_list(opts), do: shape_meta_table(opts[:stack_id])
+
+  def shape_meta_table(opts) when is_list(opts) or is_map(opts),
+    do: shape_meta_table(Access.fetch!(opts, :stack_id))
 
   def shape_meta_table(stack_id) when is_stack_id(stack_id), do: :"shape_meta_table:#{stack_id}"
 
-  if Mix.env() == :test do
-    def shape_meta_table(state) when is_map(state), do: state.shape_meta_table
-  end
-
   @impl true
   def shape_last_used_table(table) when is_atom(table), do: table
-  def shape_last_used_table(opts) when is_list(opts), do: shape_last_used_table(opts[:stack_id])
+
+  def shape_last_used_table(opts) when is_list(opts) or is_map(opts),
+    do: shape_last_used_table(Access.fetch!(opts, :stack_id))
 
   def shape_last_used_table(stack_id) when is_stack_id(stack_id),
     do: :"shape_last_used_table:#{stack_id}"
-
-  if Mix.env() == :test do
-    def shape_last_used_table(state) when is_map(state), do: state.shape_last_used_table
-  end
 
   defp create_hash_lookup_table(stack_ref) do
     hash_lookup_table = shape_hash_lookup_table(stack_ref)
@@ -478,7 +480,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
           meta_tuples =
             [
-              {{@shape_meta_data, shape_handle}, shape, snapshot_started?, nil,
+              {{@shape_meta_data, shape_handle}, shape, snapshot_started?,
                LogOffset.last_before_real_offsets()}
               | Enum.map(relations, fn {oid, _} ->
                   {{@shape_relation_lookup, oid, shape_handle}, true}
