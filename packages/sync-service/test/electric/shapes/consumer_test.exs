@@ -952,7 +952,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn1}
       ]
 
-      assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
