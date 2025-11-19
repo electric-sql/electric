@@ -1,7 +1,13 @@
 defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   @moduledoc """
   Conversion of incoming Postgres logical replication messages
-  to internal change representation.
+  to internal operatrion representation.
+
+  It is stateful, consuming the replication messages in sequential order
+  to keep track of the relation and transaction information needed
+  to form the operations.
+
+  It also enforces a maximum transaction size if configured to do so.
   """
 
   require Logger

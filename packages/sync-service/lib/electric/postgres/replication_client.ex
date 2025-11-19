@@ -107,6 +107,13 @@ defmodule Electric.Postgres.ReplicationClient do
                    max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
                  )
 
+    # Making the batch size small results in more message passing which
+    # can have a performance impact. The larger the batch size the more memory
+    # is used to hold the operations in memory before sending them off to be processed.
+    # For local testing batch sizes of 3 and above overcome the performance hit of message
+    # passing, but as we're not currently worried about the memory consumption of the
+    # replication client and don't want to risk any performance degradation in production
+    # it has been set arbitrarily high to 100. We can tune this figure later if needed.
     @default_max_operation_batch_size 100
 
     @spec new(Access.t()) :: t()
