@@ -2,6 +2,10 @@ name: PR
 
 on:
   pull_request:
+    paths:
+      - 'packages/typescript-client/**'
+      - 'packages/react-hooks/**'
+      - 'packages/y-electric/**'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
