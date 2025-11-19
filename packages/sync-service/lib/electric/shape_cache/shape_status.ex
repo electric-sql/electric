@@ -25,6 +25,9 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback terminate(stack_ref(), Electric.ShapeCache.Storage.storage()) ::
               :ok | {:error, term()}
   @callback list_shapes(stack_ref()) :: [{shape_handle(), Shape.t()}]
+  @callback list_shape_handles_for_relations(stack_ref(), [Electric.oid_relation()]) :: [
+              shape_handle()
+            ]
   @callback count_shapes(stack_ref()) :: non_neg_integer()
   @callback get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
               {shape_handle(), LogOffset.t()} | nil
@@ -179,9 +182,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.info(shape_hash_lookup_table(stack_ref), :size)
   end
 
-  @spec list_shape_handles_for_relations(t(), list(Electric.oid_relation())) :: [
-          shape_handle()
-        ]
+  @impl true
   def list_shape_handles_for_relations(stack_ref, relations) do
     patterns =
       relations
