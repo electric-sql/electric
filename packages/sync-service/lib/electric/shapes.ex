@@ -37,7 +37,7 @@ defmodule Electric.Shapes do
     ShapeCache.get_shape(shape_def, stack_id)
   end
 
-  @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: Shape.t() | nil
+  @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: Shape.t() | :error
   def fetch_shape_by_handle(stack_id, shape_handle)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeCache.fetch_shape_by_handle(shape_handle, stack_id)
