@@ -494,7 +494,7 @@ defmodule Electric.ShapeCacheTest do
       alias Electric.Replication.Eval.Parser
       where_clause = Parser.parse_and_validate_expression!("TRUE", refs: %{})
       # Insert a fake slow query
-      where_clause = %{where_clause | query: "PG_SLEEP(10)::text ILIKE ''"}
+      where_clause = %{where_clause | query: "PG_SLEEP(2)::text ILIKE ''"}
       shape = %{shape | where: where_clause}
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(shape, stack_id)
@@ -736,42 +736,55 @@ defmodule Electric.ShapeCacheTest do
 
       storage = Storage.for_shape(shape_handle, ctx.storage)
 
-      tasks =
+      task_pids =
         for n <- 1..10 do
-          Task.async(fn ->
-            :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+          start_supervised!(
+            Supervisor.child_spec(
+              {Task,
+               fn ->
+                 :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-            stream =
-              Storage.get_log_stream(
-                LogOffset.before_all(),
-                LogOffset.last_before_real_offsets(),
-                storage
-              )
+                 stream =
+                   Storage.get_log_stream(
+                     LogOffset.before_all(),
+                     LogOffset.last_before_real_offsets(),
+                     storage
+                   )
 
-            # this no longer errors because we're handling the removal of the shape
-            # data in the storage
-            send(test_pid, {:read_start, n})
-            receive(do: (:continue -> n))
+                 # this no longer errors because we're handling the removal of the shape
+                 # data in the storage
+                 send(test_pid, {:read_start, n})
+                 receive(do: (:continue -> n))
 
-            stream
-            |> Stream.transform(
-              fn -> n end,
-              fn elem, acc -> {[elem], acc} end,
-              fn _ -> :ok end
+                 stream
+                 |> Stream.transform(
+                   fn -> n end,
+                   fn elem, acc -> {[elem], acc} end,
+                   fn _ -> :ok end
+                 )
+                 |> Stream.run()
+               end},
+              id: "task_#{n}",
+              restart: :temporary
             )
-            |> Stream.run()
-          end)
+          )
         end
 
       assert_receive {:stream_start, stream_pid}
 
       for n <- 1..10, do: assert_receive({:read_start, ^n})
 
-      for %{pid: pid} <- tasks, do: send(pid, :continue)
+      for pid <- task_pids, do: send(pid, :continue)
 
       send(stream_pid, {:continue, ref})
 
-      Task.await_many(tasks, 10_000)
+      now = System.monotonic_time(:millisecond)
+
+      for pid <- task_pids do
+        ref = Process.monitor(pid)
+        time_to_wait = 10_000 - (System.monotonic_time(:millisecond) - now)
+        assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, time_to_wait
+      end
 
       assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle},
                      @shape_cleanup_timeout

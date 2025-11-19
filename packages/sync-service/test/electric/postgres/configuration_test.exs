@@ -112,15 +112,24 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel = {oid, {"public", "items"}}
       test_pid = self()
 
-      start_supervised(
-        {Task,
-         fn ->
-           Postgrex.transaction(conn, fn conn ->
-             Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
-             send(test_pid, :table_locked)
-             Process.sleep(:infinity)
-           end)
-         end}
+      start_supervised!(
+        Supervisor.child_spec(
+          {Task,
+           fn ->
+             Postgrex.transaction(
+               conn,
+               fn conn ->
+                 Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
+                 send(test_pid, :table_locked)
+
+                 receive do
+                   _ -> :ok
+                 end
+               end
+             )
+           end},
+          restart: :temporary
+        )
       )
 
       assert_receive :table_locked
@@ -129,7 +138,7 @@ defmodule Electric.Postgres.ConfigurationTest do
               %DBConnection.ConnectionError{
                 message: "connection is closed because of an error, disconnect or timeout"
               }} =
-               Configuration.add_table_to_publication(conn, publication, oid_rel, 500)
+               Configuration.add_table_to_publication(conn, publication, oid_rel, 50)
     end
   end
 
