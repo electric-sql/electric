@@ -10,29 +10,23 @@ import { Schema } from './types'
  *
  * @example
  * ```typescript
- * // Column name transformation only
  * const mapper = snakeCamelMapper()
- * mapper.decode({ user_id: '123' }) // { userId: '123' } - name changed, value unchanged
- *
- * // For type conversion, use parser
- * const stream = new ShapeStream({
- *   parser: { timestamptz: (str) => new Date(str) }, // Type conversion
- *   columnMapper: snakeCamelMapper() // Column renaming
- * })
+ * mapper.decode('user_id') // 'userId'
+ * mapper.encode('userId') // 'user_id'
  * ```
  */
 export interface ColumnMapper {
   /**
-   * Transform a row from database format to application format (decode).
-   * Applied to data received from Electric.
+   * Transform a column name from database format to application format.
+   * Applied to column names in query results.
    */
-  decode: (row: Record<string, unknown>) => Record<string, unknown>
+  decode: (dbColumnName: string) => string
 
   /**
-   * Transform column names from application format to database format (encode).
-   * Applied to column references in WHERE clauses and other query parameters.
+   * Transform a column name from application format to database format.
+   * Applied to column names in WHERE clauses and other query parameters.
    */
-  encode: (columnName: string) => string
+  encode: (appColumnName: string) => string
 }
 
 /**
@@ -125,7 +119,7 @@ export function camelToSnake(str: string): string {
  */
 export function createColumnMapper(
   mapping: Record<string, string>
-): ColumnMapper & { mapping: Record<string, string> } {
+): ColumnMapper {
   // Build reverse mapping: app name -> db name
   const reverseMapping: Record<string, string> = {}
   for (const [dbName, appName] of Object.entries(mapping)) {
@@ -133,27 +127,13 @@ export function createColumnMapper(
   }
 
   return {
-    decode: (row: Record<string, unknown>) => {
-      const result: Record<string, unknown> = {}
-      for (const [dbKey, appKey] of Object.entries(mapping)) {
-        if (dbKey in row) {
-          result[appKey] = row[dbKey]
-        }
-      }
-      // Include any columns not in the mapping
-      for (const key of Object.keys(row)) {
-        if (!(key in mapping)) {
-          result[key] = row[key]
-        }
-      }
-      return result
+    decode: (dbColumnName: string) => {
+      return mapping[dbColumnName] ?? dbColumnName
     },
 
-    encode: (columnName: string) => {
-      return reverseMapping[columnName] ?? columnName
+    encode: (appColumnName: string) => {
+      return reverseMapping[appColumnName] ?? appColumnName
     },
-
-    mapping: reverseMapping,
   }
 }
 
@@ -359,16 +339,12 @@ export function snakeCamelMapper(schema?: Schema): ColumnMapper {
 
   // Otherwise, map dynamically
   return {
-    decode: (row: Record<string, unknown>) => {
-      const result: Record<string, unknown> = {}
-      for (const [key, value] of Object.entries(row)) {
-        result[snakeToCamel(key)] = value
-      }
-      return result
+    decode: (dbColumnName: string) => {
+      return snakeToCamel(dbColumnName)
     },
 
-    encode: (columnName: string) => {
-      return camelToSnake(columnName)
+    encode: (appColumnName: string) => {
+      return camelToSnake(appColumnName)
     },
   }
 }

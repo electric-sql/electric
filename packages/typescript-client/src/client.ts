@@ -577,18 +577,30 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#liveCacheBuster = ``
     this.#shapeHandle = this.options.handle
 
-    // Chain columnMapper.decode and transformer if both are provided
-    // Execution order: columnMapper.decode runs first, then transformer
-    const transformer =
-      options.columnMapper && options.transformer
+    // Build transformer chain: columnMapper.decode -> transformer
+    // columnMapper transforms column names, transformer transforms values
+    let transformer: TransformFunction<GetExtensions<T>> | undefined
+
+    if (options.columnMapper) {
+      const applyColumnMapper = (
+        row: Row<GetExtensions<T>>
+      ): Row<GetExtensions<T>> => {
+        const result: Record<string, unknown> = {}
+        for (const [dbKey, value] of Object.entries(row)) {
+          const appKey = options.columnMapper!.decode(dbKey)
+          result[appKey] = value
+        }
+        return result as Row<GetExtensions<T>>
+      }
+
+      transformer = options.transformer
         ? (row: Row<GetExtensions<T>>) =>
-            options.transformer!(
-              options.columnMapper!.decode(row) as Row<GetExtensions<T>>
-            )
-        : options.columnMapper
-          ? (row: Row<GetExtensions<T>>) =>
-              options.columnMapper!.decode(row) as Row<GetExtensions<T>>
-          : options.transformer
+            options.transformer!(applyColumnMapper(row))
+        : applyColumnMapper
+    } else {
+      transformer = options.transformer
+    }
+
     this.#messageParser = new MessageParser<T>(options.parser, transformer)
 
     this.#onError = this.options.onError

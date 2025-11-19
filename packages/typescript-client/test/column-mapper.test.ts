@@ -134,9 +134,9 @@ describe(`createColumnMapper`, () => {
       created_at: `createdAt`,
     })
 
-    expect(
-      mapper.decode({ user_id: 1, project_id: 2, created_at: `2025-01-01` })
-    ).toEqual({ userId: 1, projectId: 2, createdAt: `2025-01-01` })
+    expect(mapper.decode(`user_id`)).toBe(`userId`)
+    expect(mapper.decode(`project_id`)).toBe(`projectId`)
+    expect(mapper.decode(`created_at`)).toBe(`createdAt`)
 
     expect(mapper.encode(`userId`)).toBe(`user_id`)
     expect(mapper.encode(`projectId`)).toBe(`project_id`)
@@ -148,31 +148,19 @@ describe(`createColumnMapper`, () => {
       user_id: `userId`,
     })
 
-    expect(mapper.decode({ user_id: 1, name: `John`, age: 30 })).toEqual({
-      userId: 1,
-      name: `John`,
-      age: 30,
-    })
-  })
-
-  it(`should provide reverse mapping`, () => {
-    const mapper = createColumnMapper({
-      user_id: `userId`,
-      project_id: `projectId`,
-    })
-
-    expect(mapper.mapping).toEqual({
-      userId: `user_id`,
-      projectId: `project_id`,
-    })
+    expect(mapper.decode(`user_id`)).toBe(`userId`)
+    expect(mapper.decode(`name`)).toBe(`name`)
+    expect(mapper.decode(`age`)).toBe(`age`)
   })
 
   it(`should return original column name if not in mapping`, () => {
     const mapper = createColumnMapper({
       user_id: `userId`,
+      project_id: `projectId`,
     })
 
-    expect(mapper.encode(`unknownColumn`)).toBe(`unknownColumn`)
+    expect(mapper.encode(`unmapped`)).toBe(`unmapped`)
+    expect(mapper.decode(`unmapped`)).toBe(`unmapped`)
   })
 })
 
@@ -180,10 +168,8 @@ describe(`snakeCamelMapper`, () => {
   it(`should create a dynamic mapper without schema`, () => {
     const mapper = snakeCamelMapper()
 
-    expect(mapper.decode({ user_id: 1, project_id: 2 })).toEqual({
-      userId: 1,
-      projectId: 2,
-    })
+    expect(mapper.decode(`user_id`)).toBe(`userId`)
+    expect(mapper.decode(`project_id`)).toBe(`projectId`)
 
     expect(mapper.encode(`userId`)).toBe(`user_id`)
     expect(mapper.encode(`projectId`)).toBe(`project_id`)
@@ -198,9 +184,9 @@ describe(`snakeCamelMapper`, () => {
 
     const mapper = snakeCamelMapper(schema)
 
-    expect(
-      mapper.decode({ user_id: 1, project_id: 2, created_at: `2025-01-01` })
-    ).toEqual({ userId: 1, projectId: 2, createdAt: `2025-01-01` })
+    expect(mapper.decode(`user_id`)).toBe(`userId`)
+    expect(mapper.decode(`project_id`)).toBe(`projectId`)
+    expect(mapper.decode(`created_at`)).toBe(`createdAt`)
 
     expect(mapper.encode(`userId`)).toBe(`user_id`)
     expect(mapper.encode(`projectId`)).toBe(`project_id`)
@@ -367,6 +353,16 @@ describe(`columnMapper and transformer together`, () => {
 
     // Simulating what ShapeStream does
     type TestRow = { userId?: string; createdAt?: string | Date }
+
+    // Apply column mapper to transform keys
+    const applyColumnMapper = (row: Record<string, unknown>) => {
+      const result: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(row)) {
+        result[mapper.decode(key)] = value
+      }
+      return result as TestRow
+    }
+
     const transformer = (row: TestRow) => ({
       ...row,
       // Transform the value (after column rename)
@@ -374,8 +370,8 @@ describe(`columnMapper and transformer together`, () => {
     })
 
     // Chained: columnMapper first, then transformer
-    const chained = (row: Record<string, string>) =>
-      transformer(mapper.decode(row) as TestRow)
+    const chained = (row: Record<string, unknown>) =>
+      transformer(applyColumnMapper(row))
 
     const result = chained({
       user_id: `123`,
