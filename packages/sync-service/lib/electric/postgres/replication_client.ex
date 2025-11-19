@@ -4,17 +4,15 @@ defmodule Electric.Postgres.ReplicationClient do
   """
   use Postgrex.ReplicationConnection
 
-  require Electric.Postgres.ReplicationClient.Collector
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.LogicalReplication.Decoder
+  alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
-  alias Electric.Postgres.ReplicationClient.Collector
+  alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
-  alias Electric.Replication.Changes.Relation
-  alias Electric.Telemetry.OpenTelemetry
-  alias Electric.Telemetry.Sampler
+  alias Electric.Replication.OperationBatcher
 
   require Logger
+  require MessageConverter
 
   @type step ::
           :disconnected
@@ -32,12 +30,11 @@ defmodule Electric.Postgres.ReplicationClient do
           | :streaming
 
   defmodule State do
-    @enforce_keys [:transaction_received, :relation_received, :publication_name]
+    @enforce_keys [:handle_operations, :publication_name]
     defstruct [
       :stack_id,
       :connection_manager,
-      :transaction_received,
-      :relation_received,
+      :handle_operations,
       :publication_name,
       :lock_acquired?,
       :try_creating_publication?,
@@ -47,7 +44,9 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_name,
       :slot_temporary?,
       :display_settings,
-      :txn_collector,
+      :message_converter,
+      :operation_batcher,
+      :max_operation_batch_size,
       :publication_owner?,
       :replication_idle_timeout,
       step: :disconnected,
@@ -69,8 +68,7 @@ defmodule Electric.Postgres.ReplicationClient do
     @type t() :: %__MODULE__{
             stack_id: String.t(),
             connection_manager: pid(),
-            transaction_received: {module(), atom(), [term()]},
-            relation_received: {module(), atom(), [term()]},
+            handle_operations: {module(), atom(), [term()]},
             publication_name: String.t(),
             try_creating_publication?: boolean(),
             recreate_slot?: boolean(),
@@ -79,7 +77,9 @@ defmodule Electric.Postgres.ReplicationClient do
             slot_name: String.t(),
             slot_temporary?: boolean(),
             display_settings: [String.t()],
-            txn_collector: Collector.t(),
+            message_converter: MessageConverter.t(),
+            operation_batcher: OperationBatcher.t(),
+            max_operation_batch_size: non_neg_integer(),
             publication_owner?: boolean(),
             replication_idle_timeout: non_neg_integer(),
             step: Electric.Postgres.ReplicationClient.step(),
@@ -93,8 +93,7 @@ defmodule Electric.Postgres.ReplicationClient do
     @opts_schema NimbleOptions.new!(
                    stack_id: [required: true, type: :string],
                    connection_manager: [required: true, type: :pid],
-                   transaction_received: [required: true, type: :mfa],
-                   relation_received: [required: true, type: :mfa],
+                   handle_operations: [required: true, type: :mfa],
                    publication_name: [required: true, type: :string],
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
@@ -108,6 +107,15 @@ defmodule Electric.Postgres.ReplicationClient do
                    max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
                  )
 
+    # Making the batch size small results in more message passing which
+    # can have a performance impact. The larger the batch size the more memory
+    # is used to hold the operations in memory before sending them off to be processed.
+    # For local testing batch sizes of 3 and above overcome the performance hit of message
+    # passing, but as we're not currently worried about the memory consumption of the
+    # replication client and don't want to risk any performance degradation in production
+    # it has been set arbitrarily high to 100. We can tune this figure later if needed.
+    @default_max_operation_batch_size 100
+
     @spec new(Access.t()) :: t()
     def new(opts) do
       opts = NimbleOptions.validate!(opts, @opts_schema)
@@ -118,7 +126,13 @@ defmodule Electric.Postgres.ReplicationClient do
 
       struct!(
         __MODULE__,
-        opts ++ [txn_collector: %Collector{max_tx_size: max_txn_size}]
+        opts ++
+          [
+            message_converter:
+              MessageConverter.new(max_tx_size: max_txn_size, stack_id: opts[:stack_id]),
+            operation_batcher: OperationBatcher.new(),
+            max_operation_batch_size: @default_max_operation_batch_size
+          ]
       )
     end
   end
@@ -331,17 +345,17 @@ defmodule Electric.Postgres.ReplicationClient do
     end)
 
     case reply do
-      1 when Collector.is_collecting(state.txn_collector) ->
+      1 when MessageConverter.in_transaction?(state.message_converter) ->
         {:noreply, [encode_standby_status_update(state)], state}
 
-      # if we are not collecting any transactions, advance the replication slot
+      # if we are not in a transaction, advance the replication slot
       # with keepalives to avoid it getting filled with irrelevant changes, like
       # heartbeats from the database provider
       1 ->
         state = update_stored_wals(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
 
-      0 when Collector.is_collecting(state.txn_collector) ->
+      0 when MessageConverter.in_transaction?(state.message_converter) ->
         {:noreply, [], state}
 
       0 ->
@@ -352,118 +366,66 @@ defmodule Electric.Postgres.ReplicationClient do
 
   def handle_data(
         <<@repl_msg_x_log_data, _wal_start::64, _server_wal_end::64, _clock::64, data::binary>>,
-        %State{stack_id: stack_id} = state
+        %State{} = state
       ) do
-    data
-    |> OpenTelemetry.start_interval("replication_client.decode_message")
-    |> Decoder.decode()
-    # # Useful for debugging:
-    # |> tap(fn %struct{} = msg ->
-    #   message_type = struct |> to_string() |> String.split(".") |> List.last()
-    #
-    #   Logger.debug(
-    #     "XLogData: wal_start=#{wal_start} (#{Lsn.from_integer(wal_start)}), " <>
-    #       "wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)})\n" <>
-    #       message_type <> " :: " <> inspect(Map.from_struct(msg))
-    #   )
-    # end)
-    |> OpenTelemetry.start_interval("replication_client.collector.handle_message")
-    |> Collector.handle_message(state.txn_collector)
-    |> case do
+    msg = Decoder.decode(data)
+
+    # Useful for debugging:
+    # %struct{} = msg
+    # message_type = struct |> to_string() |> String.split(".") |> List.last()
+
+    # Logger.debug(
+    #   "XLogData: wal_start=#{wal_start} (#{Lsn.from_integer(wal_start)}), " <>
+    #     "wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)})\n" <>
+    #     message_type <> " :: " <> inspect(Map.from_struct(msg))
+    # )
+
+    case MessageConverter.convert(msg, state.message_converter) do
       {:error, reason, _} ->
         {:disconnect, {:irrecoverable_slot, reason}}
 
-      %Collector{} = txn_collector ->
-        OpenTelemetry.start_interval("replication_client.await_more_data")
-        {:noreply, %{state | txn_collector: txn_collector, flush_up_to_date?: false}}
-
-      {%Relation{} = rel, %Collector{} = txn_collector} ->
-        OpenTelemetry.wipe_interval_timer()
-        {m, f, args} = state.relation_received
-
-        OpenTelemetry.with_span(
-          "pg_txn.replication_client.relation_received",
-          ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
-          stack_id,
-          fn -> apply_with_retries({m, f, [rel | args]}, state) end
-        )
-
-        OpenTelemetry.start_interval("replication_client.await_more_data")
-        {:noreply, %{state | txn_collector: txn_collector}}
-
-      {%Transaction{} = txn, txn_meta, %Collector{} = txn_collector} ->
-        state = %{
-          state
-          | txn_collector: txn_collector,
-            last_seen_txn_lsn: txn.lsn,
-            last_seen_txn_timestamp: System.monotonic_time()
-        }
-
-        {m, f, args} = state.transaction_received
-
-        OpenTelemetry.start_interval("replication_client.telemetry_execute")
-
-        if Sampler.sample_metrics?() do
-          OpenTelemetry.execute(
-            [:electric, :postgres, :replication, :transaction_received],
-            %{
-              monotonic_time: System.monotonic_time(),
-              receive_lag: DateTime.diff(DateTime.utc_now(), txn.commit_timestamp, :millisecond),
-              bytes: txn_meta.byte_size,
-              count: 1,
-              operations: txn.num_changes
-            },
-            %{stack_id: state.stack_id}
+      {operations, message_converter} ->
+        {batch, batcher} =
+          OperationBatcher.batch(
+            operations,
+            state.max_operation_batch_size,
+            state.operation_batcher
           )
-        end
 
-        OpenTelemetry.start_interval("replication_client.telemetry_span")
-        # this will block until all the consumers have processed the transaction because
-        # the log collector uses manual demand, and only replies to the `call` once it
-        # receives more demand.
-        # The timeout for any call here is important. Different storage
-        # backends will require different timeouts and the timeout will need to
-        # accomodate varying number of shape consumers.
-        #
-        # The current solution is to set timeout: :infinity for the call that
-        # sends the txn message to the consumers and waits for them all to
-        # write to storage, but crash individual consumers if the write takes
-        # too long. So it doesn't matter how many consumers we have but an
-        # individual storage write can timeout the entire batch.
-        OpenTelemetry.with_span(
-          "pg_txn.replication_client.transaction_received",
-          [
-            num_changes: txn.num_changes,
-            num_relations: MapSet.size(txn.affected_relations),
-            xid: txn.xid
-          ],
-          stack_id,
-          fn ->
-            OpenTelemetry.start_interval("replication_client.telemetry_span")
+        state = %{state | message_converter: message_converter, operation_batcher: batcher}
 
-            apply_with_retries({m, f, [txn | args]}, state)
+        {m, f, args} = state.handle_operations
 
-            OpenTelemetry.start_interval("replication_client.update_received_wal")
-            # We currently process incoming replication messages sequentially, persisting each
-            # new transaction into the shape log store. So, when the applied function
-            # returns, we can safely advance the replication slot past the transaction's commit
-            # LSN.
-            state =
-              state
-              |> update_received_wal(Electric.Postgres.Lsn.to_integer(txn.lsn))
+        apply_with_retries({m, f, [batch | args]}, state)
 
-            response = [encode_standby_status_update(state)]
-
-            OpenTelemetry.stop_and_save_intervals(
-              total_attribute: :"shape_log_collector.transaction.total_duration_µs"
-            )
-
-            OpenTelemetry.start_interval("replication_client.await_more_data")
-
-            {:noreply, response, state}
-          end
-        )
+        state
+        |> maybe_update_flush_up_to_date()
+        |> maybe_ack_message(msg)
     end
+  end
+
+  defp maybe_update_flush_up_to_date(state) do
+    if MessageConverter.in_transaction?(state.message_converter) do
+      %{state | flush_up_to_date?: false}
+    else
+      state
+    end
+  end
+
+  defp maybe_ack_message(state, %Messages.Commit{lsn: lsn}) do
+    state =
+      %{
+        state
+        | last_seen_txn_lsn: lsn,
+          last_seen_txn_timestamp: System.monotonic_time()
+      }
+      |> update_received_wal(Electric.Postgres.Lsn.to_integer(lsn))
+
+    {:noreply, [encode_standby_status_update(state)], state}
+  end
+
+  defp maybe_ack_message(state, _msg) do
+    {:noreply, [], state}
   end
 
   defp encode_standby_status_update(state) do
