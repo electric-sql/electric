@@ -37,6 +37,7 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
   @callback reset(stack_ref()) :: :ok
 
+  @callback shape_hash_lookup_table(stack_ref()) :: atom()
   @callback shape_meta_table(stack_ref()) :: atom()
   @callback shape_last_used_table(stack_ref()) :: atom()
 end
@@ -85,7 +86,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def initialize_from_storage(stack_ref, storage) do
-    last_used_table = create_last_used_table(stack_ref)
     meta_table = shape_meta_table(stack_ref)
 
     case load_table_backup(meta_table, storage) do
@@ -96,13 +96,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
       _ ->
         Logger.debug("No shape status backup loaded, creating new table #{meta_table}")
         create_meta_table(stack_ref)
-        load(meta_table, last_used_table, storage)
+        load(stack_ref, storage)
     end
   end
 
   def initialize_empty(stack_ref) do
     create_last_used_table(stack_ref)
     create_meta_table(stack_ref)
+    create_hash_lookup_table(stack_ref)
   end
 
   @impl true
@@ -123,7 +124,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert_new(
         shape_meta_table(stack_ref),
         [
-          {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
           {{@shape_meta_data, shape_handle}, shape, nil, offset}
           | Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
               {{@shape_relation_lookup, oid, shape_handle}, true}
@@ -135,6 +135,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert_new(shape_last_used_table(stack_ref), [
         {shape_handle, System.monotonic_time()}
       ])
+
+    # Add the lookup last as it is the one that enables clients to find the shape
+    true =
+      :ets.insert_new(
+        shape_hash_lookup_table(stack_ref),
+        {Shape.comparable(shape), shape_handle}
+      )
 
     {:ok, shape_handle}
   end
@@ -169,7 +176,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def count_shapes(stack_ref) do
-    :ets.info(shape_last_used_table(stack_ref), :size)
+    :ets.info(shape_hash_lookup_table(stack_ref), :size)
   end
 
   @spec list_shape_handles_for_relations(t(), list(Electric.oid_relation())) :: [
@@ -199,7 +206,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # Always delete the hash lookup first, so that we guarantee that no shape spec
       # is ever matched to a handle with incomplete information, since deleting with
       # select_delete can lead to inconsistent state
-      :ets.delete(meta_table, {@shape_hash_lookup, Shape.comparable(shape)})
+      :ets.delete(shape_hash_lookup_table(stack_ref), Shape.comparable(shape))
+
       :ets.delete(meta_table, {@shape_meta_data, shape_handle})
       :ets.delete(meta_table, {@snapshot_started, shape_handle})
 
@@ -222,6 +230,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def reset(stack_ref) do
+    :ets.delete_all_objects(shape_hash_lookup_table(stack_ref))
     :ets.delete_all_objects(shape_meta_table(stack_ref))
     :ets.delete_all_objects(shape_last_used_table(stack_ref))
     :ok
@@ -229,12 +238,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def get_existing_shape(stack_ref, %Shape{} = shape) do
-    case :ets.lookup_element(
-           shape_meta_table(stack_ref),
-           {@shape_hash_lookup, Shape.comparable(shape)},
-           2,
-           nil
-         ) do
+    case :ets.lookup_element(shape_hash_lookup_table(stack_ref), Shape.comparable(shape), 2, nil) do
       nil ->
         nil
 
@@ -406,6 +410,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
+  def shape_hash_lookup_table(table) when is_atom(table), do: table
+
+  def shape_hash_lookup_table(opts) when is_list(opts),
+    do: shape_hash_lookup_table(opts[:stack_id])
+
+  def shape_hash_lookup_table(stack_id) when is_stack_id(stack_id),
+    do: :"shape_hash_lookup_table:#{stack_id}"
+
+  if Mix.env() == :test do
+    def shape_hash_lookup_table(state) when is_map(state), do: state.shape_hash_lookup_table
+  end
+
+  @impl true
+  @spec shape_meta_table(atom() | binary() | maybe_improper_list() | map()) :: any()
   def shape_meta_table(table) when is_atom(table), do: table
   def shape_meta_table(opts) when is_list(opts), do: shape_meta_table(opts[:stack_id])
 
@@ -426,17 +444,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
     def shape_last_used_table(state) when is_map(state), do: state.shape_last_used_table
   end
 
-  defp create_last_used_table(stack_ref) do
-    last_used_table = shape_last_used_table(stack_ref)
+  defp create_hash_lookup_table(stack_ref) do
+    hash_lookup_table = shape_hash_lookup_table(stack_ref)
 
-    :ets.new(last_used_table, [
+    :ets.new(hash_lookup_table, [
       :named_table,
       :public,
       :ordered_set,
       write_concurrency: :auto
     ])
 
-    last_used_table
+    hash_lookup_table
   end
 
   defp create_meta_table(stack_ref) do
@@ -452,20 +470,35 @@ defmodule Electric.ShapeCache.ShapeStatus do
     meta_table
   end
 
-  defp load(meta_table, last_used_table, storage) do
+  defp create_last_used_table(stack_ref) do
+    last_used_table = shape_last_used_table(stack_ref)
+
+    :ets.new(last_used_table, [
+      :named_table,
+      :public,
+      :ordered_set,
+      write_concurrency: :auto
+    ])
+
+    last_used_table
+  end
+
+  defp load(stack_ref, storage) do
     _ = Electric.Postgres.supported_types()
 
     with {:ok, shapes} <- Storage.get_all_stored_shapes(storage) do
       now = System.monotonic_time()
 
-      {meta_tuples, last_used_tuples} =
+      {meta_tuples, last_used_tuples, hash_lookup_tuples} =
         Enum.flat_map_reduce(shapes, [], fn {shape_handle, {shape, snapshot_started?}},
-                                            last_used_tuples ->
+                                            last_used_tuples,
+                                            hash_lookup_tuples ->
           relations = Shape.list_relations(shape)
+          hash_lookup_tuples = [{Shape.comparable(shape), shape_handle} | hash_lookup_tuples]
+          last_used_tuples = [{shape_handle, now} | last_used_tuples]
 
           meta_tuples =
             [
-              {{@shape_hash_lookup, Shape.comparable(shape)}, shape_handle},
               {{@shape_meta_data, shape_handle}, shape, nil, LogOffset.first()},
               {{@snapshot_started, shape_handle}, snapshot_started?}
               | Enum.map(relations, fn {oid, _} ->
@@ -473,27 +506,28 @@ defmodule Electric.ShapeCache.ShapeStatus do
                 end)
             ]
 
-          last_used_tuples = [{shape_handle, now} | last_used_tuples]
-
-          {meta_tuples, last_used_tuples}
+          {meta_tuples, last_used_tuples, hash_lookup_tuples}
         end)
 
-      :ets.insert(meta_table, meta_tuples)
-      :ets.insert(last_used_table, last_used_tuples)
+      :ets.insert(shape_meta_table(stack_ref), meta_tuples)
+      :ets.insert(shape_last_used_table(stack_ref), last_used_tuples)
+      :ets.insert(shape_hash_lookup_table(stack_ref), hash_lookup_tuples)
 
-      restore_dependency_handles(shapes, meta_table, storage)
+      restore_dependency_handles(stack_ref, shapes, storage)
 
       :ok
     end
   end
 
-  defp restore_dependency_handles(shapes, meta_table, storage) do
+  defp restore_dependency_handles(stack_ref, shapes, storage) do
+    meta_table = shape_meta_table(stack_ref)
+
     shapes
     |> Enum.filter(fn {_, {shape, _snapshot_started?}} ->
       Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
     end)
     |> Enum.each(fn {handle, {%Shape{shape_dependencies: deps} = shape, _snapshot_started?}} ->
-      handles = Enum.map(deps, &get_existing_shape(meta_table, &1))
+      handles = Enum.map(deps, &get_existing_shape(stack_ref, &1))
 
       if not Enum.any?(handles, &is_nil/1) do
         handles = Enum.map(handles, &elem(&1, 0))
@@ -502,7 +536,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         :ets.update_element(meta_table, {@shape_meta_data, handle}, {2, shape})
       else
         Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")
-        remove_shape(meta_table, handle)
+        remove_shape(stack_ref, handle)
         Storage.cleanup!(storage, handle)
       end
     end)
