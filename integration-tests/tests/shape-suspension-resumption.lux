@@ -2,19 +2,11 @@
 
 [include _macros.luxinc]
 
-[global pg_container_name=db-connection-scaledown__pg]
-[global database_url=postgresql://electric_test:password@localhost:$pg_host_port/electric?sslmode=disable]
+[global pg_container_name=consumer-suspend-resume__pg]
 
 ###
 
-# Start Postgres and create an additional role that will be used by Electric in this test
-[invoke setup_pg_with_shell_name \
-  "pg" \
-  "-e INIT_DB_SQL=\"\
-    CREATE ROLE electric_test LOGIN PASSWORD 'password' REPLICATION;\
-    GRANT CREATE ON DATABASE electric TO electric_test\"" \
-  "" \
-  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
+[invoke setup_pg]
 
 # Create a table for subsequent shape requests
 [invoke start_psql]
@@ -25,9 +17,6 @@
 
   !insert into items values ('1'), ('2');
   ??INSERT
-
-  !alter table items owner to electric_test;
-  ??ALTER TABLE
 
 # Start Electric and wait for it to finish initialization.
 # Set a very small hibernation timeout so consumers will shutdown quickly
@@ -74,8 +63,6 @@
 
 [shell client]
   [timeout 1]
-
-  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=0_0&live"]
 
   ??HTTP/1.1 200
 
