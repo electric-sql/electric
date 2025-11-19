@@ -16,15 +16,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   import Support.TestUtils, only: [patch_calls: 3, expect_calls: 2]
 
-  import Support.ComponentSetup,
-    only: [
-      with_in_memory_storage: 1,
-      with_shape_status: 1,
-      with_lsn_tracker: 1,
-      with_stack_id_from_test: 1,
-      with_noop_publication_manager: 1,
-      with_persistent_kv: 1
-    ]
+  import Support.ComponentSetup
 
   setup [
     :with_stack_id_from_test,

@@ -3,13 +3,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
   import ExUnit.CaptureLog
 
-  import Support.ComponentSetup,
-    only: [
-      with_stack_id_from_test: 1,
-      with_status_monitor: 1,
-      with_slot_name: 1,
-      with_lsn_tracker: 1
-    ]
+  import Support.ComponentSetup
 
   import Support.DbSetup, except: [with_publication: 1]
   import Support.DbStructureSetup
