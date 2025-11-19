@@ -401,8 +401,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   @impl true
-  def shape_hash_lookup_table(table) when is_atom(table), do: table
-
   def shape_hash_lookup_table(opts) when is_list(opts) or is_map(opts),
     do: shape_hash_lookup_table(Access.fetch!(opts, :stack_id))
 
@@ -410,16 +408,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
     do: :"shape_hash_lookup_table:#{stack_id}"
 
   @impl true
-  def shape_meta_table(table) when is_atom(table), do: table
-
   def shape_meta_table(opts) when is_list(opts) or is_map(opts),
     do: shape_meta_table(Access.fetch!(opts, :stack_id))
 
   def shape_meta_table(stack_id) when is_stack_id(stack_id), do: :"shape_meta_table:#{stack_id}"
 
   @impl true
-  def shape_last_used_table(table) when is_atom(table), do: table
-
   def shape_last_used_table(opts) when is_list(opts) or is_map(opts),
     do: shape_last_used_table(Access.fetch!(opts, :stack_id))
 
