@@ -34,19 +34,24 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   defp last_used_table_name(meta_table),
     do: String.to_atom(Atom.to_string(meta_table) <> ":last_used")
 
+  defp hash_lookup_table_name(meta_table),
+    do: String.to_atom(Atom.to_string(meta_table) <> ":hash_lookup")
+
   defp shape_status_opts(opts) do
     meta_table = Keyword.get_lazy(opts, :table, fn -> table_name() end)
 
     %{
       storage: {Mock.Storage, []},
       shape_meta_table: meta_table,
-      shape_last_used_table: last_used_table_name(meta_table)
+      shape_last_used_table: last_used_table_name(meta_table),
+      shape_hash_lookup_table: hash_lookup_table_name(meta_table)
     }
   end
 
   defp delete_tables(meta_table) do
     :ets.delete(meta_table)
     :ets.delete(last_used_table_name(meta_table))
+    :ets.delete(hash_lookup_table_name(meta_table))
   end
 
   defp new_state(_ctx, opts \\ []) do
@@ -157,14 +162,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     shape = shape!()
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape])
 
-    refute ShapeStatus.get_existing_shape(state, "1234")
-
     assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape_handle)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(state, shape)
-    refute ShapeStatus.get_existing_shape(state, shape_handle)
   end
 
   test "get_existing_shape/2 public api", ctx do
@@ -173,14 +174,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     {:ok, state, [shape_handle]} = new_state(ctx, table: table, shapes: [shape])
 
-    refute ShapeStatus.get_existing_shape(table, "1234")
-
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(table, shape)
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(table, shape_handle)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(table, shape)
-    refute ShapeStatus.get_existing_shape(table, shape_handle)
   end
 
   test "fetch_shape_by_handle/2", ctx do

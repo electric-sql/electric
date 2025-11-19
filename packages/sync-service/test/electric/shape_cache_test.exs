@@ -273,7 +273,7 @@ defmodule Electric.ShapeCacheTest do
                      @shape_cleanup_timeout
 
       # should have cleaned up the shape
-      assert nil == ShapeStatus.get_existing_shape(ctx.stack_id, shape_handle)
+      assert :error == ShapeStatus.fetch_shape_by_handle(ctx.stack_id, shape_handle)
       assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(storage)
       assert map_size(found) == 0
     end

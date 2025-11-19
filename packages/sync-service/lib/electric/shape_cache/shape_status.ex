@@ -77,7 +77,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @backup_file "shape_status_#{@table_version}.ets.backup"
 
   @shape_meta_data :shape_meta_data
-  @shape_hash_lookup :shape_hash_lookup
   @shape_relation_lookup :shape_relation_lookup
   @shape_meta_shape_pos 2
   @shape_meta_xmin_pos 3
@@ -87,6 +86,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @impl true
   def initialize_from_storage(stack_ref, storage) do
     meta_table = shape_meta_table(stack_ref)
+    create_last_used_table(stack_ref)
+    create_hash_lookup_table(stack_ref)
 
     case load_table_backup(meta_table, storage) do
       {:ok, ^meta_table, path} ->
@@ -243,19 +244,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
         nil
 
       shape_handle when is_shape_handle(shape_handle) ->
-        get_existing_shape(stack_ref, shape_handle)
-    end
-  end
-
-  def get_existing_shape(stack_ref, shape_handle) when is_shape_handle(shape_handle) do
-    case :ets.lookup_element(
-           shape_meta_table(stack_ref),
-           {@shape_meta_data, shape_handle},
-           @shape_meta_latest_offset_pos,
-           nil
-         ) do
-      nil -> nil
-      offset -> {shape_handle, offset}
+        case latest_offset(stack_ref, shape_handle) do
+          {:ok, offset} -> {shape_handle, offset}
+          :error -> nil
+        end
     end
   end
 
@@ -489,10 +481,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
     with {:ok, shapes} <- Storage.get_all_stored_shapes(storage) do
       now = System.monotonic_time()
 
-      {meta_tuples, last_used_tuples, hash_lookup_tuples} =
-        Enum.flat_map_reduce(shapes, [], fn {shape_handle, {shape, snapshot_started?}},
-                                            last_used_tuples,
-                                            hash_lookup_tuples ->
+      {meta_tuples, {last_used_tuples, hash_lookup_tuples}} =
+        Enum.flat_map_reduce(shapes, {[], []}, fn {shape_handle, {shape, snapshot_started?}},
+                                                  {last_used_tuples, hash_lookup_tuples} ->
           relations = Shape.list_relations(shape)
           hash_lookup_tuples = [{Shape.comparable(shape), shape_handle} | hash_lookup_tuples]
           last_used_tuples = [{shape_handle, now} | last_used_tuples]
@@ -506,7 +497,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
                 end)
             ]
 
-          {meta_tuples, last_used_tuples, hash_lookup_tuples}
+          {meta_tuples, {last_used_tuples, hash_lookup_tuples}}
         end)
 
       :ets.insert(shape_meta_table(stack_ref), meta_tuples)
