@@ -1338,15 +1338,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         url: fetchUrl.toString(),
       })
 
-    const responseData = await response.json()
-    const batch = this.#messageParser.parseSnapshotData<ChangeMessage<T>>(
-      responseData.data,
+    const { metadata, data: rawData } = await response.json()
+    const data = this.#messageParser.parseSnapshotData<ChangeMessage<T>>(
+      rawData,
       schema
     )
 
     return {
-      metadata: responseData.metadata,
-      data: batch,
+      metadata,
+      data,
     }
   }
 }
