@@ -18,13 +18,22 @@ defmodule ElectricTelemetry.Opts do
       ],
       intervals_and_thresholds: [
         type: :keyword_list,
+        default: [],
         keys: [
           system_metrics_poll_interval: [type: :integer, default: :timer.seconds(5)],
           top_process_count: [type: :integer, default: 5],
-          long_gc_threshold: [type: :integer, default: 500],
-          long_schedule_threshold: [type: :integer, default: 500],
-          long_message_queue_enable_threshold: [type: :integer, default: 1000],
-          long_message_queue_disable_threshold: [type: :integer, default: 100]
+          # Garbage collection should run almost instantly since each process has its own heap that
+          # is garbage collected independently of others. 50ms might be too generous.
+          long_gc_threshold: [type: :integer, default: 50],
+          # A process generally runs for 1ms at a time. Erlang docs mention that 100ms should be
+          # expected in a realistic production setting. So we tentatively set it to 150ms.
+          long_schedule_threshold: [type: :integer, default: 150],
+          # All processes generally have 0 message waiting in the message queue. If a process starts
+          # lagging behind and reaches 10 pending messages, something's going seriously wrong in the
+          # VM.
+          # We tentatively set the threshold to 20 to observe in production and adjust.
+          long_message_queue_enable_threshold: [type: :integer, default: 20],
+          long_message_queue_disable_threshold: [type: :integer, default: 0]
         ]
       ],
       periodic_measurements: [
@@ -37,8 +46,7 @@ defmodule ElectricTelemetry.Opts do
               :atom,
               :mfa,
               {:fun, 1}
-            ]}},
-        required: false
+            ]}}
       ],
       additional_metrics: [
         type:

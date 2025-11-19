@@ -79,23 +79,8 @@ defmodule Electric.Config do
     call_home_telemetry?: @build_env == :prod,
     telemetry_statsd_host: nil,
     telemetry_url: URI.new!("https://checkpoint.electric-sql.com"),
-    system_metrics_poll_interval: :timer.seconds(5),
-    otel_export_period: :timer.seconds(30),
     otel_sampling_ratio: 0.01,
     metrics_sampling_ratio: 1,
-    telemetry_top_process_count: 5,
-    # Garbage collection should run almost instantly since each process has its own heap that
-    # is garbage collected independently of others. 50ms might be too generous.
-    telemetry_long_gc_threshold: 50,
-    # A process generally runs for 1ms at a time. Erlang docs mention that 100ms should be
-    # expected in a realistic production setting. So we tentatively set it to 150ms.
-    telemetry_long_schedule_threshold: 500,
-    # All processes generally have 0 message waiting in the message queue. If a process starts
-    # lagging behind and reaches 10 pending messages, something's going seriously wrong in the
-    # VM.
-    # We tentatively set the threshold to 20 to observe in production and adjust.
-    telemetry_long_message_queue_enable_threshold: 20,
-    telemetry_long_message_queue_disable_threshold: 0,
     ## Memory
     shape_hibernate_after: :timer.seconds(30),
     # Should we terminate consumer processes after `shape_hibernate_after` ms

@@ -335,16 +335,15 @@ defmodule Electric.Application do
       instance_id: Keyword.fetch!(opts, :instance_id),
       installation_id: Keyword.fetch!(opts, :installation_id),
       version: Electric.version(),
-      intervals_and_thresholds: [
-        system_metrics_poll_interval: get_env(opts, :system_metrics_poll_interval),
-        long_gc_threshold: get_env(opts, :telemetry_long_gc_threshold),
-        long_schedule_threshold: get_env(opts, :telemetry_long_schedule_threshold),
-        long_message_queue_enable_threshold:
-          get_env(opts, :telemetry_long_message_queue_enable_threshold),
-        long_message_queue_disable_threshold:
-          get_env(opts, :telemetry_long_message_queue_disable_threshold),
-        top_process_count: get_env(opts, :telemetry_top_process_count)
-      ],
+      intervals_and_thresholds:
+        get_opts(opts,
+          system_metrics_poll_interval: :system_metrics_poll_interval,
+          long_gc_threshold: :telemetry_long_gc_threshold,
+          long_schedule_threshold: :telemetry_long_schedule_threshold,
+          long_message_queue_enable_threshold: :telemetry_long_message_queue_enable_threshold,
+          long_message_queue_disable_threshold: :telemetry_long_message_queue_disable_threshold,
+          top_process_count: :telemetry_top_process_count
+        ),
       reporters: [
         statsd_host: get_env(opts, :telemetry_statsd_host),
         prometheus?: not is_nil(get_env(opts, :prometheus_port)),
@@ -352,9 +351,17 @@ defmodule Electric.Application do
           if(get_env(opts, :call_home_telemetry?), do: get_env(opts, :telemetry_url)),
         otel_metrics?: not is_nil(Application.get_env(:otel_metric_exporter, :otlp_endpoint))
       ],
-      otel_opts: [
-        export_period: get_env(opts, :otel_export_period)
-      ]
+      otel_opts: get_opts(opts, export_period: :otel_export_period)
     ]
+  end
+
+  defp get_opts(opts, mapping) do
+    mapping
+    |> Enum.map(fn {from, to} -> {from, get_opt(opts, to)} end)
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+  end
+
+  defp get_opt(opts, key) do
+    Keyword.get_lazy(opts, key, fn -> Application.get_env(:electric, key) end)
   end
 end
