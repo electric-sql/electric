@@ -424,7 +424,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :named_table,
       :public,
       :ordered_set,
-      write_concurrency: :auto
+      write_concurrency: :auto,
+      read_concurrency: true
     ])
 
     hash_lookup_table
@@ -437,7 +438,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :named_table,
       :public,
       :ordered_set,
-      write_concurrency: :auto
+      write_concurrency: :auto,
+      read_concurrency: true
     ])
 
     meta_table
