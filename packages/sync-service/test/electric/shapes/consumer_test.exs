@@ -305,6 +305,7 @@ defmodule Electric.Shapes.ConsumerTest do
     test "doesn't append to log when change is irrelevant for active shapes", ctx do
       xid = 150
       lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
 
       ref1 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle1)
       ref2 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle2)
@@ -316,7 +317,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
-          log_offset: LogOffset.first()
+          log_offset: last_log_offset
         },
         %Commit{lsn: lsn, commit_timestamp: DateTime.utc_now()}
       ]
@@ -588,7 +589,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
-          log_offset: LogOffset.first()
+          log_offset: LogOffset.new(lsn, 0)
         },
         %Commit{lsn: lsn}
       ]
