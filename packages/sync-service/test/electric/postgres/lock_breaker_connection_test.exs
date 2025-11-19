@@ -103,5 +103,6 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
 
     assert_receive {:DOWN, ^ref2, :process, ^pid, _reason}
     refute_received {:DOWN, ^ref1, :process, _, _reason}
+    stop_supervised(ReplicationClient)
   end
 end
