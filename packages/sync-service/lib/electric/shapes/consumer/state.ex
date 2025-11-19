@@ -1,65 +1,9 @@
 defmodule Electric.Shapes.Consumer.State do
-  @moduledoc false
-  alias Electric.Postgres.Xid
-  alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes.Transaction
-  alias Electric.Postgres.SnapshotQuery
-  alias Electric.Replication.LogOffset
-  alias Electric.ShapeCache.Storage
+  @moduledoc """
+  State for the Consumer process.
 
-  require LogOffset
-
-  defstruct [
-    :stack_id,
-    :shape_handle,
-    :shape,
-    :hibernate_after,
-    :latest_offset,
-    :initial_pg_snapshot,
-    :storage,
-    :writer,
-    awaiting_snapshot_start: [],
-    buffer: [],
-    monitors: [],
-    txn_offset_mapping: [],
-    snapshot_started?: false,
-    materializer_subscribed?: false,
-    terminating?: false,
-    buffering?: false,
-    initial_snapshot_filtering?: true,
-    waiting_move_ins: %{},
-    filtering_move_ins: [],
-    move_in_buffering_snapshot: nil
-  ]
-
-  @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
-  @type move_in_name() :: String.t()
-
-  @type uninitialized_t() :: %__MODULE__{
-          stack_id: Electric.stack_id(),
-          shape_handle: Shape.handle(),
-          shape: Shape.t(),
-          awaiting_snapshot_start: list(GenServer.from()),
-          buffer: list(Transaction.t()),
-          monitors: list({pid(), reference()}),
-          txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
-          snapshot_started?: boolean(),
-          materializer_subscribed?: boolean(),
-          terminating?: boolean(),
-          buffering?: boolean(),
-          initial_snapshot_filtering?: boolean(),
-          waiting_move_ins: %{move_in_name() => pg_snapshot()},
-          filtering_move_ins: list(Shape.handle()),
-          move_in_buffering_snapshot: nil | pg_snapshot(),
-          hibernate_after: non_neg_integer(),
-          latest_offset: nil,
-          initial_pg_snapshot: nil,
-          storage: nil,
-          writer: nil
-        }
-
-  @typedoc """
-  State of the consumer process.
+  This module manages the consumer's state, including buffering coordination
+  for initial snapshots and move-in operations.
 
   ## Flush notification
 
@@ -71,68 +15,76 @@ defmodule Electric.Shapes.Consumer.State do
   last relevant one to last one generally in the transaction and use that
   to map back the flushed offset to the transaction boundary.
 
-  ## Move-in handling
-
-  There are 3 fields in the state relating to the move-in handling:
-  `waiting_move_ins`, `filtering_move_ins`, and `move_in_buffering_snapshot`.
-
-  Once a move-in is necessary, we immeidately query the DB for the snapshot,
-  and store it in `waiting_move_ins` until we know the affected key set for this
-  move-in (possible only when entire query resolves). If a transaction is not a
-  part of any of these "waiting" move-in snapshots, we cannot apply it yet
-  and so we start buffering. In order to avoid walking the `waiting_move_ins`
-  map every time, we instead construct a "buffering snapshot" which is a union
-  of all the "waiting" move-in snapshots. This is stored in `move_in_buffering_snapshot`
-  and is updated when anything is added to or removed from `waiting_move_ins`.
-
-  Once we have the affected key set, we can move the move-in to `filtering_move_ins`.
-  Filtering logic is described elsewhere.
-
   ## Buffering
 
-  Consumer will be buffering transactions in 2 cases: when we're waiting for initial
-  snapshot information, or when we can't reason about the change in context of a move-in.
+  Buffering logic is now centralized in the BufferingCoordinator, which handles:
+  - Initial snapshot filtering
+  - Move-in operation buffering and filtering
+  - Transaction visibility decisions
 
   Buffer is stored in reverse order.
   """
+
+  alias Electric.Shapes.Shape
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.LogOffset
+  alias Electric.ShapeCache.Storage
+  alias Electric.Shapes.Consumer.BufferingCoordinator
+  alias Electric.Shapes.Consumer.MoveInOperation
+
+  require LogOffset
+
+  defstruct [
+    :stack_id,
+    :shape_handle,
+    :shape,
+    :hibernate_after,
+    :latest_offset,
+    :storage,
+    :writer,
+    :coordinator,
+    awaiting_snapshot_start: [],
+    buffer: [],
+    monitors: [],
+    txn_offset_mapping: [],
+    snapshot_started?: false,
+    materializer_subscribed?: false,
+    terminating?: false
+  ]
+
   @type t() :: %__MODULE__{
           stack_id: Electric.stack_id(),
           shape_handle: Shape.handle(),
           shape: Shape.t(),
+          hibernate_after: non_neg_integer(),
+          latest_offset: LogOffset.t() | nil,
+          storage: Storage.shape_storage() | nil,
+          writer: Storage.writer_state() | nil,
+          coordinator: BufferingCoordinator.t(),
           awaiting_snapshot_start: list(GenServer.from()),
           buffer: list(Transaction.t()),
           monitors: list({pid(), reference()}),
           txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
           snapshot_started?: boolean(),
           materializer_subscribed?: boolean(),
-          terminating?: boolean(),
-          buffering?: boolean(),
-          initial_snapshot_filtering?: boolean(),
-          waiting_move_ins: %{move_in_name() => pg_snapshot()},
-          filtering_move_ins: list(Shape.handle()),
-          move_in_buffering_snapshot: nil | pg_snapshot(),
-          hibernate_after: non_neg_integer(),
-          latest_offset: LogOffset.t(),
-          initial_pg_snapshot: nil | pg_snapshot(),
-          storage: Storage.shape_storage(),
-          writer: Storage.writer_state()
+          terminating?: boolean()
         }
 
-  @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: uninitialized_t()
+  @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: t()
   def new(stack_id, shape_handle, shape) do
     %__MODULE__{
       stack_id: stack_id,
       shape_handle: shape_handle,
       shape: shape,
       hibernate_after: Electric.StackConfig.lookup(stack_id, :shape_hibernate_after),
-      buffering?: true
+      coordinator: BufferingCoordinator.new()
     }
   end
 
   @doc """
   After the storage is ready, initialize the state with info from storage and writer state.
   """
-  @spec initialize(uninitialized_t(), Storage.shape_storage(), Storage.writer_state()) :: t()
+  @spec initialize(t(), Storage.shape_storage(), Storage.writer_state()) :: t()
   def initialize(%__MODULE__{} = state, storage, writer) do
     {:ok, latest_offset, pg_snapshot} = Storage.get_current_position(storage)
 
@@ -155,78 +107,39 @@ defmodule Electric.Shapes.Consumer.State do
           {{xmin, xmax, xip_list}, Map.get(pg_snapshot, :filter_txns?, true)}
       end
 
+    coordinator = BufferingCoordinator.initialize(state.coordinator, pg_snapshot, filtering?)
+
     %__MODULE__{
       state
       | latest_offset: normalized_latest_offset,
-        initial_pg_snapshot: pg_snapshot,
         storage: storage,
         writer: writer,
-        buffering?: is_nil(pg_snapshot),
-        initial_snapshot_filtering?: filtering?
+        coordinator: coordinator
     }
   end
 
   @doc """
-  Add information about a new move-in to the state for which we're waiting
-  and update the buffering boundary.
+  Add information about a new move-in to the state.
   """
-  @spec add_waiting_move_in(t(), move_in_name(), pg_snapshot()) :: t()
-  def add_waiting_move_in(%__MODULE__{waiting_move_ins: waiting_move_ins} = state, name, snapshot) do
-    new_waiting_move_ins = Map.put(waiting_move_ins, name, snapshot)
-    new_buffering_snapshot = make_move_in_buffering_snapshot(new_waiting_move_ins)
-
-    %{
-      state
-      | waiting_move_ins: new_waiting_move_ins,
-        move_in_buffering_snapshot: new_buffering_snapshot
-    }
-  end
-
-  @spec make_move_in_buffering_snapshot(%{move_in_name() => pg_snapshot()}) :: nil | pg_snapshot()
-  # The fake global snapshot allows us to check if a transaction is not visible in any of the pending snapshots
-  # instead of checking each snapshot individually.
-  defp make_move_in_buffering_snapshot(waiting_move_ins) when waiting_move_ins == %{}, do: nil
-
-  defp make_move_in_buffering_snapshot(waiting_move_ins) do
-    waiting_move_ins
-    |> Map.values()
-    |> Enum.reduce({:infinity, -1, []}, fn {xmin, xmax, xip_list},
-                                           {global_xmin, global_xmax, global_xip_list} ->
-      {Kernel.min(global_xmin, xmin), Kernel.max(global_xmax, xmax), global_xip_list ++ xip_list}
-    end)
+  @spec add_move_in_operation(t(), MoveInOperation.t()) :: t()
+  def add_move_in_operation(%__MODULE__{coordinator: coord} = state, op) do
+    %{state | coordinator: BufferingCoordinator.add_move_in(coord, op)}
   end
 
   @doc """
   Change a move-in from "waiting" to "filtering" and update the buffering boundary.
   """
-  @spec change_move_in_to_filtering(t(), move_in_name(), list(String.t())) :: t()
-  def change_move_in_to_filtering(%__MODULE__{} = state, name, key_set) do
-    {snapshot, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
-    filtering_move_ins = [{snapshot, key_set} | state.filtering_move_ins]
-    buffering_snapshot = make_move_in_buffering_snapshot(waiting_move_ins)
-
-    %{
-      state
-      | waiting_move_ins: waiting_move_ins,
-        filtering_move_ins: filtering_move_ins,
-        move_in_buffering_snapshot: buffering_snapshot
-    }
+  @spec complete_move_in(t(), MoveInOperation.name(), list(String.t())) :: t()
+  def complete_move_in(%__MODULE__{coordinator: coord} = state, name, key_set) do
+    %{state | coordinator: BufferingCoordinator.complete_move_in(coord, name, key_set)}
   end
 
   @doc """
   Remove completed move-ins from the state.
-
-  Move-in is considered "completed" (i.e. not included in the filtering logic)
-  once we see any transaction that is after the end of the move-in snapshot.
-
-  Filtering generally is applied only to transactions that are already visible
-  in the snapshot, and those can only be with `xid < xmax`.
   """
-  @spec remove_completed_move_ins(t(), Transaction.t()) :: t()
-  def remove_completed_move_ins(%__MODULE__{} = state, %Transaction{xid: xid}) do
-    state.filtering_move_ins
-    |> Enum.reject(fn {snapshot, _} -> Xid.after_snapshot?(xid, snapshot) end)
-    |> then(&%{state | filtering_move_ins: &1})
+  @spec cleanup_completed_move_ins(t(), Transaction.t()) :: t()
+  def cleanup_completed_move_ins(%__MODULE__{coordinator: coord} = state, txn) do
+    %{state | coordinator: BufferingCoordinator.cleanup_completed_ops(coord, txn)}
   end
 
   @doc """
@@ -255,46 +168,102 @@ defmodule Electric.Shapes.Consumer.State do
     %{state | monitors: [{pid, ref} | monitors]}
   end
 
-  @spec set_initial_snapshot(t(), pg_snapshot()) :: t()
-  def set_initial_snapshot(
-        %__MODULE__{initial_pg_snapshot: nil} = state,
-        {xmin, xmax, xip_list} = snapshot
-      ) do
+  @doc """
+  Sets the initial snapshot and stops buffering.
+  """
+  @spec set_initial_snapshot(t(), BufferingCoordinator.pg_snapshot()) :: t()
+  def set_initial_snapshot(%__MODULE__{coordinator: coord} = state, snapshot) do
+    {xmin, xmax, xip_list} = snapshot
+
     # We're not changing snapshot storage format for backwards compatibility.
     Storage.set_pg_snapshot(
       %{xmin: xmin, xmax: xmax, xip_list: xip_list, filter_txns?: true},
       state.storage
     )
 
-    %{state | initial_pg_snapshot: snapshot, initial_snapshot_filtering?: true, buffering?: false}
+    %{state | coordinator: BufferingCoordinator.set_initial_snapshot(coord, snapshot)}
   end
 
+  @doc """
+  Adds a transaction to the buffer.
+  """
   @spec add_to_buffer(t(), Transaction.t()) :: t()
   def add_to_buffer(%__MODULE__{buffer: buffer} = state, txn) do
     %{state | buffer: [txn | buffer]}
   end
 
-  @spec maybe_stop_initial_filtering(t(), Transaction.t()) :: t()
-  def maybe_stop_initial_filtering(
-        %__MODULE__{initial_pg_snapshot: {xmin, xmax, xip_list} = snapshot} = state,
-        %Transaction{xid: xid}
-      ) do
-    if Xid.after_snapshot?(xid, snapshot) do
-      Storage.set_pg_snapshot(
-        %{xmin: xmin, xmax: xmax, xip_list: xip_list, filter_txns?: false},
-        state.storage
-      )
-
-      %{state | initial_snapshot_filtering?: false}
-    else
-      state
-    end
+  @doc """
+  Stops buffering mode. Called when ready to process buffered transactions.
+  """
+  @spec stop_buffering(t()) :: t()
+  def stop_buffering(%__MODULE__{coordinator: coord} = state) do
+    %{state | coordinator: BufferingCoordinator.stop_buffering(coord)}
   end
 
-  @spec initial_snapshot_xmin(t()) :: nil | Xid.anyxid()
-  def initial_snapshot_xmin(%__MODULE__{initial_pg_snapshot: {xmin, _, _}}), do: xmin
-  def initial_snapshot_xmin(%__MODULE__{initial_pg_snapshot: nil}), do: nil
+  @doc """
+  Starts buffering mode.
+  """
+  @spec start_buffering(t()) :: t()
+  def start_buffering(%__MODULE__{coordinator: coord} = state) do
+    %{state | coordinator: BufferingCoordinator.start_buffering(coord)}
+  end
 
+  @doc """
+  Stops initial snapshot filtering for transactions beyond the snapshot.
+  """
+  @spec maybe_stop_initial_filtering(t(), Transaction.t()) :: t()
+  def maybe_stop_initial_filtering(%__MODULE__{coordinator: coord} = state, txn) do
+    new_coord = BufferingCoordinator.maybe_stop_initial_filtering(coord, txn)
+
+    # Update storage if filtering was stopped
+    if BufferingCoordinator.initial_filtering?(coord) and
+         not BufferingCoordinator.initial_filtering?(new_coord) do
+      case BufferingCoordinator.initial_snapshot_xmin(new_coord) do
+        nil ->
+          :ok
+
+        xmin ->
+          {^xmin, xmax, xip_list} = coord.initial_snapshot
+
+          Storage.set_pg_snapshot(
+            %{xmin: xmin, xmax: xmax, xip_list: xip_list, filter_txns?: false},
+            state.storage
+          )
+      end
+    end
+
+    %{state | coordinator: new_coord}
+  end
+
+  @doc """
+  Returns the buffering decision for a transaction.
+  """
+  @spec check_transaction(t(), Transaction.t()) ::
+          :buffer | :process | :filter_initial
+  def check_transaction(%__MODULE__{coordinator: coord}, txn) do
+    BufferingCoordinator.check_transaction(coord, txn)
+  end
+
+  @doc """
+  Returns true if a change should be filtered out.
+  """
+  @spec should_filter_change?(t(), Transaction.t(), String.t()) :: boolean()
+  def should_filter_change?(%__MODULE__{coordinator: coord}, txn, key) do
+    BufferingCoordinator.should_filter_change?(coord, txn, key)
+  end
+
+  @doc """
+  Returns the initial snapshot's xmin, or nil if no snapshot set.
+  """
+  @spec initial_snapshot_xmin(t()) :: term() | nil
+  def initial_snapshot_xmin(%__MODULE__{coordinator: coord}) do
+    BufferingCoordinator.initial_snapshot_xmin(coord)
+  end
+
+  @doc """
+  Marks the snapshot as started.
+  """
+  @spec set_snapshot_started(t()) :: t()
   def set_snapshot_started(%__MODULE__{snapshot_started?: true} = state), do: state
 
   def set_snapshot_started(%__MODULE__{} = state) do

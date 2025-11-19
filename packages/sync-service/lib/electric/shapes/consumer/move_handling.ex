@@ -1,10 +1,19 @@
 defmodule Electric.Shapes.Consumer.MoveHandling do
-  @moduledoc false
+  @moduledoc """
+  Handles move-in and move-out operations for subquery-based shapes.
+
+  This module orchestrates:
+  - Querying the database for move-in data
+  - Writing move-in snapshots to storage
+  - Generating move-out control messages
+  - Completing move-in operations with their key sets
+  """
 
   alias Electric.Shapes.PartialModes
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Consumer.MoveInOperation
   alias Electric.Shapes.Shape
 
   @spec process_move_ins(State.t(), Shape.handle(), list(term())) :: State.t()
@@ -41,7 +50,9 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         move_in_name: name
       )
 
-    State.add_waiting_move_in(state, name, pg_snapshot)
+    # Create and add the move-in operation
+    operation = MoveInOperation.new(name, pg_snapshot)
+    State.add_move_in_operation(state, operation)
   end
 
   @spec process_move_outs(State.t(), Shape.handle(), list(term())) ::
@@ -57,15 +68,15 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
     {%{state | writer: writer}, {[message], upper_bound}}
   end
 
-  @spec query_complete(State.t(), State.move_in_name(), list(String.t())) ::
+  @spec query_complete(State.t(), MoveInOperation.name(), list(String.t())) ::
           {State.t(), notification :: term()}
   def query_complete(state, name, key_set) do
     # 1. Splice the stored data into the main log
     {{_, upper_bound} = bounds, writer} =
       Storage.append_move_in_snapshot_to_log!(name, state.writer)
 
-    # 2. Remove this entry from "waiting" and add to "filtering"
-    state = State.change_move_in_to_filtering(%{state | writer: writer}, name, key_set)
+    # 2. Complete the move-in operation (moves from querying to filtering)
+    state = State.complete_move_in(%{state | writer: writer}, name, key_set)
 
     {state, {bounds, upper_bound}}
   end

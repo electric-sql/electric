@@ -22,6 +22,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Eval
+  alias Electric.Shapes.Consumer.MoveDetector
 
   import Electric.Replication.LogOffset
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
@@ -86,7 +87,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     state =
       Map.merge(opts, %{
         index: %{},
-        tag_indices: %{},
+        tag_indices: MoveDetector.new(),
         value_counts: %{},
         offset: LogOffset.before_all(),
         ref: nil,
@@ -294,7 +295,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
             {value, original_string} = cast!(record, state)
             if is_map_key(index, key), do: raise("Key #{key} already exists")
             index = Map.put(index, key, value)
-            tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
+            tag_indices = MoveDetector.add_row(tag_indices, key, move_tags)
             {{index, tag_indices}, increment_value(counts_and_events, value, original_string)}
 
           %Changes.UpdatedRecord{
@@ -312,8 +313,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
               tag_indices =
                 tag_indices
-                |> remove_row_from_tag_indices(key, removed_move_tags)
-                |> add_row_to_tag_indices(key, move_tags)
+                |> MoveDetector.remove_row(key, removed_move_tags)
+                |> MoveDetector.add_row(key, move_tags)
 
               {{index, tag_indices},
                counts_and_events
@@ -328,14 +329,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
           {{index, tag_indices}, counts_and_events} ->
             {value, index} = Map.pop!(index, key)
 
-            tag_indices = remove_row_from_tag_indices(tag_indices, key, move_tags)
+            tag_indices = MoveDetector.remove_row(tag_indices, key, move_tags)
 
             {{index, tag_indices},
              decrement_value(counts_and_events, value, value_to_string(value, state))}
 
           %{headers: %{event: "move_out", patterns: patterns}},
           {{index, tag_indices}, counts_and_events} ->
-            {keys, tag_indices} = pop_keys_from_tag_indices(tag_indices, patterns)
+            {keys, tag_indices} = MoveDetector.pop_keys(tag_indices, patterns)
 
             {index, counts_and_events} =
               Enum.reduce(keys, {index, counts_and_events}, fn key, {index, counts_and_events} ->
@@ -373,38 +374,4 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  defp add_row_to_tag_indices(tag_indices, key, move_tags) do
-    # For now we only support one move tag per row (i.e. no `OR`s in the where clause if there's a subquery)
-    Enum.reduce(move_tags, tag_indices, fn [val1], acc ->
-      Map.update(acc, val1, MapSet.new([key]), &MapSet.put(&1, key))
-    end)
-  end
-
-  defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
-    Enum.reduce(move_tags, tag_indices, fn [val1], acc ->
-      case Map.fetch(acc, val1) do
-        {:ok, v} ->
-          new_mapset = MapSet.delete(v, key)
-
-          if MapSet.size(new_mapset) == 0 do
-            Map.delete(acc, val1)
-          else
-            Map.put(acc, val1, new_mapset)
-          end
-
-        :error ->
-          acc
-      end
-    end)
-  end
-
-  defp pop_keys_from_tag_indices(tag_indices, patterns) do
-    # This implementation is naive while we support only one tag per row and no composite tags.
-    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn [val1], {keys, acc} ->
-      case Map.pop(acc, val1) do
-        {nil, acc} -> {keys, acc}
-        {v, acc} -> {MapSet.union(keys, v), acc}
-      end
-    end)
-  end
 end

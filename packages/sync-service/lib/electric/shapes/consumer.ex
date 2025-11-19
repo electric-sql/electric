@@ -159,7 +159,7 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_continue(:consume_buffer, %State{buffer: buffer} = state) do
     Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
-    state = %{state | buffer: [], buffering?: false}
+    state = State.stop_buffering(%{state | buffer: []})
     {:noreply, handle_txns(Enum.reverse(buffer), state), state.hibernate_after}
   end
 
@@ -393,29 +393,26 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
 
-  defp handle_txn(txn, %State{buffering?: true} = state),
-    do: {:cont, State.add_to_buffer(state, txn)}
+  defp handle_txn(txn, %State{} = state) do
+    # Use the BufferingCoordinator to decide what to do with this transaction
+    case State.check_transaction(state, txn) do
+      :buffer ->
+        # Need to buffer this transaction
+        {:cont, State.add_to_buffer(state, txn)}
 
-  defp handle_txn(txn, %State{initial_snapshot_filtering?: true} = state) do
-    if Transaction.visible_in_snapshot?(txn, state.initial_pg_snapshot) do
-      {:cont, consider_flushed(state, txn)}
-    else
-      # Stop initial snapshot filtering if we see anything over xmax.
-      state = State.maybe_stop_initial_filtering(state, txn)
-      handle_txn_or_buffer(txn, state)
-    end
-  end
+      :filter_initial ->
+        # Transaction is visible in initial snapshot, skip it
+        {:cont, consider_flushed(state, txn)}
 
-  defp handle_txn(txn, state), do: handle_txn_or_buffer(txn, state)
+      :process ->
+        # Process the transaction normally
+        # First, clean up any completed move-in operations and stop initial filtering if needed
+        state =
+          state
+          |> State.cleanup_completed_move_ins(txn)
+          |> State.maybe_stop_initial_filtering(txn)
 
-  defp handle_txn_or_buffer(txn, %State{move_in_buffering_snapshot: snapshot} = state) do
-    if is_nil(snapshot) or Transaction.visible_in_snapshot?(txn, snapshot) do
-      state = State.remove_completed_move_ins(state, txn)
-      handle_txn_in_span(txn, state)
-    else
-      # We can't reason about this change until we get the key set for the move-in,
-      # so we start buffering.
-      handle_txn(txn, %{state | buffering?: true})
+        handle_txn_in_span(txn, state)
     end
   end
 
@@ -445,7 +442,7 @@ defmodule Electric.Shapes.Consumer do
 
     extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
 
-    case filter_changes(changes, shape, {xid, state.filtering_move_ins}, extra_refs) do
+    case filter_changes(changes, shape, state, txn, extra_refs) do
       :includes_truncate ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
@@ -614,41 +611,44 @@ defmodule Electric.Shapes.Consumer do
   defp filter_changes(
          changes,
          shape,
-         snapshot_filtering,
+         state,
+         txn,
          extra_refs,
          change_acc \\ [],
          total_ops_acc \\ 0
        )
 
-  defp filter_changes([], _shape, _, _, [], 0), do: {[], 0, nil}
+  defp filter_changes([], _shape, _, _, _, [], 0), do: {[], 0, nil}
 
-  defp filter_changes([], _shape, _, _, [change | rest], total_ops),
+  defp filter_changes([], _shape, _, _, _, [change | rest], total_ops),
     do:
       {Enum.reverse([%{change | last?: true} | rest]), total_ops,
        LogItems.expected_offset_after_split(change)}
 
-  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _, _),
+  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _, _, _),
     do: :includes_truncate
 
   defp filter_changes(
          [change | rest],
          shape,
-         snapshot_filtering,
+         state,
+         txn,
          extra_refs,
          change_acc,
          total_ops
        ) do
-    if not change_already_visible?(change, snapshot_filtering) do
+    if not change_already_visible?(change, state, txn) do
       # Change either not visible in any snapshot, or touches other keys - we need to add it to the log
       case Shape.convert_change(shape, change, extra_refs) do
         [] ->
-          filter_changes(rest, shape, snapshot_filtering, extra_refs, change_acc, total_ops)
+          filter_changes(rest, shape, state, txn, extra_refs, change_acc, total_ops)
 
         [change] ->
           filter_changes(
             rest,
             shape,
-            snapshot_filtering,
+            state,
+            txn,
             extra_refs,
             [change | change_acc],
             total_ops + 1
@@ -656,7 +656,7 @@ defmodule Electric.Shapes.Consumer do
       end
     else
       # Already part of some snapshot, applying would duplicate data
-      filter_changes(rest, shape, snapshot_filtering, extra_refs, change_acc, total_ops)
+      filter_changes(rest, shape, state, txn, extra_refs, change_acc, total_ops)
     end
   end
 
@@ -774,12 +774,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   # Deletes can't be visible in a snapshot
-  defp change_already_visible?(%Changes.DeletedRecord{}, _), do: false
+  defp change_already_visible?(%Changes.DeletedRecord{}, _, _), do: false
 
-  defp change_already_visible?(%{key: key}, {xid, filters}) do
-    Enum.any?(filters, fn {snapshot, key_set} ->
-      Transaction.visible_in_snapshot?(xid, snapshot) and MapSet.member?(key_set, key)
-    end)
+  defp change_already_visible?(%{key: key}, state, txn) do
+    State.should_filter_change?(state, txn, key)
   end
 
   if Mix.env() == :test do
