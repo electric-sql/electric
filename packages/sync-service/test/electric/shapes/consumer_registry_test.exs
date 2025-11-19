@@ -361,6 +361,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert_receive :message_received
       assert_receive :message_received
+      assert_receive :message_received
     end
   end
 end
