@@ -442,7 +442,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
   #midStreamPromise?: Promise<void>
   #midStreamPromiseResolver?: () => void
-  #replayMode: false | string = false // False or last seen cursor when replaying cached responses
+  #lastSeenCursor?: string // Last seen cursor from previous session (used to detect cached responses)
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
   #lastSseConnectionStartTime?: number
   #minSseConnectionDuration = 1000 // Minimum expected SSE connection duration (1 second)
@@ -451,6 +451,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseFallbackToLongPolling = false
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
+
+  // Derived state: we're in replay mode if we have a last seen cursor
+  get #replayMode(): boolean {
+    return this.#lastSeenCursor !== undefined
+  }
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -845,10 +850,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // Check if the cursor has changed - cursors are time-based and always
           // increment, so a new cursor means fresh data from the server.
           const currentCursor = this.#liveCacheBuster
-          const lastSeenCursor =
-            typeof this.#replayMode === `string` ? this.#replayMode : null
 
-          if (lastSeenCursor && currentCursor === lastSeenCursor) {
+          if (currentCursor === this.#lastSeenCursor) {
             // Same cursor = still replaying cached responses
             // Suppress this up-to-date notification
             return
@@ -860,7 +863,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // 2. This is a live/SSE message (always fresh), or
         // 3. Cursor has changed (exited replay mode with fresh data)
         // In all cases, notify subscribers and record the up-to-date.
-        this.#replayMode = false // Exit replay mode
+        this.#lastSeenCursor = undefined // Exit replay mode
 
         if (this.#currentFetchUrl) {
           const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
@@ -904,7 +907,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       const lastSeenCursor = upToDateTracker.shouldEnterReplayMode(shapeKey)
       if (lastSeenCursor) {
         // Enter replay mode and store the last seen cursor
-        this.#replayMode = lastSeenCursor
+        this.#lastSeenCursor = lastSeenCursor
       }
     }
 
