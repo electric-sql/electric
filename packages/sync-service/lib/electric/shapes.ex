@@ -33,11 +33,11 @@ defmodule Electric.Shapes do
   Get the shape that corresponds to this shape definition and return it along with the latest offset of the shape
   """
   @spec get_shape(stack_id(), Shape.t()) :: {shape_handle(), LogOffset.t()} | nil
-  def get_shape(stack_id, shape_def) when is_stack_id(stack_id) do
+  def get_shape(stack_id, %Shape{} = shape_def) when is_stack_id(stack_id) do
     ShapeCache.get_shape(shape_def, stack_id)
   end
 
-  @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: Shape.t() | nil
+  @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: Shape.t() | :error
   def fetch_shape_by_handle(stack_id, shape_handle)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeCache.fetch_shape_by_handle(shape_handle, stack_id)

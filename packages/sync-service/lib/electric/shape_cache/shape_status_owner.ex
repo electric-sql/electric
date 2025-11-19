@@ -43,7 +43,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     :ok = ShapeStatus.initialize_from_storage(stack_id, config.storage)
     :ok = Electric.LsnTracker.initialize(stack_id)
 
-    {:ok, %{stack_id: stack_id, backup_dir: ShapeStatus.backup_dir(config.storage)}}
+    {:ok, %{stack_id: stack_id, storage: config.storage}}
   end
 
   @impl true
@@ -52,9 +52,9 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   end
 
   @impl true
-  def terminate(_reason, %{stack_id: stack_id, backup_dir: backup_dir}) do
+  def terminate(_reason, %{stack_id: stack_id, storage: storage}) do
     Logger.info("Terminating shape status owner, backing up state for faster recovery.")
-    ShapeStatus.terminate(stack_id, backup_dir)
+    ShapeStatus.terminate(stack_id, storage)
     :ok
   end
 end

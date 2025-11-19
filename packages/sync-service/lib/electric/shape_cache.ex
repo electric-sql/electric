@@ -73,15 +73,13 @@ defmodule Electric.ShapeCache do
   end
 
   @impl Electric.ShapeCacheBehaviour
-  def get_shape(shape, stack_id) when is_stack_id(stack_id) do
-    table = ShapeStatus.shape_meta_table(stack_id)
-    ShapeStatus.get_existing_shape(table, shape)
+  def get_shape(%Shape{} = shape, stack_id) when is_stack_id(stack_id) do
+    ShapeStatus.get_existing_shape(stack_id, shape)
   end
 
   @impl Electric.ShapeCacheBehaviour
   def fetch_shape_by_handle(handle, stack_id) when is_stack_id(stack_id) do
-    table = ShapeStatus.shape_meta_table(stack_id)
-    ShapeStatus.fetch_shape_by_handle(table, handle)
+    ShapeStatus.fetch_shape_by_handle(stack_id, handle)
   end
 
   @impl Electric.ShapeCacheBehaviour
@@ -100,16 +98,14 @@ defmodule Electric.ShapeCache do
 
   @impl Electric.ShapeCacheBehaviour
   def list_shapes(stack_id) when is_stack_id(stack_id) do
-    table = ShapeStatus.shape_meta_table(stack_id)
-    ShapeStatus.list_shapes(table)
+    ShapeStatus.list_shapes(stack_id)
   rescue
     ArgumentError -> :error
   end
 
   @impl Electric.ShapeCacheBehaviour
   def count_shapes(stack_id) when is_stack_id(stack_id) do
-    table = ShapeStatus.shape_last_used_table(stack_id)
-    ShapeStatus.count_shapes(table)
+    ShapeStatus.count_shapes(stack_id)
   rescue
     ArgumentError -> :error
   end
@@ -123,14 +119,13 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   def await_snapshot_start(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    meta_table = ShapeStatus.shape_meta_table(stack_id)
-    ShapeStatus.update_last_read_time_to_now(meta_table, shape_handle)
+    ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
 
     cond do
-      ShapeStatus.snapshot_started?(meta_table, shape_handle) ->
+      ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
         :started
 
-      !ShapeStatus.get_existing_shape(meta_table, shape_handle) ->
+      :error == ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle) ->
         {:error, :unknown}
 
       true ->
@@ -160,12 +155,9 @@ defmodule Electric.ShapeCache do
   @impl Electric.ShapeCacheBehaviour
   def has_shape?(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    table = ShapeStatus.shape_meta_table(stack_id)
-
-    if ShapeStatus.get_existing_shape(table, shape_handle) do
-      true
-    else
-      GenServer.call(name(stack_id), {:wait_shape_handle, shape_handle}, @call_timeout)
+    case ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle) do
+      {:ok, _} -> true
+      :error -> GenServer.call(name(stack_id), {:wait_shape_handle, shape_handle}, @call_timeout)
     end
   end
 
@@ -231,7 +223,7 @@ defmodule Electric.ShapeCache do
   end
 
   def handle_call({:wait_shape_handle, shape_handle}, _from, state) do
-    {:reply, !is_nil(ShapeStatus.get_existing_shape(state.stack_id, shape_handle)), state}
+    {:reply, ShapeStatus.fetch_shape_by_handle(state.stack_id, shape_handle) !== :error, state}
   end
 
   def handle_call({:start_consumer_for_handle, shape_handle}, _from, state) do

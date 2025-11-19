@@ -149,8 +149,8 @@ defmodule Electric.Shapes.ConsumerTest do
         mark_snapshot_started: fn _, _shape_handle -> :ok end,
         fetch_shape_by_handle: fn _, shape_handle -> Map.fetch(ctx.shapes, shape_handle) end,
         get_existing_shape: fn
-          _, @shape_handle1 -> {@shape_handle1, @shape1}
-          _, @shape_handle2 -> {@shape_handle2, @shape2}
+          _, @shape1 -> {@shape_handle1, @shape1}
+          _, @shape2 -> {@shape_handle2, @shape2}
         end
       )
 
@@ -787,7 +787,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert {_, offset1} = ShapeCache.get_shape(shape_handle, ctx.stack_id)
+      assert {_, offset1} = ShapeCache.get_shape(@shape1, ctx.stack_id)
       assert offset1 == LogOffset.last_before_real_offsets()
 
       ref = ctx.consumer_supervisor |> GenServer.whereis() |> Process.monitor()
@@ -807,7 +807,7 @@ defmodule Electric.Shapes.ConsumerTest do
       Support.ComponentSetup.with_shape_cache(ctx)
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
-      assert {_, offset2} = ShapeCache.get_shape(shape_handle, ctx.stack_id)
+      assert {_, offset2} = ShapeCache.get_shape(@shape1, ctx.stack_id)
 
       assert LogOffset.compare(offset2, offset1) != :lt
     end

@@ -34,19 +34,24 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   defp last_used_table_name(meta_table),
     do: String.to_atom(Atom.to_string(meta_table) <> ":last_used")
 
+  defp hash_lookup_table_name(meta_table),
+    do: String.to_atom(Atom.to_string(meta_table) <> ":hash_lookup")
+
   defp shape_status_opts(opts) do
     meta_table = Keyword.get_lazy(opts, :table, fn -> table_name() end)
 
     %{
       storage: {Mock.Storage, []},
       shape_meta_table: meta_table,
-      shape_last_used_table: last_used_table_name(meta_table)
+      shape_last_used_table: last_used_table_name(meta_table),
+      shape_hash_lookup_table: hash_lookup_table_name(meta_table)
     }
   end
 
   defp delete_tables(meta_table) do
     :ets.delete(meta_table)
     :ets.delete(last_used_table_name(meta_table))
+    :ets.delete(hash_lookup_table_name(meta_table))
   end
 
   defp new_state(_ctx, opts \\ []) do
@@ -157,14 +162,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     shape = shape!()
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape])
 
-    refute ShapeStatus.get_existing_shape(state, "1234")
-
     assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape_handle)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(state, shape)
-    refute ShapeStatus.get_existing_shape(state, shape_handle)
   end
 
   test "get_existing_shape/2 public api", ctx do
@@ -173,14 +174,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     {:ok, state, [shape_handle]} = new_state(ctx, table: table, shapes: [shape])
 
-    refute ShapeStatus.get_existing_shape(table, "1234")
-
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(table, shape)
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(table, shape_handle)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(table, shape)
-    refute ShapeStatus.get_existing_shape(table, shape_handle)
   end
 
   test "fetch_shape_by_handle/2", ctx do
@@ -434,10 +431,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       # Persist backup
       assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
 
-      backup_file =
-        Path.join([backup_base_dir, "shape_status_backups", "shape_status_v1.ets.backup"])
-
-      assert File.exists?(backup_file)
+      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
+      assert File.exists?(backup_dir)
 
       # Simulate restart: remove ETS table (would be removed with process exit in real system)
       delete_tables(table)
@@ -457,8 +452,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       assert :ok = ShapeStatus.initialize_from_storage(state2, state2.storage)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state2)
+      assert {^shape_handle, _offset} = ShapeStatus.get_existing_shape(state2, shape)
+      assert ShapeStatus.count_shapes(state2) == 1
       # consuming backup directory should have removed it after load
-      refute File.exists?(backup_file)
+      refute File.exists?(backup_dir)
     end
 
     test "backup restore aborted on storage integrity failure", _ctx do
@@ -483,10 +480,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
       assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
 
-      backup_file =
-        Path.join([backup_base_dir, "shape_status_backups", "shape_status_v1.ets.backup"])
-
-      assert File.exists?(backup_file)
+      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
+      assert File.exists?(backup_dir)
 
       delete_tables(table)
 
@@ -501,7 +496,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert :ok = ShapeStatus.initialize_from_storage(state2, state2.storage)
       # Shape from backup should NOT be present after failed integrity
       assert [] == ShapeStatus.list_shapes(state2)
-      refute File.exists?(backup_file)
+      refute File.exists?(backup_dir)
     end
   end
 
