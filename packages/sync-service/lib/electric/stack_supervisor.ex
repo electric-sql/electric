@@ -124,6 +124,10 @@ defmodule Electric.StackSupervisor do
                        type: :integer,
                        default: Electric.Config.default(:shape_hibernate_after)
                      ],
+                     shape_enable_suspend?: [
+                       type: :boolean,
+                       default: Electric.Config.default(:shape_enable_suspend?)
+                     ],
                      snapshot_timeout_to_first_data: [
                        type: :pos_integer,
                        default: Electric.Config.default(:snapshot_timeout_to_first_data)
@@ -302,6 +306,7 @@ defmodule Electric.StackSupervisor do
     shape_changes_registry_name = registry_name(stack_id)
 
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
+    shape_enable_suspend? = Keyword.fetch!(config.tweaks, :shape_enable_suspend?)
 
     shape_cache_opts = [
       stack_id: stack_id
@@ -361,7 +366,8 @@ defmodule Electric.StackSupervisor do
              chunk_bytes_threshold: config.chunk_bytes_threshold,
              snapshot_timeout_to_first_data: config.tweaks[:snapshot_timeout_to_first_data],
              inspector: inspector,
-             shape_hibernate_after: shape_hibernate_after
+             shape_hibernate_after: shape_hibernate_after,
+             shape_enable_suspend?: shape_enable_suspend?
            ]},
           {Electric.AsyncDeleter,
            stack_id: stack_id,

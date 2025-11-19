@@ -363,12 +363,16 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_info(:timeout, state) do
     # we can only suspend (terminate) the consumer process if
-    # 1. we're not waiting for snapshot information
-    # 2. we are not part of a subquery dependency tree, that is either
+    #
+    # 1. Consumer suspend has been enabled in the stack config
+    # 2. we're not waiting for snapshot information
+    # 3. we are not part of a subquery dependency tree, that is either
     #   a. we have no dependent shapes
     #   b. we don't have a materializer subscribed
+
     can_suspend? =
-      state.snapshot_started and Enum.empty?(state.shape.shape_dependencies_handles) and
+      Electric.StackConfig.lookup(state.stack_id, :shape_enable_suspend?, true) and
+        state.snapshot_started and Enum.empty?(state.shape.shape_dependencies_handles) and
         not state.materializer_subscribed?
 
     if can_suspend? do

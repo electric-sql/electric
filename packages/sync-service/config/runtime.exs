@@ -172,6 +172,8 @@ call_home_telemetry_url =
 shape_hibernate_after =
   env!("ELECTRIC_SHAPE_HIBERNATE_AFTER", &Electric.Config.parse_human_readable_time!/1, nil)
 
+shape_enable_suspend? = env!("ELECTRIC_SHAPE_SUSPEND_CONSUMER", :boolean, nil)
+
 system_metrics_poll_interval =
   env!(
     "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
@@ -234,6 +236,7 @@ config :electric,
   max_txn_size: env!("ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE", :integer, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
+  shape_enable_suspend?: shape_enable_suspend?,
   storage_dir: storage_dir,
   storage: storage_spec,
   cleanup_interval_ms:

@@ -31,7 +31,7 @@
 
 # Start Electric and wait for it to finish initialization.
 # Set a very small hibernation timeout so consumers will shutdown quickly
-[invoke setup_electric_with_env "ELECTRIC_SHAPE_HIBERNATE_AFTER=200ms"]
+[invoke setup_electric_with_env "ELECTRIC_SHAPE_HIBERNATE_AFTER=200ms ELECTRIC_SHAPE_SUSPEND_CONSUMER=true"]
 [shell electric]
   [timeout 10]
   ??[debug] Replication client started streaming

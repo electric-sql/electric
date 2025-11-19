@@ -99,6 +99,9 @@ defmodule Electric.Config do
     telemetry_long_message_queue_disable_threshold: 0,
     ## Memory
     shape_hibernate_after: :timer.seconds(30),
+    # Should we terminate consumer processes after `shape_hibernate_after` ms
+    # or just hibernate them?
+    shape_enable_suspend?: true,
     ## Performance tweaks
     publication_alter_debounce_ms: 0,
     ## Misc
