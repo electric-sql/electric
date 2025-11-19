@@ -9,6 +9,7 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
   setup [
     :with_unique_db,
     :with_stack_id_from_test,
+    :with_lsn_tracker,
     :with_slot_name
   ]
 
