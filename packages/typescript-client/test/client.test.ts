@@ -2048,6 +2048,225 @@ describe.for(fetchAndSse)(
         { timeout: 4000 }
       )
     })
+
+    it(
+      `fetchSnapshot should return data and metadata without modifying shape state`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues({ title: `A` }, { title: `B` }, { title: `C` })
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+        })
+
+        const shape = new Shape(shapeStream)
+
+        // Initial state should be empty
+        expect(await shape.rows).toEqual([])
+
+        // Track messages published to the stream
+        const seenKeys = new Set<string>()
+        const unsub = shapeStream.subscribe((msgs) => {
+          for (const m of msgs) {
+            if (isChangeMessage(m)) seenKeys.add(m.key)
+          }
+        })
+
+        // fetchSnapshot should work independently, but wait for stream to initialize
+        // (so we can test that it uses the schema from the stream if available)
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.hasStarted()).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        // Test with orderBy
+        const { metadata, data } = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+
+        // Verify fetchSnapshot returned data and metadata
+        expect(data.length).toBe(3)
+        const returnedTitles = data.map((m) => m.value.title)
+        expect(returnedTitles).toEqual([`A`, `B`, `C`])
+        expect(metadata).toBeDefined()
+        expect(typeof metadata).toBe(`object`)
+
+        // Verify shape state was NOT modified (should still be empty)
+        expect(shape.currentRows).toEqual([])
+
+        // Verify no messages were published to the stream
+        expect(seenKeys.size).toBe(0)
+
+        // Test with where clause
+        const { data: filteredData } = await shapeStream.fetchSnapshot({
+          where: `title = 'B'`,
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+        expect(filteredData.length).toBe(1)
+        expect(filteredData[0].value.title).toBe(`B`)
+
+        // Test with parametrised where clause
+        const { data: paramData } = await shapeStream.fetchSnapshot({
+          where: `title = $1 OR title = $2`,
+          params: { '1': `A`, '2': `C` },
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+        const paramTitles = paramData.map((m) => m.value.title).sort()
+        expect(paramTitles).toEqual([`A`, `C`])
+
+        // Test with orderBy + limit
+        const { data: limitedData } = await shapeStream.fetchSnapshot({
+          orderBy: `title DESC`,
+          limit: 2,
+        })
+        const limitedTitles = limitedData.map((m) => m.value.title)
+        expect(limitedTitles).toEqual([`C`, `B`])
+
+        // Verify shape state still unchanged after all fetches
+        expect(shape.currentRows).toEqual([])
+        expect(seenKeys.size).toBe(0)
+
+        unsub()
+      }
+    )
+
+    it(`fetchSnapshot does not interfere with stream updates`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      waitForIssues,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `before` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        liveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Subscribe to capture messages before fetchSnapshot
+      const messages: Message<Row>[] = []
+      const unsub = shapeStream.subscribe((msgs) => {
+        messages.push(...msgs)
+      })
+
+      // Wait for stream to be initialized and up-to-date
+      await vi.waitFor(
+        () => {
+          expect(
+            messages.some(
+              (m) => isControlMessage(m) && m.headers.control === `up-to-date`
+            )
+          ).toBe(true)
+        },
+        { timeout: 10000 }
+      )
+
+      // Fetch a snapshot (should not affect stream)
+      const { data: snapshotData } = await shapeStream.fetchSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      expect(snapshotData.length).toBe(1)
+      expect(snapshotData[0].value.title).toBe(`before`)
+
+      // Shape should still be empty (fetchSnapshot doesn't modify state)
+      expect(shape.currentRows).toEqual([])
+
+      // Now perform an update and ensure it is streamed normally
+      await updateIssue({ id, title: `after` })
+      await waitForIssues({ numChangesExpected: 1 })
+
+      await vi.waitFor(
+        () => {
+          const updateMsg = messages.find(
+            (m) => isChangeMessage(m) && m.headers.operation === `update`
+          ) as ChangeMessage<Row> | undefined
+          expect(updateMsg?.value?.title).toBe(`after`)
+        },
+        { timeout: 10000 }
+      )
+      unsub()
+    })
+
+    it(
+      `fetchSnapshot handles errors correctly`,
+      { timeout: 5000 },
+      async ({ issuesTableUrl, aborter }) => {
+        // Create a fetchClient that returns an error immediately for snapshot requests
+        // We need to bypass backoff retries for this test, so we'll use maxRetries: 0
+        let snapshotRequestCount = 0
+        const fetchClient = vi.fn(
+          async (input: string | URL | Request, _init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : input.toString()
+            const urlObj = new URL(url)
+            // Check if this is a snapshot request (has subset params with double underscores)
+            const isSnapshotRequest =
+              urlObj.searchParams.has(`subset__where`) ||
+              urlObj.searchParams.has(`subset__limit`) ||
+              urlObj.searchParams.has(`subset__order_by`)
+            if (isSnapshotRequest) {
+              snapshotRequestCount++
+              return new Response(`{"error": "Internal Server Error"}`, {
+                status: 500,
+                statusText: `Internal Server Error`,
+                headers: { 'Content-Type': `application/json` },
+              })
+            }
+            // For normal requests, return a minimal response to avoid hanging on database
+            // (we're only testing snapshot error handling, not the full stream)
+            return new Response(`[]`, {
+              status: 200,
+              headers: {
+                'electric-schema': JSON.stringify({}),
+                'electric-offset': `0_0`,
+              },
+            })
+          }
+        )
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient,
+          // Disable retries for this test to ensure errors are thrown immediately
+          backoffOptions: {
+            maxRetries: 0,
+            initialDelay: 0,
+            maxDelay: 0,
+            multiplier: 1,
+          },
+        })
+
+        // fetchSnapshot should work independently - call it immediately
+        // The error should be thrown immediately (500 is not retried, and we disabled retries anyway)
+        await expect(
+          shapeStream.fetchSnapshot({
+            orderBy: `title ASC`,
+            limit: 100,
+          })
+        ).rejects.toThrow(FetchError)
+
+        // Verify the snapshot request was made
+        expect(snapshotRequestCount).toBeGreaterThan(0)
+      }
+    )
   }
 )
 

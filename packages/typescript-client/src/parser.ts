@@ -122,16 +122,54 @@ export class MessageParser<T extends Row<unknown>> {
         typeof value === `object` &&
         value !== null
       ) {
-        // Parse the row values
-        const row = value as Record<string, Value<GetExtensions<T>>>
-        Object.keys(row).forEach((key) => {
-          row[key] = this.parseRow(key, row[key] as NullableToken, schema)
-        })
-
-        if (this.transformer) value = this.transformer(value)
+        return this.transformMessageValue(value, schema)
       }
       return value
     }) as Result
+  }
+
+  /**
+   * Parse an array of ChangeMessages from a snapshot response.
+   * Applies type parsing and transformations to the value and old_value properties.
+   */
+  parseSnapshotData<Result>(
+    messages: Array<unknown>,
+    schema: Schema
+  ): Array<Result> {
+    return messages.map((message) => {
+      const msg = message as Record<string, unknown>
+
+      // Transform the value property if it exists
+      if (msg.value && typeof msg.value === `object` && msg.value !== null) {
+        msg.value = this.transformMessageValue(msg.value, schema)
+      }
+
+      // Transform the old_value property if it exists
+      if (
+        msg.old_value &&
+        typeof msg.old_value === `object` &&
+        msg.old_value !== null
+      ) {
+        msg.old_value = this.transformMessageValue(msg.old_value, schema)
+      }
+
+      return msg as Result
+    })
+  }
+
+  /**
+   * Transform a message value or old_value object by parsing its columns.
+   */
+  private transformMessageValue(
+    value: unknown,
+    schema: Schema
+  ): Row<GetExtensions<T>> {
+    const row = value as Record<string, Value<GetExtensions<T>>>
+    Object.keys(row).forEach((key) => {
+      row[key] = this.parseRow(key, row[key] as NullableToken, schema)
+    })
+
+    return this.transformer ? this.transformer(row) : row
   }
 
   // Parses the message values using the provided parser based on the schema information
