@@ -39,10 +39,6 @@ defmodule Electric.ShapeCache.ShapeStatusBehaviour do
   @callback snapshot_started?(stack_ref(), shape_handle()) :: boolean()
   @callback remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
   @callback reset(stack_ref()) :: :ok
-
-  @callback shape_hash_lookup_table(stack_ref()) :: atom()
-  @callback shape_meta_table(stack_ref()) :: atom()
-  @callback shape_last_used_table(stack_ref()) :: atom()
 end
 
 defmodule Electric.ShapeCache.ShapeStatus do
@@ -71,6 +67,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @behaviour Electric.ShapeCache.ShapeStatusBehaviour
 
+  @typep stack_ref() :: Electric.ShapeCache.ShapeStatusBehaviour.stack_ref()
   @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
   @type table() :: atom() | reference()
   @type t() :: Keyword.t() | binary() | atom()
@@ -401,24 +398,24 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ArgumentError -> false
   end
 
-  @impl true
-  def shape_hash_lookup_table(opts) when is_list(opts) or is_map(opts),
+  @spec shape_hash_lookup_table(stack_ref()) :: atom()
+  defp shape_hash_lookup_table(opts) when is_list(opts) or is_map(opts),
     do: shape_hash_lookup_table(Access.fetch!(opts, :stack_id))
 
-  def shape_hash_lookup_table(stack_id) when is_stack_id(stack_id),
+  defp shape_hash_lookup_table(stack_id) when is_stack_id(stack_id),
     do: :"shape_hash_lookup_table:#{stack_id}"
 
-  @impl true
-  def shape_meta_table(opts) when is_list(opts) or is_map(opts),
+  @spec shape_meta_table(stack_ref()) :: atom()
+  defp shape_meta_table(opts) when is_list(opts) or is_map(opts),
     do: shape_meta_table(Access.fetch!(opts, :stack_id))
 
-  def shape_meta_table(stack_id) when is_stack_id(stack_id), do: :"shape_meta_table:#{stack_id}"
+  defp shape_meta_table(stack_id) when is_stack_id(stack_id), do: :"shape_meta_table:#{stack_id}"
 
-  @impl true
-  def shape_last_used_table(opts) when is_list(opts) or is_map(opts),
+  @spec shape_last_used_table(stack_ref()) :: atom()
+  defp shape_last_used_table(opts) when is_list(opts) or is_map(opts),
     do: shape_last_used_table(Access.fetch!(opts, :stack_id))
 
-  def shape_last_used_table(stack_id) when is_stack_id(stack_id),
+  defp shape_last_used_table(stack_id) when is_stack_id(stack_id),
     do: :"shape_last_used_table:#{stack_id}"
 
   defp create_hash_lookup_table(stack_ref) do
