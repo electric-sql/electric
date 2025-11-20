@@ -112,6 +112,11 @@ defmodule Electric.Postgres.ConfigurationTest do
       oid_rel = {oid, {"public", "items"}}
       test_pid = self()
 
+      # Need to unlink the connection pool as the test prevents any backoffs and retries for
+      # connections that fail, and timeouts and cancellations will lead to the pool dying
+      # and timing issues can cause the test to fail because of that
+      Process.unlink(conn)
+
       start_supervised!(
         Supervisor.child_spec(
           {Task,
@@ -121,12 +126,8 @@ defmodule Electric.Postgres.ConfigurationTest do
                fn conn ->
                  Postgrex.query!(conn, "LOCK TABLE public.items IN ACCESS EXCLUSIVE MODE", [])
                  send(test_pid, :table_locked)
-
-                 receive do
-                   _ -> :ok
-                 end
-               end,
-               timeout: :infinity
+                 receive(do: (_ -> :ok))
+               end
              )
            end},
           restart: :temporary
