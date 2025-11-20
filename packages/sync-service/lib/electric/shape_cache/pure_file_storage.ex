@@ -513,20 +513,27 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp initialise_filesystem!(%__MODULE__{} = opts, shape_definition) do
     on_disk_version = read_metadata!(opts, :version)
+    new? = is_nil(on_disk_version)
 
-    if on_disk_version != opts.version or not snapshot_complete?(opts) or
-         is_nil(read_metadata!(opts, :pg_snapshot)),
-       do: cleanup!(opts)
+    initialize? =
+      if not new? and
+           (on_disk_version != opts.version or not snapshot_complete?(opts) or
+              is_nil(read_metadata!(opts, :pg_snapshot))) do
+        cleanup!(opts)
+        true
+      else
+        new?
+      end
 
-    create_directories!(opts)
-    write_metadata!(opts, :version, @version)
-    write_shape_definition!(opts, shape_definition)
+    if initialize? do
+      create_directories!(opts)
+      write_shape_definition!(opts, shape_definition)
+    end
 
     last_persisted_txn_offset =
       read_metadata!(opts, :last_persisted_txn_offset) || LogOffset.last_before_real_offsets()
 
-    suffix = latest_name(opts) || "latest.0"
-    write_metadata!(opts, :latest_name, suffix)
+    suffix = latest_name(opts) || write_metadata!(opts, :latest_name, "latest.0")
 
     trim_log!(opts, last_persisted_txn_offset, suffix)
 
@@ -539,6 +546,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     # If the last chunk is complete, we take the end as position to calculate chunk size
     position = end_pos || start_pos
+
+    if initialize?, do: write_metadata!(opts, :version, @version)
 
     {WriteLoop.init_from_disk(
        last_persisted_txn_offset: last_persisted_txn_offset,
@@ -628,10 +637,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp write_metadata!(%__MODULE__{} = opts, key, value) do
     metadata_dir = shape_metadata_dir(opts)
 
-    path = Path.join(metadata_dir, "#{key}.bin.tmp")
-    write!(path, :erlang.term_to_binary(value), [:write, :raw])
+    path = Path.join(metadata_dir, to_string(key) <> ".bin")
+    tmp_path = path <> ".tmp"
+    write!(tmp_path, :erlang.term_to_binary(value), [:write, :raw])
 
-    rename!(path, Path.join(metadata_dir, "#{key}.bin"))
+    rename!(tmp_path, path)
+
+    value
   end
 
   # Write metadata to both disk and ETS
