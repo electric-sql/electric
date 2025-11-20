@@ -73,7 +73,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @type table() :: atom() | reference()
   @type t() :: Keyword.t() | binary() | atom()
 
-  @backup_version "v3"
+  @backup_version "v4"
   @backup_dir "shape_status_backups"
 
   @shape_hash_lookup_handle_pos 2
