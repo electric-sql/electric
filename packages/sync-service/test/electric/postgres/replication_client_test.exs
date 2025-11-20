@@ -733,8 +733,6 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
   end
 
-  def test_handle_operations([], _test_pid), do: :ok
-
   def test_handle_operations(operations, test_pid) when is_list(operations) do
     send(test_pid, {:from_replication, operations})
     :ok
