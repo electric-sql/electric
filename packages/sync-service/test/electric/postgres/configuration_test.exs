@@ -125,7 +125,8 @@ defmodule Electric.Postgres.ConfigurationTest do
                  receive do
                    _ -> :ok
                  end
-               end
+               end,
+               timeout: :infinity
              )
            end},
           restart: :temporary
