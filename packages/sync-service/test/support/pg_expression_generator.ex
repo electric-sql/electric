@@ -72,7 +72,7 @@ defmodule Support.PgExpressionGenerator do
   defp numeric_unary_op_gen, do: member_of(["+", "-", "@"])
   defp int_op_gen, do: one_of([numeric_op_gen(), member_of(["&", "|", "#"])])
   defp int_unary_op_gen, do: one_of([numeric_unary_op_gen(), member_of(["~"])])
-  defp double_unary_op_gen, do: one_of([numeric_unary_op_gen(), member_of(["|/"])])
+  defp double_unary_op_gen, do: one_of([numeric_unary_op_gen(), member_of(["|/ @"])])
 
   defp string_op_gen, do: member_of(["||"])
   defp string_comparison_op_gen, do: member_of(["~~", "~~*", "!~~", "!~~*"])
