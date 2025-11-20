@@ -2276,7 +2276,7 @@ it(
   async ({ issuesTableUrl, aborter }) => {
     let requestCount = 0
     let sseRequestCount = 0
-    let initialHandle: string | null = null
+    let initialHandle: string | undefined
     const requestUrls: string[] = []
 
     // Mock console.warn to capture the fallback warning
@@ -2300,7 +2300,7 @@ it(
         const reqHandle = urlObj.searchParams.get(SHAPE_HANDLE_HEADER)
 
         if (isSSE && (!initialHandle || reqHandle === initialHandle)) {
-          initialHandle ??= reqHandle
+          initialHandle ??= reqHandle!
           sseRequestCount++
           // Handle up to 4 SSE requests (we expect 3, but might see 4 due to timing)
           if (sseRequestCount <= 4) {
