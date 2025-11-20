@@ -530,16 +530,24 @@ defmodule Electric.ShapeCache.PureFileStorage do
       write_shape_definition!(opts, shape_definition)
     end
 
-    last_persisted_txn_offset =
-      read_metadata!(opts, :last_persisted_txn_offset) || LogOffset.last_before_real_offsets()
-
     suffix = latest_name(opts) || write_metadata!(opts, :latest_name, "latest.0")
 
-    trim_log!(opts, last_persisted_txn_offset, suffix)
+    {last_persisted_txn_offset, json_file_size, chunks} =
+      if initialize? do
+        {LogOffset.last_before_real_offsets(), 0, []}
+      else
+        last_persisted_txn_offset =
+          read_metadata!(opts, :last_persisted_txn_offset) ||
+            LogOffset.last_before_real_offsets()
 
-    json_file_size = FileInfo.get_file_size!(json_file(opts, suffix)) || 0
+        trim_log!(opts, last_persisted_txn_offset, suffix)
 
-    chunks = ChunkIndex.read_last_n_chunks(chunk_file(opts, suffix), 4)
+        {
+          last_persisted_txn_offset,
+          FileInfo.get_file_size!(json_file(opts, suffix)) || 0,
+          ChunkIndex.read_last_n_chunks(chunk_file(opts, suffix), 4)
+        }
+      end
 
     {{_, chunk_end_offset}, {start_pos, end_pos}, _} =
       List.last(chunks, {{nil, :empty}, {0, nil}, nil})
@@ -547,6 +555,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
     # If the last chunk is complete, we take the end as position to calculate chunk size
     position = end_pos || start_pos
 
+    # finally write the version file which also acts as our
+    # "is this a valid storage dir" test
     if initialize?, do: write_metadata!(opts, :version, @version)
 
     {WriteLoop.init_from_disk(
