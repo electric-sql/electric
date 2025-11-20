@@ -194,8 +194,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
       :ets.delete(meta_table, shape_handle)
 
+      relation_lookup_table = shape_relation_lookup_table(stack_ref)
+
       Enum.each(Shape.list_relations(shape), fn {oid, _} ->
-        :ets.delete(shape_relation_lookup_table(stack_ref), {oid, shape_handle})
+        :ets.delete(relation_lookup_table, {oid, shape_handle})
       end)
 
       :ets.delete(shape_last_used_table(stack_ref), shape_handle)
