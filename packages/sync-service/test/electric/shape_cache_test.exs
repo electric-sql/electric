@@ -14,7 +14,9 @@ defmodule Electric.ShapeCacheTest do
   import Support.ComponentSetup
   import Support.DbSetup
   import Support.DbStructureSetup
-  import Support.TestUtils, only: [activate_mocks_for_descendant_procs: 1]
+
+  import Support.TestUtils,
+    only: [activate_mocks_for_descendant_procs: 1, assert_shape_cleanup: 1]
 
   @stub_inspector Support.StubInspector.new(
                     tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -51,8 +53,6 @@ defmodule Electric.ShapeCacheTest do
   # {xmin, xmax, xip_list}
   @pg_snapshot_xmin_10 {10, 11, [10]}
   @pg_snapshot_xmin_100 {100, 101, [100]}
-
-  @shape_cleanup_timeout 5_000
 
   @moduletag :tmp_dir
 
@@ -269,8 +269,7 @@ defmodule Electric.ShapeCacheTest do
 
       assert_receive {:DOWN, ^consumer_ref, :process, _pid, :some_reason}
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(shape_handle)
 
       # should have cleaned up the shape
       assert :error == ShapeStatus.fetch_shape_by_handle(ctx.stack_id, shape_handle)
@@ -784,8 +783,7 @@ defmodule Electric.ShapeCacheTest do
         assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, time_to_wait
       end
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(shape_handle)
     end
 
     test "propagates error in snapshot creation to listeners", ctx do

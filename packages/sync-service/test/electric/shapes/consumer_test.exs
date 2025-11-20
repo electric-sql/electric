@@ -24,11 +24,11 @@ defmodule Electric.Shapes.ConsumerTest do
       expect_calls: 2,
       patch_shape_status: 1,
       expect_shape_status: 1,
-      patch_snapshotter: 1
+      patch_snapshotter: 1,
+      assert_shape_cleanup: 1
     ]
 
   @receive_timeout 1_000
-  @shape_cleanup_timeout 5_000
 
   @base_inspector StubInspector.new(
                     tables: [
@@ -356,8 +356,7 @@ defmodule Electric.Shapes.ConsumerTest do
         assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
       end)
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(@shape_handle1)
 
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
@@ -415,8 +414,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(@shape_handle1)
 
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
@@ -499,8 +497,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(@shape_handle1)
     end
 
     test "cleans shapes affected by a relation change", ctx do
@@ -536,8 +533,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(@shape_handle1)
 
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
@@ -607,8 +603,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(@shape_handle1)
 
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
@@ -621,8 +616,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)
 
-      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle1},
-                     @shape_cleanup_timeout
+      assert_shape_cleanup(@shape_handle1)
 
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
 
