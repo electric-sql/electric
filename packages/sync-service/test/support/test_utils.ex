@@ -4,6 +4,8 @@ defmodule Support.TestUtils do
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Shape
 
+  require ExUnit.Assertions
+
   @doc """
   Preprocess a list of `Changes.data_change()` structs in the same way they
   are preprocessed before reaching storage.
@@ -213,6 +215,13 @@ defmodule Support.TestUtils do
 
   def patch_shape_cache(opts \\ [], funs) do
     patch_calls(Electric.ShapeCache, opts, funs)
+  end
+
+  def assert_shape_cleanup(shape_handle, timeout \\ 5000) do
+    ExUnit.Assertions.assert_receive(
+      {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle},
+      timeout
+    )
   end
 
   def activate_mocks_for_descendant_procs(mod) do

@@ -97,6 +97,10 @@ defmodule Electric.ShapeCleanerTest do
 
         assert_receive :shape_log_collector_ready, 1000
 
+        # don't suspend consumers in this test -- we don want them terminating
+        # themselves before we clean them up
+        Electric.StackConfig.put(ctx.stack_id, :shape_enable_suspend?, false)
+
         :ok
       end
 
@@ -153,9 +157,9 @@ defmodule Electric.ShapeCleanerTest do
 
         :ok = @cleanup_fn.(ctx.stack_id, shape_handle)
 
-        assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
+        assert_shape_cleanup(shape_handle)
 
-        assert_receive {ShapeCleaner, :cleanup, ^shape_handle}
+        assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}
 
         assert_receive {^registry_ref, :shape_rotation}
 
@@ -175,7 +179,8 @@ defmodule Electric.ShapeCleanerTest do
 
         :ok = ShapeCleaner.remove_shape(ctx.stack_id, "my-shape")
 
-        assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, "my-shape"}
+        assert_shape_cleanup("my-shape")
+
         assert [] = ShapeLogCollector.active_shapes(ctx.stack_id)
       end
 
@@ -261,6 +266,8 @@ defmodule Electric.ShapeCleanerTest do
           ctx.stack_id,
           [{@shape.root_table_id, {"public", "items"}}]
         )
+
+      assert_shape_cleanup(shape_handle)
 
       # Allow asynchronous queued removal to complete
       assert_receive {:DOWN, ^consumer_ref, :process, _pid, {:shutdown, :cleanup}}, 1_000

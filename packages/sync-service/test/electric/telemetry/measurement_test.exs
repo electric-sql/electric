@@ -3,10 +3,13 @@ defmodule Electric.Telemetry.MeasurementTest do
 
   alias Electric.Telemetry.Measurement
 
+  setup(ctx) do
+    [table_name: :"#{Path.basename(ctx.file)}:#{ctx.line}"]
+  end
+
   describe "init/1" do
-    test "initializes tables with correct options" do
-      name = :test_measurement_init
-      measurement = Measurement.init(name)
+    test "initializes tables with correct options", %{table_name: table_name} do
+      measurement = Measurement.init(table_name)
 
       assert %Measurement{table: table} = measurement
 
@@ -17,17 +20,16 @@ defmodule Electric.Telemetry.MeasurementTest do
       assert :ets.info(table)[:type] == :set
     end
 
-    test "creates named tables" do
-      name = :test_measurement_named
-      Measurement.init(name)
+    test "creates named tables", %{table_name: table_name} do
+      Measurement.init(table_name)
 
-      assert :ets.whereis(name) != :undefined
+      assert :ets.whereis(table_name) != :undefined
     end
   end
 
   describe "handle_counter/2" do
-    setup do
-      measurement = Measurement.init(:test_counter)
+    setup(ctx) do
+      measurement = Measurement.init(ctx.table_name)
       %{measurement: measurement}
     end
 
