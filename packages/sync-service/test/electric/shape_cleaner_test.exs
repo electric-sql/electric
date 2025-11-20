@@ -97,6 +97,10 @@ defmodule Electric.ShapeCleanerTest do
 
         assert_receive :shape_log_collector_ready, 1000
 
+        # don't suspend consumers in this test -- we don want them terminating
+        # themselves before we clean them up
+        Electric.StackConfig.put(ctx.stack_id, :shape_enable_suspend?, false)
+
         :ok
       end
 
