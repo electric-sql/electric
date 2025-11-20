@@ -414,7 +414,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       refute_received {:materializer_changes, _, _}
     end
 
-    test "runtime move_out event removes row but value remains if another row has same value", ctx do
+    test "runtime move_out event removes row but value remains if another row has same value",
+         ctx do
       ctx = with_materializer(ctx)
 
       Materializer.new_changes(ctx, [

@@ -1,16 +1,16 @@
 defmodule Electric.Shapes.Consumer.MoveHandling do
   @moduledoc false
-
-  alias Electric.Shapes.PartialModes
   alias Electric.ShapeCache.Storage
-  alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.PartialModes
   alias Electric.Shapes.Shape
+  alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Shapes.Consumer.MoveHandlingState
 
   @spec process_move_ins(State.t(), Shape.handle(), list(term())) :: State.t()
   def process_move_ins(state, _, []), do: state
 
-  def process_move_ins(state, dep_handle, new_values) do
+  def process_move_ins(%State{} = state, dep_handle, new_values) do
     # Something moved in in a dependency shape. We need to query the DB for relevant values.
     formed_where_clause =
       Shape.SubqueryMoves.move_in_where_clause(state.shape, dep_handle, new_values)
@@ -41,7 +41,10 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         move_in_name: name
       )
 
-    State.add_waiting_move_in(state, name, pg_snapshot)
+    move_handling_state =
+      MoveHandlingState.add_waiting_move_in(state.move_handling_state, name, pg_snapshot)
+
+    %{state | move_handling_state: move_handling_state}
   end
 
   @spec process_move_outs(State.t(), Shape.handle(), list(term())) ::
@@ -57,15 +60,18 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
     {%{state | writer: writer}, {[message], upper_bound}}
   end
 
-  @spec query_complete(State.t(), State.move_in_name(), list(String.t())) ::
+  @spec query_complete(State.t(), MoveHandlingState.move_in_name(), list(String.t())) ::
           {State.t(), notification :: term()}
-  def query_complete(state, name, key_set) do
+  def query_complete(%State{} = state, name, key_set) do
     # 1. Splice the stored data into the main log
     {{_, upper_bound} = bounds, writer} =
       Storage.append_move_in_snapshot_to_log!(name, state.writer)
 
     # 2. Remove this entry from "waiting" and add to "filtering"
-    state = State.change_move_in_to_filtering(%{state | writer: writer}, name, key_set)
+    move_handling_state =
+      MoveHandlingState.change_move_in_to_filtering(state.move_handling_state, name, key_set)
+
+    state = %{state | move_handling_state: move_handling_state, writer: writer}
 
     {state, {bounds, upper_bound}}
   end

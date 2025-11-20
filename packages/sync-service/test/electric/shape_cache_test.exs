@@ -992,7 +992,7 @@ defmodule Electric.ShapeCacheTest do
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      ref = Shapes.Consumer.monitor(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
 
       ShapeLogCollector.store_transaction(
         %Changes.Transaction{
@@ -1006,7 +1006,7 @@ defmodule Electric.ShapeCacheTest do
         ctx.shape_log_collector
       )
 
-      assert_receive {Shapes.Consumer, ^ref, @xid}
+      assert_receive {^ref, :new_changes, ^offset}
 
       {^shape_handle, ^offset} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 

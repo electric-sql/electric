@@ -36,6 +36,7 @@ defmodule Electric.Replication.Changes do
 
   defmodule Transaction do
     alias Electric.Replication.Changes
+    require Electric.Postgres.Xid
 
     @type t() :: %__MODULE__{
             xid: Changes.xid() | nil,
@@ -87,6 +88,8 @@ defmodule Electric.Replication.Changes do
       }
     end
 
+    require Electric.Postgres.Xid
+
     @doc """
     Check if a transaction is visible in a snapshot.
     """
@@ -101,9 +104,10 @@ defmodule Electric.Replication.Changes do
     def visible_in_snapshot?(%__MODULE__{xid: xid}, snapshot) when is_tuple(snapshot),
       do: visible_in_snapshot?(xid, snapshot)
 
-    def visible_in_snapshot?(xid, {xmin, xmax, xip_list}) when is_integer(xid) do
-      Xid.compare(xid, xmin) == :lt or (Xid.compare(xid, xmax) == :lt and xid not in xip_list)
-    end
+    def visible_in_snapshot?(xid, {xmin, _, _}) when Xid.is_lt(xid, xmin), do: true
+    def visible_in_snapshot?(xid, {_, xmax, _}) when not Xid.is_lt(xid, xmax), do: false
+    def visible_in_snapshot?(_, {_, _, []}), do: true
+    def visible_in_snapshot?(xid, {_, _, xip_list}), do: xid not in xip_list
   end
 
   defmodule NewRecord do

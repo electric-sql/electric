@@ -308,8 +308,8 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      ref1 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle1)
-      ref2 = Shapes.Consumer.monitor(ctx.stack_id, @shape_handle2)
+      ref1 = Shapes.Consumer.register_for_changes(ctx.stack_id, @shape_handle1)
+      ref2 = Shapes.Consumer.register_for_changes(ctx.stack_id, @shape_handle2)
 
       expect_shape_status(set_latest_offset: fn _, @shape_handle2, _offset -> :ok end)
 
@@ -331,8 +331,8 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
 
-      refute_receive {Shapes.Consumer, ^ref1, 150}
-      assert_receive {Shapes.Consumer, ^ref2, 150}
+      refute_receive {^ref1, :new_changes, _}
+      assert_receive {^ref2, :new_changes, _}
     end
 
     test "handles truncate without appending to log", ctx do
@@ -670,7 +670,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       lsn = Lsn.from_integer(10)
 
-      ref = Shapes.Consumer.monitor(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
 
       txn =
         %Transaction{
@@ -692,7 +692,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
-      assert_receive {Shapes.Consumer, ^ref, 11}
+      expected_offset = LogOffset.new(lsn, 2)
+      assert_receive {^ref, :new_changes, ^expected_offset}
 
       shape_storage = Storage.for_shape(shape_handle, storage)
 
@@ -704,7 +705,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.store_transaction(txn, ctx.producer)
 
       # We should not re-process the same transaction
-      refute_receive {Shapes.Consumer, ^ref, 11}
+      refute_receive {^ref, :new_changes, _}
 
       assert [^op1, ^op2] =
                Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
@@ -722,7 +723,9 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn1 = Lsn.from_integer(9)
       lsn2 = Lsn.from_integer(10)
 
-      ref = Shapes.Consumer.monitor(ctx.stack_id, shape_handle)
+      assert_receive {:snapshot, ^shape_handle}
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
 
       txn1 =
         %Transaction{
@@ -765,7 +768,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert_receive {Shapes.Consumer, ^ref, 10}
+      expected_offset = LogOffset.new(lsn2, 2)
+      assert_receive {^ref, :new_changes, ^expected_offset}
 
       shape_storage = Storage.for_shape(shape_handle, storage)
 

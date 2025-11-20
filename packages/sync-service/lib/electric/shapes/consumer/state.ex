@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Consumer.State do
   @moduledoc false
-  alias Electric.Postgres.Xid
+  alias Electric.Shapes.Consumer.MoveHandlingState
+  alias Electric.Shapes.Consumer.InitialSnapshotState
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.SnapshotQuery
@@ -15,48 +16,43 @@ defmodule Electric.Shapes.Consumer.State do
     :shape,
     :hibernate_after,
     :latest_offset,
-    :initial_pg_snapshot,
     :storage,
     :writer,
-    awaiting_snapshot_start: [],
+    initial_snapshot_state: InitialSnapshotState.new(nil),
+    move_handling_state: MoveHandlingState.new(),
     buffer: [],
-    monitors: [],
     txn_offset_mapping: [],
-    snapshot_started?: false,
     materializer_subscribed?: false,
     terminating?: false,
-    buffering?: false,
-    initial_snapshot_filtering?: true,
-    waiting_move_ins: %{},
-    filtering_move_ins: [],
-    move_in_buffering_snapshot: nil
+    buffering?: false
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
   @type move_in_name() :: String.t()
 
-  @type uninitialized_t() :: %__MODULE__{
-          stack_id: Electric.stack_id(),
-          shape_handle: Shape.handle(),
-          shape: Shape.t(),
-          awaiting_snapshot_start: list(GenServer.from()),
-          buffer: list(Transaction.t()),
-          monitors: list({pid(), reference()}),
-          txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
-          snapshot_started?: boolean(),
-          materializer_subscribed?: boolean(),
-          terminating?: boolean(),
-          buffering?: boolean(),
-          initial_snapshot_filtering?: boolean(),
-          waiting_move_ins: %{move_in_name() => pg_snapshot()},
-          filtering_move_ins: list(Shape.handle()),
-          move_in_buffering_snapshot: nil | pg_snapshot(),
-          hibernate_after: non_neg_integer(),
-          latest_offset: nil,
-          initial_pg_snapshot: nil,
-          storage: nil,
-          writer: nil
-        }
+  @type uninitialized_t() :: term()
+  # @type uninitialized_t() :: %__MODULE__{
+  #         stack_id: Electric.stack_id(),
+  #         shape_handle: Shape.handle(),
+  #         shape: Shape.t(),
+  #         awaiting_snapshot_start: list(GenServer.from()),
+  #         buffer: list(Transaction.t()),
+  #         monitors: list({pid(), reference()}),
+  #         txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
+  #         snapshot_started?: boolean(),
+  #         materializer_subscribed?: boolean(),
+  #         terminating?: boolean(),
+  #         buffering?: boolean(),
+  #         initial_snapshot_filtering?: boolean(),
+  #         waiting_move_ins: %{move_in_name() => pg_snapshot()},
+  #         filtering_move_ins: list(Shape.handle()),
+  #         move_in_buffering_snapshot: nil | pg_snapshot(),
+  #         hibernate_after: non_neg_integer(),
+  #         latest_offset: nil,
+  #         initial_pg_snapshot: nil,
+  #         storage: nil,
+  #         writer: nil
+  #       }
 
   @typedoc """
   State of the consumer process.
@@ -95,28 +91,37 @@ defmodule Electric.Shapes.Consumer.State do
 
   Buffer is stored in reverse order.
   """
-  @type t() :: %__MODULE__{
-          stack_id: Electric.stack_id(),
-          shape_handle: Shape.handle(),
-          shape: Shape.t(),
-          awaiting_snapshot_start: list(GenServer.from()),
-          buffer: list(Transaction.t()),
-          monitors: list({pid(), reference()}),
-          txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
-          snapshot_started?: boolean(),
-          materializer_subscribed?: boolean(),
-          terminating?: boolean(),
-          buffering?: boolean(),
-          initial_snapshot_filtering?: boolean(),
-          waiting_move_ins: %{move_in_name() => pg_snapshot()},
-          filtering_move_ins: list(Shape.handle()),
-          move_in_buffering_snapshot: nil | pg_snapshot(),
-          hibernate_after: non_neg_integer(),
-          latest_offset: LogOffset.t(),
-          initial_pg_snapshot: nil | pg_snapshot(),
-          storage: Storage.shape_storage(),
-          writer: Storage.writer_state()
-        }
+  @type t() :: term()
+  # @type t() :: %__MODULE__{
+  #         stack_id: Electric.stack_id(),
+  #         shape_handle: Shape.handle(),
+  #         shape: Shape.t(),
+  #         awaiting_snapshot_start: list(GenServer.from()),
+  #         buffer: list(Transaction.t()),
+  #         monitors: list({pid(), reference()}),
+  #         txn_offset_mapping: list({LogOffset.t(), LogOffset.t()}),
+  #         snapshot_started?: boolean(),
+  #         materializer_subscribed?: boolean(),
+  #         terminating?: boolean(),
+  #         buffering?: boolean(),
+  #         initial_snapshot_filtering?: boolean(),
+  #         waiting_move_ins: %{move_in_name() => pg_snapshot()},
+  #         filtering_move_ins: list(Shape.handle()),
+  #         move_in_buffering_snapshot: nil | pg_snapshot(),
+  #         hibernate_after: non_neg_integer(),
+  #         latest_offset: LogOffset.t(),
+  #         initial_pg_snapshot: nil | pg_snapshot(),
+  #         storage: Storage.shape_storage(),
+  #         writer: Storage.writer_state()
+  #       }
+
+  defguard is_snapshot_started(state)
+           when is_struct(state.initial_snapshot_state, InitialSnapshotState) and
+                  state.initial_snapshot_state.snapshot_started?
+
+  defguard needs_initial_filtering(state)
+           when is_struct(state.initial_snapshot_state, InitialSnapshotState) and
+                  state.initial_snapshot_state.filtering?
 
   @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: uninitialized_t()
   def new(stack_id, shape_handle, shape) do
@@ -146,87 +151,16 @@ defmodule Electric.Shapes.Consumer.State do
         do: LogOffset.last_before_real_offsets(),
         else: latest_offset
 
-    {pg_snapshot, filtering?} =
-      case pg_snapshot do
-        nil ->
-          {nil, true}
-
-        %{xmin: xmin, xmax: xmax, xip_list: xip_list} ->
-          {{xmin, xmax, xip_list}, Map.get(pg_snapshot, :filter_txns?, true)}
-      end
+    initial_snapshot_state = InitialSnapshotState.new(pg_snapshot)
 
     %__MODULE__{
       state
       | latest_offset: normalized_latest_offset,
-        initial_pg_snapshot: pg_snapshot,
         storage: storage,
         writer: writer,
-        buffering?: is_nil(pg_snapshot),
-        initial_snapshot_filtering?: filtering?
+        initial_snapshot_state: initial_snapshot_state,
+        buffering?: InitialSnapshotState.needs_buffering?(initial_snapshot_state)
     }
-  end
-
-  @doc """
-  Add information about a new move-in to the state for which we're waiting
-  and update the buffering boundary.
-  """
-  @spec add_waiting_move_in(t(), move_in_name(), pg_snapshot()) :: t()
-  def add_waiting_move_in(%__MODULE__{waiting_move_ins: waiting_move_ins} = state, name, snapshot) do
-    new_waiting_move_ins = Map.put(waiting_move_ins, name, snapshot)
-    new_buffering_snapshot = make_move_in_buffering_snapshot(new_waiting_move_ins)
-
-    %{
-      state
-      | waiting_move_ins: new_waiting_move_ins,
-        move_in_buffering_snapshot: new_buffering_snapshot
-    }
-  end
-
-  @spec make_move_in_buffering_snapshot(%{move_in_name() => pg_snapshot()}) :: nil | pg_snapshot()
-  # The fake global snapshot allows us to check if a transaction is not visible in any of the pending snapshots
-  # instead of checking each snapshot individually.
-  defp make_move_in_buffering_snapshot(waiting_move_ins) when waiting_move_ins == %{}, do: nil
-
-  defp make_move_in_buffering_snapshot(waiting_move_ins) do
-    waiting_move_ins
-    |> Map.values()
-    |> Enum.reduce({:infinity, -1, []}, fn {xmin, xmax, xip_list},
-                                           {global_xmin, global_xmax, global_xip_list} ->
-      {Kernel.min(global_xmin, xmin), Kernel.max(global_xmax, xmax), global_xip_list ++ xip_list}
-    end)
-  end
-
-  @doc """
-  Change a move-in from "waiting" to "filtering" and update the buffering boundary.
-  """
-  @spec change_move_in_to_filtering(t(), move_in_name(), list(String.t())) :: t()
-  def change_move_in_to_filtering(%__MODULE__{} = state, name, key_set) do
-    {snapshot, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
-    filtering_move_ins = [{snapshot, key_set} | state.filtering_move_ins]
-    buffering_snapshot = make_move_in_buffering_snapshot(waiting_move_ins)
-
-    %{
-      state
-      | waiting_move_ins: waiting_move_ins,
-        filtering_move_ins: filtering_move_ins,
-        move_in_buffering_snapshot: buffering_snapshot
-    }
-  end
-
-  @doc """
-  Remove completed move-ins from the state.
-
-  Move-in is considered "completed" (i.e. not included in the filtering logic)
-  once we see any transaction that is after the end of the move-in snapshot.
-
-  Filtering generally is applied only to transactions that are already visible
-  in the snapshot, and those can only be with `xid < xmax`.
-  """
-  @spec remove_completed_move_ins(t(), Transaction.t()) :: t()
-  def remove_completed_move_ins(%__MODULE__{} = state, %Transaction{xid: xid}) do
-    state.filtering_move_ins
-    |> Enum.reject(fn {snapshot, _} -> Xid.after_snapshot?(xid, snapshot) end)
-    |> then(&%{state | filtering_move_ins: &1})
   end
 
   @doc """
@@ -247,58 +181,49 @@ defmodule Electric.Shapes.Consumer.State do
     end
   end
 
-  @doc """
-  Add a process to be notified of any changes to the shape.
-  """
-  @spec add_monitor(t(), pid(), reference()) :: t()
-  def add_monitor(%__MODULE__{monitors: monitors} = state, pid, ref) do
-    %{state | monitors: [{pid, ref} | monitors]}
-  end
-
-  @spec set_initial_snapshot(t(), pg_snapshot()) :: t()
-  def set_initial_snapshot(
-        %__MODULE__{initial_pg_snapshot: nil} = state,
-        {xmin, xmax, xip_list} = snapshot
-      ) do
-    # We're not changing snapshot storage format for backwards compatibility.
-    Storage.set_pg_snapshot(
-      %{xmin: xmin, xmax: xmax, xip_list: xip_list, filter_txns?: true},
-      state.storage
-    )
-
-    %{state | initial_pg_snapshot: snapshot, initial_snapshot_filtering?: true, buffering?: false}
-  end
-
   @spec add_to_buffer(t(), Transaction.t()) :: t()
   def add_to_buffer(%__MODULE__{buffer: buffer} = state, txn) do
     %{state | buffer: [txn | buffer]}
   end
 
-  @spec maybe_stop_initial_filtering(t(), Transaction.t()) :: t()
-  def maybe_stop_initial_filtering(
-        %__MODULE__{initial_pg_snapshot: {xmin, xmax, xip_list} = snapshot} = state,
-        %Transaction{xid: xid}
-      ) do
-    if Xid.after_snapshot?(xid, snapshot) do
-      Storage.set_pg_snapshot(
-        %{xmin: xmin, xmax: xmax, xip_list: xip_list, filter_txns?: false},
-        state.storage
-      )
-
-      %{state | initial_snapshot_filtering?: false}
-    else
+  @spec add_waiter(t(), GenServer.from()) :: t()
+  def add_waiter(%__MODULE__{initial_snapshot_state: initial_snapshot_state} = state, from) do
+    %{
       state
-    end
+      | initial_snapshot_state: InitialSnapshotState.add_waiter(initial_snapshot_state, from)
+    }
   end
 
-  @spec initial_snapshot_xmin(t()) :: nil | Xid.anyxid()
-  def initial_snapshot_xmin(%__MODULE__{initial_pg_snapshot: {xmin, _, _}}), do: xmin
-  def initial_snapshot_xmin(%__MODULE__{initial_pg_snapshot: nil}), do: nil
+  def set_initial_snapshot(
+        %__MODULE__{initial_snapshot_state: initial_snapshot_state} = state,
+        snapshot
+      ) do
+    initial_snapshot_state =
+      InitialSnapshotState.set_initial_snapshot(initial_snapshot_state, state.storage, snapshot)
 
-  def set_snapshot_started(%__MODULE__{snapshot_started?: true} = state), do: state
-
-  def set_snapshot_started(%__MODULE__{} = state) do
-    Storage.mark_snapshot_as_started(state.storage)
-    %{state | snapshot_started?: true}
+    %{
+      state
+      | initial_snapshot_state: initial_snapshot_state,
+        buffering?: InitialSnapshotState.needs_buffering?(initial_snapshot_state)
+    }
   end
+
+  def mark_snapshot_started(%__MODULE__{initial_snapshot_state: initial_snapshot_state} = state) do
+    initial_snapshot_state =
+      InitialSnapshotState.mark_snapshot_started(initial_snapshot_state, state.storage)
+
+    %{state | initial_snapshot_state: initial_snapshot_state}
+  end
+
+  def reply_to_snapshot_waiters(state, reason) do
+    initial_snapshot_state =
+      InitialSnapshotState.reply_to_waiters(state.initial_snapshot_state, reason)
+
+    %{state | initial_snapshot_state: initial_snapshot_state}
+  end
+
+  def initial_snapshot_xmin(%__MODULE__{initial_snapshot_state: %{pg_snapshot: {xmin, _, _}}}),
+    do: xmin
+
+  def initial_snapshot_xmin(%__MODULE__{}), do: nil
 end
