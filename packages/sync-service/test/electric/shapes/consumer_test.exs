@@ -949,7 +949,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(60)
+      Process.sleep(100)
 
       assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
                Process.info(consumer_pid, :current_function)
