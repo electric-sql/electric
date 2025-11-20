@@ -58,6 +58,11 @@ defmodule Electric.Shapes.ConsumerTest do
                            storage: %{compaction: :enabled}
                          )
 
+  @shape_with_subquery Shape.new!("public.test_table",
+                         inspector: @base_inspector,
+                         where: "id IN (SELECT id FROM public.other_table)"
+                       )
+
   @shape_position %{
     @shape_handle1 => %{
       latest_offset: LogOffset.new(Lsn.from_string("0/10"), 0),
@@ -880,8 +885,9 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:flush_boundary_updated, 301}, 1_000
     end
 
-    @tag hibernate_after: 1, with_pure_file_storage_opts: [flush_period: 1]
-    test "should hibernate after :hibernate_after ms", ctx do
+    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: true
+    test "should terminate after :hibernate_after ms", ctx do
       {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
       Registry.register(name, key, nil)
 
@@ -889,6 +895,10 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn1 = Lsn.from_integer(300)
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
 
       txn = [
         %Begin{xid: 2},
@@ -904,9 +914,48 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
-      Process.sleep(20)
+      Process.sleep(60)
 
-      consumer_pid = Consumer.name(ctx.stack_id, shape_handle) |> GenServer.whereis()
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+
+      refute Consumer.whereis(ctx.stack_id, shape_handle)
+    end
+
+    @tag hibernate_after: 10, with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: true
+    test "should hibernate not suspend if has dependencies", ctx do
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      lsn1 = Lsn.from_integer(300)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+
+      assert {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+
+      assert [dependent_shape_handle] = shape.shape_dependencies_handles
+
+      txn = [
+        %Begin{xid: 2},
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "21"},
+          log_offset: LogOffset.new(lsn1, 0)
+        },
+        %Commit{lsn: lsn1}
+      ]
+
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      Process.sleep(60)
 
       assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
                Process.info(consumer_pid, :current_function)
@@ -915,6 +964,15 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
                Process.info(consumer_pid, :current_function)
+
+      dependent_consumer_pid = Consumer.whereis(ctx.stack_id, dependent_shape_handle)
+
+      Process.sleep(20)
+
+      assert {:current_function, {:gen_server, :loop_hibernate, 4}} =
+               Process.info(dependent_consumer_pid, :current_function)
+
+      assert is_pid(Consumer.whereis(ctx.stack_id, shape_handle))
     end
 
     @tag with_pure_file_storage_opts: [compaction_period: 5, keep_complete_chunks: 133]

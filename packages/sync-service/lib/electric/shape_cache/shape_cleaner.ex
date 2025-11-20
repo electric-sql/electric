@@ -15,9 +15,11 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @type stack_id() :: Electric.stack_id()
 
   @shutdown_cleanup {:shutdown, :cleanup}
+  @shutdown_suspend {:shutdown, :suspend}
 
   # Public API
   def consumer_cleanup_reason, do: @shutdown_cleanup
+  def consumer_suspend_reason, do: @shutdown_suspend
 
   @spec remove_shapes(stack_id(), [shape_handle()], term()) :: :ok | {:error, term()}
   def remove_shapes(stack_id, shape_handles, reason \\ @shutdown_cleanup)
@@ -76,12 +78,21 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     end)
   end
 
+  @type reason() :: {:shutdown, :cleanup} | {:shutdown, :suspend} | term()
+  @spec handle_writer_termination(stack_id(), shape_handle(), reason()) :: :removed | :ok
   def handle_writer_termination(stack_id, shape_handle, @shutdown_cleanup) do
     Logger.info("Removing shape #{inspect(shape_handle)}")
 
     remove_shape_async(stack_id, shape_handle)
 
     :removed
+  end
+
+  def handle_writer_termination(stack_id, shape_handle, @shutdown_suspend) do
+    # deregister the consumer without removing it from the rest of the system
+    # the next time a txn comes in matching this consumer it will be re-started
+    # by the consumer registry as per any other lazily loaded consumer
+    Electric.Shapes.ConsumerRegistry.remove_consumer(shape_handle, stack_id)
   end
 
   def handle_writer_termination(_stack_id, _shape_handle, reason)

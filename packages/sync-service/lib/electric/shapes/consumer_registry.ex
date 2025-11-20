@@ -17,6 +17,8 @@ defmodule Electric.Shapes.ConsumerRegistry do
           stack_id: stack_id()
         }
 
+  @consumer_suspend_reason Electric.ShapeCache.ShapeCleaner.consumer_suspend_reason()
+
   def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     {:via, __MODULE__, {stack_id, shape_handle}}
   end
@@ -67,22 +69,36 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @spec publish([shape_handle()], term(), t()) :: :ok
+  def publish([], _event, _registry_state) do
+    :ok
+  end
+
   def publish(shape_handles, event, registry_state) do
     %{table: table} = registry_state
 
     shape_handles
-    |> Enum.flat_map(fn handle ->
-      (consumer_pid(handle, table) || start_consumer!(handle, registry_state))
-      |> List.wrap()
+    |> Enum.map(fn handle ->
+      {handle, consumer_pid(handle, table) || start_consumer!(handle, registry_state)}
     end)
     |> broadcast(event)
+    |> publish(event, registry_state)
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
   def remove_consumer(shape_handle, %__MODULE__{table: table}) do
+    do_remove_consumer(shape_handle, table)
+  end
+
+  @spec remove_consumer(shape_handle(), stack_id()) :: :ok
+  def remove_consumer(shape_handle, stack_id) when is_stack_id(stack_id) do
+    do_remove_consumer(shape_handle, ets_name(stack_id))
+  end
+
+  @spec do_remove_consumer(shape_handle(), :ets.table()) :: :ok
+  defp do_remove_consumer(shape_handle, table) when is_atom(table) or is_reference(table) do
     :ets.delete(table, shape_handle)
 
-    Logger.debug(fn -> "Stopped and removed consumer #{shape_handle}" end)
+    Logger.debug(fn -> "Removed consumer #{shape_handle}" end)
 
     :ok
   end
@@ -96,25 +112,38 @@ defmodule Electric.Shapes.ConsumerRegistry do
   There is no timeout so if the GenServers do not respond or die, this
   function will block indefinitely.
   """
-  @spec broadcast([pid()], term()) :: :ok
-  def broadcast(pids, message) do
+  @spec broadcast([{shape_handle(), pid()}], term()) :: [shape_handle()]
+  def broadcast(handle_pids, message) do
     # Based on OTP GenServer.call, see:
     # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
-    pids
-    |> Enum.map(fn pid ->
+    handle_pids
+    |> Enum.map(fn {handle, pid} ->
       ref = Process.monitor(pid)
       send(pid, {:"$gen_call", {self(), ref}, message})
-      ref
+      {handle, ref}
     end)
-    |> Enum.each(fn ref ->
+    |> Enum.flat_map(fn {handle, ref} ->
       receive do
         {^ref, _reply} ->
           Process.demonitor(ref, [:flush])
-          :ok
+          []
+
+        {:DOWN, ^ref, _, _, @consumer_suspend_reason} ->
+          # Catch the race condition where a consumer is in the act of
+          # suspending as the txn arrives by retrying those handles (which will
+          # start a new consumer instance).
+          [handle]
 
         {:DOWN, ^ref, _, _, _reason} ->
-          :ok
+          []
       end
+    end)
+    |> tap(fn
+      [] ->
+        :ok
+
+      suspended_handles ->
+        Logger.debug(fn -> ["Re-trying suspended shape handles ", inspect(suspended_handles)] end)
     end)
   end
 
@@ -150,7 +179,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @doc false
   def registry_table(stack_id) do
-    :ets.new(ets_name(stack_id), [:public, :named_table, write_concurrency: :auto])
+    :ets.new(ets_name(stack_id), [
+      :public,
+      :named_table,
+      write_concurrency: :auto,
+      read_concurrency: true
+    ])
   end
 
   def new(stack_id, opts \\ []) when is_binary(stack_id) do

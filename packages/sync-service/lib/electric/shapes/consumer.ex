@@ -361,9 +361,33 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info(:timeout, state) do
-    state = %{state | writer: ShapeCache.Storage.hibernate(state.writer)}
+    # we can only suspend (terminate) the consumer process if
+    #
+    # 1. Consumer suspend has been enabled in the stack config
+    # 2. we're not waiting for snapshot information
+    # 3. we are not part of a subquery dependency tree, that is either
+    #   a. we have no dependent shapes
+    #   b. we don't have a materializer subscribed
 
-    {:noreply, state, :hibernate}
+    if consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
+      Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
+      {:stop, ShapeCleaner.consumer_suspend_reason(), state}
+    else
+      state = %{state | writer: ShapeCache.Storage.hibernate(state.writer)}
+
+      {:noreply, state, :hibernate}
+    end
+  end
+
+  defp consumer_suspend_enabled?(%{stack_id: stack_id}) do
+    # TODO: remove additional feature flag check once feature is stabilised
+    Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true) and
+      "suspend_consumers" in Electric.StackConfig.lookup(stack_id, :feature_flags, [])
+  end
+
+  defp consumer_can_suspend?(state) do
+    state.snapshot_started and Enum.empty?(state.shape.shape_dependencies_handles) and
+      not state.materializer_subscribed?
   end
 
   @impl GenServer

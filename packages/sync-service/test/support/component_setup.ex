@@ -112,7 +112,8 @@ defmodule Support.ComponentSetup do
              inspector: Map.get(ctx, :inspector, nil),
              shape_changes_registry:
                Map.get(ctx, :registry, Electric.StackSupervisor.registry_name(stack_id)),
-             shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000)
+             shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000),
+             feature_flags: Electric.Config.get_env(:feature_flags)
            ],
            seed_config
          )}
@@ -456,7 +457,8 @@ defmodule Support.ComponentSetup do
            registry_partitions: 1,
            shape_cleaner_opts: shape_cleaner_opts(ctx)
          ],
-         manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false)},
+         manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
+         feature_flags: Electric.Config.get_env(:feature_flags)},
         restart: :temporary,
         significant: false
       )
