@@ -62,6 +62,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   # Directory for storing metadata
   @metadata_storage_dir ".meta"
+  @metadata_bool_fields metadata_boolean_fields()
 
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -588,6 +589,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
     LogFile.trim(json_file(opts, suffix), log_search_start_pos, last_persisted_offset)
   end
 
+  # optimization for snapshot started boolean to avoid expensive file open
+  defp read_metadata!(%__MODULE__{} = opts, key) when key in @metadata_bool_fields,
+    do: FileInfo.exists?(shape_metadata_path(opts, "#{key}.bin"))
+
   defp read_metadata!(%__MODULE__{} = opts, key) do
     case File.open(
            shape_metadata_path(opts, "#{key}.bin"),
@@ -650,6 +655,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
   # we need this because macro expects a compile-time atom
   for key <- @cached_keys do
     defp get_cached_by_key(meta, unquote(key)), do: storage_meta(meta, unquote(key))
+  end
+
+  defp write_metadata!(%__MODULE__{} = opts, key, value) when key in @metadata_bool_fields do
+    path = Path.join(shape_metadata_dir(opts), "#{key}.bin")
+
+    if value,
+      do: write!(path, <<>>, [:write, :raw]),
+      else: Electric.AsyncDeleter.delete(opts.stack_id, path)
   end
 
   defp write_metadata!(%__MODULE__{} = opts, key, value) do
