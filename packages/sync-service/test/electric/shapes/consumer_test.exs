@@ -144,9 +144,8 @@ defmodule Electric.Shapes.ConsumerTest do
       Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, storage)
 
       patch_shape_status(
-        initialise_shape: fn _, _shape_handle, _, _ -> :ok end,
-        set_snapshot_xmin: fn _, _shape_handle, _ -> :ok end,
-        mark_snapshot_started: fn _, _shape_handle -> :ok end,
+        initialise_shape: fn _, _shape_handle, _ -> :ok end,
+        mark_snapshot_as_started: fn _, _shape_handle -> :ok end,
         fetch_shape_by_handle: fn _, shape_handle -> Map.fetch(ctx.shapes, shape_handle) end,
         get_existing_shape: fn
           _, @shape1 -> {@shape_handle1, @shape1}

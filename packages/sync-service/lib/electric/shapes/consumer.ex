@@ -176,7 +176,6 @@ defmodule Electric.Shapes.Consumer do
       ShapeCache.ShapeStatus.initialise_shape(
         stack_id,
         shape_handle,
-        pg_snapshot[:xmin],
         normalized_latest_offset
       )
 
@@ -589,24 +588,10 @@ defmodule Electric.Shapes.Consumer do
 
   defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) when not is_nil(pg_snapshot) do
     ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
-    set_pg_snapshot(pg_snapshot, %{state | pg_snapshot: pg_snapshot})
+    %{state | pg_snapshot: pg_snapshot}
   end
 
-  defp set_pg_snapshot(
-         %{xmin: xmin},
-         %{
-           pg_snapshot: %{xmin: xmin},
-           shape_handle: shape_handle
-         } = state
-       ) do
-    unless ShapeCache.ShapeStatus.set_snapshot_xmin(state.stack_id, shape_handle, xmin),
-      do:
-        Logger.warning(
-          "Got snapshot information for a #{shape_handle}, that shape id is no longer valid. Ignoring."
-        )
-
-    state
-  end
+  defp set_pg_snapshot(_, state), do: state
 
   defp set_snapshot_started(%{snapshot_started: false} = state) do
     ShapeCache.Storage.mark_snapshot_as_started(state.storage)
@@ -614,7 +599,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp set_snapshot_started(%{shape_handle: shape_handle} = state) do
-    :ok = ShapeCache.ShapeStatus.mark_snapshot_started(state.stack_id, shape_handle)
+    :ok = ShapeCache.ShapeStatus.mark_snapshot_as_started(state.stack_id, shape_handle)
     reply_to_snapshot_waiters(state, :started)
   end
 

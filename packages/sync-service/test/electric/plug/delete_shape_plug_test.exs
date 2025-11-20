@@ -155,7 +155,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
 
       :ok =
-        Electric.ShapeCache.ShapeStatus.initialise_shape(stack_id, shape_handle, 1234, :something)
+        Electric.ShapeCache.ShapeStatus.initialise_shape(stack_id, shape_handle, :something)
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 
