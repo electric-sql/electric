@@ -5,7 +5,6 @@ defmodule Electric.Postgres.ReplicationClient do
   use Postgrex.ReplicationConnection
 
   alias Electric.Postgres.LogicalReplication.Decoder
-  alias Electric.Postgres.LogicalReplication.Messages
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
@@ -388,29 +387,54 @@ defmodule Electric.Postgres.ReplicationClient do
     #     message_type <> " :: " <> inspect(Map.from_struct(msg))
     # )
 
-    case MessageConverter.convert(msg, state.message_converter) do
-      {:error, reason, _} ->
+    with {:ok, operations, converter} <- MessageConverter.convert(msg, state.message_converter) do
+      {OperationBatcher.batch(
+         operations,
+         state.max_operation_batch_size,
+         state.operation_batcher
+       ), converter}
+    end
+    |> case do
+      {:error, reason} ->
         {:disconnect, {:irrecoverable_slot, reason}}
 
-      {operations, message_converter} ->
-        {batch, batcher} =
-          OperationBatcher.batch(
-            operations,
-            state.max_operation_batch_size,
-            state.operation_batcher
-          )
+      {{:buffering, batcher}, converter} ->
+        {:noreply, %{state | message_converter: converter, operation_batcher: batcher}}
 
-        state = %{state | message_converter: message_converter, operation_batcher: batcher}
+      {{:ok, operations, commits, batcher}, converter} ->
+        state = %{state | message_converter: converter, operation_batcher: batcher}
 
-        {m, f, args} = state.handle_operations
+        handle_operations(operations, state)
 
-        apply_with_retries({m, f, [batch | args]}, state)
+        state = maybe_update_flush_up_to_date(state)
 
-        state
-        |> maybe_update_flush_up_to_date()
-        |> maybe_ack_message(msg)
+        {acks, state} = acknowledge_transactions(commits, state)
+
+        {:noreply, acks, state}
     end
   end
+
+  defp handle_operations(operations, state) do
+    {m, f, args} = state.handle_operations
+
+    apply_with_retries({m, f, [operations | args]}, state)
+  end
+
+  # Since we process a message at a time and flush the buffer
+  # on commit, we will only ever have one commit here
+  defp acknowledge_transactions([commit], state) do
+    state =
+      %{
+        state
+        | last_seen_txn_lsn: commit.lsn,
+          last_seen_txn_timestamp: System.monotonic_time()
+      }
+      |> update_received_wal(Lsn.to_integer(commit.lsn))
+
+    {[encode_standby_status_update(state)], state}
+  end
+
+  defp acknowledge_transactions([], state), do: {[], state}
 
   defp maybe_update_flush_up_to_date(state) do
     if MessageConverter.in_transaction?(state.message_converter) do
@@ -418,22 +442,6 @@ defmodule Electric.Postgres.ReplicationClient do
     else
       state
     end
-  end
-
-  defp maybe_ack_message(state, %Messages.Commit{lsn: lsn}) do
-    state =
-      %{
-        state
-        | last_seen_txn_lsn: lsn,
-          last_seen_txn_timestamp: System.monotonic_time()
-      }
-      |> update_received_wal(Electric.Postgres.Lsn.to_integer(lsn))
-
-    {:noreply, [encode_standby_status_update(state)], state}
-  end
-
-  defp maybe_ack_message(state, _msg) do
-    {:noreply, [], state}
   end
 
   defp encode_standby_status_update(state) do
