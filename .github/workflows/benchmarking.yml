@@ -62,6 +62,7 @@ jobs:
             --push \
             --cache-from ${{ env.REGISTRY }}/electric:canary-builder \
             --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
+            --build-context electric-telemetry=../electric-telemetry \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             --tag ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
             --target builder \

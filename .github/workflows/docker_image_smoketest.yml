@@ -36,6 +36,8 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: packages/sync-service
+          build-contexts: |
+            electric-telemetry=packages/electric-telemetry
           push: false
           load: true
           tags: 'electric-test-image'

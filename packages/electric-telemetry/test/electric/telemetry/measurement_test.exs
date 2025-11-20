@@ -1,7 +1,7 @@
-defmodule Electric.Telemetry.MeasurementTest do
+defmodule ElectricTelemetry.MeasurementTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Telemetry.Measurement
+  alias ElectricTelemetry.Measurement
 
   describe "init/1" do
     test "initializes tables with correct options" do

@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.Processes do
+defmodule ElectricTelemetry.Processes do
   @default_count 5
 
   def proc_type(pid), do: proc_type(pid, info(pid))

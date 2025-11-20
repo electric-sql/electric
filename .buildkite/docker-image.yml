@@ -18,6 +18,7 @@ steps:
       - export ELECTRIC_VERSION=$(git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p')
       - export SHORT_COMMIT_SHA=$(git rev-parse --short HEAD)
       - docker buildx build --platform linux/arm64/v8,linux/amd64 --push
+        --build-context electric-telemetry=../electric-telemetry
         --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION}
         -t $${ELECTRIC_IMAGE_NAME}:canary
         -t $${ELECTRIC_CANARY_IMAGE_NAME}:$${SHORT_COMMIT_SHA}
@@ -31,6 +32,7 @@ steps:
       - cd ./packages/sync-service
       - export ELECTRIC_VERSION=$(jq '.version' -r package.json)
       - docker buildx build --platform linux/arm64/v8,linux/amd64 --push
+        --build-context electric-telemetry=../electric-telemetry
         --build-arg ELECTRIC_VERSION=$${ELECTRIC_VERSION}
         -t $${ELECTRIC_IMAGE_NAME}:$${ELECTRIC_VERSION}
         -t $${ELECTRIC_IMAGE_NAME}:latest

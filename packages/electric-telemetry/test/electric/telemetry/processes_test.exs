@@ -1,8 +1,8 @@
-defmodule Electric.Telemetry.ProcessesTest do
+defmodule ElectricTelemetry.ProcessesTest do
   use ExUnit.Case, async: true
 
   describe "top_memory_by_type/[1, 2]" do
-    import Electric.Telemetry.Processes, only: [top_memory_by_type: 0, top_memory_by_type: 1]
+    import ElectricTelemetry.Processes, only: [top_memory_by_type: 0, top_memory_by_type: 1]
 
     test "handles dead processes" do
       parent = self()

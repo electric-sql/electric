@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.Measurement do
+defmodule ElectricTelemetry.Measurement do
   @moduledoc """
   Module for handling telemetry measurements using ETS for storage.
   Supports counters, sums, last values, unique counts, and summaries.

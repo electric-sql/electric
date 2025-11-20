@@ -1,4 +1,4 @@
-defmodule Electric.Telemetry.SystemMonitor do
+defmodule ElectricTelemetry.SystemMonitor do
   @moduledoc """
   Application-wide process that initializes Erlang's system monitor and consumes monitoring events.
 
@@ -12,7 +12,7 @@ defmodule Electric.Telemetry.SystemMonitor do
 
   use GenServer
 
-  import Electric.Telemetry.Processes, only: [proc_type: 1]
+  import ElectricTelemetry.Processes, only: [proc_type: 1]
 
   require Logger
 
@@ -21,7 +21,7 @@ defmodule Electric.Telemetry.SystemMonitor do
   @vm_monitor_long_message_queue [:vm, :monitor, :long_message_queue]
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts.intervals_and_thresholds, name: __MODULE__)
   end
 
   def init(opts) do
@@ -103,6 +103,7 @@ defmodule Electric.Telemetry.SystemMonitor do
 
   def handle_info({:monitor, pid, :long_message_queue, false}, state) do
     Logger.debug("Long message queue no longer detected for pid #{inspect(pid)}")
+
     {:noreply, %{state | long_message_queue_pids: Map.delete(state.long_message_queue_pids, pid)}}
   end
 
