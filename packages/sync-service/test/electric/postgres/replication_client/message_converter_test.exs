@@ -303,7 +303,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                %Commit{
                  lsn: @test_lsn,
                  commit_timestamp: ~U[2024-01-01 00:00:00Z],
-                 transaction_size: 10
+                 transaction_size: 10,
+                 change_count: 1
                }
              ] = changes
 

@@ -31,8 +31,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
             tx_op_index: nil,
             change_count: 0,
             tx_size: 0,
-            max_tx_size: nil,
-            stack_id: nil
+            max_tx_size: nil
 
   @type t() :: %__MODULE__{
           relations: %{optional(LR.relation_id()) => LR.Relation.t()},
@@ -40,14 +39,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           tx_op_index: non_neg_integer() | nil,
           change_count: non_neg_integer(),
           tx_size: non_neg_integer(),
-          max_tx_size: non_neg_integer() | nil,
-          stack_id: String.t() | nil
+          max_tx_size: non_neg_integer() | nil
         }
 
   def new(opts \\ []) do
     %__MODULE__{
-      max_tx_size: Keyword.get(opts, :max_tx_size),
-      stack_id: Keyword.get(opts, :stack_id)
+      max_tx_size: Keyword.get(opts, :max_tx_size)
     }
   end
 
@@ -184,14 +181,13 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   end
 
   def convert(%LR.Commit{} = msg, %__MODULE__{} = state) do
-    log_txn_received(msg, state)
-
     {:ok,
      [
        %Commit{
          lsn: msg.lsn,
          commit_timestamp: msg.commit_timestamp,
-         transaction_size: state.tx_size
+         transaction_size: state.tx_size,
+         change_count: state.change_count
        }
      ], %{state | current_lsn: nil, tx_op_index: nil, tx_size: 0, change_count: 0}}
   end
@@ -230,24 +226,5 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
         # This gives us headroom for splitting any operation into 2.
         tx_op_index: state.tx_op_index + 2
     }
-  end
-
-  defp log_txn_received(%LR.Commit{} = msg, %__MODULE__{} = state) do
-    alias Electric.Telemetry.Sampler
-    alias Electric.Telemetry.OpenTelemetry
-
-    if Sampler.sample_metrics?() do
-      OpenTelemetry.execute(
-        [:electric, :postgres, :replication, :transaction_received],
-        %{
-          monotonic_time: System.monotonic_time(),
-          receive_lag: DateTime.diff(DateTime.utc_now(), msg.commit_timestamp, :millisecond),
-          bytes: state.tx_size,
-          count: 1,
-          operations: state.change_count
-        },
-        %{stack_id: state.stack_id}
-      )
-    end
   end
 end

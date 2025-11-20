@@ -9,6 +9,8 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.OperationBatcher
+  alias Electric.Telemetry.OpenTelemetry
+  alias Electric.Telemetry.Sampler
 
   require Logger
   require MessageConverter
@@ -128,8 +130,7 @@ defmodule Electric.Postgres.ReplicationClient do
         __MODULE__,
         opts ++
           [
-            message_converter:
-              MessageConverter.new(max_tx_size: max_txn_size, stack_id: opts[:stack_id]),
+            message_converter: MessageConverter.new(max_tx_size: max_txn_size),
             operation_batcher: OperationBatcher.new(),
             max_operation_batch_size: @default_max_operation_batch_size
           ]
@@ -423,6 +424,20 @@ defmodule Electric.Postgres.ReplicationClient do
   # Since we process a message at a time and flush the buffer
   # on commit, we will only ever have one commit here
   defp acknowledge_transactions([commit], state) do
+    if Sampler.sample_metrics?() do
+      OpenTelemetry.execute(
+        [:electric, :postgres, :replication, :transaction_received],
+        %{
+          monotonic_time: System.monotonic_time(),
+          receive_lag: DateTime.diff(DateTime.utc_now(), commit.commit_timestamp, :millisecond),
+          bytes: commit.transaction_size,
+          count: 1,
+          operations: commit.change_count
+        },
+        %{stack_id: state.stack_id}
+      )
+    end
+
     state =
       %{
         state
