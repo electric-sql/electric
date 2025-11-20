@@ -13,6 +13,8 @@ defmodule Electric.Postgres.LockBreakerConnection do
   """
   require Logger
 
+  import Electric.Utils, only: [quote_string: 1]
+
   @behaviour Postgrex.SimpleConnection
 
   @type option ::
@@ -99,18 +101,20 @@ defmodule Electric.Postgres.LockBreakerConnection do
   @impl true
   def notify(_, _, _), do: :ok
 
-  defp lock_breaker_query(lock_name, lock_connection_backend_pid, database) do
+  defp lock_breaker_query(lock_name, lock_connection_backend_pid, database)
+       when is_integer(lock_connection_backend_pid) or is_nil(lock_connection_backend_pid) do
     # We're using a `WITH` clause to execute all this in one statement
     # - See if there are existing but inactive replication slots with the given name
     # - Find all backends that are holding locks with the same name
     # - Terminate those backends
     #
     # It's generally impossible for this to return more than one row
+
     """
     WITH inactive_slots AS (
         select slot_name
         from pg_replication_slots
-        where active = false and database = '#{database}' and slot_name = '#{lock_name}'
+        where active = false and database = #{quote_string(database)} and slot_name = #{quote_string(lock_name)}
     ),
     stuck_backends AS (
         select pid
@@ -119,7 +123,7 @@ defmodule Electric.Postgres.LockBreakerConnection do
           hashtext(slot_name) = (classid::bigint << 32) | objid::bigint
           and locktype = 'advisory'
           and objsubid = 1
-          and database = (select oid from pg_database where datname = '#{database}')
+          and database = (select oid from pg_database where datname = #{quote_string(database)})
           and granted
           and pid != #{lock_connection_backend_pid || 0}
     )
