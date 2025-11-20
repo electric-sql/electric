@@ -2755,6 +2755,48 @@ defmodule Electric.Plug.RouterTest do
 
       assert Plug.Conn.get_resp_header(result, "cache-control") == ["no-cache"]
     end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "shapes with different log_mode values are treated as separate shapes", ctx do
+      # First request: Create shape with changes_only mode
+      req1 = make_shape_req("items", log: "changes_only")
+
+      assert {req1_with_handle, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} =
+               shape_req(req1, ctx.opts)
+
+      # Extract the shape handle from the returned map
+      handle1 = req1_with_handle.handle
+
+      # Second request: Create shape with full mode (default)
+      req2 = make_shape_req("items")
+
+      assert {req2_with_handle, 200, data2} = shape_req(req2, ctx.opts)
+
+      # Extract the shape handle from the returned map
+      handle2 = req2_with_handle.handle
+
+      # Verify different handles were created
+      assert handle1 != handle2,
+             "Shapes with different log_mode should have different handles"
+
+      # Verify the full mode shape returns initial data
+      assert length(data2) > 1, "Full mode shape should return initial data"
+
+      data_rows =
+        Enum.filter(data2, fn item ->
+          is_map(item) and Map.has_key?(item, "value")
+        end)
+
+      assert length(data_rows) > 0, "Full mode shape should include data rows"
+
+      # Verify changes_only mode shape still has no data when accessed again
+      req3 = make_shape_req("items", log: "changes_only", offset: "-1")
+
+      assert {_req3, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} =
+               shape_req(req3, ctx.opts)
+    end
   end
 
   describe "404" do
