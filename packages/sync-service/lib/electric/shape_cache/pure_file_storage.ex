@@ -171,23 +171,31 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def get_all_stored_shapes(stack_opts) do
     case get_all_stored_shape_handles(stack_opts) do
       {:ok, shape_handles} ->
-        shape_handles
-        |> Enum.map(&for_shape(&1, stack_opts))
-        |> Enum.reduce(%{}, fn opts, acc ->
-          case read_shape_definition(opts) do
-            {:ok, shape} ->
-              snapshot_started? = snapshot_started?(opts)
-              Map.put(acc, opts.shape_handle, {shape, snapshot_started?})
+        Task.Supervisor.async_stream(
+          stack_task_supervisor(stack_opts.stack_id),
+          shape_handles,
+          fn handle ->
+            opts = for_shape(handle, stack_opts)
 
-            _ ->
-              Logger.warning(
-                "Failed to read shape definition for shape #{opts.shape_handle}, removing it from disk"
-              )
+            case read_shape_definition(opts) do
+              {:ok, shape} ->
+                snapshot_started? = snapshot_started?(opts)
+                [{handle, {shape, snapshot_started?}}]
 
-              cleanup!(stack_opts, opts.shape_handle)
-              acc
-          end
-        end)
+              _ ->
+                Logger.warning(
+                  "Failed to read shape definition for shape #{opts.shape_handle}, removing it from disk"
+                )
+
+                cleanup!(stack_opts, opts.shape_handle)
+                []
+            end
+          end,
+          timeout: 30_000,
+          ordered: false
+        )
+        |> Enum.flat_map(fn {:ok, res} -> res end)
+        |> Map.new()
         |> then(&{:ok, &1})
 
       {:error, reason} ->
