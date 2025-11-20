@@ -161,7 +161,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
       fn ->
         case ShapeCache.start_consumer_for_handle(handle, stack_id) do
           {:ok, pid} ->
-            Logger.info("Started consumer for existing handle #{handle}")
+            Logger.debug(fn -> ["Started consumer for existing handle ", handle] end)
 
             pid
 
