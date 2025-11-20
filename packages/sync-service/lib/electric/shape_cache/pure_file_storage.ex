@@ -176,20 +176,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
           stack_task_supervisor(stack_opts.stack_id),
           shape_handles,
           fn handle ->
-            opts = for_shape(handle, stack_opts)
-
-            case read_shape_definition(opts) do
-              {:ok, shape} ->
-                snapshot_started? = snapshot_started?(opts)
-                [{handle, {shape, snapshot_started?}}]
-
-              _ ->
-                Logger.warning(
-                  "Failed to read shape definition for shape #{opts.shape_handle}, removing it from disk"
-                )
-
-                cleanup!(stack_opts, opts.shape_handle)
-                []
+            case recover_stored_shape(stack_opts, handle) do
+              {:ok, {shape, snapshot_started?}} -> [{handle, {shape, snapshot_started?}}]
+              _ -> []
             end
           end,
           timeout: 30_000,
@@ -201,6 +190,25 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @spec recover_stored_shape(map(), Electric.stack_id()) ::
+          {:ok, {Shape.t(), snapshot_started :: boolean()}} | {:error, :failed_to_recover_shape}
+  defp recover_stored_shape(stack_opts, shape_handle) do
+    opts = for_shape(shape_handle, stack_opts)
+
+    with {:ok, shape} <- read_shape_definition(opts),
+         snapshot_started? when is_boolean(snapshot_started?) <- snapshot_started?(opts) do
+      {:ok, {shape, snapshot_started?}}
+    else
+      _ ->
+        Logger.warning(
+          "Failed to read shape definition for shape #{shape_handle}, removing it from disk"
+        )
+
+        cleanup!(stack_opts, shape_handle)
+        {:error, :failed_to_recover_shape}
     end
   end
 
