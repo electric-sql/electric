@@ -13,6 +13,7 @@ import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
 import { TransformFunction } from '../src/parser'
+import { SHAPE_HANDLE_HEADER } from '../src/constants'
 
 const BASE_URL = inject(`baseUrl`)
 
@@ -2275,6 +2276,7 @@ it(
   async ({ issuesTableUrl, aborter }) => {
     let requestCount = 0
     let sseRequestCount = 0
+    let initialHandle: string | null = null
     const requestUrls: string[] = []
 
     // Mock console.warn to capture the fallback warning
@@ -2295,7 +2297,10 @@ it(
         const urlObj = new URL(url)
         const isSSE = urlObj.searchParams.get(`live_sse`) === `true`
 
-        if (isSSE) {
+        const reqHandle = urlObj.searchParams.get(SHAPE_HANDLE_HEADER)
+
+        if (isSSE && (!initialHandle || reqHandle === initialHandle)) {
+          initialHandle ??= reqHandle
           sseRequestCount++
           // Handle up to 4 SSE requests (we expect 3, but might see 4 due to timing)
           if (sseRequestCount <= 4) {
@@ -2314,7 +2319,7 @@ it(
               status: 200,
               headers: new Headers({
                 'electric-offset': `0_0`,
-                'electric-handle': `test-handle`,
+                'electric-handle': reqHandle!,
                 'electric-schema': JSON.stringify({}),
                 'electric-cursor': `123`,
                 'content-type': `text/event-stream`,
