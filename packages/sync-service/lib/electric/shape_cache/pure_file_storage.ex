@@ -177,7 +177,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
           shape_handles,
           fn handle ->
             case recover_stored_shape(stack_opts, handle) do
-              {:ok, {shape, snapshot_started?}} -> [{handle, {shape, snapshot_started?}}]
+              {:ok, shape_data} -> [{handle, shape_data}]
               _ -> []
             end
           end,
