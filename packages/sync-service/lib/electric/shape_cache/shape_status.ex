@@ -76,6 +76,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @backup_version "v3"
   @backup_dir "shape_status_backups"
 
+  @shape_hash_lookup_handle_pos 2
+
   @shape_meta_shape_pos 2
   @shape_meta_snapshot_started_pos 3
   @shape_meta_latest_offset_pos 4
@@ -241,7 +243,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def get_existing_shape(stack_ref, %Shape{} = shape) do
-    case :ets.lookup_element(shape_hash_lookup_table(stack_ref), Shape.comparable(shape), 2, nil) do
+    case :ets.lookup_element(
+           shape_hash_lookup_table(stack_ref),
+           Shape.comparable(shape),
+           @shape_hash_lookup_handle_pos,
+           nil
+         ) do
       nil ->
         nil
 
@@ -535,7 +542,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         handles = Enum.map(handles, &elem(&1, 0))
         shape = %Shape{shape | shape_dependencies_handles: handles}
 
-        :ets.update_element(meta_table, handle, {2, shape})
+        :ets.update_element(meta_table, handle, {@shape_meta_shape_pos, shape})
       else
         Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")
         remove_shape(stack_ref, handle)
@@ -588,7 +595,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
         last_used_table = create_last_used_table(stack_ref)
         relation_lookup_table = create_relation_lookup_table(stack_ref)
 
-        # repopolate last used table with current time
+        # repopulate last used table with current time and relation lookup table
+        # from the shape definition
         :ets.foldl(
           fn {shape_handle, shape, _, _}, _ ->
             :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
