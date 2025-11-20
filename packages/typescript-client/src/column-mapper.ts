@@ -1,5 +1,8 @@
 import { Schema } from './types'
 
+type DbColumnName = string
+type AppColumnName = string
+
 /**
  * A bidirectional column mapper that handles transforming column **names**
  * between database format (e.g., snake_case) and application format (e.g., camelCase).
@@ -20,13 +23,13 @@ export interface ColumnMapper {
    * Transform a column name from database format to application format.
    * Applied to column names in query results.
    */
-  decode: (dbColumnName: string) => string
+  decode: (dbColumnName: DbColumnName) => AppColumnName
 
   /**
    * Transform a column name from application format to database format.
    * Applied to column names in WHERE clauses and other query parameters.
    */
-  encode: (appColumnName: string) => string
+  encode: (appColumnName: AppColumnName) => DbColumnName
 }
 
 /**
