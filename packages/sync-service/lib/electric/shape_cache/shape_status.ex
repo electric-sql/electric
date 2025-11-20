@@ -78,6 +78,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @shape_hash_lookup_handle_pos 2
 
+  @shape_last_used_time_pos 2
+
   @shape_meta_shape_pos 2
   @shape_meta_snapshot_started_pos 3
   @shape_meta_latest_offset_pos 4
@@ -320,7 +322,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
   Used for tests, otherwise prefer `update_last_read_time_to_now/2`.
   """
   def update_last_read_time(stack_ref, shape_handle, time) do
-    :ets.insert(shape_last_used_table(stack_ref), {shape_handle, time})
+    :ets.update_element(
+      shape_last_used_table(stack_ref),
+      shape_handle,
+      {@shape_last_used_time_pos, time}
+    )
   end
 
   def least_recently_used(stack_ref, shape_count) do
