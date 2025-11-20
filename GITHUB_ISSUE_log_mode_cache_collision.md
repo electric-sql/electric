@@ -72,18 +72,15 @@ Adding `log_mode` to `comparable()` seems correct since the docstring says:
 
 `log_mode` is user-specified via the `log` query parameter. But should we verify there aren't other user-specified properties missing?
 
-### 2. **What about backward compatibility?**
+### 2. **Deployment impact**
 
 Adding a field to `comparable()` changes the ETS lookup key, which means:
 
 - **All existing shapes will get new handles after deployment**
 - Clients with old handles will get 409 "must_refetch" responses
-- This forces a global shape rotation for all clients
+- This is equivalent to a global shape rotation (same as schema changes)
 
-Is this acceptable? Should we:
-- Accept it as equivalent to schema-based rotation?
-- Implement a migration strategy?
-- Add versioning to shape handles?
+Since this is a bug fix for a data availability issue, the breaking change is acceptable.
 
 ### 3. **Storage format implications**
 
@@ -141,13 +138,13 @@ Is there a scenario where:
 
 This could explain the "even on a branch where on-demand was disabled" observation.
 
-### 7. **Shape rotation timing**
+### 7. **Deployment coordination**
 
 When `comparable()` changes:
-- What happens to in-flight requests?
-- What happens to SSE connections?
-- Should we drain old shapes before deployment?
-- Do we need a deployment strategy doc for this change?
+- In-flight requests will complete with old handles
+- New requests after deployment will get new handles
+- SSE connections may see 409 and need to reconnect
+- This is the same behavior as schema-based shape rotation (already handled by clients)
 
 ### 8. **Test coverage gaps**
 
@@ -175,34 +172,30 @@ This suggests other similar scenarios might be untested. Should we:
 - Use different table names (not practical)
 - Avoid mixing log modes (hard to enforce)
 
-## Potential Solutions & Trade-offs
+## Proposed Fix
 
-### Option 1: Add `log_mode` to `comparable()`
-**Pros**: Fixes the bug, semantically correct
-**Cons**: Breaking change, global shape rotation
+Add `log_mode` to `Shape.comparable()` in `packages/sync-service/lib/electric/shapes/shape.ex:102`:
 
-### Option 2: Validate log_mode matches on handle reuse
-**Pros**: No breaking change, explicit errors
-**Cons**: Doesn't prevent the cache collision, confusing UX
+```elixir
+def comparable(%__MODULE__{} = shape) do
+  {:shape, {shape.root_table_id, shape.root_table}, shape.root_pk,
+   Comparable.comparable(shape.where), shape.selected_columns,
+   Enum.flat_map(shape.flags, fn {k, v} -> if(v, do: [k], else: []) end) |> Enum.sort(),
+   shape.replica, shape.log_mode}  # <- Add log_mode
+end
+```
 
-### Option 3: Namespace shapes by log_mode in cache
-**Pros**: Backward compatible, isolated fix
-**Cons**: More complex, changes cache structure
-
-### Option 4: Remove changes_only shapes from cache entirely
-**Pros**: Changes-only is stateless, could be ephemeral
-**Cons**: Different semantics, potential performance impact
+This is semantically correct since `log_mode` is a user-specified property that fundamentally changes shape behavior (whether initial snapshots are returned).
 
 ## Questions for Backend Team
 
-1. Is adding `log_mode` to `comparable()` the right approach?
-2. What's our strategy for handling the breaking change?
-3. Should we version the shape handle format?
-4. Are there other fields we should audit for inclusion in `comparable()`?
-5. Should we add validation/errors when log_mode mismatches?
-6. Do we need a deployment runbook for this change?
-7. Should changes_only shapes be treated differently by the cache?
-8. How do we prevent similar issues in the future?
+1. **Sanity check**: Does adding `log_mode` to `comparable()` look correct, or are we missing something?
+2. **Audit needed**: Are there other user-specified fields missing from `comparable()`? (e.g., future parameters)
+3. **Error handling**: Should we add explicit validation/logging when shapes return empty data in unexpected cases?
+4. **Test coverage**: What other shape mode interaction scenarios should we test?
+5. **Deployment timing**: Any concerns about in-flight requests or SSE connections during deployment?
+6. **On-demand mode**: Why did the issue persist when Marius said "on-demand was disabled"? Cache poisoning or something else?
+7. **Prevention**: How do we catch similar issues in the future? Lint rule? Property-based tests?
 
 ## Related Code Locations
 
@@ -214,10 +207,11 @@ This suggests other similar scenarios might be untested. Should we:
 
 ## Next Steps
 
-Looking for feedback on:
-1. Preferred solution approach
-2. Migration/deployment strategy
-3. Additional test cases needed
-4. Documentation updates required
+1. **Review the fix**: The fix has been implemented and includes a test case
+2. **Validate approach**: Confirm `log_mode` addition to `comparable()` is correct
+3. **Test in CI**: Ensure all existing tests pass with the change
+4. **Plan deployment**: Coordinate timing to minimize disruption (clients will refetch)
+5. **Monitor**: Watch for 409 responses spike after deployment (expected behavior)
+6. **Follow-up**: Consider audit of other potential missing fields in `comparable()`
 
 cc @backend-team
