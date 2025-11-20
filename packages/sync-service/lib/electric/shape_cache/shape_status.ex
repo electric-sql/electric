@@ -489,14 +489,22 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp load(stack_ref, storage) do
     _ = Electric.Postgres.supported_types()
 
-    with {:ok, shape_data} <- Storage.get_all_stored_shapes(storage) do
+    start_time = System.monotonic_time()
+
+    with {:ok, shape_data} <-
+           Electric.Telemetry.OpenTelemetry.with_span(
+             "shape_status.get_all_stored_shapes",
+             [],
+             stack_ref,
+             fn -> Storage.get_all_stored_shapes(storage) end
+           ) do
       now = System.monotonic_time()
 
-      {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples} =
+      {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples, num_shapes} =
         Enum.reduce(
           shape_data,
-          {[], [], [], []},
-          fn {shape_handle, {shape, snapshot_started?, latest_offset}},
+          {[], [], [], [], 0},
+          fn {shape_handle, {shape, snapshot_started?, latest_offset, num_shapes}},
              {
                hash_lookup_tuples,
                meta_tuples,
@@ -519,7 +527,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
               Enum.map(relations, fn {oid, _} -> {{oid, shape_handle}, nil} end) ++
                 relation_lookup_tuples
 
-            {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples}
+            {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples,
+             num_shapes + 1}
           end
         )
 
@@ -529,6 +538,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert(shape_hash_lookup_table(stack_ref), hash_lookup_tuples)
 
       restore_dependency_handles(stack_ref, shape_data, storage)
+
+      Logger.info(fn ->
+        duration =
+          System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+
+        "Loaded #{num_shapes} shapes into #{inspect(__MODULE__)} in #{duration}ms"
+      end)
 
       :ok
     end
