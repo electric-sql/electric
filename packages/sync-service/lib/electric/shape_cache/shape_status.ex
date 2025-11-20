@@ -489,14 +489,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp load(stack_ref, storage) do
     _ = Electric.Postgres.supported_types()
 
-    with {:ok, shapes} <- Storage.get_all_stored_shapes(storage) do
+    with {:ok, shape_data} <- Storage.get_all_stored_shapes(storage) do
       now = System.monotonic_time()
 
       {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples} =
         Enum.reduce(
-          shapes,
+          shape_data,
           {[], [], [], []},
-          fn {shape_handle, {shape, snapshot_started?}},
+          fn {shape_handle, {shape, snapshot_started?, latest_offset}},
              {
                hash_lookup_tuples,
                meta_tuples,
@@ -509,7 +509,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
             meta_tuples =
               [
-                {shape_handle, shape, snapshot_started?, LogOffset.last_before_real_offsets()}
+                {shape_handle, shape, snapshot_started?, latest_offset}
                 | meta_tuples
               ]
 
@@ -528,20 +528,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :ets.insert(shape_meta_table(stack_ref), meta_tuples)
       :ets.insert(shape_hash_lookup_table(stack_ref), hash_lookup_tuples)
 
-      restore_dependency_handles(stack_ref, shapes, storage)
+      restore_dependency_handles(stack_ref, shape_data, storage)
 
       :ok
     end
   end
 
-  defp restore_dependency_handles(stack_ref, shapes, storage) do
+  defp restore_dependency_handles(stack_ref, shape_data, storage) do
     meta_table = shape_meta_table(stack_ref)
 
-    shapes
-    |> Enum.filter(fn {_, {shape, _snapshot_started?}} ->
+    shape_data
+    |> Enum.filter(fn {_, {shape, _, _}} ->
       Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
     end)
-    |> Enum.each(fn {handle, {%Shape{shape_dependencies: deps} = shape, _snapshot_started?}} ->
+    |> Enum.each(fn {handle, {%Shape{shape_dependencies: deps} = shape, _, _}} ->
       handles = Enum.map(deps, &get_existing_shape(stack_ref, &1))
 
       if not Enum.any?(handles, &is_nil/1) do

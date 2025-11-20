@@ -194,13 +194,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   @spec recover_stored_shape(map(), Electric.stack_id()) ::
-          {:ok, {Shape.t(), snapshot_started :: boolean()}} | {:error, :failed_to_recover_shape}
+          {:ok, {Shape.t(), snapshot_started :: boolean(), latest_offset :: LogOffset.t()}}
+          | {:error, :failed_to_recover_shape}
   defp recover_stored_shape(stack_opts, shape_handle) do
     opts = for_shape(shape_handle, stack_opts)
 
     with {:ok, shape} <- read_shape_definition(opts),
-         snapshot_started? when is_boolean(snapshot_started?) <- snapshot_started?(opts) do
-      {:ok, {shape, snapshot_started?}}
+         snapshot_started? when is_boolean(snapshot_started?) <- snapshot_started?(opts),
+         latest_offset when not is_nil(latest_offset) <- get_latest_offset(opts) do
+      {:ok, {shape, snapshot_started?, latest_offset}}
     else
       _ ->
         Logger.warning(

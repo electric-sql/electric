@@ -55,7 +55,14 @@ defmodule Electric.ShapeCache.Storage do
 
   @doc "Retrieve all stored shapes"
   @callback get_all_stored_shapes(compiled_opts()) ::
-              {:ok, %{shape_handle() => {shape_def :: Shape.t(), snapshot_started? :: boolean()}}}
+              {:ok,
+               %{
+                 shape_handle() => {
+                   shape_def :: Shape.t(),
+                   snapshot_started? :: boolean(),
+                   latest_offset :: LogOffset.t()
+                 }
+               }}
               | {:error, term()}
 
   @doc "Get the directory where metadata backups are stored."
