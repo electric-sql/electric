@@ -16,18 +16,16 @@ end
 
 ## Configuration
 
-Runtime configuration can partially be done via app env
+Runtime configuration is available for the underlying otel_metric_exporter lib:
 
 ```elixir
-config :electric_telemetry,
-  otel_opts: [
-    otlp_endpoint: "...",
-    otlp_headers: %{...}
-    resource: %{...}
-  ]
+config :otel_metric_exporter,
+  otlp_endpoint: "...",
+  otlp_headers: %{...}
+  resource: %{...}
 ```
 
-but the majority of the supported configuration options are passed as keyword list to either `ElectricTelemetry.ApplicationTelemetry` or `ElectricTelemetry.StackTelemetry`. See `ElectricTelemetry.Opts` for the supported options.
+The configuration options for `ElectricTelemetry.ApplicationTelemetry` or `ElectricTelemetry.StackTelemetry` must be passed as a keyword list function argument. See `ElectricTelemetry.Opts` for the supported options.
 
 ## Overview
 

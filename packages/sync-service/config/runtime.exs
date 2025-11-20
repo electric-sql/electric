@@ -309,15 +309,15 @@ if Electric.telemetry_enabled?() do
       instance: %{id: instance_id}
     }
 
-    config :electric_telemetry,
-      otel_opts: [
-        otlp_endpoint: otlp_endpoint,
-        otlp_headers: Map.new(otlp_headers),
-        # The `name` resource attribute will be inherited by both metric and log events. This is
-        # an artifact of otel_metric_exporter's implementation. With some more effort, we could
-        # allow setting different names for the two types of events.
-        resource: Map.put(resource, :name, "metrics")
-      ]
+    # We must populate otel_metric_exporter's app env to configure its LogHandler
+    # and provide base config for the metrics export.
+    config :otel_metric_exporter,
+      otlp_endpoint: otlp_endpoint,
+      otlp_headers: Map.new(otlp_headers),
+      # The `name` resource attribute will be inherited by both metric and log events. This is
+      # an artifact of otel_metric_exporter's implementation. With some more effort, we could
+      # allow setting different names for the two types of events.
+      resource: Map.put(resource, :name, "metrics")
 
     Electric.Telemetry.OpenTelemetry.Config.configure(
       otlp_endpoint: otlp_endpoint,

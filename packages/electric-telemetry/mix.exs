@@ -13,10 +13,7 @@ defmodule ElectricTelemetry.MixProject do
   end
 
   def application do
-    [
-      extra_applications: [:logger, :os_mon, :runtime_tools],
-      mod: {ElectricTelemetry.Application, []}
-    ]
+    [extra_applications: [:logger, :os_mon, :runtime_tools]]
   end
 
   defp deps do
