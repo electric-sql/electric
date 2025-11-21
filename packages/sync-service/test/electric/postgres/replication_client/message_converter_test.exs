@@ -33,7 +33,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
   setup do
     converter = MessageConverter.new()
-    {[_relation], converter} = MessageConverter.convert(@relation, converter)
+    {:ok, [_relation], converter} = MessageConverter.convert(@relation, converter)
     {:ok, converter: converter}
   end
 
@@ -47,7 +47,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         xid: 456
       }
 
-      {changes, updated_converter} = MessageConverter.convert(begin_msg, converter)
+      {:ok, changes, updated_converter} = MessageConverter.convert(begin_msg, converter)
 
       assert [%Begin{xid: 456}] = changes
       assert updated_converter.current_lsn == @test_lsn
@@ -68,7 +68,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         ]
       }
 
-      {changes, updated_converter} = MessageConverter.convert(new_relation, converter)
+      {:ok, changes, updated_converter} = MessageConverter.convert(new_relation, converter)
 
       assert [
                %Relation{
@@ -95,14 +95,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       origin = %LR.Origin{name: "another origin"}
       type = %LR.Type{name: "custom_type"}
 
-      assert {[], ^converter} = MessageConverter.convert(origin, converter)
-      assert {[], ^converter} = MessageConverter.convert(type, converter)
+      assert {:ok, [], ^converter} = MessageConverter.convert(origin, converter)
+      assert {:ok, [], ^converter} = MessageConverter.convert(type, converter)
     end
 
     test "returns NewRecord change for insert when the relation is known", %{
       converter: converter
     } do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -114,7 +114,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         bytes: 3
       }
 
-      {changes, updated_converter} = MessageConverter.convert(insert_msg, converter)
+      {:ok, changes, updated_converter} = MessageConverter.convert(insert_msg, converter)
 
       assert [
                %NewRecord{
@@ -133,7 +133,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
     test "returns UpdatedRecord change for update when the relation is known", %{
       converter: converter
     } do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -146,7 +146,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         bytes: 6
       }
 
-      {changes, updated_converter} = MessageConverter.convert(update_msg, converter)
+      {:ok, changes, updated_converter} = MessageConverter.convert(update_msg, converter)
 
       assert [
                %UpdatedRecord{
@@ -164,7 +164,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
     end
 
     test "errors for empty old data on updates", %{converter: converter} do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -179,7 +179,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
       result = MessageConverter.convert(update_msg, converter)
 
-      assert {:error, {:replica_not_full, message}, _} = result
+      assert {:error, {:replica_not_full, message}} = result
 
       assert message =~
                "Received an update from PG for public.users that did not have " <>
@@ -191,7 +191,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
     test "returns DeletedRecord change for delete when the relation is known", %{
       converter: converter
     } do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -203,7 +203,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         bytes: 3
       }
 
-      {changes, updated_converter} = MessageConverter.convert(delete_msg, converter)
+      {:ok, changes, updated_converter} = MessageConverter.convert(delete_msg, converter)
 
       assert [
                %DeletedRecord{
@@ -221,7 +221,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
     test "returns TruncatedRelation change for truncate when the relation is known",
          %{converter: converter} do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -233,7 +233,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         truncated_relations: [1]
       }
 
-      {changes, updated_converter} = MessageConverter.convert(truncate_msg, converter)
+      {:ok, changes, updated_converter} = MessageConverter.convert(truncate_msg, converter)
 
       assert [%TruncatedRelation{relation: {"public", "users"}}] = changes
       assert updated_converter.tx_op_index == 2
@@ -241,7 +241,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
     test "returns multiple TruncatedRelation changes when multiple relations are truncated",
          %{converter: converter} do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -257,7 +257,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         ]
       }
 
-      {[%Relation{}], converter} = MessageConverter.convert(new_relation, converter)
+      {:ok, [%Relation{}], converter} = MessageConverter.convert(new_relation, converter)
 
       truncate_msg = %LR.Truncate{
         number_of_relations: 1,
@@ -265,7 +265,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         truncated_relations: [1, 2]
       }
 
-      assert {[
+      assert {:ok,
+              [
                 %TruncatedRelation{relation: {"public", "users"}, log_offset: offset1},
                 %TruncatedRelation{relation: {"public", "posts"}, log_offset: offset2}
               ], _converter} = MessageConverter.convert(truncate_msg, converter)
@@ -277,14 +278,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
     test "returns Commit change when seeing a 'Commit' message", %{
       converter: converter
     } do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
         )
 
       # Add some changes to track tx_size
-      {[_insert], converter} =
+      {:ok, [_insert], converter} =
         MessageConverter.convert(
           %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 10},
           converter
@@ -296,13 +297,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         commit_timestamp: ~U[2024-01-01 00:00:00Z]
       }
 
-      {changes, updated_converter} = MessageConverter.convert(commit_msg, converter)
+      {:ok, changes, updated_converter} = MessageConverter.convert(commit_msg, converter)
 
       assert [
                %Commit{
                  lsn: @test_lsn,
                  commit_timestamp: ~U[2024-01-01 00:00:00Z],
-                 transaction_size: 10
+                 transaction_size: 10,
+                 change_count: 1
                }
              ] = changes
 
@@ -312,7 +314,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
     end
 
     test "multiple converted operations maintain correct log offsets", %{converter: converter} do
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -329,9 +331,9 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
       delete_msg = %LR.Delete{relation_id: 1, old_tuple_data: ["124"], bytes: 3}
 
-      {[insert_change], converter} = MessageConverter.convert(insert_msg, converter)
-      {[update_change], converter} = MessageConverter.convert(update_msg, converter)
-      {[delete_change], _converter} = MessageConverter.convert(delete_msg, converter)
+      {:ok, [insert_change], converter} = MessageConverter.convert(insert_msg, converter)
+      {:ok, [update_change], converter} = MessageConverter.convert(update_msg, converter)
+      {:ok, [delete_change], _converter} = MessageConverter.convert(delete_msg, converter)
 
       log_offset_1 = LogOffset.new(@test_lsn, 0)
       log_offset_2 = LogOffset.new(@test_lsn, 2)
@@ -359,9 +361,9 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
     test "returns error when transaction size exceeds max_tx_size limit" do
       converter = %MessageConverter{max_tx_size: 10}
-      {[_relation], converter} = MessageConverter.convert(@relation, converter)
+      {:ok, [_relation], converter} = MessageConverter.convert(@relation, converter)
 
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -369,14 +371,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
 
       # First insert is under the limit
       insert_msg1 = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 5}
-      {[_change], converter} = MessageConverter.convert(insert_msg1, converter)
+      {:ok, [_change], converter} = MessageConverter.convert(insert_msg1, converter)
       assert converter.tx_size == 5
 
       # Second insert exceeds the limit (5 + 10 = 15 > 10)
       insert_msg2 = %LR.Insert{relation_id: 1, tuple_data: ["456"], bytes: 10}
       result = MessageConverter.convert(insert_msg2, converter)
 
-      assert {:error, {:exceeded_max_tx_size, message}, ^converter} = result
+      assert {:error, {:exceeded_max_tx_size, message}} = result
       assert message == "Collected transaction exceeds limit of 10 bytes."
     end
 
@@ -395,9 +397,9 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       }
 
       converter = MessageConverter.new()
-      {[_relation], converter} = MessageConverter.convert(multi_col_relation, converter)
+      {:ok, [_relation], converter} = MessageConverter.convert(multi_col_relation, converter)
 
-      {[_begin], converter} =
+      {:ok, [_begin], converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
           converter
@@ -411,7 +413,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         bytes: 10
       }
 
-      {changes, _converter} = MessageConverter.convert(update_msg, converter)
+      {:ok, changes, _converter} = MessageConverter.convert(update_msg, converter)
 
       assert [
                %UpdatedRecord{

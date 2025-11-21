@@ -47,10 +47,11 @@ defmodule Electric.Replication.Changes do
     @type t() :: %__MODULE__{
             lsn: Electric.Postgres.Lsn.t(),
             commit_timestamp: DateTime.t() | nil,
-            transaction_size: non_neg_integer()
+            transaction_size: non_neg_integer(),
+            change_count: non_neg_integer()
           }
 
-    defstruct [:lsn, :commit_timestamp, transaction_size: 0]
+    defstruct [:lsn, :commit_timestamp, transaction_size: 0, change_count: 0]
   end
 
   defmodule Transaction do
