@@ -277,7 +277,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
             await deleteIssue({ id: id1, title: `foo1` })
             await insertIssues({ id: id2, title: `foo2` })
             await waitForIssues({ numChangesExpected: 3 })
-            await clearIssuesShape(shapeStream.shapeHandle)
+            await clearIssuesShape(shapeStream.shapeHandle!)
           })
 
           rotationTime = Date.now()
@@ -1012,7 +1012,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
       unsub()
       // the normal cleanup doesn't work because our shape definition is
       // changed by the updates: 'full' param
-      await clearIssuesShape(shapeStream.shapeHandle)
+      await clearIssuesShape(shapeStream.shapeHandle!)
     }
   })
 
@@ -2037,7 +2037,7 @@ describe.for(fetchAndSse)(
         await deleteIssue({ id: id2, title: `snap2` })
         await insertIssues({ title: `snap3` })
         await waitForIssues({ numChangesExpected: 2 })
-        await clearIssuesShape(shapeStream.shapeHandle)
+        await clearIssuesShape(shapeStream.shapeHandle!)
       })
 
       // Wait until shape reflects re-executed snapshot on the new shape
