@@ -1,5 +1,19 @@
 # @electric-sql/client
 
+## 1.2.0
+
+### Minor Changes
+
+- 18df5a5: Add bidirectional column mapping API for query filters with built-in snake_case ↔ camelCase support. Introduces `columnMapper` option to `ShapeStream` that handles both encoding (TypeScript → Database) for WHERE clauses and decoding (Database → TypeScript) for results. Includes `snakeCamelMapper()` helper for automatic snake_case/camelCase conversion and `createColumnMapper()` for custom mappings. The new API deprecates using `transformer` solely for column renaming, though `transformer` remains useful for value transformations like encryption.
+
+### Patch Changes
+
+- f0b83fa: Fix subset\_\_params to use constant parameter name for proxy configurations
+
+  Changed subset**params from deepObject style (subset**params[1], subset**params[2]) to JSON serialization (subset**params={"1":"value1","2":"value2"}). This allows proxy configurations to match the constant parameter name "subset\_\_params" in ELECTRIC_PROTOCOL_QUERY_PARAMS without needing dynamic pattern matching.
+
+- cd15a56: Fix multiple renders from cached up-to-date messages on page refresh. When a shape receives multiple updates within the HTTP cache window (60s), each update ends with an up-to-date control message that gets cached. On page refresh, these cached responses replay rapidly, causing multiple renders. This change implements cursor-based detection to suppress cached up-to-date notifications until a fresh response (with a new cursor) arrives from the server, ensuring only one render occurs.
+
 ## 1.1.5
 
 ### Patch Changes
