@@ -54,6 +54,8 @@ defmodule Electric.ShapeCache.PureFileStorage.FileInfo do
 
   def dir?(path), do: match?({:ok, file_info(type: :directory)}, stat(path))
 
+  def exists?(path), do: match?({:ok, _}, :prim_file.read_file_info(path))
+
   defdelegate rename(old, new), to: :prim_file
 
   def recursive_disk_usage(path, acc \\ 0) do

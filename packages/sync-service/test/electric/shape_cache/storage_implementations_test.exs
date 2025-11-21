@@ -765,7 +765,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       test "retrieves stored shapes", %{storage: opts, storage_base: storage_base} do
         _writer = Storage.init_writer!(opts, @shape)
 
-        assert {:ok, %{@shape_handle => {parsed, false}}} =
+        assert {:ok, %{@shape_handle => {parsed, false, _}}} =
                  Storage.get_all_stored_shapes(storage_base)
 
         assert @shape == parsed
@@ -775,7 +775,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         _writer = Storage.init_writer!(opts, @shape)
         :ok = Storage.mark_snapshot_as_started(opts)
 
-        assert {:ok, %{@shape_handle => {parsed, true}}} =
+        assert {:ok, %{@shape_handle => {parsed, true, _}}} =
                  Storage.get_all_stored_shapes(storage_base)
 
         assert @shape == parsed
