@@ -57,7 +57,7 @@
 
 
 [shell electric]
-  ??[info] Started consumer for existing handle $handle
+  ??[debug] Started consumer for existing handle $handle
   !{:active_consumer_count, Electric.Shapes.ConsumerRegistry.active_consumer_count("single_stack")}
   ?{:active_consumer_count, 1}
 
