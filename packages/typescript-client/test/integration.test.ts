@@ -973,7 +973,7 @@ describe(`HTTP Sync`, () => {
         // that the existing shape is deleted and some more data is inserted
         if (numRequests === 2) {
           await insertIssues({ id: rowId2, title: `foo2` })
-          await clearIssuesShape(issueStream.shapeHandle)
+          await clearIssuesShape(issueStream.shapeHandle!)
         }
 
         numRequests++

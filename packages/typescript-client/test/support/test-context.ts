@@ -11,7 +11,7 @@ export type GeneratedIssueRow = { id?: string; title: string }
 export type UpdateIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type DeleteIssueFn = (row: IssueRow) => Promise<QueryResult<IssueRow>>
 export type InsertIssuesFn = (...rows: GeneratedIssueRow[]) => Promise<string[]>
-export type ClearIssuesShapeFn = (handle?: string) => Promise<void>
+export type ClearIssuesShapeFn = (handle: string) => Promise<void>
 export type ClearShapeFn = (
   table: string,
   options?: { handle?: string }
@@ -52,10 +52,13 @@ export const testWithDbClient = test.extend<{
       ) => {
         const baseUrl = inject(`baseUrl`)
         const url = new URL(`${baseUrl}/v1/shape`)
-        url.searchParams.set(`table`, table)
 
+        // if an handle is provided, don't pass the table
+        // as the shape definition might have more params
         if (options.handle) {
           url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, options.handle)
+        } else {
+          url.searchParams.set(`table`, table)
         }
 
         const resp = await fetch(url.toString(), { method: `DELETE` })
