@@ -45,8 +45,28 @@
   ?electric-offset: ([\w\d_]+)
   [local offset=$1]
 
+
+# Add more data before crash
+[shell psql]
+  """!
+  INSERT INTO items (id, val)
+  VALUES (gen_random_uuid(), '#pre-crash test val');
+  """
+  ??INSERT 0 1
+
+# Should see pre crash update
+[shell client]
+  [invoke shape_get_live items $handle $offset]
+  ??HTTP/1.1 200 OK
+  ?electric-offset: ([\w\d_]+)
+  [local offset=$1]
+  ??"val":"#pre-crash test val"
+  
+
 ## Terminate electric
 [shell electric]
+  # ensure logs are flushed
+  [sleep 1]
   !System.halt()
   ??$PS1
 
@@ -59,20 +79,23 @@
 [shell client]
   [invoke shape_get items $handle $offset]
   ??HTTP/1.1 200 OK
+  ??electric-handle: $handle
+  ??"val":"#pre-crash test val"
 
 
 # Recovered shape should handle new data
 [shell psql]
   """!
   INSERT INTO items (id, val)
-  VALUES (gen_random_uuid(), '# new test val');
+  VALUES (gen_random_uuid(), '#post-crash test val');
   """
   ??INSERT 0 1
 
 [shell client]
   [invoke shape_get_live items $handle $offset]
   ??HTTP/1.1 200 OK
-  ??"val":"# new test val"
+  ??electric-handle: $handle
+  ??"val":"#post-crash test val"
 
 [cleanup]
   [invoke teardown]
