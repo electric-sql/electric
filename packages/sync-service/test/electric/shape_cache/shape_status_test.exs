@@ -41,7 +41,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     {:ok, state, []} =
       new_state(ctx,
         stored_shapes: %{
-          shape_handle => {shape, true}
+          shape_handle => {shape, true, LogOffset.last_before_real_offsets()}
         }
       )
 

@@ -62,6 +62,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   # Directory for storing metadata
   @metadata_storage_dir ".meta"
+  @metadata_bool_fields metadata_boolean_fields()
 
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -171,27 +172,45 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def get_all_stored_shapes(stack_opts) do
     case get_all_stored_shape_handles(stack_opts) do
       {:ok, shape_handles} ->
-        shape_handles
-        |> Enum.map(&for_shape(&1, stack_opts))
-        |> Enum.reduce(%{}, fn opts, acc ->
-          case read_shape_definition(opts) do
-            {:ok, shape} ->
-              snapshot_started? = snapshot_started?(opts)
-              Map.put(acc, opts.shape_handle, {shape, snapshot_started?})
-
-            _ ->
-              Logger.warning(
-                "Failed to read shape definition for shape #{opts.shape_handle}, removing it from disk"
-              )
-
-              cleanup!(stack_opts, opts.shape_handle)
-              acc
-          end
-        end)
+        Task.Supervisor.async_stream(
+          stack_task_supervisor(stack_opts.stack_id),
+          shape_handles,
+          fn handle ->
+            case recover_stored_shape(stack_opts, handle) do
+              {:ok, shape_data} -> [{handle, shape_data}]
+              _ -> []
+            end
+          end,
+          timeout: :infinity,
+          ordered: false
+        )
+        |> Enum.flat_map(fn {:ok, res} -> res end)
+        |> Map.new()
         |> then(&{:ok, &1})
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @spec recover_stored_shape(map(), Electric.stack_id()) ::
+          {:ok, {Shape.t(), snapshot_started :: boolean(), latest_offset :: LogOffset.t()}}
+          | {:error, :failed_to_recover_shape}
+  defp recover_stored_shape(stack_opts, shape_handle) do
+    opts = for_shape(shape_handle, stack_opts)
+
+    with {:ok, shape} <- read_shape_definition(opts),
+         snapshot_started? when is_boolean(snapshot_started?) <- snapshot_started?(opts),
+         latest_offset when not is_nil(latest_offset) <- get_latest_offset(opts) do
+      {:ok, {shape, snapshot_started?, latest_offset}}
+    else
+      _ ->
+        Logger.warning(
+          "Failed to read shape definition for shape #{shape_handle}, removing it from disk"
+        )
+
+        cleanup!(stack_opts, shape_handle)
+        {:error, :failed_to_recover_shape}
     end
   end
 
@@ -580,6 +599,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
     LogFile.trim(json_file(opts, suffix), log_search_start_pos, last_persisted_offset)
   end
 
+  # optimization for snapshot started boolean to avoid expensive file open
+  defp read_metadata!(%__MODULE__{} = opts, key) when key in @metadata_bool_fields,
+    do: FileInfo.exists?(shape_metadata_path(opts, "#{key}.bin"))
+
   defp read_metadata!(%__MODULE__{} = opts, key) do
     case File.open(
            shape_metadata_path(opts, "#{key}.bin"),
@@ -642,6 +665,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
   # we need this because macro expects a compile-time atom
   for key <- @cached_keys do
     defp get_cached_by_key(meta, unquote(key)), do: storage_meta(meta, unquote(key))
+  end
+
+  defp write_metadata!(%__MODULE__{} = opts, key, value) when key in @metadata_bool_fields do
+    path = Path.join(shape_metadata_dir(opts), "#{key}.bin")
+
+    if value,
+      do: write!(path, <<>>, [:write, :raw]),
+      else: Electric.AsyncDeleter.delete(opts.stack_id, path)
   end
 
   defp write_metadata!(%__MODULE__{} = opts, key, value) do
