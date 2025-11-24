@@ -1,4 +1,5 @@
 defmodule Electric.Postgres.SnapshotQuery do
+  alias Electric.SnapshotError
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
@@ -72,6 +73,9 @@ defmodule Electric.Postgres.SnapshotQuery do
       end,
       timeout: :infinity
     )
+  catch
+    :exit, {_, {DBConnection.Holder, :checkout, _}} ->
+      raise SnapshotError.connection_not_available()
   end
 
   defp shape_attrs(shape_handle, shape) do

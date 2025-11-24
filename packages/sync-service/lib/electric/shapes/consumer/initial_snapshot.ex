@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Consumer.InitialSnapshotState do
+defmodule Electric.Shapes.Consumer.InitialSnapshot do
   @moduledoc false
   # Internal module, used as a part of the consumer state, dealing
   # with the initial snapshot state and the waiting for the snapshot to start.

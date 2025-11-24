@@ -2250,14 +2250,19 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "a move-out from the inner shape invalidates all outer shapes", %{
+    test "a move-out from the inner shape is propagated to the outer shape", %{
       opts: opts,
       db_conn: db_conn
     } do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
-      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} = data
+
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "headers" => %{"operation" => "insert", "tags" => [[tag]]}
+             } = data
+
       assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
       task = live_shape_req(req, opts)
@@ -2265,7 +2270,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "UPDATE parent SET value = 3 WHERE id = 1", [])
 
       assert {_req, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
-      assert %{"headers" => %{"event" => "move-out", "patterns" => [["1"]]}} = data
+      assert %{"headers" => %{"event" => "move-out", "patterns" => [[^tag]]}} = data
     end
 
     @tag with_sql: [
@@ -2454,7 +2459,7 @@ defmodule Electric.Plug.RouterTest do
         :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
         |> Base.encode16(case: :lower)
 
-      assert {_, 200,
+      assert {req, 200,
               [
                 %{
                   "value" => %{"id" => "2", "name" => "Team B"},
@@ -2462,6 +2467,13 @@ defmodule Electric.Plug.RouterTest do
                 },
                 _
               ]} =
+               Task.await(task)
+
+      # And move-out should be propagated
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "DELETE FROM members WHERE user_id = 1 AND team_id = 2")
+
+      assert {_, 200, [%{"headers" => %{"event" => "move-out", "patterns" => [[^tag]]}}, _]} =
                Task.await(task)
     end
 
@@ -2511,17 +2523,28 @@ defmodule Electric.Plug.RouterTest do
       )
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:2" <> "team_id:2")
         |> Base.encode16(case: :lower)
 
-      assert {_, 200,
+      assert {req, 200,
               [
                 %{
-                  "headers" => %{"tags" => [[[^tag, ^tag]]]},
+                  "headers" => %{"tags" => [[^tag]]},
                   "value" => %{"id" => "2", "role" => "Member"}
                 },
                 _
               ]} =
+               Task.await(task)
+
+      # And move-out should be propagated
+      task = live_shape_req(req, ctx.opts)
+
+      Postgrex.query!(
+        ctx.db_conn,
+        "UPDATE members SET flag = FALSE WHERE (user_id, team_id) = (2, 2)"
+      )
+
+      assert {_, 200, [%{"headers" => %{"event" => "move-out", "patterns" => [[^tag]]}}, _]} =
                Task.await(task)
     end
 
