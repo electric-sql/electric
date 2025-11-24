@@ -1,0 +1,32 @@
+version: '3.8'
+name: 'electric_test'
+
+include:
+  - path: ./dev/docker-compose.yml
+    project_name: electric_test
+
+services:
+  sync-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        MIX_ENV: test
+    environment:
+      MIX_ENV: test
+      DATABASE_URL: "postgresql://postgres:password@postgres:5432/electric?sslmode=disable"
+      ELECTRIC_QUERY_DATABASE_URL: "postgresql://postgres:password@pgbouncer:6432/electric?sslmode=disable"
+      ELECTRIC_LOG_LEVEL: info
+      ELECTRIC_TEST_LOG_LEVEL: error
+    volumes:
+      # Mount source for live code changes
+      - ./lib:/app/lib
+      - ./test:/app/test
+      - ./config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+    # Keep container running
+    command: tail -f /dev/null
