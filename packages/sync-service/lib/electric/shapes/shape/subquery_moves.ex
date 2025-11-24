@@ -65,28 +65,72 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   end
 
   @doc """
-  Generate a tag-removal control message for a shape and
+  Generate a tag-removal control message for a shape.
+
+  Patterns are a list of lists, where each inner list represents a pattern (and is functionally a tuple, but
+  JSON can't directly represent tuples). This pattern is filled with actual values that have been removed.
   """
-  @spec make_move_out_control_message(Shape.t(), [
+  @spec make_move_out_control_message(Shape.t(), String.t(), String.t(), [
           {dep_handle :: String.t(), gone_values :: String.t()},
           ...
         ]) :: map()
   # Stub guard to allow only one dependency for now.
-  def make_move_out_control_message(shape, [_] = move_outs) do
+  def make_move_out_control_message(shape, stack_id, shape_handle, [_] = move_outs) do
     %{
       headers: %{
         event: "move-out",
-        patterns: Enum.flat_map(move_outs, &make_move_out_pattern(shape, &1))
+        patterns:
+          Enum.flat_map(move_outs, &make_move_out_pattern(shape, stack_id, shape_handle, &1))
       }
     }
   end
 
   # This is a stub implementation valid only for when there is exactly one dependency.
-  defp make_move_out_pattern(_shape, {_dep_handle, gone_values}) do
-    # Patterns are a list of tuples (represented as lists for JSON serialization)
-    Enum.map(gone_values, &List.wrap/1)
+  defp make_move_out_pattern(
+         %{tag_structure: patterns},
+         stack_id,
+         shape_handle,
+         {_dep_handle, gone_values}
+       ) do
+    # TODO: This makes the assumption of only one column per pattern.
+    Enum.flat_map(patterns, fn [column_or_expr] ->
+      case column_or_expr do
+        column_name when is_binary(column_name) ->
+          Enum.map(gone_values, &%{pos: 0, value: make_value_hash(stack_id, shape_handle, &1)})
+
+        {:hash_together, columns} ->
+          column_parts =
+            &(Enum.zip_with(&1, columns, fn value, column -> column <> ":" <> value end)
+              |> Enum.join())
+
+          Enum.map(
+            gone_values,
+            &%{
+              pos: 0,
+              value: make_value_hash(stack_id, shape_handle, column_parts.(Tuple.to_list(&1)))
+            }
+          )
+      end
+    end)
   end
 
+  def make_value_hash(stack_id, shape_handle, value) do
+    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{value}")
+    |> Base.encode16(case: :lower)
+  end
+
+  @doc """
+  Generate a tag structure for a shape.
+
+  A tag structure is a list of lists, where each inner list represents a tag (and is functionally a tuple, but
+  JSON can't directly represent tuples). The structure is used to generate actual tags for each row, that act
+  as a refenence as to why this row is part of the shape.
+
+  Tag structure then is essentially a list of column names in correct positions that will get filled in
+  with actual values from the row
+  """
+  @spec move_in_tag_structure(Shape.t()) ::
+          list(list(String.t() | {:hash_together, [String.t(), ...]}))
   def move_in_tag_structure(%Shape{} = shape)
       when is_nil(shape.where)
       when shape.shape_dependencies == [],
@@ -111,7 +155,7 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
                     column_name
                   end)
 
-                {:ok, [[elements | current_tag] | others]}
+                {:ok, [[{:hash_together, elements} | current_tag] | others]}
             end
 
           _, acc, _ ->

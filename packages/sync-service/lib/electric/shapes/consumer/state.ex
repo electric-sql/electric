@@ -1,7 +1,7 @@
 defmodule Electric.Shapes.Consumer.State do
   @moduledoc false
-  alias Electric.Shapes.Consumer.MoveHandlingState
-  alias Electric.Shapes.Consumer.InitialSnapshotState
+  alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.SnapshotQuery
@@ -18,8 +18,8 @@ defmodule Electric.Shapes.Consumer.State do
     :latest_offset,
     :storage,
     :writer,
-    initial_snapshot_state: InitialSnapshotState.new(nil),
-    move_handling_state: MoveHandlingState.new(),
+    initial_snapshot_state: InitialSnapshot.new(nil),
+    move_handling_state: MoveIns.new(),
     buffer: [],
     txn_offset_mapping: [],
     materializer_subscribed?: false,
@@ -116,11 +116,11 @@ defmodule Electric.Shapes.Consumer.State do
   #       }
 
   defguard is_snapshot_started(state)
-           when is_struct(state.initial_snapshot_state, InitialSnapshotState) and
+           when is_struct(state.initial_snapshot_state, InitialSnapshot) and
                   state.initial_snapshot_state.snapshot_started?
 
   defguard needs_initial_filtering(state)
-           when is_struct(state.initial_snapshot_state, InitialSnapshotState) and
+           when is_struct(state.initial_snapshot_state, InitialSnapshot) and
                   state.initial_snapshot_state.filtering?
 
   @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: uninitialized_t()
@@ -156,7 +156,7 @@ defmodule Electric.Shapes.Consumer.State do
         do: LogOffset.last_before_real_offsets(),
         else: latest_offset
 
-    initial_snapshot_state = InitialSnapshotState.new(pg_snapshot)
+    initial_snapshot_state = InitialSnapshot.new(pg_snapshot)
 
     %__MODULE__{
       state
@@ -164,7 +164,7 @@ defmodule Electric.Shapes.Consumer.State do
         storage: storage,
         writer: writer,
         initial_snapshot_state: initial_snapshot_state,
-        buffering?: InitialSnapshotState.needs_buffering?(initial_snapshot_state)
+        buffering?: InitialSnapshot.needs_buffering?(initial_snapshot_state)
     }
   end
 
@@ -195,7 +195,7 @@ defmodule Electric.Shapes.Consumer.State do
   def add_waiter(%__MODULE__{initial_snapshot_state: initial_snapshot_state} = state, from) do
     %{
       state
-      | initial_snapshot_state: InitialSnapshotState.add_waiter(initial_snapshot_state, from)
+      | initial_snapshot_state: InitialSnapshot.add_waiter(initial_snapshot_state, from)
     }
   end
 
@@ -204,25 +204,25 @@ defmodule Electric.Shapes.Consumer.State do
         snapshot
       ) do
     initial_snapshot_state =
-      InitialSnapshotState.set_initial_snapshot(initial_snapshot_state, state.storage, snapshot)
+      InitialSnapshot.set_initial_snapshot(initial_snapshot_state, state.storage, snapshot)
 
     %{
       state
       | initial_snapshot_state: initial_snapshot_state,
-        buffering?: InitialSnapshotState.needs_buffering?(initial_snapshot_state)
+        buffering?: InitialSnapshot.needs_buffering?(initial_snapshot_state)
     }
   end
 
   def mark_snapshot_started(%__MODULE__{initial_snapshot_state: initial_snapshot_state} = state) do
     initial_snapshot_state =
-      InitialSnapshotState.mark_snapshot_started(initial_snapshot_state, state.storage)
+      InitialSnapshot.mark_snapshot_started(initial_snapshot_state, state.storage)
 
     %{state | initial_snapshot_state: initial_snapshot_state}
   end
 
   def reply_to_snapshot_waiters(state, reason) do
     initial_snapshot_state =
-      InitialSnapshotState.reply_to_waiters(state.initial_snapshot_state, reason)
+      InitialSnapshot.reply_to_waiters(state.initial_snapshot_state, reason)
 
     %{state | initial_snapshot_state: initial_snapshot_state}
   end

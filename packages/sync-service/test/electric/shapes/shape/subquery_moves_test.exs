@@ -98,17 +98,35 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
       shape = %Shape{
         root_table: {"public", "child"},
         root_table_id: 1,
-        shape_dependencies_handles: ["dep-handle-1"]
+        shape_dependencies_handles: ["dep-handle-1"],
+        tag_structure: [["parent_id"]]
       }
 
       move_outs = [{"dep-handle-1", ["1", "2", "3"]}]
 
-      message = SubqueryMoves.make_move_out_control_message(shape, move_outs)
+      message =
+        SubqueryMoves.make_move_out_control_message(shape, "stack-id", "shape-handle", move_outs)
+
+      tag1 =
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "1")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "2")
+        |> Base.encode16(case: :lower)
+
+      tag3 =
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "3")
+        |> Base.encode16(case: :lower)
 
       assert message == %{
                headers: %{
                  event: "move-out",
-                 patterns: [["1"], ["2"], ["3"]]
+                 patterns: [
+                   %{pos: 0, value: tag1},
+                   %{pos: 0, value: tag2},
+                   %{pos: 0, value: tag3}
+                 ]
                }
              }
     end
@@ -117,18 +135,28 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
       shape = %Shape{
         root_table: {"public", "child"},
         root_table_id: 1,
-        shape_dependencies_handles: ["dep-handle-1"]
+        shape_dependencies_handles: ["dep-handle-1"],
+        tag_structure: [[{:hash_together, ["col1", "col2"]}]]
       }
 
       # Composite keys are represented as lists
-      move_outs = [{"dep-handle-1", [["1", "a"], ["2", "b"]]}]
+      move_outs = [{"dep-handle-1", [{"1", "a"}, {"2", "b"}]}]
 
-      message = SubqueryMoves.make_move_out_control_message(shape, move_outs)
+      message =
+        SubqueryMoves.make_move_out_control_message(shape, "stack-id", "shape-handle", move_outs)
+
+      tag1 =
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "col1:1col2:a")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "col1:2col2:b")
+        |> Base.encode16(case: :lower)
 
       assert message == %{
                headers: %{
                  event: "move-out",
-                 patterns: [["1", "a"], ["2", "b"]]
+                 patterns: [%{pos: 0, value: tag1}, %{pos: 0, value: tag2}]
                }
              }
     end
@@ -168,7 +196,7 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
 
       result = SubqueryMoves.move_in_tag_structure(shape)
 
-      assert result == [[["col1", "col2"]]]
+      assert result == [[{:hash_together, ["col1", "col2"]}]]
     end
   end
 

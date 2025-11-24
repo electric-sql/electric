@@ -1,4 +1,4 @@
-defmodule Electric.Shapes.Consumer.MoveHandlingState do
+defmodule Electric.Shapes.Consumer.MoveIns do
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
   alias Electric.Postgres.Xid
@@ -25,8 +25,8 @@ defmodule Electric.Shapes.Consumer.MoveHandlingState do
   Add information about a new move-in to the state for which we're waiting
   and update the buffering boundary.
   """
-  @spec add_waiting_move_in(t(), move_in_name(), pg_snapshot()) :: t()
-  def add_waiting_move_in(%__MODULE__{waiting_move_ins: waiting_move_ins} = state, name, snapshot) do
+  @spec add_waiting(t(), move_in_name(), pg_snapshot()) :: t()
+  def add_waiting(%__MODULE__{waiting_move_ins: waiting_move_ins} = state, name, snapshot) do
     new_waiting_move_ins = Map.put(waiting_move_ins, name, snapshot)
     new_buffering_snapshot = make_move_in_buffering_snapshot(new_waiting_move_ins)
 
@@ -54,8 +54,8 @@ defmodule Electric.Shapes.Consumer.MoveHandlingState do
   @doc """
   Change a move-in from "waiting" to "filtering" and update the buffering boundary.
   """
-  @spec change_move_in_to_filtering(t(), move_in_name(), list(String.t())) :: t()
-  def change_move_in_to_filtering(%__MODULE__{} = state, name, key_set) do
+  @spec change_to_filtering(t(), move_in_name(), list(String.t())) :: t()
+  def change_to_filtering(%__MODULE__{} = state, name, key_set) do
     {snapshot, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
     filtering_move_ins = [{snapshot, key_set} | state.filtering_move_ins]
     buffering_snapshot = make_move_in_buffering_snapshot(waiting_move_ins)
@@ -77,8 +77,8 @@ defmodule Electric.Shapes.Consumer.MoveHandlingState do
   Filtering generally is applied only to transactions that are already visible
   in the snapshot, and those can only be with `xid < xmax`.
   """
-  @spec remove_completed_move_ins(t(), Transaction.t()) :: t()
-  def remove_completed_move_ins(%__MODULE__{} = state, %Transaction{xid: xid}) do
+  @spec remove_completed(t(), Transaction.t()) :: t()
+  def remove_completed(%__MODULE__{} = state, %Transaction{xid: xid}) do
     state.filtering_move_ins
     |> Enum.reject(fn {snapshot, _} -> Xid.after_snapshot?(xid, snapshot) end)
     |> then(&%{state | filtering_move_ins: &1})
@@ -92,7 +92,7 @@ defmodule Electric.Shapes.Consumer.MoveHandlingState do
   @spec check_txn(t(), Transaction.t()) :: {:continue, t()} | {:start_buffering, t()}
   def check_txn(%__MODULE__{move_in_buffering_snapshot: snapshot} = state, %Transaction{} = txn) do
     if is_nil(snapshot) or Transaction.visible_in_snapshot?(txn, snapshot) do
-      state = remove_completed_move_ins(state, txn)
+      state = remove_completed(state, txn)
       {:continue, state}
     else
       {:start_buffering, state}

@@ -1,7 +1,7 @@
-defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
+defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
   use ExUnit.Case, async: true
 
-  alias Electric.Shapes.Consumer.InitialSnapshotState
+  alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Replication.Changes.Transaction
   alias Electric.ShapeCache.Storage
 
@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
   describe "new/1" do
     test "creates state with no snapshot" do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
 
       assert state.filtering? == true
       assert state.snapshot_started? == false
@@ -21,7 +21,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
     test "creates state with snapshot map" do
       snapshot = %{xmin: 100, xmax: 200, xip_list: [150], filter_txns?: true}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       assert state.filtering? == true
       assert state.snapshot_started? == false
@@ -31,7 +31,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
     test "respects filter_txns? flag from snapshot" do
       snapshot = %{xmin: 100, xmax: 200, xip_list: [], filter_txns?: false}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       assert state.filtering? == false
       assert state.pg_snapshot == {100, 200, []}
@@ -39,7 +39,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
     test "defaults filter_txns? to true if not present" do
       snapshot = %{xmin: 100, xmax: 200, xip_list: []}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       assert state.filtering? == true
     end
@@ -47,23 +47,23 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
   describe "add_waiter/2" do
     test "adds waiter to empty list" do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
       from = {self(), make_ref()}
 
-      state = InitialSnapshotState.add_waiter(state, from)
+      state = InitialSnapshot.add_waiter(state, from)
 
       assert state.awaiting_snapshot_start == [from]
     end
 
     test "adds multiple waiters" do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
       from1 = {self(), make_ref()}
       from2 = {self(), make_ref()}
 
       state =
         state
-        |> InitialSnapshotState.add_waiter(from1)
-        |> InitialSnapshotState.add_waiter(from2)
+        |> InitialSnapshot.add_waiter(from1)
+        |> InitialSnapshot.add_waiter(from2)
 
       assert state.awaiting_snapshot_start == [from2, from1]
     end
@@ -76,11 +76,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
       ref2 = make_ref()
 
       state =
-        InitialSnapshotState.new(nil)
-        |> InitialSnapshotState.add_waiter({parent, ref1})
-        |> InitialSnapshotState.add_waiter({parent, ref2})
+        InitialSnapshot.new(nil)
+        |> InitialSnapshot.add_waiter({parent, ref1})
+        |> InitialSnapshot.add_waiter({parent, ref2})
 
-      state = InitialSnapshotState.reply_to_waiters(state, :started)
+      state = InitialSnapshot.reply_to_waiters(state, :started)
 
       assert state.awaiting_snapshot_start == []
       assert_received {^ref1, :started}
@@ -88,9 +88,9 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
     end
 
     test "handles empty waiter list" do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
 
-      state = InitialSnapshotState.reply_to_waiters(state, :started)
+      state = InitialSnapshot.reply_to_waiters(state, :started)
 
       assert state.awaiting_snapshot_start == []
     end
@@ -99,9 +99,9 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
       parent = self()
       ref = make_ref()
 
-      state = %{InitialSnapshotState.new(nil) | awaiting_snapshot_start: [nil, {parent, ref}]}
+      state = %{InitialSnapshot.new(nil) | awaiting_snapshot_start: [nil, {parent, ref}]}
 
-      state = InitialSnapshotState.reply_to_waiters(state, :started)
+      state = InitialSnapshot.reply_to_waiters(state, :started)
 
       assert state.awaiting_snapshot_start == []
       assert_received {^ref, :started}
@@ -110,16 +110,16 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
   describe "needs_buffering?/1" do
     test "returns true when snapshot is nil" do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
 
-      assert InitialSnapshotState.needs_buffering?(state) == true
+      assert InitialSnapshot.needs_buffering?(state) == true
     end
 
     test "returns false when snapshot is set" do
       snapshot = %{xmin: 100, xmax: 200, xip_list: []}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
-      assert InitialSnapshotState.needs_buffering?(state) == false
+      assert InitialSnapshot.needs_buffering?(state) == false
     end
   end
 
@@ -133,10 +133,10 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
     end
 
     test "sets snapshot and updates storage", %{shape_storage: storage} do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
       snapshot = {100, 200, [150]}
 
-      state = InitialSnapshotState.set_initial_snapshot(state, storage, snapshot)
+      state = InitialSnapshot.set_initial_snapshot(state, storage, snapshot)
 
       assert state.pg_snapshot == snapshot
       assert state.filtering? == true
@@ -147,10 +147,10 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
     end
 
     test "sets snapshot with empty xip_list", %{shape_storage: storage} do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
       snapshot = {100, 200, []}
 
-      state = InitialSnapshotState.set_initial_snapshot(state, storage, snapshot)
+      state = InitialSnapshot.set_initial_snapshot(state, storage, snapshot)
 
       assert state.pg_snapshot == snapshot
       assert state.filtering? == true
@@ -175,10 +175,10 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
       ref = make_ref()
 
       state =
-        InitialSnapshotState.new(nil)
-        |> InitialSnapshotState.add_waiter({parent, ref})
+        InitialSnapshot.new(nil)
+        |> InitialSnapshot.add_waiter({parent, ref})
 
-      state = InitialSnapshotState.mark_snapshot_started(state, storage)
+      state = InitialSnapshot.mark_snapshot_started(state, storage)
 
       assert state.snapshot_started? == true
       assert state.awaiting_snapshot_start == []
@@ -189,13 +189,13 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
     end
 
     test "is idempotent when already started", %{shape_storage: storage} do
-      state = InitialSnapshotState.new(nil)
+      state = InitialSnapshot.new(nil)
 
-      state = InitialSnapshotState.mark_snapshot_started(state, storage)
+      state = InitialSnapshot.mark_snapshot_started(state, storage)
       assert state.snapshot_started? == true
 
       # Call again
-      state = InitialSnapshotState.mark_snapshot_started(state, storage)
+      state = InitialSnapshot.mark_snapshot_started(state, storage)
       assert state.snapshot_started? == true
     end
   end
@@ -211,11 +211,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
     test "stops filtering when transaction is after snapshot", %{shape_storage: storage} do
       snapshot = %{xmin: 100, xmax: 200, xip_list: []}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       # Transaction with xid >= xmax should stop filtering
       txn = %Transaction{xid: 200, lsn: {0, 1}, changes: []}
-      state = InitialSnapshotState.maybe_stop_initial_filtering(state, storage, txn)
+      state = InitialSnapshot.maybe_stop_initial_filtering(state, storage, txn)
 
       assert state.filtering? == false
 
@@ -226,11 +226,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
     test "keeps filtering when transaction is within snapshot", %{shape_storage: storage} do
       snapshot = %{xmin: 100, xmax: 200, xip_list: []}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       # Transaction with xid < xmax should keep filtering
       txn = %Transaction{xid: 150, lsn: {0, 1}, changes: []}
-      state = InitialSnapshotState.maybe_stop_initial_filtering(state, storage, txn)
+      state = InitialSnapshot.maybe_stop_initial_filtering(state, storage, txn)
 
       assert state.filtering? == true
     end
@@ -239,11 +239,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
       shape_storage: storage
     } do
       snapshot = %{xmin: 100, xmax: 200, xip_list: [150]}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       # Transaction with xid >= xmax
       txn = %Transaction{xid: 200, lsn: {0, 1}, changes: []}
-      state = InitialSnapshotState.maybe_stop_initial_filtering(state, storage, txn)
+      state = InitialSnapshot.maybe_stop_initial_filtering(state, storage, txn)
 
       assert state.filtering? == false
     end
@@ -262,11 +262,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
       shape_storage: storage
     } do
       snapshot = %{xmin: 100, xmax: 200, xip_list: []}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       # Transaction with xid < xmax and not in xip_list is visible
       txn = %Transaction{xid: 150, lsn: {0, 1}, changes: []}
-      {result, state} = InitialSnapshotState.filter(state, storage, txn)
+      {result, state} = InitialSnapshot.filter(state, storage, txn)
 
       assert result == :consider_flushed
       assert state.filtering? == true
@@ -276,11 +276,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
       shape_storage: storage
     } do
       snapshot = %{xmin: 100, xmax: 200, xip_list: []}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       # Transaction with xid >= xmax is not visible
       txn = %Transaction{xid: 200, lsn: {0, 1}, changes: []}
-      {result, state} = InitialSnapshotState.filter(state, storage, txn)
+      {result, state} = InitialSnapshot.filter(state, storage, txn)
 
       assert result == :continue
       assert state.filtering? == false
@@ -288,11 +288,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
     test "returns :consider_flushed for transactions in xip_list", %{shape_storage: storage} do
       snapshot = %{xmin: 100, xmax: 200, xip_list: [150]}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       # Transaction with xid in xip_list is not visible, but still within snapshot range
       txn = %Transaction{xid: 150, lsn: {0, 1}, changes: []}
-      {result, _state} = InitialSnapshotState.filter(state, storage, txn)
+      {result, _state} = InitialSnapshot.filter(state, storage, txn)
 
       # Transactions in xip_list are considered in-progress at snapshot time,
       # so they're not visible in the snapshot
@@ -301,11 +301,11 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotStateTest do
 
     test "returns :consider_flushed for transactions before xmin", %{shape_storage: storage} do
       snapshot = %{xmin: 100, xmax: 200, xip_list: []}
-      state = InitialSnapshotState.new(snapshot)
+      state = InitialSnapshot.new(snapshot)
 
       # Transaction with xid < xmin is visible (committed before snapshot)
       txn = %Transaction{xid: 50, lsn: {0, 1}, changes: []}
-      {result, state} = InitialSnapshotState.filter(state, storage, txn)
+      {result, state} = InitialSnapshot.filter(state, storage, txn)
 
       assert result == :consider_flushed
       assert state.filtering? == true

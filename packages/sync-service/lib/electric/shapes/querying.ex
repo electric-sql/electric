@@ -153,9 +153,17 @@ defmodule Electric.Shapes.Querying do
          shape_handle
        ) do
     additional_headers =
-      Shape.SubqueryMoves.move_in_tag_structure(shape)
-      |> Electric.Utils.deep_map(fn column_name ->
-        "$${md5('#{stack_id}#{shape_handle}' || #{column_name}::text)}"
+      shape.tag_structure
+      |> Enum.map(fn pattern ->
+        Enum.map(pattern, fn
+          column_name when is_binary(column_name) ->
+            "$${md5('#{stack_id}#{shape_handle}' || #{column_name}::text)}"
+
+          {:hash_together, columns} ->
+            column_parts = Enum.map(columns, &~s['#{&1}:' || #{&1}::text])
+            "$${md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})}"
+        end)
+        |> Enum.join("/")
       end)
       |> case do
         [] -> additional_headers
