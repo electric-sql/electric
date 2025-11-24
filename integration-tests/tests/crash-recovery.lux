@@ -80,7 +80,7 @@
   [invoke shape_get items $handle $offset]
   ??HTTP/1.1 200 OK
   ??electric-handle: $handle
-  ??"val":"#pre-crash test val"
+  ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
 
 
 # Recovered shape should handle new data
