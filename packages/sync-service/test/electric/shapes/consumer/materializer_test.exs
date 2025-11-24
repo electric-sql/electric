@@ -355,9 +355,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Insert records with move_tags
       Materializer.new_changes(ctx, [
-        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]},
-        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: [["tag2"]]},
-        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: [["tag1"]]}
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: ["tag1"]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: ["tag2"]},
+        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: ["tag1"]}
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10, 20, 30])
@@ -365,7 +365,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Send move_out event to remove rows with tag1
       Materializer.new_changes(ctx, [
-        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}}
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
@@ -377,9 +377,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       ctx = with_materializer(ctx)
 
       Materializer.new_changes(ctx, [
-        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]},
-        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: [["tag2"]]},
-        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: [["tag3"]]}
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: ["tag1"]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: ["tag2"]},
+        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: ["tag3"]}
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10, 20, 30])
@@ -387,7 +387,12 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Remove rows with tag1 or tag3
       Materializer.new_changes(ctx, [
-        %{headers: %{event: "move-out", patterns: [["tag1"], ["tag3"]]}}
+        %{
+          headers: %{
+            event: "move-out",
+            patterns: [%{pos: 0, value: "tag1"}, %{pos: 0, value: "tag3"}]
+          }
+        }
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
@@ -399,7 +404,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       ctx = with_materializer(ctx)
 
       Materializer.new_changes(ctx, [
-        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]}
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: ["tag1"]}
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
@@ -407,7 +412,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Try to remove rows with non-existent tag
       Materializer.new_changes(ctx, [
-        %{headers: %{event: "move-out", patterns: [["non_existent"]]}}
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "non_existent"}]}}
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
@@ -419,8 +424,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       ctx = with_materializer(ctx)
 
       Materializer.new_changes(ctx, [
-        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [["tag1"]]},
-        %Changes.NewRecord{key: "2", record: %{"value" => "10"}, move_tags: [["tag2"]]}
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: ["tag1"]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "10"}, move_tags: ["tag2"]}
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
@@ -428,7 +433,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Remove only tag1 row
       Materializer.new_changes(ctx, [
-        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}}
       ])
 
       # Value 10 should still be present because key "2" still has it
@@ -438,8 +443,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     @tag snapshot_data: {
            [
-             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: [["tag1"]]},
-             %Changes.NewRecord{record: %{"id" => "2", "value" => "20"}, move_tags: [["tag2"]]}
+             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: ["tag1"]},
+             %Changes.NewRecord{record: %{"id" => "2", "value" => "20"}, move_tags: ["tag2"]}
            ],
            []
          }
@@ -451,7 +456,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Now send move_out event to remove rows with tag1
       Materializer.new_changes(ctx, [
-        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}}
       ])
 
       # Only value 20 should remain after move_out
@@ -461,8 +466,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     @tag snapshot_data: {
            [
-             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: [["tag1"]]},
-             %Changes.NewRecord{record: %{"id" => "2", "value" => "10"}, move_tags: [["tag2"]]}
+             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: ["tag1"]},
+             %Changes.NewRecord{record: %{"id" => "2", "value" => "10"}, move_tags: ["tag2"]}
            ],
            []
          }
@@ -474,7 +479,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Remove rows with tag1
       Materializer.new_changes(ctx, [
-        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}}
       ])
 
       # Value 10 should still be present because key "2" still has it
@@ -484,9 +489,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     @tag snapshot_data: {
            [
-             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: [["tag1"]]},
-             %Changes.NewRecord{record: %{"id" => "2", "value" => "20"}, move_tags: [["tag1"]]},
-             %Changes.NewRecord{record: %{"id" => "3", "value" => "30"}, move_tags: [["tag2"]]}
+             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: ["tag1"]},
+             %Changes.NewRecord{record: %{"id" => "2", "value" => "20"}, move_tags: ["tag1"]},
+             %Changes.NewRecord{record: %{"id" => "3", "value" => "30"}, move_tags: ["tag2"]}
            ],
            []
          }
@@ -497,7 +502,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Remove all rows with tag1
       Materializer.new_changes(ctx, [
-        %{headers: %{event: "move-out", patterns: [["tag1"]]}}
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}}
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([30])
@@ -506,9 +511,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     end
 
     @tag snapshot_data: [
-           ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":[["tag1"]]}}),
-           ~s({"key":"\\"public\\".\\"test_table\\"/\\"2\\"","value":{"id":"2","value":"20"},"headers":{"operation":"insert","tags":[["tag2"]]}}),
-           ~s({"headers":{"event":"move-out","patterns":[["tag1"]]}})
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":["tag1"]}}),
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"2\\"","value":{"id":"2","value":"20"},"headers":{"operation":"insert","tags":["tag2"]}}),
+           ~s({"headers":{"event":"move-out","patterns":[{"pos":0,"value":"tag1"}]}})
          ]
     test "on-load move_out event in snapshot data is processed correctly", ctx do
       ctx = with_materializer(ctx)
@@ -519,9 +524,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     end
 
     @tag snapshot_data: [
-           ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":[["tag1"]]}}),
-           ~s({"key":"\\"public\\".\\"test_table\\"/\\"2\\"","value":{"id":"2","value":"10"},"headers":{"operation":"insert","tags":[["tag2"]]}}),
-           ~s({"headers":{"event":"move-out","patterns":[["tag1"]]}})
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":["tag1"]}}),
+           ~s({"key":"\\"public\\".\\"test_table\\"/\\"2\\"","value":{"id":"2","value":"10"},"headers":{"operation":"insert","tags":["tag2"]}}),
+           ~s({"headers":{"event":"move-out","patterns":[{"pos":0,"value":"tag1"}]}})
          ]
     test "on-load move_out event with duplicate values keeps remaining row's value", ctx do
       ctx = with_materializer(ctx)

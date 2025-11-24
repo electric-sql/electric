@@ -5,7 +5,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   alias Electric.Shapes.PartialModes
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
-  alias Electric.Shapes.Consumer.MoveHandlingState
+  alias Electric.Shapes.Consumer.MoveIns
 
   @spec process_move_ins(State.t(), Shape.handle(), list(term())) :: State.t()
   def process_move_ins(state, _, []), do: state
@@ -42,7 +42,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       )
 
     move_handling_state =
-      MoveHandlingState.add_waiting_move_in(state.move_handling_state, name, pg_snapshot)
+      MoveIns.add_waiting(state.move_handling_state, name, pg_snapshot)
 
     %{state | move_handling_state: move_handling_state}
   end
@@ -53,14 +53,21 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
 
   def process_move_outs(state, dep_handle, removed_values) do
     message =
-      SubqueryMoves.make_move_out_control_message(state.shape, [{dep_handle, removed_values}])
+      SubqueryMoves.make_move_out_control_message(
+        state.shape,
+        state.stack_id,
+        state.shape_handle,
+        [
+          {dep_handle, removed_values}
+        ]
+      )
 
     {{_, upper_bound}, writer} = Storage.append_control_message!(message, state.writer)
 
     {%{state | writer: writer}, {[message], upper_bound}}
   end
 
-  @spec query_complete(State.t(), MoveHandlingState.move_in_name(), list(String.t())) ::
+  @spec query_complete(State.t(), MoveIns.move_in_name(), list(String.t())) ::
           {State.t(), notification :: term()}
   def query_complete(%State{} = state, name, key_set) do
     # 1. Splice the stored data into the main log
@@ -69,7 +76,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
 
     # 2. Remove this entry from "waiting" and add to "filtering"
     move_handling_state =
-      MoveHandlingState.change_move_in_to_filtering(state.move_handling_state, name, key_set)
+      MoveIns.change_to_filtering(state.move_handling_state, name, key_set)
 
     state = %{state | move_handling_state: move_handling_state, writer: writer}
 

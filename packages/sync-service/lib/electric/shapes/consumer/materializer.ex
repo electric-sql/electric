@@ -149,6 +149,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
           end
 
         %{"headers" => %{"event" => "move-out", "patterns" => patterns}} ->
+          patterns =
+            Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
+              %{pos: pos, value: value}
+            end)
+
           %{headers: %{event: "move-out", patterns: patterns}}
       end)
       |> apply_changes(state)
@@ -375,21 +380,21 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   defp add_row_to_tag_indices(tag_indices, key, move_tags) do
     # For now we only support one move tag per row (i.e. no `OR`s in the where clause if there's a subquery)
-    Enum.reduce(move_tags, tag_indices, fn [val1], acc ->
-      Map.update(acc, val1, MapSet.new([key]), &MapSet.put(&1, key))
+    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
+      Map.update(acc, tag, MapSet.new([key]), &MapSet.put(&1, key))
     end)
   end
 
   defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
-    Enum.reduce(move_tags, tag_indices, fn [val1], acc ->
-      case Map.fetch(acc, val1) do
+    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
+      case Map.fetch(acc, tag) do
         {:ok, v} ->
           new_mapset = MapSet.delete(v, key)
 
           if MapSet.size(new_mapset) == 0 do
-            Map.delete(acc, val1)
+            Map.delete(acc, tag)
           else
-            Map.put(acc, val1, new_mapset)
+            Map.put(acc, tag, new_mapset)
           end
 
         :error ->
@@ -400,8 +405,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   defp pop_keys_from_tag_indices(tag_indices, patterns) do
     # This implementation is naive while we support only one tag per row and no composite tags.
-    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn [val1], {keys, acc} ->
-      case Map.pop(acc, val1) do
+    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn %{pos: _pos, value: value},
+                                                          {keys, acc} ->
+      case Map.pop(acc, value) do
         {nil, acc} -> {keys, acc}
         {v, acc} -> {MapSet.union(keys, v), acc}
       end

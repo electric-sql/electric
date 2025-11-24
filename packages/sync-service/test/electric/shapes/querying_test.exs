@@ -300,9 +300,9 @@ defmodule Electric.Shapes.QueryingTest do
         |> Base.encode16(case: :lower)
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [[^tag1]]}},
-               %{value: %{value: "5"}, headers: %{tags: [[^tag2]]}},
-               %{value: %{value: "6"}, headers: %{tags: [[^tag3]]}}
+               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [^tag2]}},
+               %{value: %{value: "6"}, headers: %{tags: [^tag3]}}
              ] =
                decode_stream(
                  Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
@@ -311,15 +311,24 @@ defmodule Electric.Shapes.QueryingTest do
 
     test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(
+          :md5,
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:1" <> "parent_id2:1"
+        )
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(
+          :md5,
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:2" <> "parent_id2:2"
+        )
         |> Base.encode16(case: :lower)
 
       tag3 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        :crypto.hash(
+          :md5,
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:3" <> "parent_id2:3"
+        )
         |> Base.encode16(case: :lower)
 
       for statement <- [
@@ -337,9 +346,9 @@ defmodule Electric.Shapes.QueryingTest do
         )
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [[[^tag1, ^tag1]]]}},
-               %{value: %{value: "5"}, headers: %{tags: [[[^tag2, ^tag2]]]}},
-               %{value: %{value: "6"}, headers: %{tags: [[[^tag3, ^tag3]]]}}
+               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [^tag2]}},
+               %{value: %{value: "6"}, headers: %{tags: [^tag3]}}
              ] =
                decode_stream(
                  Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
@@ -382,8 +391,8 @@ defmodule Electric.Shapes.QueryingTest do
         |> Base.encode16(case: :lower)
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [[^tag1]]}},
-               %{value: %{value: "5"}, headers: %{tags: [[^tag2]]}}
+               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [^tag2]}}
              ] =
                Querying.query_move_in(
                  conn,
@@ -422,16 +431,22 @@ defmodule Electric.Shapes.QueryingTest do
                )
 
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(
+          :md5,
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:1" <> "parent_id2:1"
+        )
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(
+          :md5,
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:2" <> "parent_id2:2"
+        )
         |> Base.encode16(case: :lower)
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [[[^tag1, ^tag1]]]}},
-               %{value: %{value: "5"}, headers: %{tags: [[[^tag2, ^tag2]]]}}
+               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [^tag2]}}
              ] =
                Querying.query_move_in(
                  conn,

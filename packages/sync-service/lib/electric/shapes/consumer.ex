@@ -1,8 +1,8 @@
 defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
-  alias Electric.Shapes.Consumer.MoveHandlingState
-  alias Electric.Shapes.Consumer.InitialSnapshotState
+  alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Consumer.MoveHandling
   alias Electric.Shapes.Consumer.State
 
@@ -437,7 +437,7 @@ defmodule Electric.Shapes.Consumer do
     do: {:cont, State.add_to_buffer(state, txn)}
 
   defp handle_txn(txn, state) when needs_initial_filtering(state) do
-    case InitialSnapshotState.filter(state.initial_snapshot_state, state.storage, txn) do
+    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn) do
       {:consider_flushed, initial_snapshot_state} ->
         {:cont, consider_flushed(%{state | initial_snapshot_state: initial_snapshot_state}, txn)}
 
@@ -455,7 +455,7 @@ defmodule Electric.Shapes.Consumer do
          txn,
          %State{move_handling_state: move_handling_state} = state
        ) do
-    case MoveHandlingState.check_txn(move_handling_state, txn) do
+    case MoveIns.check_txn(move_handling_state, txn) do
       {:start_buffering, new_move_handling_state} ->
         handle_txn(txn, %{state | move_handling_state: new_move_handling_state, buffering?: true})
 
@@ -666,7 +666,7 @@ defmodule Electric.Shapes.Consumer do
          change_acc,
          total_ops
        ) do
-    if not MoveHandlingState.change_already_visible?(filter_state, xid, change) do
+    if not MoveIns.change_already_visible?(filter_state, xid, change) do
       case Shape.convert_change(shape, change,
              extra_refs: extra_refs,
              stack_id: stack_id,

@@ -633,15 +633,18 @@ defmodule Electric.Shapes.Shape do
     %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
   end
 
-  defp make_tags_from_pattern(pattern, record, stack_id, shape_handle) do
-    Utils.deep_map(pattern, fn column_name ->
-      make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
-    end)
-  end
+  defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
+    Enum.map(patterns, fn pattern ->
+      Enum.map(pattern, fn
+        column_name when is_binary(column_name) ->
+          SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
 
-  defp make_value_hash(stack_id, shape_handle, value) do
-    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{value}")
-    |> Base.encode16(case: :lower)
+        {:hash_together, columns} ->
+          column_parts = Enum.map(columns, &(&1 <> ":" <> Map.get(record, &1)))
+          SubqueryMoves.make_value_hash(stack_id, shape_handle, Enum.join(column_parts, ":"))
+      end)
+      |> Enum.join("/")
+    end)
   end
 
   defp filtered_columns_changed?(%Changes.UpdatedRecord{old_record: record, record: record}),
