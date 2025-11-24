@@ -29,7 +29,9 @@ defmodule Electric.Replication.Eval.EnvTest do
     test "converts integer types using out functions", %{env: env} do
       assert Env.const_to_pg_string(env, 42, :int2) == "42"
       assert Env.const_to_pg_string(env, 100, :int4) == "100"
-      assert Env.const_to_pg_string(env, 9_223_372_036_854_775_807, :int8) == "9223372036854775807"
+
+      assert Env.const_to_pg_string(env, 9_223_372_036_854_775_807, :int8) ==
+               "9223372036854775807"
     end
 
     test "converts float types using out functions", %{env: env} do

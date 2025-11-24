@@ -234,7 +234,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
             }
           })
 
-        Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
+        Querying.stream_initial_data(conn, stack_id, shape_handle, shape, chunk_bytes_threshold)
         |> Stream.transform(
           fn -> false end,
           fn item, acc ->

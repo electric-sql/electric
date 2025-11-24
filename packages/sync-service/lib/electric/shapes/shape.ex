@@ -524,7 +524,7 @@ defmodule Electric.Shapes.Shape do
   Updates, on the other hand, may be converted to an "new record" or a "deleted record"
   if the previous/new version of the updated row isn't in the shape.
   """
-  def convert_change(shape, change, extra_refs \\ %{})
+  def convert_change(shape, change, opts \\ [])
 
   def convert_change(%__MODULE__{root_table: table}, %{relation: relation}, _)
       when table != relation,
@@ -533,13 +533,13 @@ defmodule Electric.Shapes.Shape do
   def convert_change(
         %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
         change,
-        _
+        opts
       ) do
     # If the change actually doesn't change any columns, we can skip it - this is possible on Postgres but we don't care for those.
     if is_struct(change, Changes.UpdatedRecord) and change.changed_columns == MapSet.new() do
       []
     else
-      [fill_move_tags(change, shape)]
+      [fill_move_tags(change, shape, opts[:stack_id], opts[:shape_handle])]
     end
   end
 
@@ -548,14 +548,17 @@ defmodule Electric.Shapes.Shape do
   def convert_change(
         %__MODULE__{where: where, selected_columns: selected_columns} = shape,
         change,
-        extra_refs
+        opts
       )
       when is_struct(change, Changes.NewRecord)
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
-    if WhereClause.includes_record?(where, record, extra_refs) do
-      change |> fill_move_tags(shape) |> filter_change_columns(selected_columns) |> List.wrap()
+    if WhereClause.includes_record?(where, record, opts[:extra_refs] || %{}) do
+      change
+      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
+      |> filter_change_columns(selected_columns)
+      |> List.wrap()
     else
       []
     end
@@ -564,8 +567,9 @@ defmodule Electric.Shapes.Shape do
   def convert_change(
         %__MODULE__{where: where, selected_columns: selected_columns} = shape,
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
-        extra_refs
+        opts
       ) do
+    extra_refs = opts[:extra_refs] || %{}
     old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs)
     new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs)
 
@@ -578,7 +582,7 @@ defmodule Electric.Shapes.Shape do
       end
 
     converted_changes
-    |> Enum.map(&fill_move_tags(&1, shape))
+    |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&filtered_columns_changed?/1)
   end
@@ -589,33 +593,55 @@ defmodule Electric.Shapes.Shape do
     Changes.filter_columns(change, selected_columns)
   end
 
-  defp fill_move_tags(change, %__MODULE__{tag_structure: []}), do: change
+  defp fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
 
-  defp fill_move_tags(%Changes.NewRecord{record: record} = change, %__MODULE__{
-         tag_structure: tag_structure
-       }) do
-    move_tags = Utils.deep_map(tag_structure, fn column_name -> Map.get(record, column_name) end)
+  defp fill_move_tags(
+         %Changes.NewRecord{record: record} = change,
+         %__MODULE__{
+           tag_structure: tag_structure
+         },
+         stack_id,
+         shape_handle
+       ) do
+    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
     %{change | move_tags: move_tags}
   end
 
   defp fill_move_tags(
          %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
-         %__MODULE__{tag_structure: tag_structure}
+         %__MODULE__{tag_structure: tag_structure},
+         stack_id,
+         shape_handle
        ) do
-    move_tags = Utils.deep_map(tag_structure, fn column_name -> Map.get(record, column_name) end)
+    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
 
     old_move_tags =
-      Utils.deep_map(tag_structure, fn column_name -> Map.get(old_record, column_name) end) --
+      make_tags_from_pattern(tag_structure, old_record, stack_id, shape_handle) --
         move_tags
 
     %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
   end
 
-  defp fill_move_tags(%Changes.DeletedRecord{old_record: record} = change, %__MODULE__{
-         tag_structure: tag_structure
-       }) do
-    move_tags = Utils.deep_map(tag_structure, fn column_name -> Map.get(record, column_name) end)
-    %{change | move_tags: move_tags}
+  defp fill_move_tags(
+         %Changes.DeletedRecord{old_record: record} = change,
+         %__MODULE__{
+           tag_structure: tag_structure
+         },
+         stack_id,
+         shape_handle
+       ) do
+    %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
+  end
+
+  defp make_tags_from_pattern(pattern, record, stack_id, shape_handle) do
+    Utils.deep_map(pattern, fn column_name ->
+      make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
+    end)
+  end
+
+  defp make_value_hash(stack_id, shape_handle, value) do
+    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{value}")
+    |> Base.encode16(case: :lower)
   end
 
   defp filtered_columns_changed?(%Changes.UpdatedRecord{old_record: record, record: record}),
