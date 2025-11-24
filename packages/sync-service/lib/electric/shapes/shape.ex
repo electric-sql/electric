@@ -99,7 +99,7 @@ defmodule Electric.Shapes.Shape do
     {:shape, {shape.root_table_id, shape.root_table}, shape.root_pk,
      Comparable.comparable(shape.where), shape.selected_columns,
      Enum.flat_map(shape.flags, fn {k, v} -> if(v, do: [k], else: []) end) |> Enum.sort(),
-     shape.replica}
+     shape.replica, shape.log_mode}
   end
 
   def has_dependencies?(%__MODULE__{} = shape), do: shape.shape_dependencies != []

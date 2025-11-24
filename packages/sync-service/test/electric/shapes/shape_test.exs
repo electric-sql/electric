@@ -785,5 +785,23 @@ defmodule Electric.Shapes.ShapeTest do
         end
       end
     end
+
+    test "log_mode affects the equivalence", %{inspector: inspector} do
+      shape_fun = fn mode ->
+        Shape.new(~S|the_table|,
+          inspector: inspector,
+          log_mode: mode
+        )
+      end
+
+      {:ok, shape1} = shape_fun.(:full)
+      {:ok, shape2} = shape_fun.(:changes_only)
+
+      assert_shape_comparable(shape1, shape1)
+      assert_shape_comparable(shape2, shape2)
+
+      refute Shape.comparable(shape1) == Shape.comparable(shape2)
+      refute Shape.comparable(shape1) === Shape.comparable(shape2)
+    end
   end
 end
