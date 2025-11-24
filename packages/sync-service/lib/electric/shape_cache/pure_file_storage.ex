@@ -181,7 +181,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
               _ -> []
             end
           end,
-          timeout: 30_000,
+          timeout: :infinity,
           ordered: false
         )
         |> Enum.flat_map(fn {:ok, res} -> res end)
