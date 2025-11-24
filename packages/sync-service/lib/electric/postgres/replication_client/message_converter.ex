@@ -31,8 +31,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
             tx_op_index: nil,
             change_count: 0,
             tx_size: 0,
-            max_tx_size: nil,
-            stack_id: nil
+            max_tx_size: nil
 
   @type t() :: %__MODULE__{
           relations: %{optional(LR.relation_id()) => LR.Relation.t()},
@@ -40,14 +39,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           tx_op_index: non_neg_integer() | nil,
           change_count: non_neg_integer(),
           tx_size: non_neg_integer(),
-          max_tx_size: non_neg_integer() | nil,
-          stack_id: String.t() | nil
+          max_tx_size: non_neg_integer() | nil
         }
 
   def new(opts \\ []) do
     %__MODULE__{
-      max_tx_size: Keyword.get(opts, :max_tx_size),
-      stack_id: Keyword.get(opts, :stack_id)
+      max_tx_size: Keyword.get(opts, :max_tx_size)
     }
   end
 
@@ -57,25 +54,24 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   """
   @spec convert(LR.message(), t()) ::
           {[Changes.change() | Begin.t() | Commit.t() | Relation.t()], t()}
-          | {:error, {:replica_not_full, String.t()}, t()}
-          | {:error, {:exceeded_max_tx_size, String.t()}, t()}
+          | {:error, {:replica_not_full, String.t()}}
+          | {:error, {:exceeded_max_tx_size, String.t()}}
   def convert(%LR.Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
-    {[], state}
+    {:ok, [], state}
   end
 
   def convert(%LR.Begin{} = msg, %__MODULE__{} = state) do
-    {[%Begin{xid: msg.xid}],
+    {:ok, [%Begin{xid: msg.xid}],
      %{state | current_lsn: msg.final_lsn, tx_op_index: 0, tx_size: 0, change_count: 0}}
   end
 
-  def convert(%LR.Origin{} = _msg, state), do: {[], state}
-  def convert(%LR.Type{}, state), do: {[], state}
+  def convert(%LR.Origin{} = _msg, state), do: {:ok, [], state}
+  def convert(%LR.Type{}, state), do: {:ok, [], state}
 
-  def convert(%{bytes: bytes} = _msg, %__MODULE__{max_tx_size: max, tx_size: tx_size} = state)
+  def convert(%{bytes: bytes} = _msg, %__MODULE__{max_tx_size: max, tx_size: tx_size})
       when not is_nil(max) and tx_size + bytes > max do
-    {:error, {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max} bytes."},
-     state}
+    {:error, {:exceeded_max_tx_size, "Collected transaction exceeds limit of #{max} bytes."}}
   end
 
   def convert(
@@ -84,50 +80,43 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       ) do
     new_state = Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
 
-    {
-      [
-        %Relation{
-          id: id,
-          schema: ns,
-          table: name,
-          columns: Enum.map(cols, fn col -> %Column{name: col.name, type_oid: col.type_oid} end)
-        }
-      ],
-      new_state
-    }
+    {:ok,
+     [
+       %Relation{
+         id: id,
+         schema: ns,
+         table: name,
+         columns: Enum.map(cols, fn col -> %Column{name: col.name, type_oid: col.type_oid} end)
+       }
+     ], new_state}
   end
 
   def convert(%LR.Insert{} = msg, %__MODULE__{} = state) do
     relation = Map.fetch!(state.relations, msg.relation_id)
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
 
-    {
-      [
-        %NewRecord{
-          relation: {relation.namespace, relation.name},
-          record: data,
-          log_offset: current_offset(state)
-        }
-      ],
-      change_received(state, msg.bytes)
-    }
+    {:ok,
+     [
+       %NewRecord{
+         relation: {relation.namespace, relation.name},
+         record: data,
+         log_offset: current_offset(state)
+       }
+     ], change_received(state, msg.bytes)}
   end
 
   def convert(%LR.Update{old_tuple_data: nil} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
-    {
-      :error,
-      {:replica_not_full,
-       """
-       Received an update from PG for #{relation.namespace}.#{relation.name} that did not have old data included in the message.
-       This means the table #{relation.namespace}.#{relation.name} doesn't have the correct replica identity mode. Electric cannot
-       function with replica identity mode set to something other than FULL.
+    {:error,
+     {:replica_not_full,
+      """
+      Received an update from PG for #{relation.namespace}.#{relation.name} that did not have old data included in the message.
+      This means the table #{relation.namespace}.#{relation.name} doesn't have the correct replica identity mode. Electric cannot
+      function with replica identity mode set to something other than FULL.
 
-       Try executing `ALTER TABLE #{relation.namespace}.#{relation.name} REPLICA IDENTITY FULL` on Postgres.
-       """},
-      state
-    }
+      Try executing `ALTER TABLE #{relation.namespace}.#{relation.name} REPLICA IDENTITY FULL` on Postgres.
+      """}}
   end
 
   def convert(%LR.Update{} = msg, %__MODULE__{} = state) do
@@ -145,33 +134,29 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
         _, value -> value
       end)
 
-    {
-      [
-        UpdatedRecord.new(
-          relation: {relation.namespace, relation.name},
-          old_record: old_data,
-          record: data,
-          log_offset: current_offset(state)
-        )
-      ],
-      change_received(state, msg.bytes)
-    }
+    {:ok,
+     [
+       UpdatedRecord.new(
+         relation: {relation.namespace, relation.name},
+         old_record: old_data,
+         record: data,
+         log_offset: current_offset(state)
+       )
+     ], change_received(state, msg.bytes)}
   end
 
   def convert(%LR.Delete{} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
     data = data_tuple_to_map(relation.columns, msg.old_tuple_data || msg.changed_key_tuple_data)
 
-    {
-      [
-        %DeletedRecord{
-          relation: {relation.namespace, relation.name},
-          old_record: data,
-          log_offset: current_offset(state)
-        }
-      ],
-      change_received(state, msg.bytes)
-    }
+    {:ok,
+     [
+       %DeletedRecord{
+         relation: {relation.namespace, relation.name},
+         old_record: data,
+         log_offset: current_offset(state)
+       }
+     ], change_received(state, msg.bytes)}
   end
 
   def convert(%LR.Truncate{} = msg, state) do
@@ -192,22 +177,19 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
         end
       )
 
-    {Enum.reverse(truncated), state}
+    {:ok, Enum.reverse(truncated), state}
   end
 
   def convert(%LR.Commit{} = msg, %__MODULE__{} = state) do
-    log_txn_received(msg, state)
-
-    {
-      [
-        %Commit{
-          lsn: msg.lsn,
-          commit_timestamp: msg.commit_timestamp,
-          transaction_size: state.tx_size
-        }
-      ],
-      %{state | current_lsn: nil, tx_op_index: nil, tx_size: 0, change_count: 0}
-    }
+    {:ok,
+     [
+       %Commit{
+         lsn: msg.lsn,
+         commit_timestamp: msg.commit_timestamp,
+         transaction_size: state.tx_size,
+         change_count: state.change_count
+       }
+     ], %{state | current_lsn: nil, tx_op_index: nil, tx_size: 0, change_count: 0}}
   end
 
   defguard in_transaction?(converter) when not is_nil(converter.current_lsn)
@@ -244,24 +226,5 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
         # This gives us headroom for splitting any operation into 2.
         tx_op_index: state.tx_op_index + 2
     }
-  end
-
-  defp log_txn_received(%LR.Commit{} = msg, %__MODULE__{} = state) do
-    alias Electric.Telemetry.Sampler
-    alias Electric.Telemetry.OpenTelemetry
-
-    if Sampler.sample_metrics?() do
-      OpenTelemetry.execute(
-        [:electric, :postgres, :replication, :transaction_received],
-        %{
-          monotonic_time: System.monotonic_time(),
-          receive_lag: DateTime.diff(DateTime.utc_now(), msg.commit_timestamp, :millisecond),
-          bytes: state.tx_size,
-          count: 1,
-          operations: state.change_count
-        },
-        %{stack_id: state.stack_id}
-      )
-    end
   end
 end
