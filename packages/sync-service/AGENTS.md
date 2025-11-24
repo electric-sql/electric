@@ -5,23 +5,21 @@
 
 ## Running Commands
 
-### Option 1: With Elixir Installed (Native)
+### Docker-Based Testing (Recommended for Claude Code Cloud)
 
-If you have Elixir 1.19+ and Erlang/OTP 28+ installed:
+**IMPORTANT for Claude Code Cloud:** Always use Docker for testing. Do NOT attempt to install Elixir natively - it is very slow.
 
+**Install Docker (if not already installed):**
 ```sh
-mix test                                    # Run all tests
-mix test test/electric/shapes/              # Run tests in directory
-mix test test/path/to/test.exs:42           # Run specific test by line
-mix format                                  # Format code
-mix dialyzer                                # Static analysis
+sudo apt-get update -qq && sudo apt-get install -y -qq docker.io docker-compose && sudo service docker start
 ```
 
-### Option 2: Without Elixir (Docker)
+**Navigate to sync-service directory:**
+```sh
+cd packages/sync-service
+```
 
-If Elixir/Erlang are not installed, use Docker:
-
-**First time - start the environment:**
+**Start the test environment:**
 ```sh
 docker compose -f docker-compose.test.yml up -d --build
 ```
@@ -34,15 +32,27 @@ docker compose -f docker-compose.test.yml exec sync-service mix format
 docker compose -f docker-compose.test.yml exec sync-service mix dialyzer
 ```
 
-**Key benefits:**
-- No local Elixir/Erlang installation needed
-- All dependencies (including native NIFs like pg_query_ex) are pre-compiled
-- Source code (`lib/`, `test/`, `config/`) is mounted, so changes are immediately available
+**Why Docker:**
+- No Elixir/Erlang installation needed (installing natively is very slow)
+- All dependencies (including native NIFs like pg_query_ex) are pre-compiled in the image
+- Source code (`lib/`, `test/`, `config/`) is mounted for live updates
 - Only rebuild when dependencies change: `docker compose -f docker-compose.test.yml up -d --build`
 
 **Stop environment:**
 ```sh
 docker compose -f docker-compose.test.yml down
+```
+
+### Native Elixir (For Local Development Only)
+
+If you have Elixir 1.19+ and Erlang/OTP 28+ already installed locally:
+
+```sh
+mix test                                    # Run all tests
+mix test test/electric/shapes/              # Run tests in directory
+mix test test/path/to/test.exs:42           # Run specific test by line
+mix format                                  # Format code
+mix dialyzer                                # Static analysis
 ```
 
 ## Test Commands
@@ -56,17 +66,3 @@ Common patterns:
 
 - `mix format` - Format all code (auto-formats on save in most editors)
 - `mix dialyzer` - Type checking (slow first run, then cached)
-
-## Common Issues
-
-**"PgQuery.Parser not available" or "invalid ELF header"**
-- Native dependency compilation issue
-- Solution: Use Docker environment (has pre-compiled NIFs)
-
-**"all replication slots are in use"**
-- Postgres config limit reached
-- Solution: Increase `max_replication_slots` in `dev/postgres.conf` or run fewer tests in parallel
-
-**Tests hang/timeout**
-- Postgres not running
-- Solution: Docker environment starts Postgres automatically, or run `docker compose -f dev/docker-compose.yml up -d`
