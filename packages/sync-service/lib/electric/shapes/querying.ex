@@ -4,10 +4,12 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
-  def query_move_in(conn, shape, {where, params}) do
+  def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
     table = Utils.relation_to_sql(shape.root_table)
 
-    {json_like_select, _} = json_like_select(shape, %{"is_move_in" => true})
+    {json_like_select, _} =
+      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
+
     key_select = key_select(shape)
 
     query =
@@ -21,7 +23,7 @@ defmodule Electric.Shapes.Querying do
     |> Stream.flat_map(& &1.rows)
   end
 
-  def query_subset(conn, shape, subset, headers \\ []) do
+  def query_subset(conn, stack_id, shape_handle, shape, subset, headers \\ []) do
     # When querying a subset, we select same columns as the base shape
     table = Utils.relation_to_sql(shape.root_table)
 
@@ -44,7 +46,7 @@ defmodule Electric.Shapes.Querying do
     limit = if limit = subset.limit, do: " LIMIT #{limit}", else: ""
     offset = if offset = subset.offset, do: " OFFSET #{offset}", else: ""
 
-    {json_like_select, params} = json_like_select(shape, headers)
+    {json_like_select, params} = json_like_select(shape, headers, stack_id, shape_handle)
 
     query =
       Postgrex.prepare!(
@@ -80,22 +82,30 @@ defmodule Electric.Shapes.Querying do
 
   @type json_result_stream :: Enumerable.t(json_iodata())
 
-  @spec stream_initial_data(DBConnection.t(), String.t(), Shape.t(), non_neg_integer()) ::
+  @spec stream_initial_data(
+          DBConnection.t(),
+          String.t(),
+          String.t(),
+          Shape.t(),
+          non_neg_integer()
+        ) ::
           json_result_stream()
   def stream_initial_data(
         conn,
         stack_id,
+        shape_handle,
         shape,
         chunk_bytes_threshold \\ LogChunker.default_chunk_size_threshold()
       )
 
-  def stream_initial_data(_, _, %Shape{log_mode: :changes_only}, _chunk_bytes_threshold) do
+  def stream_initial_data(_, _, _, %Shape{log_mode: :changes_only}, _chunk_bytes_threshold) do
     []
   end
 
   def stream_initial_data(
         conn,
         stack_id,
+        shape_handle,
         %Shape{root_table: root_table} = shape,
         chunk_bytes_threshold
       ) do
@@ -105,7 +115,7 @@ defmodule Electric.Shapes.Querying do
       where =
         if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
 
-      {json_like_select, params} = json_like_select(shape)
+      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle)
 
       query =
         Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
@@ -138,11 +148,15 @@ defmodule Electric.Shapes.Querying do
            root_table: root_table,
            selected_columns: columns
          } = shape,
-         additional_headers \\ []
+         additional_headers,
+         stack_id,
+         shape_handle
        ) do
     additional_headers =
       Shape.SubqueryMoves.move_in_tag_structure(shape)
-      |> Electric.Utils.deep_map(fn column_name -> "$${#{column_name}}" end)
+      |> Electric.Utils.deep_map(fn column_name ->
+        "$${md5('#{stack_id}#{shape_handle}' || #{column_name}::text)}"
+      end)
       |> case do
         [] -> additional_headers
         tag_structure -> additional_headers |> Map.new() |> Map.put(:tags, tag_structure)
@@ -179,9 +193,20 @@ defmodule Electric.Shapes.Querying do
     headers =
       headers
       |> Map.merge(additional_headers)
-      |> Jason.encode!()
-      |> Utils.escape_quotes(?')
-      |> String.replace(~r/\$\$\{(\w+)\}/, ~s[' || \\1::text || '])
+      |> Map.pop(:tags)
+      |> case do
+        {nil, headers} ->
+          headers |> Jason.encode!() |> Utils.escape_quotes(?')
+
+        {tags, headers} ->
+          "{" <> json = headers |> Jason.encode!() |> Utils.escape_quotes(?')
+
+          tags =
+            Jason.encode!(tags)
+            |> String.replace(~r/\$\$\{([^\}]+)\}/, ~s[' || \\1::text || '])
+
+          ~s|{"tags":#{tags},| <> json
+      end
 
     ~s['"headers":#{headers}']
   end

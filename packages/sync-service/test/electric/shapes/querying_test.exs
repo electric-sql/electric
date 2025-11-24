@@ -48,7 +48,10 @@ defmodule Electric.Shapes.QueryingTest do
                  value: %{id: "5", value: "5"},
                  headers: %{operation: "insert", relation: ["public", "items"]}
                }
-             ] == decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+             ] ==
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "respects the where clauses", %{db_conn: conn} do
@@ -69,7 +72,10 @@ defmodule Electric.Shapes.QueryingTest do
       assert [
                %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
                %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "respects the where clauses with params", %{db_conn: conn} do
@@ -101,7 +107,10 @@ defmodule Electric.Shapes.QueryingTest do
       assert [
                %{key: ~S["public"."items"/"4"], value: %{value: "4"}},
                %{key: ~S["public"."items"/"5"], value: %{value: "5"}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "allows column names to have special characters", %{db_conn: conn} do
@@ -126,7 +135,10 @@ defmodule Electric.Shapes.QueryingTest do
 
       assert [
                %{key: ~S["public"."items"/"1"], value: %{"col with \"' in it": "1"}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "works with composite PKs", %{db_conn: conn} do
@@ -154,7 +166,10 @@ defmodule Electric.Shapes.QueryingTest do
       assert [
                %{key: ~S["public"."items"/"1"/"2"], value: %{test: "1"}},
                %{key: ~S["public"."items"/"3"/"4"], value: %{test: "2"}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "works with null values when no PK constraint is present", %{db_conn: conn} do
@@ -182,7 +197,10 @@ defmodule Electric.Shapes.QueryingTest do
                %{key: ~S["public"."items"/"2"/_], value: %{id: "2", val: nil}},
                %{key: ~S["public"."items"/_/""], value: %{id: nil, val: ""}},
                %{key: ~S["public"."items"/_/_], value: %{id: nil, val: nil}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "works with null values & values with special characters", %{db_conn: conn} do
@@ -209,7 +227,10 @@ defmodule Electric.Shapes.QueryingTest do
                %{key: ~S["public"."items"/"1"], value: %{value: "1"}},
                %{key: ~S["public"."items"/"2"], value: %{value: nil}},
                %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "splits the result into chunks according to the chunk size threshold", %{db_conn: conn} do
@@ -239,7 +260,16 @@ defmodule Electric.Shapes.QueryingTest do
                :chunk_boundary,
                %{key: ~S["public"."items"/"3"], value: %{value: ~s["test\\x0001\n"]}},
                :chunk_boundary
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape, 10))
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(
+                   conn,
+                   "dummy-stack-id",
+                   "dummy-shape-handle",
+                   shape,
+                   10
+                 )
+               )
     end
 
     test "if shape has a subquery, tags the results", %{db_conn: conn} do
@@ -257,14 +287,41 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
+      tag1 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        |> Base.encode16(case: :lower)
+
+      tag3 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        |> Base.encode16(case: :lower)
+
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [["1"]]}},
-               %{value: %{value: "5"}, headers: %{tags: [["2"]]}},
-               %{value: %{value: "6"}, headers: %{tags: [["3"]]}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+               %{value: %{value: "4"}, headers: %{tags: [[^tag1]]}},
+               %{value: %{value: "5"}, headers: %{tags: [[^tag2]]}},
+               %{value: %{value: "6"}, headers: %{tags: [[^tag3]]}}
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
 
     test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do
+      tag1 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        |> Base.encode16(case: :lower)
+
+      tag3 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        |> Base.encode16(case: :lower)
+
       for statement <- [
             "CREATE TABLE parent (id1 SERIAL, id2 SERIAL, value INTEGER, PRIMARY KEY (id1, id2))",
             "CREATE TABLE child (id1 SERIAL, id2 SERIAL, value INTEGER, parent_id1 INTEGER, parent_id2 INTEGER, PRIMARY KEY (id1, id2), FOREIGN KEY (parent_id1, parent_id2) REFERENCES parent(id1, id2))",
@@ -280,10 +337,13 @@ defmodule Electric.Shapes.QueryingTest do
         )
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [[["1", "1"]]]}},
-               %{value: %{value: "5"}, headers: %{tags: [[["2", "2"]]]}},
-               %{value: %{value: "6"}, headers: %{tags: [[["3", "3"]]]}}
-             ] = decode_stream(Querying.stream_initial_data(conn, "dummy-stack-id", shape))
+               %{value: %{value: "4"}, headers: %{tags: [[[^tag1, ^tag1]]]}},
+               %{value: %{value: "5"}, headers: %{tags: [[[^tag2, ^tag2]]]}},
+               %{value: %{value: "6"}, headers: %{tags: [[[^tag3, ^tag3]]]}}
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
     end
   end
 
@@ -313,11 +373,25 @@ defmodule Electric.Shapes.QueryingTest do
                  move_in_values
                )
 
+      tag1 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        |> Base.encode16(case: :lower)
+
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [["1"]]}},
-               %{value: %{value: "5"}, headers: %{tags: [["2"]]}}
+               %{value: %{value: "4"}, headers: %{tags: [[^tag1]]}},
+               %{value: %{value: "5"}, headers: %{tags: [[^tag2]]}}
              ] =
-               Querying.query_move_in(conn, shape, {where, params})
+               Querying.query_move_in(
+                 conn,
+                 "dummy-stack-id",
+                 "dummy-shape-handle",
+                 shape,
+                 {where, params}
+               )
                |> Enum.map(fn [_key, json] -> json end)
                |> decode_stream()
     end
@@ -347,11 +421,25 @@ defmodule Electric.Shapes.QueryingTest do
                  move_in_values
                )
 
+      tag1 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        |> Base.encode16(case: :lower)
+
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [[["1", "1"]]]}},
-               %{value: %{value: "5"}, headers: %{tags: [[["2", "2"]]]}}
+               %{value: %{value: "4"}, headers: %{tags: [[[^tag1, ^tag1]]]}},
+               %{value: %{value: "5"}, headers: %{tags: [[[^tag2, ^tag2]]]}}
              ] =
-               Querying.query_move_in(conn, shape, {where, params})
+               Querying.query_move_in(
+                 conn,
+                 "dummy-stack-id",
+                 "dummy-shape-handle",
+                 shape,
+                 {where, params}
+               )
                |> Enum.map(fn [_key, json] -> json end)
                |> decode_stream()
     end

@@ -159,7 +159,7 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def write_move_in_snapshot!(stream, name, {parent, shape_handle, data, storage}) do
+  def write_move_in_snapshot!(stream, name, {parent, shape_handle, _data, storage}) do
     send(parent, {__MODULE__, :write_move_in_snapshot!, shape_handle, name, stream})
     Storage.write_move_in_snapshot!(stream, name, storage)
     :ok

@@ -2276,13 +2276,18 @@ defmodule Electric.Plug.RouterTest do
          ]
     test "a move-in from the inner shape causes a query and new entries in the outer shape", %{
       opts: opts,
-      db_conn: db_conn
+      db_conn: db_conn,
+      stack_id: stack_id
     } do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
-
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
+
+      tag =
+        :crypto.hash(:md5, stack_id <> req.handle <> "1")
+        |> Base.encode16(case: :lower)
+
       assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
-      assert %{"operation" => "insert", "tags" => [["1"]]} = data["headers"]
+      assert %{"operation" => "insert", "tags" => [[^tag]]} = data["headers"]
       assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
       task = live_shape_req(req, opts)
@@ -2290,9 +2295,15 @@ defmodule Electric.Plug.RouterTest do
       # Move in reflects in the new shape without invalidating it
       Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
 
+      tag2 =
+        :crypto.hash(:md5, stack_id <> req.handle <> "2")
+        |> Base.encode16(case: :lower)
+
       assert {_, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
       assert %{"id" => "2", "parent_id" => "2", "value" => "20"} = data["value"]
-      assert %{"operation" => "insert", "is_move_in" => true, "tags" => [["2"]]} = data["headers"]
+
+      assert %{"operation" => "insert", "is_move_in" => true, "tags" => [[^tag2]]} =
+               data["headers"]
     end
 
     @tag with_sql: [
@@ -2439,11 +2450,15 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
 
+      tag =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
+        |> Base.encode16(case: :lower)
+
       assert {_, 200,
               [
                 %{
                   "value" => %{"id" => "2", "name" => "Team B"},
-                  "headers" => %{"tags" => [["2"]]}
+                  "headers" => %{"tags" => [[^tag]]}
                 },
                 _
               ]} =
@@ -2495,10 +2510,14 @@ defmodule Electric.Plug.RouterTest do
         "UPDATE members SET flag = TRUE WHERE (user_id, team_id) = (2, 2)"
       )
 
+      tag =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
+        |> Base.encode16(case: :lower)
+
       assert {_, 200,
               [
                 %{
-                  "headers" => %{"tags" => [[["2", "2"]]]},
+                  "headers" => %{"tags" => [[[^tag, ^tag]]]},
                   "value" => %{"id" => "2", "role" => "Member"}
                 },
                 _
@@ -2541,7 +2560,11 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
-      assert {_, 200, [%{"headers" => %{"tags" => [["20"]]}, "value" => %{"id" => "3"}}, _]} =
+      tag =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "20")
+        |> Base.encode16(case: :lower)
+
+      assert {_, 200, [%{"headers" => %{"tags" => [[^tag]]}, "value" => %{"id" => "3"}}, _]} =
                Task.await(task)
     end
   end

@@ -15,7 +15,7 @@ defmodule Electric.Shapes.PartialModes do
         send(self(), {:pg_snapshot_info, pg_snapshot, lsn})
       end,
       query_fn: fn conn, _, _ ->
-        Querying.query_subset(conn, shape, subset, headers)
+        Querying.query_subset(conn, opts[:stack_id], shape_handle, shape, subset, headers)
         |> Enum.to_list()
       end,
       stack_id: opts[:stack_id],
@@ -66,7 +66,7 @@ defmodule Electric.Shapes.PartialModes do
           end,
           query_fn: fn conn, _, _ ->
             result =
-              Querying.query_move_in(conn, shape, where)
+              Querying.query_move_in(conn, opts[:stack_id], shape_handle, shape, where)
               |> results_fn.()
 
             send(parent, {:query_move_in_complete, opts[:move_in_name], result})

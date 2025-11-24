@@ -497,7 +497,12 @@ defmodule Electric.Shapes.Consumer do
 
     extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
 
-    case filter_changes(changes, shape, {xid, state.move_handling_state}, extra_refs) do
+    case filter_changes(
+           changes,
+           shape,
+           {xid, state.move_handling_state, state.stack_id, state.shape_handle},
+           extra_refs
+         ) do
       :includes_truncate ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
@@ -656,13 +661,17 @@ defmodule Electric.Shapes.Consumer do
   defp filter_changes(
          [change | rest],
          shape,
-         {xid, filter_state} = filtering,
+         {xid, filter_state, stack_id, shape_handle} = filtering,
          extra_refs,
          change_acc,
          total_ops
        ) do
     if not MoveHandlingState.change_already_visible?(filter_state, xid, change) do
-      case Shape.convert_change(shape, change, extra_refs) do
+      case Shape.convert_change(shape, change,
+             extra_refs: extra_refs,
+             stack_id: stack_id,
+             shape_handle: shape_handle
+           ) do
         [] ->
           filter_changes(rest, shape, filtering, extra_refs, change_acc, total_ops)
 
