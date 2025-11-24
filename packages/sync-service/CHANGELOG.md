@@ -1,5 +1,26 @@
 # @core/sync-service
 
+## 1.2.7
+
+### Patch Changes
+
+- f0b83fa: Fix subset\_\_params to use constant parameter name for proxy configurations
+
+  Changed subset**params from deepObject style (subset**params[1], subset**params[2]) to JSON serialization (subset**params={"1":"value1","2":"value2"}). This allows proxy configurations to match the constant parameter name "subset\_\_params" in ELECTRIC_PROTOCOL_QUERY_PARAMS without needing dynamic pattern matching.
+
+- 8cbd9fb: Reduce memory usage by terminating consumer processes after the hibernation timeout
+- 69e4599: Support LIKE and ILIKE functions in where clauses (LIKE and ILIKE binary operators were already supported)
+- 2e19332: Add `log_mode` to shape comparable version for indexing.
+- f36be0b: Simplify `ShapeStatus` and remove unused APIs.
+- a672d2a: Reduce logging when starting a consumer process
+- b62335f: Split `ShapeStatus` relation to shape lookup into separate ETS table to avoid congestion on main metadata table.
+- e7b8bd0: Fix shape counting after reload and ensure shape last used repopulation
+- d483851: Ensure table and slot names are properly escaped in lock breaker query
+- 7d080a3: Load shapes from storage in parallel for faster recovery.
+- d492b47: Improve storage initialization performance
+- e7b8bd0: Separate `shape def -> handle` lookup into new table
+- 7d080a3: Load latest offset from storage when recovering shapes for accurate metadata reconstruction.
+
 ## 1.2.6
 
 ### Patch Changes
