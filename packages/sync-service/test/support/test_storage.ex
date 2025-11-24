@@ -147,43 +147,22 @@ defmodule Support.TestStorage do
   @impl Electric.ShapeCache.Storage
   def append_move_in_snapshot_to_log!(name, {parent, shape_handle, data, storage}) do
     send(parent, {__MODULE__, :append_move_in_snapshot_to_log!, shape_handle, name})
-    storage = Storage.append_move_in_snapshot_to_log!(name, storage)
-    {parent, shape_handle, data, storage}
+    {range, storage} = Storage.append_move_in_snapshot_to_log!(name, storage)
+    {range, {parent, shape_handle, data, storage}}
   end
 
   @impl Electric.ShapeCache.Storage
   def append_control_message!(control_message, {parent, shape_handle, data, storage}) do
     send(parent, {__MODULE__, :append_control_message!, shape_handle, control_message})
-    storage = Storage.append_control_message!(control_message, storage)
-    {parent, shape_handle, data, storage}
+    {range, storage} = Storage.append_control_message!(control_message, storage)
+    {range, {parent, shape_handle, data, storage}}
   end
 
   @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, {parent, shape_handle, data, storage}) do
     send(parent, {__MODULE__, :write_move_in_snapshot!, shape_handle, name, stream})
-    storage = Storage.write_move_in_snapshot!(stream, name, storage)
-    {parent, shape_handle, data, storage}
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def append_move_in_snapshot_to_log!(name, {parent, shape_handle, data, storage}) do
-    send(parent, {__MODULE__, :append_move_in_snapshot_to_log!, shape_handle, name})
-    storage = Storage.append_move_in_snapshot_to_log!(name, storage)
-    {parent, shape_handle, data, storage}
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def append_control_message!(control_message, {parent, shape_handle, data, storage}) do
-    send(parent, {__MODULE__, :append_control_message!, shape_handle, control_message})
-    storage = Storage.append_control_message!(control_message, storage)
-    {parent, shape_handle, data, storage}
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def write_move_in_snapshot!(stream, name, {parent, shape_handle, data, storage}) do
-    send(parent, {__MODULE__, :write_move_in_snapshot!, shape_handle, name, stream})
-    storage = Storage.write_move_in_snapshot!(stream, name, storage)
-    {parent, shape_handle, data, storage}
+    Storage.write_move_in_snapshot!(stream, name, storage)
+    :ok
   end
 
   @impl Electric.ShapeCache.Storage

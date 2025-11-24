@@ -292,14 +292,20 @@ defmodule Electric.Shapes.Consumer do
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs in it's #{dep_handle} dependency"
     end)
 
-    {state, notification} =
-      state
-      |> MoveHandling.process_move_ins(dep_handle, move_in)
-      |> MoveHandling.process_move_outs(dep_handle, move_out)
+    if own_materializer_exists?(state) do
+      # We currently cannot support causally correct event processing of 3+ level dependency trees
+      # so we're just invalidating this middle shape instead
+      stop_and_clean(state)
+    else
+      {state, notification} =
+        state
+        |> MoveHandling.process_move_ins(dep_handle, move_in)
+        |> MoveHandling.process_move_outs(dep_handle, move_out)
 
-    notify_new_changes(state, notification)
+      notify_new_changes(state, notification)
 
-    {:noreply, state}
+      {:noreply, state}
+    end
   end
 
   def handle_info({:query_move_in_complete, name, key_set}, state) do
@@ -765,6 +771,17 @@ defmodule Electric.Shapes.Consumer do
           false
       end
     end)
+  end
+
+  defp own_materializer_exists?(state) do
+    name = Materializer.name(state.stack_id, state.shape_handle)
+
+    with pid when is_pid(pid) <- GenServer.whereis(name),
+         true <- Process.alive?(pid) do
+      true
+    else
+      _ -> false
+    end
   end
 
   defp clean_table(table_oid, state) do

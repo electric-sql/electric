@@ -2385,15 +2385,23 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, opts)
       Postgrex.query!(db_conn, "UPDATE grandparent SET value = 10 WHERE id = 2")
 
-      assert {req, 200, [%{"headers" => %{"tags" => [["2"]]}, "value" => %{"id" => "2"}}, _]} =
+      assert {_, 409, _} =
                Task.await(task)
 
-      # Move-out should be propagated too
-      task = live_shape_req(req, opts)
-      Postgrex.query!(db_conn, "UPDATE grandparent SET value = 20 WHERE id = 1")
+      # And fresh view should now see everything
+      assert {_, 200, response} = shape_req(orig_req, opts)
 
-      assert {_, 200, [%{"headers" => %{"patterns" => [["1"]], "event" => "move_out"}}, _]} =
-               Task.await(task)
+      # Should contain 2 data records and the snapshot-end control message
+      assert length(response) == 3
+
+      # Filter out control messages to get just the data records
+      results = Enum.filter(response, &Map.has_key?(&1, "key"))
+      assert length(results) == 2
+
+      assert [
+               %{"value" => %{"id" => "1", "value" => "2"}},
+               %{"value" => %{"id" => "2", "value" => "20"}}
+             ] = Enum.sort_by(results, & &1["value"]["id"])
     end
 
     @tag with_sql: [
