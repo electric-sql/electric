@@ -96,6 +96,9 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
     def not_ilike?(text1, text2), do: not Casting.ilike?(text1, text2)
   end
 
+  defpostgres("like(text, text) -> bool", delegate: &Casting.like?/2)
+  defpostgres("ilike(text, text) -> bool", delegate: &Casting.ilike?/2)
+
   ## Date functions
   defpostgres("date + int8 -> date", commutative?: true, delegate: &Date.add/2)
   defpostgres("date - date -> int8", delegate: &Date.diff/2)
