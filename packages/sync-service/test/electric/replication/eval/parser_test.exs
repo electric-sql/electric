@@ -350,6 +350,18 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: true, type: :bool} = result
     end
 
+    test "should work with LIKE and ILIKE functions" do
+      env = Env.new()
+
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|NOT LIKE('hello', 'hell\%') AND ILIKE('hello', 'h%o') |,
+                 env: env
+               )
+
+      assert %Const{value: true, type: :bool} = result
+    end
+
     test "should work with BETWEEN clauses" do
       env = Env.new()
 
