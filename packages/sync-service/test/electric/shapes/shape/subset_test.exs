@@ -36,5 +36,18 @@ defmodule Electric.Shapes.Shape.SubsetTest do
                  inspector: ctx.inspector
                )
     end
+
+    @tag with_sql: [
+           "CREATE TYPE my_enum AS ENUM ('value1', 'value2', 'value3')",
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, my_enum my_enum NOT NULL)"
+         ]
+    test "where clause with enum comparison", ctx do
+      assert {:ok, %Subset{}} =
+               Subset.new(
+                 ctx.shape_def,
+                 [where: "my_enum = 'value1'"],
+                 inspector: ctx.inspector
+               )
+    end
   end
 end
