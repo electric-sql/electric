@@ -538,8 +538,12 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
   end
 
-  defp assert_pub_tables(ctx, expected_tables, timeout \\ 500) do
-    start_time = :erlang.monotonic_time(:millisecond)
+  defp assert_pub_tables(
+         ctx,
+         expected_tables,
+         timeout \\ 500,
+         start_time \\ :erlang.monotonic_time(:millisecond)
+       ) do
     pub_tables = fetch_pub_tables(ctx)
 
     try do
@@ -550,7 +554,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
         if current_time - start_time < timeout do
           Process.sleep(10)
-          assert_pub_tables(ctx, expected_tables, timeout)
+          assert_pub_tables(ctx, expected_tables, timeout, start_time)
         else
           reraise e, __STACKTRACE__
         end

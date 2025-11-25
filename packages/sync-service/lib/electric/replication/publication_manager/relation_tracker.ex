@@ -22,6 +22,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     :stack_id,
     :publication_name,
     :publication_refresh_period,
+    oid_to_relation: %{},
     relation_ref_counts: %{},
     prepared_relation_filters: MapSet.new(),
     submitted_relation_filters: MapSet.new(),
@@ -35,14 +36,17 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   ]
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
-  @typep publication_filter() :: {Electric.oid_relation(), with_generated_cols :: boolean()}
+  @typep internal_relation_filters() :: MapSet.t(Electric.oid())
+  @typep publication_filter() :: {Electric.oid(), with_generated_cols :: boolean()}
+  @typep waiter() :: {GenServer.from(), Electric.ShapeCache.shape_handle()}
   @typep state() :: %__MODULE__{
            stack_id: Electric.stack_id(),
-           relation_ref_counts: %{Electric.oid_relation() => non_neg_integer()},
-           prepared_relation_filters: relation_filters(),
-           submitted_relation_filters: relation_filters(),
-           committed_relation_filters: relation_filters(),
-           waiters: %{Electric.oid_relation() => [GenServer.from(), ...]},
+           relation_ref_counts: %{Electric.oid() => non_neg_integer()},
+           oid_to_relation: %{Electric.oid() => Electric.relation()},
+           prepared_relation_filters: internal_relation_filters(),
+           submitted_relation_filters: internal_relation_filters(),
+           committed_relation_filters: internal_relation_filters(),
+           waiters: %{Electric.oid() => [waiter(), ...]},
            tracked_shape_handles: %{shape_handle() => publication_filter()},
            publication_name: String.t(),
            publishes_generated_columns?: boolean(),
@@ -140,19 +144,24 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       [],
       state.stack_id,
       fn ->
+        # Build initial state in an ephemeral Task process so that to avoid
+        # retaining the data from list_shapes in this process's heap.
         state =
-          state.stack_id
-          |> Electric.ShapeCache.ShapeStatus.list_shapes()
-          |> Enum.reduce(
-            state,
-            fn {shape_handle, shape}, state ->
-              add_shape_to_publication_filters(
-                shape_handle,
-                get_publication_filter_from_shape(shape),
-                state
-              )
-            end
-          )
+          Task.async(fn ->
+            state.stack_id
+            |> Electric.ShapeCache.ShapeStatus.list_shapes()
+            |> Enum.reduce(
+              state,
+              fn {shape_handle, shape}, state ->
+                add_shape_to_publication_filters(
+                  shape_handle,
+                  get_publication_filter_from_shape(shape),
+                  state
+                )
+              end
+            )
+          end)
+          |> Task.await(:infinity)
 
         # filters will be pulled by the configurator on startup, so no
         # need to explicitly call for an update here
@@ -163,13 +172,13 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   @impl true
   def handle_call({:add_shape, shape_handle, publication_filter}, from, state) do
-    {oid_rel, with_gen_cols} = publication_filter
+    {{oid, _relation}, with_gen_cols} = publication_filter
 
     # if the relation is already committed AND part of the last made
     # update submission, we can consider it ready
     relation_ready? =
-      MapSet.member?(state.submitted_relation_filters, oid_rel) and
-        MapSet.member?(state.committed_relation_filters, oid_rel)
+      MapSet.member?(state.submitted_relation_filters, oid) and
+        MapSet.member?(state.committed_relation_filters, oid)
 
     state = add_shape_to_publication_filters(shape_handle, publication_filter, state)
     state = update_publication_if_necessary(state)
@@ -215,7 +224,8 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   end
 
   def handle_call(:fetch_current_filters, _from, state) do
-    {:reply, state.prepared_relation_filters, state, state.publication_refresh_period}
+    {:reply, expand_oids(state.prepared_relation_filters, state), state,
+     state.publication_refresh_period}
   end
 
   @impl true
@@ -232,16 +242,16 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
      state.publication_refresh_period}
   end
 
-  def handle_cast({:relation_configuration_result, oid_rel, {:ok, :dropped}}, state) do
-    new_committed_filters = MapSet.delete(state.committed_relation_filters, oid_rel)
+  def handle_cast({:relation_configuration_result, {oid, _rel}, {:ok, :dropped}}, state) do
+    new_committed_filters = MapSet.delete(state.committed_relation_filters, oid)
 
     {:noreply, %{state | committed_relation_filters: new_committed_filters},
      state.publication_refresh_period}
   end
 
-  def handle_cast({:relation_configuration_result, oid_rel, {:ok, :configured}}, state) do
+  def handle_cast({:relation_configuration_result, {oid, _} = oid_rel, {:ok, :configured}}, state) do
     state = reply_to_relation_waiters(oid_rel, :ok, state)
-    new_committed_filters = MapSet.put(state.committed_relation_filters, oid_rel)
+    new_committed_filters = MapSet.put(state.committed_relation_filters, oid)
 
     {:noreply, %{state | committed_relation_filters: new_committed_filters},
      state.publication_refresh_period}
@@ -295,10 +305,20 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   defp update_publication(state) do
     Electric.Replication.PublicationManager.Configurator.configure_publication(
       state.stack_id,
-      state.prepared_relation_filters
+      expand_oids(state.prepared_relation_filters, state)
     )
 
     %{state | submitted_relation_filters: state.prepared_relation_filters}
+  end
+
+  @spec expand_oids(MapSet.t(Electric.oid()), state()) :: MapSet.t(Electric.oid_relation())
+  defp expand_oids(%MapSet{} = oids, state) do
+    MapSet.new(oids, &expand_oid(&1, state))
+  end
+
+  @spec expand_oid(Electric.oid(), state()) :: Electric.oid_relation()
+  defp expand_oid(oid, %{oid_to_relation: oid_to_relation}) do
+    {oid, Map.fetch!(oid_to_relation, oid)}
   end
 
   defp update_needed?(%__MODULE__{
@@ -319,7 +339,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     state
   end
 
-  defp add_shape_to_publication_filters(shape_handle, {rel_key, _} = pub_filter, state) do
+  defp add_shape_to_publication_filters(
+         shape_handle,
+         {{oid, relation} = rel_key, _} = pub_filter,
+         state
+       ) do
+    state = Map.update!(state, :oid_to_relation, &Map.put_new(&1, oid, relation))
     state = track_shape_handle(shape_handle, pub_filter, state)
     do_update_relation_filters(rel_key, :add, state)
   end
@@ -342,12 +367,14 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
           :add | :remove,
           state()
         ) :: state()
-  defp do_update_relation_filters(
-         {_oid, _rel} = rel_key,
-         operation,
-         %__MODULE__{prepared_relation_filters: prepared, relation_ref_counts: counts} = state
-       ) do
-    current = Map.get(counts, rel_key, 0)
+  defp do_update_relation_filters({oid, _rel} = rel_key, operation, %__MODULE__{} = state) do
+    %{
+      prepared_relation_filters: prepared,
+      relation_ref_counts: counts,
+      oid_to_relation: oid_lookup
+    } = state
+
+    current = Map.get(counts, oid, 0)
 
     new_count =
       case operation do
@@ -356,24 +383,27 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       end
 
     # we could rederive the prepared filters from the keys of the counts map
-    # but since we're keeping both arouond might as well not iterate over the
+    # but since we're keeping both around might as well not iterate over the
     # whole map every time
-    {prepared, counts} =
+    {prepared, counts, oid_lookup} =
       cond do
         new_count == 0 and current > 0 ->
-          {MapSet.delete(prepared, rel_key), Map.delete(counts, rel_key)}
+          # if the oid is not referenced then remove from the lookup
+          # so that if the table name has changed we get the new name
+          # as shapes are defined on it
+          {MapSet.delete(prepared, oid), Map.delete(counts, oid), Map.delete(oid_lookup, oid)}
 
         current == 0 and new_count > 0 ->
-          {MapSet.put(prepared, rel_key), Map.put(counts, rel_key, new_count)}
+          {MapSet.put(prepared, oid), Map.put(counts, oid, new_count), oid_lookup}
 
         new_count > 0 ->
-          {prepared, Map.put(counts, rel_key, new_count)}
+          {prepared, Map.put(counts, oid, new_count), oid_lookup}
 
         true ->
-          {prepared, counts}
+          {prepared, counts, oid_lookup}
       end
 
-    if not MapSet.member?(prepared, rel_key) do
+    if not MapSet.member?(prepared, oid) do
       reply_to_relation_waiters(
         rel_key,
         {:error, %RuntimeError{message: "Shape removed before updating publication"}},
@@ -381,27 +411,32 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       )
     end
 
-    %{state | prepared_relation_filters: prepared, relation_ref_counts: counts}
+    %{
+      state
+      | prepared_relation_filters: prepared,
+        relation_ref_counts: counts,
+        oid_to_relation: oid_lookup
+    }
   end
 
   @spec add_waiter(GenServer.from(), shape_handle(), publication_filter(), state()) ::
           state()
   defp add_waiter(from, shape_handle, pub_filter, %__MODULE__{waiters: waiters} = state) do
-    {oid_rel, _} = pub_filter
+    {{oid, _relaion}, _} = pub_filter
     from_tuple = {from, shape_handle}
-    %{state | waiters: Map.update(waiters, oid_rel, [from_tuple], &[from_tuple | &1])}
+    %{state | waiters: Map.update(waiters, oid, [from_tuple], &[from_tuple | &1])}
   end
 
   @spec reply_to_relation_waiters(Electric.oid_relation(), any(), state()) :: state()
-  defp reply_to_relation_waiters(oid_rel, reply, %__MODULE__{waiters: waiters} = state) do
-    rel_waiters = Map.get(waiters, oid_rel, [])
+  defp reply_to_relation_waiters({oid, _rel}, reply, %__MODULE__{waiters: waiters} = state) do
+    rel_waiters = Map.get(waiters, oid, [])
     for {from, _} <- rel_waiters, do: GenServer.reply(from, reply)
-    %{state | waiters: Map.delete(waiters, oid_rel)}
+    %{state | waiters: Map.delete(waiters, oid)}
   end
 
   @spec reply_to_all_waiters(any(), state()) :: state()
   defp reply_to_all_waiters(reply, %__MODULE__{waiters: waiters} = state) do
-    for {_oid_rel, rel_waiters} <- waiters,
+    for {_oid, rel_waiters} <- waiters,
         {from, _} <- rel_waiters,
         do: GenServer.reply(from, reply)
 
@@ -419,14 +454,14 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
     to_fail =
       state.tracked_shape_handles
-      |> Map.filter(fn {_handle, {_oid_rel, with_gen_cols}} -> with_gen_cols end)
+      |> Map.filter(fn {_handle, {_oid, with_gen_cols}} -> with_gen_cols end)
 
     # scan through and reply to any waiters for shapes that require generated columns
     new_waiters =
       to_fail
-      |> Enum.group_by(fn {_handle, {oid_rel, _}} -> oid_rel end, fn {handle, _} -> handle end)
-      |> Enum.reduce(state.waiters, fn {oid_rel, handles_to_fail}, waiters ->
-        if rel_waiters = Map.get(waiters, oid_rel) do
+      |> Enum.group_by(fn {_handle, {oid, _}} -> oid end, fn {handle, _} -> handle end)
+      |> Enum.reduce(state.waiters, fn {oid, handles_to_fail}, waiters ->
+        if rel_waiters = Map.get(waiters, oid) do
           {to_fail, to_keep} =
             rel_waiters |> Enum.split_with(fn {_from, handle} -> handle in handles_to_fail end)
 
@@ -434,16 +469,18 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
               do: GenServer.reply(from, {:error, missing_gen_col_error})
 
           if to_keep == [],
-            do: Map.delete(waiters, oid_rel),
-            else: Map.put(waiters, oid_rel, to_keep)
+            do: Map.delete(waiters, oid),
+            else: Map.put(waiters, oid, to_keep)
         else
           waiters
         end
       end)
 
-    # schedule removals for any tracked shapes that require generated columns
-    for {handle, _} <- to_fail do
-      ShapeCleaner.remove_shape_async(handle, stack_id: state.stack_id)
+    if not Enum.empty?(to_fail) do
+      # schedule removals for any tracked shapes that require generated columns
+      handles = for {handle, _} <- to_fail, do: handle
+
+      ShapeCleaner.remove_shapes_async(state.stack_id, handles)
     end
 
     %{state | waiters: new_waiters}
@@ -457,18 +494,21 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
          } = state
        )
        when is_tracking_shape_handle?(shape_handle, state) do
-    {oid_rel, _} = Map.fetch!(tracked_shape_handles, shape_handle)
-    oid_rel
+    {oid, _} = Map.fetch!(tracked_shape_handles, shape_handle)
+    expand_oid(oid, state)
   end
 
   @spec track_shape_handle(shape_handle(), publication_filter(), state()) :: state()
   defp track_shape_handle(
          shape_handle,
-         pub_filter,
+         {{oid, _relation}, generated?},
          %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
        )
        when not is_tracking_shape_handle?(shape_handle, state) do
-    %{state | tracked_shape_handles: Map.put_new(tracked_shape_handles, shape_handle, pub_filter)}
+    %{
+      state
+      | tracked_shape_handles: Map.put_new(tracked_shape_handles, shape_handle, {oid, generated?})
+    }
   end
 
   @spec untrack_shape_handle(shape_handle(), state()) :: state()
