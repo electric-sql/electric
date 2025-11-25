@@ -339,8 +339,8 @@ export default defineConfig({
               link: '/about/jobs',
               items: [
                 {
-                  text: 'PGlite Engineer',
-                  link: '/about/jobs/pglite-engineer',
+                  text: 'Founders Associate',
+                  link: '/about/jobs/founders-associate',
                 },
               ],
               collapsed: false,
