@@ -43,10 +43,30 @@ export type NormalizedPgSnapshot = {
 }
 
 interface Header {
-  [key: Exclude<string, `operation` | `control`>]: Value
+  [key: Exclude<string, `operation` | `control` | `event`>]: Value
 }
 
 export type Operation = `insert` | `update` | `delete`
+/**
+ * A tag is a string identifying a reason for this row to be part of the shape.
+ *
+ * Tags can be composite, but they are always sent as a single string. Compound tags
+ * are separated by `|`. It's up to the client to split the tag into its components
+ * in order to react to move-outs correctly. Tag parts are guaranteed to not contain an
+ * unescaped `|` character (escaped as `\\|`) or be a literal `*`.
+ *
+ * Composite tag width is guaranteed to be fixed for a given shape.
+ */
+export type MoveTag = string
+
+/**
+ * A move-out pattern is a position and a value. The position is the index of the column
+ * that is being moved out. The value is the value of the column that is being moved out.
+ *
+ * Tag width and value order is fixed for a given shape, so the client can determine
+ * which tags match this pattern.
+ */
+export type MoveOutPattern = { pos: number; value: string }
 
 export type ControlMessage = {
   headers:
@@ -57,16 +77,27 @@ export type ControlMessage = {
     | (Header & { control: `snapshot-end` } & PostgresSnapshot)
 }
 
+export type EventMessage = {
+  headers: Header & { event: `move-out`; patterns: MoveOutPattern[] }
+}
+
 export type ChangeMessage<T extends Row<unknown> = Row> = {
   key: string
   value: T
   old_value?: Partial<T> // Only provided for updates if `replica` is `full`
-  headers: Header & { operation: Operation; txids?: number[] }
+  headers: Header & {
+    operation: Operation
+    txids?: number[]
+    /** Tags will always be present for changes if the shape has a subquery in its where clause, and are omitted otherwise.*/
+    tags?: MoveTag[]
+    removed_tags?: MoveTag[]
+  }
 }
 
 // Define the type for a record
 export type Message<T extends Row<unknown> = Row> =
   | ControlMessage
+  | EventMessage
   | ChangeMessage<T>
 
 /**
