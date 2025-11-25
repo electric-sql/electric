@@ -25,7 +25,7 @@ defmodule Electric.Shapes.Shape.Subset do
     with {:ok, fields} <- NimbleOptions.validate(Map.new(fields), @schema_options),
          {:ok, columns} <- load_column_info(shape, inspector),
          :ok <- validate_order_by(fields[:order_by], columns),
-         refs = Inspector.columns_to_expr(columns),
+         refs = columns |> Inspector.columns_to_expr() |> enums_to_text(),
          {:ok, where} <- validate_where_clause(fields[:where], fields[:params], refs) do
       {:ok,
        %__MODULE__{
@@ -83,4 +83,15 @@ defmodule Electric.Shapes.Shape.Subset do
 
   defp assert_no_subqueries([]), do: :ok
   defp assert_no_subqueries(_), do: {:error, "Subqueries are not allowed in subsets"}
+
+  # Treat enum types as text for where clause validation.
+  # This is because enums are not supported in where clauses for shapes
+  # But since for subsets we only pass the where clause directly
+  # to Postgres we don't need to enforce this restriction here.
+  defp enums_to_text(refs) do
+    Map.new(refs, fn
+      {key, {:enum, _}} -> {key, :text}
+      entry -> entry
+    end)
+  end
 end
