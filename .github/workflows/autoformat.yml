@@ -48,7 +48,7 @@ jobs:
   elixir_formatting:
     strategy:
       matrix:
-        package: [sync-service, elixir-client]
+        package: [sync-service, elixir-client, electric-telemetry]
     name: Elixir formatting and linting
     runs-on: ubuntu-latest
     defaults:

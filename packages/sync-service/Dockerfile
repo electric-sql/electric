@@ -20,27 +20,29 @@ ARG MIX_ENV=prod
 ARG ELECTRIC_VERSION
 ARG MIX_TARGET
 
-WORKDIR /app
+WORKDIR /builder/electric
 
-COPY mix.* /app/
+COPY --from=electric-telemetry / /builder/electric-telemetry
+
+COPY mix.* /builder/electric/
 RUN mix deps.get
 RUN MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4 mix deps.compile
 
 # These are ordered by change frequency, with the least frequently changing dir first.
-COPY rel /app/rel
-COPY lib /app/lib/
+COPY rel /builder/electric/rel
+COPY lib /builder/electric/lib/
 
-COPY package.json /app/
-COPY config/config.exs /app/config/
+COPY package.json /builder/electric/
+COPY config/config.exs /builder/electric/config/
 
 RUN mix compile
 RUN mix sentry.package_source_code
 
-COPY config/runtime.exs /app/config/
+COPY config/runtime.exs /builder/electric/config/
 
 RUN mix release
 
-RUN ls -l /app/_build
+RUN ls -l /builder/electric/_build
 
 FROM ${RUNNER_IMAGE} AS runner_setup
 
@@ -58,7 +60,7 @@ ENV LANG=en_US.UTF-8 \
   MIX_ENV=prod \
   MIX_TARGET=application
 
-WORKDIR "/app"
+WORKDIR /app
 
 RUN chown nobody /app
 
@@ -68,7 +70,7 @@ ARG MIX_TARGET
 ARG RELEASE_NAME=electric
 
 
-COPY --from=builder "/app/_build/${MIX_TARGET}_prod/rel/${RELEASE_NAME}" ./
+COPY --from=builder "/builder/electric/_build/${MIX_TARGET}_prod/rel/${RELEASE_NAME}" ./
 
 RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
 
@@ -77,3 +79,4 @@ HEALTHCHECK --start-period=10s CMD curl --fail http://localhost:${ELECTRIC_PORT-
 ENTRYPOINT ["/app/bin/entrypoint"]
 
 CMD ["start"]
+

@@ -151,9 +151,7 @@ defmodule Electric do
   end
 
   @telemetry_enabled? Mix.target() == Electric.MixProject.telemetry_target()
-  def telemetry_enabled? do
-    @telemetry_enabled?
-  end
+  def telemetry_enabled?, do: @telemetry_enabled?
 
   def stack_events_registry do
     Electric.StackEventsRegistry

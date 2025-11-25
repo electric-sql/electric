@@ -10,6 +10,20 @@ defmodule Electric.MixProject do
   # make the metrics-enabled target available to the rest of the app
   def telemetry_target, do: @telemetry_target
 
+  # Necessary boilerplate because opentelemetry doesn't mention opentelemetry_exporter in
+  # its list of dependency but actually expects it to be started before itself at runtime.
+  if Mix.target() == @telemetry_target do
+    @extra_telemetry_applications [:opentelemetry_exporter]
+
+    @telemetry_applications_in_release [
+      opentelemetry_exporter: :permanent,
+      opentelemetry: :temporary
+    ]
+  else
+    @extra_telemetry_applications []
+    @telemetry_applications_in_release []
+  end
+
   def project do
     [
       app: :electric,
@@ -32,11 +46,10 @@ defmodule Electric.MixProject do
       ],
       releases: [
         electric: [
-          applications: [electric: :permanent] ++ telemetry_applications_in_release(),
+          applications: @telemetry_applications_in_release,
           include_executables_for: [:unix]
         ]
       ],
-      default_release: :electric,
       test_coverage: [
         tool: ExCoveralls,
         ignore_modules: [
@@ -61,9 +74,7 @@ defmodule Electric.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :os_mon, :runtime_tools],
-      # Using a compile-time flag to select the application module or lack thereof allows
-      # using this app as a dependency with this additional flag
+      extra_applications: [:logger, :runtime_tools] ++ @extra_telemetry_applications,
       mod: {Electric.Application, []}
     ]
   end
@@ -103,9 +114,6 @@ defmodule Electric.MixProject do
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
         {:stream_split, "~> 0.1"},
-        {:telemetry_poller, "~> 1.2"},
-        # tls_certificate_check is required by otel_exporter_otlp
-        {:tls_certificate_check, "~> 1.27"},
         {:tz, "~> 0.28"}
       ],
       dev_and_test_deps(),
@@ -124,32 +132,15 @@ defmodule Electric.MixProject do
     ]
   end
 
-  defp telemetry_applications_in_release do
-    if Mix.target() == @telemetry_target do
-      # This order of application is important to ensure proper startup sequence of
-      # application dependencies, namely, inets.
-      [
-        opentelemetry_exporter: :permanent,
-        opentelemetry: :temporary
-      ]
-    else
-      []
-    end
-  end
-
-  defp telemetry_deps() do
+  defp telemetry_deps do
     [
-      {:sentry, "~> 11.0"},
+      {:electric_telemetry, path: "../electric-telemetry"},
       {:opentelemetry, "~> 1.6"},
-      {:opentelemetry_exporter, "~> 1.8"},
-      {:otel_metric_exporter, "~> 0.4.1"},
-      # For debugging the otel_metric_exporter check it out locally and uncomment the line below
-      # {:otel_metric_exporter, path: "../../../elixir-otel-metric-exporter"},
-      {:telemetry_metrics_prometheus_core, "~> 1.1"},
-      {:telemetry_metrics_statsd, "~> 0.7"},
+      {:opentelemetry_exporter, "~> 1.10.0"},
       # Pin protobuf to v0.13.x because starting with v0.14.0 it includes modules that conflict
       # with those of Protox (which itself is brought in by pg_query_ex).
-      {:protobuf, "~> 0.13.0", optional: true, override: true}
+      {:protobuf, "~> 0.13.0", override: true},
+      {:sentry, "~> 11.0"}
     ]
     |> Enum.map(fn
       {package, version} when is_binary(version) ->
@@ -164,10 +155,10 @@ defmodule Electric.MixProject do
   end
 
   defp telemetry_dep_opts(source_opts) do
-    Keyword.merge(source_opts, targets: @telemetry_target, optional: true)
+    Keyword.merge(source_opts, targets: @telemetry_target)
   end
 
-  defp aliases() do
+  defp aliases do
     [
       start_dev: "cmd --cd dev docker compose up -d",
       stop_dev: "cmd --cd dev docker compose down -v",

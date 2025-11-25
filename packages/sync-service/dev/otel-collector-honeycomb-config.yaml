@@ -4,8 +4,8 @@ exporters:
     headers:
       x-honeycomb-team: ${env:ELECTRIC_HNY_API_KEY}
       x-honeycomb-dataset: ${env:ELECTRIC_HNY_DATASET}
-  logging:
-    loglevel: info
+  debug:
+    verbosity: normal
 receivers:
   otlp:
     protocols:
@@ -54,4 +54,4 @@ service:
         - batch
       exporters:
         - otlp/honeycomb
-        - logging
+        - debug
