@@ -34,14 +34,12 @@ defmodule Electric.Shapes.ApiTest do
     explicitly_selected_columns: ["id", "value"],
     flags: %{selects_all_columns: true}
   }
-  @registry __MODULE__.Registry
   @test_shape_handle "test-shape-handle"
   @test_opts %{foo: "bar"}
   @before_all_offset LogOffset.before_all()
   @first_offset LogOffset.first()
   @test_offset LogOffset.new(Lsn.from_integer(100), 0)
   @start_offset_50 LogOffset.new(Lsn.from_integer(50), 0)
-  @test_pg_id "12345"
 
   # Higher timeout is needed for some tests that tend to run slower on CI.
   @receive_timeout 1000
@@ -51,20 +49,14 @@ defmodule Electric.Shapes.ApiTest do
   defp configure_request(ctx) do
     Api.plug_opts(
       stack_id: ctx.stack_id,
-      pg_id: @test_pg_id,
-      stack_events_registry: Electric.stack_events_registry(),
       stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-      shape_cache: {Electric.ShapeCache, []},
-      storage: {Electric.ShapeCache.Storage.PureFileStorage, []},
       inspector: @inspector,
-      registry: @registry,
       long_poll_timeout: long_poll_timeout(ctx),
       max_age: max_age(ctx),
       stale_age: stale_age(ctx),
       allow_shape_deletion: true,
       send_cache_headers?: send_cache_headers?(ctx),
-      encoder: api_encoder(ctx),
-      persistent_kv: ctx.persistent_kv
+      encoder: api_encoder(ctx)
     )
   end
 
@@ -83,14 +75,10 @@ defmodule Electric.Shapes.ApiTest do
   defp send_cache_headers?(ctx), do: Access.get(ctx, :send_cache_headers?, true)
   defp api_encoder(ctx), do: Access.get(ctx, :api_encoder, Electric.Shapes.Api.Encoder.Term)
 
-  setup do
-    start_link_supervised!({Registry, keys: :duplicate, name: @registry})
-    :ok
-  end
-
   setup [
-    :with_persistent_kv,
     :with_stack_id_from_test,
+    :with_registry,
+    :with_persistent_kv,
     :with_pure_file_storage,
     :with_status_monitor,
     :with_shape_cleaner
@@ -835,7 +823,7 @@ defmodule Electric.Shapes.ApiTest do
       assert_receive :got_log_stream, @receive_timeout
 
       # Simulate new changes arriving
-      Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
         send(pid, {ref, :new_changes, next_offset})
       end)
 
@@ -860,7 +848,7 @@ defmodule Electric.Shapes.ApiTest do
       assert response.offset == next_offset
       assert response.up_to_date
       # Ensure registered listener is cleaned up after body is read
-      assert [] == Registry.lookup(@registry, @test_shape_handle)
+      assert [] == Registry.lookup(ctx.registry, @test_shape_handle)
     end
 
     test "raises if body is read from a different process", ctx do
@@ -908,7 +896,7 @@ defmodule Electric.Shapes.ApiTest do
       assert_receive :got_log_stream, @receive_timeout
 
       # Simulate new changes arriving
-      Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
         send(pid, {ref, :new_changes, next_offset})
       end)
 
@@ -1092,7 +1080,7 @@ defmodule Electric.Shapes.ApiTest do
       assert_receive :got_log_stream, @receive_timeout
 
       # Simulate shape rotation
-      Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
         send(pid, {ref, :shape_rotation})
       end)
 
@@ -1115,7 +1103,8 @@ defmodule Electric.Shapes.ApiTest do
       # # any subsequent get shape calls should return the new offset
       expect_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
-          Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+          # Simulate new changes arriving the moment we load the shape
+          Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
             send(pid, {ref, :new_changes, next_offset})
           end)
 
@@ -1165,7 +1154,8 @@ defmodule Electric.Shapes.ApiTest do
     test "picks up shape rotation missed between loading shape and listening for changes", ctx do
       expect_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
-          Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+          # Simulate shape rotating a moment after we load the shape
+          Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
             send(pid, {ref, :shape_rotation})
           end)
 

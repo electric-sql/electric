@@ -190,9 +190,11 @@ defmodule Electric.Shapes.Api.Response do
 
   defp clean_up_change_listener(%__MODULE__{handle: shape_handle} = response)
        when not is_nil(shape_handle) do
-    %{api: %{registry: registry}} = response
+    %{api: %{stack_id: stack_id}} = response
     # Ensure registry is still runnning and unregister handle
-    if Process.whereis(registry) != nil,
+    registry = Electric.StackSupervisor.registry_name(stack_id)
+
+    if GenServer.whereis(registry) != nil,
       do: Registry.unregister(registry, shape_handle)
 
     response

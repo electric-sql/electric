@@ -16,16 +16,8 @@ defmodule Electric.Shapes.Api do
   require Logger
 
   @options [
-    inspector: [type: :mod_arg, required: true],
-    pg_id: [type: {:or, [nil, :string]}],
-    registry: [type: :atom, required: true],
-    stack_events_registry: [type: :atom, required: true],
     stack_id: [type: :string, required: true],
-    storage: [type: :mod_arg, required: true],
-    persistent_kv: [
-      type: {:custom, __MODULE__, :implements_persistent_kv, []},
-      required: true
-    ],
+    inspector: [type: :mod_arg, required: true],
     allow_shape_deletion: [type: :boolean],
     feature_flags: [type: {:list, :string}, default: []],
     keepalive_interval: [type: :integer],
@@ -51,13 +43,8 @@ defmodule Electric.Shapes.Api do
 
   defstruct [
     :inspector,
-    :pg_id,
-    :registry,
-    :persistent_kv,
     :shape,
-    :stack_events_registry,
     :stack_id,
-    :storage,
     :feature_flags,
     :max_concurrent_requests,
     allow_shape_deletion: false,
@@ -343,10 +330,7 @@ defmodule Electric.Shapes.Api do
      )}
   end
 
-  defp handle_shape_info(
-         {active_shape_handle, _},
-         %Request{} = request
-       ) do
+  defp handle_shape_info({active_shape_handle, _}, %Request{} = request) do
     # Either the requested shape handle exists or does not exist.
     # If it exists there is a mismatch between the shape definition and the shape handle
     # (otherwise we would have matched the previous function clause).
@@ -405,7 +389,7 @@ defmodule Electric.Shapes.Api do
       last_offset: last_offset,
       handle: handle,
       params: %{offset: offset},
-      api: %{registry: registry}
+      api: %{stack_id: stack_id}
     } = request
 
     # Only start listening when we know there is a possibility that nothing is going to be returned
@@ -413,8 +397,7 @@ defmodule Electric.Shapes.Api do
     # by that process. In that case, we'll start listening for changes but not receive any updates.
     if LogOffset.compare(offset, last_offset) != :lt or
          last_offset == LogOffset.last_before_real_offsets() do
-      ref = make_ref()
-      Registry.register(registry, handle, ref)
+      ref = Electric.StackSupervisor.subscribe_to_shape_events(stack_id, handle)
       Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
 
       %{request | new_changes_pid: self(), new_changes_ref: ref}

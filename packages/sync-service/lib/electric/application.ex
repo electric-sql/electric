@@ -52,7 +52,7 @@ defmodule Electric.Application do
       children_library(),
       application_telemetry(config),
       [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
-      api_server_children([]),
+      api_server_children(config),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])
   end
@@ -140,7 +140,8 @@ defmodule Electric.Application do
         publication_refresh_period: get_env(opts, :publication_refresh_period),
         schema_reconciler_period: get_env(opts, :schema_reconciler_period),
         cleanup_interval_ms: get_env(opts, :cleanup_interval_ms),
-        shape_hibernate_after: get_env(opts, :shape_hibernate_after)
+        shape_hibernate_after: get_env(opts, :shape_hibernate_after),
+        conn_fullsweep_after: get_env(opts, :conn_fullsweep_after)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )
@@ -149,7 +150,9 @@ defmodule Electric.Application do
   # Gets the API-side configuration based on the same opts + application config
   # used for `configuration/1`
   defp api_configuration(opts) do
-    Electric.StackSupervisor.build_shared_opts(core_configuration(opts))
+    opts
+    |> core_configuration()
+    |> Electric.StackSupervisor.build_shared_opts()
     |> Keyword.merge(
       long_poll_timeout: get_env(opts, :long_poll_timeout),
       max_age: get_env(opts, :cache_max_age),
@@ -160,7 +163,7 @@ defmodule Electric.Application do
       max_concurrent_requests: get_env(opts, :max_concurrent_requests),
       secret: Application.get_env(:electric, :secret)
     )
-    |> Keyword.merge(Keyword.take(opts, [:encoder, :inspector, :registry]))
+    |> Keyword.merge(Keyword.take(opts, [:encoder, :inspector]))
   end
 
   defp core_configuration(opts) do
@@ -303,7 +306,15 @@ defmodule Electric.Application do
   end
 
   defp thousand_island_options(opts) do
+    tweaks = Keyword.get(opts, :tweaks, [])
     acceptor_opts = Keyword.take(opts, [:num_acceptors])
+
+    genserver_options =
+      if fullsweep_after = Keyword.get(tweaks, :conn_fullsweep_after) do
+        [genserver_options: [spawn_opt: [fullsweep_after: fullsweep_after]]]
+      else
+        []
+      end
 
     send_opts =
       case get_env(opts, :tcp_send_timeout) do
@@ -320,7 +331,7 @@ defmodule Electric.Application do
 
     transport_opts = [transport_options: ipv6_opts ++ send_opts]
 
-    acceptor_opts ++ transport_opts
+    genserver_options ++ acceptor_opts ++ transport_opts
   end
 
   defp cowboy_options(opts) do
@@ -365,3 +376,4 @@ defmodule Electric.Application do
     Keyword.get_lazy(opts, key, fn -> Application.get_env(:electric, key) end)
   end
 end
+
