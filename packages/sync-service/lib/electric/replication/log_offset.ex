@@ -212,7 +212,13 @@ defmodule Electric.Replication.LogOffset do
       iex> compare(new(10, 1) |> increment(4), new(10, 5))
       :eq
   """
-  def increment(%LogOffset{op_offset: op_offset} = log_offset, increment \\ 1) do
+  def increment(log_offset, increment \\ 1)
+
+  def increment(%LogOffset{op_offset: :infinity} = log_offset, increment) when increment > 0 do
+    %{log_offset | tx_offset: 1, op_offset: increment - 1}
+  end
+
+  def increment(%LogOffset{op_offset: op_offset} = log_offset, increment) when increment > 0 do
     %{log_offset | op_offset: op_offset + increment}
   end
 

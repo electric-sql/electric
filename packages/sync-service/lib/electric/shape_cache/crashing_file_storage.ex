@@ -26,6 +26,9 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate terminate(opts), to: PureFileStorage
   defdelegate hibernate(opts), to: PureFileStorage
   defdelegate compact(opts, keep_complete_chunks), to: PureFileStorage
+  defdelegate append_move_in_snapshot_to_log!(name, writer_state), to: PureFileStorage
+  defdelegate append_control_message!(control_message, writer_state), to: PureFileStorage
+  defdelegate write_move_in_snapshot!(stream, name, opts), to: PureFileStorage
 
   defp stack_agent_name(opts) do
     Electric.ProcessRegistry.name(opts, __MODULE__, :agent)

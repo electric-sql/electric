@@ -170,6 +170,27 @@ defmodule Electric.Replication.Eval.Env do
     end
   end
 
+  def const_to_pg_string(%__MODULE__{}, value, type) when type in @text_types, do: value
+  def const_to_pg_string(%__MODULE__{}, value, {:enum, _}), do: value
+
+  def const_to_pg_string(%__MODULE__{} = env, value, {:array, type}) do
+    "ARRAY[#{array_section_to_string(env, value, type)}]"
+  end
+
+  def const_to_pg_string(%__MODULE__{funcs: funcs}, value, type) do
+    [%{implementation: impl}] = Map.fetch!(funcs, {to_string(type) <> "out", 1})
+
+    case impl do
+      {module, fun} -> apply(module, fun, [value])
+      fun -> apply(fun, [value])
+    end
+  end
+
+  defp array_section_to_string(env, value, type) when is_list(value),
+    do: "[#{Enum.map(value, &array_section_to_string(env, &1, type))}]"
+
+  defp array_section_to_string(env, value, type), do: const_to_pg_string(env, value, type)
+
   @doc """
   Check if one type is implicitly castable to another type in this environment.
   """

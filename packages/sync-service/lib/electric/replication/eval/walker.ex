@@ -107,7 +107,7 @@ defmodule Electric.Replication.Eval.Walker do
 
   This function takes an optional `ctx` argument, which is passed to `reduce_fn` as the last argument.
   """
-  @spec reduce(target :: struct() | nil, reduce_fn :: reduce_fn, acc :: acc, ctx :: context) ::
+  @spec reduce(target :: struct() | nil, reduce_fn, acc, context) ::
           {:error, any()} | {:ok, acc}
         when acc: any(),
              context: any(),

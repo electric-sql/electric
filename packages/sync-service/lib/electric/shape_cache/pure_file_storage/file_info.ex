@@ -86,4 +86,8 @@ defmodule Electric.ShapeCache.PureFileStorage.FileInfo do
       :file.truncate(file)
     end)
   end
+
+  def delete(path) do
+    :prim_file.delete(path)
+  end
 end
