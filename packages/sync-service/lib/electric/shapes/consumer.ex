@@ -16,7 +16,9 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.ShapeLogCollector
+  alias Electric.Replication.TransactionBuilder
   alias Electric.ShapeCache
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes
@@ -432,7 +434,13 @@ defmodule Electric.Shapes.Consumer do
     |> mark_for_removal()
   end
 
-  defp handle_event(%Transaction{} = txn, state), do: handle_txns([txn], state)
+  defp handle_event(%TransactionFragment{} = txn_fragment, state) do
+    {txns, transaction_builder} =
+      TransactionBuilder.build(txn_fragment, state.transaction_builder)
+
+    state = %{state | transaction_builder: transaction_builder}
+    handle_txns(txns, state)
+  end
 
   defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
 

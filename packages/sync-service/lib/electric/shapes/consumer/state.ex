@@ -4,6 +4,7 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.TransactionBuilder
   alias Electric.Postgres.SnapshotQuery
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
@@ -20,6 +21,7 @@ defmodule Electric.Shapes.Consumer.State do
     :writer,
     initial_snapshot_state: InitialSnapshot.new(nil),
     move_handling_state: MoveIns.new(),
+    transaction_builder: TransactionBuilder.new(),
     buffer: [],
     txn_offset_mapping: [],
     materializer_subscribed?: false,

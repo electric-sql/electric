@@ -3,8 +3,8 @@ defmodule Electric.Shapes.PartitionsTest do
 
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.Relation
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.TruncatedRelation
+  alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Shapes.Partitions
   alias Electric.Shapes.Shape
 
@@ -81,10 +81,10 @@ defmodule Electric.Shapes.PartitionsTest do
     }
 
     root = %{new | relation: {"public", "partitioned"}}
-    insert = %Transaction{changes: [new]}
+    insert = %TransactionFragment{changes: [new]}
 
-    assert {_, %Transaction{changes: [^new, ^root]}} =
-             Partitions.handle_transaction(partitions, insert)
+    assert {_, %TransactionFragment{changes: [^new, ^root]}} =
+             Partitions.handle_txn_fragment(partitions, insert)
   end
 
   test "no change expansion is done when no partitioned shapes are active" do
@@ -108,7 +108,7 @@ defmodule Electric.Shapes.PartitionsTest do
         Shape.new!("partition_01", where: "id = 3", inspector: @inspector)
       )
 
-    insert = %Transaction{
+    insert = %TransactionFragment{
       changes: [
         %NewRecord{
           relation: {"public", "partition_01"},
@@ -117,7 +117,7 @@ defmodule Electric.Shapes.PartitionsTest do
       ]
     }
 
-    {_, ^insert} = Partitions.handle_transaction(partitions, insert)
+    {_, ^insert} = Partitions.handle_txn_fragment(partitions, insert)
   end
 
   test "after addition of new partition, shape receives updates" do
@@ -143,9 +143,9 @@ defmodule Electric.Shapes.PartitionsTest do
 
     new = %NewRecord{relation: {"public", "partition_03"}, record: %{"id" => "2"}}
     root = %NewRecord{relation: {"public", "partitioned"}, record: %{"id" => "2"}}
-    insert = %Transaction{changes: [new]}
+    insert = %TransactionFragment{changes: [new]}
 
-    {_, ^insert} = Partitions.handle_transaction(partitions, insert)
+    {_, ^insert} = Partitions.handle_txn_fragment(partitions, insert)
 
     relation = %Relation{
       schema: "public",
@@ -155,8 +155,8 @@ defmodule Electric.Shapes.PartitionsTest do
 
     {:ok, partitions} = Partitions.handle_relation(partitions, relation)
 
-    {_, %Transaction{changes: [^new, ^root]}} =
-      Partitions.handle_transaction(partitions, insert)
+    {_, %TransactionFragment{changes: [^new, ^root]}} =
+      Partitions.handle_txn_fragment(partitions, insert)
   end
 
   test "remove_shape/2 cleans up partition information" do
@@ -207,10 +207,10 @@ defmodule Electric.Shapes.PartitionsTest do
 
     new = %NewRecord{relation: {"public", "partition_03"}, record: %{"id" => "2"}}
     root = %NewRecord{relation: {"public", "partitioned"}, record: %{"id" => "2"}}
-    insert = %Transaction{changes: [new]}
+    insert = %TransactionFragment{changes: [new]}
 
-    assert {_, %Transaction{changes: [^new, ^root]}} =
-             Partitions.handle_transaction(partitions, insert)
+    assert {_, %TransactionFragment{changes: [^new, ^root]}} =
+             Partitions.handle_txn_fragment(partitions, insert)
 
     clean_partitions =
       partitions
@@ -222,8 +222,8 @@ defmodule Electric.Shapes.PartitionsTest do
 
     assert clean_partitions == empty
 
-    assert {_, %Transaction{changes: [^new]}} =
-             Partitions.handle_transaction(clean_partitions, insert)
+    assert {_, %TransactionFragment{changes: [^new]}} =
+             Partitions.handle_txn_fragment(clean_partitions, insert)
   end
 
   test "add_shape/3 returns error on no connection" do
@@ -270,22 +270,22 @@ defmodule Electric.Shapes.PartitionsTest do
       truncate_partition_01 = %TruncatedRelation{relation: {"public", "partition_01"}}
       truncate_partition_02 = %TruncatedRelation{relation: {"public", "partition_02"}}
 
-      txn = %Transaction{changes: [truncate_partitioned]}
+      batch = %TransactionFragment{changes: [truncate_partitioned]}
 
       assert {_,
-              %Transaction{
+              %TransactionFragment{
                 changes: [^truncate_partitioned, ^truncate_partition_01, ^truncate_partition_02]
-              }} = Partitions.handle_transaction(ctx.partitions, txn)
+              }} = Partitions.handle_txn_fragment(ctx.partitions, batch)
     end
 
     test "truncation of partition truncates root and that partition", ctx do
       truncate_partitioned = %TruncatedRelation{relation: {"public", "partitioned"}}
       truncate_partition_02 = %TruncatedRelation{relation: {"public", "partition_02"}}
 
-      txn = %Transaction{changes: [truncate_partition_02]}
+      batch = %TransactionFragment{changes: [truncate_partition_02]}
 
-      assert {_, %Transaction{changes: [^truncate_partition_02, ^truncate_partitioned]}} =
-               Partitions.handle_transaction(ctx.partitions, txn)
+      assert {_, %TransactionFragment{changes: [^truncate_partition_02, ^truncate_partitioned]}} =
+               Partitions.handle_txn_fragment(ctx.partitions, batch)
     end
   end
 end

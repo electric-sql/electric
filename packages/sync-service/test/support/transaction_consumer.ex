@@ -1,10 +1,8 @@
 defmodule Support.TransactionConsumer do
   use GenServer, restart: :temporary
 
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.Relation
-  alias Electric.Replication.Changes.Begin
-  alias Electric.Replication.TransactionBuilder
+  alias Electric.Replication.Changes.TransactionFragment
 
   import ExUnit.Assertions
 
@@ -28,18 +26,25 @@ defmodule Support.TransactionConsumer do
       |> Enum.zip(received_evts)
       |> Enum.map(fn {expected, received} ->
         case expected do
-          %Transaction{} = expected ->
-            assert expected.xid == received.xid
-            received.xid
+          %TransactionFragment{} = txn_fragment ->
+            assert %TransactionFragment{} = received
 
-          %Relation{} = expected ->
-            assert expected.id == received.id
-            received.id
+            assert Map.drop(received, [:changes, :affected_relations, :change_count]) ==
+                     Map.drop(txn_fragment, [:changes, :affected_relations, :change_count])
 
-          [%Begin{xid: xid} | _] ->
-            assert %Transaction{} = received
-            assert xid == received.xid
-            received.xid
+            assert length(received.changes) == length(txn_fragment.changes)
+
+            Enum.zip(received.changes, txn_fragment.changes)
+            |> Enum.each(fn {received_change, expected_change} ->
+              assert Map.drop(received_change, [:key, :old_key]) ==
+                       Map.drop(expected_change, [:key, :old_key])
+            end)
+
+            txn_fragment.xid
+
+          %Relation{id: id} ->
+            assert %Relation{id: ^id} = received
+            id
         end
       end)
     end
@@ -71,16 +76,8 @@ defmodule Support.TransactionConsumer do
     {:ok, %{id: id, producer: producer, parent: parent, shape_handle: shape_handle}}
   end
 
-  def handle_call({:handle_event, %Transaction{} = txn, _ctx}, _from, state) do
-    send(state.parent, {__MODULE__, {state.id, self()}, [txn]})
-    {:reply, :ok, state}
-  end
-
-  def handle_call({:handle_event, changes, _ctx}, _from, state) when is_list(changes) do
-    # Build Transaction from list of changes
-    builder = TransactionBuilder.new()
-    {results, _builder} = TransactionBuilder.build(changes, builder)
-    send(state.parent, {__MODULE__, {state.id, self()}, results})
+  def handle_call({:handle_event, %TransactionFragment{} = txn_fragment, _ctx}, _from, state) do
+    send(state.parent, {__MODULE__, {state.id, self()}, [txn_fragment]})
     {:reply, :ok, state}
   end
 

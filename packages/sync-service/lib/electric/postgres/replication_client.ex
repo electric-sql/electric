@@ -8,7 +8,8 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
-  alias Electric.Replication.OperationBatcher
+  alias Electric.Replication.Changes.TransactionFragment
+  alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Telemetry.Sampler
 
@@ -32,11 +33,11 @@ defmodule Electric.Postgres.ReplicationClient do
           | :streaming
 
   defmodule State do
-    @enforce_keys [:handle_operations, :publication_name]
+    @enforce_keys [:handle_event, :publication_name]
     defstruct [
       :stack_id,
       :connection_manager,
-      :handle_operations,
+      :handle_event,
       :publication_name,
       :lock_acquired?,
       :try_creating_publication?,
@@ -47,8 +48,7 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_temporary?,
       :display_settings,
       :message_converter,
-      :operation_batcher,
-      :max_operation_batch_size,
+      :max_change_batch_size,
       :publication_owner?,
       :replication_idle_timeout,
       step: :disconnected,
@@ -70,7 +70,7 @@ defmodule Electric.Postgres.ReplicationClient do
     @type t() :: %__MODULE__{
             stack_id: String.t(),
             connection_manager: pid(),
-            handle_operations: {module(), atom(), [term()]},
+            handle_event: {module(), atom(), [term()]},
             publication_name: String.t(),
             try_creating_publication?: boolean(),
             recreate_slot?: boolean(),
@@ -80,8 +80,7 @@ defmodule Electric.Postgres.ReplicationClient do
             slot_temporary?: boolean(),
             display_settings: [String.t()],
             message_converter: MessageConverter.t(),
-            operation_batcher: OperationBatcher.t(),
-            max_operation_batch_size: non_neg_integer(),
+            max_change_batch_size: non_neg_integer(),
             publication_owner?: boolean(),
             replication_idle_timeout: non_neg_integer(),
             step: Electric.Postgres.ReplicationClient.step(),
@@ -95,7 +94,7 @@ defmodule Electric.Postgres.ReplicationClient do
     @opts_schema NimbleOptions.new!(
                    stack_id: [required: true, type: :string],
                    connection_manager: [required: true, type: :pid],
-                   handle_operations: [required: true, type: :mfa],
+                   handle_event: [required: true, type: :mfa],
                    publication_name: [required: true, type: :string],
                    try_creating_publication?: [required: true, type: :boolean],
                    start_streaming?: [type: :boolean, default: true],
@@ -116,7 +115,7 @@ defmodule Electric.Postgres.ReplicationClient do
     # passing, but as we're not currently worried about the memory consumption of the
     # replication client and don't want to risk any performance degradation in production
     # it has been set arbitrarily high to 100. We can tune this figure later if needed.
-    @default_max_operation_batch_size 100
+    @default_max_change_batch_size 100
 
     @spec new(Access.t()) :: t()
     def new(opts) do
@@ -131,8 +130,7 @@ defmodule Electric.Postgres.ReplicationClient do
         opts ++
           [
             message_converter: MessageConverter.new(max_tx_size: max_txn_size),
-            operation_batcher: OperationBatcher.new(),
-            max_operation_batch_size: @default_max_operation_batch_size
+            max_change_batch_size: @default_max_change_batch_size
           ]
       )
     end
@@ -388,42 +386,44 @@ defmodule Electric.Postgres.ReplicationClient do
     #     message_type <> " :: " <> inspect(Map.from_struct(msg))
     # )
 
-    with {:ok, operations, converter} <- MessageConverter.convert(msg, state.message_converter) do
-      {OperationBatcher.batch(
-         operations,
-         state.max_operation_batch_size,
-         state.operation_batcher
-       ), converter}
-    end
-    |> case do
+    case MessageConverter.convert(msg, state.max_change_batch_size, state.message_converter) do
       {:error, reason} ->
         {:disconnect, {:irrecoverable_slot, reason}}
 
-      {{:buffering, batcher}, converter} ->
-        {:noreply, %{state | message_converter: converter, operation_batcher: batcher}}
+      {:buffering, converter} ->
+        {:noreply, %{state | message_converter: converter}}
 
-      {{:ok, operations, commits, batcher}, converter} ->
-        state = %{state | message_converter: converter, operation_batcher: batcher}
+      {:ok, %Relation{} = relation, converter} ->
+        state = %{state | message_converter: converter}
 
-        handle_operations(operations, state)
+        handle_event(relation, state)
 
         state = maybe_update_flush_up_to_date(state)
 
-        {acks, state} = acknowledge_transactions(commits, state)
+        {:noreply, state}
+
+      {:ok, %TransactionFragment{} = txn_fragment, converter} ->
+        state = %{state | message_converter: converter}
+
+        handle_event(txn_fragment, state)
+
+        state = maybe_update_flush_up_to_date(state)
+
+        {acks, state} = acknowledge_transaction(txn_fragment, state)
 
         {:noreply, acks, state}
     end
   end
 
-  defp handle_operations(operations, state) do
-    {m, f, args} = state.handle_operations
+  defp handle_event(event, state) do
+    {m, f, args} = state.handle_event
 
-    apply_with_retries({m, f, [operations | args]}, state)
+    apply_with_retries({m, f, [event | args]}, state)
   end
 
-  # Since we process a message at a time and flush the buffer
-  # on commit, we will only ever have one commit here
-  defp acknowledge_transactions([commit], state) do
+  defp acknowledge_transaction(%TransactionFragment{commit: nil}, state), do: {[], state}
+
+  defp acknowledge_transaction(%TransactionFragment{lsn: lsn, commit: commit}, state) do
     if Sampler.sample_metrics?() do
       OpenTelemetry.execute(
         [:electric, :postgres, :replication, :transaction_received],
@@ -432,7 +432,7 @@ defmodule Electric.Postgres.ReplicationClient do
           receive_lag: DateTime.diff(DateTime.utc_now(), commit.commit_timestamp, :millisecond),
           bytes: commit.transaction_size,
           count: 1,
-          operations: commit.change_count
+          operations: commit.txn_change_count
         },
         %{stack_id: state.stack_id}
       )
@@ -441,15 +441,13 @@ defmodule Electric.Postgres.ReplicationClient do
     state =
       %{
         state
-        | last_seen_txn_lsn: commit.lsn,
+        | last_seen_txn_lsn: lsn,
           last_seen_txn_timestamp: System.monotonic_time()
       }
-      |> update_received_wal(Lsn.to_integer(commit.lsn))
+      |> update_received_wal(Lsn.to_integer(lsn))
 
     {[encode_standby_status_update(state)], state}
   end
-
-  defp acknowledge_transactions([], state), do: {[], state}
 
   defp maybe_update_flush_up_to_date(state) do
     if MessageConverter.in_transaction?(state.message_converter) do

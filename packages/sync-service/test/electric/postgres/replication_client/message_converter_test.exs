@@ -8,14 +8,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
   alias Electric.Postgres.ReplicationClient.MessageConverter
 
   alias Electric.Replication.Changes.{
-    Begin,
     Commit,
     Relation,
     Column,
     NewRecord,
     UpdatedRecord,
     DeletedRecord,
-    TruncatedRelation
+    TruncatedRelation,
+    TransactionFragment
   }
 
   alias Electric.Replication.LogOffset
@@ -31,33 +31,19 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
     columns: [%LR.Relation.Column{name: "id", flags: [:key], type_oid: 23, type_modifier: -1}]
   }
 
+  @max_batch_size 100
+
   setup do
     converter = MessageConverter.new()
-    {:ok, [_relation], converter} = MessageConverter.convert(@relation, converter)
+
+    {:ok, %Relation{}, converter} =
+      MessageConverter.convert(@relation, @max_batch_size, converter)
+
     {:ok, converter: converter}
   end
 
   describe "convert/2" do
-    test "returns Begin change when seeing a 'Begin' message", %{
-      converter: converter
-    } do
-      begin_msg = %LR.Begin{
-        final_lsn: @test_lsn,
-        commit_timestamp: DateTime.utc_now(),
-        xid: 456
-      }
-
-      {:ok, changes, updated_converter} = MessageConverter.convert(begin_msg, converter)
-
-      assert [%Begin{xid: 456}] = changes
-      assert updated_converter.current_lsn == @test_lsn
-      assert updated_converter.tx_op_index == 0
-      assert updated_converter.tx_size == 0
-    end
-
-    test "returns Relation change when receiving a relation message", %{
-      converter: converter
-    } do
+    test "returns Relation immediately when receiving a relation message", %{converter: converter} do
       new_relation = %LR.Relation{
         id: 2,
         namespace: "public",
@@ -68,118 +54,140 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         ]
       }
 
-      {:ok, changes, updated_converter} = MessageConverter.convert(new_relation, converter)
-
-      assert [
-               %Relation{
-                 id: 2,
-                 schema: "public",
-                 table: "posts",
-                 columns: [%Column{name: "id", type_oid: 23}]
-               }
-             ] = changes
-
-      assert %MessageConverter{relations: %{1 => @relation, 2 => ^new_relation}} =
-               updated_converter
+      {:ok,
+       %Relation{
+         id: 2,
+         schema: "public",
+         table: "posts",
+         columns: [%Column{name: "id", type_oid: 23}]
+       }, _converter} = MessageConverter.convert(new_relation, @max_batch_size, converter)
     end
 
-    test "logs information when receiving a generic message",
-         %{converter: converter} do
+    test "logs information when receiving a generic message", %{converter: converter} do
       message = %LR.Message{prefix: "test", content: "hello world"}
-      log = capture_log(fn -> MessageConverter.convert(message, converter) end)
+      log = capture_log(fn -> MessageConverter.convert(message, @max_batch_size, converter) end)
       assert log =~ "Got a message from PG via logical replication"
     end
 
-    test "returns empty list for origin & type messages",
-         %{converter: converter} do
+    test "skips origin & type messages", %{converter: converter} do
       origin = %LR.Origin{name: "another origin"}
       type = %LR.Type{name: "custom_type"}
 
-      assert {:ok, [], ^converter} = MessageConverter.convert(origin, converter)
-      assert {:ok, [], ^converter} = MessageConverter.convert(type, converter)
+      assert {:buffering, _converter} =
+               MessageConverter.convert(origin, @max_batch_size, converter)
+
+      assert {:buffering, _converter} = MessageConverter.convert(type, @max_batch_size, converter)
     end
 
-    test "returns NewRecord change for insert when the relation is known", %{
-      converter: converter
-    } do
-      {:ok, [_begin], converter} =
+    test "returns TransactionFragment once a whole transaction is seen", %{converter: converter} do
+      {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
           converter
         )
 
-      insert_msg = %LR.Insert{
-        relation_id: 1,
-        tuple_data: ["123"],
-        bytes: 3
-      }
-
-      {:ok, changes, updated_converter} = MessageConverter.convert(insert_msg, converter)
-
-      assert [
-               %NewRecord{
-                 relation: {"public", "users"},
-                 record: %{"id" => "123"},
-                 log_offset: log_offset
-               }
-             ] = changes
-
-      assert log_offset == LogOffset.new(@test_lsn, 0)
-
-      assert updated_converter.tx_op_index == 2
-      assert updated_converter.tx_size == 3
-    end
-
-    test "returns UpdatedRecord change for update when the relation is known", %{
-      converter: converter
-    } do
-      {:ok, [_begin], converter} =
+      {:buffering, converter} =
         MessageConverter.convert(
-          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3},
+          @max_batch_size,
           converter
         )
 
-      update_msg = %LR.Update{
-        relation_id: 1,
-        old_tuple_data: ["123"],
-        tuple_data: ["124"],
-        bytes: 6
-      }
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                has_begin?: true,
+                commit: %Commit{
+                  commit_timestamp: ~U[2024-01-01 00:00:00Z],
+                  transaction_size: 3,
+                  txn_change_count: 1
+                },
+                changes: [
+                  %NewRecord{
+                    relation: {"public", "users"},
+                    record: %{"id" => "123"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 0}
+                  }
+                ],
+                affected_relations: affected
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
 
-      {:ok, changes, updated_converter} = MessageConverter.convert(update_msg, converter)
+      assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
+    end
 
-      assert [
-               %UpdatedRecord{
-                 relation: {"public", "users"},
-                 old_record: %{"id" => "123"},
-                 record: %{"id" => "124"},
-                 log_offset: log_offset
-               }
-             ] = changes
+    test "returns TransactionFragment with UpdatedRecord for update", %{converter: converter} do
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
+          converter
+        )
 
-      assert log_offset == LogOffset.new(@test_lsn, 0)
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Update{relation_id: 1, old_tuple_data: ["123"], tuple_data: ["124"], bytes: 6},
+          @max_batch_size,
+          converter
+        )
 
-      assert updated_converter.tx_op_index == 2
-      assert updated_converter.tx_size == 6
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                has_begin?: true,
+                commit: %Commit{
+                  commit_timestamp: ~U[2024-01-01 00:00:00Z],
+                  transaction_size: 6,
+                  txn_change_count: 1
+                },
+                changes: [
+                  %UpdatedRecord{
+                    relation: {"public", "users"},
+                    old_record: %{"id" => "123"},
+                    record: %{"id" => "124"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 0}
+                  }
+                ],
+                affected_relations: affected
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
+
+      assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
     end
 
     test "errors for empty old data on updates", %{converter: converter} do
-      {:ok, [_begin], converter} =
+      {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
           converter
         )
 
-      update_msg = %LR.Update{
-        relation_id: 1,
-        old_tuple_data: nil,
-        tuple_data: ["124"],
-        bytes: 3
-      }
-
-      result = MessageConverter.convert(update_msg, converter)
-
-      assert {:error, {:replica_not_full, message}} = result
+      assert {:error, {:replica_not_full, message}} =
+               MessageConverter.convert(
+                 %LR.Update{relation_id: 1, old_tuple_data: nil, tuple_data: ["124"], bytes: 3},
+                 @max_batch_size,
+                 converter
+               )
 
       assert message =~
                "Received an update from PG for public.users that did not have " <>
@@ -188,65 +196,98 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       assert message =~ "Try executing `ALTER TABLE public.users REPLICA IDENTITY FULL`"
     end
 
-    test "returns DeletedRecord change for delete when the relation is known", %{
+    test "returns TransactionFragment with DeletedRecord for delete", %{converter: converter} do
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
+          converter
+        )
+
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Delete{relation_id: 1, old_tuple_data: ["123"], bytes: 3},
+          @max_batch_size,
+          converter
+        )
+
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                has_begin?: true,
+                commit: %Commit{
+                  commit_timestamp: ~U[2024-01-01 00:00:00Z],
+                  transaction_size: 3,
+                  txn_change_count: 1
+                },
+                changes: [
+                  %DeletedRecord{
+                    relation: {"public", "users"},
+                    old_record: %{"id" => "123"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 0}
+                  }
+                ],
+                affected_relations: affected
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
+
+      assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
+    end
+
+    test "returns TransactionFragment with TruncatedRelation for truncate", %{
       converter: converter
     } do
-      {:ok, [_begin], converter} =
+      {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
           converter
         )
 
-      delete_msg = %LR.Delete{
-        relation_id: 1,
-        old_tuple_data: ["123"],
-        bytes: 3
-      }
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Truncate{number_of_relations: 1, options: [], truncated_relations: [1]},
+          @max_batch_size,
+          converter
+        )
 
-      {:ok, changes, updated_converter} = MessageConverter.convert(delete_msg, converter)
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                has_begin?: true,
+                commit: %Commit{commit_timestamp: ~U[2024-01-01 00:00:00Z]},
+                changes: [
+                  %TruncatedRelation{
+                    relation: {"public", "users"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 0}
+                  }
+                ],
+                affected_relations: affected
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
 
-      assert [
-               %DeletedRecord{
-                 relation: {"public", "users"},
-                 old_record: %{"id" => "123"},
-                 log_offset: log_offset
-               }
-             ] = changes
-
-      assert log_offset == LogOffset.new(@test_lsn, 0)
-
-      assert updated_converter.tx_op_index == 2
-      assert updated_converter.tx_size == 3
+      assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
     end
 
-    test "returns TruncatedRelation change for truncate when the relation is known",
-         %{converter: converter} do
-      {:ok, [_begin], converter} =
-        MessageConverter.convert(
-          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          converter
-        )
-
-      truncate_msg = %LR.Truncate{
-        number_of_relations: 1,
-        options: [],
-        truncated_relations: [1]
-      }
-
-      {:ok, changes, updated_converter} = MessageConverter.convert(truncate_msg, converter)
-
-      assert [%TruncatedRelation{relation: {"public", "users"}}] = changes
-      assert updated_converter.tx_op_index == 2
-    end
-
-    test "returns multiple TruncatedRelation changes when multiple relations are truncated",
-         %{converter: converter} do
-      {:ok, [_begin], converter} =
-        MessageConverter.convert(
-          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          converter
-        )
-
+    test "returns TransactionFragment with multiple TruncatedRelations", %{converter: converter} do
       new_relation = %LR.Relation{
         id: 2,
         namespace: "public",
@@ -257,133 +298,151 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         ]
       }
 
-      {:ok, [%Relation{}], converter} = MessageConverter.convert(new_relation, converter)
+      {:ok, %Relation{}, converter} =
+        MessageConverter.convert(new_relation, @max_batch_size, converter)
 
-      truncate_msg = %LR.Truncate{
-        number_of_relations: 1,
-        options: [],
-        truncated_relations: [1, 2]
-      }
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
+          converter
+        )
+
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Truncate{number_of_relations: 2, options: [], truncated_relations: [1, 2]},
+          @max_batch_size,
+          converter
+        )
 
       assert {:ok,
-              [
-                %TruncatedRelation{relation: {"public", "users"}, log_offset: offset1},
-                %TruncatedRelation{relation: {"public", "posts"}, log_offset: offset2}
-              ], _converter} = MessageConverter.convert(truncate_msg, converter)
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                has_begin?: true,
+                commit: %Commit{commit_timestamp: ~U[2024-01-01 00:00:00Z]},
+                changes: [
+                  %TruncatedRelation{
+                    relation: {"public", "users"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 0}
+                  },
+                  %TruncatedRelation{
+                    relation: {"public", "posts"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 2}
+                  }
+                ],
+                affected_relations: affected
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
 
-      assert offset1 == LogOffset.new(@test_lsn, 0)
-      assert offset2 == LogOffset.new(@test_lsn, 2)
+      assert MapSet.equal?(affected, MapSet.new([{"public", "users"}, {"public", "posts"}]))
     end
 
-    test "returns Commit change when seeing a 'Commit' message", %{
-      converter: converter
-    } do
-      {:ok, [_begin], converter} =
+    test "multiple converted changes maintain correct log offsets", %{converter: converter} do
+      {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
           converter
         )
 
-      # Add some changes to track tx_size
-      {:ok, [_insert], converter} =
+      {:buffering, converter} =
         MessageConverter.convert(
-          %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 10},
+          %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3},
+          @max_batch_size,
           converter
         )
 
-      commit_msg = %LR.Commit{
-        lsn: @test_lsn,
-        end_lsn: @test_end_lsn,
-        commit_timestamp: ~U[2024-01-01 00:00:00Z]
-      }
-
-      {:ok, changes, updated_converter} = MessageConverter.convert(commit_msg, converter)
-
-      assert [
-               %Commit{
-                 lsn: @test_lsn,
-                 commit_timestamp: ~U[2024-01-01 00:00:00Z],
-                 transaction_size: 10,
-                 change_count: 1
-               }
-             ] = changes
-
-      assert updated_converter.current_lsn == nil
-      assert updated_converter.tx_op_index == nil
-      assert updated_converter.tx_size == 0
-    end
-
-    test "multiple converted operations maintain correct log offsets", %{converter: converter} do
-      {:ok, [_begin], converter} =
+      {:buffering, converter} =
         MessageConverter.convert(
-          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          %LR.Update{relation_id: 1, old_tuple_data: ["123"], tuple_data: ["124"], bytes: 6},
+          @max_batch_size,
           converter
         )
 
-      insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3}
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Delete{relation_id: 1, old_tuple_data: ["124"], bytes: 3},
+          @max_batch_size,
+          converter
+        )
 
-      update_msg = %LR.Update{
-        relation_id: 1,
-        old_tuple_data: ["123"],
-        tuple_data: ["124"],
-        bytes: 6
-      }
-
-      delete_msg = %LR.Delete{relation_id: 1, old_tuple_data: ["124"], bytes: 3}
-
-      {:ok, [insert_change], converter} = MessageConverter.convert(insert_msg, converter)
-      {:ok, [update_change], converter} = MessageConverter.convert(update_msg, converter)
-      {:ok, [delete_change], _converter} = MessageConverter.convert(delete_msg, converter)
-
-      log_offset_1 = LogOffset.new(@test_lsn, 0)
-      log_offset_2 = LogOffset.new(@test_lsn, 2)
-      log_offset_3 = LogOffset.new(@test_lsn, 4)
-
-      assert %NewRecord{
-               relation: {"public", "users"},
-               record: %{"id" => "123"},
-               log_offset: ^log_offset_1
-             } = insert_change
-
-      assert %UpdatedRecord{
-               relation: {"public", "users"},
-               old_record: %{"id" => "123"},
-               record: %{"id" => "124"},
-               log_offset: ^log_offset_2
-             } = update_change
-
-      assert %DeletedRecord{
-               relation: {"public", "users"},
-               old_record: %{"id" => "124"},
-               log_offset: ^log_offset_3
-             } = delete_change
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                has_begin?: true,
+                commit: %Commit{},
+                changes: [
+                  %NewRecord{
+                    relation: {"public", "users"},
+                    record: %{"id" => "123"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 0}
+                  },
+                  %UpdatedRecord{
+                    relation: {"public", "users"},
+                    old_record: %{"id" => "123"},
+                    record: %{"id" => "124"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 2}
+                  },
+                  %DeletedRecord{
+                    relation: {"public", "users"},
+                    old_record: %{"id" => "124"},
+                    log_offset: %LogOffset{tx_offset: 123, op_offset: 4}
+                  }
+                ]
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
     end
 
     test "returns error when transaction size exceeds max_tx_size limit" do
-      converter = %MessageConverter{max_tx_size: 10}
-      {:ok, [_relation], converter} = MessageConverter.convert(@relation, converter)
+      converter = MessageConverter.new(max_tx_size: 10)
 
-      {:ok, [_begin], converter} =
+      {:ok, %Relation{}, converter} =
+        MessageConverter.convert(@relation, @max_batch_size, converter)
+
+      {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
           converter
         )
 
       # First insert is under the limit
-      insert_msg1 = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 5}
-      {:ok, [_change], converter} = MessageConverter.convert(insert_msg1, converter)
-      assert converter.tx_size == 5
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 5},
+          @max_batch_size,
+          converter
+        )
 
       # Second insert exceeds the limit (5 + 10 = 15 > 10)
-      insert_msg2 = %LR.Insert{relation_id: 1, tuple_data: ["456"], bytes: 10}
-      result = MessageConverter.convert(insert_msg2, converter)
+      assert {:error, {:exceeded_max_tx_size, message}} =
+               MessageConverter.convert(
+                 %LR.Insert{relation_id: 1, tuple_data: ["456"], bytes: 10},
+                 @max_batch_size,
+                 converter
+               )
 
-      assert {:error, {:exceeded_max_tx_size, message}} = result
       assert message == "Collected transaction exceeds limit of 10 bytes."
     end
 
     test "replaces :unchanged_toast with actual values from old_data in updates" do
-      # Set up a relation with multiple columns
       multi_col_relation = %LR.Relation{
         id: 2,
         namespace: "public",
@@ -397,39 +456,211 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       }
 
       converter = MessageConverter.new()
-      {:ok, [_relation], converter} = MessageConverter.convert(multi_col_relation, converter)
 
-      {:ok, [_begin], converter} =
+      {:ok, %Relation{}, converter} =
+        MessageConverter.convert(multi_col_relation, @max_batch_size, converter)
+
+      {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
           converter
         )
 
-      # Update where only 'title' changed, 'content' is unchanged_toast
-      update_msg = %LR.Update{
-        relation_id: 2,
-        old_tuple_data: ["1", "Old Title", "Long content that was toasted"],
-        tuple_data: ["1", "New Title", :unchanged_toast],
-        bytes: 10
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Update{
+            relation_id: 2,
+            old_tuple_data: ["1", "Old Title", "Long content that was toasted"],
+            tuple_data: ["1", "New Title", :unchanged_toast],
+            bytes: 10
+          },
+          @max_batch_size,
+          converter
+        )
+
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                has_begin?: true,
+                commit: %Commit{},
+                changes: [
+                  %UpdatedRecord{
+                    relation: {"public", "posts"},
+                    old_record: %{
+                      "id" => "1",
+                      "title" => "Old Title",
+                      "content" => "Long content that was toasted"
+                    },
+                    record: %{
+                      "id" => "1",
+                      "title" => "New Title",
+                      "content" => "Long content that was toasted"
+                    }
+                  }
+                ]
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
+    end
+
+    test "flushes batch when max_batch_size is reached mid-transaction", %{converter: converter} do
+      max_batch_size = 3
+
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          max_batch_size,
+          converter
+        )
+
+      insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3}
+
+      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+
+      # Third change triggers flush (3 inserts = max_batch_size)
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                last_log_offset: %LogOffset{tx_offset: 123, op_offset: 4},
+                has_begin?: true,
+                commit: nil,
+                changes: [%NewRecord{}, %NewRecord{}, %NewRecord{}],
+                affected_relations: affected
+              }, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+
+      assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
+
+      # Subsequent operations continue to buffer
+      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+
+      # Until commit
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                last_log_offset: %LogOffset{tx_offset: 123, op_offset: 6},
+                has_begin?: false,
+                commit: %Commit{},
+                changes: [%NewRecord{}]
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 max_batch_size,
+                 converter
+               )
+    end
+
+    test "maintains correct log offsets across batches", %{converter: converter} do
+      max_batch_size = 3
+
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          max_batch_size,
+          converter
+        )
+
+      insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3}
+
+      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+
+      # First batch flushes (3 changes = max_batch_size)
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                has_begin?: true,
+                commit: nil,
+                changes: [
+                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 0}},
+                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 2}},
+                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 4}}
+                ]
+              }, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+
+      # Second batch continues with correct offsets
+      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                has_begin?: false,
+                commit: %Commit{},
+                changes: [
+                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 6}}
+                ]
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 max_batch_size,
+                 converter
+               )
+    end
+
+    test "returns Relation immediately without flushing buffered operations", %{
+      converter: converter
+    } do
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
+          converter
+        )
+
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3},
+          @max_batch_size,
+          converter
+        )
+
+      # Relation is returned immediately
+      new_relation = %LR.Relation{
+        id: 2,
+        namespace: "public",
+        name: "posts",
+        replica_identity: :default,
+        columns: [%LR.Relation.Column{name: "id", flags: [:key], type_oid: 23, type_modifier: -1}]
       }
 
-      {:ok, changes, _converter} = MessageConverter.convert(update_msg, converter)
+      assert {:ok, %Relation{id: 2, schema: "public", table: "posts"}, converter} =
+               MessageConverter.convert(new_relation, @max_batch_size, converter)
 
-      assert [
-               %UpdatedRecord{
-                 relation: {"public", "posts"},
-                 old_record: %{
-                   "id" => "1",
-                   "title" => "Old Title",
-                   "content" => "Long content that was toasted"
+      # Buffered operations still flush on commit
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                has_begin?: true,
+                commit: %Commit{},
+                changes: [%NewRecord{}]
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 record: %{
-                   "id" => "1",
-                   "title" => "New Title",
-                   "content" => "Long content that was toasted"
-                 }
-               }
-             ] = changes
+                 @max_batch_size,
+                 converter
+               )
     end
   end
 end
