@@ -144,6 +144,8 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       [],
       state.stack_id,
       fn ->
+        # Build initial state in an ephemeral Task process so that to avoid
+        # retaining the data from list_shapes in this process's heap.
         state =
           Task.async(fn ->
             state.stack_id
@@ -475,7 +477,6 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       end)
 
     if not Enum.empty?(to_fail) do
-      dbg(to_fail)
       # schedule removals for any tracked shapes that require generated columns
       handles = for {handle, _} <- to_fail, do: handle
 
