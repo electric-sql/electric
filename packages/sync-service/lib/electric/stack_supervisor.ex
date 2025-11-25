@@ -131,6 +131,10 @@ defmodule Electric.StackSupervisor do
                      snapshot_timeout_to_first_data: [
                        type: :pos_integer,
                        default: Electric.Config.default(:snapshot_timeout_to_first_data)
+                     ],
+                     conn_fullsweep_after: [
+                       type: :pos_integer,
+                       default: Electric.Config.default(:conn_fullsweep_after)
                      ]
                    ]
                  ],
@@ -225,6 +229,12 @@ defmodule Electric.StackSupervisor do
     end)
   end
 
+  def subscribe_to_shape_events(stack_id, handle, ref \\ make_ref()) do
+    registry = Electric.StackSupervisor.registry_name(stack_id)
+    Registry.register(registry, handle, ref)
+    ref
+  end
+
   def build_shared_opts(opts) do
     # needs validation
     opts = Map.new(opts)
@@ -264,7 +274,7 @@ defmodule Electric.StackSupervisor do
   end
 
   def registry_name(stack_id) do
-    :"#{inspect(Registry.ShapeChanges)}:#{stack_id}"
+    :"Electric.Registry.ShapeChanges:#{stack_id}"
   end
 
   defp shared_storage_opts(config) do
