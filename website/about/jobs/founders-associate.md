@@ -25,7 +25,7 @@ active: true
 | **Published** | 24th November 2025                                          |
 | **Deadline**  | Noon PT, 12th December 2025                                 |
 
-You are a generalist and future founder. You want to join an existing, Seed-stage startup with product market fit to work directly with the founding team and learn how to grow a startup into and through the Series stages.
+You are a generalist and future founder. You want to join an existing, Seed-stage startup with product market fit to work directly with the founding team and grow a startup into and through the Series stages.
 
 [Electric](/) is a devtools startup. We solve [reactive, real-time sync](/blog/2025/07/29/local-first-sync-with-tanstack-db) across client and server. We have a large developer community, millions of downloads a week, high profile customers and [top-tier investors](/about/team#investors), including the founders of companies like Supabase and Heroku. Our software is built into platforms like Firebase, Prisma and TanStack. Our cloud product is growing 7% week on week.
 
