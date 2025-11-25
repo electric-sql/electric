@@ -43,6 +43,8 @@ defmodule Electric.Shapes.Querying do
       case e.postgres do
         # invalid_text_representation - e.g. invalid enum value
         %{code: :invalid_text_representation, message: message} ->
+          # This is a type of error we expect, because we allow enums in subset where clauses 
+          # even though we can't validate them fully.
           raise __MODULE__.QueryError, message: message
 
         _ ->
