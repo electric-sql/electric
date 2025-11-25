@@ -376,4 +376,3 @@ defmodule Electric.Application do
     Keyword.get_lazy(opts, key, fn -> Application.get_env(:electric, key) end)
   end
 end
-
