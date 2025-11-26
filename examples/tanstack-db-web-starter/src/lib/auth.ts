@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
+import { tanstackStartCookies } from "better-auth/tanstack-start"
 import { db } from "@/db/connection" // your drizzle instance
 import * as schema from "@/db/auth-schema"
 import { networkInterfaces } from "os"
@@ -38,4 +39,5 @@ export const auth = betterAuth({
     `https://${networkIP}`,
     `http://localhost:5173`, // fallback for direct Vite access
   ],
+  plugins: [tanstackStartCookies()],
 })
