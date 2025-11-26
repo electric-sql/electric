@@ -638,14 +638,7 @@ defmodule Electric.Shapes.Consumer do
   # 2. request a notification when all active shape data reads are complete
   # 3. exit the process when we receive that notification
 
-  defp mark_for_removal(%{terminating?: true} = state) do
-    state
-  end
-
-  defp mark_for_removal(state) do
-    # remove the writer state to save on a pointless Storage.terminate/1 call
-    Map.delete(%{state | terminating?: true}, :writer)
-  end
+  defp mark_for_removal(state), do: %{state | terminating?: true}
 
   defp stop_with_reason(reason, state) do
     {reason, state} =

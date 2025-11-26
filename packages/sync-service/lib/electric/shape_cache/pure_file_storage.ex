@@ -218,6 +218,24 @@ defmodule Electric.ShapeCache.PureFileStorage do
     Path.join([base_path, @metadata_storage_dir, "backups"])
   end
 
+  def delete_shape_ets_entry(stack_id, shape_handle) do
+    try do
+      :ets.delete(stack_ets(stack_id), shape_handle)
+      :ok
+    rescue
+      ArgumentError -> :ok
+    end
+  end
+
+  def drop_all_ets_entries(stack_id) do
+    try do
+      :ets.delete_all_objects(stack_ets(stack_id))
+      :ok
+    rescue
+      ArgumentError -> :ok
+    end
+  end
+
   def cleanup!(%__MODULE__{} = shape_opts) do
     stack_storage = Storage.for_stack(shape_opts.stack_id)
     Storage.cleanup!(stack_storage, shape_opts.shape_handle)
@@ -227,14 +245,19 @@ defmodule Electric.ShapeCache.PureFileStorage do
     # This call renames the `shape_data_dir` out of the shape storage path. On
     # linux renames are atomic so there's no need for a marker to catch
     # half-deleted data
-    Electric.AsyncDeleter.delete(
-      stack_opts.stack_id,
-      shape_data_dir(stack_opts.base_path, shape_handle)
-    )
+    with :ok <-
+           Electric.AsyncDeleter.delete(
+             stack_opts.stack_id,
+             shape_data_dir(stack_opts.base_path, shape_handle)
+           ) do
+      delete_shape_ets_entry(stack_opts.stack_id, shape_handle)
+    end
   end
 
   def cleanup_all!(%{stack_id: stack_id, base_path: base_path}) do
-    Electric.AsyncDeleter.delete(stack_id, base_path)
+    with :ok <- Electric.AsyncDeleter.delete(stack_id, base_path) do
+      drop_all_ets_entries(stack_id)
+    end
   end
 
   def schedule_compaction(compaction_config) do
@@ -517,13 +540,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def terminate(writer_state(opts: opts) = state) do
     close_all_files(state)
-
-    try do
-      :ets.delete(stack_ets(opts.stack_id), opts.shape_handle)
-      :ok
-    rescue
-      ArgumentError -> :ok
-    end
+    delete_shape_ets_entry(opts.stack_id, opts.shape_handle)
   end
 
   defp close_all_files(writer_state(writer_acc: acc) = state) do

@@ -987,5 +987,28 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:consumer_did_invoke_compact, ^ref}
     end
+
+    test "terminating the consumers cleans up its entry from Storage ETS", ctx do
+      import Electric.ShapeCache.PureFileStorage.SharedRecords, only: [storage_meta: 2]
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      assert {_, offset1} = ShapeCache.get_shape(@shape1, ctx.stack_id)
+      assert offset1 == LogOffset.last_before_real_offsets()
+
+      table = Electric.ShapeCache.PureFileStorage.stack_ets(ctx.stack_id)
+
+      assert [shape_meta] = :ets.tab2list(table)
+      assert storage_meta(shape_meta, :shape_handle) == shape_handle
+      assert storage_meta(shape_meta, :last_persisted_offset) == offset1
+
+      assert :ok == Consumer.stop(ctx.stack_id, shape_handle, "reason")
+
+      assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle}
+
+      assert [] == :ets.tab2list(table)
+    end
   end
 end
