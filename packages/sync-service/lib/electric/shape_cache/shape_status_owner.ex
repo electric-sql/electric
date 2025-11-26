@@ -43,7 +43,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     :ok = ShapeStatus.initialize_from_storage(stack_id, config.storage)
     :ok = Electric.LsnTracker.initialize(stack_id)
 
-    {:ok, %{stack_id: stack_id, storage: config.storage}}
+    {:ok, %{stack_id: stack_id, storage: config.storage}, :hibernate}
   end
 
   @impl true
