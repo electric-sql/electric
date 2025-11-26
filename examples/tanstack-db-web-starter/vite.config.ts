@@ -7,6 +7,9 @@ import tailwindcss from "@tailwindcss/vite"
 import { caddyPlugin } from "./src/vite-plugin-caddy"
 
 const config = defineConfig({
+  server: {
+    host: true,
+  },
   plugins: [
     // this is the plugin that enables path aliases
     viteTsConfigPaths({
@@ -17,6 +20,12 @@ const config = defineConfig({
     tailwindcss(),
     // TanStack Start must come before viteReact
     tanstackStart({
+      srcDirectory: `src`,
+      start: { entry: `./start.tsx` },
+      server: { entry: `./server.ts` },
+      router: {
+        srcDirectory: `src`,
+      },
       spa: {
         enabled: true,
       },
@@ -25,9 +34,6 @@ const config = defineConfig({
     nitro(),
     viteReact(),
   ],
-  server: {
-    host: true,
-  },
   ssr: {
     noExternal: [`zod`],
   },
