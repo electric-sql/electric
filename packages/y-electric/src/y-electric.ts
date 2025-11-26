@@ -234,7 +234,7 @@ export class ElectricProvider<
     })
 
     const operationsShapeUnsubscribe = operationsStream.subscribe(
-      (messages) => {
+      (messages: Message<RowWithDocumentUpdate>[]) => {
         this.operationsShapeHandler(
           messages,
           operationsStream.lastOffset,
@@ -247,17 +247,15 @@ export class ElectricProvider<
     if (this.awarenessUpdates) {
       const awarenessStream = new ShapeStream<RowWithAwarenessUpdate>({
         ...this.awarenessUpdates.shape,
-        ...this.resumeState.awareness,
         signal: abortController.signal,
+        offset: `now`,
       })
 
-      awarenessShapeUnsubscribe = awarenessStream.subscribe((messages) => {
-        this.awarenessShapeHandler(
-          messages,
-          awarenessStream.lastOffset,
-          awarenessStream.shapeHandle!
-        )
-      })
+      awarenessShapeUnsubscribe = awarenessStream.subscribe(
+        (messages: Message<RowWithAwarenessUpdate>[]) => {
+          this.awarenessShapeHandler(messages)
+        }
+      )
     }
 
     this.unsubscribeShapes = () => {
@@ -397,11 +395,7 @@ export class ElectricProvider<
     }
   }
 
-  private awarenessShapeHandler(
-    messages: Message<RowWithAwarenessUpdate>[],
-    offset: Offset,
-    handle: string
-  ) {
+  private awarenessShapeHandler(messages: Message<RowWithAwarenessUpdate>[]) {
     for (const message of messages) {
       if (isChangeMessage(message)) {
         if (message.headers.operation === `delete`) {
@@ -418,15 +412,6 @@ export class ElectricProvider<
             this
           )
         }
-      } else if (
-        isControlMessage(message) &&
-        message.headers.control === `up-to-date`
-      ) {
-        this.resumeState.awareness = {
-          offset: offset,
-          handle: handle,
-        }
-        this.emit(`resumeState`, [this.resumeState])
       }
     }
   }

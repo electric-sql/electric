@@ -9,20 +9,26 @@ The typical flow for syncing shared documents using Yjs and Electric is the foll
 1. Developer exposes a shape proxy for [authorizing](https://electric-sql.com/docs/guides/auth) shape requests
 2. Clients define a [shape](https://electric-sql.com/docs/guides/shapes) for syncing changes for a [Y.Doc](https://docs.yjs.dev/api/y.doc)
 3. Developer exposes a [write API](#Handling Writes) for handling Yjs updates
-4. Vòila! Y-Electric automatically shares updates across all connected clients
+4. Voilà! Y-Electric automatically shares updates across all connected clients
+
+### Key Features
 
 ### Basic Setup
 
 ```typescript
 import * as Y from 'yjs'
-import { ElectricProvider } from '@electric-sql/y-electric'
+import {
+  ElectricProvider,
+  LocalStorageResumeStateProvider,
+} from '@electric-sql/y-electric'
 import { Awareness } from 'y-protocols/awareness'
 import { parseToDecoder } from '@electric-sql/y-electric/utils'
 
 const ydoc = new Y.Doc()
 const awareness = new Awareness(ydoc)
+const resumeStateProvider = new LocalStorageResumeStateProvider('my-doc')
 
-new ElectricProvider({
+const provider = new ElectricProvider({
   doc: ydoc,
   documentUpdates: {
     shape: {
@@ -51,6 +57,9 @@ new ElectricProvider({
   },
   resumeState: resumeStateProvider.load(),
 })
+
+// Subscribe to resume state changes to persist them
+resumeStateProvider.subscribeToResumeState(provider)
 ```
 
 ### Handling Writes
@@ -116,6 +125,4 @@ In the client, you need to pass a `getUpdateFromRow` to extract the column with 
 
 ### Storage providers
 
-Y-Electric work with existing [database providers](https://docs.yjs.dev/ecosystem/database-provider) to store documents locally. When saving documents locally, we recommend using the ElectricStorageProvider to save a resume point for the shapes, otherwise the entire document will be retransmitted when a new client session starts.
-
-The ElectricStorageProvider also keeps track of the document state vector to handle offline updates.
+Y-Electric works with existing [database providers](https://docs.yjs.dev/ecosystem/database-provider) to store documents locally. When saving documents locally, we recommend providing a `ElectricResumeStateProvider` to save a resume point for the document, otherwise the entire document will be retransmitted when a new client session starts.

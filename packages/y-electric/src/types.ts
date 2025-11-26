@@ -49,7 +49,6 @@ export type YProvider = {
  * A resume state provider is used to persist the sync state of a document
  * This is composed of:
  * - The document shape offset and handle
- * - The awareness shape offset and handle (optional)
  * - The state vector of the document synced to the server (optional)
  */
 export type ElectricResumeStateProvider = {
@@ -100,10 +99,6 @@ export type ElectricProviderOptions<
 
 export type ResumeState = {
   document?: {
-    offset: Offset
-    handle: string
-  }
-  awareness?: {
     offset: Offset
     handle: string
   }
