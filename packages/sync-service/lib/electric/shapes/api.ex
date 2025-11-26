@@ -517,6 +517,9 @@ defmodule Electric.Shapes.Api do
         }
         |> Response.final()
 
+      {:error, {key, message}} when is_atom(key) ->
+        Response.invalid_request(request, errors: %{subset: %{key => message}})
+
       {:error, reason} ->
         Response.error(request, inspect(reason), status: 500)
     end
