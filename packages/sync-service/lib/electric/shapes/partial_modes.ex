@@ -26,5 +26,8 @@ defmodule Electric.Shapes.PartialModes do
       #       after closing the transaction, so we can't return a stream here, we'd need to pass in the reducer.
       {metadata, Querying.query_subset(conn, shape, subset, mark) |> Enum.to_list()}
     end)
+  rescue
+    e in Querying.QueryError ->
+      {:error, {:where, e.message}}
   end
 end
