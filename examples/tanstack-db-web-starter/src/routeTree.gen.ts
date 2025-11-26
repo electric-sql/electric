@@ -15,8 +15,8 @@ import { Route as AuthenticatedIndexRouteImport } from "./routes/_authenticated/
 import { Route as ApiUsersRouteImport } from "./routes/api/users"
 import { Route as ApiTodosRouteImport } from "./routes/api/todos"
 import { Route as ApiProjectsRouteImport } from "./routes/api/projects"
-import { Route as ApiAuthRouteImport } from "./routes/api/auth"
 import { Route as ApiTrpcSplatRouteImport } from "./routes/api/trpc/$"
+import { Route as ApiAuthSplatRouteImport } from "./routes/api/auth/$"
 import { Route as AuthenticatedProjectProjectIdRouteImport } from "./routes/_authenticated/project/$projectId"
 
 const LoginRoute = LoginRouteImport.update({
@@ -48,14 +48,14 @@ const ApiProjectsRoute = ApiProjectsRouteImport.update({
   path: "/api/projects",
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthRoute = ApiAuthRouteImport.update({
-  id: "/api/auth",
-  path: "/api/auth",
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
   id: "/api/trpc/$",
   path: "/api/trpc/$",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: "/api/auth/$",
+  path: "/api/auth/$",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedProjectProjectIdRoute =
@@ -67,77 +67,77 @@ const AuthenticatedProjectProjectIdRoute =
 
 export interface FileRoutesByFullPath {
   "/login": typeof LoginRoute
-  "/api/auth": typeof ApiAuthRoute
   "/api/projects": typeof ApiProjectsRoute
   "/api/todos": typeof ApiTodosRoute
   "/api/users": typeof ApiUsersRoute
   "/": typeof AuthenticatedIndexRoute
   "/project/$projectId": typeof AuthenticatedProjectProjectIdRoute
+  "/api/auth/$": typeof ApiAuthSplatRoute
   "/api/trpc/$": typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesByTo {
   "/login": typeof LoginRoute
-  "/api/auth": typeof ApiAuthRoute
   "/api/projects": typeof ApiProjectsRoute
   "/api/todos": typeof ApiTodosRoute
   "/api/users": typeof ApiUsersRoute
   "/": typeof AuthenticatedIndexRoute
   "/project/$projectId": typeof AuthenticatedProjectProjectIdRoute
+  "/api/auth/$": typeof ApiAuthSplatRoute
   "/api/trpc/$": typeof ApiTrpcSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/_authenticated": typeof AuthenticatedRouteWithChildren
   "/login": typeof LoginRoute
-  "/api/auth": typeof ApiAuthRoute
   "/api/projects": typeof ApiProjectsRoute
   "/api/todos": typeof ApiTodosRoute
   "/api/users": typeof ApiUsersRoute
   "/_authenticated/": typeof AuthenticatedIndexRoute
   "/_authenticated/project/$projectId": typeof AuthenticatedProjectProjectIdRoute
+  "/api/auth/$": typeof ApiAuthSplatRoute
   "/api/trpc/$": typeof ApiTrpcSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/login"
-    | "/api/auth"
     | "/api/projects"
     | "/api/todos"
     | "/api/users"
     | "/"
     | "/project/$projectId"
+    | "/api/auth/$"
     | "/api/trpc/$"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/login"
-    | "/api/auth"
     | "/api/projects"
     | "/api/todos"
     | "/api/users"
     | "/"
     | "/project/$projectId"
+    | "/api/auth/$"
     | "/api/trpc/$"
   id:
     | "__root__"
     | "/_authenticated"
     | "/login"
-    | "/api/auth"
     | "/api/projects"
     | "/api/todos"
     | "/api/users"
     | "/_authenticated/"
     | "/_authenticated/project/$projectId"
+    | "/api/auth/$"
     | "/api/trpc/$"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   LoginRoute: typeof LoginRoute
-  ApiAuthRoute: typeof ApiAuthRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiTodosRoute: typeof ApiTodosRoute
   ApiUsersRoute: typeof ApiUsersRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
@@ -185,18 +185,18 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ApiProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/api/auth": {
-      id: "/api/auth"
-      path: "/api/auth"
-      fullPath: "/api/auth"
-      preLoaderRoute: typeof ApiAuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     "/api/trpc/$": {
       id: "/api/trpc/$"
       path: "/api/trpc/$"
       fullPath: "/api/trpc/$"
       preLoaderRoute: typeof ApiTrpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/api/auth/$": {
+      id: "/api/auth/$"
+      path: "/api/auth/$"
+      fullPath: "/api/auth/$"
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_authenticated/project/$projectId": {
@@ -226,10 +226,10 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   LoginRoute: LoginRoute,
-  ApiAuthRoute: ApiAuthRoute,
   ApiProjectsRoute: ApiProjectsRoute,
   ApiTodosRoute: ApiTodosRoute,
   ApiUsersRoute: ApiUsersRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport
