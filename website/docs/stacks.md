@@ -267,7 +267,7 @@ For example, sync into [LiveStore](https://docs.livestore.dev/reference/syncing/
 
 [Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
-Paired with [Electric](/) and [TanStack Start](https://tanstack.com/start), it gives you an end-to-end sync stack that's type-safe, declarative, incrementally adoptable and insanely fast.
+[Paired with Electric](/blog/2025/07/29/local-first-sync-with-tanstack-db) and [TanStack Start](https://tanstack.com/start), it gives you an end-to-end sync stack that's type-safe, declarative, incrementally adoptable and insanely fast.
 
 ### End-to-end Typescript
 

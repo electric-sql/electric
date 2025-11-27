@@ -1,0 +1,71 @@
+{
+  "name": "@electric-sql/quickstart",
+  "version": "1.0.0",
+  "description": "CLI package for the ElectricSQL Quickstart.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "quickstart": "./dist/cli.js"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && tsup",
+    "prepack": "pnpm build",
+    "dev": "pnpm run build && node dist/cli.js",
+    "format": "eslint . --fix",
+    "stylecheck": "eslint . --quiet",
+    "test": "pnpm exec vitest",
+    "coverage": "pnpm exec vitest --coverage",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/node-fetch": "^2.6.11",
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser": "^7.14.1",
+    "@vitest/coverage-istanbul": "2.1.4",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "netlify-cli": "^23.5.1",
+    "prettier": "^3.3.2",
+    "shx": "^0.3.4",
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.2",
+    "vitest": "^3.0.0"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [
+    "cli",
+    "db",
+    "electric",
+    "electric-sql",
+    "quickstart",
+    "starter",
+    "tanstack"
+  ],
+  "author": "ElectricSQL team and contributors.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git"
+  },
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric/issues"
+  },
+  "homepage": "https://electric-sql.com"
+}
