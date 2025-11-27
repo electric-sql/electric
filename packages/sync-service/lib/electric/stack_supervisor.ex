@@ -100,7 +100,7 @@ defmodule Electric.StackSupervisor do
                    type: :pos_integer,
                    default: LogChunker.default_chunk_size_threshold()
                  ],
-                 feature_flags: [type: {:list, :string}, default: []],
+                 feature_flags: [type: {:list, :atom}, default: []],
                  tweaks: [
                    type: :keyword_list,
                    required: false,
@@ -306,7 +306,12 @@ defmodule Electric.StackSupervisor do
     shape_changes_registry_name = registry_name(stack_id)
 
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
-    shape_enable_suspend? = Keyword.fetch!(config.tweaks, :shape_enable_suspend?)
+
+    # The feature_flags check is temporary. Once we're sure in the correct functioning of shape
+    # customer suspension, we'll leave just the :shape_enable_suspend? config.
+    shape_enable_suspend? =
+      Keyword.fetch!(config.tweaks, :shape_enable_suspend?) and
+        Electric.Config.feature_flag_suspend_consumers() in config.feature_flags
 
     shape_cache_opts = [
       stack_id: stack_id
@@ -355,8 +360,7 @@ defmodule Electric.StackSupervisor do
            snapshot_timeout_to_first_data: config.tweaks[:snapshot_timeout_to_first_data],
            inspector: inspector,
            shape_hibernate_after: shape_hibernate_after,
-           shape_enable_suspend?: shape_enable_suspend?,
-           feature_flags: Map.get(config, :feature_flags, [])
+           shape_enable_suspend?: shape_enable_suspend?
          ]},
         {Electric.AsyncDeleter,
          stack_id: stack_id,
