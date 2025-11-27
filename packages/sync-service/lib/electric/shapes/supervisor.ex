@@ -39,11 +39,11 @@ defmodule Electric.Shapes.Supervisor do
 
     Logger.info("Starting shape replication pipeline")
 
-    inspector = Electric.StackConfig.lookup(stack_id, :inspector)
-    persistent_kv = Electric.StackConfig.lookup(stack_id, :persistent_kv)
+    inspector = Electric.StackConfig.lookup!(stack_id, :inspector)
+    persistent_kv = Electric.StackConfig.lookup!(stack_id, :persistent_kv)
+    tweaks = Electric.StackConfig.lookup!(stack_id, :tweaks)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
-    schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
 
     children = [
       {Task.Supervisor,
@@ -55,7 +55,10 @@ defmodule Electric.Shapes.Supervisor do
       {Electric.Shapes.DynamicConsumerSupervisor, stack_id: stack_id},
       shape_cache,
       {Electric.ShapeCache.ExpiryManager, stack_id: stack_id},
-      schema_reconciler,
+      {Electric.Replication.SchemaReconciler,
+       stack_id: stack_id,
+       inspector: inspector,
+       period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)},
       canary_spec(stack_id)
     ]
 

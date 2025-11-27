@@ -41,7 +41,6 @@ defmodule Electric.CoreSupervisor do
     stack_id = Keyword.fetch!(opts, :stack_id)
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
-    inspector = Keyword.fetch!(opts, :inspector)
     tweaks = Keyword.fetch!(opts, :tweaks)
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
@@ -55,20 +54,13 @@ defmodule Electric.CoreSupervisor do
        update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0),
        refresh_period: Keyword.get(tweaks, :publication_refresh_period, 60_000)}
 
-    schema_reconciler_spec =
-      {Electric.Replication.SchemaReconciler,
-       stack_id: stack_id,
-       inspector: inspector,
-       period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)}
-
     child_spec =
       Supervisor.child_spec(
         {
           Electric.Shapes.Supervisor,
           stack_id: stack_id,
           shape_cache: shape_cache_spec,
-          publication_manager: publication_manager_spec,
-          schema_reconciler: schema_reconciler_spec
+          publication_manager: publication_manager_spec
         },
         restart: :transient
       )
