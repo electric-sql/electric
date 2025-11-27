@@ -199,7 +199,9 @@ defmodule Electric.Shapes.ApiTest do
 
     test "returns error when offset is out of bounds", ctx do
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end
       )
 
       invalid_offset = LogOffset.increment(@test_offset)
@@ -228,7 +230,9 @@ defmodule Electric.Shapes.ApiTest do
       request_handle = @test_shape_handle <> "-wrong"
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> nil end,
+        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id ->
+          nil
+        end,
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end
@@ -239,7 +243,7 @@ defmodule Electric.Shapes.ApiTest do
                  ctx.api,
                  %{
                    table: "public.users",
-                   handle: "#{request_handle}",
+                   handle: request_handle,
                    offset: "0_0"
                  }
                )
@@ -252,7 +256,9 @@ defmodule Electric.Shapes.ApiTest do
       request_handle = @test_shape_handle <> "-wrong"
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @before_all_offset} end
+        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @before_all_offset}
+        end
       )
 
       assert {:error, %{status: 409} = response} =
@@ -273,7 +279,9 @@ defmodule Electric.Shapes.ApiTest do
       request_handle = @test_shape_handle <> "-wrong"
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @before_all_offset} end
+        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @before_all_offset}
+        end
       )
 
       assert {:error, %{status: 409} = response} =
@@ -297,7 +305,7 @@ defmodule Electric.Shapes.ApiTest do
       patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> false end)
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> nil end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id -> nil end,
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
           {new_shape_handle, @test_offset}
         end
@@ -683,7 +691,9 @@ defmodule Electric.Shapes.ApiTest do
 
     test "returns log when offset is >= 0", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -779,7 +789,9 @@ defmodule Electric.Shapes.ApiTest do
 
     test "handles live updates", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -853,7 +865,9 @@ defmodule Electric.Shapes.ApiTest do
 
     test "raises if body is read from a different process", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -920,8 +934,12 @@ defmodule Electric.Shapes.ApiTest do
       )
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, next_offset} end,
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, last_minute_next_offset} end
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, next_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, last_minute_next_offset}
+        end
       )
 
       patch_shape_cache(
@@ -1035,7 +1053,9 @@ defmodule Electric.Shapes.ApiTest do
 
     test "handles shape rotation", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -1094,15 +1114,16 @@ defmodule Electric.Shapes.ApiTest do
 
       # # any subsequent get shape calls should return the new offset
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts ->
-          # Simulate new changes arriving the moment we load the shape
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
           Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
             send(pid, {ref, :new_changes, next_offset})
           end)
 
           {@test_shape_handle, @test_offset}
         end,
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, next_offset} end
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, next_offset}
+        end
       )
 
       patch_storage(
@@ -1143,15 +1164,16 @@ defmodule Electric.Shapes.ApiTest do
     @tag long_poll_timeout: 100
     test "picks up shape rotation missed between loading shape and listening for changes", ctx do
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts ->
-          # Simulate shape rotating a moment after we load the shape
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
           Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
             send(pid, {ref, :shape_rotation})
           end)
 
           {@test_shape_handle, @test_offset}
         end,
-        get_shape: fn @test_shape, _opts -> nil end
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          nil
+        end
       )
 
       patch_shape_cache(
@@ -1184,7 +1206,9 @@ defmodule Electric.Shapes.ApiTest do
     @tag long_poll_timeout: 100
     test "sends an up-to-date response after a timeout if no changes are observed", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -1219,7 +1243,9 @@ defmodule Electric.Shapes.ApiTest do
     @tag long_poll_timeout: 100
     test "returns the latest lsn after the long poll timeout even if stack has failed", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )

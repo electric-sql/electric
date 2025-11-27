@@ -44,6 +44,13 @@ defmodule Electric.Shapes do
   end
 
   @doc """
+  Cheaply validate that a shape handle matches the shape definition.
+  """
+  def resolve_shape_handle(stack_id, shape_handle, %Shape{} = shape) do
+    ShapeCache.resolve_shape_handle(shape_handle, shape, stack_id)
+  end
+
+  @doc """
   Get or create a shape handle and return it along with the latest offset of the shape
   """
   @spec get_or_create_shape_handle(stack_id(), Shape.t()) :: {shape_handle(), LogOffset.t()}

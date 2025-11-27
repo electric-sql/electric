@@ -93,12 +93,14 @@ defmodule Electric.Shapes.Shape do
   @doc """
   Return a comparable representation of the shape.
 
-  This is used to compare shapes for equality as an ETS key - and thus it'll be matched in some cases,
-  not just compared equal. This representation must therefore not contain any maps (as they are matched when one
-  is missing a key for example).
+  This is used to compare shapes for equality as an ETS key - and thus it'll be
+  matched in some cases, not just compared equal. This representation must
+  therefore not contain any maps (as they are matched when one is missing a key
+  for example).
 
-  This representation must contain all the information that identifies user-specified properties of the shape. We're
-  omitting storage configuration and other internal state.
+  This representation must contain all the information that identifies
+  user-specified properties of the shape. We're omitting storage configuration
+  and other internal state.
   """
   def comparable(%__MODULE__{} = shape) do
     {:shape, {shape.root_table_id, shape.root_table}, shape.root_pk,
@@ -112,13 +114,21 @@ defmodule Electric.Shapes.Shape do
   def dependency_handles_known?(%__MODULE__{} = shape),
     do: shape.shape_dependencies_handles != []
 
-  def hash(%__MODULE__{} = shape),
-    do: shape |> comparable() |> :erlang.phash2()
+  def hash(%__MODULE__{} = shape) do
+    {_comparable, hash} = comparable_hash(shape)
+    hash
+  end
+
+  def comparable_hash(%__MODULE__{} = shape) do
+    comparable = comparable(shape)
+    {comparable, :erlang.phash2(comparable)}
+  end
 
   def generate_id(%__MODULE__{} = shape) do
     hash = hash(shape)
 
-    # Use microseconds to essentially avoid collisions within the same millisecond when we have a hash collision
+    # Use microseconds to essentially avoid collisions within the same
+    # millisecond when we have a hash collision
     {hash, "#{hash}-#{DateTime.utc_now() |> DateTime.to_unix(:microsecond)}"}
   end
 

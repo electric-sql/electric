@@ -110,6 +110,31 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert :error = ShapeStatus.fetch_shape_by_handle(state, "not-my-handle")
   end
 
+  test "has_shape_handle?/2", ctx do
+    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
+    assert ShapeStatus.has_shape_handle?(state, shape_handle)
+    refute ShapeStatus.has_shape_handle?(state, "no-such-shape")
+  end
+
+  test "validate_shape_handle/3", ctx do
+    shape1 = shape!("one")
+    shape2 = shape!("two")
+
+    {:ok, state, [shape_handle1, shape_handle2]} = new_state(ctx, shapes: [shape1, shape2])
+
+    offset = LogOffset.new(100, 3)
+
+    ShapeStatus.set_latest_offset(ctx.stack_id, shape_handle1, offset)
+
+    assert {:ok, ^offset} = ShapeStatus.validate_shape_handle(state, shape_handle1, shape1)
+    assert {:ok, _} = ShapeStatus.validate_shape_handle(state, shape_handle2, shape2)
+
+    # not a valid handle
+    assert :error = ShapeStatus.validate_shape_handle(state, "not-the-handle", shape1)
+    # wrong handle for the shape
+    assert :error = ShapeStatus.validate_shape_handle(state, shape_handle1, shape2)
+  end
+
   test "latest_offset", ctx do
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
     assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
