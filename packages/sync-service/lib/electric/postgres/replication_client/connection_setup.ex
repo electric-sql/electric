@@ -90,10 +90,11 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   end
 
   defp pg_info_result([%Postgrex.Result{} = result], state) do
-    %{rows: [[version_str, backend_pid]]} = result
+    %{rows: [[version_str, backend_pid_str]]} = result
     version_num = String.to_integer(version_str)
+    backend_pid_num = String.to_integer(backend_pid_str)
 
-    {%{server_version_num: version_num, pg_backend_pid: backend_pid},
+    {%{server_version_num: version_num, pg_backend_pid: backend_pid_num},
      %{state | pg_version: version_num}}
   end
 
