@@ -84,6 +84,7 @@ defmodule Electric.Shapes.Shape do
           shape_dependencies: [json_safe(), ...],
           log_mode: log_mode()
         }
+  @type comparable() :: term()
 
   @doc """
   Return a comparable representation of the shape.
@@ -97,6 +98,7 @@ defmodule Electric.Shapes.Shape do
   user-specified properties of the shape. We're omitting storage configuration
   and other internal state.
   """
+  @spec comparable(t()) :: comparable()
   def comparable(%__MODULE__{} = shape) do
     {:shape, {shape.root_table_id, shape.root_table}, shape.root_pk,
      Comparable.comparable(shape.where), shape.selected_columns,
