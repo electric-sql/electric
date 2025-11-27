@@ -60,7 +60,6 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
         table: `ydoc_update`,
         where: `room = '${room}'`,
       },
-      liveSse: true,
       parser: parseToDecoder,
     },
     sendUrl: new URL(`/api/update?room=${room}`, serverUrl),
@@ -73,7 +72,6 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
         table: `ydoc_awareness`,
         where: `room = '${room}'`,
       },
-      liveSse: true,
       parser: parseToDecoder,
     },
     sendUrl: new URL(
