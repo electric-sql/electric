@@ -196,7 +196,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns 400 when offset is out of bounds", ctx do
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end
       )
 
       invalid_offset = LogOffset.increment(@test_offset)
@@ -402,7 +404,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns log when offset is >= 0", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -464,7 +468,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "returns 304 Not Modified when If-None-Match matches ETag",
          ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end
       )
 
@@ -485,7 +491,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end
       )
 
       expect_storage(
@@ -518,7 +526,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "handles live updates", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -589,7 +599,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "handles shape rotation", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -636,7 +648,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "sends an up-to-date response after a timeout if no changes are observed",
          ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -674,6 +688,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",
          ctx do
       patch_shape_cache(
+        resolve_shape_handle: fn "foo", @test_shape, _stack_id ->
+          nil
+        end,
         get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
         has_shape?: fn "foo", _opts -> false end
       )
@@ -701,7 +718,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
       patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> false end)
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> nil end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          nil
+        end,
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
           {new_shape_handle, @test_offset}
         end
@@ -727,7 +746,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
       new_shape_handle = "new-shape-handle"
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> nil end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          nil
+        end,
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
           {new_shape_handle, @test_offset}
         end
@@ -852,7 +873,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "returns proper SSE format response when live_sse=true and live=true", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
@@ -922,7 +945,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
       )
 
       expect_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end
       )
 
       expect_storage(
@@ -946,7 +971,9 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
     test "works with deprecated experimental_live_sse=true", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
         await_snapshot_start: fn @test_shape_handle, _ -> :started end
       )
