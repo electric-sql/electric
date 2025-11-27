@@ -20,8 +20,7 @@ defmodule Electric.Connection.Manager do
          connection_opts: [...],
          replication_opts: [...],
          pool_opts: [...],
-         timeline_opts: [...],
-         shape_cache_opts: [...]}
+         timeline_opts: [...]
       ]
 
       Supervisor.start_link(children, strategy: :one_for_one)
@@ -77,8 +76,6 @@ defmodule Electric.Connection.Manager do
       :pool_opts,
       # Options specific to `Electric.Timeline`
       :timeline_opts,
-      # Options passed to the Shapes.Supervisor's start_link() function
-      :shape_cache_opts,
       # PID of the replication client
       :replication_client_pid,
       # Timer reference for the periodic replication client status check
@@ -134,7 +131,6 @@ defmodule Electric.Connection.Manager do
           | {:replication_opts, Keyword.t()}
           | {:pool_opts, Keyword.t()}
           | {:timeline_opts, Keyword.t()}
-          | {:shape_cache_opts, Keyword.t()}
 
   @type options :: [option]
 
@@ -270,7 +266,6 @@ defmodule Electric.Connection.Manager do
 
     pool_opts = Keyword.fetch!(opts, :pool_opts)
     timeline_opts = Keyword.fetch!(opts, :timeline_opts)
-    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
 
     connection_backoff =
       Keyword.get(opts, :connection_backoff, ConnectionBackoff.init(1000, 10_000))
@@ -282,7 +277,6 @@ defmodule Electric.Connection.Manager do
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
         inspector: Keyword.fetch!(opts, :inspector),
-        shape_cache_opts: shape_cache_opts,
         connection_backoff: {connection_backoff, nil},
         stack_id: stack_id,
         stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
@@ -458,7 +452,7 @@ defmodule Electric.Connection.Manager do
       Electric.CoreSupervisor.stop_shapes_supervisor(stack_id: state.stack_id)
 
       # Clean up the on-disk storage from all shapes.
-      Electric.Shapes.Supervisor.reset_storage(shape_cache_opts: state.shape_cache_opts)
+      Electric.Shapes.Supervisor.reset_storage(state.stack_id)
 
       # The ShapeStatusOwner process lives independently of connection or replication
       # supervisor. Purge all shapes from it before starting the replication supervisor.
@@ -485,7 +479,6 @@ defmodule Electric.Connection.Manager do
 
     repl_sup_opts = [
       stack_id: state.stack_id,
-      shape_cache_opts: state.shape_cache_opts,
       inspector: state.inspector,
       pool_opts: state.pool_opts,
       replication_opts: state.replication_opts,

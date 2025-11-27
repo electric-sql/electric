@@ -16,9 +16,7 @@ defmodule Electric.Shapes.Supervisor do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
-  def reset_storage(opts) do
-    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
-    stack_id = Keyword.fetch!(shape_cache_opts, :stack_id)
+  def reset_storage(stack_id) do
     stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
 
     Logger.info("Purging all shapes.")
@@ -33,6 +31,7 @@ defmodule Electric.Shapes.Supervisor do
   @impl Supervisor
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
+
     Process.set_label({:replication_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
@@ -43,7 +42,6 @@ defmodule Electric.Shapes.Supervisor do
     persistent_kv = Electric.StackConfig.lookup!(stack_id, :persistent_kv)
     tweaks = Electric.StackConfig.lookup!(stack_id, :tweaks)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
-    shape_cache = Keyword.fetch!(opts, :shape_cache)
 
     children = [
       {Task.Supervisor,
@@ -53,7 +51,7 @@ defmodule Electric.Shapes.Supervisor do
        stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv},
       publication_manager,
       {Electric.Shapes.DynamicConsumerSupervisor, stack_id: stack_id},
-      shape_cache,
+      {Electric.ShapeCache, stack_id: stack_id},
       {Electric.ShapeCache.ExpiryManager, stack_id: stack_id},
       {Electric.Replication.SchemaReconciler,
        stack_id: stack_id,

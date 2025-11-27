@@ -44,9 +44,6 @@ defmodule Electric.Connection.ConnectionManagerTest do
       connection_backoff: Connection.Manager.ConnectionBackoff.init(50, 50),
       timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
       inspector: ctx.inspector,
-      shape_cache_opts: [
-        stack_id: stack_id
-      ],
       tweaks: [],
       max_shapes: nil,
       persistent_kv: ctx.persistent_kv,

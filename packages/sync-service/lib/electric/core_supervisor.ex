@@ -39,11 +39,8 @@ defmodule Electric.CoreSupervisor do
   """
   def start_shapes_supervisor(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
-    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
     tweaks = Keyword.fetch!(opts, :tweaks)
-
-    shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     publication_manager_spec =
       {Electric.Replication.PublicationManager,
@@ -58,9 +55,7 @@ defmodule Electric.CoreSupervisor do
       Supervisor.child_spec(
         {
           Electric.Shapes.Supervisor,
-          stack_id: stack_id,
-          shape_cache: shape_cache_spec,
-          publication_manager: publication_manager_spec
+          stack_id: stack_id, publication_manager: publication_manager_spec
         },
         restart: :transient
       )

@@ -313,10 +313,6 @@ defmodule Electric.StackSupervisor do
       Keyword.fetch!(config.tweaks, :shape_enable_suspend?) and
         Electric.Config.feature_flag_suspend_consumers() in config.feature_flags
 
-    shape_cache_opts = [
-      stack_id: stack_id
-    ]
-
     shape_log_collector =
       Electric.Replication.ShapeLogCollector.name(stack_id)
 
@@ -337,7 +333,6 @@ defmodule Electric.StackSupervisor do
         persistent_kv: config.persistent_kv
       ],
       persistent_kv: config.persistent_kv,
-      shape_cache_opts: shape_cache_opts,
       inspector: inspector,
       max_shapes: config.max_shapes,
       tweaks: config.tweaks,
