@@ -39,7 +39,8 @@ defmodule Electric.Shapes.Supervisor do
 
     Logger.info("Starting shape replication pipeline")
 
-    log_collector = Keyword.fetch!(opts, :log_collector)
+    inspector = Electric.StackConfig.lookup(stack_id, :inspector)
+    persistent_kv = Electric.StackConfig.lookup(stack_id, :persistent_kv)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
@@ -50,7 +51,8 @@ defmodule Electric.Shapes.Supervisor do
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
       {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, stack_id: stack_id},
-      log_collector,
+      {Electric.Replication.ShapeLogCollector,
+       stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv},
       publication_manager,
       consumer_supervisor,
       shape_cache,

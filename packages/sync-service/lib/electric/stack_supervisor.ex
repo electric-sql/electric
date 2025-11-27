@@ -359,6 +359,7 @@ defmodule Electric.StackSupervisor do
            chunk_bytes_threshold: config.chunk_bytes_threshold,
            snapshot_timeout_to_first_data: config.tweaks[:snapshot_timeout_to_first_data],
            inspector: inspector,
+           persistent_kv: config.persistent_kv,
            shape_hibernate_after: shape_hibernate_after,
            shape_enable_suspend?: shape_enable_suspend?
          ]},

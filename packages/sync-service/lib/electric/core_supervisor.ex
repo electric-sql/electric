@@ -42,7 +42,6 @@ defmodule Electric.CoreSupervisor do
     shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
     replication_opts = Keyword.fetch!(opts, :replication_opts)
     inspector = Keyword.fetch!(opts, :inspector)
-    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
     tweaks = Keyword.fetch!(opts, :tweaks)
 
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
@@ -57,10 +56,6 @@ defmodule Electric.CoreSupervisor do
        db_pool: Electric.Connection.Manager.admin_pool(stack_id),
        update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0),
        refresh_period: Keyword.get(tweaks, :publication_refresh_period, 60_000)}
-
-    shape_log_collector_spec =
-      {Electric.Replication.ShapeLogCollector,
-       stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv}
 
     schema_reconciler_spec =
       {Electric.Replication.SchemaReconciler,
@@ -80,7 +75,6 @@ defmodule Electric.CoreSupervisor do
           consumer_supervisor: consumer_supervisor_spec,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,
-          log_collector: shape_log_collector_spec,
           schema_reconciler: schema_reconciler_spec,
           expiry_manager: expiry_manager_spec
         },
