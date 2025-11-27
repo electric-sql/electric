@@ -290,8 +290,9 @@ defmodule Electric.Shapes.Api do
   # A shape handle is provided so we need to return the shape that matches the
   # shape handle and the shape definition
   defp get_or_create_shape_handle(%Request{} = request) do
-    %{params: %{shape_definition: shape}, api: %{stack_id: stack_id}} = request
-    Shapes.get_shape(stack_id, shape)
+    %{params: %{handle: handle, shape_definition: shape}, api: %{stack_id: stack_id}} = request
+
+    Shapes.resolve_shape_handle(stack_id, handle, shape)
   end
 
   defp handle_shape_info(nil, %Request{} = request) do
@@ -710,20 +711,19 @@ defmodule Electric.Shapes.Api do
       last_offset: last_offset,
       handle: shape_handle,
       params: %{shape_definition: shape_def},
-      api: api
+      api: %{stack_id: stack_id}
     } = request
 
     Logger.debug(
       "Client #{inspect(self())} is checking for any changes to #{shape_handle} since start of request"
     )
 
-    case Shapes.get_shape(api.stack_id, shape_def) do
+    case Shapes.resolve_shape_handle(stack_id, shape_handle, shape_def) do
       {^shape_handle, ^last_offset} ->
         # no-op, shape is still present and unchanged
         nil
 
-      {^shape_handle, latest_log_offset}
-      when is_log_offset_lt(last_offset, latest_log_offset) ->
+      {^shape_handle, latest_log_offset} when is_log_offset_lt(last_offset, latest_log_offset) ->
         send(self(), {ref, :new_changes, latest_log_offset})
 
       {other_shape_handle, _} when other_shape_handle != shape_handle ->
