@@ -8,17 +8,23 @@ All reads from the Postgres database are done via the Electric sync engine. All 
 
 We sync normalized data from tables into TanStack DB collections in the client & then write client-side queries for displaying data in components.
 
-## Initial setup
+## General Usage
+
+Read https://electric-sql.com/AGENTS.md for general information on developing wth Electric and TanStack DB.
+
+## Starter template specifics
+
+### Initial setup
 
 Before you started, all necessary package install is done via `pnpm install` and a dev server is started with `pnpm dev`.
 
-## Linting and formatting
+### Linting and formatting
 
 Human devs have IDEs that autoformat code on every file save. After you edit files, you must do the equivalent by running `pnpm lint`.
 
 This command will also report linter errors that were not automatically fixable. Use your judgement as to which of the linter violations should be fixed.
 
-## Build/Test Commands
+### Build/Test Commands
 
 - `pnpm run dev` - Start development server with Docker services
 - `pnpm run build` - Build for production
@@ -26,7 +32,7 @@ This command will also report linter errors that were not automatically fixable.
 - `vitest run <test-file>` - Run single test file
 - `pnpm run start` - Start production server
 
-## Architecture
+### Architecture
 
 - **Frontend**: TanStack Start (SSR framework for React and other frameworks) with file-based routing in `src/routes/`
 - **Database**: PostgreSQL with Drizzle ORM, schema in `src/db/schema.ts`
@@ -36,13 +42,13 @@ This command will also report linter errors that were not automatically fixable.
 - **Authentication**: better-auth
 - **API**: tRPC v10 for mutations with full e2e type safety, Electric shapes for real-time reads
 
-## API Routing
+### API Routing
 
 - **tRPC** (`/api/trpc/*`) - All mutations (create, update, delete) with full type safety
 - **better-auth** (`/api/auth/*`) - Authentication endpoints
 - **Electric shapes** (`/api/projects`, `/api/todos`, `/api/users`) - Real-time sync endpoints for reads
 
-## Code Style
+### Code Style
 
 - **TypeScript**: Strict mode, ES2022 target, bundler module resolution
 - **Imports**: Use `@/*` path aliases for `src/` directory imports
@@ -53,16 +59,16 @@ This command will also report linter errors that were not automatically fixable.
 - **Testing**: Vitest with @testing-library/react for component tests
 - **file names** should always use kebab-case
 
-## tRPC Integration
+### tRPC Integration
 
 - tRPC routers are defined in `src/lib/trpc/` directory
 - Client is configured in `src/lib/trpc-client.ts`
 - Collection hooks use tRPC client for mutations in `src/lib/collections.ts`
 - Transaction IDs are generated using `pg_current_xact_id()::xid::text` for Electric sync compatibility
 
-## Data Flow Architecture
+### Data Flow Architecture
 
-### Reading Data (Electric SQL → TanStack DB)
+#### Reading Data (Electric SQL → TanStack DB)
 
 ```tsx
 // 1. Preload in route loader
@@ -82,7 +88,7 @@ const { data: todos } = useLiveQuery(
 )
 ```
 
-### Writing Data (TanStack DB → tRPC)
+#### Writing Data (TanStack DB → tRPC)
 
 ```tsx
 // Use collection operations for optimistic updates
@@ -92,7 +98,7 @@ todosCollection.update(id, (draft) => { ... })
 todosCollection.delete(id)
 ```
 
-### Collection Definition Pattern
+#### Collection Definition Pattern
 
 ```tsx
 // src/lib/collections.ts
@@ -114,7 +120,7 @@ export const todosCollection = createCollection(
 )
 ```
 
-## Critical Rules
+### Critical Rules
 
 1. **NEVER use tRPC for data reads** - Only Electric SQL + useLiveQuery
 2. **NEVER call tRPC directly from components** - Use collection operations
@@ -123,13 +129,13 @@ export const todosCollection = createCollection(
 5. **ALWAYS use snake_case** for database fields throughout the app
 6. **ONLY basic CRUD in tRPC** - No special mutations unless using `createOptimisticAction`
 
-## Naming Conventions
+### Naming Conventions
 
 - **Database**: snake_case (e.g., `user_id`, `created_at`)
 - **Files**: kebab-case (e.g., `todo-card.tsx`)
 - **Routes**: Use `_` prefix for pathless layouts (e.g., `_authenticated.tsx`)
 
-## Schema Management
+### Schema Management
 
 ```tsx
 // src/db/zod-schemas.ts (centralized, never redefine)
@@ -138,7 +144,7 @@ export const insertTodoSchema = createInsertSchema(todos)
 export const updateTodoSchema = createUpdateSchema(todos)
 ```
 
-## Component Patterns
+### Component Patterns
 
 - **Forms**: Use optimistic updates, no loading states needed
 - **Links**: Use TanStack Router's `Link` component
