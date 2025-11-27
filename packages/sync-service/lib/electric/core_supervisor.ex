@@ -61,10 +61,6 @@ defmodule Electric.CoreSupervisor do
        inspector: inspector,
        period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)}
 
-    expiry_manager_spec =
-      {Electric.ShapeCache.ExpiryManager,
-       max_shapes: Keyword.fetch!(opts, :max_shapes), stack_id: stack_id}
-
     child_spec =
       Supervisor.child_spec(
         {
@@ -72,8 +68,7 @@ defmodule Electric.CoreSupervisor do
           stack_id: stack_id,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,
-          schema_reconciler: schema_reconciler_spec,
-          expiry_manager: expiry_manager_spec
+          schema_reconciler: schema_reconciler_spec
         },
         restart: :transient
       )

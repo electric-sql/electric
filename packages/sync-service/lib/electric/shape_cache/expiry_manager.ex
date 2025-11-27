@@ -29,37 +29,36 @@ defmodule Electric.ShapeCache.ExpiryManager do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    state =
-      %{
-        stack_id: stack_id,
-        max_shapes: Keyword.fetch!(opts, :max_shapes),
-        period: Keyword.fetch!(opts, :period)
-      }
+    state = %{
+      stack_id: stack_id,
+      period: Keyword.fetch!(opts, :period)
+    }
 
-    if not is_nil(state.max_shapes), do: schedule_next_check(state)
+    schedule_next_check(state.period)
 
     {:ok, state}
   end
 
-  defp schedule_next_check(state) do
-    Process.send_after(self(), :maybe_expire_shapes, state.period)
+  defp schedule_next_check(period) do
+    Process.send_after(self(), :maybe_expire_shapes, period)
   end
 
   def handle_info(:maybe_expire_shapes, state) do
-    maybe_expire_shapes(state)
-    schedule_next_check(state)
+    maybe_expire_shapes(state.stack_id, max_shapes_config(state.stack_id))
+    schedule_next_check(state.period)
     {:noreply, state}
   end
 
-  defp maybe_expire_shapes(%{max_shapes: nil}), do: :ok
+  defp maybe_expire_shapes(_stack_id, max_shapes) when is_nil(max_shapes) or max_shapes == 0,
+    do: :ok
 
-  defp maybe_expire_shapes(%{max_shapes: max_shapes} = state) do
-    case StatusMonitor.status(state.stack_id) do
+  defp maybe_expire_shapes(stack_id, max_shapes) when is_integer(max_shapes) and max_shapes > 0 do
+    case StatusMonitor.status(stack_id) do
       %{shape: :up} ->
-        shape_count = shape_count(state)
+        shape_count = shape_count(stack_id)
 
         if shape_count > max_shapes do
-          expire_shapes(shape_count, state)
+          expire_shapes(shape_count, max_shapes, stack_id)
         end
 
       status ->
@@ -70,38 +69,40 @@ defmodule Electric.ShapeCache.ExpiryManager do
     end
   end
 
-  defp expire_shapes(shape_count, state) do
-    number_to_expire = shape_count - state.max_shapes
-    {handles_to_expire, min_age} = least_recently_used(state, number_to_expire)
+  defp expire_shapes(shape_count, max_shapes, stack_id) do
+    number_to_expire = shape_count - max_shapes
+    {handles_to_expire, min_age} = least_recently_used(stack_id, number_to_expire)
 
     Logger.info(
       "Expiring #{number_to_expire} shapes as the number of shapes " <>
-        "has exceeded the limit (#{state.max_shapes})"
+        "has exceeded the limit (#{max_shapes})"
     )
 
     OpenTelemetry.with_span(
       "expiry_manager.expire_shapes",
       [
-        max_shapes: state.max_shapes,
+        max_shapes: max_shapes,
         shape_count: shape_count,
         number_to_expire: number_to_expire,
         elapsed_minutes_since_use: min_age
       ],
-      fn ->
-        Electric.ShapeCache.ShapeCleaner.remove_shapes(state.stack_id, handles_to_expire)
-      end
+      fn -> Electric.ShapeCache.ShapeCleaner.remove_shapes(stack_id, handles_to_expire) end
     )
   end
 
-  defp least_recently_used(%{stack_id: stack_id}, number_to_expire) do
+  defp least_recently_used(stack_id, number_to_expire) do
     OpenTelemetry.with_span("expiry_manager.get_least_recently_used", [], fn ->
       ShapeStatus.least_recently_used(stack_id, number_to_expire)
     end)
   end
 
-  defp shape_count(%{stack_id: stack_id}) do
+  defp shape_count(stack_id) do
     OpenTelemetry.with_span("expiry_manager.get_shape_count", [], fn ->
       ShapeStatus.count_shapes(stack_id)
     end)
+  end
+
+  defp max_shapes_config(stack_id) do
+    Electric.StackConfig.lookup(stack_id, :max_shapes)
   end
 end

@@ -43,7 +43,6 @@ defmodule Electric.Shapes.Supervisor do
     persistent_kv = Electric.StackConfig.lookup(stack_id, :persistent_kv)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
-    expiry_manager = Keyword.fetch!(opts, :expiry_manager)
     schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
 
     children = [
@@ -55,7 +54,7 @@ defmodule Electric.Shapes.Supervisor do
       publication_manager,
       {Electric.Shapes.DynamicConsumerSupervisor, stack_id: stack_id},
       shape_cache,
-      expiry_manager,
+      {Electric.ShapeCache.ExpiryManager, stack_id: stack_id},
       schema_reconciler,
       canary_spec(stack_id)
     ]

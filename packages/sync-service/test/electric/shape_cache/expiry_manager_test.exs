@@ -21,8 +21,10 @@ defmodule Electric.ExpiryManagerTest do
   @max_shapes 10
 
   setup %{stack_id: stack_id} do
+    Electric.StackConfig.put(stack_id, :max_shapes, @max_shapes)
+
     expiry_manager =
-      start_supervised!({ExpiryManager, max_shapes: @max_shapes, period: 1, stack_id: stack_id})
+      start_supervised!({ExpiryManager, period: 1, stack_id: stack_id})
 
     Repatch.patch(ShapeCleaner, :remove_shapes, [mode: :shared], fn stack_id, shape_handles ->
       Enum.each(shape_handles, &ShapeStatus.remove_shape(stack_id, &1))
