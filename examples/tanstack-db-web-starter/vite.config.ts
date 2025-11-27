@@ -22,6 +22,7 @@ const config = defineConfig({
     tanstackStart({
       spa: {
         enabled: true,
+        prerender: false,
       },
     }),
     // Nitro handles server bundling for Node.js deployment
