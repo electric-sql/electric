@@ -543,16 +543,17 @@ defmodule Electric.Connection.Manager do
 
   def handle_continue(
         :check_lock_not_abandoned,
-        %State{replication_pg_backend_pid: pid} = state
+        %State{replication_pg_backend_pid: pg_backend_pid} = state
       ) do
-    if state.current_step == {:start_replication_client, :acquiring_lock} and not is_nil(pid) do
+    if state.current_step == {:start_replication_client, :acquiring_lock} and
+         not is_nil(pg_backend_pid) do
       with {:ok, conn_opts, state} <-
              validate_connection(pooled_connection_opts(state), :pool, state),
            {:ok, breaker_pid} <-
              LockBreakerConnection.start(connection_opts: conn_opts, stack_id: state.stack_id) do
         lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
 
-        LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pid)
+        LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pg_backend_pid)
       else
         {:error, reason} ->
           # no-op, this is a one-shot attempt at fixing a lock
@@ -1149,7 +1150,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp kill_replication_backend(%State{replication_pg_backend_pid: nil} = state) do
-    Logger.debug("Skipping killing replication backend, pid not known")
+    Logger.debug("Skipping killing replication backend, pg_backend_pid not known")
     state
   end
 
@@ -1158,9 +1159,9 @@ defmodule Electric.Connection.Manager do
     state
   end
 
-  defp kill_replication_backend(%State{replication_pg_backend_pid: backend_pid} = state) do
+  defp kill_replication_backend(%State{replication_pg_backend_pid: pg_backend_pid} = state) do
     pool = pool_name(state.stack_id, :admin)
-    execute_and_log_errors(pool, "SELECT pg_terminate_backend(#{backend_pid});")
+    execute_and_log_errors(pool, "SELECT pg_terminate_backend(#{pg_backend_pid});")
     %{state | replication_pg_backend_pid: nil}
   end
 

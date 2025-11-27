@@ -38,23 +38,30 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
       end
     })
 
-    {:ok, pid} =
-      start_supervised(%{
-        id: :lock_breaker,
-        start:
-          {Electric.Postgres.LockBreakerConnection, :start,
-           [[connection_opts: ctx.db_config, stack_id: ctx.stack_id]]}
-      })
+    {:ok, lock_breaker_pid} =
+      Electric.Postgres.LockBreakerConnection.start(
+        connection_opts: ctx.db_config,
+        stack_id: ctx.stack_id
+      )
 
-    ref2 = Process.monitor(pid)
+    lock_breaker_monitor = Process.monitor(lock_breaker_pid)
 
     assert_receive :lock_acquired
 
+    # Verify there's an entry for the acquired lock in pg_locks
+    assert %Postgrex.Result{rows: [_pg_backend_pid], num_rows: 1} =
+             Postgrex.query!(
+               ctx.db_conn,
+               "SELECT pid FROM pg_locks WHERE objid::bigint = hashtext($1) AND locktype = 'advisory'",
+               [ctx.slot_name]
+             )
+
     # Make sure we can stop the lock connection above, so we're not specifying current pid
-    LockBreakerConnection.stop_backends_and_close(pid, ctx.slot_name)
+    LockBreakerConnection.stop_backends_and_close(lock_breaker_pid, ctx.slot_name)
 
-    assert_receive {:DOWN, ^ref2, :process, ^pid, _reason}
+    assert_receive {:DOWN, ^lock_breaker_monitor, :process, ^lock_breaker_pid, :shutdown}
 
+    # Verify that the pg_locks entry is gone
     assert %Postgrex.Result{rows: [], num_rows: 0} =
              Postgrex.query!(
                ctx.db_conn,
@@ -69,7 +76,7 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
       "SELECT pg_create_logical_replication_slot('#{ctx.slot_name}', 'pgoutput')"
     )
 
-    {:ok, pid} =
+    {:ok, replication_client_pid} =
       start_supervised(
         {ReplicationClient,
          stack_id: ctx.stack_id,
@@ -84,9 +91,9 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
          ]}
       )
 
-    ref1 = Process.monitor(pid)
+    replication_client_monitor = Process.monitor(replication_client_pid)
 
-    {:ok, pid} =
+    {:ok, lock_breaker_pid} =
       start_supervised(%{
         id: :lock_breaker,
         start:
@@ -94,15 +101,16 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
            [[connection_opts: ctx.db_config, stack_id: ctx.stack_id]]}
       })
 
-    ref2 = Process.monitor(pid)
+    lock_breaker_monitor = Process.monitor(lock_breaker_pid)
 
     assert_receive {:"$gen_cast", {:pg_info_obtained, %{pg_backend_pid: pg_backend_pid}}}
     assert_receive {:"$gen_cast", :replication_client_lock_acquired}
 
-    LockBreakerConnection.stop_backends_and_close(pid, ctx.slot_name, pg_backend_pid)
+    LockBreakerConnection.stop_backends_and_close(lock_breaker_pid, ctx.slot_name, pg_backend_pid)
 
-    assert_receive {:DOWN, ^ref2, :process, ^pid, _reason}
-    refute_received {:DOWN, ^ref1, :process, _, _reason}
+    assert_receive {:DOWN, ^lock_breaker_monitor, :process, ^lock_breaker_pid, :shutdown}
+    refute_received {:DOWN, ^replication_client_monitor, :process, _pid, _reason}
+
     stop_supervised(ReplicationClient)
   end
 end
