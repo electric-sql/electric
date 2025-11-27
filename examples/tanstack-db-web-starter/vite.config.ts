@@ -20,12 +20,6 @@ const config = defineConfig({
     tailwindcss(),
     // TanStack Start must come before viteReact
     tanstackStart({
-      srcDirectory: `src`,
-      start: { entry: `./start.tsx` },
-      server: { entry: `./server.ts` },
-      router: {
-        srcDirectory: `src`,
-      },
       spa: {
         enabled: true,
       },
