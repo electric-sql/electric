@@ -73,6 +73,7 @@ export type ElectricResumeStateProvider = {
  * @param resumeState (optional) The resume state to use for the provider. If no resume state the provider will fetch the entire shape.
  * @param connect (optional) Whether to automatically connect upon initialization.
  * @param fetchClient (optional) Custom fetch implementation to use for send requests.
+ * @param debounceMs (optional) Debounce window in milliseconds for sending document updates. If 0 or undefined, debouncing is disabled and updates are sent immediately.
  */
 export type ElectricProviderOptions<
   RowWithDocumentUpdate extends Row<decoding.Decoder>,
@@ -95,6 +96,7 @@ export type ElectricProviderOptions<
   resumeState?: ResumeState
   connect?: boolean
   fetchClient?: typeof fetch
+  debounceMs?: number
 }
 
 export type ResumeState = {
