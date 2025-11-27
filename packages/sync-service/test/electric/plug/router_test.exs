@@ -2745,7 +2745,6 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
-           "CREATE TYPE my_enum AS ENUM ('value1', 'value2', 'value3')",
            "CREATE TABLE enum_table (id UUID PRIMARY KEY, status my_enum NOT NULL)",
            "INSERT INTO enum_table VALUES (gen_random_uuid(), 'value1')",
            "INSERT INTO enum_table VALUES (gen_random_uuid(), 'value2')"
@@ -2766,7 +2765,6 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
-           "CREATE TYPE my_enum AS ENUM ('value1', 'value2', 'value3')",
            "CREATE TABLE enum_table (id UUID PRIMARY KEY, status my_enum NOT NULL)",
            "INSERT INTO enum_table VALUES (gen_random_uuid(), 'value1')"
          ]
