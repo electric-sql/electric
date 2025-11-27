@@ -46,8 +46,8 @@ defmodule Electric.Postgres.LockBreakerConnection do
     end
   end
 
-  def stop_backends_and_close(server, lock_name, lock_connection_backend_pid \\ nil) do
-    send(server, {:stop_backends_and_close, lock_name, lock_connection_backend_pid})
+  def stop_backends_and_close(server, lock_name, lock_connection_pg_backend_pid \\ nil) do
+    send(server, {:stop_backends_and_close, lock_name, lock_connection_pg_backend_pid})
   end
 
   @impl true
@@ -74,10 +74,10 @@ defmodule Electric.Postgres.LockBreakerConnection do
 
   @impl true
   def handle_info(
-        {:stop_backends_and_close, lock_name, lock_connection_backend_pid},
+        {:stop_backends_and_close, lock_name, lock_connection_pg_backend_pid},
         state
       ) do
-    {:query, lock_breaker_query(lock_name, lock_connection_backend_pid, state.database),
+    {:query, lock_breaker_query(lock_name, lock_connection_pg_backend_pid, state.database),
      Map.put(state, :lock_name, lock_name)}
   end
 
@@ -101,8 +101,8 @@ defmodule Electric.Postgres.LockBreakerConnection do
   @impl true
   def notify(_, _, _), do: :ok
 
-  defp lock_breaker_query(lock_name, lock_connection_backend_pid, database)
-       when is_integer(lock_connection_backend_pid) or is_nil(lock_connection_backend_pid) do
+  defp lock_breaker_query(lock_name, lock_connection_pg_backend_pid, database)
+       when is_integer(lock_connection_pg_backend_pid) or is_nil(lock_connection_pg_backend_pid) do
     # We're using a `WITH` clause to execute all this in one statement
     # - See if there are existing but inactive replication slots with the given name
     # - Find all backends that are holding locks with the same name
@@ -125,7 +125,7 @@ defmodule Electric.Postgres.LockBreakerConnection do
           and objsubid = 1
           and database = (select oid from pg_database where datname = #{quote_string(database)})
           and granted
-          and pid != #{lock_connection_backend_pid || 0}
+          and pid != #{lock_connection_pg_backend_pid || 0}
     )
     SELECT pg_terminate_backend(pid) FROM stuck_backends;
     """
