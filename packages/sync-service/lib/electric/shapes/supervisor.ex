@@ -42,7 +42,6 @@ defmodule Electric.Shapes.Supervisor do
     inspector = Electric.StackConfig.lookup(stack_id, :inspector)
     persistent_kv = Electric.StackConfig.lookup(stack_id, :persistent_kv)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
-    consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     expiry_manager = Keyword.fetch!(opts, :expiry_manager)
     schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
@@ -54,7 +53,7 @@ defmodule Electric.Shapes.Supervisor do
       {Electric.Replication.ShapeLogCollector,
        stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv},
       publication_manager,
-      consumer_supervisor,
+      {Electric.Shapes.DynamicConsumerSupervisor, stack_id: stack_id},
       shape_cache,
       expiry_manager,
       schema_reconciler,

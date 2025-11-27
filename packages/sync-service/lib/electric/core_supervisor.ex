@@ -44,8 +44,6 @@ defmodule Electric.CoreSupervisor do
     inspector = Keyword.fetch!(opts, :inspector)
     tweaks = Keyword.fetch!(opts, :tweaks)
 
-    consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
-
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     publication_manager_spec =
@@ -72,7 +70,6 @@ defmodule Electric.CoreSupervisor do
         {
           Electric.Shapes.Supervisor,
           stack_id: stack_id,
-          consumer_supervisor: consumer_supervisor_spec,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,
           schema_reconciler: schema_reconciler_spec,
