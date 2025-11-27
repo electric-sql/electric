@@ -1,36 +1,31 @@
 import { defineConfig } from "vite"
+import { devtools } from "@tanstack/devtools-vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import viteReact from "@vitejs/plugin-react"
 import viteTsConfigPaths from "vite-tsconfig-paths"
 import tailwindcss from "@tailwindcss/vite"
+import { nitro } from "nitro/vite"
 import { caddyPlugin } from "./src/vite-plugin-caddy"
 
 const config = defineConfig({
-  server: {
-    host: true,
-  },
   plugins: [
-    // this is the plugin that enables path aliases
+    devtools(),
+    nitro(),
     viteTsConfigPaths({
       projects: [`./tsconfig.json`],
     }),
-    // Local HTTPS with Caddy
     caddyPlugin(),
     tailwindcss(),
-    // TanStack Start must come before viteReact
     tanstackStart({
-      srcDirectory: `src`,
-      start: { entry: `./start.tsx` },
-      server: { entry: `./server.ts` },
       router: {
         srcDirectory: `src`,
-      },
-      spa: {
-        enabled: true,
       },
     }),
     viteReact(),
   ],
+  optimizeDeps: {
+    exclude: [`@tanstack/start-server-core`],
+  },
   ssr: {
     noExternal: [`zod`],
   },
