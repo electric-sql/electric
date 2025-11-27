@@ -159,6 +159,8 @@ defmodule Electric.Shapes.PartitionedTablesTest do
   end
 
   test "truncation of partition truncates the partition root", ctx do
+    Support.ComponentSetup.put_shape_cleaner_callback(ctx)
+
     {:ok, shape} = Shape.new("public.partitioned_items", inspector: ctx.inspector)
     {:ok, partition_shape} = Shape.new("public.partitioned_items_100", inspector: ctx.inspector)
 
@@ -211,6 +213,8 @@ defmodule Electric.Shapes.PartitionedTablesTest do
   end
 
   test "truncation of partition root truncates all partitions", ctx do
+    Support.ComponentSetup.put_shape_cleaner_callback(ctx)
+
     {:ok, shape} = Shape.new("public.partitioned_items", inspector: ctx.inspector)
     {:ok, partition_shape} = Shape.new("public.partitioned_items_100", inspector: ctx.inspector)
 

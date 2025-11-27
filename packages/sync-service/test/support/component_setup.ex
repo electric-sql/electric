@@ -197,9 +197,10 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_cleaner(ctx) do
+    put_shape_cleaner_callback(ctx)
+
     start_supervised!(
-      {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
-       Keyword.merge(shape_cleaner_opts(ctx), stack_id: ctx.stack_id)}
+      {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, stack_id: ctx.stack_id}
     )
 
     :ok
@@ -390,17 +391,6 @@ defmodule Support.ComponentSetup do
     %{}
   end
 
-  def shape_cleaner_opts(ctx) do
-    parent = self()
-
-    on_cleanup =
-      Map.get(ctx, :on_shape_cleanup, fn handle ->
-        send(parent, {Electric.ShapeCache.ShapeCleaner, :cleanup, handle})
-      end)
-
-    [on_cleanup: on_cleanup]
-  end
-
   def with_complete_stack(ctx) do
     stack_id = full_test_name(ctx)
 
@@ -452,10 +442,7 @@ defmodule Support.ComponentSetup do
            max_restarts: 0,
            pool_size: 2
          ],
-         tweaks: [
-           registry_partitions: 1,
-           shape_cleaner_opts: shape_cleaner_opts(ctx)
-         ],
+         tweaks: [registry_partitions: 1],
          manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
          feature_flags: Electric.Config.get_env(:feature_flags)},
         restart: :temporary,
@@ -505,5 +492,24 @@ defmodule Support.ComponentSetup do
     )
     |> Keyword.merge(overrides)
     |> Electric.Shapes.Api.plug_opts()
+  end
+
+  # In tests we want to know when shape cleaning occurs. This puts a callback function into
+  # StackConfig, exactly where Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor expects
+  # to find it.
+  def put_shape_cleaner_callback(ctx) do
+    Electric.StackConfig.put(
+      ctx.stack_id,
+      {Electric.ShapeCache.ShapeCleaner, :on_cleanup},
+      shape_cleaner_callback(ctx)
+    )
+  end
+
+  def shape_cleaner_callback(ctx) do
+    parent = self()
+
+    Map.get(ctx, :on_shape_cleanup, fn handle ->
+      send(parent, {Electric.ShapeCache.ShapeCleaner, :cleanup, handle})
+    end)
   end
 end
