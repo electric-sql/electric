@@ -17,6 +17,7 @@ export default [
       `**/sst-env.d.ts`,
       `**/sst.config.ts`,
       `website/src/partials/**`,
+      `**/routeTree.gen.ts`,
     ],
   },
   {
