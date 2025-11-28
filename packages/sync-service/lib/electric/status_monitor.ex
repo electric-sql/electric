@@ -16,7 +16,7 @@ defmodule Electric.StatusMonitor do
     :snapshot_connection_pool_ready,
     :shape_log_collector_ready,
     :supervisor_processes_ready,
-    :integrety_checks_passed
+    :integrity_checks_passed
   ]
 
   @default_results for condition <- @conditions, into: %{}, do: {condition, {false, %{}}}
@@ -60,7 +60,7 @@ defmodule Electric.StatusMonitor do
          replication_client_ready: {true, _},
          admin_connection_pool_ready: {true, _},
          snapshot_connection_pool_ready: {true, _},
-         integrety_checks_passed: {true, _}
+         integrity_checks_passed: {true, _}
        }),
        do: :up
 
@@ -106,8 +106,8 @@ defmodule Electric.StatusMonitor do
     mark_condition_met(stack_id, :supervisor_processes_ready, canary_pid)
   end
 
-  def mark_integrety_checks_passed(stack_id, connection_manager_pid) do
-    mark_condition_met(stack_id, :integrety_checks_passed, connection_manager_pid)
+  def mark_integrity_checks_passed(stack_id, connection_manager_pid) do
+    mark_condition_met(stack_id, :integrity_checks_passed, connection_manager_pid)
   end
 
   def mark_pg_lock_as_errored(stack_id, message) when is_binary(message) do
@@ -377,8 +377,8 @@ defmodule Electric.StatusMonitor do
       %{supervisor_processes_ready: {false, details}} ->
         "Timeout waiting for stack restart" <> format_details(details)
 
-      %{integrety_checks_passed: {false, details}} ->
-        "Timeout waiting for integrety checks" <> format_details(details)
+      %{integrity_checks_passed: {false, details}} ->
+        "Timeout waiting for integrity checks" <> format_details(details)
     end
   end
 

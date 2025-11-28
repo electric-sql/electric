@@ -502,7 +502,7 @@ defmodule Electric.Connection.Manager do
         exit(reason)
     end
 
-    StatusMonitor.mark_integrety_checks_passed(state.stack_id, self())
+    StatusMonitor.mark_integrity_checks_passed(state.stack_id, self())
 
     state = %{
       state
