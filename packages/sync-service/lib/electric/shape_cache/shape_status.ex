@@ -73,7 +73,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @type table() :: atom() | reference()
   @type t() :: Keyword.t() | binary() | atom()
 
-  @backup_version "v4"
+  @backup_version "v5"
   @backup_dir "shape_status_backups"
 
   @shape_hash_lookup_handle_pos 2
@@ -81,8 +81,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_last_used_time_pos 2
 
   @shape_meta_shape_pos 2
-  @shape_meta_snapshot_started_pos 3
-  @shape_meta_latest_offset_pos 4
+  @shape_meta_shape_hash_pos 3
+  @shape_meta_snapshot_started_pos 4
+  @shape_meta_latest_offset_pos 5
 
   @impl true
   def initialize_from_storage(stack_ref, storage) do
@@ -114,26 +115,34 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @impl true
   def add_shape(stack_ref, shape) do
+    stack_id = extract_stack_id(stack_ref)
+
     {_, shape_handle} = Shape.generate_id(shape)
     # For fresh snapshots we're setting "latest" offset to be a highest possible virtual offset,
     # which is needed because while the snapshot is being made we DON'T update this ETS table.
     # We could, but that would required making the Storage know about this module and I don't like that.
     offset = LogOffset.last_before_real_offsets()
 
-    true = :ets.insert_new(shape_meta_table(stack_ref), {shape_handle, shape, false, offset})
+    {comparable_shape, shape_hash} = Shape.comparable_hash(shape)
 
     true =
       :ets.insert_new(
-        shape_relation_lookup_table(stack_ref),
+        shape_meta_table(stack_id),
+        {shape_handle, shape, shape_hash, false, offset}
+      )
+
+    true =
+      :ets.insert_new(
+        shape_relation_lookup_table(stack_id),
         Enum.map(Shape.list_relations(shape), fn {oid, _name} -> {{oid, shape_handle}, nil} end)
       )
 
     true =
-      :ets.insert_new(shape_last_used_table(stack_ref), {shape_handle, System.monotonic_time()})
+      :ets.insert_new(shape_last_used_table(stack_id), {shape_handle, System.monotonic_time()})
 
     # Add the lookup last as it is the one that enables clients to find the shape
     true =
-      :ets.insert_new(shape_hash_lookup_table(stack_ref), {Shape.comparable(shape), shape_handle})
+      :ets.insert_new(shape_hash_lookup_table(stack_id), {comparable_shape, shape_handle})
 
     {:ok, shape_handle}
   end
@@ -143,7 +152,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     shape_meta_table(stack_ref)
     |> :ets.select([
       {
-        {:"$1", :"$2", :_, :_},
+        {:"$1", :"$2", :_, :_, :_},
         [],
         [{{:"$1", :"$2"}}]
       }
@@ -272,6 +281,43 @@ defmodule Electric.ShapeCache.ShapeStatus do
          ) do
       nil -> :error
       shape -> {:ok, shape}
+    end
+  end
+
+  def has_shape_handle?(stack_ref, shape_handle) do
+    case :ets.lookup_element(
+           shape_meta_table(stack_ref),
+           shape_handle,
+           @shape_meta_shape_hash_pos,
+           nil
+         ) do
+      nil -> false
+      hash when is_integer(hash) -> true
+    end
+  end
+
+  @doc """
+  Cheaply validate that a shape handle matches the shape definition by matching
+  the shape's saved hash against the provided shape's hash.
+  """
+  def validate_shape_handle(stack_ref, shape_handle, %Shape{} = shape) do
+    case :ets.lookup_element(
+           shape_meta_table(stack_ref),
+           shape_handle,
+           @shape_meta_shape_hash_pos,
+           nil
+         ) do
+      nil ->
+        :error
+
+      valid_hash when is_integer(valid_hash) ->
+        shape_hash = Shape.hash(shape)
+
+        if shape_hash == valid_hash do
+          {:ok, latest_offset!(stack_ref, shape_handle)}
+        else
+          :error
+        end
     end
   end
 
@@ -506,12 +552,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
                num_shapes
              } ->
             relations = Shape.list_relations(shape)
+            {comparable, shape_hash} = Shape.comparable_hash(shape)
 
-            hash_lookup_tuples = [{Shape.comparable(shape), shape_handle} | hash_lookup_tuples]
+            hash_lookup_tuples = [{comparable, shape_handle} | hash_lookup_tuples]
 
             meta_tuples =
               [
-                {shape_handle, shape, snapshot_started?, latest_offset}
+                {shape_handle, shape, shape_hash, snapshot_started?, latest_offset}
                 | meta_tuples
               ]
 
@@ -614,7 +661,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         # repopulate last used table with current time and relation lookup table
         # from the shape definition
         :ets.foldl(
-          fn {shape_handle, shape, _, _}, _ ->
+          fn {shape_handle, shape, _, _, _}, _ ->
             :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
 
             :ets.insert(
