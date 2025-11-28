@@ -54,8 +54,8 @@ async function main() {
 
   console.log(`\nFound ${prToPackages.size} PRs to comment on`)
 
-  // Collect issues linked to PRs
-  const issueToPackages = new Map()
+  // Collect issues linked to PRs: Map<issueNumber, { prs: Set<prNumber>, packages: Array }>
+  const issueData = new Map()
 
   // Comment on each PR and collect linked issues
   for (const [prNumber, packages] of prToPackages) {
@@ -64,24 +64,25 @@ async function main() {
     // Find issues that this PR closes/fixes
     const linkedIssues = await findLinkedIssues(prNumber)
     for (const issueNumber of linkedIssues) {
-      if (!issueToPackages.has(issueNumber)) {
-        issueToPackages.set(issueNumber, [])
+      if (!issueData.has(issueNumber)) {
+        issueData.set(issueNumber, { prs: new Set(), packages: [] })
       }
+      const data = issueData.get(issueNumber)
+      data.prs.add(prNumber)
       // Merge packages, avoiding duplicates
       for (const pkg of packages) {
-        const existing = issueToPackages.get(issueNumber)
-        if (!existing.some((p) => p.name === pkg.name && p.version === pkg.version)) {
-          existing.push(pkg)
+        if (!data.packages.some((p) => p.name === pkg.name && p.version === pkg.version)) {
+          data.packages.push(pkg)
         }
       }
     }
   }
 
-  console.log(`\nFound ${issueToPackages.size} linked issues to comment on`)
+  console.log(`\nFound ${issueData.size} linked issues to comment on`)
 
   // Comment on each linked issue
-  for (const [issueNumber, packages] of issueToPackages) {
-    await commentOnIssue(issueNumber, packages)
+  for (const [issueNumber, { prs, packages }] of issueData) {
+    await commentOnIssue(issueNumber, Array.from(prs), packages)
   }
 }
 
@@ -239,12 +240,15 @@ async function findLinkedIssues(prNumber) {
   return []
 }
 
-async function commentOnIssue(issueNumber, packages) {
+async function commentOnIssue(issueNumber, prNumbers, packages) {
   const packageList = packages
     .map((p) => `- \`${p.name}@${p.version}\``)
     .join('\n')
 
-  const body = `A fix for this issue has been released! :rocket:
+  const prLinks = prNumbers.map((pr) => `#${pr}`).join(', ')
+  const prWord = prNumbers.length === 1 ? 'PR' : 'PRs'
+
+  const body = `The ${prWord} fixing this issue (${prLinks}) has been released! :rocket:
 
 The following packages include the fix:
 
