@@ -1,7 +1,7 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 import { getSharedCluster, isProduction } from "../.shared/lib/infra"
-import { createNeonDb, getNeonConnectionString } from "../.shared/lib/neon"
+import { createNeonDb, getNeonConnectionStrings } from "../.shared/lib/neon"
 
 export default $config({
   app(input) {
@@ -81,18 +81,14 @@ export function createNeonDatabase({ dbName }: { dbName: string }) {
     dbName,
   })
 
-  const databaseUri = getNeonConnectionString({
-    project,
+  const connectionStrings = getNeonConnectionStrings({
+    projectId: project.id,
+    branchId: project.defaultBranchId,
     roleName: ownerName,
     databaseName: resultingDbName,
-    pooled: false,
   })
-  const pooledDatabaseUri = getNeonConnectionString({
-    project,
-    roleName: ownerName,
-    databaseName: resultingDbName,
-    pooled: true,
-  })
+  const databaseUri = connectionStrings.direct
+  const pooledDatabaseUri = connectionStrings.pooled
 
   const res = {
     databaseUri,

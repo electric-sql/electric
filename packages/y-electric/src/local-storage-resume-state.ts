@@ -25,7 +25,6 @@ export class LocalStorageResumeStateProvider extends ObservableV2<ElectricResume
   save(resumeState: ResumeState) {
     const jsonPart = JSON.stringify({
       operations: resumeState.document,
-      awareness: resumeState.awareness,
     })
     localStorage.setItem(this.key, jsonPart)
 

@@ -82,6 +82,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
     getUpdateFromRow: (row) => row.update,
   },
   resumeState: resumeStateProvider.load(),
+  debounceMs: 100,
 }
 
 function ElectricEditor({
