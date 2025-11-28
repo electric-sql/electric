@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.2.8
+
+### Patch Changes
+
+- c28e8ed: Extract telemetry code from Electric into a separate package, for easier modification and sharing of the telemetry code between Electric and Cloud.
+- 0a82280: Hibernate the shape status owner process to release any memory accumulated during startup
+- 65edd9f: Reduce PublicationManager memory usage
+- 48b6bf0: Allow enums in subset where clauses
+
 ## 1.2.7
 
 ### Patch Changes
