@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { createNeonDb, getNeonConnectionString } from './neon'
+import { createNeonDb, getNeonConnectionStrings } from './neon'
 
 function addDatabaseToElectric({
   dbUri,
@@ -152,20 +152,14 @@ export function createDatabaseForCloudElectric({
     console.log(`[db] createNeonDb owner`, { ownerName: name })
   )
 
-  const databaseUri = getNeonConnectionString({
+  const connectionStrings = getNeonConnectionStrings({
     projectId: neonProjectId,
     branchId: defaultBranchId,
     roleName: ownerName,
     databaseName: resultingDbName,
-    pooled: false,
   })
-  const pooledDatabaseUri = getNeonConnectionString({
-    projectId: neonProjectId,
-    branchId: defaultBranchId,
-    roleName: ownerName,
-    databaseName: resultingDbName,
-    pooled: true,
-  })
+  const databaseUri = connectionStrings.direct
+  const pooledDatabaseUri = connectionStrings.pooled
   databaseUri.apply(() => console.log(`[db] Resolved direct connection string`))
   pooledDatabaseUri.apply(() =>
     console.log(`[db] Resolved pooled connection string`)

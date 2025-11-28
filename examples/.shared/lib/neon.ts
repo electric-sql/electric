@@ -8,20 +8,19 @@ type NeonResetPasswordResponse = {
   role?: { password?: string }
 }
 
-export function getNeonConnectionString({
+export function getNeonConnectionStrings({
   projectId,
   branchId,
   roleName,
   databaseName,
-  pooled,
 }: {
   projectId: $util.Input<string>
   branchId: $util.Input<string>
   roleName: $util.Input<string>
   databaseName: $util.Input<string>
-  pooled: boolean
-}): $util.Output<string> {
+}): $util.Output<{ direct: string; pooled: string }> {
   // Compute synchronously via Neon HTTP API (avoids Pulumi provider invokes)
+  // Reset password only once to avoid invalidating previous passwords
   if (!process.env.NEON_API_KEY) {
     throw new Error(`NEON_API_KEY is not set`)
   }
@@ -38,16 +37,16 @@ export function getNeonConnectionString({
       if (!endpoint?.host || !endpoint?.id) {
         throw new Error(`Failed to resolve Neon branch endpoint`)
       }
-      const host = pooled
-        ? String(endpoint.host).replace(
-            String(endpoint.id),
-            `${endpoint.id}-pooler`
-          )
-        : String(endpoint.host)
-      console.log(`[neon] Using ${pooled ? `pooled` : `direct`} endpoint`, {
-        host,
-      })
 
+      const directHost = String(endpoint.host)
+      const pooledHost = String(endpoint.host).replace(
+        String(endpoint.id),
+        `${endpoint.id}-pooler`
+      )
+      console.log(`[neon] Using direct endpoint`, { host: directHost })
+      console.log(`[neon] Using pooled endpoint`, { host: pooledHost })
+
+      // Reset password once for both connection strings
       const pwdResp = execSync(
         `curl -s -w "\\n%{http_code}" -X POST -H "Authorization: Bearer $NEON_API_KEY" ` +
           `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/roles/${role}/reset_password`,
@@ -92,7 +91,10 @@ export function getNeonConnectionString({
         throw new Error(`Failed to obtain Neon role password`)
       }
 
-      return `postgresql://${role}:${password}@${host}/${db}?sslmode=require`
+      return {
+        direct: `postgresql://${role}:${password}@${directHost}/${db}?sslmode=require`,
+        pooled: `postgresql://${role}:${password}@${pooledHost}/${db}?sslmode=require`,
+      }
     }
   )
 }
