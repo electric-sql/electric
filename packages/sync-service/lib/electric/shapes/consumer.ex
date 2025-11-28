@@ -811,7 +811,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp clean_table(table_oid, state) do
-    inspector = Electric.StackConfig.lookup!(state.stack_id, :inspector)
+    inspector = Electric.Postgres.Inspector.for_stack(state.stack_id)
     Inspector.clean(table_oid, inspector)
   end
 
