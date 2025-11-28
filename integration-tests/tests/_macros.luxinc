@@ -186,7 +186,12 @@
 
 [macro start_electric_script shell_name port env]
   [shell $shell_name]
-    !ELECTRIC_PORT=$port $env ../scripts/electric_dev.sh --no-color
+    !ELECTRIC_DB_POOL_SIZE=4 \
+     ELECTRIC_TWEAKS_PROCESS_REGISTRY_PARTITIONS=1 \
+     ELECTRIC_TWEAKS_HTTP_API_NUM_ACCEPTORS=1 \
+     ELECTRIC_PORT=$port \
+     $env \
+     ../scripts/electric_dev.sh --no-color
 [endmacro]
 
 [macro stop_electric]

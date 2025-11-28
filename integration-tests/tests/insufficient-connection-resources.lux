@@ -7,10 +7,10 @@
 ###
 
 ## Start a new Postgres cluster with limited max connections
-[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=10" ""]
+[invoke setup_pg_with_shell_name "pg" "" "-c max_connections=4" ""]
 
 ## Start the sync service.
-[invoke setup_electric]
+[invoke setup_electric_with_env "ELECTRIC_DB_POOL_SIZE=5"]
 
 [shell electric]
   ??[info] Lock acquired from postgres
