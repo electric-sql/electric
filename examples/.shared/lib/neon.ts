@@ -59,35 +59,12 @@ export function getNeonConnectionStrings({
       const body = pwdResp.slice(0, pwdResp.lastIndexOf(`\n`))
 
       if (status !== `200`) {
-        console.error(`[neon] Password reset failed with status ${status}`)
-        if (body) {
-          try {
-            const errorJson = JSON.parse(body)
-            console.error(`[neon] Error response: ${JSON.stringify(errorJson)}`)
-          } catch {
-            console.error(`[neon] Error response (raw): ${body}`)
-          }
-        }
         throw new Error(`Failed to reset Neon role password: HTTP ${status}`)
       }
 
       const pwdJson = JSON.parse(body) as unknown as NeonResetPasswordResponse
       const password = pwdJson?.role?.password
       if (!password) {
-        console.error(
-          `[neon] Password reset returned 200 but password not found in response`
-        )
-        console.error(
-          `[neon] Response keys: ${Object.keys(pwdJson || {}).join(`, `)}`
-        )
-        if (pwdJson?.role) {
-          console.error(
-            `[neon] Role object keys: ${Object.keys(pwdJson.role).join(`, `)}`
-          )
-        }
-        console.error(
-          `[neon] Full response: ${JSON.stringify(pwdJson, null, 2)}`
-        )
         throw new Error(`Failed to obtain Neon role password`)
       }
 
