@@ -5,7 +5,7 @@ type NeonEndpointsResponse = {
 }
 
 type NeonResetPasswordResponse = {
-  password?: string
+  role?: { password?: string }
 }
 
 export function getNeonConnectionString({
@@ -54,7 +54,7 @@ export function getNeonConnectionString({
             `https://console.neon.tech/api/v2/projects/${pid}/branches/${bid}/roles/${role}/reset_password`
         ).toString()
       ) as unknown as NeonResetPasswordResponse
-      const password = pwdJson?.password
+      const password = pwdJson?.role?.password
       if (!password) {
         throw new Error(`Failed to obtain Neon role password`)
       }
