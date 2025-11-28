@@ -1,22 +1,15 @@
-import tseslint from '@typescript-eslint/eslint-plugin'
-import tsparser from '@typescript-eslint/parser'
+import tseslint from "@typescript-eslint/eslint-plugin"
+import tsparser from "@typescript-eslint/parser"
 
 export default [
   {
     ignores: [
-      `**/.sst/**`,
-      `**/node_modules/**`,
-      `**/dist/**`,
-      `**/build/**`,
-      `**/coverage/**`,
-      `**/.next/**`,
       `**/.nitro/**`,
       `**/.output/**`,
-      `**/.vitepress/cache/**`,
-      `**/.vitepress/dist/**`,
-      `**/sst-env.d.ts`,
-      `**/sst.config.ts`,
-      `website/src/partials/**`,
+      `**/.sst/**`,
+      `**/.tanstack/**`,
+      `**/dist/**`,
+      `**/node_modules/**`,
       `**/routeTree.gen.ts`,
     ],
   },
@@ -36,12 +29,12 @@ export default [
       },
     },
     plugins: {
-      '@typescript-eslint': tseslint,
+      "@typescript-eslint": tseslint,
     },
     rules: {
       quotes: [`error`, `backtick`],
-      'no-unused-vars': `off`,
-      '@typescript-eslint/no-unused-vars': [
+      "no-unused-vars": `off`,
+      "@typescript-eslint/no-unused-vars": [
         `error`,
         {
           argsIgnorePattern: `^_`,
