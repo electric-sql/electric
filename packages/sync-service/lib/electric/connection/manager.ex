@@ -74,7 +74,7 @@ defmodule Electric.Connection.Manager do
       :replication_opts,
       # Database connection pool options
       :pool_opts,
-      # Options specific to `Electric.Timeline`
+      # Basically stack_id and persistent_kv
       :timeline_opts,
       # PID of the replication client
       :replication_client_pid,
@@ -95,17 +95,10 @@ defmodule Electric.Connection.Manager do
       :pg_system_identifier,
       # PostgreSQL timeline ID
       :pg_timeline_id,
-      # User setting that determines whether the table publishing is to be automatically
-      # managed by the stack or whether it's the user's responsibility.
-      :manual_table_publishing?,
       # ID used for process labeling and sibling discovery
       :stack_id,
       # Registry used for stack events
       :stack_events_registry,
-      :inspector,
-      :tweaks,
-      :max_shapes,
-      :persistent_kv,
       purge_all_shapes?: false,
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
@@ -276,14 +269,9 @@ defmodule Electric.Connection.Manager do
         current_step: {:start_replication_client, nil},
         pool_opts: pool_opts,
         timeline_opts: timeline_opts,
-        inspector: Keyword.fetch!(opts, :inspector),
         connection_backoff: {connection_backoff, nil},
         stack_id: stack_id,
-        stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
-        tweaks: Keyword.fetch!(opts, :tweaks),
-        persistent_kv: Keyword.fetch!(opts, :persistent_kv),
-        manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
-        max_shapes: Keyword.fetch!(opts, :max_shapes)
+        stack_events_registry: Keyword.fetch!(opts, :stack_events_registry)
       }
       |> initialize_connection_opts(opts)
 
@@ -460,10 +448,7 @@ defmodule Electric.Connection.Manager do
     end
 
     if timeline_changed? do
-      Electric.Replication.PersistentReplicationState.reset(
-        stack_id: state.stack_id,
-        persistent_kv: state.persistent_kv
-      )
+      Electric.Replication.PersistentReplicationState.reset(state.timeline_opts)
 
       dispatch_stack_event(
         {:warning,
@@ -477,22 +462,11 @@ defmodule Electric.Connection.Manager do
       )
     end
 
-    repl_sup_opts = [
-      stack_id: state.stack_id,
-      inspector: state.inspector,
-      pool_opts: state.pool_opts,
-      replication_opts: state.replication_opts,
-      tweaks: state.tweaks,
-      manual_table_publishing?: state.manual_table_publishing?,
-      persistent_kv: state.persistent_kv,
-      max_shapes: state.max_shapes
-    ]
-
-    case Electric.CoreSupervisor.start_shapes_supervisor(repl_sup_opts) do
+    case Electric.CoreSupervisor.start_shapes_supervisor(stack_id: state.stack_id) do
       {:ok, _pid} ->
         :ok
 
-      {:error, {:already_started, _pid}} ->
+      {:error, :running} ->
         # Shapes supervisor is already running, which can happen if the
         # Connection.Manager is restarting
         :ok

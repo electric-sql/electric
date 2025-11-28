@@ -24,8 +24,17 @@ defmodule Electric.Shapes.Supervisor do
   end
 
   def start_link(opts) do
-    name = Access.get(opts, :name, name(opts))
-    Supervisor.start_link(__MODULE__, opts, name: name)
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    # Start the sup only if the connection subsystem is up
+    case Electric.StatusMonitor.status(stack_id) do
+      %{conn: ready} when ready in [:up, :waiting_on_integrity_checks] ->
+        name = Access.get(opts, :name, name(opts))
+        Supervisor.start_link(__MODULE__, opts, name: name)
+
+      _ ->
+        :ignore
+    end
   end
 
   @impl Supervisor
@@ -38,10 +47,12 @@ defmodule Electric.Shapes.Supervisor do
 
     Logger.info("Starting shape replication pipeline")
 
-    inspector = Electric.StackConfig.lookup!(stack_id, :inspector)
-    persistent_kv = Electric.StackConfig.lookup!(stack_id, :persistent_kv)
-    tweaks = Electric.StackConfig.lookup!(stack_id, :tweaks)
-    publication_manager = Keyword.fetch!(opts, :publication_manager)
+    inspector = Keyword.fetch!(opts, :inspector)
+    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
+
+    connection_manager_opts = Keyword.fetch!(opts, :connection_manager_opts)
+    replication_opts = Keyword.fetch!(connection_manager_opts, :replication_opts)
+    tweaks = Keyword.fetch!(opts, :tweaks)
 
     children = [
       {Task.Supervisor,
@@ -49,7 +60,13 @@ defmodule Electric.Shapes.Supervisor do
       {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, stack_id: stack_id},
       {Electric.Replication.ShapeLogCollector,
        stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv},
-      publication_manager,
+      {Electric.Replication.PublicationManager,
+       stack_id: stack_id,
+       publication_name: Keyword.fetch!(replication_opts, :publication_name),
+       manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
+       db_pool: Electric.Connection.Manager.admin_pool(stack_id),
+       update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0),
+       refresh_period: Keyword.get(tweaks, :publication_refresh_period, 60_000)},
       {Electric.Shapes.DynamicConsumerSupervisor, stack_id: stack_id},
       {Electric.ShapeCache, stack_id: stack_id},
       {Electric.ShapeCache.ExpiryManager, stack_id: stack_id},

@@ -37,7 +37,9 @@ defmodule Electric.StatusMonitorTest do
       assert StatusMonitor.status(stack_id) == %{conn: :up, shape: :up}
     end
 
-    test "when integrity checks not passed, returns :starting", %{stack_id: stack_id} do
+    test "when integrity checks not passed, returns :waiting_on_integrity_checks", %{
+      stack_id: stack_id
+    } do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
       StatusMonitor.mark_pg_lock_acquired(stack_id, self())
       StatusMonitor.mark_replication_client_ready(stack_id, self())
@@ -46,7 +48,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-      assert StatusMonitor.status(stack_id) == %{conn: :starting, shape: :up}
+      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_integrity_checks, shape: :up}
     end
 
     test "when replication client not ready, returns :starting", %{stack_id: stack_id} do

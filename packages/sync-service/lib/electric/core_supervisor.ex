@@ -27,7 +27,8 @@ defmodule Electric.CoreSupervisor do
     connection_manager_opts = Keyword.fetch!(opts, :connection_manager_opts)
 
     children = [
-      {Electric.Connection.Supervisor, connection_manager_opts}
+      {Electric.Connection.Supervisor, connection_manager_opts},
+      {Electric.Shapes.Supervisor, opts} |> Supervisor.child_spec(restart: :transient)
     ]
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
@@ -38,29 +39,7 @@ defmodule Electric.CoreSupervisor do
   initialization sequence.
   """
   def start_shapes_supervisor(opts) do
-    stack_id = Keyword.fetch!(opts, :stack_id)
-    replication_opts = Keyword.fetch!(opts, :replication_opts)
-    tweaks = Keyword.fetch!(opts, :tweaks)
-
-    publication_manager_spec =
-      {Electric.Replication.PublicationManager,
-       stack_id: stack_id,
-       publication_name: Keyword.fetch!(replication_opts, :publication_name),
-       manual_table_publishing?: Keyword.fetch!(opts, :manual_table_publishing?),
-       db_pool: Electric.Connection.Manager.admin_pool(stack_id),
-       update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0),
-       refresh_period: Keyword.get(tweaks, :publication_refresh_period, 60_000)}
-
-    child_spec =
-      Supervisor.child_spec(
-        {
-          Electric.Shapes.Supervisor,
-          stack_id: stack_id, publication_manager: publication_manager_spec
-        },
-        restart: :transient
-      )
-
-    Supervisor.start_child(name(opts), child_spec)
+    Supervisor.restart_child(name(opts), Electric.Shapes.Supervisor)
   end
 
   @doc """
@@ -70,16 +49,6 @@ defmodule Electric.CoreSupervisor do
   Returns :ok if the supervisor was stopped or wasn't running.
   """
   def stop_shapes_supervisor(opts) do
-    case Supervisor.terminate_child(name(opts), Electric.Shapes.Supervisor) do
-      :ok ->
-        Supervisor.delete_child(name(opts), Electric.Shapes.Supervisor)
-        :ok
-
-      {:error, :not_found} ->
-        :ok
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    Supervisor.terminate_child(name(opts), Electric.Shapes.Supervisor)
   end
 end

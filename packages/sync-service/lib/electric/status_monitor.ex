@@ -5,7 +5,7 @@ defmodule Electric.StatusMonitor do
   require Logger
 
   @type status() :: %{
-          conn: :waiting_on_lock | :starting | :up | :sleeping,
+          conn: :waiting_on_lock | :waiting_on_integrity_checks | :starting | :up | :sleeping,
           shape: :starting | :up
         }
 
@@ -60,9 +60,10 @@ defmodule Electric.StatusMonitor do
          replication_client_ready: {true, _},
          admin_connection_pool_ready: {true, _},
          snapshot_connection_pool_ready: {true, _},
-         integrity_checks_passed: {true, _}
-       }),
-       do: :up
+         integrity_checks_passed: {integrity_checks_passed?, _}
+       }) do
+    if integrity_checks_passed?, do: :up, else: :waiting_on_integrity_checks
+  end
 
   defp conn_status_from_results(_), do: :starting
 

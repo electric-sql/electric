@@ -43,17 +43,17 @@ defmodule Electric.Connection.ConnectionManagerTest do
       pool_opts: [pool_size: 2],
       connection_backoff: Connection.Manager.ConnectionBackoff.init(50, 50),
       timeline_opts: [stack_id: stack_id, persistent_kv: ctx.persistent_kv],
-      inspector: ctx.inspector,
-      tweaks: [],
-      max_shapes: nil,
-      persistent_kv: ctx.persistent_kv,
       stack_events_registry: stack_events_registry
     ]
 
     core_sup =
       start_link_supervised!(
         {Electric.CoreSupervisor,
-         stack_id: stack_id, connection_manager_opts: connection_manager_opts},
+         stack_id: stack_id,
+         connection_manager_opts: connection_manager_opts,
+         inspector: ctx.inspector,
+         persistent_kv: ctx.persistent_kv,
+         tweaks: []},
         # The test supervisor under which this one is started has `auto_shutdown` set to
         # `:never`, so we need to make sure the core supervisor is not a significant
         # child, otherwise we'd get the following error:
