@@ -11,7 +11,7 @@ export function prepareElectricUrl(requestUrl: string): URL {
   const electricUrl =
     process.env.NODE_ENV === `production`
       ? `https://api.electric-sql.cloud`
-      : `http://localhost:3000`
+      : `http://localhost:30000`
   const originUrl = new URL(`${electricUrl}/v1/shape`)
 
   // Copy Electric-specific query params
