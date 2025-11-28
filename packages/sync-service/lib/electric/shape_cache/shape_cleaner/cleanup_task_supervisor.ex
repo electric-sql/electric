@@ -19,16 +19,7 @@ defmodule Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor do
   end
 
   def start_link(opts) do
-    {:ok, stack_id} = Keyword.fetch(opts, :stack_id)
-
-    if on_cleanup_callback = Keyword.get(opts, :on_cleanup, nil) do
-      Electric.StackConfig.put(
-        stack_id,
-        {Electric.ShapeCache.ShapeCleaner, :on_cleanup},
-        on_cleanup_callback
-      )
-    end
-
+    stack_id = Keyword.fetch!(opts, :stack_id)
     Task.Supervisor.start_link(name: name(stack_id))
   end
 

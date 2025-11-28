@@ -70,12 +70,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       :ok
     end)
 
-    shape_cache_opts =
-      [
-        stack_id: stack_id
-      ]
-
-    shape_cache_pid = start_link_supervised!({Electric.ShapeCache, shape_cache_opts})
+    shape_cache_pid = start_link_supervised!({Electric.ShapeCache, stack_id: stack_id})
 
     assert_receive :shape_log_collector_ready, 1000
 

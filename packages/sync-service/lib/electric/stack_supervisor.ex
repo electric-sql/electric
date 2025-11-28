@@ -313,10 +313,6 @@ defmodule Electric.StackSupervisor do
       Keyword.fetch!(config.tweaks, :shape_enable_suspend?) and
         Electric.Config.feature_flag_suspend_consumers() in config.feature_flags
 
-    shape_cache_opts = [
-      stack_id: stack_id
-    ]
-
     shape_log_collector =
       Electric.Replication.ShapeLogCollector.name(stack_id)
 
@@ -335,13 +331,7 @@ defmodule Electric.StackSupervisor do
       timeline_opts: [
         stack_id: stack_id,
         persistent_kv: config.persistent_kv
-      ],
-      persistent_kv: config.persistent_kv,
-      shape_cache_opts: shape_cache_opts,
-      inspector: inspector,
-      max_shapes: config.max_shapes,
-      tweaks: config.tweaks,
-      manual_table_publishing?: config.manual_table_publishing?
+      ]
     ]
 
     registry_partitions =
@@ -359,8 +349,11 @@ defmodule Electric.StackSupervisor do
            chunk_bytes_threshold: config.chunk_bytes_threshold,
            snapshot_timeout_to_first_data: config.tweaks[:snapshot_timeout_to_first_data],
            inspector: inspector,
+           persistent_kv: config.persistent_kv,
            shape_hibernate_after: shape_hibernate_after,
-           shape_enable_suspend?: shape_enable_suspend?
+           shape_enable_suspend?: shape_enable_suspend?,
+           manual_table_publishing?: config.manual_table_publishing?,
+           tweaks: config.tweaks
          ]},
         {Electric.AsyncDeleter,
          stack_id: stack_id,
@@ -373,7 +366,12 @@ defmodule Electric.StackSupervisor do
          stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
         {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id, storage: storage]},
         {Electric.MonitoredCoreSupervisor,
-         stack_id: stack_id, connection_manager_opts: connection_manager_opts}
+         stack_id: stack_id,
+         connection_manager_opts: connection_manager_opts,
+         inspector: inspector,
+         persistent_kv: config.persistent_kv,
+         manual_table_publishing?: config.manual_table_publishing?,
+         tweaks: config.tweaks}
       ]
       |> Enum.reject(&is_nil/1)
 

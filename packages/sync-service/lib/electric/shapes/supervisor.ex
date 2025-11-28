@@ -16,9 +16,7 @@ defmodule Electric.Shapes.Supervisor do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
-  def reset_storage(opts) do
-    shape_cache_opts = Keyword.fetch!(opts, :shape_cache_opts)
-    stack_id = Keyword.fetch!(shape_cache_opts, :stack_id)
+  def reset_storage(stack_id) do
     stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
 
     Logger.info("Purging all shapes.")
@@ -26,37 +24,56 @@ defmodule Electric.Shapes.Supervisor do
   end
 
   def start_link(opts) do
-    name = Access.get(opts, :name, name(opts))
-    Supervisor.start_link(__MODULE__, opts, name: name)
+    stack_id = Keyword.fetch!(opts, :stack_id)
+
+    # Start the sup only if the connection subsystem is up
+    case Electric.StatusMonitor.status(stack_id) do
+      %{conn: ready} when ready in [:up, :waiting_on_integrity_checks] ->
+        name = Access.get(opts, :name, name(opts))
+        Supervisor.start_link(__MODULE__, opts, name: name)
+
+      _ ->
+        :ignore
+    end
   end
 
   @impl Supervisor
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
+
     Process.set_label({:replication_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     Logger.info("Starting shape replication pipeline")
 
-    shape_cleaner = Keyword.fetch!(opts, :shape_cleaner)
-    log_collector = Keyword.fetch!(opts, :log_collector)
-    publication_manager = Keyword.fetch!(opts, :publication_manager)
-    consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
-    shape_cache = Keyword.fetch!(opts, :shape_cache)
-    expiry_manager = Keyword.fetch!(opts, :expiry_manager)
-    schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
+    inspector = Keyword.fetch!(opts, :inspector)
+    persistent_kv = Keyword.fetch!(opts, :persistent_kv)
+
+    connection_manager_opts = Keyword.fetch!(opts, :connection_manager_opts)
+    replication_opts = Keyword.fetch!(connection_manager_opts, :replication_opts)
+    tweaks = Keyword.fetch!(opts, :tweaks)
 
     children = [
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
-      shape_cleaner,
-      log_collector,
-      publication_manager,
-      consumer_supervisor,
-      shape_cache,
-      expiry_manager,
-      schema_reconciler,
+      {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, stack_id: stack_id},
+      {Electric.Replication.ShapeLogCollector,
+       stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv},
+      {Electric.Replication.PublicationManager,
+       stack_id: stack_id,
+       publication_name: Keyword.fetch!(replication_opts, :publication_name),
+       manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
+       db_pool: Electric.Connection.Manager.admin_pool(stack_id),
+       update_debounce_timeout: Keyword.get(tweaks, :publication_alter_debounce_ms, 0),
+       refresh_period: Keyword.get(tweaks, :publication_refresh_period, 60_000)},
+      {Electric.Shapes.DynamicConsumerSupervisor, stack_id: stack_id},
+      {Electric.ShapeCache, stack_id: stack_id},
+      {Electric.ShapeCache.ExpiryManager, stack_id: stack_id},
+      {Electric.Replication.SchemaReconciler,
+       stack_id: stack_id,
+       inspector: inspector,
+       period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)},
       canary_spec(stack_id)
     ]
 

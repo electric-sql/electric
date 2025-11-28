@@ -17,6 +17,7 @@ defmodule Electric.Plug.HealthCheckPlug do
     {status_code, status_text} =
       case StatusMonitor.status(config[:stack_id]) do
         %{conn: :waiting_on_lock, shape: _} -> {202, "waiting"}
+        %{conn: :waiting_on_integrity_checks, shape: _} -> {202, "starting"}
         %{conn: :starting, shape: _} -> {202, "starting"}
         %{conn: _, shape: :starting} -> {202, "starting"}
         %{conn: :up, shape: :up} -> {200, "active"}
