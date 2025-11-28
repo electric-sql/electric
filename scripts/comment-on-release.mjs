@@ -2,9 +2,10 @@ import { readFileSync, existsSync } from 'fs'
 import { execSync } from 'child_process'
 
 /**
- * This script comments on PRs that are included in a release.
+ * This script comments on PRs and their linked issues when included in a release.
  * It reads the published packages from the PUBLISHED_PACKAGES environment variable,
- * extracts commit hashes from their changelogs, maps them to PRs, and posts comments.
+ * extracts commit hashes from their changelogs, maps them to PRs, finds linked issues,
+ * and posts comments on both.
  */
 
 const REPO = process.env.GITHUB_REPOSITORY || 'electric-sql/electric'
@@ -53,9 +54,34 @@ async function main() {
 
   console.log(`\nFound ${prToPackages.size} PRs to comment on`)
 
-  // Comment on each PR
+  // Collect issues linked to PRs
+  const issueToPackages = new Map()
+
+  // Comment on each PR and collect linked issues
   for (const [prNumber, packages] of prToPackages) {
     await commentOnPR(prNumber, packages)
+
+    // Find issues that this PR closes/fixes
+    const linkedIssues = await findLinkedIssues(prNumber)
+    for (const issueNumber of linkedIssues) {
+      if (!issueToPackages.has(issueNumber)) {
+        issueToPackages.set(issueNumber, [])
+      }
+      // Merge packages, avoiding duplicates
+      for (const pkg of packages) {
+        const existing = issueToPackages.get(issueNumber)
+        if (!existing.some((p) => p.name === pkg.name && p.version === pkg.version)) {
+          existing.push(pkg)
+        }
+      }
+    }
+  }
+
+  console.log(`\nFound ${issueToPackages.size} linked issues to comment on`)
+
+  // Comment on each linked issue
+  for (const [issueNumber, packages] of issueToPackages) {
+    await commentOnIssue(issueNumber, packages)
   }
 }
 
@@ -176,6 +202,75 @@ Thanks for contributing to Electric!`
     console.log(`  Commented on PR #${prNumber}`)
   } catch (e) {
     console.error(`  Failed to comment on PR #${prNumber}:`, e.message)
+  }
+}
+
+async function findLinkedIssues(prNumber) {
+  const [owner, repo] = REPO.split('/')
+  const query = `
+    query($owner: String!, $repo: String!, $pr: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $pr) {
+          closingIssuesReferences(first: 10) {
+            nodes {
+              number
+            }
+          }
+        }
+      }
+    }
+  `
+
+  try {
+    const result = execSync(
+      `gh api graphql -f query='${query}' -F owner='${owner}' -F repo='${repo}' -F pr=${prNumber} --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[].number'`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim()
+
+    if (result) {
+      const issues = result.split('\n').map((n) => parseInt(n, 10))
+      console.log(`  PR #${prNumber} links to issues: ${issues.join(', ')}`)
+      return issues
+    }
+  } catch (e) {
+    // PR might not have any linked issues
+    console.log(`  PR #${prNumber} has no linked issues`)
+  }
+  return []
+}
+
+async function commentOnIssue(issueNumber, packages) {
+  const packageList = packages
+    .map((p) => `- \`${p.name}@${p.version}\``)
+    .join('\n')
+
+  const body = `A fix for this issue has been released! :rocket:
+
+The following packages include the fix:
+
+${packageList}
+
+Thanks for reporting!`
+
+  try {
+    // Check if we already commented on this issue
+    const existingComments = execSync(
+      `gh api repos/${REPO}/issues/${issueNumber}/comments --jq '[.[] | select(.body | contains("A fix for this issue has been released!"))] | length'`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim()
+
+    if (parseInt(existingComments, 10) > 0) {
+      console.log(`  Already commented on issue #${issueNumber}, skipping`)
+      return
+    }
+
+    execSync(
+      `gh issue comment ${issueNumber} --repo ${REPO} --body "${body.replace(/"/g, '\\"')}"`,
+      { stdio: 'inherit' }
+    )
+    console.log(`  Commented on issue #${issueNumber}`)
+  } catch (e) {
+    console.error(`  Failed to comment on issue #${issueNumber}:`, e.message)
   }
 }
 
