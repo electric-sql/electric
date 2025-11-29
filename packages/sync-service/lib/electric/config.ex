@@ -38,7 +38,9 @@ defmodule Electric.Config do
 
   @build_env Mix.env()
 
-  @known_feature_flags ~w[allow_subqueries suspend_consumers]
+  @feature_flag_allow_subqueries :allow_subqueries
+  @feature_flag_suspend_consumers :suspend_consumers
+  @known_feature_flags [@feature_flag_allow_subqueries, @feature_flag_suspend_consumers]
 
   @defaults [
     ## Database
@@ -91,12 +93,16 @@ defmodule Electric.Config do
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
     feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),
+    allow_subqueries?: Mix.env() == :test,
     publication_refresh_period: 60_000,
     schema_reconciler_period: 60_000,
     snapshot_timeout_to_first_data: :timer.seconds(30)
   ]
 
   @installation_id_key "electric_installation_id"
+
+  def feature_flag_allow_subqueries, do: @feature_flag_allow_subqueries
+  def feature_flag_suspend_consumers, do: @feature_flag_suspend_consumers
 
   def default(key) do
     case Keyword.fetch!(@defaults, key) do
@@ -473,7 +479,7 @@ defmodule Electric.Config do
     |> String.split(",")
     |> Enum.map(&String.trim/1)
     |> Enum.reject(&(&1 == ""))
-    |> Enum.split_with(&(&1 in @known_feature_flags))
+    |> split_into_known_and_unknown_flags()
     |> case do
       {known, []} ->
         known
@@ -481,7 +487,22 @@ defmodule Electric.Config do
       {_, unknown} ->
         raise Dotenvy.Error,
           message:
-            "Unknown feature flags specified: #{inspect(unknown)}. Known feature flags: #{inspect(@known_feature_flags)}"
+            "Unknown feature flags specified: #{format_flags(unknown)}. " <>
+              "Known feature flags: #{format_flags(@known_feature_flags)}"
     end
   end
+
+  defp split_into_known_and_unknown_flags(inputs) do
+    known_flags = Map.new(@known_feature_flags, &{Atom.to_string(&1), &1})
+
+    Enum.reduce(inputs, {[], []}, fn input, {known, unknown} ->
+      if flag = Map.get(known_flags, input) do
+        {[flag | known], unknown}
+      else
+        {known, [input | unknown]}
+      end
+    end)
+  end
+
+  defp format_flags(list), do: Enum.join(list, ", ")
 end

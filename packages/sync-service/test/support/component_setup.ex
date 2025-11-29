@@ -112,8 +112,7 @@ defmodule Support.ComponentSetup do
              inspector: Map.get(ctx, :inspector, nil),
              shape_changes_registry:
                Map.get(ctx, :registry, Electric.StackSupervisor.registry_name(stack_id)),
-             shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000),
-             feature_flags: Electric.Config.get_env(:feature_flags)
+             shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000)
            ],
            seed_config
          )}
@@ -492,6 +491,7 @@ defmodule Support.ComponentSetup do
       max_age: 60,
       stale_age: 300,
       allow_shape_deletion: true,
+      allow_subqueries?: true,
       secret: ctx[:secret]
     ]
     |> Keyword.merge(
