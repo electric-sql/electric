@@ -4,8 +4,11 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   alias Electric.Postgres.Xid
   alias Electric.Postgres.SnapshotQuery
 
+  require Xid
+
   defstruct waiting_move_ins: %{},
             filtering_move_ins: [],
+            touch_tracker: %{},
             move_in_buffering_snapshot: nil
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -14,6 +17,7 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   @type t() :: %__MODULE__{
           waiting_move_ins: %{move_in_name() => pg_snapshot()},
           filtering_move_ins: list({pg_snapshot(), keys :: list(String.t())}),
+          touch_tracker: %{String.t() => pos_integer()},
           move_in_buffering_snapshot: nil | pg_snapshot()
         }
 
@@ -22,8 +26,8 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   end
 
   @doc """
-  Add information about a new move-in to the state for which we're waiting
-  and update the buffering boundary.
+  Add information about a new move-in to the state for which we're waiting.
+  Snapshot can be nil initially and will be set later when the query begins.
   """
   @spec add_waiting(t(), move_in_name(), pg_snapshot()) :: t()
   def add_waiting(%__MODULE__{waiting_move_ins: waiting_move_ins} = state, name, snapshot) do
@@ -37,24 +41,52 @@ defmodule Electric.Shapes.Consumer.MoveIns do
     }
   end
 
+  @doc """
+  Set the snapshot for a waiting move-in when it becomes known.
+  """
+  @spec set_snapshot(t(), move_in_name(), pg_snapshot()) :: t()
+  def set_snapshot(%__MODULE__{waiting_move_ins: waiting_move_ins} = state, name, snapshot) do
+    new_move_ins =
+      Map.update!(waiting_move_ins, name, fn {_, moved_values} -> {snapshot, moved_values} end)
+
+    new_buffering_snapshot = make_move_in_buffering_snapshot(new_move_ins)
+
+    %{
+      state
+      | waiting_move_ins: new_move_ins,
+        move_in_buffering_snapshot: new_buffering_snapshot
+    }
+  end
+
   @spec make_move_in_buffering_snapshot(%{move_in_name() => pg_snapshot()}) :: nil | pg_snapshot()
   # The fake global snapshot allows us to check if a transaction is not visible in any of the pending snapshots
   # instead of checking each snapshot individually.
   defp make_move_in_buffering_snapshot(waiting_move_ins) when waiting_move_ins == %{}, do: nil
 
   defp make_move_in_buffering_snapshot(waiting_move_ins) do
-    waiting_move_ins
-    |> Map.values()
-    |> Enum.reduce({:infinity, -1, []}, fn {xmin, xmax, xip_list},
-                                           {global_xmin, global_xmax, global_xip_list} ->
-      {Kernel.min(global_xmin, xmin), Kernel.max(global_xmax, xmax), global_xip_list ++ xip_list}
-    end)
+    snapshots =
+      waiting_move_ins
+      |> Map.values()
+      |> Enum.map(fn {snapshot, _} -> snapshot end)
+      |> Enum.reject(&is_nil/1)
+
+    case snapshots do
+      [] ->
+        nil
+
+      _ ->
+        Enum.reduce(snapshots, {:infinity, -1, []}, fn {xmin, xmax, xip_list},
+                                                       {global_xmin, global_xmax, global_xip_list} ->
+          {Kernel.min(global_xmin, xmin), Kernel.max(global_xmax, xmax),
+           global_xip_list ++ xip_list}
+        end)
+    end
   end
 
   @doc """
-  Change a move-in from "waiting" to "filtering" and update the buffering boundary.
+  Change a move-in from "waiting" to "filtering".
   """
-  @spec change_to_filtering(t(), move_in_name(), list(String.t())) :: t()
+  @spec change_to_filtering(t(), move_in_name(), MapSet.t(String.t())) :: t()
   def change_to_filtering(%__MODULE__{} = state, name, key_set) do
     {snapshot, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
     filtering_move_ins = [{snapshot, key_set} | state.filtering_move_ins]
@@ -85,21 +117,6 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   end
 
   @doc """
-  Check if the transaction can be processed immediately or needs to be buffered.
-
-  As a side effect, it also removes completed move-ins.
-  """
-  @spec check_txn(t(), Transaction.t()) :: {:continue, t()} | {:start_buffering, t()}
-  def check_txn(%__MODULE__{move_in_buffering_snapshot: snapshot} = state, %Transaction{} = txn) do
-    if is_nil(snapshot) or Transaction.visible_in_snapshot?(txn, snapshot) do
-      state = remove_completed(state, txn)
-      {:continue, state}
-    else
-      {:start_buffering, state}
-    end
-  end
-
-  @doc """
   Check if a change is already visible in one of the completed move-ins.
 
   A visible change means it needs to be skipped to avoid duplicates.
@@ -112,5 +129,71 @@ defmodule Electric.Shapes.Consumer.MoveIns do
     Enum.any?(filters, fn {snapshot, key_set} ->
       Transaction.visible_in_snapshot?(xid, snapshot) and MapSet.member?(key_set, key)
     end)
+  end
+
+  @doc """
+  Track a touch for a non-delete change.
+  Returns updated touch_tracker.
+  """
+  @spec track_touch(t(), pos_integer(), Changes.change()) :: t()
+
+  def track_touch(%__MODULE__{} = state, _xid, %Changes.DeletedRecord{}),
+    do: state
+
+  def track_touch(%__MODULE__{touch_tracker: touch_tracker} = state, xid, %{key: key}) do
+    %{state | touch_tracker: Map.put(touch_tracker, key, xid)}
+  end
+
+  @doc """
+  Garbage collect touches that are visible in all pending snapshots.
+  A touch is visible if its xid is before the minimum xmin of all waiting snapshots.
+  """
+  @spec gc_touch_tracker(t()) :: t()
+  def gc_touch_tracker(
+        %__MODULE__{
+          move_in_buffering_snapshot: nil,
+          waiting_move_ins: waiting_move_ins
+        } = state
+      ) do
+    # If there are waiting move-ins but buffering_snapshot is nil (all snapshots unknown),
+    # keep all touches. Otherwise (no waiting move-ins), clear all touches.
+    case waiting_move_ins do
+      empty when empty == %{} -> %{state | touch_tracker: %{}}
+      _ -> state
+    end
+  end
+
+  def gc_touch_tracker(
+        %__MODULE__{
+          touch_tracker: touch_tracker,
+          move_in_buffering_snapshot: {xmin, _xmax, _xip_list}
+        } =
+          state
+      ) do
+    # Remove touches that are before the minimum xmin (visible in all snapshots)
+    %{
+      state
+      | touch_tracker:
+          Map.reject(touch_tracker, fn {_key, touch_xid} ->
+            touch_xid < xmin
+          end)
+    }
+  end
+
+  @doc """
+  Check if a query result row should be skipped because a fresher version exists in the stream.
+  Skip if: touch exists AND touch xid is NOT visible in query snapshot.
+  """
+  @spec should_skip_query_row?(%{String.t() => pos_integer()}, pg_snapshot(), String.t()) ::
+          boolean()
+  def should_skip_query_row?(touch_tracker, _snapshot, key)
+      when not is_map_key(touch_tracker, key) do
+    false
+  end
+
+  def should_skip_query_row?(touch_tracker, snapshot, key) do
+    touch_xid = Map.fetch!(touch_tracker, key)
+    # Skip if touch is NOT visible in snapshot (means we have fresher data in stream)
+    not Transaction.visible_in_snapshot?(touch_xid, snapshot)
   end
 end

@@ -363,6 +363,49 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def append_move_in_snapshot_to_log_filtered!(
+        name,
+        %MS{log_table: log_table} = opts,
+        touch_tracker,
+        snapshot
+      ) do
+    initial_offset = current_offset(opts)
+    ref = make_ref()
+
+    Stream.unfold(initial_offset, fn offset ->
+      case :ets.next_lookup(log_table, {:movein, {name, nil}}) do
+        {{:movein, {^name, _}}, [{_, {key, _} = item}]} ->
+          # Check if this row should be skipped
+          if Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
+               touch_tracker,
+               snapshot,
+               key
+             ) do
+            # Skip this row - don't increment offset
+            {[], offset}
+          else
+            offset = LogOffset.increment(offset)
+            {{{:offset, storage_offset(offset)}, item}, offset}
+          end
+
+        _ ->
+          send(self(), {ref, offset})
+          nil
+      end
+    end)
+    |> Stream.reject(&(&1 == []))
+    |> Stream.chunk_every(500)
+    |> Stream.each(&:ets.insert(log_table, &1))
+    |> Stream.run()
+
+    :ets.match_delete(log_table, {{:movein, {name, :_}}, :_})
+
+    resulting_offset = receive(do: ({^ref, offset} -> offset))
+
+    {{initial_offset, resulting_offset}, opts}
+  end
+
+  @impl Electric.ShapeCache.Storage
   def cleanup!(%MS{} = opts) do
     for table <- tables(opts),
         do: ignoring_exceptions(fn -> :ets.delete(table) end, ArgumentError)
