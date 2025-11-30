@@ -51,6 +51,43 @@ defmodule Electric.Shapes.PartialModes do
     }
   end
 
+  @doc """
+  Asynchronous version of query_move_in that doesn't block on snapshot.
+  Sends {:pg_snapshot_known, name, snapshot} immediately when snapshot is known.
+  Sends {:query_move_in_complete, name, key_set, snapshot} when query completes.
+  """
+  def query_move_in_async(supervisor, shape_handle, %Shape{} = shape, where, opts) do
+    consumer_pid = Access.fetch!(opts, :consumer_pid)
+    pool = Manager.pool_name(opts[:stack_id], :snapshot)
+    results_fn = Access.fetch!(opts, :results_fn)
+
+    Task.Supervisor.start_child(supervisor, fn ->
+      try do
+        SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
+          stack_id: opts[:stack_id],
+          query_reason: "move_in_query",
+          snapshot_info_fn: fn _, pg_snapshot, _ ->
+            # Send snapshot notification immediately instead of blocking
+            send(consumer_pid, {:pg_snapshot_known, opts[:move_in_name], pg_snapshot})
+          end,
+          query_fn: fn conn, pg_snapshot, _ ->
+            result =
+              Querying.query_move_in(conn, opts[:stack_id], shape_handle, shape, where)
+              |> results_fn.(pg_snapshot)
+
+            {key_set, snapshot} = result
+            send(consumer_pid, {:query_move_in_complete, opts[:move_in_name], key_set, snapshot})
+          end
+        )
+      rescue
+        error ->
+          send(consumer_pid, {:query_move_in_error, opts[:move_in_name], error, __STACKTRACE__})
+      end
+    end)
+
+    :ok
+  end
+
   def query_move_in(supervisor, shape_handle, %Shape{} = shape, where, opts) do
     parent = self()
     pool = Manager.pool_name(opts[:stack_id], :snapshot)

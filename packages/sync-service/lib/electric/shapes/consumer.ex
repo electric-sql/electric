@@ -291,7 +291,7 @@ defmodule Electric.Shapes.Consumer do
         state
       ) do
     Logger.debug(fn ->
-      "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs in it's #{dep_handle} dependency"
+      "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
@@ -315,15 +315,31 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  def handle_info({:query_move_in_complete, name, key_set}, state) do
+  def handle_info({:pg_snapshot_known, name, snapshot}, state) do
+    Logger.debug(fn -> "Snapshot known for move-in #{name}" end)
+
+    # Update the snapshot in waiting_move_ins
+    move_handling_state = MoveIns.set_snapshot(state.move_handling_state, name, snapshot)
+
+    # Garbage collect touches visible in all known snapshots
+    state = %{state | move_handling_state: move_handling_state}
+    state = State.gc_touch_tracker(state)
+
+    {:noreply, state, state.hibernate_after}
+  end
+
+  def handle_info({:query_move_in_complete, name, key_set, snapshot}, state) do
     Logger.debug(fn ->
       "Consumer query move in complete for #{name} with #{length(key_set)} keys"
     end)
 
-    {state, notification} = MoveHandling.query_complete(state, name, key_set)
+    {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
     state = notify_new_changes(state, notification)
 
-    {:noreply, state, {:continue, :consume_buffer}}
+    # Garbage collect touches after query completes (no buffer consumption needed)
+    state = State.gc_touch_tracker(state)
+
+    {:noreply, state, state.hibernate_after}
   end
 
   def handle_info({:query_move_in_error, _, error, stacktrace}, state) do
@@ -444,6 +460,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
 
+  # Keep buffering for initial snapshot
   defp handle_txn(txn, %State{buffering?: true} = state),
     do: {:cont, State.add_to_buffer(state, txn)}
 
@@ -453,27 +470,12 @@ defmodule Electric.Shapes.Consumer do
         {:cont, consider_flushed(%{state | initial_snapshot_state: initial_snapshot_state}, txn)}
 
       {:continue, new_initial_snapshot_state} ->
-        handle_txn_or_start_buffering(txn, %{
-          state
-          | initial_snapshot_state: new_initial_snapshot_state
-        })
+        handle_txn_in_span(txn, %{state | initial_snapshot_state: new_initial_snapshot_state})
     end
   end
 
-  defp handle_txn(txn, state), do: handle_txn_or_start_buffering(txn, state)
-
-  defp handle_txn_or_start_buffering(
-         txn,
-         %State{move_handling_state: move_handling_state} = state
-       ) do
-    case MoveIns.check_txn(move_handling_state, txn) do
-      {:start_buffering, new_move_handling_state} ->
-        handle_txn(txn, %{state | move_handling_state: new_move_handling_state, buffering?: true})
-
-      {:continue, new_move_handling_state} ->
-        handle_txn_in_span(txn, %{state | move_handling_state: new_move_handling_state})
-    end
-  end
+  # Remove the move-in buffering check - just process immediately
+  defp handle_txn(txn, state), do: handle_txn_in_span(txn, state)
 
   defp handle_txn_in_span(txn, %State{} = state) do
     ot_attrs =
@@ -508,6 +510,8 @@ defmodule Electric.Shapes.Consumer do
 
     extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
 
+    Logger.debug(fn -> "Extra refs: #{inspect(extra_refs)}" end)
+
     case filter_changes(
            changes,
            shape,
@@ -535,6 +539,12 @@ defmodule Electric.Shapes.Consumer do
 
       {changes, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
+
+        # Track touches for all filtered changes
+        state =
+          Enum.reduce(changes, state, fn change, acc ->
+            State.track_change(acc, xid, change)
+          end)
 
         {lines, total_size} = prepare_log_entries(changes, xid, shape)
         writer = ShapeCache.Storage.append_to_log!(lines, writer)

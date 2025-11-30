@@ -27,6 +27,14 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate hibernate(opts), to: PureFileStorage
   defdelegate compact(opts, keep_complete_chunks), to: PureFileStorage
   defdelegate append_move_in_snapshot_to_log!(name, writer_state), to: PureFileStorage
+
+  defdelegate append_move_in_snapshot_to_log_filtered!(
+                name,
+                writer_state,
+                touch_tracker,
+                snapshot
+              ), to: PureFileStorage
+
   defdelegate append_control_message!(control_message, writer_state), to: PureFileStorage
   defdelegate write_move_in_snapshot!(stream, name, opts), to: PureFileStorage
 

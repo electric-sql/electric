@@ -233,4 +233,23 @@ defmodule Electric.Shapes.Consumer.State do
     do: xmin
 
   def initial_snapshot_xmin(%__MODULE__{}), do: nil
+
+  @doc """
+  Track a change in the touch tracker.
+  """
+  @spec track_change(t(), pos_integer(), Electric.Replication.Changes.change()) :: t()
+  def track_change(%__MODULE__{move_handling_state: move_handling_state} = state, xid, change) do
+    %{state | move_handling_state: MoveIns.track_touch(move_handling_state, xid, change)}
+  end
+
+  @doc """
+  Garbage collect touches that are visible in all pending snapshots.
+  """
+  @spec gc_touch_tracker(t()) :: t()
+  def gc_touch_tracker(%__MODULE__{move_handling_state: move_handling_state} = state) do
+    %{
+      state
+      | move_handling_state: MoveIns.gc_touch_tracker(move_handling_state)
+    }
+  end
 end
