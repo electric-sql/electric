@@ -132,16 +132,7 @@ defmodule Support.ComponentSetup do
 
   def with_async_deleter(ctx) do
     storage_dir =
-      case ctx do
-        %{storage: {_, opts}} ->
-          opts[:storage_dir]
-
-        %{tmp_dir: tmp_dir} when is_binary(tmp_dir) ->
-          tmp_dir
-
-        _ ->
-          nil
-      end ||
+      ctx[:storage_dir] || ctx[:tmp_dir] ||
         Path.join(
           System.tmp_dir!(),
           "electric-trash-#{System.monotonic_time()}-#{System.unique_integer([:positive, :monotonic])}"
