@@ -141,7 +141,7 @@ defmodule Electric.Application do
         schema_reconciler_period: get_env(opts, :schema_reconciler_period),
         cleanup_interval_ms: get_env(opts, :cleanup_interval_ms),
         shape_hibernate_after: get_env(opts, :shape_hibernate_after),
-        conn_fullsweep_after: get_env(opts, :conn_fullsweep_after)
+        conn_max_requests: get_env(opts, :conn_max_requests)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )
@@ -272,6 +272,7 @@ defmodule Electric.Application do
 
   def api_server(Bandit, opts) do
     router_opts = api_plug_opts(opts)
+    tweaks = Keyword.get(opts, :tweaks, [])
 
     ti_opts =
       if num_acceptors = get_env(opts, :http_api_num_acceptors) do
@@ -280,11 +281,22 @@ defmodule Electric.Application do
         []
       end
 
+    shared_http_opts =
+      if max_requests = Keyword.get(tweaks, :conn_max_requests) do
+        [max_requests: max_requests]
+      else
+        []
+      end
+
     [
       {Bandit,
-       plug: {Electric.Plug.Router, router_opts},
-       port: get_env(opts, :service_port),
-       thousand_island_options: thousand_island_options(opts ++ ti_opts)}
+       [
+         plug: {Electric.Plug.Router, router_opts},
+         port: get_env(opts, :service_port),
+         http_1_options: shared_http_opts,
+         http_2_options: shared_http_opts,
+         thousand_island_options: thousand_island_options(opts ++ ti_opts)
+       ]}
     ]
   end
 
@@ -306,15 +318,7 @@ defmodule Electric.Application do
   end
 
   defp thousand_island_options(opts) do
-    tweaks = Keyword.get(opts, :tweaks, [])
     acceptor_opts = Keyword.take(opts, [:num_acceptors])
-
-    genserver_options =
-      if fullsweep_after = Keyword.get(tweaks, :conn_fullsweep_after) do
-        [genserver_options: [spawn_opt: [fullsweep_after: fullsweep_after]]]
-      else
-        []
-      end
 
     send_opts =
       case get_env(opts, :tcp_send_timeout) do
@@ -331,7 +335,7 @@ defmodule Electric.Application do
 
     transport_opts = [transport_options: ipv6_opts ++ send_opts]
 
-    genserver_options ++ acceptor_opts ++ transport_opts
+    acceptor_opts ++ transport_opts
   end
 
   defp cowboy_options(opts) do

@@ -86,11 +86,11 @@ defmodule Electric.Config do
     # Should we terminate consumer processes after `shape_hibernate_after` ms
     # or just hibernate them?
     shape_enable_suspend?: true,
-    # Sets fullsweep_after for ThousandIsland handler processes
-    # https://www.erlang.org/doc/apps/erts/erlang.html#spawn_opt/4
-    # set to 0 to clean all binaries from heap immediately
-    # or to some +ve int to occasionally gc.
-    conn_fullsweep_after: 10,
+    # Sets max_requests for Bandit handler processes:
+    # https://hexdocs.pm/bandit/Bandit.html#t:http_1_options/0
+    # "The maximum number of requests to serve in a single HTTP/{1,2}
+    # connection before closing the connection"
+    conn_max_requests: 50,
     ## Performance tweaks
     publication_alter_debounce_ms: 0,
     ## Misc

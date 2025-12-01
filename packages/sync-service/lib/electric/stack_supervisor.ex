@@ -132,9 +132,9 @@ defmodule Electric.StackSupervisor do
                        type: :pos_integer,
                        default: Electric.Config.default(:snapshot_timeout_to_first_data)
                      ],
-                     conn_fullsweep_after: [
+                     conn_max_requests: [
                        type: :pos_integer,
-                       default: Electric.Config.default(:conn_fullsweep_after)
+                       default: Electric.Config.default(:conn_max_requests)
                      ]
                    ]
                  ],

@@ -2,4 +2,4 @@
 '@core/sync-service': patch
 ---
 
-Cleanup API config and set fullsweep_after for conn processes
+Cleanup API config and terminate request handler processes periodically
