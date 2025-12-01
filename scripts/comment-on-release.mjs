@@ -11,9 +11,7 @@ import { execSync } from 'child_process'
 const REPO = process.env.GITHUB_REPOSITORY || 'electric-sql/electric'
 
 async function main() {
-  const publishedPackages = JSON.parse(
-    process.env.PUBLISHED_PACKAGES || '[]'
-  )
+  const publishedPackages = JSON.parse(process.env.PUBLISHED_PACKAGES || '[]')
 
   if (publishedPackages.length === 0) {
     console.log('No published packages found')
@@ -71,7 +69,11 @@ async function main() {
       data.prs.add(prNumber)
       // Merge packages, avoiding duplicates
       for (const pkg of packages) {
-        if (!data.packages.some((p) => p.name === pkg.name && p.version === pkg.version)) {
+        if (
+          !data.packages.some(
+            (p) => p.name === pkg.name && p.version === pkg.version
+          )
+        ) {
           data.packages.push(pkg)
         }
       }
