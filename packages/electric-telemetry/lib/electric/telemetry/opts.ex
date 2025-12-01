@@ -71,7 +71,8 @@ defmodule ElectricTelemetry.Opts do
           otlp_headers: [type: :map, default: %{}],
           export_period: [type: :integer, default: :timer.seconds(30)],
           resource: [type: :map, default: %{}]
-        ]
+        ],
+        default: []
       ]
     ]
   end
