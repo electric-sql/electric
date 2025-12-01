@@ -78,9 +78,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_all_stored_shapes({parent, _init, storage}) do
-    send(parent, {__MODULE__, :get_all_stored_shapes})
-    Storage.get_all_stored_shapes(storage)
+  def get_stored_shapes({parent, _init, storage}, shape_handles) do
+    send(parent, {__MODULE__, :get_stored_shapes, shape_handles})
+    Storage.get_stored_shapes(storage, shape_handles)
   end
 
   @impl Electric.ShapeCache.Storage

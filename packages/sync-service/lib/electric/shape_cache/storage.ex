@@ -53,17 +53,18 @@ defmodule Electric.ShapeCache.Storage do
   @callback get_all_stored_shape_handles(compiled_opts()) ::
               {:ok, MapSet.t(shape_handle())} | {:error, term()}
 
-  @doc "Retrieve all stored shapes"
-  @callback get_all_stored_shapes(compiled_opts()) ::
-              {:ok,
-               %{
-                 shape_handle() => {
-                   shape_def :: Shape.t(),
-                   snapshot_started? :: boolean(),
-                   latest_offset :: LogOffset.t()
-                 }
-               }}
-              | {:error, term()}
+  @doc "Retrieve stored shapes for given shape handles"
+  @callback get_stored_shapes(compiled_opts(), Enumerable.t(shape_handle())) ::
+              %{
+                shape_handle() =>
+                  {:ok,
+                   {
+                     shape_def :: Shape.t(),
+                     snapshot_started? :: boolean(),
+                     latest_offset :: LogOffset.t()
+                   }}
+                  | {:error, term()}
+              }
 
   @doc "Get the directory where metadata backups are stored."
   @callback metadata_backup_dir(compiled_opts()) :: String.t() | nil
@@ -248,8 +249,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def get_all_stored_shapes({mod, opts}) do
-    mod.get_all_stored_shapes(opts)
+  def get_stored_shapes({mod, opts}, shape_handles) do
+    mod.get_stored_shapes(opts, shape_handles)
   end
 
   @impl __MODULE__

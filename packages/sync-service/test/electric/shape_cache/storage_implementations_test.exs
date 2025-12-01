@@ -754,19 +754,20 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.get_all_stored_shapes/1" do
+    describe "#{module_name}.get_stored_shapes/1" do
       @describetag skip_initialise: true
       setup :start_storage
 
       test "retrieves no shapes if no shapes persisted", %{storage_base: storage_base} do
-        assert {:ok, %{}} = Storage.get_all_stored_shapes(storage_base)
+        assert %{} = Storage.get_stored_shapes(storage_base, [])
       end
 
       test "retrieves stored shapes", %{storage: opts, storage_base: storage_base} do
         _writer = Storage.init_writer!(opts, @shape)
+        invalid_handle = "invalid-handle"
 
-        assert {:ok, %{@shape_handle => {parsed, false, _}}} =
-                 Storage.get_all_stored_shapes(storage_base)
+        assert %{@shape_handle => {:ok, {parsed, false, _}}, ^invalid_handle => {:error, _}} =
+                 Storage.get_stored_shapes(storage_base, [@shape_handle, invalid_handle])
 
         assert @shape == parsed
       end
@@ -775,8 +776,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         _writer = Storage.init_writer!(opts, @shape)
         :ok = Storage.mark_snapshot_as_started(opts)
 
-        assert {:ok, %{@shape_handle => {parsed, true, _}}} =
-                 Storage.get_all_stored_shapes(storage_base)
+        assert %{@shape_handle => {:ok, {parsed, true, _}}} =
+                 Storage.get_stored_shapes(storage_base, [@shape_handle])
 
         assert @shape == parsed
       end

@@ -172,28 +172,21 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def get_all_stored_shapes(stack_opts) do
-    case get_all_stored_shape_handles(stack_opts) do
-      {:ok, shape_handles} ->
-        Task.Supervisor.async_stream(
-          stack_task_supervisor(stack_opts.stack_id),
-          shape_handles,
-          fn handle ->
-            case recover_stored_shape(stack_opts, handle) do
-              {:ok, shape_data} -> [{handle, shape_data}]
-              _ -> []
-            end
-          end,
-          timeout: :infinity,
-          ordered: false
-        )
-        |> Enum.flat_map(fn {:ok, res} -> res end)
-        |> Map.new()
-        |> then(&{:ok, &1})
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+  def get_stored_shapes(stack_opts, shape_handles) do
+    Task.Supervisor.async_stream(
+      stack_task_supervisor(stack_opts.stack_id),
+      shape_handles,
+      fn handle ->
+        case recover_stored_shape(stack_opts, handle) do
+          {:ok, shape_data} -> {handle, {:ok, shape_data}}
+          {:error, reason} -> {handle, {:error, reason}}
+        end
+      end,
+      timeout: :infinity,
+      ordered: false
+    )
+    |> Enum.map(fn {:ok, res} -> res end)
+    |> Map.new()
   end
 
   @spec recover_stored_shape(map(), Electric.stack_id()) ::

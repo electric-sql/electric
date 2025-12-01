@@ -41,7 +41,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     {:ok, state, []} =
       new_state(ctx,
         stored_shapes: %{
-          shape_handle => {shape, true, LogOffset.last_before_real_offsets()}
+          shape_handle => {:ok, {shape, true, LogOffset.last_before_real_offsets()}},
+          "invalid" => {:error, :corrupted}
         }
       )
 
@@ -316,12 +317,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
 
       # First lifecycle: no shapes in storage, start empty, add a shape, terminate to create backup
-      stub_storage(
-        metadata_backup_dir: fn _ -> backup_base_dir end,
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end
-      )
+      stub_storage(metadata_backup_dir: fn _ -> backup_base_dir end)
 
-      expect_storage(get_all_stored_shapes: fn _ -> {:ok, %{}} end)
+      expect_storage(
+        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
+        get_stored_shapes: fn _, _ -> %{} end
+      )
 
       state = %{
         storage: {Mock.Storage, []},
@@ -341,10 +342,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       ShapeStatus.remove(state)
 
-      # Second lifecycle: should load from backup (so must NOT call get_all_stored_shapes)
+      # Second lifecycle: should load from backup (so must NOT call get_stored_shapes)
       stub_storage([force: true],
-        get_all_stored_shapes: fn _ ->
-          flunk("get_all_stored_shapes should not be called when backup exists")
+        get_stored_shapes: fn _, _ ->
+          flunk("get_stored_shapes should not be called when backup exists")
         end
       )
 
@@ -365,12 +366,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
 
       # First lifecycle: create backup containing one shape
-      stub_storage(
-        metadata_backup_dir: fn _ -> backup_base_dir end,
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end
-      )
+      stub_storage(metadata_backup_dir: fn _ -> backup_base_dir end)
 
-      expect_storage(get_all_stored_shapes: fn _ -> {:ok, %{}} end)
+      expect_storage(
+        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
+        get_stored_shapes: fn _, _ -> %{} end
+      )
 
       state = %{
         storage: {Mock.Storage, []},
@@ -390,8 +391,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       expect_storage([force: true],
         get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
-        # After integrity failure, initialise will call load/1 -> get_all_stored_shapes
-        get_all_stored_shapes: fn _ -> {:ok, %{}} end
+        # After integrity failure, initialise will call load/1 -> get_stored_shapes
+        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
+        get_stored_shapes: fn _, _ -> %{} end
       )
 
       assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
@@ -422,8 +424,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   defp new_state(ctx, opts \\ []) do
     stub_storage([force: true], metadata_backup_dir: fn _ -> nil end)
 
+    stored_shapes = Access.get(opts, :stored_shapes, %{})
+    stored_shape_handles = Map.keys(stored_shapes) |> MapSet.new()
+
     expect_storage(
-      get_all_stored_shapes: fn _ -> {:ok, Access.get(opts, :stored_shapes, %{})} end
+      get_all_stored_shape_handles: fn _ -> {:ok, stored_shape_handles} end,
+      get_stored_shapes: fn _, _ -> Access.get(opts, :stored_shapes, %{}) end
     )
 
     state = %{
