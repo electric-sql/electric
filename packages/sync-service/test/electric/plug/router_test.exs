@@ -2250,46 +2250,33 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "a move-out from the inner shape invalidates all outer shapes", %{
+    test "a move-out from the inner shape is propagated to the outer shape", %{
       opts: opts,
       db_conn: db_conn
     } do
-      # TEMPORARY: this test is expected to fail once proper move handling is added
-      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
-      assert %{status: 200} =
-               conn =
-               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
-               |> Router.call(opts)
+      assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
-      shape_handle = get_resp_shape_handle(conn)
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "headers" => %{"operation" => "insert", "tags" => [tag]}
+             } = data
 
-      response = Jason.decode!(conn.resp_body)
+      assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
-      # Should contain the data record and the snapshot-end control message
-      assert length(response) == 2
-
-      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} =
-               Enum.find(response, &Map.has_key?(&1, "key"))
-
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
-
-      task =
-        Task.async(fn ->
-          conn("GET", "/v1/shape", %{
-            table: "child",
-            offset: "0_0",
-            handle: shape_handle,
-            where: where,
-            live: true
-          })
-          |> Router.call(opts)
-        end)
+      task = live_shape_req(req, opts)
 
       Postgrex.query!(db_conn, "UPDATE parent SET value = 3 WHERE id = 1", [])
 
-      assert %{status: 409} = Task.await(task)
+      assert {_req, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
+
+      assert %{
+               "headers" => %{
+                 "event" => "move-out",
+                 "patterns" => [%{"pos" => 0, "value" => ^tag}]
+               }
+             } = data
     end
 
     @tag with_sql: [
@@ -2298,46 +2285,36 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "a move-in from the inner shape invalidates all outer shapes", %{
+    test "a move-in from the inner shape causes a query and new entries in the outer shape", %{
       opts: opts,
-      db_conn: db_conn
+      db_conn: db_conn,
+      stack_id: stack_id
     } do
-      # TEMPORARY: this test is expected to fail once proper move handling is added
-      where = "parent_id in (SELECT id FROM parent WHERE value = 1)"
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
+      assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
-      assert %{status: 200} =
-               conn =
-               conn("GET", "/v1/shape", %{table: "child", offset: "-1", where: where})
-               |> Router.call(opts)
+      tag =
+        :crypto.hash(:md5, stack_id <> req.handle <> "1")
+        |> Base.encode16(case: :lower)
 
-      shape_handle = get_resp_shape_handle(conn)
+      assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
+      assert %{"operation" => "insert", "tags" => [^tag]} = data["headers"]
+      assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
-      response = Jason.decode!(conn.resp_body)
+      task = live_shape_req(req, opts)
 
-      # Should contain the data record and the snapshot-end control message
-      assert length(response) == 2
-
-      assert %{"value" => %{"id" => "1", "parent_id" => "1", "value" => "10"}} =
-               Enum.find(response, &Map.has_key?(&1, "key"))
-
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
-
-      task =
-        Task.async(fn ->
-          conn("GET", "/v1/shape", %{
-            table: "child",
-            offset: "0_0",
-            handle: shape_handle,
-            where: where,
-            live: true
-          })
-          |> Router.call(opts)
-        end)
-
+      # Move in reflects in the new shape without invalidating it
       Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
 
-      assert %{status: 409} = Task.await(task)
+      tag2 =
+        :crypto.hash(:md5, stack_id <> req.handle <> "2")
+        |> Base.encode16(case: :lower)
+
+      assert {_, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
+      assert %{"id" => "2", "parent_id" => "2", "value" => "20"} = data["value"]
+
+      assert %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]} =
+               data["headers"]
     end
 
     @tag with_sql: [
@@ -2365,7 +2342,7 @@ defmodule Electric.Plug.RouterTest do
       assert %{"headers" => %{"control" => "snapshot-end"}} =
                Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
 
-      # Updating the parent in a way that doesn't change the condition doesn't drop the shape
+      # Updating the parent in a way that doesn't change the condition
       task = live_shape_req(req, opts)
       Postgrex.query!(db_conn, "UPDATE parent SET other_value = 13 WHERE id = 1")
       # This change should thus be visible
@@ -2374,7 +2351,7 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200, [%{"value" => %{"id" => "1", "other_value" => "2"}}, _]} =
                Task.await(task)
 
-      # Adding another parent row in a way that's not changing the target value set doesn't drop the shape
+      # Adding another parent row in a way that's not changing the target value
       task = live_shape_req(req, opts)
       Postgrex.query!(db_conn, "INSERT INTO parent (id, value, other_value) VALUES (3, 10, 30)")
       # This change should thus be visible
@@ -2385,11 +2362,10 @@ defmodule Electric.Plug.RouterTest do
 
       # But adding a new value to the target set does
       task = live_shape_req(req, opts)
+      Postgrex.query!(db_conn, "INSERT INTO child (id, value, other_value) VALUES (2, 20, 4)", [])
       Postgrex.query!(db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
-      # This should not be visible
-      Postgrex.query!(db_conn, "UPDATE child SET other_value = 4 WHERE id = 1")
 
-      assert {_, 409, _} = Task.await(task)
+      assert {_, 200, [%{"value" => %{"id" => "2", "other_value" => "4"}}, _]} = Task.await(task)
     end
 
     @tag with_sql: [
@@ -2431,7 +2407,8 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, opts)
       Postgrex.query!(db_conn, "UPDATE grandparent SET value = 10 WHERE id = 2")
 
-      assert {_, 409, _} = Task.await(task)
+      assert {_, 409, _} =
+               Task.await(task)
 
       # And fresh view should now see everything
       assert {_, 200, response} = shape_req(orig_req, opts)
@@ -2447,10 +2424,6 @@ defmodule Electric.Plug.RouterTest do
                %{"value" => %{"id" => "1", "value" => "2"}},
                %{"value" => %{"id" => "2", "value" => "20"}}
              ] = Enum.sort_by(results, & &1["value"]["id"])
-
-      # Also verify the control message is present
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
 
     @tag with_sql: [
@@ -2484,31 +2457,39 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200, [%{"value" => %{"id" => "1", "name" => "Team C"}}, _]} =
                Task.await(task)
 
-      # Move-in should cause a 409
+      # Move-in should cause data to appear
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
 
-      assert {_, 409, _} = Task.await(task)
+      tag =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
+        |> Base.encode16(case: :lower)
 
-      # And new shape should have the correct data
-      assert {_, 200, response} = shape_req(orig_req, ctx.opts)
+      assert {req, 200,
+              [
+                %{
+                  "value" => %{"id" => "2", "name" => "Team B"},
+                  "headers" => %{"tags" => [^tag]}
+                },
+                _
+              ]} =
+               Task.await(task)
 
-      # Should contain 2 data records and the snapshot-end control message
-      assert length(response) == 3
+      # And move-out should be propagated
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "DELETE FROM members WHERE user_id = 1 AND team_id = 2")
 
-      # Filter out control messages to get just the data records
-      data = Enum.filter(response, &Map.has_key?(&1, "key"))
-      assert length(data) == 2
-
-      assert [
-               %{"value" => %{"id" => "1", "name" => "Team C"}},
-               %{"value" => %{"id" => "2", "name" => "Team B"}}
-             ] =
-               Enum.sort_by(data, & &1["value"]["id"])
-
-      # Also verify the control message is present
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
+      assert {_, 200,
+              [
+                %{
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [%{"pos" => 0, "value" => ^tag}]
+                  }
+                },
+                _
+              ]} =
+               Task.await(task)
     end
 
     @tag with_sql: [
@@ -2556,27 +2537,39 @@ defmodule Electric.Plug.RouterTest do
         "UPDATE members SET flag = TRUE WHERE (user_id, team_id) = (2, 2)"
       )
 
-      assert {_, 409, _} = Task.await(task)
+      tag =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:2" <> "team_id:2")
+        |> Base.encode16(case: :lower)
 
-      # And new shape should have the correct data
-      assert {_, 200, response} = shape_req(orig_req, ctx.opts)
+      assert {req, 200,
+              [
+                %{
+                  "headers" => %{"tags" => [^tag]},
+                  "value" => %{"id" => "2", "role" => "Member"}
+                },
+                _
+              ]} =
+               Task.await(task)
 
-      # Should contain 2 data records and the snapshot-end control message
-      assert length(response) == 3
+      # And move-out should be propagated
+      task = live_shape_req(req, ctx.opts)
 
-      # Filter out control messages to get just the data records
-      data = Enum.filter(response, &Map.has_key?(&1, "key"))
-      assert length(data) == 2
+      Postgrex.query!(
+        ctx.db_conn,
+        "UPDATE members SET flag = FALSE WHERE (user_id, team_id) = (2, 2)"
+      )
 
-      assert [
-               %{"value" => %{"id" => "1", "role" => "Admin"}},
-               %{"value" => %{"id" => "2", "role" => "Member"}}
-             ] =
-               Enum.sort_by(data, & &1["value"]["id"])
-
-      # Also verify the control message is present
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
+      assert {_, 200,
+              [
+                %{
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [%{"pos" => 0, "value" => ^tag}]
+                  }
+                },
+                _
+              ]} =
+               Task.await(task)
     end
 
     @tag with_sql: [
@@ -2614,27 +2607,12 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
-      assert {_, 409, _} = Task.await(task)
+      tag =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "20")
+        |> Base.encode16(case: :lower)
 
-      # And new shape should have the correct data
-      assert {_, 200, response} = shape_req(base_req, ctx.opts)
-
-      # Should contain 3 data records and the snapshot-end control message
-      assert length(response) == 4
-
-      # Filter out control messages to get just the data records
-      data = Enum.filter(response, &Map.has_key?(&1, "key"))
-      assert length(data) == 3
-
-      assert [
-               %{"value" => %{"id" => "1", "value" => "10"}},
-               %{"value" => %{"id" => "2", "value" => "10"}},
-               %{"value" => %{"id" => "3", "value" => "20"}}
-             ] = Enum.sort_by(data, & &1["value"]["id"])
-
-      # Also verify the control message is present
-      assert %{"headers" => %{"control" => "snapshot-end"}} =
-               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
+      assert {_, 200, [%{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}}, _]} =
+               Task.await(task)
     end
   end
 

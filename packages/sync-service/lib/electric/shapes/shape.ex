@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Shape do
   @moduledoc """
   Struct describing the requested shape
   """
+  alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Replication.Eval.Expr
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
@@ -35,11 +36,14 @@ defmodule Electric.Shapes.Shape do
     :explicitly_selected_columns,
     shape_dependencies: [],
     shape_dependencies_handles: [],
+    tag_structure: [],
     log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
     replica: @default_replica
   ]
+
+  @type handle() :: String.t()
 
   @type replica() :: :full | :default
   @type table_info() :: %{
@@ -61,6 +65,7 @@ defmodule Electric.Shapes.Shape do
           where: Electric.Replication.Eval.Expr.t() | nil,
           selected_columns: [String.t(), ...],
           explicitly_selected_columns: [String.t(), ...],
+          tag_structure: [String.t() | [String.t(), ...]],
           replica: replica(),
           storage: storage_config() | nil,
           shape_dependencies: [t(), ...],
@@ -238,8 +243,13 @@ defmodule Electric.Shapes.Shape do
          storage: Map.get(opts, :storage) || %{compaction: :disabled},
          shape_dependencies: shape_dependencies,
          log_mode: Map.fetch!(opts, :log_mode)
-       }}
+       }
+       |> fill_tag_structure()}
     end
+  end
+
+  defp fill_tag_structure(shape) do
+    %{shape | tag_structure: SubqueryMoves.move_in_tag_structure(shape)}
   end
 
   defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
@@ -514,42 +524,52 @@ defmodule Electric.Shapes.Shape do
   Updates, on the other hand, may be converted to an "new record" or a "deleted record"
   if the previous/new version of the updated row isn't in the shape.
   """
-  def convert_change(shape, change, extra_refs \\ %{})
+  def convert_change(shape, change, opts \\ [])
 
   def convert_change(%__MODULE__{root_table: table}, %{relation: relation}, _)
       when table != relation,
       do: []
 
-  def convert_change(%__MODULE__{where: nil, flags: %{selects_all_columns: true}}, change, _) do
+  def convert_change(
+        %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
+        change,
+        opts
+      ) do
     # If the change actually doesn't change any columns, we can skip it - this is possible on Postgres but we don't care for those.
     if is_struct(change, Changes.UpdatedRecord) and change.changed_columns == MapSet.new() do
       []
     else
-      [change]
+      [fill_move_tags(change, shape, opts[:stack_id], opts[:shape_handle])]
     end
   end
 
   def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _), do: [change]
 
   def convert_change(
-        %__MODULE__{where: where, selected_columns: selected_columns},
+        %__MODULE__{where: where, selected_columns: selected_columns} = shape,
         change,
-        extra_refs
+        opts
       )
       when is_struct(change, Changes.NewRecord)
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
-    if WhereClause.includes_record?(where, record, extra_refs),
-      do: [filter_change_columns(selected_columns, change)],
-      else: []
+    if WhereClause.includes_record?(where, record, opts[:extra_refs] || %{}) do
+      change
+      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
+      |> filter_change_columns(selected_columns)
+      |> List.wrap()
+    else
+      []
+    end
   end
 
   def convert_change(
-        %__MODULE__{where: where, selected_columns: selected_columns},
+        %__MODULE__{where: where, selected_columns: selected_columns} = shape,
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
-        extra_refs
+        opts
       ) do
+    extra_refs = opts[:extra_refs] || %{}
     old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs)
     new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs)
 
@@ -562,20 +582,75 @@ defmodule Electric.Shapes.Shape do
       end
 
     converted_changes
-    |> Enum.map(&filter_change_columns(selected_columns, &1))
-    |> Enum.filter(&filtered_columns_changed/1)
+    |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
+    |> Enum.map(&filter_change_columns(&1, selected_columns))
+    |> Enum.filter(&filtered_columns_changed?/1)
   end
 
-  defp filter_change_columns(nil, change), do: change
+  defp filter_change_columns(change, nil), do: change
 
-  defp filter_change_columns(selected_columns, change) do
+  defp filter_change_columns(change, selected_columns) do
     Changes.filter_columns(change, selected_columns)
   end
 
-  defp filtered_columns_changed(%Changes.UpdatedRecord{old_record: record, record: record}),
+  defp fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
+
+  defp fill_move_tags(
+         %Changes.NewRecord{record: record} = change,
+         %__MODULE__{
+           tag_structure: tag_structure
+         },
+         stack_id,
+         shape_handle
+       ) do
+    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
+    %{change | move_tags: move_tags}
+  end
+
+  defp fill_move_tags(
+         %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
+         %__MODULE__{tag_structure: tag_structure},
+         stack_id,
+         shape_handle
+       ) do
+    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
+
+    old_move_tags =
+      make_tags_from_pattern(tag_structure, old_record, stack_id, shape_handle) --
+        move_tags
+
+    %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
+  end
+
+  defp fill_move_tags(
+         %Changes.DeletedRecord{old_record: record} = change,
+         %__MODULE__{
+           tag_structure: tag_structure
+         },
+         stack_id,
+         shape_handle
+       ) do
+    %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
+  end
+
+  defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
+    Enum.map(patterns, fn pattern ->
+      Enum.map(pattern, fn
+        column_name when is_binary(column_name) ->
+          SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
+
+        {:hash_together, columns} ->
+          column_parts = Enum.map(columns, &(&1 <> ":" <> Map.get(record, &1)))
+          SubqueryMoves.make_value_hash(stack_id, shape_handle, Enum.join(column_parts, ":"))
+      end)
+      |> Enum.join("/")
+    end)
+  end
+
+  defp filtered_columns_changed?(%Changes.UpdatedRecord{old_record: record, record: record}),
     do: false
 
-  defp filtered_columns_changed(_), do: true
+  defp filtered_columns_changed?(_), do: true
 
   # If neither oid nor schema/table name matches, then shape is not affected
   def is_affected_by_relation_change?(
@@ -674,7 +749,8 @@ defmodule Electric.Shapes.Shape do
          replica: String.to_existing_atom(replica),
          shape_dependencies: shape_dependencies,
          log_mode: String.to_existing_atom(Map.get(data, "log_mode", "full"))
-       }}
+       }
+       |> fill_tag_structure()}
     end
   end
 

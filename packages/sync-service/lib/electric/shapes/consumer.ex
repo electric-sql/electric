@@ -1,8 +1,13 @@
 defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
-  import Electric.Postgres.Xid, only: [compare: 2]
-  import Electric.Replication.LogOffset, only: [is_virtual_offset: 1, last_before_real_offsets: 0]
+  alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Shapes.Consumer.InitialSnapshot
+  alias Electric.Shapes.Consumer.MoveHandling
+  alias Electric.Shapes.Consumer.State
+
+  import Electric.Shapes.Consumer.State, only: :macros
+  require Electric.Replication.LogOffset
 
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
@@ -34,6 +39,12 @@ defmodule Electric.Shapes.Consumer do
     GenServer.call(consumer, :initial_state, 30_000)
   end
 
+  def register_for_changes(stack_id, shape_handle) do
+    ref = make_ref()
+    Registry.register(Electric.StackSupervisor.registry_name(stack_id), shape_handle, ref)
+    ref
+  end
+
   @spec await_snapshot_start(Electric.stack_id(), ShapeCache.shape_handle(), timeout()) ::
           :started | {:error, any()}
   def await_snapshot_start(stack_id, shape_handle, timeout \\ @default_snapshot_timeout)
@@ -48,18 +59,6 @@ defmodule Electric.Shapes.Consumer do
     stack_id
     |> consumer_pid(shape_handle)
     |> GenServer.call({:subscribe_materializer, pid})
-  end
-
-  @doc false
-  # use in tests to avoid race conditions. registers `pid` to be notified
-  # when the `shape_handle` consumer has processed every transaction.
-  # Transactions that we skip because of xmin logic do not generate
-  # a notification
-  @spec monitor(Electric.stack_id(), ShapeCache.shape_handle(), pid()) :: reference()
-  def monitor(stack_id, shape_handle, pid \\ self()) do
-    stack_id
-    |> consumer_pid(shape_handle)
-    |> GenServer.call({:monitor, pid})
   end
 
   @spec whereis(Electric.stack_id(), ShapeCache.shape_handle()) :: pid() | nil
@@ -100,7 +99,7 @@ defmodule Electric.Shapes.Consumer do
   def init(config) do
     activate_mocked_functions_from_test_process()
 
-    %{stack_id: stack_id, shape_handle: shape_handle} = config
+    %{stack_id: stack_id, shape_handle: shape_handle, otel_ctx: otel_ctx} = config
 
     Process.set_label({:consumer, shape_handle})
     Process.flag(:trap_exit, true)
@@ -109,34 +108,14 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {action, config} = Map.pop!(config, :action)
-
     {:ok, shape} = ShapeCache.ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle)
 
-    state =
-      Map.merge(config, %{
-        shape: shape,
-        snapshot_started: false,
-        awaiting_snapshot_start: [],
-        buffer: [],
-        monitors: [],
-        cleaned?: false,
-        terminating?: false,
-        txn_offset_mapping: [],
-        materializer_subscribed?: false,
-        hibernate_after:
-          Electric.StackConfig.lookup(
-            stack_id,
-            :shape_hibernate_after,
-            Electric.Config.default(:shape_hibernate_after)
-          )
-      })
-
-    {:ok, state, {:continue, {:init_consumer, action}}}
+    {:ok, State.new(stack_id, shape_handle, shape),
+     {:continue, {:init_consumer, config.action, otel_ctx}}}
   end
 
   @impl GenServer
-  def handle_continue({:init_consumer, action}, state) do
+  def handle_continue({:init_consumer, action, otel_ctx}, state) do
     %{
       stack_id: stack_id,
       shape: shape,
@@ -154,29 +133,13 @@ defmodule Electric.Shapes.Consumer do
 
     writer = ShapeCache.Storage.init_writer!(storage, shape)
 
-    {:ok, latest_offset, pg_snapshot} = ShapeCache.Storage.get_current_position(storage)
-
-    # When writing the snapshot initially, we don't know ahead of time the real last offset for the
-    # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
-    # however many there may be. That means the clients will be using that as the latest offset.
-    # In order to avoid confusing the clients, we make sure that we preserve that functionality
-    # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
-    normalized_latest_offset =
-      if is_virtual_offset(latest_offset), do: last_before_real_offsets(), else: latest_offset
-
-    state =
-      Map.merge(state, %{
-        latest_offset: normalized_latest_offset,
-        pg_snapshot: pg_snapshot,
-        storage: storage,
-        writer: writer
-      })
+    state = State.initialize(state, storage, writer)
 
     :ok =
       ShapeCache.ShapeStatus.initialise_shape(
         stack_id,
         shape_handle,
-        normalized_latest_offset
+        state.latest_offset
       )
 
     if all_materializers_alive?(state) && subscribe(state, action) do
@@ -196,7 +159,7 @@ defmodule Electric.Shapes.Consumer do
             shape: shape,
             shape_handle: shape_handle,
             storage: storage,
-            otel_ctx: state.otel_ctx
+            otel_ctx: otel_ctx
           }
         )
 
@@ -208,6 +171,19 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_continue(:stop_and_clean, state) do
     stop_and_clean(state)
+  end
+
+  def handle_continue(:consume_buffer, %State{buffer: buffer} = state) do
+    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
+    state = %{state | buffer: [], buffering?: false}
+
+    case handle_txns(Enum.reverse(buffer), state) do
+      %State{terminating?: true} = state ->
+        {:noreply, state, {:continue, :stop_and_clean}}
+
+      state ->
+        {:noreply, state, state.hibernate_after}
+    end
   end
 
   @impl GenServer
@@ -222,14 +198,14 @@ defmodule Electric.Shapes.Consumer do
     {:reply, ref, %{state | monitors: [{pid, ref} | monitors]}, state.hibernate_after}
   end
 
-  def handle_call(:await_snapshot_start, _from, %{snapshot_started: true} = state) do
+  def handle_call(:await_snapshot_start, _from, state) when is_snapshot_started(state) do
     {:reply, :started, state, state.hibernate_after}
   end
 
-  def handle_call(:await_snapshot_start, from, %{awaiting_snapshot_start: waiters} = state) do
+  def handle_call(:await_snapshot_start, from, state) do
     Logger.debug("Starting a wait on the snapshot #{state.shape_handle} for #{inspect(from)}}")
 
-    {:noreply, %{state | awaiting_snapshot_start: [from | waiters]}}
+    {:noreply, State.add_waiter(state, from), state.hibernate_after}
   end
 
   def handle_call({:handle_event, event, trace_context}, _from, state) do
@@ -257,35 +233,19 @@ defmodule Electric.Shapes.Consumer do
 
   @impl GenServer
   def handle_cast(
-        {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list}},
+        {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list} = snapshot},
         %{shape_handle: shape_handle} = state
       ) do
     Logger.debug(
-      "Snapshot known for shape_handle: #{shape_handle} xmin: #{xmin}, xmax: #{xmax}, xip_list: #{Enum.join(xip_list, ",")}"
+      "Snapshot known for shape_handle: #{shape_handle} xmin: #{xmin}, xmax: #{xmax}, xip_list: #{inspect(xip_list)}"
     )
 
-    state =
-      %{
-        xmin: xmin,
-        xmax: xmax,
-        xip_list: xip_list,
-        filter_txns?: true
-      }
-      |> set_pg_snapshot(state)
-
-    case handle_txns(state.buffer, %{state | buffer: []}) do
-      %{terminating?: true} = state ->
-        stop_and_clean(state)
-
-      state ->
-        {:noreply, state, state.hibernate_after}
-    end
+    {:noreply, State.set_initial_snapshot(state, snapshot), {:continue, :consume_buffer}}
   end
 
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
     Logger.debug("Snapshot started shape_handle: #{shape_handle}")
-    state = set_snapshot_started(state)
-    {:noreply, state, state.hibernate_after}
+    {:noreply, mark_snapshot_started(state), state.hibernate_after}
   end
 
   def handle_cast(
@@ -300,34 +260,78 @@ defmodule Electric.Shapes.Consumer do
     end
 
     state
-    |> reply_to_snapshot_waiters({:error, error})
+    |> State.reply_to_snapshot_waiters({:error, error})
     |> stop_and_clean()
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
-    state =
-      state.pg_snapshot
-      |> set_pg_snapshot(state)
-      |> set_snapshot_started()
+    state = mark_snapshot_started(state)
 
     {:noreply, state, state.hibernate_after}
   end
 
   @impl GenServer
   def handle_info({ShapeCache.Storage, :flushed, offset}, state) do
-    {state, offset} = align_to_txn_boundary(state, offset)
+    {state, offset} = State.align_offset_to_txn_boundary(state, offset)
 
     ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, offset)
     {:noreply, state, state.hibernate_after}
   end
 
+  # This is part of the storage module contract - messages tagged storage should be applied to the writer state.
   def handle_info({ShapeCache.Storage, message}, state) do
     writer = ShapeCache.Storage.apply_message(state.writer, message)
     {:noreply, %{state | writer: writer}, state.hibernate_after}
   end
 
-  def handle_info({:materializer_changes, shape_handle, events}, state) do
-    Logger.debug("Materializer changes for #{shape_handle}: #{inspect(events)}")
+  def handle_info(
+        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}},
+        state
+      ) do
+    Logger.debug(fn ->
+      "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs in it's #{dep_handle} dependency"
+    end)
+
+    feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
+    tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
+
+    should_invalidate? = own_materializer_exists?(state) or not tagged_subqueries_enabled?
+
+    if should_invalidate? do
+      # We currently cannot support causally correct event processing of 3+ level dependency trees
+      # so we're just invalidating this middle shape instead
+      stop_and_clean(state)
+    else
+      {state, notification} =
+        state
+        |> MoveHandling.process_move_ins(dep_handle, move_in)
+        |> MoveHandling.process_move_outs(dep_handle, move_out)
+
+      notify_new_changes(state, notification)
+
+      {:noreply, state}
+    end
+  end
+
+  def handle_info({:query_move_in_complete, name, key_set}, state) do
+    Logger.debug(fn ->
+      "Consumer query move in complete for #{name} with #{length(key_set)} keys"
+    end)
+
+    {state, notification} = MoveHandling.query_complete(state, name, key_set)
+    state = notify_new_changes(state, notification)
+
+    {:noreply, state, {:continue, :consume_buffer}}
+  end
+
+  def handle_info({:query_move_in_error, _, error, stacktrace}, state) do
+    Logger.error(
+      "Error querying move in for #{state.shape_handle}: #{Exception.format(:error, error, stacktrace)}"
+    )
+
+    reraise(error, stacktrace)
+
+    # No-op as the raise will crash the process
     stop_and_clean(state)
   end
 
@@ -386,7 +390,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp consumer_can_suspend?(state) do
-    state.snapshot_started and Enum.empty?(state.shape.shape_dependencies_handles) and
+    is_snapshot_started(state) and not Shape.has_dependencies?(state.shape) and
       not state.materializer_subscribed?
   end
 
@@ -407,7 +411,7 @@ defmodule Electric.Shapes.Consumer do
       :removed -> :ok
     end
 
-    reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
+    State.reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
 
   # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
@@ -424,78 +428,48 @@ defmodule Electric.Shapes.Consumer do
     clean_table(root_table_id, state)
 
     state
-    |> reply_to_snapshot_waiters({:error, "Shape relation changed before snapshot was ready"})
+    |> State.reply_to_snapshot_waiters(
+      {:error, "Shape relation changed before snapshot was ready"}
+    )
     |> mark_for_removal()
   end
 
-  # Buffer incoming transactions until we know our pg_snapshot
-  defp handle_event(%Transaction{xid: xid} = txn, %{pg_snapshot: nil} = state) do
-    Logger.debug(fn ->
-      "Consumer for #{state.shape_handle} buffering 1 transaction with xid #{xid}"
-    end)
+  defp handle_event(%Transaction{} = txn, state), do: handle_txns([txn], state)
 
-    %{state | buffer: state.buffer ++ [txn]}
-  end
+  defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
 
-  defp handle_event(%Transaction{} = txn, %{pg_snapshot: %{xmin: xmin, xmax: xmax}} = state) do
-    OpenTelemetry.with_child_span(
-      "shape_write.consumer.handle_txns",
-      [snapshot_xmin: xmin, snapshot_xmax: xmax],
-      state.stack_id,
-      fn -> handle_txns([txn], state) end
-    )
-  end
+  defp handle_txn(txn, %State{buffering?: true} = state),
+    do: {:cont, State.add_to_buffer(state, txn)}
 
-  defp handle_txns(txns, state) do
-    Enum.reduce_while(txns, state, &handle_txn/2)
-  end
+  defp handle_txn(txn, state) when needs_initial_filtering(state) do
+    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn) do
+      {:consider_flushed, initial_snapshot_state} ->
+        {:cont, consider_flushed(%{state | initial_snapshot_state: initial_snapshot_state}, txn)}
 
-  defp handle_txn(txn, %{pg_snapshot: %{filter_txns?: false}} = state) do
-    handle_txn_in_span(txn, state)
-  end
-
-  defp handle_txn(
-         %Transaction{xid: xid} = txn,
-         %{pg_snapshot: %{xmin: xmin, xmax: xmax, xip_list: xip_list}} = state
-       ) do
-    # xmin is the lowest active transaction ID, there can be txids > xmin that have
-    # committed and so would already be included in the shape's data snapshot.
-    # For this reason we store the full pg_snapshot and compare the incoming xid not only
-    # against xmin but also against xip_list, the list of transactions active at the time of
-    # taking the original data snapshot.
-    #
-    # See Postgres docs for details on the pg_snapshot fields:
-    # https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-PG-SNAPSHOT-PARTS
-    cond do
-      compare(xid, xmin) == :lt ->
-        # Transaction already included in the shape snapshot because it had committed before
-        # the snapshot transaction started.
-        {:cont, consider_flushed(state, txn)}
-
-      compare(xid, xmax) == :lt and xid not in xip_list ->
-        # Transaction commited sometime between xmin and the start of the snapshot transaction.
-        {:cont, consider_flushed(state, txn)}
-
-      compare(xid, xmin) == :eq or xid in xip_list ->
-        # Transaction was active at the time of taking the snapshot so its effects weren't
-        # visible to the snapshot transaction.
-        handle_txn_in_span(txn, state)
-
-      compare(xid, xmax) != :lt ->
-        # The first transaction received from the replication stream whose xid >= xmax.
-        #
-        # From now on the only kinds of transactions coming in from the replication stream will
-        # be either those active at the time of taking the snapshot or those commited after the
-        # snapshot transaction had started. Both kinds need to be appended to the shape log.
-        #
-        # At this point we can disable transaction filtering on the snapshot to avoid further
-        # xid comparisons.
-        state = stop_filtering_txns(state)
-        handle_txn_in_span(txn, state)
+      {:continue, new_initial_snapshot_state} ->
+        handle_txn_or_start_buffering(txn, %{
+          state
+          | initial_snapshot_state: new_initial_snapshot_state
+        })
     end
   end
 
-  defp handle_txn_in_span(txn, state) do
+  defp handle_txn(txn, state), do: handle_txn_or_start_buffering(txn, state)
+
+  defp handle_txn_or_start_buffering(
+         txn,
+         %State{move_handling_state: move_handling_state} = state
+       ) do
+    case MoveIns.check_txn(move_handling_state, txn) do
+      {:start_buffering, new_move_handling_state} ->
+        handle_txn(txn, %{state | move_handling_state: new_move_handling_state, buffering?: true})
+
+      {:continue, new_move_handling_state} ->
+        handle_txn_in_span(txn, %{state | move_handling_state: new_move_handling_state})
+    end
+  end
+
+  defp handle_txn_in_span(txn, %State{} = state) do
     ot_attrs =
       [xid: txn.xid, total_num_changes: txn.num_changes] ++
         shape_attrs(state.shape_handle, state.shape)
@@ -528,7 +502,12 @@ defmodule Electric.Shapes.Consumer do
 
     extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
 
-    case filter_changes(changes, shape, extra_refs) do
+    case filter_changes(
+           changes,
+           shape,
+           {xid, state.move_handling_state, state.stack_id, state.shape_handle},
+           extra_refs
+         ) do
       :includes_truncate ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
         #       present in the transaction, we're considering the whole transaction empty, and
@@ -539,7 +518,7 @@ defmodule Electric.Shapes.Consumer do
 
         state = mark_for_removal(state)
 
-        {:halt, notify(txn, state)}
+        {:halt, state}
 
       {_, 0, _} ->
         Logger.debug(fn ->
@@ -559,8 +538,6 @@ defmodule Electric.Shapes.Consumer do
           actual_num_changes: num_changes
         })
 
-        ShapeCache.ShapeStatus.set_latest_offset(state.stack_id, shape_handle, last_log_offset)
-
         notify_new_changes(state, changes, last_log_offset)
 
         lag = calculate_replication_lag(txn)
@@ -579,19 +556,36 @@ defmodule Electric.Shapes.Consumer do
         )
 
         {:cont,
-         notify(txn, %{
+         %{
            state
            | writer: writer,
              latest_offset: last_log_offset,
              txn_offset_mapping:
                state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
-         })}
+         }}
     end
   end
 
-  defp notify_new_changes(state, changes, latest_log_offset) do
+  defp notify_new_changes(state, nil), do: state
+
+  defp notify_new_changes(state, {changes, upper_bound}) do
+    notify_new_changes(state, changes, upper_bound)
+  end
+
+  @spec notify_new_changes(
+          state :: map(),
+          changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
+          latest_log_offset :: LogOffset.t()
+        ) :: map()
+  defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
+    ShapeCache.ShapeStatus.set_latest_offset(
+      state.stack_id,
+      state.shape_handle,
+      latest_log_offset
+    )
+
     if state.materializer_subscribed? do
-      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes)
+      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
     end
 
     Registry.dispatch(
@@ -610,27 +604,9 @@ defmodule Electric.Shapes.Consumer do
     state
   end
 
-  defp set_pg_snapshot(pg_snapshot, %{pg_snapshot: nil} = state) when not is_nil(pg_snapshot) do
-    ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
-    %{state | pg_snapshot: pg_snapshot}
-  end
-
-  defp set_pg_snapshot(_, state), do: state
-
-  defp set_snapshot_started(%{snapshot_started: false} = state) do
-    ShapeCache.Storage.mark_snapshot_as_started(state.storage)
-    set_snapshot_started(%{state | snapshot_started: true})
-  end
-
-  defp set_snapshot_started(%{shape_handle: shape_handle} = state) do
-    :ok = ShapeCache.ShapeStatus.mark_snapshot_as_started(state.stack_id, shape_handle)
-    reply_to_snapshot_waiters(state, :started)
-  end
-
-  defp stop_filtering_txns(state) do
-    pg_snapshot = Map.put(state.pg_snapshot, :filter_txns?, false)
-    ShapeCache.Storage.set_pg_snapshot(pg_snapshot, state.storage)
-    %{state | pg_snapshot: pg_snapshot}
+  defp mark_snapshot_started(%State{stack_id: stack_id, shape_handle: shape_handle} = state) do
+    :ok = ShapeCache.ShapeStatus.mark_snapshot_as_started(stack_id, shape_handle)
+    State.mark_snapshot_started(state)
   end
 
   # termination and cleanup is now done in stages.
@@ -644,7 +620,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp mark_for_removal(state) do
     # remove the writer state to save on a pointless Storage.terminate/1 call
-    Map.delete(%{state | terminating?: true}, :writer)
+    %{state | terminating?: true, writer: nil}
   end
 
   defp stop_with_reason(reason, state) do
@@ -652,7 +628,7 @@ defmodule Electric.Shapes.Consumer do
       case reason do
         # map reason to a clean shutdown to avoid exceptions/errors
         {:error, _} = error ->
-          state = state |> reply_to_snapshot_waiters(error) |> mark_for_removal()
+          state = state |> State.reply_to_snapshot_waiters(error) |> mark_for_removal()
           {@stop_and_clean_reason, state}
 
         reason ->
@@ -666,40 +642,49 @@ defmodule Electric.Shapes.Consumer do
     {:stop, @stop_and_clean_reason, mark_for_removal(state)}
   end
 
-  defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: []} = state, _reply) do
-    state
-  end
-
-  defp reply_to_snapshot_waiters(%{awaiting_snapshot_start: waiters} = state, reply) do
-    for client <- List.wrap(waiters), not is_nil(client), do: GenServer.reply(client, reply)
-    %{state | awaiting_snapshot_start: []}
-  end
-
-  defp notify(_txn, %{monitors: []} = state), do: state
-
-  defp notify(%{xid: xid}, %{monitors: monitors} = state) do
-    for {pid, ref} <- monitors, do: send(pid, {__MODULE__, ref, xid})
-
-    state
-  end
-
   # Apply shape filter to keep only relevant changes, returning the list of changes.
   # Marks the last change, and infers the last offset after possible splits.
-  defp filter_changes(changes, shape, extra_refs, change_acc \\ [], total_ops_acc \\ 0)
-  defp filter_changes([], _shape, _, [], 0), do: {[], 0, nil}
+  defp filter_changes(
+         changes,
+         shape,
+         snapshot_filtering,
+         extra_refs,
+         change_acc \\ [],
+         total_ops_acc \\ 0
+       )
 
-  defp filter_changes([], _shape, _, [change | rest], total_ops),
+  defp filter_changes([], _shape, _, _, [], 0), do: {[], 0, nil}
+
+  defp filter_changes([], _shape, _, _, [change | rest], total_ops),
     do:
       {Enum.reverse([%{change | last?: true} | rest]), total_ops,
        LogItems.expected_offset_after_split(change)}
 
-  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _),
+  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _, _),
     do: :includes_truncate
 
-  defp filter_changes([change | rest], shape, extra_refs, change_acc, total_ops) do
-    case Shape.convert_change(shape, change, extra_refs) do
-      [] -> filter_changes(rest, shape, extra_refs, change_acc, total_ops)
-      [change] -> filter_changes(rest, shape, extra_refs, [change | change_acc], total_ops + 1)
+  defp filter_changes(
+         [change | rest],
+         shape,
+         {xid, filter_state, stack_id, shape_handle} = filtering,
+         extra_refs,
+         change_acc,
+         total_ops
+       ) do
+    if not MoveIns.change_already_visible?(filter_state, xid, change) do
+      case Shape.convert_change(shape, change,
+             extra_refs: extra_refs,
+             stack_id: stack_id,
+             shape_handle: shape_handle
+           ) do
+        [] ->
+          filter_changes(rest, shape, filtering, extra_refs, change_acc, total_ops)
+
+        [change] ->
+          filter_changes(rest, shape, filtering, extra_refs, [change | change_acc], total_ops + 1)
+      end
+    else
+      filter_changes(rest, shape, filtering, extra_refs, change_acc, total_ops)
     end
   end
 
@@ -737,17 +722,7 @@ defmodule Electric.Shapes.Consumer do
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
-  defp align_to_txn_boundary(%{txn_offset_mapping: txn_offset_mapping} = state, offset) do
-    case Enum.drop_while(txn_offset_mapping, &(LogOffset.compare(elem(&1, 0), offset) == :lt)) do
-      [{^offset, boundary} | rest] ->
-        {%{state | txn_offset_mapping: rest}, boundary}
-
-      rest ->
-        {%{state | txn_offset_mapping: rest}, offset}
-    end
-  end
-
-  defp consider_flushed(state, %Transaction{last_log_offset: new_boundary}) do
+  defp consider_flushed(%State{} = state, %Transaction{last_log_offset: new_boundary}) do
     if state.txn_offset_mapping == [] do
       # No relevant txns have been observed and unflushed, we can notify immediately
       ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, new_boundary)
@@ -810,6 +785,17 @@ defmodule Electric.Shapes.Consumer do
           false
       end
     end)
+  end
+
+  defp own_materializer_exists?(state) do
+    name = Materializer.name(state.stack_id, state.shape_handle)
+
+    with pid when is_pid(pid) <- GenServer.whereis(name),
+         true <- Process.alive?(pid) do
+      true
+    else
+      _ -> false
+    end
   end
 
   defp clean_table(table_oid, state) do

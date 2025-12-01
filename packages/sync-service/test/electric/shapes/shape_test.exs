@@ -430,7 +430,7 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "child"},
                    record: %{"id" => "1", "par_id" => "1"}
                  },
-                 %{["$sublink", "0"] => MapSet.new([1])}
+                 extra_refs: %{["$sublink", "0"] => MapSet.new([1])}
                )
 
       assert [] =
@@ -440,7 +440,7 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "child"},
                    record: %{"id" => "1", "par_id" => "1"}
                  },
-                 %{["$sublink", "0"] => MapSet.new([2])}
+                 extra_refs: %{["$sublink", "0"] => MapSet.new([2])}
                )
     end
 
@@ -474,7 +474,7 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "item"},
                    record: %{"id" => "1", "value" => "10"}
                  },
-                 %{["$sublink", "0"] => MapSet.new([10])}
+                 extra_refs: %{["$sublink", "0"] => MapSet.new([10])}
                )
 
       assert [] =
@@ -484,7 +484,7 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "item"},
                    record: %{"id" => "1", "value" => "10"}
                  },
-                 %{["$sublink", "0"] => MapSet.new([20])}
+                 extra_refs: %{["$sublink", "0"] => MapSet.new([20])}
                )
     end
 
