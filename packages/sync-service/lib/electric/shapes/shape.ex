@@ -109,8 +109,10 @@ defmodule Electric.Shapes.Shape do
   def dependency_handles_known?(%__MODULE__{} = shape),
     do: shape.shape_dependencies_handles != []
 
-  def hash(%__MODULE__{} = shape),
-    do: shape |> comparable() |> :erlang.phash2()
+  def hash(%__MODULE__{} = shape) do
+    {_comparable, hash} = comparable_hash(shape)
+    hash
+  end
 
   def comparable_hash(%__MODULE__{} = shape) do
     comparable = comparable(shape)
