@@ -361,7 +361,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       refute File.exists?(backup_dir)
     end
 
-    test "backup restore aborted on storage integrity failure", ctx do
+    test "backup restore reconciled if stored handles missing", ctx do
       backup_base_dir =
         Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
 
@@ -379,9 +379,16 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       }
 
       assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
-      shape = shape!()
-      assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
+      to_keep_shape = shape!()
+      to_invalidate_shape = shape!("to be invalidated")
+      assert {:ok, to_keep_shape_handle} = ShapeStatus.add_shape(state, to_keep_shape)
+      assert {:ok, to_invalidate_shape_handle} = ShapeStatus.add_shape(state, to_invalidate_shape)
+
+      assert [
+               {to_invalidate_shape_handle, to_invalidate_shape},
+               {to_keep_shape_handle, to_keep_shape}
+             ] == ShapeStatus.list_shapes(state)
+
       assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
 
       backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
@@ -389,16 +396,32 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       ShapeStatus.remove(state)
 
+      not_backed_up_shape = shape!("not backed up")
+      not_backed_up_shape_handle = "not-backed-up-handle"
+
+      expected_handles_to_load = MapSet.new([not_backed_up_shape_handle])
+
       expect_storage([force: true],
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
-        # After integrity failure, initialise will call load/1 -> get_stored_shapes
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
-        get_stored_shapes: fn _, _ -> %{} end
+        # After loading from backup and showing mismatch of stored vs in-memory handles,
+        # the missing stored handle should be loaded from storage and in memory removed
+        get_all_stored_shape_handles: fn _ ->
+          {:ok, MapSet.new([to_keep_shape_handle, not_backed_up_shape_handle])}
+        end,
+        get_stored_shapes: fn _, ^expected_handles_to_load ->
+          %{
+            not_backed_up_shape_handle =>
+              {:ok, {not_backed_up_shape, false, LogOffset.last_before_real_offsets()}}
+          }
+        end
       )
 
       assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
-      # Shape from backup should NOT be present after failed integrity
-      assert [] == ShapeStatus.list_shapes(state)
+      # after reconciliation, only the to_keep_shape and not_backed_up_shape remain
+      assert [
+               {to_keep_shape_handle, to_keep_shape},
+               {not_backed_up_shape_handle, not_backed_up_shape}
+             ] == ShapeStatus.list_shapes(state)
+
       refute File.exists?(backup_dir)
     end
   end
