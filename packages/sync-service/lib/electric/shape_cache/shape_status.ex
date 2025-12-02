@@ -100,7 +100,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         create_meta_table(stack_ref)
         create_hash_lookup_table(stack_ref)
 
-        load(stack_ref, storage)
+        load_all_shapes(stack_ref, storage)
     end
   end
 
@@ -149,10 +149,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
       }
     ])
     |> topological_sort()
-  end
-
-  defp list_shape_handles(stack_ref) do
-    shape_hash_lookup_table(stack_ref) |> :ets.select([{{:_, :"$1"}, [], [:"$1"]}])
   end
 
   @spec topological_sort([{shape_handle(), Shape.t()}]) :: [{shape_handle(), Shape.t()}]
@@ -479,32 +475,42 @@ defmodule Electric.ShapeCache.ShapeStatus do
     last_used_table
   end
 
-  defp load(stack_ref, storage) do
+  defp load_all_shapes(stack_ref, storage) do
+    Electric.Telemetry.OpenTelemetry.with_span(
+      "shape_status.load_all_shapes",
+      [],
+      extract_stack_id(stack_ref),
+      fn ->
+        with {:ok, shape_handles} <- Storage.get_all_stored_shape_handles(storage) do
+          load_shapes(stack_ref, shape_handles, storage)
+        end
+      end
+    )
+  end
+
+  defp load_shapes(stack_ref, shape_handles, storage) do
     _ = Electric.Postgres.supported_types()
 
     start_time = System.monotonic_time()
 
-    with {:ok, shape_data} <-
-           Electric.Telemetry.OpenTelemetry.with_span(
-             "shape_status.get_all_stored_shapes",
-             [],
-             extract_stack_id(stack_ref),
-             fn -> Storage.get_all_stored_shapes(storage) end
-           ) do
-      now = System.monotonic_time()
+    shape_data = Storage.get_stored_shapes(storage, shape_handles)
 
-      {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples, num_shapes} =
-        Enum.reduce(
-          shape_data,
-          {[], [], [], [], 0},
-          fn {shape_handle, {shape, snapshot_started?, latest_offset}},
-             {
-               hash_lookup_tuples,
-               meta_tuples,
-               last_used_tuples,
-               relation_lookup_tuples,
-               num_shapes
-             } ->
+    {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples, num_shapes} =
+      Enum.reduce(
+        shape_data,
+        {[], [], [], [], 0},
+        fn
+          {_shape_handle, {:error, _reason}}, acc ->
+            acc
+
+          {shape_handle, {:ok, {shape, snapshot_started?, latest_offset}}},
+          {
+            hash_lookup_tuples,
+            meta_tuples,
+            last_used_tuples,
+            relation_lookup_tuples,
+            num_shapes
+          } ->
             relations = Shape.list_relations(shape)
 
             hash_lookup_tuples = [{Shape.comparable(shape), shape_handle} | hash_lookup_tuples]
@@ -515,7 +521,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
                 | meta_tuples
               ]
 
-            last_used_tuples = [{shape_handle, now} | last_used_tuples]
+            last_used_tuples = [{shape_handle, start_time} | last_used_tuples]
 
             relation_lookup_tuples =
               Enum.map(relations, fn {oid, _} -> {{oid, shape_handle}, nil} end) ++
@@ -523,35 +529,35 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
             {hash_lookup_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples,
              num_shapes + 1}
-          end
-        )
+        end
+      )
 
-      :ets.insert(shape_relation_lookup_table(stack_ref), relation_lookup_tuples)
-      :ets.insert(shape_last_used_table(stack_ref), last_used_tuples)
-      :ets.insert(shape_meta_table(stack_ref), meta_tuples)
-      :ets.insert(shape_hash_lookup_table(stack_ref), hash_lookup_tuples)
+    :ets.insert(shape_relation_lookup_table(stack_ref), relation_lookup_tuples)
+    :ets.insert(shape_last_used_table(stack_ref), last_used_tuples)
+    :ets.insert(shape_meta_table(stack_ref), meta_tuples)
+    :ets.insert(shape_hash_lookup_table(stack_ref), hash_lookup_tuples)
 
-      restore_dependency_handles(stack_ref, shape_data, storage)
+    shape_defs = Enum.map(meta_tuples, fn {handle, shape, _, _} -> {handle, shape} end)
+    restore_dependency_handles(stack_ref, shape_defs, storage)
 
-      Logger.info(fn ->
-        duration =
-          System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
+    Logger.info(fn ->
+      duration =
+        System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
 
-        "Loaded #{num_shapes} shapes into #{inspect(__MODULE__)} in #{duration}ms"
-      end)
+      "Loaded #{num_shapes} shapes into #{inspect(__MODULE__)} in #{duration}ms"
+    end)
 
-      :ok
-    end
+    :ok
   end
 
-  defp restore_dependency_handles(stack_ref, shape_data, storage) do
+  defp restore_dependency_handles(stack_ref, shape_defs, storage) do
     meta_table = shape_meta_table(stack_ref)
 
-    shape_data
-    |> Enum.filter(fn {_, {shape, _, _}} ->
+    shape_defs
+    |> Enum.filter(fn {_handle, shape} ->
       Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
     end)
-    |> Enum.each(fn {handle, {%Shape{shape_dependencies: deps} = shape, _, _}} ->
+    |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
       handles = Enum.map(deps, &get_existing_shape(stack_ref, &1))
 
       if not Enum.any?(handles, &is_nil/1) do
@@ -601,7 +607,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
              :ets.file2tab(meta_table_path, verify: true),
            {:ok, recovered_hash_lookup_table} <-
              :ets.file2tab(hash_lookup_table_path, verify: true),
-           :ok <- verify_storage_integrity(stack_ref, storage) do
+           {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
         if recovered_meta_table != meta_table,
           do: :ets.rename(recovered_meta_table, meta_table)
 
@@ -613,20 +619,33 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
         # repopulate last used table with current time and relation lookup table
         # from the shape definition
-        :ets.foldl(
-          fn {shape_handle, shape, _, _}, _ ->
-            :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
+        in_memory_handles =
+          :ets.foldl(
+            fn {shape_handle, shape, _, _}, acc ->
+              :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
 
-            :ets.insert(
-              relation_lookup_table,
-              Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
-                {{oid, shape_handle}, nil}
-              end)
-            )
-          end,
-          :ok,
-          meta_table
-        )
+              :ets.insert(
+                relation_lookup_table,
+                Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
+                  {{oid, shape_handle}, nil}
+                end)
+              )
+
+              MapSet.put(acc, shape_handle)
+            end,
+            MapSet.new(),
+            meta_table
+          )
+
+        # reconcile stored vs in-memory handles by loading any missing stored shapes
+        # and removing any invalid in-memory shapes
+        missing_stored_handles = MapSet.difference(stored_handles, in_memory_handles)
+        invalid_in_memory_handles = MapSet.difference(in_memory_handles, stored_handles)
+
+        if MapSet.size(missing_stored_handles) > 0,
+          do: load_shapes(stack_ref, missing_stored_handles, storage)
+
+        Enum.each(invalid_in_memory_handles, fn handle -> remove_shape(stack_ref, handle) end)
 
         :ok
       else
@@ -642,18 +661,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
     File.rm_rf(backup_dir)
     result
-  end
-
-  defp verify_storage_integrity(stack_ref, storage) do
-    with {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
-      in_memory_handles = stack_ref |> list_shape_handles() |> MapSet.new()
-
-      if MapSet.equal?(in_memory_handles, stored_handles) do
-        :ok
-      else
-        {:error, :storage_integrity_check_failed}
-      end
-    end
   end
 
   defp backup_file_path(backup_dir, table_type)

@@ -273,8 +273,11 @@ defmodule Electric.ShapeCacheTest do
 
       # should have cleaned up the shape
       assert :error == ShapeStatus.fetch_shape_by_handle(ctx.stack_id, shape_handle)
-      assert {:ok, found} = Electric.ShapeCache.Storage.get_all_stored_shapes(storage)
-      assert map_size(found) == 0
+
+      assert {:ok, found} =
+               Electric.ShapeCache.Storage.get_all_stored_shape_handles(storage)
+
+      assert MapSet.size(found) == 0
     end
   end
 
