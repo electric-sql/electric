@@ -76,11 +76,9 @@ describe(`yieldToMain`, () => {
 
     // Wait for both the yield and the setTimeout
     await new Promise((resolve) => setTimeout(resolve, 10))
-    const valueAfterYield = await yieldingTask
+    await yieldingTask
 
     // The setTimeout should have had a chance to run
     expect(taskRan.value).toBe(true)
-    // Note: valueAfterYield might be true or false depending on timing,
-    // we just care that the setTimeout got to execute
   })
 })
