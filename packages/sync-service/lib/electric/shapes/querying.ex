@@ -62,7 +62,7 @@ defmodule Electric.Shapes.Querying do
       case e.postgres do
         # invalid_text_representation - e.g. invalid enum value
         %{code: :invalid_text_representation, message: message} ->
-          # This is a type of error we expect, because we allow enums in subset where clauses 
+          # This is a type of error we expect, because we allow enums in subset where clauses
           # even though we can't validate them fully.
           raise __MODULE__.QueryError, message: message
 
@@ -152,27 +152,22 @@ defmodule Electric.Shapes.Querying do
          stack_id,
          shape_handle
        ) do
-    additional_headers =
-      shape.tag_structure
-      |> Enum.map(fn pattern ->
+    tags =
+      Enum.map(shape.tag_structure, fn pattern ->
         Enum.map(pattern, fn
           column_name when is_binary(column_name) ->
-            "$${md5('#{stack_id}#{shape_handle}' || #{column_name}::text)}"
+            ~s[md5('#{stack_id}#{shape_handle}' || #{pg_cast_column_to_text(column_name)})]
 
           {:hash_together, columns} ->
-            column_parts = Enum.map(columns, &~s['#{&1}:' || #{&1}::text])
-            "$${md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})}"
+            column_parts = Enum.map(columns, &~s['#{&1}:' || #{pg_cast_column_to_text(&1)}])
+            ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
         end)
         |> Enum.join("/")
       end)
-      |> case do
-        [] -> additional_headers
-        tag_structure -> additional_headers |> Map.new() |> Map.put(:tags, tag_structure)
-      end
 
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table, additional_headers)
+    headers_part = build_headers_part(root_table, additional_headers, tags)
 
     # We're building a JSON string that looks like this:
     #
@@ -192,28 +187,26 @@ defmodule Electric.Shapes.Querying do
     {query, []}
   end
 
-  defp build_headers_part(rel, headers) when is_list(headers),
-    do: build_headers_part(rel, Map.new(headers))
+  defp build_headers_part(rel, headers, tags) when is_list(headers),
+    do: build_headers_part(rel, Map.new(headers), tags)
 
-  defp build_headers_part({relation, table}, additional_headers) do
+  defp build_headers_part({relation, table}, additional_headers, tags) do
     headers = %{operation: "insert", relation: [relation, table]}
 
     headers =
       headers
       |> Map.merge(additional_headers)
-      |> Map.pop(:tags)
-      |> case do
-        {nil, headers} ->
-          headers |> Jason.encode!() |> Utils.escape_quotes(?')
+      |> Jason.encode!()
+      |> Utils.escape_quotes(?')
 
-        {tags, headers} ->
-          "{" <> json = headers |> Jason.encode!() |> Utils.escape_quotes(?')
+    headers =
+      if tags != [] do
+        "{" <> json = headers
 
-          tags =
-            Jason.encode!(tags)
-            |> String.replace(~r/\$\$\{([^\}]+)\}/, ~s[' || \\1::text || '])
-
-          ~s|{"tags":#{tags},| <> json
+        tags = Enum.join(tags, ~s[ || '","' || ])
+        ~s/{"tags":["' || #{tags} || '"],/ <> json
+      else
+        headers
       end
 
     ~s['"headers":#{headers}']
