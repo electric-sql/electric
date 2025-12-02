@@ -43,7 +43,7 @@ defmodule Electric.Shapes.Api.Response do
     finalized?: false
   ]
 
-  @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_handle :: Electric.shape_handle()
 
   @type t() :: %__MODULE__{
           api: Api.t(),

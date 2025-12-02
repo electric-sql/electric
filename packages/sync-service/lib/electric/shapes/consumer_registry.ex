@@ -11,7 +11,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @type stack_id() :: Electric.stack_id()
   @type stack_ref() :: stack_id() | [stack_id: stack_id()] | %{stack_id: stack_id()}
-  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_handle() :: Electric.shape_handle()
   @type t() :: %__MODULE__{
           table: :ets.table(),
           stack_id: stack_id()

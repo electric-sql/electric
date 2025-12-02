@@ -10,7 +10,7 @@ defmodule Electric.ShapeCache.Storage do
     defexception [:message]
   end
 
-  @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_handle :: Electric.shape_handle()
   @type pg_snapshot :: %{
           xmin: pos_integer(),
           xmax: pos_integer(),

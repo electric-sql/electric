@@ -6,7 +6,7 @@ defmodule Electric.Shapes do
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
 
-  @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_handle :: Electric.shape_handle()
   @type stack_id :: Electric.stack_id()
 
   @doc """

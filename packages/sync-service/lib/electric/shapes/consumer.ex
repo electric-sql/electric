@@ -45,7 +45,7 @@ defmodule Electric.Shapes.Consumer do
     ref
   end
 
-  @spec await_snapshot_start(Electric.stack_id(), ShapeCache.shape_handle(), timeout()) ::
+  @spec await_snapshot_start(Electric.stack_id(), Electric.shape_handle(), timeout()) ::
           :started | {:error, any()}
   def await_snapshot_start(stack_id, shape_handle, timeout \\ @default_snapshot_timeout)
       when is_binary(stack_id) and is_binary(shape_handle) do
@@ -54,14 +54,14 @@ defmodule Electric.Shapes.Consumer do
     |> GenServer.call(:await_snapshot_start, timeout)
   end
 
-  @spec subscribe_materializer(Electric.stack_id(), ShapeCache.shape_handle(), pid()) :: :ok
+  @spec subscribe_materializer(Electric.stack_id(), Electric.shape_handle(), pid()) :: :ok
   def subscribe_materializer(stack_id, shape_handle, pid) do
     stack_id
     |> consumer_pid(shape_handle)
     |> GenServer.call({:subscribe_materializer, pid})
   end
 
-  @spec whereis(Electric.stack_id(), ShapeCache.shape_handle()) :: pid() | nil
+  @spec whereis(Electric.stack_id(), Electric.shape_handle()) :: pid() | nil
   def whereis(stack_id, shape_handle) do
     consumer_pid(stack_id, shape_handle)
   end

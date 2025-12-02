@@ -11,7 +11,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
 
   require Logger
 
-  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_handle() :: Electric.shape_handle()
   @type stack_id() :: Electric.stack_id()
 
   @shutdown_cleanup {:shutdown, :cleanup}

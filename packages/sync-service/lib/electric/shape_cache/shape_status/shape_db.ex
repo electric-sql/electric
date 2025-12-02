@@ -9,7 +9,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
   import Electric, only: [is_stack_id: 1]
 
-  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_handle() :: Electric.shape_handle()
   @type stack_id() :: Electric.stack_id()
 
   # this is called if the load_backup call fails

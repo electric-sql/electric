@@ -1,47 +1,3 @@
-defmodule Electric.ShapeCache.ShapeStatusBehaviour do
-  @moduledoc """
-  Behaviour defining the ShapeStatus functions
-  """
-  alias Electric.Shapes.Shape
-  alias Electric.Replication.LogOffset
-
-  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type xmin() :: non_neg_integer()
-
-  @type stack_id() :: Electric.stack_id()
-
-  if Mix.env() == :test do
-    @type stack_ref() ::
-            atom()
-            | stack_id()
-            | [stack_id: stack_id()]
-            | %{shape_meta_table: atom(), shape_last_used_table: atom()}
-  else
-    @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
-  end
-
-  @callback initialize_from_storage(stack_ref(), Electric.ShapeCache.Storage.storage()) ::
-              :ok | {:error, term()}
-  @callback terminate(stack_ref(), Electric.ShapeCache.Storage.storage()) ::
-              :ok | {:error, term()}
-  @callback list_shapes(stack_ref()) :: [{shape_handle(), Shape.t()}]
-
-  @callback list_shape_handles_for_relations(stack_ref(), [Electric.oid_relation()]) :: [
-              shape_handle()
-            ]
-  @callback count_shapes(stack_ref()) :: non_neg_integer()
-  @callback get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
-              {shape_handle(), LogOffset.t()} | nil
-  @callback fetch_shape_by_handle(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | :error
-  @callback add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
-  @callback initialise_shape(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
-  @callback set_latest_offset(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
-  @callback mark_snapshot_as_started(stack_ref(), shape_handle()) :: :ok
-  @callback snapshot_started?(stack_ref(), shape_handle()) :: boolean()
-  @callback remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
-  @callback reset(stack_ref()) :: :ok
-end
-
 defmodule Electric.ShapeCache.ShapeStatus do
   @moduledoc """
   Keeps track of shape state.
@@ -67,12 +23,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   require Logger
 
-  @behaviour Electric.ShapeCache.ShapeStatusBehaviour
+  @type stack_id() :: Electric.stack_id()
+  @type shape_handle() :: Electric.shape_handle()
 
-  @typep stack_ref() :: Electric.ShapeCache.ShapeStatusBehaviour.stack_ref()
-  @type shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type table() :: atom() | reference()
-  @type t() :: Keyword.t() | binary() | atom()
+  if Mix.env() == :test do
+    @type stack_ref() ::
+            atom()
+            | stack_id()
+            | [stack_id: stack_id()]
+            | %{shape_meta_table: atom(), shape_last_used_table: atom()}
+  else
+    @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
+  end
 
   @backup_version "v6"
   @backup_dir "shape_status_backups"
@@ -83,7 +45,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_snapshot_started_pos 3
   @shape_meta_latest_offset_pos 4
 
-  @impl true
+  @spec initialize_from_storage(stack_ref(), Storage.storage()) ::
+          :ok | {:error, term()}
   def initialize_from_storage(stack_ref, storage) do
     stack_id = extract_stack_id(stack_ref)
 
@@ -105,7 +68,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @impl true
+  @spec terminate(stack_ref(), Storage.storage()) :: :ok | {:error, term()}
   def terminate(stack_ref, storage) do
     case backup_dir(storage) do
       nil -> {:error, :no_backup_dir_configured}
@@ -113,7 +76,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @impl true
+  @spec add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   def add_shape(stack_ref, shape) do
     stack_id = extract_stack_id(stack_ref)
 
@@ -146,7 +109,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     {:ok, shape_handle}
   end
 
-  @impl true
+  @spec list_shapes(stack_ref()) :: [{shape_handle(), Shape.t()}]
   def list_shapes(stack_ref) do
     stack_ref
     |> extract_stack_id()
@@ -169,12 +132,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
     topological_sort(missing_deps, [appendable | acc], visited)
   end
 
-  @impl true
+  @spec count_shapes(stack_ref()) :: non_neg_integer()
   def count_shapes(stack_ref) do
     :ets.info(shape_meta_table(stack_ref), :size)
   end
 
-  @impl true
+  @spec list_shape_handles_for_relations(stack_ref(), [Electric.oid_relation()]) :: [
+          shape_handle()
+        ]
   def list_shape_handles_for_relations(stack_ref, relations) do
     patterns =
       relations
@@ -183,7 +148,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.select(shape_relation_lookup_table(stack_ref), patterns)
   end
 
-  @impl true
+  @spec remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
   def remove_shape(stack_ref, shape_handle) do
     stack_id = extract_stack_id(stack_ref)
     meta_table = shape_meta_table(stack_id)
@@ -215,7 +180,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @impl true
+  @spec reset(stack_ref()) :: :ok
   def reset(stack_ref) do
     ShapeDb.reset(extract_stack_id(stack_ref))
     :ets.delete_all_objects(shape_meta_table(stack_ref))
@@ -244,7 +209,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  @impl true
+  @spec get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
+          {shape_handle(), LogOffset.t()} | nil
   def get_existing_shape(stack_ref, %Shape{} = shape) do
     stack_id = extract_stack_id(stack_ref)
 
@@ -260,7 +226,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @impl true
+  @spec fetch_shape_by_handle(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | :error
   def fetch_shape_by_handle(stack_ref, shape_handle) when is_shape_handle(shape_handle) do
     stack_id = extract_stack_id(stack_ref)
 
@@ -307,7 +273,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @impl true
+  @spec initialise_shape(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
   def initialise_shape(stack_ref, shape_handle, latest_offset) do
     true =
       :ets.update_element(
@@ -319,7 +285,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  @impl true
+  @spec mark_snapshot_as_started(stack_ref(), shape_handle()) :: :ok
   def mark_snapshot_as_started(stack_ref, shape_handle) do
     :ets.update_element(
       shape_meta_table(stack_ref),
@@ -330,7 +296,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  @impl true
+  @spec set_latest_offset(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
   def set_latest_offset(stack_ref, shape_handle, latest_offset) do
     :ets.update_element(
       shape_meta_table(stack_ref),
@@ -425,7 +391,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  @impl true
+  @spec snapshot_started?(stack_ref(), shape_handle()) :: boolean()
   def snapshot_started?(stack_ref, shape_handle) do
     :ets.lookup_element(
       shape_meta_table(stack_ref),

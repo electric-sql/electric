@@ -1,29 +1,3 @@
-defmodule Electric.ShapeCacheBehaviour do
-  @moduledoc """
-  Behaviour defining the ShapeCache functions to be used in mocks
-  """
-  alias Electric.Shapes.Shape
-  alias Electric.Replication.LogOffset
-
-  @type shape_handle :: String.t()
-  @type shape_def :: Shape.t()
-  @type stack_id :: Electric.stack_id()
-  @type handle_position :: {shape_handle(), current_snapshot_offset :: LogOffset.t()}
-
-  @callback get_shape(shape_def(), stack_id()) :: handle_position() | nil
-  @callback fetch_shape_by_handle(shape_handle(), stack_id()) :: {:ok, Shape.t()} | :error
-  @callback get_or_create_shape_handle(shape_def(), stack_id(), opts :: Access.t()) ::
-              handle_position()
-  @callback resolve_shape_handle(shape_handle(), shape_def(), stack_id) :: handle_position() | nil
-  @callback list_shapes(stack_id()) :: [{shape_handle(), Shape.t()}] | :error
-  @callback count_shapes(stack_id()) :: non_neg_integer() | :error
-  @callback await_snapshot_start(shape_handle(), stack_id()) :: :started | {:error, term()}
-  @callback has_shape?(shape_handle(), Access.t()) :: boolean()
-  @callback start_consumer_for_handle(shape_handle(), stack_id()) ::
-              {:ok, pid()} | {:error, :no_shape}
-  @callback clean_shape(shape_handle(), stack_id()) :: :ok
-end
-
 defmodule Electric.ShapeCache do
   use GenServer
 
@@ -38,10 +12,10 @@ defmodule Electric.ShapeCache do
 
   require Logger
 
-  @behaviour Electric.ShapeCacheBehaviour
-
-  @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
-  @type shape_def() :: Electric.ShapeCacheBehaviour.shape_def()
+  @type stack_id :: Electric.stack_id()
+  @type shape_handle :: Electric.shape_handle()
+  @type shape_def :: Shape.t()
+  @type handle_position :: {shape_handle(), current_snapshot_offset :: LogOffset.t()}
 
   @name_schema_tuple {:tuple, [:atom, :atom, :any]}
   @genserver_name_schema {:or, [:atom, @name_schema_tuple]}
@@ -72,17 +46,18 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec get_shape(shape_def(), stack_id()) :: handle_position() | nil
   def get_shape(%Shape{} = shape, stack_id) when is_stack_id(stack_id) do
     ShapeStatus.get_existing_shape(stack_id, shape)
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec fetch_shape_by_handle(shape_handle(), stack_id()) :: {:ok, Shape.t()} | :error
   def fetch_shape_by_handle(handle, stack_id) when is_stack_id(stack_id) do
     ShapeStatus.fetch_shape_by_handle(stack_id, handle)
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec get_or_create_shape_handle(shape_def(), stack_id(), opts :: Access.t()) ::
+          handle_position()
   def get_or_create_shape_handle(shape, stack_id, opts \\ []) when is_stack_id(stack_id) do
     # Get or create the shape handle and fire a snapshot if necessary
     if shape_state = get_shape(shape, stack_id) do
@@ -96,7 +71,7 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec resolve_shape_handle(shape_handle(), shape_def(), stack_id()) :: handle_position() | nil
   def resolve_shape_handle(shape_handle, shape, stack_id) do
     # Ensure that the given shape handle matches the shape using a cheap shape
     # hash check.
@@ -108,27 +83,27 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec list_shapes(stack_id()) :: [{shape_handle(), Shape.t()}] | :error
   def list_shapes(stack_id) when is_stack_id(stack_id) do
     ShapeStatus.list_shapes(stack_id)
   rescue
     ArgumentError -> :error
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec count_shapes(stack_id()) :: non_neg_integer() | :error
   def count_shapes(stack_id) when is_stack_id(stack_id) do
     ShapeStatus.count_shapes(stack_id)
   rescue
     ArgumentError -> :error
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec clean_shape(shape_handle(), stack_id()) :: :ok
   def clean_shape(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeCleaner.remove_shape(stack_id, shape_handle)
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec await_snapshot_start(shape_handle(), stack_id()) :: :started | {:error, term()}
   def await_snapshot_start(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
@@ -164,14 +139,15 @@ defmodule Electric.ShapeCache do
       {:error, %RuntimeError{message: "Shape meta tables not found"}}
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec has_shape?(shape_handle(), Access.t()) :: boolean()
   def has_shape?(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeStatus.has_shape_handle?(stack_id, shape_handle) ||
       GenServer.call(name(stack_id), {:has_shape_handle?, shape_handle}, @call_timeout)
   end
 
-  @impl Electric.ShapeCacheBehaviour
+  @spec start_consumer_for_handle(shape_handle(), stack_id()) ::
+          {:ok, pid()} | {:error, :no_shape}
   def start_consumer_for_handle(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     GenServer.call(name(stack_id), {:start_consumer_for_handle, shape_handle}, @call_timeout)
