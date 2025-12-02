@@ -13,8 +13,6 @@ defmodule Support.ComponentSetup do
   defmodule NoopPublicationManager do
     use GenServer
 
-    @behaviour Electric.Replication.PublicationManager
-
     def add_shape(_stack_id, _handle, _shape), do: :ok
     def remove_shape(_stack_id, _handle), do: :ok
     def wait_for_restore(_stack_id, _opts), do: :ok
@@ -42,7 +40,6 @@ defmodule Support.ComponentSetup do
   defmodule TestPublicationManager do
     use GenServer
 
-    @behaviour Electric.Replication.PublicationManager
     def add_shape(stack_id, handle, shape) do
       GenServer.call(
         Electric.Replication.PublicationManager.name(stack_id),
@@ -234,7 +231,7 @@ defmodule Support.ComponentSetup do
 
   def with_noop_publication_manager(ctx) do
     start_supervised!({NoopPublicationManager, ctx.stack_id})
-    %{publication_manager: {NoopPublicationManager, []}}
+    :ok
   end
 
   def with_shape_status(ctx) do

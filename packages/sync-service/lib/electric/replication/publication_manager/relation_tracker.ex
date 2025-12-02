@@ -16,7 +16,8 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
 
   require Logger
 
-  @typep shape_handle() :: Electric.ShapeCacheBehaviour.shape_handle()
+  @typep shape_handle() :: Electric.shape_handle()
+  @typep stack_id() :: Electric.stack_id()
 
   defstruct [
     :stack_id,
@@ -38,7 +39,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
   @typep internal_relation_filters() :: MapSet.t(Electric.oid())
   @typep publication_filter() :: {Electric.oid(), with_generated_cols :: boolean()}
-  @typep waiter() :: {GenServer.from(), Electric.ShapeCache.shape_handle()}
+  @typep waiter() :: {GenServer.from(), shape_handle()}
   @typep state() :: %__MODULE__{
            stack_id: Electric.stack_id(),
            relation_ref_counts: %{Electric.oid() => non_neg_integer()},
@@ -53,13 +54,11 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
            publication_refresh_period: non_neg_integer()
          }
 
-  @behaviour Electric.Replication.PublicationManager
-
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
-  @impl Electric.Replication.PublicationManager
+  @spec add_shape(stack_id(), shape_handle(), Electric.Shapes.Shape.t()) :: :ok
   def add_shape(stack_id, shape_handle, shape) do
     pub_filter = get_publication_filter_from_shape(shape)
 
@@ -69,7 +68,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     end
   end
 
-  @impl Electric.Replication.PublicationManager
+  @spec remove_shape(stack_id(), shape_handle()) :: :ok
   def remove_shape(stack_id, shape_handle) do
     case GenServer.call(name(stack_id), {:remove_shape, shape_handle}) do
       :ok -> :ok
@@ -77,7 +76,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     end
   end
 
-  @impl Electric.Replication.PublicationManager
+  @spec wait_for_restore(stack_id(), Keyword.t()) :: :ok
   def wait_for_restore(stack_id, opts \\ []) do
     GenServer.call(name(stack_id), :wait_for_restore, Keyword.get(opts, :timeout, :infinity))
   end

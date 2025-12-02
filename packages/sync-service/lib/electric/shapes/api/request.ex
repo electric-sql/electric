@@ -14,7 +14,7 @@ defmodule Electric.Shapes.Api.Request do
     response: %Api.Response{}
   ]
 
-  @type shape_handle :: Electric.ShapeCacheBehaviour.shape_handle()
+  @type shape_handle :: Electric.shape_handle()
   @type t() :: %__MODULE__{
           chunk_end_offset: nil | LogOffset.t(),
           handle: nil | shape_handle(),
