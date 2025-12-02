@@ -341,7 +341,9 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(
+        unlink_handle_from_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
+      )
 
       txn = [
         %Begin{xid: xid},
@@ -397,7 +399,9 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(
+        unlink_handle_from_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
+      )
 
       txn = [
         %Begin{xid: xid},
@@ -490,7 +494,9 @@ defmodule Electric.Shapes.ConsumerTest do
         clean: fn ^cleaned_oid, _ -> true end
       )
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(
+        unlink_handle_from_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
+      )
 
       assert :ok = ShapeLogCollector.handle_operations([rel], ctx.producer)
 
@@ -526,7 +532,9 @@ defmodule Electric.Shapes.ConsumerTest do
         clean: fn ^cleaned_oid, _ -> true end
       )
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(
+        unlink_handle_from_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
+      )
 
       assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.producer)
 
@@ -565,7 +573,9 @@ defmodule Electric.Shapes.ConsumerTest do
         clean: fn ^cleaned_oid, _ -> true end
       )
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(
+        unlink_handle_from_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
+      )
 
       assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.producer)
 
@@ -580,7 +590,7 @@ defmodule Electric.Shapes.ConsumerTest do
         set_latest_offset: fn _, @shape_handle1, _ ->
           raise "The unexpected error"
         end,
-        remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
+        unlink_handle_from_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
       )
 
       lsn = Lsn.from_string("0/10")
@@ -612,7 +622,9 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(
+        unlink_handle_from_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
+      )
 
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)
 

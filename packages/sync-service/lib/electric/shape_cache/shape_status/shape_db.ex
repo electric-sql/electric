@@ -55,13 +55,15 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     :ok
   end
 
-  def remove_shape!(stack_id, shape_handle) when is_stack_id(stack_id) do
-    handle_to_shape_table = handle_to_shape_table(stack_id)
-    shape = :ets.lookup_element(handle_to_shape_table, shape_handle, 2)
-
+  def unlink_handle_from_shape!(stack_id, shape_handle) when is_stack_id(stack_id) do
+    shape = shape_for_handle!(stack_id, shape_handle)
     :ets.delete(shape_to_handle_table(stack_id), Shape.comparable(shape))
-    :ets.delete(handle_to_shape_table, shape_handle)
+    shape
+  end
 
+  def remove_shape!(stack_id, shape_handle) when is_stack_id(stack_id) do
+    shape = unlink_handle_from_shape!(stack_id, shape_handle)
+    :ets.delete(handle_to_shape_table(stack_id), shape_handle)
     shape
   end
 
@@ -71,6 +73,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
   def handle_for_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
     :ets.lookup_element(shape_to_handle_table(stack_id), Shape.comparable(shape), 2, nil)
+  end
+
+  defp shape_for_handle!(stack_id, shape_handle) when is_stack_id(stack_id) do
+    :ets.lookup_element(handle_to_shape_table(stack_id), shape_handle, 2)
   end
 
   def shape_for_handle(stack_id, shape_handle) when is_stack_id(stack_id) do

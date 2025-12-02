@@ -54,7 +54,8 @@ defmodule Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor do
 
       tasks = [
         async(stack_id, shape_handles, &notify_shape_rotation/2),
-        async(stack_id, shape_handles, &cleanup_publication_manager/2)
+        async(stack_id, shape_handles, &cleanup_publication_manager/2),
+        async(stack_id, shape_handles, &cleanup_shape_status/2)
       ]
 
       try do
@@ -95,6 +96,17 @@ defmodule Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor do
           Electric.Replication.PublicationManager.remove_shape(stack_id, shape_handle)
         end,
         "Failed to remove shape #{shape_handle} from publication"
+      )
+    end)
+  end
+
+  defp cleanup_shape_status(stack_id, shape_handles) do
+    Enum.each(shape_handles, fn shape_handle ->
+      perform_reporting_errors(
+        fn ->
+          Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle)
+        end,
+        "Failed to remove shape #{shape_handle} from shape status"
       )
     end)
   end

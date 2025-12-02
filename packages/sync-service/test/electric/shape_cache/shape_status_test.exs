@@ -102,6 +102,26 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     refute ShapeStatus.get_existing_shape(state, shape)
   end
 
+  test "unlink_handle_from_shape/2", ctx do
+    {:ok, state, []} = new_state(ctx)
+    shape = shape!()
+
+    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
+
+    # Unlink the handle from the shape
+    assert {:ok, ^shape} = ShapeStatus.unlink_handle_from_shape(state, shape_handle)
+
+    # After unlinking, the shape should not be findable via get_existing_shape
+    refute ShapeStatus.get_existing_shape(state, shape)
+
+    # But the shape should still be fetchable by handle (metadata still exists)
+    assert {:ok, ^shape} = ShapeStatus.fetch_shape_by_handle(state, shape_handle)
+
+    # Unlinking a non-existent handle should return an error
+    assert {:error, _} = ShapeStatus.unlink_handle_from_shape(state, "invalid-handle")
+  end
+
   test "fetch_shape_by_handle/2", ctx do
     shape = shape!()
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape])
