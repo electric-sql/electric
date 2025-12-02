@@ -384,9 +384,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp consumer_suspend_enabled?(%{stack_id: stack_id}) do
-    # TODO: remove additional feature flag check once feature is stabilised
-    Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true) and
-      "suspend_consumers" in Electric.StackConfig.lookup(stack_id, :feature_flags, [])
+    Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true)
   end
 
   defp consumer_can_suspend?(state) do
