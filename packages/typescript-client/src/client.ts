@@ -425,7 +425,6 @@ export interface ShapeStreamOptions<T = never> {
    * ```
    */
   onError?: ShapeStreamErrorHandler
-
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {

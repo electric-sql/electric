@@ -299,7 +299,10 @@ describe(`Async Message parser`, () => {
     ]
     const schema = { a: { type: `int4` } }
 
-    const syncResult = parser.parseSnapshotData(structuredClone(messages), schema)
+    const syncResult = parser.parseSnapshotData(
+      structuredClone(messages),
+      schema
+    )
     const asyncResult = await parser.parseSnapshotDataAsync(
       structuredClone(messages),
       schema
