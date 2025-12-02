@@ -114,6 +114,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     # After unlinking, the shape should not be findable via get_existing_shape
     refute ShapeStatus.get_existing_shape(state, shape)
+    refute ShapeStatus.has_shape_handle?(state, shape_handle)
 
     # But the shape should still be fetchable by handle (metadata still exists)
     assert {:ok, ^shape} = ShapeStatus.fetch_shape_by_handle(state, shape_handle)
