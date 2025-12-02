@@ -72,7 +72,7 @@ defmodule Electric.ShapeCleanerTest do
 
         if map_size(existing_shape_map) > 0 do
           patch_calls(Electric.ShapeCache.ShapeStatus,
-            remove_shape: fn _stack_id, handle ->
+            unlink_handle_from_shape: fn _stack_id, handle ->
               if shape = Map.get(existing_shape_map, handle) do
                 {:ok, shape}
               else

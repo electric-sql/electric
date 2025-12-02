@@ -152,6 +152,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.select(shape_relation_lookup_table(stack_ref), patterns)
   end
 
+  @spec unlink_handle_from_shape(stack_ref(), shape_handle()) ::
+          {:ok, Shape.t()} | {:error, term()}
+  def unlink_handle_from_shape(stack_ref, shape_handle) do
+    stack_id = extract_stack_id(stack_ref)
+    shape = ShapeDb.unlink_handle_from_shape!(stack_id, shape_handle)
+    {:ok, shape}
+  rescue
+    ArgumentError ->
+      {:error, "No shape matching #{inspect(shape_handle)}"}
+  end
+
   @spec remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
   def remove_shape(stack_ref, shape_handle) do
     stack_id = extract_stack_id(stack_ref)
