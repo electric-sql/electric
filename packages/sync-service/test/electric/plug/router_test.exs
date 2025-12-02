@@ -143,7 +143,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000001', 'test value 0')"
          ]
     test "GET after a compaction proceeds correctly",
-         %{opts: opts, db_conn: db_conn} do
+         %{opts: opts, db_conn: db_conn, storage: storage} do
       conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
       assert [_] = Jason.decode!(conn.resp_body)
 
@@ -185,7 +185,7 @@ defmodule Electric.Plug.RouterTest do
 
       # Force compaction, but it's done in chunks, so we're using small chunks
       Electric.Shapes.Consumer.whereis(opts[:stack_id], shape_handle)
-      |> Electric.ShapeCache.Storage.trigger_compaction(opts[:api].storage, 0)
+      |> Electric.ShapeCache.Storage.trigger_compaction(storage, 0)
 
       # If this test is flaking, then the compaction didn't have time to complete - we don't have a good way to wait for it to complete though.
       Process.sleep(200)

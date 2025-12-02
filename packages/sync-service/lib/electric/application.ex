@@ -52,7 +52,7 @@ defmodule Electric.Application do
       children_library(),
       application_telemetry(config),
       [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
-      api_server_children([]),
+      api_server_children(config),
       prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
     ])
   end
@@ -140,7 +140,8 @@ defmodule Electric.Application do
         publication_refresh_period: get_env(opts, :publication_refresh_period),
         schema_reconciler_period: get_env(opts, :schema_reconciler_period),
         cleanup_interval_ms: get_env(opts, :cleanup_interval_ms),
-        shape_hibernate_after: get_env(opts, :shape_hibernate_after)
+        shape_hibernate_after: get_env(opts, :shape_hibernate_after),
+        conn_max_requests: get_env(opts, :conn_max_requests)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )
@@ -149,7 +150,9 @@ defmodule Electric.Application do
   # Gets the API-side configuration based on the same opts + application config
   # used for `configuration/1`
   defp api_configuration(opts) do
-    Electric.StackSupervisor.build_shared_opts(core_configuration(opts))
+    opts
+    |> core_configuration()
+    |> Electric.StackSupervisor.build_shared_opts()
     |> Keyword.merge(
       long_poll_timeout: get_env(opts, :long_poll_timeout),
       max_age: get_env(opts, :cache_max_age),
@@ -160,7 +163,7 @@ defmodule Electric.Application do
       max_concurrent_requests: get_env(opts, :max_concurrent_requests),
       secret: Application.get_env(:electric, :secret)
     )
-    |> Keyword.merge(Keyword.take(opts, [:encoder, :inspector, :registry]))
+    |> Keyword.merge(Keyword.take(opts, [:encoder, :inspector]))
   end
 
   defp core_configuration(opts) do
@@ -269,6 +272,7 @@ defmodule Electric.Application do
 
   def api_server(Bandit, opts) do
     router_opts = api_plug_opts(opts)
+    tweaks = Keyword.get(opts, :tweaks, [])
 
     ti_opts =
       if num_acceptors = get_env(opts, :http_api_num_acceptors) do
@@ -277,11 +281,22 @@ defmodule Electric.Application do
         []
       end
 
+    shared_http_opts =
+      if max_requests = Keyword.get(tweaks, :conn_max_requests) do
+        [max_requests: max_requests]
+      else
+        []
+      end
+
     [
       {Bandit,
-       plug: {Electric.Plug.Router, router_opts},
-       port: get_env(opts, :service_port),
-       thousand_island_options: thousand_island_options(opts ++ ti_opts)}
+       [
+         plug: {Electric.Plug.Router, router_opts},
+         port: get_env(opts, :service_port),
+         http_1_options: shared_http_opts,
+         http_2_options: shared_http_opts,
+         thousand_island_options: thousand_island_options(opts ++ ti_opts)
+       ]}
     ]
   end
 

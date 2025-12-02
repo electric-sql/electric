@@ -22,8 +22,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
       expect_storage: 1
     ]
 
-  @registry Registry.ServeShapePlugTest
-
   @inspector Support.StubInspector.new(
                tables: ["users"],
                columns: [
@@ -47,21 +45,16 @@ defmodule Electric.Plug.ServeShapePlugTest do
   @first_offset LogOffset.first()
   @test_offset LogOffset.new(Lsn.from_integer(100), 0)
   @start_offset_50 LogOffset.new(Lsn.from_integer(50), 0)
-  @test_pg_id "12345"
 
   # Higher timeout is needed for some tests that tend to run slower on CI.
   @receive_timeout 2000
 
   @moduletag :tmp_dir
 
-  setup do
-    start_link_supervised!({Registry, keys: :duplicate, name: @registry})
-    :ok
-  end
-
   setup [
-    :with_persistent_kv,
     :with_stack_id_from_test,
+    :with_registry,
+    :with_persistent_kv,
     :with_pure_file_storage,
     :with_status_monitor,
     :with_shape_cleaner
@@ -75,18 +68,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
     opts =
       Api.plug_opts(
         stack_id: ctx.stack_id,
-        pg_id: @test_pg_id,
-        stack_events_registry: Electric.stack_events_registry(),
-        stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-        shape_cache: {Electric.ShapeCache, []},
-        storage: {Electric.ShapeCache.Storage.PureFileStorage, []},
         inspector: @inspector,
-        registry: @registry,
+        stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
         long_poll_timeout: long_poll_timeout(ctx),
         sse_timeout: sse_timeout(ctx),
         max_age: max_age(ctx),
         stale_age: stale_age(ctx),
-        persistent_kv: ctx.persistent_kv,
         max_concurrent_requests: %{initial: 300, existing: 1000}
       )
 
@@ -563,7 +550,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert_receive :got_log_stream, @receive_timeout
 
       # Simulate new changes arriving
-      Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
         send(pid, {ref, :new_changes, next_offset})
       end)
 
@@ -632,7 +619,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert_receive :got_log_stream, @receive_timeout
 
       # Simulate shape rotation
-      Registry.dispatch(@registry, @test_shape_handle, fn [{pid, ref}] ->
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
         send(pid, {ref, :shape_rotation})
       end)
 
