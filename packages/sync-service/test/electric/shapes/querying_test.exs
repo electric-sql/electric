@@ -354,6 +354,43 @@ defmodule Electric.Shapes.QueryingTest do
                  Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
                )
     end
+
+    test "if shape has a subquery, tags the results (with quoted column names)", %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE parent (id SERIAL PRIMARY KEY, value INTEGER)",
+            "CREATE TABLE child (id SERIAL PRIMARY KEY, value INTEGER, \"parentId\" INTEGER REFERENCES parent(id))",
+            "INSERT INTO parent (value) VALUES (1), (2), (3)",
+            "INSERT INTO child (value, \"parentId\") VALUES (4, 1), (5, 2), (6, 3)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "\"parentId\" IN (SELECT id FROM parent)",
+          inspector: {DirectInspector, conn}
+        )
+
+      tag1 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        |> Base.encode16(case: :lower)
+
+      tag3 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        |> Base.encode16(case: :lower)
+
+      assert [
+               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [^tag2]}},
+               %{value: %{value: "6"}, headers: %{tags: [^tag3]}}
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
+    end
   end
 
   describe "query_move_in/5 with SubqueryMoves.move_in_where_clause/3" do

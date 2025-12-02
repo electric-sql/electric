@@ -2614,6 +2614,36 @@ defmodule Electric.Plug.RouterTest do
       assert {_, 200, [%{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}}, _]} =
                Task.await(task)
     end
+
+    @tag with_sql: [
+           ~S|CREATE TABLE "Parent" (id INT PRIMARY KEY, "Value" INT NOT NULL, "otherValue" INT NOT NULL)|,
+           ~S|CREATE TABLE "Child" (id INT PRIMARY KEY, "Value" INT NOT NULL, "parentId" INT NOT NULL)|,
+           ~S|INSERT INTO "Parent" (id, "Value", "otherValue") VALUES (1, 10, 10), (2, 20, 5)|,
+           ~S|INSERT INTO "Child" (id, "Value", "parentId") VALUES (1, 10, 1), (2, 10, 2), (3, 20, 2)|
+         ]
+    test "subqueries work with quoted column names and are tagged correctly", ctx do
+      orig_req =
+        make_shape_req(~S|"Child"|,
+          where:
+            ~S|"parentId" in (SELECT "id" FROM "Parent" WHERE "otherValue" >= $2) AND "Value" >= $1|,
+          params: %{"1" => "10", "2" => "6"}
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "1") |> Base.encode16(case: :lower)
+
+      assert %{
+               "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},
+               "headers" => %{"tags" => [^tag]}
+             } =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} =
+               Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
+    end
   end
 
   describe "/v1/shapes - subset snapshots" do
