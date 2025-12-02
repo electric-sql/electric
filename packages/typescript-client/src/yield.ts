@@ -22,13 +22,12 @@ export const DEFAULT_YIELD_EVERY = 1000
  */
 export function yieldToMain(): Promise<void> {
   // Check if scheduler.yield is available (modern browsers)
-  const g = globalThis as GlobalWithScheduler
-  if (
-    typeof globalThis !== `undefined` &&
-    g.scheduler &&
-    typeof g.scheduler.yield === `function`
-  ) {
-    return g.scheduler.yield()
+  // Guard typeof globalThis first to avoid reference errors in exotic environments
+  if (typeof globalThis !== `undefined`) {
+    const g = globalThis as GlobalWithScheduler
+    if (g.scheduler && typeof g.scheduler.yield === `function`) {
+      return g.scheduler.yield()
+    }
   }
 
   // Fallback to setTimeout(0) which yields to the event loop

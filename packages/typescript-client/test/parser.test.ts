@@ -329,6 +329,25 @@ describe(`Async Message parser`, () => {
     yieldSpy.mockRestore()
   })
 
+  it(`should yield periodically during parseAsync`, async () => {
+    const yieldSpy = vi.spyOn(yieldModule, `yieldToMain`).mockResolvedValue()
+
+    // Create a JSON string with many messages that exceed the yield threshold
+    const messageCount = 2500
+    const messagesArray = Array.from({ length: messageCount }, (_, i) => ({
+      value: { a: `${i}` },
+    }))
+    const messagesJson = JSON.stringify(messagesArray)
+    const schema = { a: { type: `int4` } }
+
+    await parser.parseAsync(messagesJson, schema, 1000)
+
+    // Should yield twice (after 1000 and 2000 messages)
+    expect(yieldSpy).toHaveBeenCalledTimes(2)
+
+    yieldSpy.mockRestore()
+  })
+
   it(`should not yield for small datasets`, async () => {
     const yieldSpy = vi.spyOn(yieldModule, `yieldToMain`).mockResolvedValue()
 
