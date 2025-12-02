@@ -38,7 +38,7 @@ defmodule Electric.Config do
 
   @build_env Mix.env()
 
-  @known_feature_flags ~w[allow_subqueries suspend_consumers tagged_subqueries]
+  @known_feature_flags ~w[allow_subqueries tagged_subqueries]
 
   @defaults [
     ## Database
@@ -85,7 +85,7 @@ defmodule Electric.Config do
     shape_hibernate_after: :timer.seconds(30),
     # Should we terminate consumer processes after `shape_hibernate_after` ms
     # or just hibernate them?
-    shape_enable_suspend?: true,
+    shape_enable_suspend?: false,
     # Sets max_requests for Bandit handler processes:
     # https://hexdocs.pm/bandit/Bandit.html#t:http_1_options/0
     # "The maximum number of requests to serve in a single HTTP/{1,2}
@@ -483,10 +483,14 @@ defmodule Electric.Config do
       {known, []} ->
         known
 
-      {_, unknown} ->
-        raise Dotenvy.Error,
-          message:
-            "Unknown feature flags specified: #{inspect(unknown)}. Known feature flags: #{inspect(@known_feature_flags)}"
+      {known, unknown} ->
+        # Log an error but don't raise so that deployments can proceeed without
+        # removal of old flags and new flags can be added before deployment
+        Logger.error(
+          "Unknown feature flags specified: #{inspect(unknown)}. Known feature flags: #{inspect(@known_feature_flags)}"
+        )
+
+        known
     end
   end
 end
