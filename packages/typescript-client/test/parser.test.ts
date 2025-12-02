@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MessageParser, defaultParser, pgArrayParser } from '../src/parser'
+import * as yieldModule from '../src/yield'
 
 describe(`Default parser`, () => {
   it(`should parse integers`, () => {
@@ -266,5 +267,108 @@ describe(`Message parser`, () => {
     expect(
       parser.parse(`[ { "value": { "a": "{1,2,NULL,4,5}" } } ]`, schema)
     ).toEqual([{ value: { a: [1, 2, null, 4, 5] } }])
+  })
+})
+
+describe(`Async Message parser`, () => {
+  const parser = new MessageParser()
+
+  it(`should parse messages asynchronously with same results as sync`, async () => {
+    const messages = `[ { "value": { "a": "123" } }, { "value": { "a": "456" } } ]`
+    const schema = { a: { type: `int4` } }
+
+    const syncResult = parser.parse(messages, schema)
+    const asyncResult = await parser.parseAsync(messages, schema)
+
+    expect(asyncResult).toEqual(syncResult)
+  })
+
+  it(`should parse a single message (non-array)`, async () => {
+    const message = `{ "value": { "a": "123" } }`
+    const schema = { a: { type: `int4` } }
+
+    const result = await parser.parseAsync(message, schema)
+    expect(result).toEqual({ value: { a: 123 } })
+  })
+
+  it(`should parse snapshot data asynchronously with same results as sync`, async () => {
+    const messages = [
+      { value: { a: `123` } },
+      { value: { a: `456` } },
+      { value: { a: `789` } },
+    ]
+    const schema = { a: { type: `int4` } }
+
+    const syncResult = parser.parseSnapshotData(structuredClone(messages), schema)
+    const asyncResult = await parser.parseSnapshotDataAsync(
+      structuredClone(messages),
+      schema
+    )
+
+    expect(asyncResult).toEqual(syncResult)
+  })
+
+  it(`should yield periodically during async parsing`, async () => {
+    const yieldSpy = vi.spyOn(yieldModule, `yieldToMain`).mockResolvedValue()
+
+    // Create messages that exceed the yield threshold
+    const messageCount = 2500
+    const messages = Array.from({ length: messageCount }, (_, i) => ({
+      value: { a: `${i}` },
+    }))
+    const schema = { a: { type: `int4` } }
+
+    await parser.parseSnapshotDataAsync(messages, schema, 1000)
+
+    // Should yield twice (after 1000 and 2000 messages)
+    expect(yieldSpy).toHaveBeenCalledTimes(2)
+
+    yieldSpy.mockRestore()
+  })
+
+  it(`should not yield for small datasets`, async () => {
+    const yieldSpy = vi.spyOn(yieldModule, `yieldToMain`).mockResolvedValue()
+
+    const messages = [{ value: { a: `123` } }, { value: { a: `456` } }]
+    const schema = { a: { type: `int4` } }
+
+    await parser.parseSnapshotDataAsync(messages, schema, 1000)
+
+    // Should not yield for just 2 messages
+    expect(yieldSpy).not.toHaveBeenCalled()
+
+    yieldSpy.mockRestore()
+  })
+
+  it(`should respect custom yieldEvery parameter`, async () => {
+    const yieldSpy = vi.spyOn(yieldModule, `yieldToMain`).mockResolvedValue()
+
+    const messages = Array.from({ length: 15 }, (_, i) => ({
+      value: { a: `${i}` },
+    }))
+    const schema = { a: { type: `int4` } }
+
+    await parser.parseSnapshotDataAsync(messages, schema, 5)
+
+    // Should yield 3 times (after 5, 10, and 15 messages)
+    expect(yieldSpy).toHaveBeenCalledTimes(3)
+
+    yieldSpy.mockRestore()
+  })
+
+  it(`should handle old_value in async parsing`, async () => {
+    const messages = `[ { "value": { "a": "123" }, "old_value": { "a": "100" } } ]`
+    const schema = { a: { type: `int4` } }
+
+    const result = await parser.parseAsync(messages, schema)
+    expect(result).toEqual([{ value: { a: 123 }, old_value: { a: 100 } }])
+  })
+
+  it(`should handle null values in async parsing`, async () => {
+    const messages = [{ value: { a: null } }]
+    const schema = { a: { type: `int4` } }
+
+    const result = await parser.parseSnapshotDataAsync(messages, schema)
+    expect(result).toEqual([{ value: { a: null } }])
   })
 })

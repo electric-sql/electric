@@ -1,5 +1,6 @@
 import { ColumnInfo, GetExtensions, Row, Schema, Value } from './types'
 import { ParserNullValueError } from './error'
+import { yieldToMain, DEFAULT_YIELD_EVERY } from './yield'
 
 type Token = string
 type NullableToken = Token | null
@@ -155,6 +156,111 @@ export class MessageParser<T extends Row<unknown>> {
 
       return msg as Result
     })
+  }
+
+  /**
+   * Async version of parse() that yields to the main thread periodically
+   * to prevent UI blocking when processing large datasets.
+   *
+   * This is useful when parsing large shape responses where blocking the
+   * main thread would cause UI jank or unresponsiveness.
+   *
+   * @param messages - JSON string of messages to parse
+   * @param schema - Schema for type parsing
+   * @param yieldEvery - Number of messages to process before yielding (default: 1000)
+   */
+  async parseAsync<Result>(
+    messages: string,
+    schema: Schema,
+    yieldEvery: number = DEFAULT_YIELD_EVERY
+  ): Promise<Result> {
+    // First, parse the JSON without transformation (this is fast)
+    const parsed = JSON.parse(messages)
+
+    // If it's not an array, just transform it directly (single message)
+    if (!Array.isArray(parsed)) {
+      this.transformParsedMessage(parsed, schema)
+      return parsed as Result
+    }
+
+    // For arrays, transform each message with yielding
+    for (let i = 0; i < parsed.length; i++) {
+      this.transformParsedMessage(parsed[i], schema)
+
+      // Yield periodically to prevent blocking
+      if ((i + 1) % yieldEvery === 0) {
+        await yieldToMain()
+      }
+    }
+
+    return parsed as Result
+  }
+
+  /**
+   * Async version of parseSnapshotData() that yields to the main thread periodically
+   * to prevent UI blocking when processing large snapshots.
+   *
+   * @param messages - Array of already-parsed messages to transform
+   * @param schema - Schema for type parsing
+   * @param yieldEvery - Number of messages to process before yielding (default: 1000)
+   */
+  async parseSnapshotDataAsync<Result>(
+    messages: Array<unknown>,
+    schema: Schema,
+    yieldEvery: number = DEFAULT_YIELD_EVERY
+  ): Promise<Array<Result>> {
+    const results: Array<Result> = []
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i] as Record<string, unknown>
+
+      // Transform the value property if it exists
+      if (msg.value && typeof msg.value === `object` && msg.value !== null) {
+        msg.value = this.transformMessageValue(msg.value, schema)
+      }
+
+      // Transform the old_value property if it exists
+      if (
+        msg.old_value &&
+        typeof msg.old_value === `object` &&
+        msg.old_value !== null
+      ) {
+        msg.old_value = this.transformMessageValue(msg.old_value, schema)
+      }
+
+      results.push(msg as Result)
+
+      // Yield periodically to prevent blocking
+      if ((i + 1) % yieldEvery === 0) {
+        await yieldToMain()
+      }
+    }
+
+    return results
+  }
+
+  /**
+   * Transform value and old_value properties of a parsed message object.
+   * Used by parseAsync to transform messages after initial JSON parsing.
+   */
+  private transformParsedMessage(
+    message: Record<string, unknown>,
+    schema: Schema
+  ): void {
+    if (
+      message.value &&
+      typeof message.value === `object` &&
+      message.value !== null
+    ) {
+      message.value = this.transformMessageValue(message.value, schema)
+    }
+    if (
+      message.old_value &&
+      typeof message.old_value === `object` &&
+      message.old_value !== null
+    ) {
+      message.old_value = this.transformMessageValue(message.old_value, schema)
+    }
   }
 
   /**
