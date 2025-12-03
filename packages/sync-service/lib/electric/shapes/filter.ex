@@ -8,6 +8,8 @@ defmodule Electric.Shapes.Filter do
 
   The `Filter` module keeps track of what tables are referenced by the shapes and changes and delegates
   the table specific logic to the `Filter.WhereCondition` module.
+
+  Data is stored in ETS tables (outside the process heap) to avoid GC pressure with large numbers of shapes.
   """
 
   alias Electric.Replication.Changes
@@ -23,24 +25,40 @@ defmodule Electric.Shapes.Filter do
 
   require Logger
 
-  defstruct tables: %{}, refs_fun: nil, shapes: %{}
+  # ETS tables:
+  # - shapes_table: shape_id -> Shape struct
+  # - tables_table: table_name -> where_condition_id (reference to root WhereCondition for that table)
+  # - where_cond_table: where_condition_id -> {index_keys, other_shapes}
+  # - eq_index_table: {where_cond_id, field, value} -> {type, nested_where_cond_id}
+  # - incl_index_table: {where_cond_id, field, path} -> node_data
+  defstruct [:shapes_table, :tables_table, :where_cond_table, :eq_index_table, :incl_index_table, :refs_fun]
 
   @type t :: %Filter{}
   @type shape_id :: any()
 
   @spec new(keyword()) :: Filter.t()
   def new(opts \\ []) do
-    %Filter{refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)}
+    # Use a unique reference for table names to allow multiple filters in tests
+    unique = :erlang.unique_integer([:positive])
+
+    %Filter{
+      shapes_table: :ets.new(:"filter_shapes_#{unique}", [:set, :private]),
+      tables_table: :ets.new(:"filter_tables_#{unique}", [:set, :private]),
+      where_cond_table: :ets.new(:"filter_where_#{unique}", [:set, :private]),
+      eq_index_table: :ets.new(:"filter_eq_#{unique}", [:set, :private]),
+      incl_index_table: :ets.new(:"filter_incl_#{unique}", [:set, :private]),
+      refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)
+    }
   end
 
   @spec has_shape?(t(), shape_id()) :: boolean()
-  def has_shape?(%Filter{} = filter, shape_handle) do
-    is_map_key(filter.shapes, shape_handle)
+  def has_shape?(%Filter{shapes_table: table}, shape_handle) do
+    :ets.member(table, shape_handle)
   end
 
   @spec active_shapes(t()) :: [shape_id()]
-  def active_shapes(%Filter{} = filter) do
-    Map.keys(filter.shapes)
+  def active_shapes(%Filter{shapes_table: table}) do
+    :ets.select(table, [{{:"$1", :_}, [], [:"$1"]}])
   end
 
   @doc """
@@ -53,19 +71,31 @@ defmodule Electric.Shapes.Filter do
   def add_shape(%Filter{} = filter, shape_id, shape) do
     if has_shape?(filter, shape_id), do: raise("duplicate shape #{shape_id}")
 
-    %Filter{
-      filter
-      | tables:
-          Map.update(
-            filter.tables,
-            shape.root_table,
-            WhereCondition.add_shape(WhereCondition.new(), shape_id, shape.where),
-            fn condition ->
-              WhereCondition.add_shape(condition, shape_id, shape.where)
-            end
-          ),
-        shapes: Map.put(filter.shapes, shape_id, shape)
-    }
+    # Store shape metadata
+    :ets.insert(filter.shapes_table, {shape_id, shape})
+
+    # Get or create WhereCondition for the table
+    table_name = shape.root_table
+    where_cond_id = get_or_create_table_condition(filter, table_name)
+
+    # Add shape to the WhereCondition
+    WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
+
+    filter
+  end
+
+  defp get_or_create_table_condition(filter, table_name) do
+    case :ets.lookup(filter.tables_table, table_name) do
+      [] ->
+        # Create new WhereCondition
+        where_cond_id = make_ref()
+        WhereCondition.init(filter, where_cond_id)
+        :ets.insert(filter.tables_table, {table_name, where_cond_id})
+        where_cond_id
+
+      [{_, where_cond_id}] ->
+        where_cond_id
+    end
   end
 
   @doc """
@@ -73,20 +103,23 @@ defmodule Electric.Shapes.Filter do
   """
   @spec remove_shape(Filter.t(), shape_id()) :: Filter.t()
   def remove_shape(%Filter{} = filter, shape_id) do
-    shape = Map.fetch!(filter.shapes, shape_id)
+    [{_, shape}] = :ets.lookup(filter.shapes_table, shape_id)
+    table_name = shape.root_table
 
-    condition =
-      Map.fetch!(filter.tables, shape.root_table)
-      |> WhereCondition.remove_shape(shape_id, shape.where)
+    [{_, where_cond_id}] = :ets.lookup(filter.tables_table, table_name)
 
-    tables =
-      if WhereCondition.empty?(condition) do
-        Map.delete(filter.tables, shape.root_table)
-      else
-        Map.put(filter.tables, shape.root_table, condition)
-      end
+    # Remove shape from WhereCondition
+    WhereCondition.remove_shape(filter, where_cond_id, shape_id, shape.where)
 
-    %Filter{filter | tables: tables, shapes: Map.delete(filter.shapes, shape_id)}
+    # Clean up empty table condition
+    if WhereCondition.empty?(filter, where_cond_id) do
+      WhereCondition.delete(filter, where_cond_id)
+      :ets.delete(filter.tables_table, table_name)
+    end
+
+    :ets.delete(filter.shapes_table, shape_id)
+
+    filter
   end
 
   @doc """
@@ -117,7 +150,7 @@ defmodule Electric.Shapes.Filter do
   defp shapes_affected_by_change(%Filter{} = filter, %Relation{} = relation) do
     # Check all shapes is all tables because the table may have been renamed
     for shape_id <- all_shape_ids(filter),
-        shape = Map.fetch!(filter.shapes, shape_id),
+        [{_, shape}] = :ets.lookup(filter.shapes_table, shape_id),
         Shape.is_affected_by_relation_change?(shape, relation),
         into: MapSet.new() do
       shape_id
@@ -150,25 +183,39 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shapes_affected_by_record(filter, table_name, record) do
-    case Map.get(filter.tables, table_name) do
-      nil ->
+    case :ets.lookup(filter.tables_table, table_name) do
+      [] ->
         MapSet.new()
 
-      condition ->
-        WhereCondition.affected_shapes(condition, record, filter.shapes, filter.refs_fun)
+      [{_, where_cond_id}] ->
+        WhereCondition.affected_shapes(filter, where_cond_id, record, filter.refs_fun)
     end
   end
 
   defp all_shape_ids(%Filter{} = filter) do
-    Enum.reduce(filter.tables, MapSet.new(), fn {_table, condition}, ids ->
-      MapSet.union(ids, WhereCondition.all_shape_ids(condition))
-    end)
+    :ets.foldl(
+      fn {_table_name, where_cond_id}, acc ->
+        MapSet.union(acc, WhereCondition.all_shape_ids(filter, where_cond_id))
+      end,
+      MapSet.new(),
+      filter.tables_table
+    )
   end
 
   defp shape_ids_for_table(%Filter{} = filter, table_name) do
-    case Map.get(filter.tables, table_name) do
-      nil -> MapSet.new()
-      condition -> WhereCondition.all_shape_ids(condition)
+    case :ets.lookup(filter.tables_table, table_name) do
+      [] -> MapSet.new()
+      [{_, where_cond_id}] -> WhereCondition.all_shape_ids(filter, where_cond_id)
+    end
+  end
+
+  @doc """
+  Get a shape by its ID. Used internally for where clause evaluation.
+  """
+  def get_shape(%Filter{shapes_table: table}, shape_id) do
+    case :ets.lookup(table, shape_id) do
+      [{_, shape}] -> shape
+      [] -> nil
     end
   end
 end
