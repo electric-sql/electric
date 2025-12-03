@@ -411,7 +411,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
          [],
          _values,
          _record
-       ), do: nil
+       ),
+       do: nil
 
   # No more values to process
   defp shapes_affected_by_children(
@@ -423,7 +424,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
          _keys,
          [],
          _record
-       ), do: nil
+       ),
+       do: nil
 
   defp value_from_record(record, field, type) do
     Env.parse_const(@env, record[field], type)
