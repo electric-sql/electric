@@ -31,7 +31,14 @@ defmodule Electric.Shapes.Filter do
   # - where_cond_table: where_condition_id -> {index_keys, other_shapes}
   # - eq_index_table: {where_cond_id, field, value} -> {type, nested_where_cond_id}
   # - incl_index_table: {where_cond_id, field, path} -> node_data
-  defstruct [:shapes_table, :tables_table, :where_cond_table, :eq_index_table, :incl_index_table, :refs_fun]
+  defstruct [
+    :shapes_table,
+    :tables_table,
+    :where_cond_table,
+    :eq_index_table,
+    :incl_index_table,
+    :refs_fun
+  ]
 
   @type t :: %Filter{}
   @type shape_id :: any()

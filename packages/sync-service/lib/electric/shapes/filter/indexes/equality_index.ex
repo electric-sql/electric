@@ -33,7 +33,15 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   @doc """
   Add a shape to the equality index.
   """
-  def add_shape(%Filter{eq_index_table: table} = filter, where_cond_id, field, type, value, shape_id, and_where) do
+  def add_shape(
+        %Filter{eq_index_table: table} = filter,
+        where_cond_id,
+        field,
+        type,
+        value,
+        shape_id,
+        and_where
+      ) do
     key = {where_cond_id, field, value}
 
     nested_where_cond_id =
@@ -72,7 +80,14 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   @doc """
   Remove a shape from the equality index.
   """
-  def remove_shape(%Filter{eq_index_table: table} = filter, where_cond_id, shape_id, field, value, and_where) do
+  def remove_shape(
+        %Filter{eq_index_table: table} = filter,
+        where_cond_id,
+        shape_id,
+        field,
+        value,
+        and_where
+      ) do
     key = {where_cond_id, field, value}
 
     case :ets.lookup(table, key) do
@@ -133,12 +148,15 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
                 MapSet.new()
 
               [{_, {_type, nested_where_cond_id}}] ->
-                WhereCondition.affected_shapes(filter, nested_where_cond_id, record, fn _shape -> %{} end)
+                WhereCondition.affected_shapes(filter, nested_where_cond_id, record, fn _shape ->
+                  %{}
+                end)
             end
 
           :error ->
             raise RuntimeError,
-              message: "Could not parse value for field #{inspect(field)} of type #{inspect(type)}"
+              message:
+                "Could not parse value for field #{inspect(field)} of type #{inspect(type)}"
         end
     end
   end
