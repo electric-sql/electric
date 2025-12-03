@@ -108,8 +108,8 @@ defmodule Electric.StackSupervisor.Telemetry do
         Electric.Telemetry.OpenTelemetry.execute(
           [:electric, :postgres, :replication],
           %{
-            retained_wal_size: retained_wal_size,
-            confirmed_flush_lsn_lag: max(0, confirmed_flush_lsn_lag)
+            slot_retained_wal_size: retained_wal_size,
+            slot_confirmed_flush_lsn_lag: max(0, confirmed_flush_lsn_lag)
           },
           %{stack_id: stack_id}
         )
