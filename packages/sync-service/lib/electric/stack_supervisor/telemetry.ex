@@ -44,6 +44,9 @@ defmodule Electric.StackSupervisor.Telemetry do
       [
         Telemetry.Metrics.last_value("electric.shapes.total_shapes.count"),
         Telemetry.Metrics.last_value("electric.shapes.active_shapes.count"),
+        Telemetry.Metrics.last_value("electric.postgres.replication.pg_current_wal_lsn",
+          unit: :byte
+        ),
         Telemetry.Metrics.last_value("electric.postgres.replication.slot_retained_wal_size",
           unit: :byte
         ),
