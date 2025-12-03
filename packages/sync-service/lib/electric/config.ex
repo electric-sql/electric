@@ -93,6 +93,12 @@ defmodule Electric.Config do
     conn_max_requests: 50,
     ## Performance tweaks
     publication_alter_debounce_ms: 0,
+    # allow for configuring per-process `Process.spawn_opt()`. In the form
+    # %{process_id :: atom() => [Process.spawn_opt()]}
+    # See `Process.flag/2`
+    #
+    # e.g. %{shape_log_collector: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024]}
+    process_spawn_opts: %{},
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
     feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),
@@ -465,6 +471,69 @@ defmodule Electric.Config do
         :ok
     end
   end
+
+  @valid_spawn_opts ~w[min_bin_vheap_size min_heap_size priority fullsweep_after message_queue_data]
+
+  @doc """
+  Parse `spawn_opts` from environment variable to keyword list suitable for passing to `GenServer.start_link/2`
+
+  ## Examples
+
+      iex> parse_spawn_opts!(~S({"shape_log_collector":{"min_heap_size":234,"min_bin_vheap_size":123,"message_queue_data":"on_heap","priority":"high","fullsweep_after":104}}))
+      %{shape_log_collector: [fullsweep_after: 104, message_queue_data: :on_heap, min_bin_vheap_size: 123, min_heap_size: 234, priority: :high]}
+
+      iex> parse_spawn_opts!(~S({"shape_log_collector":{"monkey":123,"message_queue_data":"on_fire","min_bin_vheap_size":-1,"priority":"high"}}))
+      %{shape_log_collector: [priority: :high]}
+
+      iex> parse_spawn_opts!("")
+      %{}
+
+      iex> parse_spawn_opts!("{}")
+      %{}
+  """
+  def parse_spawn_opts!("") do
+    %{}
+  end
+
+  def parse_spawn_opts!(str) do
+    str
+    |> Jason.decode!()
+    |> then(fn
+      opts when is_map(opts) ->
+        for {process_name, process_opts} <- opts, is_map(process_opts), into: %{} do
+          opts =
+            for {opt_key, opt_val} <- process_opts,
+                opt_key in @valid_spawn_opts,
+                key = String.to_atom(opt_key),
+                val = validate_spawn_opt(key, opt_val) do
+              {key, val}
+            end
+
+          {String.to_atom(process_name), opts}
+        end
+
+      _invalid ->
+        raise ArgumentError, message: "Invalid spawn opts: #{inspect(str)}"
+    end)
+    |> tap(fn process_spawn_opts ->
+      if map_size(process_spawn_opts) > 0 do
+        Logger.info("Process spawn opts: #{inspect(process_spawn_opts)}")
+      end
+    end)
+  end
+
+  defp validate_spawn_opt(:min_bin_vheap_size, val) when is_integer(val) and val >= 0, do: val
+  defp validate_spawn_opt(:min_heap_size, val) when is_integer(val) and val >= 0, do: val
+
+  defp validate_spawn_opt(:priority, val) when val in ["low", "normal", "high"],
+    do: String.to_atom(val)
+
+  defp validate_spawn_opt(:fullsweep_after, val) when is_integer(val) and val >= 0, do: val
+
+  defp validate_spawn_opt(:message_queue_data, val) when val in ["off_heap", "on_heap"],
+    do: String.to_atom(val)
+
+  defp validate_spawn_opt(_, _), do: nil
 
   @doc false
   # helper function for use in doc tests

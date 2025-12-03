@@ -135,7 +135,8 @@ defmodule Electric.StackSupervisor do
                      conn_max_requests: [
                        type: :pos_integer,
                        default: Electric.Config.default(:conn_max_requests)
-                     ]
+                     ],
+                     process_spawn_opts: [type: :map, default: %{}]
                    ]
                  ],
                  manual_table_publishing?: [
@@ -317,6 +318,7 @@ defmodule Electric.StackSupervisor do
 
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
     shape_enable_suspend? = Keyword.fetch!(config.tweaks, :shape_enable_suspend?)
+    process_spawn_opts = Keyword.fetch!(config.tweaks, :process_spawn_opts)
 
     shape_cache_opts = [
       stack_id: stack_id
@@ -366,6 +368,7 @@ defmodule Electric.StackSupervisor do
            inspector: inspector,
            shape_hibernate_after: shape_hibernate_after,
            shape_enable_suspend?: shape_enable_suspend?,
+           process_spawn_opts: process_spawn_opts,
            feature_flags: Map.get(config, :feature_flags, [])
          ]},
         {Electric.AsyncDeleter,

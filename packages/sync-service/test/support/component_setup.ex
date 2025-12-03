@@ -111,7 +111,8 @@ defmodule Support.ComponentSetup do
                Map.get(ctx, :registry, Electric.StackSupervisor.registry_name(stack_id)),
              shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000),
              shape_enable_suspend?: Map.get(ctx, :suspend, false),
-             feature_flags: Electric.Config.get_env(:feature_flags)
+             feature_flags: Electric.Config.get_env(:feature_flags),
+             process_spawn_opts: Map.get(ctx, :process_spawn_opts, %{})
            ],
            seed_config
          )}

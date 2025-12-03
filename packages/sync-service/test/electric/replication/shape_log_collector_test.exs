@@ -82,6 +82,22 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
   end
 
+  describe "process gc configuration" do
+    setup :setup_log_collector
+
+    @tag process_spawn_opts: %{
+           shape_log_collector: [priority: :high, min_bin_vheap_size: 1024 * 1024]
+         }
+    test "are correctly passed to process", ctx do
+      pid = ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis()
+
+      info = Process.info(pid)
+
+      assert :high == info[:priority]
+      assert info[:garbage_collection][:min_bin_vheap_size] >= 1024 * 1024
+    end
+  end
+
   describe "shape restoration" do
     setup :setup_log_collector
 
