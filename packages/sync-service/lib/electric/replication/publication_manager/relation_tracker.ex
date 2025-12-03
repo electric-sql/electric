@@ -458,14 +458,19 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     missing_gen_col_error =
       Electric.DbConfigurationError.publication_missing_generated_columns(state.publication_name)
 
-    to_fail =
-      state.tracked_shape_handles
-      |> Map.filter(fn {_handle, {_oid, with_gen_cols}} -> with_gen_cols end)
+    oid_to_handles_to_fail =
+      :ets.foldl(
+        fn
+          {handle, oid, true}, acc -> Map.update(acc, oid, [handle], &[handle | &1])
+          {_handle, _oid, false}, acc -> acc
+        end,
+        Map.new(),
+        state.tracked_handles_table
+      )
 
     # scan through and reply to any waiters for shapes that require generated columns
     new_waiters =
-      to_fail
-      |> Enum.group_by(fn {_handle, {oid, _}} -> oid end, fn {handle, _} -> handle end)
+      oid_to_handles_to_fail
       |> Enum.reduce(state.waiters, fn {oid, handles_to_fail}, waiters ->
         if rel_waiters = Map.get(waiters, oid) do
           {to_fail, to_keep} =
@@ -482,10 +487,9 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
         end
       end)
 
-    if not Enum.empty?(to_fail) do
+    if map_size(oid_to_handles_to_fail) > 0 do
       # schedule removals for any tracked shapes that require generated columns
-      handles = for {handle, _} <- to_fail, do: handle
-
+      handles = oid_to_handles_to_fail |> Map.values() |> List.flatten()
       ShapeCleaner.remove_shapes_async(state.stack_id, handles)
     end
 
@@ -506,10 +510,10 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   @spec track_shape_handle(shape_handle(), publication_filter(), state()) :: state()
   defp track_shape_handle(
          shape_handle,
-         {{oid, _relation}, _generated?},
+         {{oid, _relation}, generated?},
          %__MODULE__{tracked_handles_table: tracked_handles_table} = state
        ) do
-    true = :ets.insert_new(tracked_handles_table, {shape_handle, oid})
+    true = :ets.insert_new(tracked_handles_table, {shape_handle, oid, generated?})
     state
   end
 
