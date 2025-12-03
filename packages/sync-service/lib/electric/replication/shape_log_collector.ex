@@ -38,8 +38,13 @@ defmodule Electric.Replication.ShapeLogCollector do
             when is_map_key(state, :last_processed_lsn) and not is_nil(state.last_processed_lsn)
 
   def start_link(opts) do
-    with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
-      GenServer.start_link(__MODULE__, Map.new(opts), name: name(opts[:stack_id]))
+    with {:ok, opts} <- NimbleOptions.validate(Map.new(opts), @schema) do
+      stack_id = opts[:stack_id]
+
+      GenServer.start_link(__MODULE__, opts,
+        name: name(stack_id),
+        spawn_opt: Electric.StackConfig.spawn_opts(stack_id, :shape_log_collector)
+      )
     end
   end
 
@@ -91,6 +96,23 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def active_shapes(server_ref) do
     GenServer.call(server(server_ref), :active_shapes)
+  end
+
+  def set_process_flags(server_ref, flags) do
+    GenServer.call(server(server_ref), {:set_process_flags, flags}, :infinity)
+  end
+
+  def get_process_flags(server_ref) do
+    if pid = server(server_ref) |> GenServer.whereis() do
+      {:garbage_collection, gc_flags} = :erlang.process_info(pid, :garbage_collection)
+      {:priority, priority} = :erlang.process_info(pid, :priority)
+
+      {:ok,
+       [priority: priority] ++
+         Keyword.take(gc_flags, [:min_bin_vheap_size, :min_heap_size, :fullsweep_after])}
+    else
+      :error
+    end
   end
 
   def init(opts) do
@@ -232,6 +254,20 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_call(:active_shapes, _from, state) do
     {:reply, Filter.active_shapes(state.filter), state}
+  end
+
+  def handle_call({:set_process_flags, flags}, _from, state) do
+    {settings, invalid} =
+      Enum.flat_map_reduce(flags, [], fn {flag, value}, invalid ->
+        try do
+          {[{flag, :erlang.process_flag(flag, value)}], invalid}
+        rescue
+          ArgumentError ->
+            {[], [flag | invalid]}
+        end
+      end)
+
+    {:reply, {:ok, [settings: settings, invalid: invalid]}, state}
   end
 
   def handle_cast({:writer_flushed, shape_id, offset}, state) do

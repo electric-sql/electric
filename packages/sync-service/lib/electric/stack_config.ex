@@ -9,6 +9,12 @@ defmodule Electric.StackConfig do
     :ets.lookup_element(table(stack_id), key, 2, default)
   end
 
+  def spawn_opts(stack_id, process_name) do
+    stack_id
+    |> lookup(:process_spawn_opts, %{})
+    |> Map.get(process_name, [])
+  end
+
   def lookup!(stack_id, key) do
     :ets.lookup_element(table(stack_id), key, 2)
   rescue
@@ -25,7 +31,8 @@ defmodule Electric.StackConfig do
       shape_hibernate_after: Electric.Config.default(:shape_hibernate_after),
       shape_enable_suspend?: Electric.Config.default(:shape_enable_suspend?),
       chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
-      feature_flags: []
+      feature_flags: [],
+      process_spawn_opts: %{}
     ]
   end
 
