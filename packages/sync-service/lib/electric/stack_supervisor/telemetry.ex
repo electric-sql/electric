@@ -47,7 +47,8 @@ defmodule Electric.StackSupervisor.Telemetry do
     [
       last_value("electric.shapes.total_shapes.count"),
       last_value("electric.shapes.active_shapes.count"),
-      last_value("electric.postgres.replication.wal_size", unit: :byte)
+      last_value("electric.postgres.replication.slot_retained_wal_size", unit: :byte),
+      last_value("electric.postgres.replication.slot_confirmed_flush_lsn_lag", unit: :byte)
     ]
   end
 
@@ -78,7 +79,8 @@ defmodule Electric.StackSupervisor.Telemetry do
 
   @retained_wal_size_query """
   SELECT
-    pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8
+    pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::int8 AS retained_wal_size
+    pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8 AS confirmed_flush_lsn_lag
   FROM
     pg_replication_slots
   WHERE
@@ -89,7 +91,7 @@ defmodule Electric.StackSupervisor.Telemetry do
   @spec report_retained_wal_size(Electric.stack_id(), binary(), map()) :: :ok
   def report_retained_wal_size(stack_id, slot_name, _telemetry_opts) do
     try do
-      %Postgrex.Result{rows: [[wal_size]]} =
+      %Postgrex.Result{rows: [[retained_wal_size, confirmed_flush_lsn_lag]]} =
         Postgrex.query!(
           Electric.Connection.Manager.admin_pool(stack_id),
           @retained_wal_size_query,
@@ -98,13 +100,16 @@ defmodule Electric.StackSupervisor.Telemetry do
           deadline: 3_000
         )
 
-      # The query above can return `-1` which I'm assuming means "up-to-date".
-      # This is a confusing stat if we're measuring in bytes, so normalise to
-      # [0, :infinity)
+      # The query above can return `-1` for `confirmed_flush_lsn_lag` which means that Electric
+      # is caught up with Postgres' replication stream.
+      # This is a confusing stat if we're measuring in bytes, so use 0 as the bottom limit.
 
       Electric.Telemetry.OpenTelemetry.execute(
         [:electric, :postgres, :replication],
-        %{wal_size: max(0, wal_size)},
+        %{
+          retained_wal_size: retained_wal_size,
+          confirmed_flush_lsn_lag: max(0, confirmed_flush_lsn_lag)
+        },
         %{stack_id: stack_id}
       )
     catch
