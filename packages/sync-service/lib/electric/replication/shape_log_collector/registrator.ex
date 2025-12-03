@@ -29,13 +29,12 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   ]
   defstruct @enforce_keys
 
-  @typep registration_waiter :: {GenServer.from(), Electric.shape_handle()}
   @type t :: %__MODULE__{
           stack_id: Electric.stack_id(),
-          to_add: %{Electric.shape_handle() => Electric.Replication.Shape.t()},
+          to_add: %{Electric.shape_handle() => Electric.Shapes.Shape.t()},
           to_remove: MapSet.t(Electric.shape_handle()),
-          to_schedule_waiters: [registration_waiter()],
-          ack_waiters: [registration_waiter()],
+          to_schedule_waiters: %{Electric.shape_handle() => GenServer.from() | nil},
+          ack_waiters: [{Electric.shape_handle(), GenServer.from()}],
           ack_ref: reference() | nil
         }
 
@@ -88,7 +87,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
        stack_id: stack_id,
        to_add: %{},
        to_remove: MapSet.new(),
-       to_schedule_waiters: [],
+       to_schedule_waiters: %{},
        ack_waiters: [],
        ack_ref: nil
      }}
@@ -101,23 +100,31 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
        state
        | to_add: Map.put(state.to_add, shape_handle, shape),
          to_remove: MapSet.delete(state.to_remove, shape_handle),
-         to_schedule_waiters: [{from, shape_handle} | state.to_schedule_waiters]
+         to_schedule_waiters: Map.put(state.to_schedule_waiters, shape_handle, from)
      }, {:continue, :maybe_schedule_update}}
   end
 
   @impl true
   def handle_cast({:remove_shape, shape_handle}, state) do
+    if from = Map.get(state.to_schedule_waiters, shape_handle) do
+      GenServer.reply(
+        from,
+        {:error, "Shape #{shape_handle} removed before registration completed"}
+      )
+    end
+
     {:noreply,
      %{
        state
        | to_add: Map.delete(state.to_add, shape_handle),
-         to_remove: MapSet.put(state.to_remove, shape_handle)
+         to_remove: MapSet.put(state.to_remove, shape_handle),
+         to_schedule_waiters: Map.put(state.to_schedule_waiters, shape_handle, nil)
      }, {:continue, :maybe_schedule_update}}
   end
 
   @impl true
   def handle_info({ref, {:ok, results}}, %{ack_ref: ref} = state) do
-    for {from, shape_handle} <- state.ack_waiters do
+    for {shape_handle, from} <- state.ack_waiters do
       GenServer.reply(from, Map.fetch!(results, shape_handle))
     end
 
@@ -138,9 +145,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
     {:noreply, state}
   end
 
-  @empty_mapset MapSet.new()
-  def handle_continue(:maybe_schedule_update, state)
-      when map_size(state.to_add) == 0 and state.to_remove == @empty_mapset do
+  def handle_continue(:maybe_schedule_update, %{to_schedule_waiters: []} = state) do
     Logger.debug("No shapes to register or unregister; skipping update scheduling")
     {:noreply, state}
   end
@@ -153,13 +158,20 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
         state.to_remove
       )
 
+    ack_waiters =
+      state.to_schedule_waiters
+      |> Enum.flat_map(fn
+        {_shape_handle, nil} -> []
+        {shape_handle, from} -> [{shape_handle, from}]
+      end)
+
     {:noreply,
      %{
        state
        | to_add: Map.new(),
          to_remove: MapSet.new(),
-         to_schedule_waiters: [],
-         ack_waiters: state.to_schedule_waiters,
+         to_schedule_waiters: %{},
+         ack_waiters: ack_waiters,
          ack_ref: ack_ref
      }}
   end
