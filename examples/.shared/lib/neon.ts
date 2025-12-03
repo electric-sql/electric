@@ -43,8 +43,6 @@ export function getNeonConnectionStrings({
         String(endpoint.id),
         `${endpoint.id}-pooler`
       )
-      console.log(`[neon] Using direct endpoint`, { host: directHost })
-      console.log(`[neon] Using pooled endpoint`, { host: pooledHost })
 
       // Reset password once for both connection strings
       const pwdResp = execSync(
@@ -60,14 +58,6 @@ export function getNeonConnectionStrings({
 
       if (status !== `200`) {
         let errorMessage = `Failed to reset Neon role password: HTTP ${status}`
-        if (body) {
-          try {
-            const errorJson = JSON.parse(body)
-            errorMessage += ` - ${JSON.stringify(errorJson)}`
-          } catch {
-            errorMessage += ` - ${body}`
-          }
-        }
         throw new Error(errorMessage)
       }
 
