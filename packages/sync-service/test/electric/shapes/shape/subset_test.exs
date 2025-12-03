@@ -11,7 +11,7 @@ defmodule Electric.Shapes.Shape.SubsetTest do
 
     setup [
       :with_stack_id_from_test,
-      :with_shared_db,
+      :with_unique_db,
       :with_persistent_kv,
       :with_inspector,
       :with_sql_execute
