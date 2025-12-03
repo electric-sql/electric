@@ -23,12 +23,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     :stack_id,
     :publication_name,
     :publication_refresh_period,
+    :tracked_handles_table,
     oid_to_relation: %{},
     relation_ref_counts: %{},
     prepared_relation_filters: MapSet.new(),
     submitted_relation_filters: MapSet.new(),
     committed_relation_filters: MapSet.new(),
-    tracked_shape_handles: %{},
     waiters: %{},
     # start with optimistic assumption about what the
     # publication supports (altering and generated columns)
@@ -39,18 +39,16 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
   @typep internal_relation_filters() :: MapSet.t(Electric.relation_id())
   @typep publication_filter() :: {Electric.oid_relation(), with_generated_cols :: boolean()}
-  @typep reduced_publication_filter() ::
-           {Electric.relation_id(), with_generated_cols :: boolean()}
   @typep waiter() :: {GenServer.from(), shape_handle()}
   @typep state() :: %__MODULE__{
            stack_id: Electric.stack_id(),
            relation_ref_counts: %{Electric.relation_id() => non_neg_integer()},
            oid_to_relation: %{Electric.relation_id() => Electric.relation()},
+           tracked_handles_table: atom(),
            prepared_relation_filters: internal_relation_filters(),
            submitted_relation_filters: internal_relation_filters(),
            committed_relation_filters: internal_relation_filters(),
            waiters: %{Electric.relation_id() => [waiter(), ...]},
-           tracked_shape_handles: %{shape_handle() => reduced_publication_filter()},
            publication_name: String.t(),
            publishes_generated_columns?: boolean(),
            publication_refresh_period: non_neg_integer()
@@ -129,10 +127,21 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
+    # Using an ETS table for trackin shape handles as it is an unbounded
+    # set that could grow large enough for GC pauses to matter. It is set
+    # to public as a task populates it on startup, and it is scoped privately
+    # enough such that defensive programming is unnecessary.
+    tracked_handles_table =
+      :ets.new(
+        :"relation_tracker_tracked_handles:#{opts.stack_id}",
+        [:named_table, :public, :set]
+      )
+
     state = %__MODULE__{
       stack_id: opts.stack_id,
       publication_name: opts.publication_name,
-      publication_refresh_period: opts.refresh_period
+      publication_refresh_period: opts.refresh_period,
+      tracked_handles_table: tracked_handles_table
     }
 
     {:ok, state, {:continue, :restore_relations}}
@@ -331,37 +340,32 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     not MapSet.equal?(prepared, submitted) or not MapSet.equal?(submitted, committed)
   end
 
-  defguardp is_tracking_shape_handle?(shape_handle, state)
-            when is_map_key(state.tracked_shape_handles, shape_handle)
-
   @spec add_shape_to_publication_filters(shape_handle(), publication_filter(), state()) :: state()
-  defp add_shape_to_publication_filters(shape_handle, _pub_filter, state)
-       when is_tracking_shape_handle?(shape_handle, state) do
-    Logger.debug("Shape handle already tracked: #{inspect(shape_handle)}")
-    state
-  end
-
   defp add_shape_to_publication_filters(
          shape_handle,
          {{oid, relation} = rel_key, _} = pub_filter,
          state
        ) do
-    state = Map.update!(state, :oid_to_relation, &Map.put_new(&1, oid, relation))
-    state = track_shape_handle(shape_handle, pub_filter, state)
-    do_update_relation_filters(rel_key, :add, state)
+    if is_handle_tracked?(shape_handle, state) do
+      Logger.debug("Shape handle already tracked: #{inspect(shape_handle)}")
+      state
+    else
+      state = Map.update!(state, :oid_to_relation, &Map.put_new(&1, oid, relation))
+      state = track_shape_handle(shape_handle, pub_filter, state)
+      do_update_relation_filters(rel_key, :add, state)
+    end
   end
 
   @spec remove_shape_from_publication_filters(shape_handle(), state()) :: state()
-  defp remove_shape_from_publication_filters(shape_handle, state)
-       when not is_tracking_shape_handle?(shape_handle, state) do
-    Logger.debug("Shape handle already not tracked: #{inspect(shape_handle)}")
-    state
-  end
-
   defp remove_shape_from_publication_filters(shape_handle, state) do
-    rel_key = fetch_tracked_shape_relation!(shape_handle, state)
-    state = untrack_shape_handle(shape_handle, state)
-    do_update_relation_filters(rel_key, :remove, state)
+    if is_handle_tracked?(shape_handle, state) do
+      rel_key = fetch_tracked_shape_relation!(shape_handle, state)
+      state = untrack_shape_handle(shape_handle, state)
+      do_update_relation_filters(rel_key, :remove, state)
+    else
+      Logger.debug("Shape handle already not tracked: #{inspect(shape_handle)}")
+      state
+    end
   end
 
   @spec do_update_relation_filters(
@@ -492,34 +496,34 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   defp fetch_tracked_shape_relation!(
          shape_handle,
          %__MODULE__{
-           tracked_shape_handles: tracked_shape_handles
+           tracked_handles_table: tracked_handles_table
          } = state
-       )
-       when is_tracking_shape_handle?(shape_handle, state) do
-    {oid, _} = Map.fetch!(tracked_shape_handles, shape_handle)
+       ) do
+    oid = :ets.lookup_element(tracked_handles_table, shape_handle, 2)
     expand_oid(oid, state)
   end
 
   @spec track_shape_handle(shape_handle(), publication_filter(), state()) :: state()
   defp track_shape_handle(
          shape_handle,
-         {{oid, _relation}, generated?},
-         %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
-       )
-       when not is_tracking_shape_handle?(shape_handle, state) do
-    %{
-      state
-      | tracked_shape_handles: Map.put_new(tracked_shape_handles, shape_handle, {oid, generated?})
-    }
+         {{oid, _relation}, _generated?},
+         %__MODULE__{tracked_handles_table: tracked_handles_table} = state
+       ) do
+    true = :ets.insert_new(tracked_handles_table, {shape_handle, oid})
+    state
   end
 
   @spec untrack_shape_handle(shape_handle(), state()) :: state()
   defp untrack_shape_handle(
          shape_handle,
-         %__MODULE__{tracked_shape_handles: tracked_shape_handles} = state
-       )
-       when is_tracking_shape_handle?(shape_handle, state) do
-    %{state | tracked_shape_handles: Map.delete(tracked_shape_handles, shape_handle)}
+         %__MODULE__{tracked_handles_table: tracked_handles_table} = state
+       ) do
+    true = :ets.delete(tracked_handles_table, shape_handle)
+    state
+  end
+
+  defp is_handle_tracked?(shape_handle, %__MODULE__{tracked_handles_table: tracked_handles_table}) do
+    :ets.member(tracked_handles_table, shape_handle)
   end
 
   @spec get_publication_filter_from_shape(Shape.t()) :: publication_filter()
