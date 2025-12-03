@@ -2,7 +2,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   @moduledoc """
   Efficiently finds shapes that are affected by a change when the shape's where clause has `array_field @> const_array` in it.
 
-  The index is a tree. Each node in the tree represents a value in the array.
+  The index is a tree stored in ETS. Each node in the tree represents a value in the array.
 
   When adding a shape to the tree, the shape's array is sorted and deduplicated, then first value is used to find the child node of the root node.
   The child to that node is then found using the next value and so on. When there are no values left, the shape is then added to the last node.
@@ -12,226 +12,330 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   To find the shapes affected by a change, the values of the array in the change are sorted and deduplicated. The tree is then traversed using the values
   and any nodes that contain shapes on the way are added to the result set, because if the node has been reached the shape's array must be a subset of the change's array.
 
-  A futher optimisation is we keep a sorted list of keys of the children in each node. In `shapes_affected_by_children/3` we have to check the values against the keys.
-  We may have more keys or more values, keeping this sorted list of keys allows up to only do min(key_count, value_count) comparisons for the node.
+  ## ETS Storage
+
+  Tree nodes are stored in the incl_index_table with keys of the form:
+  `{where_cond_id, field, path}` -> `%{keys: [...], condition_id: where_cond_id | nil}`
+
+  Where `path` is the list of array values traversed to reach this node (e.g., `[]` for root, `[1]`, `[1, 2]`, etc.).
+
+  Additionally, we store index metadata at:
+  `{where_cond_id, field, :meta}` -> `{type}`
   """
+
   alias Electric.Replication.Eval.Env
-  alias Electric.Shapes.Filter.Index
-  alias Electric.Shapes.Filter.Indexes.InclusionIndex
+  alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.WhereCondition
 
-  empty_node = %{keys: []}
-  @empty_node empty_node
+  @env Env.new()
 
-  defstruct [:type, :value_tree]
+  @doc """
+  Check if the index for a field is empty.
+  """
+  def empty?(%Filter{incl_index_table: table}, where_cond_id, field) do
+    # Check if root node exists and is empty
+    root_key = {where_cond_id, field, []}
 
-  def new(type), do: %InclusionIndex{type: type, value_tree: @empty_node}
-
-  defimpl Index.Protocol, for: InclusionIndex do
-    @empty_node empty_node
-
-    def empty?(%InclusionIndex{value_tree: value_tree}), do: node_empty?(value_tree)
-
-    def add_shape(%InclusionIndex{} = index, array, shape_id, and_where) do
-      ordered = array |> Enum.sort() |> Enum.dedup()
-
-      %{
-        index
-        | value_tree:
-            add_shape_to_node(index.value_tree, ordered, %{
-              shape_id: shape_id,
-              and_where: and_where
-            })
-      }
+    case :ets.lookup(table, root_key) do
+      [] -> true
+      [{_, %{keys: [], condition_id: nil}}] -> true
+      [{_, %{keys: []}}] -> true
+      _ -> false
     end
-
-    defp add_shape_to_node(node, [value | values], shape_info) do
-      # There are still array values left so don't add the shape to this node, add it a child or descendent node instead
-      case Map.get(node, value) do
-        nil ->
-          # child for the value does not exist so create one
-          child =
-            @empty_node
-            # add the shape to the child with the remaining values
-            |> add_shape_to_node(values, shape_info)
-
-          node
-          |> Map.put(value, child)
-          # Also add to the sorted list of keys
-          # This helps to make `shapes_affected_by_children/3` more efficient
-          |> Map.put(:keys, Enum.sort([value | node.keys]))
-
-        child ->
-          # Child for the value exists so add the shape to it with the remaining values
-          node
-          |> Map.put(value, add_shape_to_node(child, values, shape_info))
-      end
-    end
-
-    defp add_shape_to_node(node, [] = _values, shape_info) do
-      # There are no more arry values left so add the shape to the node
-      Map.put(
-        node,
-        :condition,
-        WhereCondition.add_shape(
-          node[:condition] || WhereCondition.new(),
-          shape_info.shape_id,
-          shape_info.and_where
-        )
-      )
-    end
-
-    def remove_shape(%InclusionIndex{} = index, array, shape_id, and_where) do
-      ordered = array |> Enum.sort() |> Enum.dedup()
-
-      %{
-        index
-        | value_tree:
-            remove_shape_from_node(index.value_tree, ordered, %{
-              shape_id: shape_id,
-              and_where: and_where
-            })
-      }
-    end
-
-    defp remove_shape_from_node(node, [value | values], shape_info) do
-      # There are still array values left so don't remove the shape from this node, remove it from a child or descendent node instead
-      child =
-        node
-        |> Map.fetch!(value)
-        |> remove_shape_from_node(values, shape_info)
-
-      if node_empty?(child) do
-        node
-        |> Map.delete(value)
-        |> Map.put(:keys, List.delete(node.keys, value))
-      else
-        Map.put(node, value, child)
-      end
-    end
-
-    defp remove_shape_from_node(node, [] = _values, shape_info) do
-      # There are no more arry values left so remove the shape from the node
-      condition =
-        node.condition
-        |> WhereCondition.remove_shape(
-          shape_info.shape_id,
-          shape_info.and_where
-        )
-
-      if WhereCondition.empty?(condition) do
-        Map.delete(node, :condition)
-      else
-        Map.put(node, :condition, condition)
-      end
-    end
-
-    defp node_empty?(%{condition: _}), do: false
-    defp node_empty?(%{keys: []}), do: true
-    defp node_empty?(_), do: false
-
-    def affected_shapes(%InclusionIndex{} = index, field, record, shapes) do
-      record
-      |> value_from_record(field, index.type)
-      |> shapes_affected_by_array(index, record, shapes)
-    end
-
-    defp shapes_affected_by_array(nil, _, _, _), do: MapSet.new()
-
-    defp shapes_affected_by_array(values, index, record, shapes) when is_list(values) do
-      values =
-        values
-        |> Enum.sort()
-        |> Enum.dedup()
-
-      shapes_affected_by_tree(index.value_tree, values, record, shapes) || MapSet.new()
-    end
-
-    defp shapes_affected_by_tree(node, values, record, shapes) do
-      union(
-        shapes_affected_by_node(node, record, shapes),
-        shapes_affected_by_children(node, values, record, shapes)
-      )
-    end
-
-    defp shapes_affected_by_node(%{condition: condition}, record, shapes) do
-      WhereCondition.affected_shapes(condition, record, shapes)
-    end
-
-    defp shapes_affected_by_node(_, _, _), do: nil
-
-    defp shapes_affected_by_children(
-           %{keys: [value | keys]} = node,
-           [value | values],
-           record,
-           shapes
-         ) do
-      # key matches value, so add the child then continue with the rest of the values
-      union(
-        shapes_affected_by_tree(node[value], values, record, shapes),
-        shapes_affected_by_children(%{node | keys: keys}, values, record, shapes)
-      )
-    end
-
-    defp shapes_affected_by_children(
-           %{keys: [key | keys]} = node,
-           [value | _] = values,
-           record,
-           shapes
-         )
-         when key < value do
-      # key can be discarded as it's not in the list of values
-      shapes_affected_by_children(%{node | keys: keys}, values, record, shapes)
-    end
-
-    defp shapes_affected_by_children(node, [_value | values], record, shapes) do
-      # value can be discarded as it's not in the list of keys
-      shapes_affected_by_children(node, values, record, shapes)
-    end
-
-    defp shapes_affected_by_children(%{keys: []}, _values, _record, _shapes) do
-      # No more keys to process, so no more shapes to find
-      nil
-    end
-
-    defp shapes_affected_by_children(%{keys: _keys}, [], _record, _shapes) do
-      # No more values to process, so no more shapes to find
-      nil
-    end
-
-    @env Env.new()
-    defp value_from_record(record, field, type) do
-      case Env.parse_const(@env, record[field], type) do
-        {:ok, value} ->
-          value
-
-        :error ->
-          raise RuntimeError,
-            message: "Could not parse value for field #{inspect(field)} of type #{inspect(type)}"
-      end
-    end
-
-    def all_shape_ids(%InclusionIndex{value_tree: value_tree}), do: shape_ids_in_tree(value_tree)
-
-    defp shape_ids_in_tree(node) do
-      Map.merge(shape_ids_in_node(node), shape_ids_in_children(node))
-    end
-
-    defp shape_ids_in_node(%{condition: condition}), do: WhereCondition.all_shape_ids(condition)
-    defp shape_ids_in_node(_), do: %{}
-
-    defp shape_ids_in_children(node) do
-      Enum.reduce(node.keys, %{}, fn key, shapes ->
-        Map.merge(shapes, shape_ids_in_tree(node[key]))
-      end)
-    end
-
-    # Union two sets, treating `nil` as an empty set.
-    # This allows us to use `nil` rather than `MapSet.new()`
-    # and avoid many calls to `MapSet.union/2` which
-    # makes `affected_shapes/3` ~20% faster.
-    defp union(nil, set), do: set
-    defp union(set, nil), do: set
-    defp union(set1, set2), do: MapSet.union(set1, set2)
   end
+
+  @doc """
+  Add a shape to the inclusion index.
+  """
+  def add_shape(%Filter{incl_index_table: table} = filter, where_cond_id, field, type, array_value, shape_id, and_where) do
+    # Store type metadata
+    meta_key = {where_cond_id, field, :meta}
+    :ets.insert(table, {meta_key, {type}})
+
+    # Sort and deduplicate the array
+    ordered = array_value |> Enum.sort() |> Enum.dedup()
+
+    # Add shape to the tree
+    add_shape_to_node(filter, table, where_cond_id, field, [], ordered, shape_id, and_where)
+  end
+
+  defp add_shape_to_node(filter, table, where_cond_id, field, path, [value | values], shape_id, and_where) do
+    # There are still array values left, so don't add the shape to this node
+    # Add it to a child or descendant node instead
+    node_key = {where_cond_id, field, path}
+
+    # Get or create the node
+    node = get_or_create_node(table, node_key)
+
+    # Check if child for this value exists
+    child_path = path ++ [value]
+    child_key = {where_cond_id, field, child_path}
+
+    case :ets.lookup(table, child_key) do
+      [] ->
+        # Child doesn't exist, create it
+        :ets.insert(table, {child_key, %{keys: [], condition_id: nil}})
+
+        # Update parent's keys list (maintain sorted order)
+        updated_keys = insert_sorted(node.keys, value)
+        :ets.insert(table, {node_key, %{node | keys: updated_keys}})
+
+      _ ->
+        # Child exists, no need to update parent's keys
+        :ok
+    end
+
+    # Recurse to child
+    add_shape_to_node(filter, table, where_cond_id, field, child_path, values, shape_id, and_where)
+  end
+
+  defp add_shape_to_node(filter, table, where_cond_id, field, path, [], shape_id, and_where) do
+    # No more array values left, add the shape to this node
+    node_key = {where_cond_id, field, path}
+
+    node = get_or_create_node(table, node_key)
+
+    # Get or create the WhereCondition for this node
+    condition_id =
+      case node.condition_id do
+        nil ->
+          new_id = make_ref()
+          WhereCondition.init(filter, new_id)
+          :ets.insert(table, {node_key, %{node | condition_id: new_id}})
+          new_id
+
+        existing_id ->
+          existing_id
+      end
+
+    # Add shape to the WhereCondition
+    WhereCondition.add_shape(filter, condition_id, shape_id, and_where)
+  end
+
+  defp get_or_create_node(table, node_key) do
+    case :ets.lookup(table, node_key) do
+      [] ->
+        node = %{keys: [], condition_id: nil}
+        :ets.insert(table, {node_key, node})
+        node
+
+      [{_, node}] ->
+        node
+    end
+  end
+
+  defp insert_sorted([], value), do: [value]
+
+  defp insert_sorted([head | tail], value) when value < head do
+    [value, head | tail]
+  end
+
+  defp insert_sorted([head | tail], value) when value == head do
+    [head | tail]
+  end
+
+  defp insert_sorted([head | tail], value) do
+    [head | insert_sorted(tail, value)]
+  end
+
+  @doc """
+  Remove a shape from the inclusion index.
+  """
+  def remove_shape(%Filter{incl_index_table: table} = filter, where_cond_id, shape_id, field, array_value, and_where) do
+    # Sort and deduplicate the array
+    ordered = array_value |> Enum.sort() |> Enum.dedup()
+
+    # Remove shape from the tree
+    remove_shape_from_node(filter, table, where_cond_id, field, [], ordered, shape_id, and_where)
+  end
+
+  defp remove_shape_from_node(filter, table, where_cond_id, field, path, [value | values], shape_id, and_where) do
+    # There are still array values left, so don't remove the shape from this node
+    # Remove it from a child or descendant node instead
+    child_path = path ++ [value]
+
+    # Recurse to child
+    remove_shape_from_node(filter, table, where_cond_id, field, child_path, values, shape_id, and_where)
+
+    # Check if child is now empty and clean up if so
+    child_key = {where_cond_id, field, child_path}
+
+    case :ets.lookup(table, child_key) do
+      [{_, child_node}] ->
+        if node_empty?(child_node) do
+          # Delete the child
+          :ets.delete(table, child_key)
+
+          # Update parent's keys list
+          node_key = {where_cond_id, field, path}
+
+          case :ets.lookup(table, node_key) do
+            [{_, node}] ->
+              updated_keys = List.delete(node.keys, value)
+              :ets.insert(table, {node_key, %{node | keys: updated_keys}})
+
+            [] ->
+              :ok
+          end
+        end
+
+      [] ->
+        :ok
+    end
+  end
+
+  defp remove_shape_from_node(filter, table, where_cond_id, field, path, [], shape_id, and_where) do
+    # No more array values left, remove the shape from this node
+    node_key = {where_cond_id, field, path}
+
+    case :ets.lookup(table, node_key) do
+      [{_, %{condition_id: nil}}] ->
+        :ok
+
+      [{_, %{condition_id: condition_id} = node}] ->
+        # Remove shape from the WhereCondition
+        WhereCondition.remove_shape(filter, condition_id, shape_id, and_where)
+
+        # If condition is now empty, remove it
+        if WhereCondition.empty?(filter, condition_id) do
+          WhereCondition.delete(filter, condition_id)
+          :ets.insert(table, {node_key, %{node | condition_id: nil}})
+        end
+
+      [] ->
+        :ok
+    end
+  end
+
+  defp node_empty?(%{keys: [], condition_id: nil}), do: true
+  defp node_empty?(%{keys: []}), do: true
+  defp node_empty?(_), do: false
+
+  @doc """
+  Delete all entries for this index.
+  """
+  def delete_all(%Filter{incl_index_table: table} = filter, where_cond_id, field) do
+    # Find all entries for this where_cond_id and field
+    # We need to delete all nested WhereConditions first
+    pattern = {{where_cond_id, field, :"$1"}, :"$2"}
+    guard = [{:is_list, :"$1"}]  # Only match path entries, not :meta
+
+    entries = :ets.select(table, [{pattern, guard, [:"$2"]}])
+
+    # Delete WhereConditions
+    Enum.each(entries, fn
+      %{condition_id: nil} -> :ok
+      %{condition_id: condition_id} -> WhereCondition.delete(filter, condition_id)
+    end)
+
+    # Delete all entries with this prefix
+    :ets.match_delete(table, {{where_cond_id, field, :_}, :_})
+  end
+
+  @doc """
+  Find shapes affected by a record change.
+  """
+  def affected_shapes(%Filter{incl_index_table: table} = filter, where_cond_id, field, record) do
+    meta_key = {where_cond_id, field, :meta}
+
+    case :ets.lookup(table, meta_key) do
+      [] ->
+        MapSet.new()
+
+      [{_, {type}}] ->
+        case value_from_record(record, field, type) do
+          {:ok, nil} ->
+            MapSet.new()
+
+          {:ok, values} when is_list(values) ->
+            # Sort and deduplicate the array
+            sorted_values = values |> Enum.sort() |> Enum.dedup()
+
+            # Traverse the tree
+            shapes_affected_by_tree(filter, table, where_cond_id, field, [], sorted_values, record) ||
+              MapSet.new()
+
+          :error ->
+            raise RuntimeError,
+              message: "Could not parse value for field #{inspect(field)} of type #{inspect(type)}"
+        end
+    end
+  end
+
+  defp shapes_affected_by_tree(filter, table, where_cond_id, field, path, values, record) do
+    node_key = {where_cond_id, field, path}
+
+    case :ets.lookup(table, node_key) do
+      [] ->
+        nil
+
+      [{_, node}] ->
+        union(
+          shapes_affected_by_node(filter, node, record),
+          shapes_affected_by_children(filter, table, where_cond_id, field, path, node.keys, values, record)
+        )
+    end
+  end
+
+  defp shapes_affected_by_node(_filter, %{condition_id: nil}, _record), do: nil
+
+  defp shapes_affected_by_node(filter, %{condition_id: condition_id}, record) do
+    WhereCondition.affected_shapes(filter, condition_id, record, fn _shape -> %{} end)
+  end
+
+  # key matches value, so check the child then continue with the rest
+  defp shapes_affected_by_children(filter, table, where_cond_id, field, path, [value | keys], [value | values], record) do
+    child_path = path ++ [value]
+
+    union(
+      shapes_affected_by_tree(filter, table, where_cond_id, field, child_path, values, record),
+      shapes_affected_by_children(filter, table, where_cond_id, field, path, keys, values, record)
+    )
+  end
+
+  # key can be discarded as it's not in the list of values
+  defp shapes_affected_by_children(filter, table, where_cond_id, field, path, [key | keys], [value | _] = values, record)
+       when key < value do
+    shapes_affected_by_children(filter, table, where_cond_id, field, path, keys, values, record)
+  end
+
+  # value can be discarded as it's not in the list of keys
+  defp shapes_affected_by_children(filter, table, where_cond_id, field, path, keys, [_value | values], record) do
+    shapes_affected_by_children(filter, table, where_cond_id, field, path, keys, values, record)
+  end
+
+  # No more keys to process
+  defp shapes_affected_by_children(_filter, _table, _where_cond_id, _field, _path, [], _values, _record), do: nil
+
+  # No more values to process
+  defp shapes_affected_by_children(_filter, _table, _where_cond_id, _field, _path, _keys, [], _record), do: nil
+
+  defp value_from_record(record, field, type) do
+    Env.parse_const(@env, record[field], type)
+  end
+
+  @doc """
+  Get all shape IDs in this index.
+  """
+  def all_shape_ids(%Filter{incl_index_table: table} = filter, where_cond_id, field) do
+    # Find all entries with WhereConditions
+    pattern = {{where_cond_id, field, :"$1"}, :"$2"}
+    guard = [{:is_list, :"$1"}]  # Only match path entries, not :meta
+
+    entries = :ets.select(table, [{pattern, guard, [:"$2"]}])
+
+    Enum.reduce(entries, MapSet.new(), fn
+      %{condition_id: nil}, acc -> acc
+      %{condition_id: condition_id}, acc ->
+        MapSet.union(acc, WhereCondition.all_shape_ids(filter, condition_id))
+    end)
+  end
+
+  # Union two sets, treating `nil` as an empty set.
+  # This allows us to use `nil` rather than `MapSet.new()`
+  # and avoid many calls to `MapSet.union/2` which
+  # makes `affected_shapes/3` ~20% faster.
+  defp union(nil, set), do: set
+  defp union(set, nil), do: set
+  defp union(set1, set2), do: MapSet.union(set1, set2)
 end
