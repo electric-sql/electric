@@ -31,4 +31,4 @@ electric-*.tar
 # The shape database, created when the Sync Service runs
 /persistent
 
-.env.dev.local
+.env.*.local

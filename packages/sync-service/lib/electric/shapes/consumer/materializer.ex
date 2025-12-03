@@ -363,7 +363,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         {Map.put(value_counts, value, count + 1), events}
 
       :error ->
-        {Map.put(value_counts, value, 1), [{:move_in, original_string} | events]}
+        {Map.put(value_counts, value, 1), [{:move_in, {value, original_string}} | events]}
     end
   end
 
@@ -371,7 +371,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     # If we're decrementing, it must have been added before
     case Map.fetch!(value_counts, value) do
       1 ->
-        {Map.delete(value_counts, value), [{:move_out, original_string} | events]}
+        {Map.delete(value_counts, value), [{:move_out, {value, original_string}} | events]}
 
       count ->
         {Map.put(value_counts, value, count - 1), events}

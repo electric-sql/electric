@@ -9,18 +9,19 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   defstruct waiting_move_ins: %{},
             filtering_move_ins: [],
             touch_tracker: %{},
-            move_in_buffering_snapshot: nil
+            move_in_buffering_snapshot: nil,
+            in_flight_values: %{}
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
   @type move_in_name() :: String.t()
-
+  @type in_flight_values() :: %{term() => MapSet.t()}
   @type t() :: %__MODULE__{
-          waiting_move_ins: %{move_in_name() => pg_snapshot()},
+          waiting_move_ins: %{move_in_name() => {pg_snapshot(), {term(), MapSet.t()}}},
           filtering_move_ins: list({pg_snapshot(), keys :: list(String.t())}),
           touch_tracker: %{String.t() => pos_integer()},
-          move_in_buffering_snapshot: nil | pg_snapshot()
+          move_in_buffering_snapshot: nil | pg_snapshot(),
+          in_flight_values: in_flight_values()
         }
-
   def new() do
     %__MODULE__{}
   end
@@ -29,15 +30,21 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   Add information about a new move-in to the state for which we're waiting.
   Snapshot can be nil initially and will be set later when the query begins.
   """
-  @spec add_waiting(t(), move_in_name(), pg_snapshot()) :: t()
-  def add_waiting(%__MODULE__{waiting_move_ins: waiting_move_ins} = state, name, snapshot) do
-    new_waiting_move_ins = Map.put(waiting_move_ins, name, snapshot)
+  @spec add_waiting(t(), move_in_name(), pg_snapshot() | nil, {term(), MapSet.t()}) :: t()
+  def add_waiting(
+        %__MODULE__{waiting_move_ins: waiting_move_ins} = state,
+        name,
+        snapshot,
+        moved_values
+      ) do
+    new_waiting_move_ins = Map.put(waiting_move_ins, name, {snapshot, moved_values})
     new_buffering_snapshot = make_move_in_buffering_snapshot(new_waiting_move_ins)
 
     %{
       state
       | waiting_move_ins: new_waiting_move_ins,
-        move_in_buffering_snapshot: new_buffering_snapshot
+        move_in_buffering_snapshot: new_buffering_snapshot,
+        in_flight_values: make_in_flight_values(new_waiting_move_ins)
     }
   end
 
@@ -83,12 +90,21 @@ defmodule Electric.Shapes.Consumer.MoveIns do
     end
   end
 
+  defp make_in_flight_values(waiting_move_ins) do
+    waiting_move_ins
+    |> Map.values()
+    |> Enum.map(fn {_, moved_values} -> moved_values end)
+    |> Enum.reduce(%{}, fn {key, value}, acc ->
+      Map.update(acc, key, value, &MapSet.union(&1, value))
+    end)
+  end
+
   @doc """
   Change a move-in from "waiting" to "filtering".
   """
   @spec change_to_filtering(t(), move_in_name(), MapSet.t(String.t())) :: t()
   def change_to_filtering(%__MODULE__{} = state, name, key_set) do
-    {snapshot, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
+    {{snapshot, _}, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
     filtering_move_ins = [{snapshot, key_set} | state.filtering_move_ins]
     buffering_snapshot = make_move_in_buffering_snapshot(waiting_move_ins)
 
@@ -96,7 +112,8 @@ defmodule Electric.Shapes.Consumer.MoveIns do
       state
       | waiting_move_ins: waiting_move_ins,
         filtering_move_ins: filtering_move_ins,
-        move_in_buffering_snapshot: buffering_snapshot
+        move_in_buffering_snapshot: buffering_snapshot,
+        in_flight_values: make_in_flight_values(waiting_move_ins)
     }
   end
 

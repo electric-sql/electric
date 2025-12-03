@@ -508,7 +508,15 @@ defmodule Electric.Shapes.Consumer do
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
-    extra_refs = Materializer.get_all_as_refs(shape, state.stack_id)
+    extra_refs1 =
+      Materializer.get_all_as_refs(shape, state.stack_id)
+
+    extra_refs =
+      Enum.reduce(state.move_handling_state.in_flight_values, extra_refs1, fn {key, value}, acc ->
+        if is_map_key(acc, key),
+          do: Map.update!(acc, key, &MapSet.difference(&1, value)),
+          else: acc
+      end)
 
     Logger.debug(fn -> "Extra refs: #{inspect(extra_refs)}" end)
 
