@@ -1,4 +1,11 @@
 defmodule Electric.Replication.ShapeLogCollector.Supervisor do
+  @moduledoc """
+  Supervisor for the ShapeLogCollector components.
+
+  Using one_for_all to ensure no de/registration messages are lost
+  in case of a Registrator crash.
+
+  """
   use Supervisor
 
   alias Electric.Replication.ShapeLogCollector.Processor
@@ -23,9 +30,6 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
       {Registrator, stack_id: stack_id}
     ]
 
-    Supervisor.init(children, strategy: :rest_for_one)
+    Supervisor.init(children, strategy: :one_for_all)
   end
-
-  defdelegate subscribe(server_ref, shape_handle, shape, operation), to: Registrator
-  defdelegate remove_shape(server_ref, shape_handle), to: Registrator
 end

@@ -1,5 +1,7 @@
 defmodule Electric.Replication.ShapeLogCollector.Processor do
   @moduledoc """
+  Module responsible for processing shape log operations.
+
   When any txn comes from postgres, we need to store it into the
   log for this shape if and only if it has txid >= xmin of the snapshot.
   """

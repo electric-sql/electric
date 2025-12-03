@@ -1,4 +1,13 @@
 defmodule Electric.Replication.ShapeLogCollector.Registrator do
+  @moduledoc """
+  Module responsible for registering and unregistering shapes
+  with the ShapeLogCollector. It batches registration and
+  unregistration requests to avoid overwhelming the ShapeLogCollector
+  with frequent updates.
+
+  In the future, this could also create diffs to the shape filters
+  instead of sending the full list of shapes to add/remove on each update.
+  """
   use GenServer
 
   require Logger
