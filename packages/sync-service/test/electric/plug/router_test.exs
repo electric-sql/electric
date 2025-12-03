@@ -2713,6 +2713,58 @@ defmodule Electric.Plug.RouterTest do
                 %{"headers" => %{"control" => "up-to-date"}}
               ]} = Task.await(task)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2), (3, 3)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20), (3, 3, 30)"
+         ]
+    test "move-in into move-out into move-in of the same parent results in a ", ctx do
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
+
+      assert {req, 200, [data, snapshot_end]} = shape_req(req, ctx.opts)
+
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "headers" => %{"operation" => "insert", "tags" => [tag]}
+             } = data
+
+      for stmt <- [
+            # Move-in
+            "UPDATE parent SET value = 1 WHERE id = 2",
+            # Move-out
+            "UPDATE parent SET value = 2 WHERE id = 2",
+            # Move-in
+            "UPDATE parent SET value = 1 WHERE id = 2 OR id = 3",
+            # Move-out
+            "UPDATE parent SET value = 2 WHERE id = 2"
+          ],
+          do: Postgrex.query!(ctx.db_conn, stmt)
+
+      # Hard to wait exactly what we want, so this should be OK
+      Process.sleep(1000)
+
+      # We're essentially guaranteed, in this test environment, to see move-out before move-in resolves.
+      # It's safe to propagate a move-out even for stuff client hasn't seen (because of hashing in the pattern)
+      # as it's just a no-op.
+      # So we should see 2 move-outs and a move-in but only for the 3rd parent. The move-in should be filtered despite
+      # being triggered for 2 moved in parents initially
+      assert {req, 200, data1} = shape_req(req, ctx.opts)
+      dbg({tag, data1})
+
+      assert length(data1) == 4
+
+      assert %{"headers" => %{"event" => "move-out"}} = Enum.at(data1, 0)
+      assert %{"headers" => %{"event" => "move-out"}} = Enum.at(data1, 1)
+
+      assert %{
+               "headers" => %{"operation" => "insert", "is_move_in" => true},
+               "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
+             } = Enum.at(data1, 2)
+
+      assert %{"headers" => %{"control" => "up-to-date"}} = Enum.at(data1, 3)
+    end
   end
 
   describe "/v1/shapes - subset snapshots" do

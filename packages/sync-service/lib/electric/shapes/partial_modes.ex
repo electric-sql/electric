@@ -61,6 +61,10 @@ defmodule Electric.Shapes.PartialModes do
     pool = Manager.pool_name(opts[:stack_id], :snapshot)
     results_fn = Access.fetch!(opts, :results_fn)
 
+    :telemetry.execute([:electric, :subqueries, :move_in_triggered], %{count: 1}, %{
+      stack_id: opts[:stack_id]
+    })
+
     Task.Supervisor.start_child(supervisor, fn ->
       try do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,

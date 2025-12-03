@@ -15,7 +15,11 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   def process_move_ins(%State{} = state, dep_handle, new_values) do
     # Something moved in in a dependency shape. We need to query the DB for relevant values.
     formed_where_clause =
-      Shape.SubqueryMoves.move_in_where_clause(state.shape, dep_handle, new_values)
+      Shape.SubqueryMoves.move_in_where_clause(
+        state.shape,
+        dep_handle,
+        Enum.map(new_values, &elem(&1, 1))
+      )
 
     storage = state.storage
     name = Electric.Utils.uuid4()
