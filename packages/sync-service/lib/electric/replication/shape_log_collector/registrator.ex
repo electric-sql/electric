@@ -145,7 +145,8 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
     {:noreply, state}
   end
 
-  def handle_continue(:maybe_schedule_update, %{to_schedule_waiters: []} = state) do
+  def handle_continue(:maybe_schedule_update, state)
+      when map_size(state.to_schedule_waiters) == 0 do
     Logger.debug("No shapes to register or unregister; skipping update scheduling")
     {:noreply, state}
   end
