@@ -52,9 +52,9 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  @spec mark_as_ready(binary() | pid() | {:via, any(), any()}) :: any()
-  def mark_as_ready(server_ref) do
-    GenServer.call(server(server_ref), :mark_as_ready)
+  @spec mark_as_ready(Electric.stack_id()) :: any()
+  def mark_as_ready(stack_id) do
+    GenServer.call(name(stack_id), :mark_as_ready)
   end
 
   # use `GenServer.call/2` here to make the event processing synchronous.
@@ -68,11 +68,11 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
 
   def handle_operations(operations, stack_id) when is_list(operations) do
     trace_context = OpenTelemetry.get_current_context()
-    GenServer.call(server(stack_id), {:handle_operations, operations, trace_context}, :infinity)
+    GenServer.call(name(stack_id), {:handle_operations, operations, trace_context}, :infinity)
   end
 
-  def handle_shape_registration_updates(server_ref, shapes_to_add, shapes_to_remove) do
-    pid = server(server_ref) |> GenServer.whereis()
+  def handle_shape_registration_updates(stack_id, shapes_to_add, shapes_to_remove) do
+    pid = name(stack_id) |> GenServer.whereis()
     call_ref = make_ref()
 
     send(
@@ -84,12 +84,14 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
     call_ref
   end
 
-  def notify_flushed(server_ref, shape_handle, offset) do
-    GenServer.cast(server(server_ref), {:writer_flushed, shape_handle, offset})
+  @spec notify_flushed(Electric.stack_id(), Electric.shape_handle(), LogOffset.t()) :: :ok
+  def notify_flushed(stack_id, shape_handle, offset) do
+    GenServer.cast(name(stack_id), {:writer_flushed, shape_handle, offset})
   end
 
-  def active_shapes(server_ref) do
-    GenServer.call(server(server_ref), :active_shapes)
+  @spec active_shapes(Electric.stack_id()) :: MapSet.t(Electric.shape_handle())
+  def active_shapes(stack_id) do
+    GenServer.call(name(stack_id), :active_shapes)
   end
 
   @doc """
@@ -103,12 +105,12 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
       iex> ShapeLogCollector.set_process_flags("my-stack-id", min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024)
       {:ok, settings: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024], invalid: []}
   """
-  def set_process_flags(server_ref, flags) do
-    GenServer.call(server(server_ref), {:set_process_flags, flags}, :infinity)
+  def set_process_flags(stack_id, flags) do
+    GenServer.call(name(stack_id), {:set_process_flags, flags}, :infinity)
   end
 
-  def get_process_flags(server_ref) do
-    if pid = server(server_ref) |> GenServer.whereis() do
+  def get_process_flags(stack_id) do
+    if pid = name(stack_id) |> GenServer.whereis() do
       {:garbage_collection, gc_flags} = :erlang.process_info(pid, :garbage_collection)
       {:priority, priority} = :erlang.process_info(pid, :priority)
 
@@ -568,10 +570,6 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
        do: %{state | last_processed_lsn: lsn}
 
   defp put_last_processed_lsn(state, _lsn), do: state
-
-  defp server(stack_id) when is_binary(stack_id), do: name(stack_id)
-  defp server({:via, _, _} = name), do: name
-  defp server(pid) when is_pid(pid), do: pid
 
   if Mix.env() == :test do
     def activate_mocked_functions_from_test_process do
