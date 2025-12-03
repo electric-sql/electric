@@ -5,6 +5,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
   import Support.ComponentSetup
   import Support.DbSetup
 
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.Connection
   alias Electric.StatusMonitor
 
@@ -155,7 +156,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     test "backtracks the status when the shape log collector goes down", %{stack_id: stack_id} do
       wait_until_active(stack_id)
 
-      :ok = GenServer.stop(Electric.Replication.ShapeLogCollector.name(stack_id), :shutdown)
+      :ok = Supervisor.stop(ShapeLogCollector.Supervisor.name(stack_id), :shutdown)
 
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
@@ -170,7 +171,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       # by the replication supervisor
       monitor =
         stack_id
-        |> Electric.Replication.ShapeLogCollector.name()
+        |> Electric.Replication.ShapeLogCollector.Processor.name()
         |> GenServer.whereis()
         |> Process.monitor()
 

@@ -994,7 +994,7 @@ defmodule Electric.ShapeCacheTest do
           @change,
           %Changes.Commit{lsn: @lsn, commit_timestamp: DateTime.utc_now()}
         ],
-        ctx.shape_log_collector
+        ctx.stack_id
       )
 
       assert_receive {^ref, :new_changes, ^offset}

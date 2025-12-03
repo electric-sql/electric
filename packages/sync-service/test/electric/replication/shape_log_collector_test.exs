@@ -49,7 +49,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       existing_shapes
     end)
 
-    Support.TestUtils.activate_mocks_for_descendant_procs(ShapeLogCollector)
+    Support.TestUtils.activate_mocks_for_descendant_procs(ShapeLogCollector.Processor)
 
     inspector = Map.get(ctx, :inspector, {Mock.Inspector, elem(@inspector, 1)})
 
@@ -61,7 +61,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       consumer_registry_opts: Map.get(ctx, :consumer_registry_opts, [])
     ]
 
-    {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+    {:ok, _pid} = start_supervised({ShapeLogCollector, opts})
 
     parent = self()
 
@@ -79,17 +79,17 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
     assert_receive :shape_log_collector_ready, 1000
 
-    %{server: pid, registry: registry_name, shape_cache: shape_cache_pid}
+    %{stack_id: stack_id, registry: registry_name, shape_cache: shape_cache_pid}
   end
 
   describe "process gc configuration" do
     setup :setup_log_collector
 
     @tag process_spawn_opts: %{
-           shape_log_collector: [priority: :high, min_bin_vheap_size: 1024 * 1024]
+           shape_log_collector_processor: [priority: :high, min_bin_vheap_size: 1024 * 1024]
          }
     test "are correctly passed to process", ctx do
-      pid = ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis()
+      pid = ShapeLogCollector.Processor.name(ctx.stack_id) |> GenServer.whereis()
 
       info = Process.info(pid)
 
@@ -116,7 +116,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
              id: 1,
              stack_id: ctx.stack_id,
              parent: parent,
-             producer: ctx.server,
              shape: @shape,
              shape_handle: @shape_handle,
              stack_id: ctx.stack_id,
@@ -138,7 +137,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
       assert xids == [xmin]
@@ -171,7 +170,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                    id: id,
                    stack_id: ctx.stack_id,
                    parent: parent,
-                   producer: ctx.server,
                    shape: @shape,
                    shape_handle: shape_handle,
                    action: :restore
@@ -201,7 +199,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       assert_receive {:start_consumer, @shape_handle, id, pid}
       xids = Support.TransactionConsumer.assert_consume([{id, pid}], [txn])
       assert xids == [xmin]
@@ -212,7 +210,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      Process.monitor(ctx.server)
+      ctx.stack_id
+      |> ShapeLogCollector.Processor.name()
+      |> GenServer.whereis()
+      |> Process.monitor()
 
       txn = [
         %Begin{xid: xmin},
@@ -224,7 +225,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       assert_receive {:start_consumer, @shape_handle, id, consumer_pid}
       ref = Process.monitor(consumer_pid)
       xids = Support.TransactionConsumer.assert_consume([{id, consumer_pid}], [txn])
@@ -236,7 +237,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _}
 
       # the shape has been removed from the filters
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       refute_receive {:start_consumer, @shape_handle, _id, _consumer_pid}
     end
   end
@@ -279,7 +280,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      id: id,
                      stack_id: ctx.stack_id,
                      parent: parent,
-                     producer: ctx.server,
                      shape: @shape,
                      shape_handle: "#{@shape_handle}-#{id}"
                    ]
@@ -310,7 +310,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       xids =
         Support.TransactionConsumer.assert_consume(ctx.consumers, [txn])
@@ -327,7 +327,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: next_lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
 
       xids = Support.TransactionConsumer.assert_consume(ctx.consumers, [txn2])
 
@@ -358,7 +358,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           %Commit{lsn: lsn}
         ]
 
-        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
         Support.TransactionConsumer.assert_consume(ctx.consumers, [txn], @transaction_timeout)
 
@@ -382,8 +382,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           %Commit{lsn: prev_lsn}
         ]
 
-        assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.server)
-        assert :ok = ShapeLogCollector.handle_operations(txn3, ctx.server)
+        assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
+        assert :ok = ShapeLogCollector.handle_operations(txn3, ctx.stack_id)
         Support.TransactionConsumer.refute_consume(ctx.consumers, @transaction_timeout * 2)
         {xid, prev_xid, lsn_int, prev_lsn_int}
       end)
@@ -408,7 +408,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: 1}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
     end
 
     test "correctly handles flush notifications", ctx do
@@ -425,7 +425,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: prev_lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(irrelevant_txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(irrelevant_txn, ctx.stack_id)
       expected_lsn = Lsn.to_integer(prev_lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 50
 
@@ -439,14 +439,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       refute_receive {:flush_boundary_updated, _}, 50
 
-      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-1", last_log_offset)
+      ShapeLogCollector.notify_flushed(ctx.stack_id, @shape_handle <> "-1", last_log_offset)
       refute_receive {:flush_boundary_updated, _}, 50
-      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-2", last_log_offset)
+      ShapeLogCollector.notify_flushed(ctx.stack_id, @shape_handle <> "-2", last_log_offset)
       refute_receive {:flush_boundary_updated, _}, 50
-      ShapeLogCollector.notify_flushed(ctx.server, @shape_handle <> "-3", last_log_offset)
+      ShapeLogCollector.notify_flushed(ctx.stack_id, @shape_handle <> "-3", last_log_offset)
 
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 100
@@ -483,7 +483,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       assert_receive {:flush_boundary_updated, 55}, 50
     end
 
@@ -492,7 +492,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       Registry.register(name, key, nil)
 
       LsnTracker.set_last_processed_lsn(ctx.stack_id, Lsn.from_integer(50))
-      assert :ok = ShapeLogCollector.mark_as_ready(ctx.server)
+      assert :ok = ShapeLogCollector.mark_as_ready(ctx.stack_id)
 
       lsn = Lsn.from_integer(20)
 
@@ -506,7 +506,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       assert_receive {:flush_boundary_updated, 20}, 50
     end
 
@@ -526,7 +526,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       for {id, pid} <- ctx.consumers do
         Process.unlink(pid)
@@ -554,7 +554,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       ]
 
       assert {:error, :connection_not_available} =
-               ShapeLogCollector.handle_operations(txn, ctx.server)
+               ShapeLogCollector.handle_operations(txn, ctx.stack_id)
     end
   end
 
@@ -585,7 +585,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
                      id: id,
                      stack_id: ctx.stack_id,
                      parent: parent,
-                     producer: ctx.server,
                      shape: @shape,
                      shape_handle: "#{@shape_handle}-#{id}"
                    ]
@@ -627,11 +626,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       relation1 = %Relation{id: id, table: "test_table", schema: "public", columns: []}
 
-      assert :ok = ShapeLogCollector.handle_operations([relation1], ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations([relation1], ctx.stack_id)
 
       relation2 = %Relation{id: id, table: "bar", schema: "public", columns: []}
 
-      assert :ok = ShapeLogCollector.handle_operations([relation2], ctx.server)
+      assert :ok = ShapeLogCollector.handle_operations([relation2], ctx.stack_id)
 
       Support.TransactionConsumer.assert_consume(ctx.consumers, [relation1, relation2])
     end
@@ -639,7 +638,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   describe "collector not ready" do
     setup ctx do
-      {:ok, pid} =
+      {:ok, _pid} =
         start_supervised(
           {ShapeLogCollector,
            stack_id: ctx.stack_id,
@@ -647,7 +646,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            persistent_kv: ctx.persistent_kv}
         )
 
-      %{server: pid}
+      :ok
     end
 
     test "rejects new transactions", ctx do
@@ -658,13 +657,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         %Commit{lsn: lsn}
       ]
 
-      assert {:error, :not_ready} = ShapeLogCollector.handle_operations(txn, ctx.server)
+      assert {:error, :not_ready} = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
     end
 
     test "rejects relation messages", ctx do
       relation = %Relation{id: 1234, table: "test_table", schema: "public", columns: []}
 
-      assert {:error, :not_ready} = ShapeLogCollector.handle_operations([relation], ctx.server)
+      assert {:error, :not_ready} = ShapeLogCollector.handle_operations([relation], ctx.stack_id)
     end
   end
 
@@ -684,7 +683,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ]
 
     # this call should return immediately
-    assert :ok = ShapeLogCollector.handle_operations(txn, ctx.server)
+    assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
   end
 
   test "initializes with provided LSN", ctx do
@@ -699,13 +698,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       persistent_kv: ctx.persistent_kv
     ]
 
-    {:ok, pid} = start_supervised({ShapeLogCollector, opts})
+    {:ok, _pid} = start_supervised({ShapeLogCollector, opts})
 
     Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
       :ok
     end)
 
-    Repatch.allow(self(), pid)
+    Repatch.allow(self(), ShapeLogCollector.Processor.name(ctx.stack_id))
 
     stub_inspector(
       load_relation_oid: fn {"public", "test_table"}, _ ->
@@ -727,7 +726,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
          id: consumer_id,
          stack_id: ctx.stack_id,
          parent: self(),
-         producer: pid,
          shape: @shape,
          shape_handle: @shape_handle}
       )
@@ -739,7 +737,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     next_lsn = Lsn.increment(start_lsn, +1)
 
     LsnTracker.set_last_processed_lsn(ctx.stack_id, start_lsn)
-    ShapeLogCollector.mark_as_ready(pid)
+    ShapeLogCollector.mark_as_ready(ctx.stack_id)
 
     txn_to_drop = [
       %Begin{xid: 99},
@@ -752,7 +750,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     ]
 
     # this call should return immediately
-    assert :ok = ShapeLogCollector.handle_operations(txn_to_drop, pid)
+    assert :ok = ShapeLogCollector.handle_operations(txn_to_drop, ctx.stack_id)
 
     # should drop the transaction and not update the lsn
     Support.TransactionConsumer.refute_consume(consumers)
@@ -769,18 +767,19 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       %Commit{lsn: next_lsn}
     ]
 
-    assert :ok = ShapeLogCollector.handle_operations(txn_to_process, pid)
+    assert :ok = ShapeLogCollector.handle_operations(txn_to_process, ctx.stack_id)
     Support.TransactionConsumer.assert_consume(consumers, [txn_to_process])
     assert next_lsn == LsnTracker.get_last_processed_lsn(ctx.stack_id)
   end
 
   test "notifies the StatusMonitor when it's ready", ctx do
     ctx = Map.merge(ctx, setup_log_collector(ctx))
+    pid = ctx.stack_id |> ShapeLogCollector.Processor.name() |> GenServer.whereis()
 
     assert RepatchExt.called_within_ms?(
              StatusMonitor,
              :mark_shape_log_collector_ready,
-             [ctx.stack_id, ctx.server],
+             [ctx.stack_id, pid],
              100
            )
   end
@@ -797,16 +796,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       children: nil
     }
 
-    test "returns :ok when relation info available", %{server: server} do
+    test "returns :ok when relation info available", ctx do
       stub_inspector(load_relation_info: fn _, _ -> {:ok, @relation_info} end)
 
-      assert ShapeLogCollector.subscribe(server, @shape_handle, @shape, :create) == :ok
+      assert ShapeLogCollector.subscribe(ctx.stack_id, @shape_handle, @shape, :create) == :ok
     end
 
-    test "returns error when connection not available", %{server: server} do
+    test "returns error when connection not available", ctx do
       stub_inspector(load_relation_info: fn _, _ -> {:error, :connection_not_available} end)
 
-      assert ShapeLogCollector.subscribe(server, @shape_handle, @shape, :create) ==
+      assert ShapeLogCollector.subscribe(ctx.stack_id, @shape_handle, @shape, :create) ==
                {:error, :connection_not_available}
     end
   end

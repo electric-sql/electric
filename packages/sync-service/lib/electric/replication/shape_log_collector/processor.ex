@@ -43,7 +43,7 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
 
       GenServer.start_link(__MODULE__, opts,
         name: name(stack_id),
-        spawn_opt: Electric.StackConfig.spawn_opts(stack_id, :shape_log_collector)
+        spawn_opt: Electric.StackConfig.spawn_opts(stack_id, :shape_log_collector_processor)
       )
     end
   end
@@ -52,6 +52,7 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
+  @spec mark_as_ready(binary() | pid() | {:via, any(), any()}) :: any()
   def mark_as_ready(server_ref) do
     GenServer.call(server(server_ref), :mark_as_ready)
   end
@@ -64,9 +65,10 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
   # the new txn to disk, instead the storage backend is responsible for
   # determining how long a write should reasonably take and if that fails
   # it should raise.
-  def handle_operations(operations, server) when is_list(operations) do
+
+  def handle_operations(operations, stack_id) when is_list(operations) do
     trace_context = OpenTelemetry.get_current_context()
-    GenServer.call(server, {:handle_operations, operations, trace_context}, :infinity)
+    GenServer.call(server(stack_id), {:handle_operations, operations, trace_context}, :infinity)
   end
 
   def handle_shape_registration_updates(server_ref, shapes_to_add, shapes_to_remove) do
@@ -123,7 +125,7 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
 
     stack_id = opts.stack_id
 
-    Process.set_label({:shape_log_collector, stack_id})
+    Process.set_label({:shape_log_collector_processor, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 

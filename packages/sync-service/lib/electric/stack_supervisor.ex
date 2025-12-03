@@ -324,9 +324,6 @@ defmodule Electric.StackSupervisor do
       stack_id: stack_id
     ]
 
-    shape_log_collector =
-      Electric.Replication.ShapeLogCollector.name(stack_id)
-
     connection_manager_opts = [
       stack_id: stack_id,
       # Coming from the outside, need validation
@@ -336,7 +333,7 @@ defmodule Electric.StackSupervisor do
         [
           stack_id: stack_id,
           handle_operations:
-            {Electric.Replication.ShapeLogCollector, :handle_operations, [shape_log_collector]}
+            {Electric.Replication.ShapeLogCollector, :handle_operations, [stack_id]}
         ] ++ config.replication_opts,
       pool_opts: [types: PgInterop.Postgrex.Types] ++ config.pool_opts,
       timeline_opts: [

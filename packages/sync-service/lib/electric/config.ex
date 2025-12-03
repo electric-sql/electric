@@ -97,7 +97,7 @@ defmodule Electric.Config do
     # %{process_id :: atom() => [Process.spawn_opt()]}
     # See `Process.flag/2`
     #
-    # e.g. %{shape_log_collector: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024]}
+    # e.g. %{shape_log_collector_processor: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024]}
     process_spawn_opts: %{},
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
@@ -479,11 +479,11 @@ defmodule Electric.Config do
 
   ## Examples
 
-      iex> parse_spawn_opts!(~S({"shape_log_collector":{"min_heap_size":234,"min_bin_vheap_size":123,"message_queue_data":"on_heap","priority":"high","fullsweep_after":104}}))
-      %{shape_log_collector: [fullsweep_after: 104, message_queue_data: :on_heap, min_bin_vheap_size: 123, min_heap_size: 234, priority: :high]}
+      iex> parse_spawn_opts!(~S({"shape_log_collector_processor":{"min_heap_size":234,"min_bin_vheap_size":123,"message_queue_data":"on_heap","priority":"high","fullsweep_after":104}}))
+      %{shape_log_collector_processor: [fullsweep_after: 104, message_queue_data: :on_heap, min_bin_vheap_size: 123, min_heap_size: 234, priority: :high]}
 
-      iex> parse_spawn_opts!(~S({"shape_log_collector":{"monkey":123,"message_queue_data":"on_fire","min_bin_vheap_size":-1,"priority":"high"}}))
-      %{shape_log_collector: [priority: :high]}
+      iex> parse_spawn_opts!(~S({"shape_log_collector_processor":{"monkey":123,"message_queue_data":"on_fire","min_bin_vheap_size":-1,"priority":"high"}}))
+      %{shape_log_collector_processor: [priority: :high]}
 
       iex> parse_spawn_opts!("")
       %{}

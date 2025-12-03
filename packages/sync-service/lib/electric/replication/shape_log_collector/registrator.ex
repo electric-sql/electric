@@ -31,34 +31,31 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   end
 
   @spec subscribe(
-          Electric.stack_id() | GenServer.name() | pid(),
+          Electric.stack_id(),
           Electric.shape_handle(),
           Electric.Shapes.Shape.t(),
           :create | :restore
         ) :: :ok
   # shapes that are being restored are already in the filters
   # because they were restored from the ets at startup
-  def subscribe(_server_ref, _shape_handle, _shape, :restore) do
+  def subscribe(_stack_id, _shape_handle, _shape, :restore) do
     :ok
   end
 
   # new shapes -- created after boot -- do need to be added
-  def subscribe(server_ref, shape_handle, shape, :create) do
-    GenServer.call(server(server_ref), {:add_shape, shape_handle, shape})
+  def subscribe(stack_id, shape_handle, shape, :create) do
+    GenServer.call(name(stack_id), {:add_shape, shape_handle, shape})
   end
 
-  @spec remove_shape(
-          Electric.stack_id() | GenServer.name() | pid(),
-          Electric.shape_handle()
-        ) :: :ok
-  def remove_shape(server_ref, shape_handle) do
+  @spec remove_shape(Electric.stack_id(), Electric.shape_handle()) :: :ok
+  def remove_shape(stack_id, shape_handle) do
     # This has to be async otherwise the system will deadlock -
     # - a consumer being cleanly shutdown may be waiting for a response from ShapeLogCollector
     #   while ShapeLogCollector is waiting for an ack from a transaction event, or
     # - a consumer that has crashed will be waiting in a terminate callback
     #   for a reply from the unsubscribe while the ShapeLogCollector is again
     #   waiting for a txn ack.
-    GenServer.cast(server(server_ref), {:remove_shape, shape_handle})
+    GenServer.cast(name(stack_id), {:remove_shape, shape_handle})
   end
 
   def start_link(opts) do
@@ -91,7 +88,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
        | to_add: Map.put(state.to_add, shape_handle, shape),
          to_remove: MapSet.delete(state.to_remove, shape_handle),
          to_schedule_waiters: [{from, shape_handle} | state.to_schedule_waiters]
-     }}
+     }, {:continue, :maybe_schedule_update}}
   end
 
   @impl true
@@ -101,7 +98,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
        state
        | to_add: Map.delete(state.to_add, shape_handle),
          to_remove: MapSet.put(state.to_remove, shape_handle)
-     }}
+     }, {:continue, :maybe_schedule_update}}
   end
 
   @impl true
@@ -119,16 +116,18 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
 
   @impl true
 
-  def handle_continue(:maybe_schedule_update, %{to_schedule_waiters: []} = state) do
-    Logger.debug("No shapes to register or unregister; skipping update scheduling")
-    {:noreply, state}
-  end
-
   def handle_continue(:maybe_schedule_update, state) when not is_nil(state.ack_ref) do
     Logger.debug(
       "Waiting on update ack for #{length(state.ack_waiters)} shapes before scheduling new update"
     )
 
+    {:noreply, state}
+  end
+
+  @empty_mapset MapSet.new()
+  def handle_continue(:maybe_schedule_update, state)
+      when map_size(state.to_add) == 0 and state.to_remove == @empty_mapset do
+    Logger.debug("No shapes to register or unregister; skipping update scheduling")
     {:noreply, state}
   end
 
@@ -146,12 +145,8 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
        | to_add: Map.new(),
          to_remove: MapSet.new(),
          to_schedule_waiters: [],
-         ack_waiters: state.waiters,
+         ack_waiters: state.to_schedule_waiters,
          ack_ref: ack_ref
      }}
   end
-
-  defp server(stack_id) when is_binary(stack_id), do: name(stack_id)
-  defp server({:via, _, _} = name), do: name
-  defp server(pid) when is_pid(pid), do: pid
 end

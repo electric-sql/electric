@@ -325,7 +325,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_log_collector(ctx) do
-    name = ShapeLogCollector.name(ctx.stack_id)
+    name = :"shape_log_collector_#{ctx.stack_id}"
 
     start_supervised!(
       {ShapeLogCollector,

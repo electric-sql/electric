@@ -119,15 +119,14 @@ defmodule Electric.Shapes.ConsumerTest do
     end
 
     setup(ctx) do
-      producer =
-        start_link_supervised!({
-          ShapeLogCollector,
-          stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
-        })
+      start_link_supervised!({
+        ShapeLogCollector,
+        stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
+      })
 
-      ShapeLogCollector.mark_as_ready(producer)
+      ShapeLogCollector.mark_as_ready(ctx.stack_id)
 
-      [producer: producer]
+      :ok
     end
 
     setup(ctx) do
@@ -215,7 +214,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn, commit_timestamp: DateTime.utc_now()}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
@@ -230,7 +229,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: next_lsn, commit_timestamp: DateTime.utc_now()}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^next_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
@@ -285,7 +284,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn, commit_timestamp: DateTime.utc_now()}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       assert_receive {^ref1, :new_changes, ^change1_offset}, @receive_timeout
       assert_receive {^ref2, :new_changes, ^change2_offset}, @receive_timeout
@@ -327,7 +326,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn, commit_timestamp: DateTime.utc_now()}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
@@ -353,7 +352,7 @@ defmodule Electric.Shapes.ConsumerTest do
       ]
 
       assert_consumer_shutdown(ctx.stack_id, @shape_handle1, fn ->
-        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       end)
 
       assert_shape_cleanup(@shape_handle1)
@@ -409,7 +408,7 @@ defmodule Electric.Shapes.ConsumerTest do
       ]
 
       assert_consumer_shutdown(ctx.stack_id, @shape_handle1, fn ->
-        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       end)
 
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
@@ -439,7 +438,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
     end
@@ -463,7 +462,7 @@ defmodule Electric.Shapes.ConsumerTest do
         end
       )
 
-      assert :ok = ShapeLogCollector.handle_operations([rel], ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations([rel], ctx.stack_id)
 
       refute_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -492,7 +491,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      assert :ok = ShapeLogCollector.handle_operations([rel], ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations([rel], ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -514,7 +513,7 @@ defmodule Electric.Shapes.ConsumerTest do
         columns: [%{name: "id", type_oid: {1, 1}}]
       }
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_before], ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations([rel_before], ctx.stack_id)
 
       refute_receive {:DOWN, _, :process, _, _}
 
@@ -528,7 +527,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -551,7 +550,7 @@ defmodule Electric.Shapes.ConsumerTest do
         columns: [%{name: "id", type_oid: {1, 1}}]
       }
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_before], ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations([rel_before], ctx.stack_id)
 
       refute_receive {:DOWN, _, :process, _, _}
 
@@ -567,7 +566,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       assert_receive {^live_ref, :shape_rotation}
@@ -598,7 +597,7 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -667,7 +666,6 @@ defmodule Electric.Shapes.ConsumerTest do
         Support.ComponentSetup.with_shape_cache(ctx)
 
       [
-        producer: ctx.shape_log_collector,
         consumer_supervisor: consumer_supervisor,
         shape_cache: shape_cache
       ]
@@ -699,7 +697,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       expected_offset = LogOffset.new(lsn, 2)
       assert_receive {^ref, :new_changes, ^expected_offset}
@@ -711,7 +709,7 @@ defmodule Electric.Shapes.ConsumerTest do
                |> Enum.map(&Jason.decode!/1)
 
       # If we encounter & store the same transaction, log stream should be stable
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       # We should not re-process the same transaction
       refute_receive {^ref, :new_changes, _}
@@ -766,8 +764,8 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn2}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn1, ctx.producer)
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn1, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
@@ -840,7 +838,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 10}, 1_000
     end
@@ -876,8 +874,8 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn2}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
       assert_receive {:flush_boundary_updated, 301}, 1_000
@@ -908,7 +906,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn1}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
@@ -949,7 +947,7 @@ defmodule Electric.Shapes.ConsumerTest do
         %Commit{lsn: lsn1}
       ]
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
