@@ -80,7 +80,7 @@ defmodule Electric.StackSupervisor.Telemetry do
 
     @retained_wal_size_query """
     SELECT
-      pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::int8 AS retained_wal_size
+      pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::int8 AS retained_wal_size,
       pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8 AS confirmed_flush_lsn_lag
     FROM
       pg_replication_slots
