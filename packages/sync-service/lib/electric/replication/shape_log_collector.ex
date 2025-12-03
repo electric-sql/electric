@@ -98,6 +98,17 @@ defmodule Electric.Replication.ShapeLogCollector do
     GenServer.call(server(server_ref), :active_shapes)
   end
 
+  @doc """
+  Set process flags on the given ShapeLogCollector process.
+
+  Accepts a list of flags to set, see `Process.flag/2` for valid settings.
+
+  Doesn't crash if given an invalid flag or value - instead returns the list of
+  invalid flags.
+
+      iex> ShapeLogCollector.set_process_flags("my-stack-id", min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024)
+      {:ok, settings: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024], invalid: []}
+  """
   def set_process_flags(server_ref, flags) do
     GenServer.call(server(server_ref), {:set_process_flags, flags}, :infinity)
   end
@@ -260,7 +271,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     {settings, invalid} =
       Enum.flat_map_reduce(flags, [], fn {flag, value}, invalid ->
         try do
-          {[{flag, :erlang.process_flag(flag, value)}], invalid}
+          {[{flag, Process.flag(flag, value)}], invalid}
         rescue
           ArgumentError ->
             {[], [flag | invalid]}

@@ -93,6 +93,11 @@ defmodule Electric.Config do
     conn_max_requests: 50,
     ## Performance tweaks
     publication_alter_debounce_ms: 0,
+    # allow for configuring per-process `Process.spawn_opt()`. In the form
+    # %{process_id :: atom() => [Process.spawn_opt()]}
+    # See `Process.flag/2`
+    #
+    # e.g. %{shape_log_collector: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024]}
     process_spawn_opts: %{},
     ## Misc
     process_registry_partitions: &Electric.Config.Defaults.process_registry_partitions/0,
