@@ -41,7 +41,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         true
 
       [{_, {index_keys, other_shapes}}] ->
-        index_keys == [] and other_shapes == %{} and no_indexes?(filter, where_cond_id, index_keys)
+        index_keys == [] and other_shapes == %{} and
+          no_indexes?(filter, where_cond_id, index_keys)
     end
   end
 
@@ -86,7 +87,12 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  defp add_shape_to_index(%Filter{where_cond_table: table} = filter, where_cond_id, shape_id, optimisation) do
+  defp add_shape_to_index(
+         %Filter{where_cond_table: table} = filter,
+         where_cond_id,
+         shape_id,
+         optimisation
+       ) do
     # Ensure the index_keys list includes this index
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
     key = {optimisation.field, optimisation.operation}
@@ -159,7 +165,12 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   @doc """
   Remove a shape from a WhereCondition.
   """
-  def remove_shape(%Filter{where_cond_table: table} = filter, where_cond_id, shape_id, where_clause) do
+  def remove_shape(
+        %Filter{where_cond_table: table} = filter,
+        where_cond_id,
+        shape_id,
+        where_clause
+      ) do
     case optimise_where(where_clause) do
       :not_optimised ->
         # Remove from other_shapes
@@ -173,7 +184,12 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  defp remove_shape_from_index(%Filter{where_cond_table: table} = filter, where_cond_id, shape_id, optimisation) do
+  defp remove_shape_from_index(
+         %Filter{where_cond_table: table} = filter,
+         where_cond_id,
+         shape_id,
+         optimisation
+       ) do
     # Remove shape from the index
     Index.remove_shape(filter, where_cond_id, shape_id, optimisation)
 
