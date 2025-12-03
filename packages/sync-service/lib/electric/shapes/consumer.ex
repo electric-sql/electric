@@ -371,6 +371,14 @@ defmodule Electric.Shapes.Consumer do
     {:stop, reason, state}
   end
 
+  # Set a new value for hibernate after and set a timeout between
+  # hibernate_after and max_timeout in order to spread
+  # consumer suspend events.
+  def handle_info({:configure_suspend, hibernate_after, max_timeout}, state) do
+    {:noreply, %{state | hibernate_after: hibernate_after},
+     Enum.random(hibernate_after..max_timeout)}
+  end
+
   def handle_info(:timeout, state) do
     # we can only suspend (terminate) the consumer process if
     #
