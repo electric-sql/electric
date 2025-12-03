@@ -1132,10 +1132,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Track when the SSE connection starts
     this.#lastSseConnectionStartTime = Date.now()
 
+    // Add Accept header for SSE requests
+    const sseHeaders = {
+      ...headers,
+      Accept: `text/event-stream`,
+    }
+
     try {
       let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
-        headers,
+        headers: sseHeaders,
         fetch,
         onopen: async (response: Response) => {
           this.#connected = true
