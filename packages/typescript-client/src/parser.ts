@@ -167,13 +167,8 @@ export class MessageParser<T extends Row<unknown>> {
    *
    * @param messages - JSON string of messages to parse
    * @param schema - Schema for type parsing
-   * @param yieldEvery - Number of messages to process before yielding (default: 1000)
    */
-  async parseAsync<Result>(
-    messages: string,
-    schema: Schema,
-    yieldEvery: number = DEFAULT_YIELD_EVERY
-  ): Promise<Result> {
+  async parseAsync<Result>(messages: string, schema: Schema): Promise<Result> {
     // First, parse the JSON without transformation (this is fast)
     const parsed = JSON.parse(messages)
 
@@ -188,7 +183,7 @@ export class MessageParser<T extends Row<unknown>> {
       this.transformParsedMessage(parsed[i], schema)
 
       // Yield periodically to prevent blocking
-      if ((i + 1) % yieldEvery === 0) {
+      if ((i + 1) % DEFAULT_YIELD_EVERY === 0) {
         await yieldToMain()
       }
     }
@@ -202,12 +197,10 @@ export class MessageParser<T extends Row<unknown>> {
    *
    * @param messages - Array of already-parsed messages to transform
    * @param schema - Schema for type parsing
-   * @param yieldEvery - Number of messages to process before yielding (default: 1000)
    */
   async parseSnapshotDataAsync<Result>(
     messages: Array<unknown>,
-    schema: Schema,
-    yieldEvery: number = DEFAULT_YIELD_EVERY
+    schema: Schema
   ): Promise<Array<Result>> {
     const results: Array<Result> = []
 
@@ -231,7 +224,7 @@ export class MessageParser<T extends Row<unknown>> {
       results.push(msg as Result)
 
       // Yield periodically to prevent blocking
-      if ((i + 1) % yieldEvery === 0) {
+      if ((i + 1) % DEFAULT_YIELD_EVERY === 0) {
         await yieldToMain()
       }
     }

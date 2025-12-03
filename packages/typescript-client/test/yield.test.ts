@@ -1,13 +1,9 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { yieldToMain, DEFAULT_YIELD_EVERY } from '../src/yield'
+import { yieldToMain } from '../src/yield'
 
 describe(`yieldToMain`, () => {
   afterEach(() => {
     vi.restoreAllMocks()
-  })
-
-  it(`should export DEFAULT_YIELD_EVERY constant`, () => {
-    expect(DEFAULT_YIELD_EVERY).toBe(1000)
   })
 
   it(`should return a promise that resolves`, async () => {

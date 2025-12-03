@@ -311,17 +311,17 @@ describe(`Async Message parser`, () => {
     expect(asyncResult).toEqual(syncResult)
   })
 
-  it(`should yield periodically during async parsing`, async () => {
+  it(`should yield periodically during async snapshot parsing`, async () => {
     const yieldSpy = vi.spyOn(yieldModule, `yieldToMain`).mockResolvedValue()
 
-    // Create messages that exceed the yield threshold
+    // Create messages that exceed the yield threshold (DEFAULT_YIELD_EVERY = 1000)
     const messageCount = 2500
     const messages = Array.from({ length: messageCount }, (_, i) => ({
       value: { a: `${i}` },
     }))
     const schema = { a: { type: `int4` } }
 
-    await parser.parseSnapshotDataAsync(messages, schema, 1000)
+    await parser.parseSnapshotDataAsync(messages, schema)
 
     // Should yield twice (after 1000 and 2000 messages)
     expect(yieldSpy).toHaveBeenCalledTimes(2)
@@ -340,7 +340,7 @@ describe(`Async Message parser`, () => {
     const messagesJson = JSON.stringify(messagesArray)
     const schema = { a: { type: `int4` } }
 
-    await parser.parseAsync(messagesJson, schema, 1000)
+    await parser.parseAsync(messagesJson, schema)
 
     // Should yield twice (after 1000 and 2000 messages)
     expect(yieldSpy).toHaveBeenCalledTimes(2)
@@ -354,26 +354,10 @@ describe(`Async Message parser`, () => {
     const messages = [{ value: { a: `123` } }, { value: { a: `456` } }]
     const schema = { a: { type: `int4` } }
 
-    await parser.parseSnapshotDataAsync(messages, schema, 1000)
+    await parser.parseSnapshotDataAsync(messages, schema)
 
     // Should not yield for just 2 messages
     expect(yieldSpy).not.toHaveBeenCalled()
-
-    yieldSpy.mockRestore()
-  })
-
-  it(`should respect custom yieldEvery parameter`, async () => {
-    const yieldSpy = vi.spyOn(yieldModule, `yieldToMain`).mockResolvedValue()
-
-    const messages = Array.from({ length: 15 }, (_, i) => ({
-      value: { a: `${i}` },
-    }))
-    const schema = { a: { type: `int4` } }
-
-    await parser.parseSnapshotDataAsync(messages, schema, 5)
-
-    // Should yield 3 times (after 5, 10, and 15 messages)
-    expect(yieldSpy).toHaveBeenCalledTimes(3)
 
     yieldSpy.mockRestore()
   })
