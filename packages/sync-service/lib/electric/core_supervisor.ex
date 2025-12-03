@@ -63,7 +63,7 @@ defmodule Electric.CoreSupervisor do
        refresh_period: Keyword.get(tweaks, :publication_refresh_period, 60_000)}
 
     shape_log_collector_spec =
-      {Electric.Replication.ShapeLogCollector,
+      {Electric.Replication.ShapeLogCollector.Supervisor,
        stack_id: stack_id, inspector: inspector, persistent_kv: persistent_kv}
 
     schema_reconciler_spec =
