@@ -54,7 +54,6 @@ defmodule Electric.StackSupervisor.Telemetry do
   defp default_periodic_measurements(%{stack_id: stack_id} = config) do
     [
       {__MODULE__, :count_shapes, [stack_id]},
-      {__MODULE__, :count_active_shapes, [stack_id]},
       {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]}
     ]
   end
@@ -62,20 +61,14 @@ defmodule Electric.StackSupervisor.Telemetry do
   def count_shapes(stack_id, _telemetry_opts) do
     # Telemetry is started before everything else in the stack, so we need to handle
     # the case where the shape cache is not started yet.
-    case Electric.ShapeCache.count_shapes(stack_id) do
-      :error ->
-        :ok
-
-      num_shapes ->
-        Electric.Telemetry.OpenTelemetry.execute(
-          [:electric, :shapes, :total_shapes],
-          %{count: num_shapes},
-          %{stack_id: stack_id}
-        )
+    with num_shapes when is_integer(num_shapes) <- Electric.ShapeCache.count_shapes(stack_id) do
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :shapes, :total_shapes],
+        %{count: num_shapes},
+        %{stack_id: stack_id}
+      )
     end
-  end
 
-  def count_active_shapes(stack_id, _telemetry_opts) do
     Electric.Telemetry.OpenTelemetry.execute(
       [:electric, :shapes, :active_shapes],
       %{count: Electric.Shapes.ConsumerRegistry.active_consumer_count(stack_id)},
