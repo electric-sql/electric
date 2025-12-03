@@ -246,7 +246,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_call(:mark_as_ready, _from, state) do
     lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
-    offset = LogOffset.new(Lsn.to_integer(lsn), 0)
+    offset = LogOffset.new(Lsn.to_integer(lsn), :infinity)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
   end

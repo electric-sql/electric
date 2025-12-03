@@ -855,20 +855,23 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     consumers = [{consumer_id, consumer}]
 
     start_lsn = Lsn.from_integer(100)
-    prev_lsn = Lsn.increment(start_lsn, -1)
     next_lsn = Lsn.increment(start_lsn, +1)
-    prev_log_offset = LogOffset.new(prev_lsn, 0)
     next_log_offset = LogOffset.new(next_lsn, 0)
 
     LsnTracker.set_last_processed_lsn(ctx.stack_id, start_lsn)
     ShapeLogCollector.mark_as_ready(pid)
 
     txn_to_drop =
-      transaction(99, prev_lsn, [
+      transaction(100, start_lsn, [
         %Changes.NewRecord{
           relation: {"public", "test_table"},
           record: %{"id" => "1"},
-          log_offset: prev_log_offset
+          log_offset: LogOffset.new(start_lsn, 0)
+        },
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "2"},
+          log_offset: LogOffset.new(start_lsn, 1)
         }
       ])
 
