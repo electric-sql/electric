@@ -263,9 +263,13 @@ defmodule Electric.Replication.Eval.Parser do
     case parse_where_stmt(ast, params, refs, env) do
       {:ok, value, computed_params} ->
         sublink_queries = Keyword.get(opts, :sublink_queries, %{})
+        enum_columns = Keyword.get(opts, :enum_columns, MapSet.new())
 
         updated_query =
-          rebuild_query_with_substituted_parts(ast, {params, computed_params, sublink_queries})
+          rebuild_query_with_substituted_parts(
+            ast,
+            {params, computed_params, sublink_queries, enum_columns}
+          )
 
         {:ok,
          %Expr{
@@ -1509,7 +1513,7 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.ParamRef{number: number, location: location},
          _,
          _,
-         {original_params, resolved_params, _}
+         {original_params, resolved_params, _, _}
        ) do
     %Const{type: type} = Map.fetch!(resolved_params, number)
 
@@ -1560,12 +1564,62 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.SubLink{} = sublink,
          %{testexpr: testexpr},
          %{encountered_sublinks: nth_sublink},
-         {_, _, sublink_queries}
+         {_, _, sublink_queries, _}
        ) do
     %{stmts: [%{stmt: select_node}]} =
       Map.fetch!(sublink_queries, nth_sublink) |> PgQuery.parse!()
 
     {:ok, %PgQuery.SubLink{sublink | testexpr: testexpr, subselect: select_node}}
+  end
+
+  # Handle ColumnRef nodes for enum columns - wrap them with ::text cast
+  defp replace_query_parts(
+         %PgQuery.ColumnRef{fields: fields, location: location} = col_ref,
+         _,
+         _,
+         {_, _, _, enum_columns}
+       ) do
+    # Extract column name from fields (e.g., [%{node: {:string, %{sval: "column_name"}}}])
+    column_path =
+      Enum.map(fields, fn
+        %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} -> sval
+        other -> other
+      end)
+
+    if MapSet.member?(enum_columns, column_path) do
+      # Wrap the column reference with ::text cast
+      {:ok,
+       %PgQuery.TypeCast{
+         arg: %PgQuery.Node{node: {:column_ref, col_ref}},
+         type_name: %PgQuery.TypeName{
+           names: [
+             %PgQuery.Node{
+               node: {:string, %PgQuery.String{sval: "text"}}
+             }
+           ],
+           type_oid: 0,
+           setof: false,
+           pct_type: false,
+           typmods: [],
+           typemod: -1,
+           array_bounds: [],
+           location: location
+         },
+         location: location
+       }}
+    else
+      {:ok, col_ref}
+    end
+  end
+
+  # Handle the Node wrapper for ColumnRef that was converted to TypeCast
+  defp replace_query_parts(
+         %PgQuery.Node{node: {:column_ref, _}},
+         %{node: %PgQuery.TypeCast{} = type_cast},
+         _,
+         _
+       ) do
+    {:ok, %PgQuery.Node{node: {:type_cast, type_cast}}}
   end
 
   defp replace_query_parts(node, children, _, _) when map_size(children) == 0, do: {:ok, node}

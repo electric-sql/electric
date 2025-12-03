@@ -25,8 +25,11 @@ defmodule Electric.Shapes.Shape.Subset do
     with {:ok, fields} <- NimbleOptions.validate(Map.new(fields), @schema_options),
          {:ok, columns} <- load_column_info(shape, inspector),
          :ok <- validate_order_by(fields[:order_by], columns),
-         refs = columns |> Inspector.columns_to_expr() |> enums_to_text(),
-         {:ok, where} <- validate_where_clause(fields[:where], fields[:params], refs) do
+         original_refs = Inspector.columns_to_expr(columns),
+         enum_columns = extract_enum_columns(original_refs),
+         refs = enums_to_text(original_refs),
+         {:ok, where} <-
+           validate_where_clause(fields[:where], fields[:params], refs, enum_columns) do
       {:ok,
        %__MODULE__{
          order_by: fields[:order_by],
@@ -65,14 +68,19 @@ defmodule Electric.Shapes.Shape.Subset do
     end
   end
 
-  defp validate_where_clause(nil, _params, _refs), do: {:ok, nil}
+  defp validate_where_clause(nil, _params, _refs, _enum_columns), do: {:ok, nil}
 
-  defp validate_where_clause(where, params, refs) do
+  defp validate_where_clause(where, params, refs, enum_columns) do
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
          :ok <- assert_no_subqueries(subqueries),
          :ok <- Validators.validate_parameters(params),
-         {:ok, where} <- Parser.validate_where_ast(where, params: params, refs: refs),
+         {:ok, where} <-
+           Parser.validate_where_ast(where,
+             params: params,
+             refs: refs,
+             enum_columns: enum_columns
+           ),
          {:ok, where} <- Validators.validate_where_return_type(where) do
       {:ok, where}
     else
@@ -83,6 +91,14 @@ defmodule Electric.Shapes.Shape.Subset do
 
   defp assert_no_subqueries([]), do: :ok
   defp assert_no_subqueries(_), do: {:error, "Subqueries are not allowed in subsets"}
+
+  # Extract column keys that are enum types
+  defp extract_enum_columns(refs) do
+    refs
+    |> Enum.filter(fn {_key, type} -> match?({:enum, _}, type) end)
+    |> Enum.map(fn {key, _type} -> key end)
+    |> MapSet.new()
+  end
 
   # Treat enum types as text for where clause validation.
   #

@@ -52,5 +52,47 @@ defmodule Electric.Shapes.Shape.SubsetTest do
                  inspector: ctx.inspector
                )
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TYPE my_enum AS ENUM ('value1', 'value2', 'value3')",
+           "CREATE TABLE IF NOT EXISTS enum_item (id INT PRIMARY KEY, my_enum my_enum NOT NULL)"
+         ]
+    test "where clause with enum comparison casts column to text", ctx do
+      shape_def = Shape.new!("enum_item", inspector: ctx.inspector)
+
+      assert {:ok, %Subset{where: where}} =
+               Subset.new(
+                 shape_def,
+                 [where: "my_enum = 'value1'"],
+                 inspector: ctx.inspector
+               )
+
+      # The query should cast the enum column to text to avoid
+      # "operator does not exist: enum = text" errors
+      assert where.query =~ "my_enum::text"
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TYPE my_enum AS ENUM ('value1', 'value2', 'value3')",
+           "CREATE TABLE IF NOT EXISTS enum_item (id INT PRIMARY KEY, my_enum my_enum NOT NULL)"
+         ]
+    test "where clause with enum comparison and parameter casts column to text", ctx do
+      shape_def = Shape.new!("enum_item", inspector: ctx.inspector)
+
+      assert {:ok, %Subset{where: where}} =
+               Subset.new(
+                 shape_def,
+                 [where: "my_enum = $1", params: %{"1" => "value1"}],
+                 inspector: ctx.inspector
+               )
+
+      # The query should cast the enum column to text to avoid
+      # "operator does not exist: enum = text" errors
+      assert where.query =~ "my_enum::text"
+      # The parameter should also be cast to text
+      assert where.query =~ "'value1'::text"
+    end
   end
 end
