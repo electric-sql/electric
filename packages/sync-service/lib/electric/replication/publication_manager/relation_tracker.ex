@@ -37,18 +37,20 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   ]
 
   @type relation_filters() :: MapSet.t(Electric.oid_relation())
-  @typep internal_relation_filters() :: MapSet.t(Electric.oid())
-  @typep publication_filter() :: {Electric.oid(), with_generated_cols :: boolean()}
+  @typep internal_relation_filters() :: MapSet.t(Electric.relation_id())
+  @typep publication_filter() :: {Electric.oid_relation(), with_generated_cols :: boolean()}
+  @typep reduced_publication_filter() ::
+           {Electric.relation_id(), with_generated_cols :: boolean()}
   @typep waiter() :: {GenServer.from(), shape_handle()}
   @typep state() :: %__MODULE__{
            stack_id: Electric.stack_id(),
-           relation_ref_counts: %{Electric.oid() => non_neg_integer()},
-           oid_to_relation: %{Electric.oid() => Electric.relation()},
+           relation_ref_counts: %{Electric.relation_id() => non_neg_integer()},
+           oid_to_relation: %{Electric.relation_id() => Electric.relation()},
            prepared_relation_filters: internal_relation_filters(),
            submitted_relation_filters: internal_relation_filters(),
            committed_relation_filters: internal_relation_filters(),
-           waiters: %{Electric.oid() => [waiter(), ...]},
-           tracked_shape_handles: %{shape_handle() => publication_filter()},
+           waiters: %{Electric.relation_id() => [waiter(), ...]},
+           tracked_shape_handles: %{shape_handle() => reduced_publication_filter()},
            publication_name: String.t(),
            publishes_generated_columns?: boolean(),
            publication_refresh_period: non_neg_integer()
@@ -310,12 +312,13 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
     %{state | submitted_relation_filters: state.prepared_relation_filters}
   end
 
-  @spec expand_oids(MapSet.t(Electric.oid()), state()) :: MapSet.t(Electric.oid_relation())
+  @spec expand_oids(MapSet.t(Electric.relation_id()), state()) ::
+          MapSet.t(Electric.oid_relation())
   defp expand_oids(%MapSet{} = oids, state) do
     MapSet.new(oids, &expand_oid(&1, state))
   end
 
-  @spec expand_oid(Electric.oid(), state()) :: Electric.oid_relation()
+  @spec expand_oid(Electric.relation_id(), state()) :: Electric.oid_relation()
   defp expand_oid(oid, %{oid_to_relation: oid_to_relation}) do
     {oid, Map.fetch!(oid_to_relation, oid)}
   end
