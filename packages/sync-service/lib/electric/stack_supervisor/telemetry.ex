@@ -80,6 +80,7 @@ defmodule Electric.StackSupervisor.Telemetry do
 
     @retained_wal_size_query """
     SELECT
+      pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::int8 AS pg_current_wal_lsn,
       pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::int8 AS retained_wal_size,
       pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8 AS confirmed_flush_lsn_lag
     FROM
@@ -92,7 +93,7 @@ defmodule Electric.StackSupervisor.Telemetry do
     @spec report_retained_wal_size(Electric.stack_id(), binary(), map()) :: :ok
     def report_retained_wal_size(stack_id, slot_name, _telemetry_opts) do
       try do
-        %Postgrex.Result{rows: [[retained_wal_size, confirmed_flush_lsn_lag]]} =
+        %Postgrex.Result{rows: [[pg_current_wal_lsn, retained_wal_size, confirmed_flush_lsn_lag]]} =
           Postgrex.query!(
             Electric.Connection.Manager.admin_pool(stack_id),
             @retained_wal_size_query,
@@ -108,6 +109,10 @@ defmodule Electric.StackSupervisor.Telemetry do
         Electric.Telemetry.OpenTelemetry.execute(
           [:electric, :postgres, :replication],
           %{
+            # The absolute value of pg_current_wal_lsn doesn't convey any useful info but by
+            # plotting its rate of change we can see how fast Postgres is writing new WAL
+            # entries.
+            pg_current_wal_lsn: pg_current_wal_lsn,
             slot_retained_wal_size: retained_wal_size,
             slot_confirmed_flush_lsn_lag: max(0, confirmed_flush_lsn_lag)
           },
