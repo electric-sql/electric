@@ -5,6 +5,11 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   unregistration requests to avoid overwhelming the ShapeLogCollector
   with frequent updates.
 
+  The current implementation batches updates until it receives an
+  acknowledgement that its previous update was processed by the Processor,
+  and only then sends the next batch of updates. This is slower than a
+  regular debounce, but prevents any buildup on the Processor.
+
   In the future, this could also create diffs to the shape filters
   instead of sending the full list of shapes to add/remove on each update.
   """
