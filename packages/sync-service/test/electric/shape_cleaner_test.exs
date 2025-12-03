@@ -152,7 +152,7 @@ defmodule Electric.ShapeCleanerTest do
         )
 
         expect_calls(Electric.Replication.ShapeLogCollector,
-          remove_shape: fn _, ^shape_handle -> :ok end
+          unsubscribe: fn _, ^shape_handle -> :ok end
         )
 
         :ok = @cleanup_fn.(ctx.stack_id, shape_handle)

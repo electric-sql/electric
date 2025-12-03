@@ -57,18 +57,18 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
 
   # new shapes -- created after boot -- do need to be added
   def subscribe(stack_id, shape_handle, shape, :create) do
-    GenServer.call(name(stack_id), {:add_shape, shape_handle, shape})
+    GenServer.call(name(stack_id), {:subscribe, shape_handle, shape})
   end
 
-  @spec remove_shape(Electric.stack_id(), Electric.shape_handle()) :: :ok
-  def remove_shape(stack_id, shape_handle) do
+  @spec unsubscribe(Electric.stack_id(), Electric.shape_handle()) :: :ok
+  def unsubscribe(stack_id, shape_handle) do
     # This has to be async otherwise the system will deadlock -
     # - a consumer being cleanly shutdown may be waiting for a response from ShapeLogCollector
     #   while ShapeLogCollector is waiting for an ack from a transaction event, or
     # - a consumer that has crashed will be waiting in a terminate callback
     #   for a reply from the unsubscribe while the ShapeLogCollector is again
     #   waiting for a txn ack.
-    GenServer.cast(name(stack_id), {:remove_shape, shape_handle})
+    GenServer.cast(name(stack_id), {:unsubscribe, shape_handle})
   end
 
   def start_link(opts) do
@@ -94,7 +94,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   end
 
   @impl true
-  def handle_call({:add_shape, shape_handle, shape}, from, state) do
+  def handle_call({:subscribe, shape_handle, shape}, from, state) do
     {:noreply,
      %{
        state
@@ -105,7 +105,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   end
 
   @impl true
-  def handle_cast({:remove_shape, shape_handle}, state) do
+  def handle_cast({:unsubscribe, shape_handle}, state) do
     if from = Map.get(state.to_schedule_waiters, shape_handle) do
       GenServer.reply(
         from,

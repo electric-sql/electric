@@ -71,20 +71,20 @@ defmodule Electric.Replication.ShapeLogCollector.RegistratorTest do
     end
   end
 
-  describe "remove_shape/2" do
+  describe "unsubscribe/2" do
     test "updates processor to remove shape", %{stack_id: stack_id} do
       assert :ok = Registrator.subscribe(stack_id, @shape_handle_1, @shape_1, :create)
 
       expected_msg = {:processor_called, %{@shape_handle_1 => @shape_1}, MapSet.new()}
       assert_received ^expected_msg
 
-      assert :ok = Registrator.remove_shape(stack_id, @shape_handle_1)
+      assert :ok = Registrator.unsubscribe(stack_id, @shape_handle_1)
 
       expected_msg = {:processor_called, %{}, MapSet.new([@shape_handle_1])}
       assert_receive ^expected_msg
 
       # registrator will always repeat messages, no global state known
-      assert :ok = Registrator.remove_shape(stack_id, @shape_handle_1)
+      assert :ok = Registrator.unsubscribe(stack_id, @shape_handle_1)
       assert_receive ^expected_msg
     end
   end
@@ -107,7 +107,7 @@ defmodule Electric.Replication.ShapeLogCollector.RegistratorTest do
         end)
 
       assert_receive :adding_shape_2
-      assert :ok = Registrator.remove_shape(stack_id, @shape_handle_2)
+      assert :ok = Registrator.unsubscribe(stack_id, @shape_handle_2)
 
       assert [:ok, {:error, "Shape #{@shape_handle_2} removed before registration completed"}] ==
                Task.await_many([task1, task2], 500)
@@ -129,7 +129,7 @@ defmodule Electric.Replication.ShapeLogCollector.RegistratorTest do
         Task.async(fn -> Registrator.subscribe(stack_id, @shape_handle_3, @shape_3, :create) end)
 
       task4 =
-        Task.async(fn -> Registrator.remove_shape(stack_id, @shape_handle_1) end)
+        Task.async(fn -> Registrator.unsubscribe(stack_id, @shape_handle_1) end)
 
       # should not call processor until acked
       Process.sleep(10)

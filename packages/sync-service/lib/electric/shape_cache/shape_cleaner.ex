@@ -150,7 +150,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
              :ok <- Storage.cleanup!(stack_storage, shape_handle),
              OpenTelemetry.start_interval("remove_shape.shape_log_collector_remove"),
              :ok <-
-               Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle) do
+               Electric.Replication.ShapeLogCollector.unsubscribe(stack_id, shape_handle) do
           :ok
         end
 
