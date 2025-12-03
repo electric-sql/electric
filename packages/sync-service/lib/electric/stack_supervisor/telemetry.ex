@@ -1,4 +1,6 @@
 defmodule Electric.StackSupervisor.Telemetry do
+  import Telemetry.Metrics
+
   require Logger
 
   def configure(config) do
@@ -29,9 +31,24 @@ defmodule Electric.StackSupervisor.Telemetry do
           default_periodic_measurements(config),
           & &1
         )
+        # Add metrics for the default periodic measurements regardless of whether the
+        # measurements themselves are occuring.
+        |> Keyword.update(
+          :additional_metrics,
+          default_metrics_from_periodic_measurements(),
+          &(default_metrics_from_periodic_measurements() ++ &1)
+        )
 
       {ElectricTelemetry.StackTelemetry, telemetry_opts}
     end
+  end
+
+  defp default_metrics_from_periodic_measurements do
+    [
+      last_value("electric.shapes.total_shapes.count"),
+      last_value("electric.shapes.active_shapes.count"),
+      last_value("electric.postgres.replication.wal_size", unit: :byte)
+    ]
   end
 
   defp default_periodic_measurements(%{stack_id: stack_id} = config) do
