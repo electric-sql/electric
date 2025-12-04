@@ -259,9 +259,8 @@ defmodule Electric.Replication.Eval.Parser do
     params = Keyword.get(opts, :params, %{})
     refs = Keyword.get(opts, :refs, %{})
     env = Keyword.get(opts, :env, Env.new())
-    allow_enums = Keyword.get(opts, :allow_enums, false)
 
-    case parse_where_stmt(ast, params, refs, env, allow_enums: allow_enums) do
+    case parse_where_stmt(ast, params, refs, env) do
       {:ok, value, computed_params} ->
         sublink_queries = Keyword.get(opts, :sublink_queries, %{})
 
@@ -355,9 +354,8 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp parse_where_stmt(stmt, params, refs, env, opts \\ []) do
-    allow_enums = Keyword.get(opts, :allow_enums, false)
-    context = %{params: params, refs: refs, env: env, allow_enums: allow_enums}
+  defp parse_where_stmt(stmt, params, refs, env) do
+    context = %{params: params, refs: refs, env: env}
 
     with {:ok, {ast, %{resolved_params: resolved_params}}} <- query_to_ast(stmt, context),
          {:ok, result} <- reduce_ast(ast) do
@@ -454,14 +452,14 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.A_ArrayExpr{location: loc},
          %{elements: elements},
          _,
-         %{env: env, allow_enums: allow_enums}
+         %{env: env}
        ) do
     element_len = length(elements)
 
     case Lookups.pick_union_type(elements, env) do
       {:ok, type} ->
         with {:ok, elements} <-
-               cast_unknowns(elements, List.duplicate(type, element_len), env, allow_enums: allow_enums),
+               cast_unknowns(elements, List.duplicate(type, element_len), env),
              {:ok, elements} <-
                try_cast_implicit(elements, List.duplicate(type, element_len), env) do
           {:ok, %Array{elements: elements, type: {:array, extract_base_type_name(type)}, location: loc}}
@@ -522,7 +520,7 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.A_Indices{is_slice: is_slice},
          %{lidx: lower_idx, uidx: upper_idx},
          _,
-         %{env: env, allow_enums: allow_enums}
+         %{env: env}
        ) do
     lower_idx =
       lower_idx || %Const{value: :unspecified, type: {:internal, :slice_boundary}, location: 0}
@@ -531,7 +529,7 @@ defmodule Electric.Replication.Eval.Parser do
       upper_idx || %Const{value: :unspecified, type: {:internal, :slice_boundary}, location: 0}
 
     with {:ok, [lower_idx, upper_idx]} <-
-           cast_unknowns([lower_idx, upper_idx], List.duplicate(:int8, 2), env, allow_enums: allow_enums),
+           cast_unknowns([lower_idx, upper_idx], List.duplicate(:int8, 2), env),
          {:ok, [lower_idx, upper_idx]} <- round_numerics([lower_idx, upper_idx]),
          {:ok, [lower_idx, upper_idx]} <-
            try_cast_implicit([lower_idx, upper_idx], List.duplicate(:int8, 2), env) do
@@ -578,9 +576,9 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.BoolExpr{boolop: bool_op} = expr,
          %{args: args},
          _,
-         %{env: env, allow_enums: allow_enums}
+         %{env: env}
        ) do
-    with {:ok, args} <- cast_unknowns(args, List.duplicate(:bool, length(args)), env, allow_enums: allow_enums) do
+    with {:ok, args} <- cast_unknowns(args, List.duplicate(:bool, length(args)), env) do
       case Enum.find(args, &(not Env.implicitly_castable?(env, &1.type, :bool))) do
         nil ->
           {fun, name, strict?} =
@@ -649,11 +647,11 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.FuncCall{} = call,
          %{args: args},
          _,
-         %{env: env, allow_enums: allow_enums}
+         %{env: env}
        ) do
     with {:ok, choices} <- find_available_functions(call, env),
          {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env, allow_enums: allow_enums),
+         {:ok, args} <- cast_unknowns(args, concrete.args, env),
          {:ok, args} <- cast_implicit(args, concrete.args, env) do
       {:ok, from_concrete(concrete, args)}
     else
@@ -679,29 +677,28 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.A_Expr{kind: kind, location: loc} = expr,
          children,
          _acc,
-         %{env: env, allow_enums: allow_enums}
+         %{env: env}
        ) do
     expr = Map.merge(expr, children)
-    opts = [allow_enums: allow_enums]
 
     error_msg =
       "expression #{identifier(expr.name)} of #{inspect(kind)} is not currently supported"
 
     case {kind, expr.lexpr} do
-      {:AEXPR_OP, nil} -> handle_unary_operator(expr, env, opts)
-      {:AEXPR_OP, _} -> handle_binary_operator(expr, env, opts)
+      {:AEXPR_OP, nil} -> handle_unary_operator(expr, env)
+      {:AEXPR_OP, _} -> handle_binary_operator(expr, env)
       # LIKE and ILIKE are expressed plainly as operators by the parser
-      {:AEXPR_LIKE, _} -> handle_binary_operator(expr, env, opts)
-      {:AEXPR_ILIKE, _} -> handle_binary_operator(expr, env, opts)
-      {:AEXPR_DISTINCT, _} -> handle_distinct(expr, env, opts)
-      {:AEXPR_NOT_DISTINCT, _} -> handle_distinct(expr, env, opts)
-      {:AEXPR_IN, _} -> handle_in(expr, env, opts)
-      {:AEXPR_BETWEEN, _} -> handle_between(expr, env, opts)
-      {:AEXPR_BETWEEN_SYM, _} -> handle_between(expr, env, opts)
-      {:AEXPR_NOT_BETWEEN, _} -> handle_between(expr, env, opts)
-      {:AEXPR_NOT_BETWEEN_SYM, _} -> handle_between(expr, env, opts)
-      {:AEXPR_OP_ANY, _} -> handle_any_or_all(expr, env, opts)
-      {:AEXPR_OP_ALL, _} -> handle_any_or_all(expr, env, opts)
+      {:AEXPR_LIKE, _} -> handle_binary_operator(expr, env)
+      {:AEXPR_ILIKE, _} -> handle_binary_operator(expr, env)
+      {:AEXPR_DISTINCT, _} -> handle_distinct(expr, env)
+      {:AEXPR_NOT_DISTINCT, _} -> handle_distinct(expr, env)
+      {:AEXPR_IN, _} -> handle_in(expr, env)
+      {:AEXPR_BETWEEN, _} -> handle_between(expr, env)
+      {:AEXPR_BETWEEN_SYM, _} -> handle_between(expr, env)
+      {:AEXPR_NOT_BETWEEN, _} -> handle_between(expr, env)
+      {:AEXPR_NOT_BETWEEN_SYM, _} -> handle_between(expr, env)
+      {:AEXPR_OP_ANY, _} -> handle_any_or_all(expr, env)
+      {:AEXPR_OP_ALL, _} -> handle_any_or_all(expr, env)
       _ -> {:error, {loc, error_msg}}
     end
   end
@@ -736,9 +733,9 @@ defmodule Electric.Replication.Eval.Parser do
          %PgQuery.BooleanTest{location: loc} = test,
          %{arg: arg},
          _,
-         %{env: env, allow_enums: allow_enums}
+         %{env: env}
        ) do
-    with {:ok, [arg]} <- cast_unknowns([arg], [:bool], env, allow_enums: allow_enums) do
+    with {:ok, [arg]} <- cast_unknowns([arg], [:bool], env) do
       if arg.type == :bool do
         func =
           case test.booltesttype do
@@ -870,15 +867,15 @@ defmodule Electric.Replication.Eval.Parser do
   defp get_type_from_pg_name(type, loc),
     do: {:error, {loc, "unsupported type #{identifier(type)}"}}
 
-  defp handle_unary_operator(%PgQuery.A_Expr{rexpr: rexpr, name: name} = expr, env, opts) do
-    find_operator_func(name, [rexpr], expr.location, env, opts)
+  defp handle_unary_operator(%PgQuery.A_Expr{rexpr: rexpr, name: name} = expr, env) do
+    find_operator_func(name, [rexpr], expr.location, env)
   end
 
-  defp handle_binary_operator(%PgQuery.A_Expr{name: name} = expr, env, opts) do
-    find_operator_func(name, [expr.lexpr, expr.rexpr], expr.location, env, opts)
+  defp handle_binary_operator(%PgQuery.A_Expr{name: name} = expr, env) do
+    find_operator_func(name, [expr.lexpr, expr.rexpr], expr.location, env)
   end
 
-  defp handle_distinct(%PgQuery.A_Expr{kind: kind} = expr, env, opts) do
+  defp handle_distinct(%PgQuery.A_Expr{kind: kind} = expr, env) do
     args = [expr.lexpr, expr.rexpr]
 
     fun =
@@ -887,7 +884,7 @@ defmodule Electric.Replication.Eval.Parser do
         :AEXPR_NOT_DISTINCT -> :values_not_distinct?
       end
 
-    with {:ok, func} <- find_operator_func(["<>"], args, expr.location, env, opts) do
+    with {:ok, func} <- find_operator_func(["<>"], args, expr.location, env) do
       # This is suboptimal at evaluation time, in that it duplicates same argument sub-expressions
       # to be at this level, as well as at the `=` operator level. I'm not sure how else to model
       # this as functions, without either introducing functions as arguments (to pass in the operator impl),
@@ -903,13 +900,13 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp handle_in(%PgQuery.A_Expr{name: name} = expr, env, opts) do
+  defp handle_in(%PgQuery.A_Expr{name: name} = expr, env) do
     # `name` is "=" if it's `IN`, and "<>" if it's `NOT IN`.
 
     with {:ok, comparisons} <-
            Utils.map_while_ok(
              expr.rexpr,
-             &find_operator_func(["="], [expr.lexpr, &1], expr.location, env, opts)
+             &find_operator_func(["="], [expr.lexpr, &1], expr.location, env)
            ),
          {:ok, reduced} <-
            build_bool_chain(
@@ -925,13 +922,13 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp handle_any_or_all(%PgQuery.A_Expr{lexpr: lexpr, rexpr: rexpr} = expr, env, opts) do
+  defp handle_any_or_all(%PgQuery.A_Expr{lexpr: lexpr, rexpr: rexpr} = expr, env) do
     with {:ok, fake_rexpr} <- get_fake_array_elem(rexpr),
          {:ok, choices} <- find_available_operators(expr.name, 2, expr.location, env),
          # Get a fake element type for the array, if possible, to pick correct operator overload
          {:ok, %{args: [lexpr_type, rexpr_type], returns: :bool} = concrete} <-
            Lookups.pick_concrete_operator_overload(choices, [lexpr, fake_rexpr], env),
-         {:ok, args} <- cast_unknowns([lexpr, rexpr], [lexpr_type, {:array, rexpr_type}], env, opts),
+         {:ok, args} <- cast_unknowns([lexpr, rexpr], [lexpr_type, {:array, rexpr_type}], env),
          {:ok, [lexpr, rexpr]} <- cast_implicit(args, [lexpr_type, {:array, rexpr_type}], env) do
       bool_array =
         concrete
@@ -966,31 +963,31 @@ defmodule Electric.Replication.Eval.Parser do
   defp get_fake_array_elem(other),
     do: {:error, {other.location, "argument of ANY must be an array"}}
 
-  defp handle_between(%PgQuery.A_Expr{rexpr: [left_bound, right_bound]} = expr, env, opts) do
+  defp handle_between(%PgQuery.A_Expr{rexpr: [left_bound, right_bound]} = expr, env) do
     case expr.kind do
       :AEXPR_BETWEEN ->
-        between(expr, left_bound, right_bound, env, opts)
+        between(expr, left_bound, right_bound, env)
 
       :AEXPR_NOT_BETWEEN ->
-        with {:ok, comparison} <- between(expr, left_bound, right_bound, env, opts) do
+        with {:ok, comparison} <- between(expr, left_bound, right_bound, env) do
           negate(comparison)
         end
 
       :AEXPR_BETWEEN_SYM ->
-        between_sym(expr, left_bound, right_bound, env, opts)
+        between_sym(expr, left_bound, right_bound, env)
 
       :AEXPR_NOT_BETWEEN_SYM ->
-        with {:ok, comparison} <- between_sym(expr, left_bound, right_bound, env, opts) do
+        with {:ok, comparison} <- between_sym(expr, left_bound, right_bound, env) do
           negate(comparison)
         end
     end
   end
 
-  defp between(expr, left_bound, right_bound, env, opts) do
+  defp between(expr, left_bound, right_bound, env) do
     with {:ok, left_comparison} <-
-           find_operator_func(["<="], [left_bound, expr.lexpr], expr.location, env, opts),
+           find_operator_func(["<="], [left_bound, expr.lexpr], expr.location, env),
          {:ok, right_comparison} <-
-           find_operator_func(["<="], [expr.lexpr, right_bound], expr.location, env, opts),
+           find_operator_func(["<="], [expr.lexpr, right_bound], expr.location, env),
          comparisons = [left_comparison, right_comparison],
          {:ok, reduced} <-
            build_bool_chain(
@@ -1003,9 +1000,9 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   # This is suboptimal since it has to recalculate the subtree for the two comparisons
-  defp between_sym(expr, left_bound, right_bound, env, opts) do
-    with {:ok, comparison1} <- between(expr, left_bound, right_bound, env, opts),
-         {:ok, comparison2} <- between(expr, right_bound, left_bound, env, opts) do
+  defp between_sym(expr, left_bound, right_bound, env) do
+    with {:ok, comparison1} <- between(expr, left_bound, right_bound, env),
+         {:ok, comparison2} <- between(expr, right_bound, left_bound, env) do
       build_bool_chain(
         %{name: "or", impl: &pg_or/2, strict?: false},
         [comparison1, comparison2],
@@ -1029,15 +1026,15 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   # Returns an unreduced function so that caller has access to args
-  @spec find_operator_func([String.t()], [term(), ...], non_neg_integer(), Env.t(), keyword()) ::
+  @spec find_operator_func([String.t()], [term(), ...], non_neg_integer(), Env.t()) ::
           {:ok, %Func{}} | {:error, {non_neg_integer(), String.t()}}
-  defp find_operator_func(name, args, location, %Env{} = env, opts \\ []) do
+  defp find_operator_func(name, args, location, %Env{} = env) do
     # Operators cannot have arity other than 1 or 2
     arity = if(match?([_, _], args), do: 2, else: 1)
 
     with {:ok, choices} <- find_available_operators(name, arity, location, env),
          {:ok, concrete} <- Lookups.pick_concrete_operator_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env, opts),
+         {:ok, args} <- cast_unknowns(args, concrete.args, env),
          {:ok, args} <- cast_implicit(args, concrete.args, env) do
       {:ok, from_concrete(concrete, args)}
     else
@@ -1200,14 +1197,14 @@ defmodule Electric.Replication.Eval.Parser do
     {:error, {_loc, _message}} = error -> error
   end
 
-  defp cast_unknowns(processed_args, arg_list, env, opts \\ []) do
+  defp cast_unknowns(processed_args, arg_list, env) do
     {:ok,
      Enum.zip_with(processed_args, arg_list, fn
        %UnknownConst{value: nil, location: loc, meta: meta}, type ->
          %Const{type: type, value: nil, location: loc, meta: meta}
 
        %UnknownConst{value: value, location: loc, meta: meta}, type ->
-         case parse_const_for_type(env, value, type, opts) do
+         case Env.parse_const(env, value, type) do
            {:ok, value} -> %Const{type: type, location: loc, value: value, meta: meta}
            :error -> throw({:error, {loc, "invalid syntax for type #{readable(type)}: #{value}"}})
          end
@@ -1217,21 +1214,6 @@ defmodule Electric.Replication.Eval.Parser do
      end)}
   catch
     {:error, {_loc, _message}} = error -> error
-  end
-
-  # For enum types, pass opts to check allow_enums flag
-  defp parse_const_for_type(env, value, {:enum, _} = type, opts) do
-    Env.parse_const(env, value, type, opts)
-  end
-
-  # For arrays of enum types, pass opts to check allow_enums flag
-  defp parse_const_for_type(env, value, {:array, {:enum, _}} = type, opts) do
-    Env.parse_const(env, value, type, opts)
-  end
-
-  # For non-enum types, use standard 3-arity version (no opts needed)
-  defp parse_const_for_type(env, value, type, _opts) do
-    Env.parse_const(env, value, type)
   end
 
   defp infer_unknown(%UnknownConst{value: nil, location: loc}),

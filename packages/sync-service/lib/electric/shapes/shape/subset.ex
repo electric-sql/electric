@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.Shape.Subset do
   alias Electric.Postgres.Inspector
+  alias Electric.Replication.Eval.Env
   alias Electric.Replication.Eval.Parser
   alias Electric.Shapes.Shape.Validators
 
@@ -68,11 +69,15 @@ defmodule Electric.Shapes.Shape.Subset do
   defp validate_where_clause(nil, _params, _refs), do: {:ok, nil}
 
   defp validate_where_clause(where, params, refs) do
+    # Use an env with allow_enums: true to allow enum types in WHERE clauses for subsets.
+    # Enum values are validated by Postgres at query time rather than during parsing.
+    env = %{Env.new() | allow_enums: true}
+
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
          :ok <- assert_no_subqueries(subqueries),
          :ok <- Validators.validate_parameters(params),
-         {:ok, where} <- Parser.validate_where_ast(where, params: params, refs: refs, allow_enums: true),
+         {:ok, where} <- Parser.validate_where_ast(where, params: params, refs: refs, env: env),
          {:ok, where} <- Validators.validate_where_return_type(where) do
       {:ok, where}
     else

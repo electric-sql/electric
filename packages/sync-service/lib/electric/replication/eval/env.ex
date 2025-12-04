@@ -73,14 +73,16 @@ defmodule Electric.Replication.Eval.Env do
             operators: __MODULE__.KnownFunctions.known_operators(),
             explicit_casts: __MODULE__.ExplicitCasts.known(),
             implicit_casts: __MODULE__.ImplicitCasts.known(),
-            known_basic_types: __MODULE__.BasicTypes.known()
+            known_basic_types: __MODULE__.BasicTypes.known(),
+            allow_enums: false
 
   @type t() :: %__MODULE__{
           funcs: funcs(),
           operators: funcs(),
           explicit_casts: cast_registry(),
           implicit_casts: implicit_cast_registry(),
-          known_basic_types: basic_type_registry()
+          known_basic_types: basic_type_registry(),
+          allow_enums: boolean()
         }
 
   @struct_keys [:funcs, :explicit_casts, :implicit_casts, :known_basic_types, :operators]
@@ -138,6 +140,29 @@ defmodule Electric.Replication.Eval.Env do
     _ -> :error
   end
 
+  # For enum types, we can't validate the value without knowing the DDL.
+  # When allow_enums is true (used by subsets), we accept any string value
+  # and let Postgres validate when the query runs.
+  def parse_const(%__MODULE__{allow_enums: true}, value, {:enum, _}) when is_binary(value) do
+    {:ok, value}
+  end
+
+  def parse_const(%__MODULE__{allow_enums: false}, _value, {:enum, _}) do
+    :error
+  end
+
+  # For arrays of enum types, parse the array when allow_enums is true
+  # NOTE: These clauses MUST come before the generic {:array, subtype} clause below
+  def parse_const(%__MODULE__{allow_enums: true}, value, {:array, {:enum, _}}) do
+    {:ok, PgInterop.Array.parse(value)}
+  rescue
+    _ -> :error
+  end
+
+  def parse_const(%__MODULE__{allow_enums: false}, _value, {:array, {:enum, _}}) do
+    :error
+  end
+
   def parse_const(%__MODULE__{funcs: funcs}, value, {:array, subtype}) do
     with {:ok, overloads} <- Map.fetch(funcs, {to_string(subtype), 1}),
          %{implementation: impl} <- Enum.find(overloads, &(&1.args == [:text])) do
@@ -154,29 +179,6 @@ defmodule Electric.Replication.Eval.Env do
     end
   end
 
-  # For enum types, we can't validate the value without knowing the DDL.
-  # When allow_enums is true (used by subsets), we accept any string value
-  # and let Postgres validate when the query runs.
-  def parse_const(%__MODULE__{}, value, {:enum, _}, opts) when is_binary(value) do
-    if Keyword.get(opts, :allow_enums, false) do
-      {:ok, value}
-    else
-      :error
-    end
-  end
-
-  # For arrays of enum types, parse the array and check allow_enums flag
-  def parse_const(%__MODULE__{}, value, {:array, {:enum, _}}, opts) do
-    if Keyword.get(opts, :allow_enums, false) do
-      {:ok, PgInterop.Array.parse(value)}
-    else
-      :error
-    end
-  rescue
-    _ -> :error
-  end
-
-  # Default 3-arity version for non-enum types - no opts needed
   def parse_const(%__MODULE__{funcs: funcs}, value, type) do
     with {:ok, overloads} <- Map.fetch(funcs, {to_string(type), 1}),
          %{implementation: impl} <- Enum.find(overloads, &(&1.args == [:text])) do
