@@ -3,9 +3,8 @@ name: Deploy Examples
 on:
   push:
     branches: ['main']
-  pull_request:
-    paths: ['examples/*/**']
-  workflow_dispatch:
+#   pull_request:
+#     paths: ['examples/*/**']
 
 concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
