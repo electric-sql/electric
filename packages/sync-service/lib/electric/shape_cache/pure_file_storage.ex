@@ -903,8 +903,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
     FileInfo.mkdir_p(shape_snapshot_dir(opts))
 
     stream
-    |> Stream.map(fn [key, json] ->
-      [<<byte_size(key)::32>>, <<byte_size(json)::64>>, ?i, key, json]
+    |> Stream.map(fn [key, tags, json] ->
+      tags_binary = Enum.map(tags, &[<<byte_size(&1)::16>>, &1])
+
+      [
+        <<byte_size(key)::32>>,
+        <<byte_size(json)::64>>,
+        <<?i::8>>,
+        <<length(tags)::16>>,
+        tags_binary,
+        key,
+        json
+      ]
     end)
     |> Stream.into(File.stream!(path, [:delayed_write]))
     |> Stream.run()
@@ -923,8 +933,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
            LogOffset.increment(starting_offset)}
         end,
         fn {file, offset} ->
-          with {:meta, <<key_size::32, json_size::64, op_type::8>>} <-
-                 {:meta, IO.binread(file, 13)},
+          with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
+                 {:meta, IO.binread(file, 15)},
+               _tags = read_tags(file, tag_count),
                <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
                <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
             {[{offset, key_size, key, op_type, 0, json_size, json}],
@@ -950,11 +961,20 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {inserted_range, state}
   end
 
+  defp read_tags(file, tag_count) do
+    for _ <- 1..tag_count do
+      <<tag_size::16>> = IO.binread(file, 2)
+      <<tag::binary-size(tag_size)>> = IO.binread(file, tag_size)
+      tag
+    end
+  end
+
   def append_move_in_snapshot_to_log_filtered!(
         name,
         writer_state(opts: opts, writer_acc: acc) = state,
         touch_tracker,
-        snapshot
+        snapshot,
+        tags_to_skip
       ) do
     starting_offset = WriteLoop.last_seen_offset(acc)
 
@@ -966,16 +986,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
            LogOffset.increment(starting_offset)}
         end,
         fn {file, offset} ->
-          with {:meta, <<key_size::32, json_size::64, op_type::8>>} <-
-                 {:meta, IO.binread(file, 13)},
+          with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
+                 {:meta, IO.binread(file, 15)},
+               tags = read_tags(file, tag_count),
                <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
                <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
             # Check if this row should be skipped
-            if Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
-                 touch_tracker,
-                 snapshot,
-                 key
-               ) do
+            if all_parents_moved_out?(tags, tags_to_skip) or
+                 Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
+                   touch_tracker,
+                   snapshot,
+                   key
+                 ) do
               # Skip this row - don't increment offset
               {[], {file, offset}}
             else
@@ -1003,6 +1025,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     {inserted_range, state}
   end
+
+  defp all_parents_moved_out?(_tags, []), do: false
+
+  defp all_parents_moved_out?(tags, tags_to_skip),
+    do: Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
 
   def append_control_message!(control_message, writer_state(writer_acc: acc) = state)
       when is_binary(control_message) do

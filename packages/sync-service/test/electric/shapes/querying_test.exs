@@ -438,7 +438,7 @@ defmodule Electric.Shapes.QueryingTest do
                  shape,
                  {where, params}
                )
-               |> Enum.map(fn [_key, json] -> json end)
+               |> Enum.map(fn [_key, _tags, json] -> json end)
                |> decode_stream()
     end
 
@@ -492,7 +492,7 @@ defmodule Electric.Shapes.QueryingTest do
                  shape,
                  {where, params}
                )
-               |> Enum.map(fn [_key, json] -> json end)
+               |> Enum.map(fn [_key, _tags, json] -> json end)
                |> decode_stream()
     end
   end

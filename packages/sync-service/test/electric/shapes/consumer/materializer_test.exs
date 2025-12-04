@@ -84,7 +84,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1])
 
-      assert_receive {:materializer_changes, _, %{move_in: ["1"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{1, "1"}]}}
     end
 
     @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
@@ -113,7 +113,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([11])
 
-      assert_receive {:materializer_changes, _, %{move_out: ["10"], move_in: ["11"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}], move_in: [{11, "11"}]}}
     end
 
     @tag snapshot_data: [
@@ -140,7 +140,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([])
 
-      assert_receive {:materializer_changes, _, %{move_out: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
     end
 
     @tag snapshot_data: [
@@ -191,7 +191,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
 
-      assert_received {:materializer_changes, _, %{move_out: ["10"]}}
+      assert_received {:materializer_changes, _, %{move_out: [{10, "10"}]}}
     end
 
     @tag snapshot_data: [
@@ -216,7 +216,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
 
-      assert_received {:materializer_changes, _, %{move_in: ["20"]}}
+      assert_received {:materializer_changes, _, %{move_in: [{20, "20"}]}}
     end
 
     @tag snapshot_data: [
@@ -331,7 +331,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 2])
 
-      assert_receive {:materializer_changes, _, %{move_in: ["2", "1"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{2, "2"}, {1, "1"}]}}
 
       Materializer.new_changes(ctx, [
         %Changes.UpdatedRecord{
@@ -345,7 +345,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 3])
 
-      assert_receive {:materializer_changes, _, %{move_out: ["2"], move_in: ["3"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{2, "2"}], move_in: [{3, "3"}]}}
     end
   end
 
@@ -370,7 +370,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
       assert_receive {:materializer_changes, _, %{move_out: move_out}}
-      assert Enum.sort(move_out) == ["10", "30"]
+      assert Enum.sort(move_out) == [{10, "10"}, {30, "30"}]
     end
 
     test "runtime move_out event with multiple patterns removes all matching rows", ctx do
@@ -397,7 +397,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
       assert_receive {:materializer_changes, _, %{move_out: move_out}}
-      assert Enum.sort(move_out) == ["10", "30"]
+      assert Enum.sort(move_out) == [{10, "10"}, {30, "30"}]
     end
 
     test "runtime move_out event for non-existent pattern causes no events", ctx do
@@ -408,7 +408,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
-      assert_receive {:materializer_changes, _, %{move_in: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
 
       # Try to remove rows with non-existent tag
       Materializer.new_changes(ctx, [
@@ -429,7 +429,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
-      assert_receive {:materializer_changes, _, %{move_in: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
 
       # Remove only tag1 row
       Materializer.new_changes(ctx, [
@@ -461,7 +461,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Only value 20 should remain after move_out
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
-      assert_receive {:materializer_changes, _, %{move_out: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
     end
 
     @tag snapshot_data: {
@@ -507,7 +507,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([30])
       assert_receive {:materializer_changes, _, %{move_out: move_out}}
-      assert Enum.sort(move_out) == ["10", "20"]
+      assert Enum.sort(move_out) == [{10, "10"}, {20, "20"}]
     end
 
     @tag snapshot_data: [

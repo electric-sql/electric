@@ -10,17 +10,38 @@ defmodule Electric.Shapes.Consumer.MoveIns do
             filtering_move_ins: [],
             touch_tracker: %{},
             move_in_buffering_snapshot: nil,
-            in_flight_values: %{}
+            in_flight_values: %{},
+            moved_out_tags: %{}
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
   @type move_in_name() :: String.t()
   @type in_flight_values() :: %{term() => MapSet.t()}
+
+  @typedoc """
+  Information needed to reason about move-in handling and correct stream processing.
+
+  - `waiting_move_ins`: Information about move-ins we're waiting for. That means a move-in was triggered, but
+                        query results are not yet available. The map value has pg snapshot and actual values that were
+                        moved in and thus should be skipped in where clause evaluation until the results are appended to the log
+  - `filtering_move_ins`: Information about move-ins we're filtering. That means a move-in has resolved and was
+                          added to the shape log, and we need to skip changes that are already visible there.
+  - `touch_tracker`: A map of keys to xids of transactions that have touched them. This is used to skip changes
+                     inside move-in query results that are already visible in the shape log.
+  - `move_in_buffering_snapshot`: A snapshot that is a union of all the "waiting" move-in snapshots. This is used to
+                                  reduce a check whether something is visible in any of the "waiting" move-in snapshots
+                                  down to a single check instead of checking each snapshot individually.
+  - `in_flight_values`: A precalculated map of all moved-in values that caused a move-in and thus should be skipped in
+                        where clause evaluation until the results are appended to the log.
+  - `moved_out_tags`: A map of move-in names to sets of tags that were moved out while the move-in was happening and thus
+                      should be skipped when appending move-in results to the log.
+  """
   @type t() :: %__MODULE__{
           waiting_move_ins: %{move_in_name() => {pg_snapshot(), {term(), MapSet.t()}}},
           filtering_move_ins: list({pg_snapshot(), keys :: list(String.t())}),
           touch_tracker: %{String.t() => pos_integer()},
           move_in_buffering_snapshot: nil | pg_snapshot(),
-          in_flight_values: in_flight_values()
+          in_flight_values: in_flight_values(),
+          moved_out_tags: %{move_in_name() => MapSet.t(String.t())}
         }
   def new() do
     %__MODULE__{}
@@ -44,8 +65,17 @@ defmodule Electric.Shapes.Consumer.MoveIns do
       state
       | waiting_move_ins: new_waiting_move_ins,
         move_in_buffering_snapshot: new_buffering_snapshot,
-        in_flight_values: make_in_flight_values(new_waiting_move_ins)
+        in_flight_values: make_in_flight_values(new_waiting_move_ins),
+        moved_out_tags: Map.put(state.moved_out_tags, name, MapSet.new())
     }
+  end
+
+  # TODO: this assumes a single subquery for now
+  def move_out_happened(state, new_tags) do
+    moved_out_tags =
+      Map.new(state.moved_out_tags, fn {name, tags} -> {name, MapSet.union(tags, new_tags)} end)
+
+    %{state | moved_out_tags: moved_out_tags}
   end
 
   @doc """
@@ -113,7 +143,8 @@ defmodule Electric.Shapes.Consumer.MoveIns do
       | waiting_move_ins: waiting_move_ins,
         filtering_move_ins: filtering_move_ins,
         move_in_buffering_snapshot: buffering_snapshot,
-        in_flight_values: make_in_flight_values(waiting_move_ins)
+        in_flight_values: make_in_flight_values(waiting_move_ins),
+        moved_out_tags: Map.delete(state.moved_out_tags, name)
     }
   end
 

@@ -40,7 +40,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         stream
         |> Stream.transform(
           fn -> [] end,
-          fn [key, _] = item, acc -> {[item], [key | acc]} end,
+          fn [key, _, _] = item, acc -> {[item], [key | acc]} end,
           fn acc -> send(task_pid, {:acc, acc, pg_snapshot}) end
         )
         |> Storage.write_move_in_snapshot!(name, storage)
@@ -82,18 +82,19 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         ]
       )
 
+    # TODO: This leaks the message abstraction, and I'm OK with it for now because I'll be refactoring this code path for the multi-subqueries shortly
+    move_handling_state =
+      MoveIns.move_out_happened(
+        state.move_handling_state,
+        MapSet.new(message.headers.patterns |> Enum.map(& &1[:value]))
+      )
+
     {{_, upper_bound}, writer} = Storage.append_control_message!(message, state.writer)
 
-    {%{state | writer: writer}, {[message], upper_bound}}
+    {%{state | move_handling_state: move_handling_state, writer: writer},
+     {[message], upper_bound}}
   end
 
-  @spec query_complete(
-          State.t(),
-          MoveIns.move_in_name(),
-          list(String.t()),
-          MoveIns.pg_snapshot()
-        ) ::
-          {State.t(), notification :: term()}
   def query_complete(%State{} = state, name, key_set, snapshot) do
     # 1. Splice stored snapshot into main log with filtering
     {{_, upper_bound} = bounds, writer} =
@@ -101,7 +102,8 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         name,
         state.writer,
         state.move_handling_state.touch_tracker,
-        snapshot
+        snapshot,
+        state.move_handling_state.moved_out_tags[name] || MapSet.new()
       )
 
     # 2. Move from "waiting" to "filtering"
