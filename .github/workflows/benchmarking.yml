@@ -80,7 +80,7 @@ jobs:
             --push \
             --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
             --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
-            --build-context electric-telemetry=../electric-telemetry \
+            --build-context electric-telemetry=./packages/electric-telemetry \
             --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }} \
             ./packages/sync-service/
       - name: Write fanout benchmark
