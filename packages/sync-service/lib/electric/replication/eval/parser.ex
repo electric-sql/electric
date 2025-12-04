@@ -462,7 +462,8 @@ defmodule Electric.Replication.Eval.Parser do
                cast_unknowns(elements, List.duplicate(type, element_len), env),
              {:ok, elements} <-
                try_cast_implicit(elements, List.duplicate(type, element_len), env) do
-          {:ok, %Array{elements: elements, type: {:array, extract_base_type_name(type)}, location: loc}}
+          {:ok,
+           %Array{elements: elements, type: {:array, extract_base_type_name(type)}, location: loc}}
         end
 
       {:error, type, candidate} ->
