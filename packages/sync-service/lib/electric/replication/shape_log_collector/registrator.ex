@@ -43,6 +43,10 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
+  @doc """
+  Registers a shape with the SLC, returns after the shape has actually
+  been added and is receiving operations from the log.
+  """
   @spec subscribe(
           Electric.stack_id(),
           Electric.shape_handle(),
@@ -60,15 +64,13 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
     GenServer.call(name(stack_id), {:subscribe, shape_handle, shape})
   end
 
+  @doc """
+  Schedules a shape removal from the SLC, returns before the shape is
+  actually removed.
+  """
   @spec unsubscribe(Electric.stack_id(), Electric.shape_handle()) :: :ok
   def unsubscribe(stack_id, shape_handle) do
-    # This has to be async otherwise the system will deadlock -
-    # - a consumer being cleanly shutdown may be waiting for a response from ShapeLogCollector
-    #   while ShapeLogCollector is waiting for an ack from a transaction event, or
-    # - a consumer that has crashed will be waiting in a terminate callback
-    #   for a reply from the unsubscribe while the ShapeLogCollector is again
-    #   waiting for a txn ack.
-    GenServer.cast(name(stack_id), {:unsubscribe, shape_handle})
+    GenServer.call(name(stack_id), {:unsubscribe, shape_handle})
   end
 
   def start_link(opts) do
@@ -104,8 +106,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
      }, {:continue, :maybe_schedule_update}}
   end
 
-  @impl true
-  def handle_cast({:unsubscribe, shape_handle}, state) do
+  def handle_call({:unsubscribe, shape_handle}, _from, state) do
     if from = Map.get(state.to_schedule_waiters, shape_handle) do
       GenServer.reply(
         from,
@@ -113,7 +114,13 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
       )
     end
 
-    {:noreply,
+    # This has to return before the shape is actually removed, otherwise the system will deadlock:
+    # - a consumer being cleanly shutdown may be waiting for a response from ShapeLogCollector
+    #   while ShapeLogCollector is waiting for an ack from a transaction event, or
+    # - a consumer that has crashed will be waiting in a terminate callback
+    #   for a reply from the unsubscribe while the ShapeLogCollector is again
+    #   waiting for a txn ack.
+    {:reply, :ok,
      %{
        state
        | to_add: Map.delete(state.to_add, shape_handle),
