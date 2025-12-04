@@ -169,11 +169,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       # should backtrack the status by virtue of the shape log collector being shut down
       # by the replication supervisor
-      monitor =
-        stack_id
-        |> Electric.Replication.ShapeLogCollector.Processor.name()
-        |> GenServer.whereis()
-        |> Process.monitor()
+      monitor = Electric.Replication.ShapeLogCollector.monitor(stack_id)
 
       :ok = GenServer.stop(Electric.ShapeCache.name(stack_id), :shutdown)
 

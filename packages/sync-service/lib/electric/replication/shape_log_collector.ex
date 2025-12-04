@@ -56,4 +56,14 @@ defmodule Electric.Replication.ShapeLogCollector do
   in the shape matching filters.
   """
   defdelegate active_shapes(stack_id), to: __MODULE__.Processor
+
+  @doc """
+  Utility for tests, monitors the SLC process.
+  """
+  def monitor(stack_id) do
+    stack_id
+    |> __MODULE__.Processor.name()
+    |> GenServer.whereis()
+    |> Process.monitor()
+  end
 end
