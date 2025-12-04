@@ -316,7 +316,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
     stream
-    |> Stream.map(fn {key, json} -> {{:movein, {name, key}}, json} end)
+    |> Stream.map(fn {key, tags, json} -> {{:movein, {name, key}}, {tags, json}} end)
     |> Stream.chunk_every(500)
     |> Stream.each(&:ets.insert(log_table, &1))
     |> Stream.run()
@@ -367,25 +367,27 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         name,
         %MS{log_table: log_table} = opts,
         touch_tracker,
-        snapshot
+        snapshot,
+        tags_to_skip
       ) do
     initial_offset = current_offset(opts)
     ref = make_ref()
 
     Stream.unfold(initial_offset, fn offset ->
       case :ets.next_lookup(log_table, {:movein, {name, nil}}) do
-        {{:movein, {^name, _}}, [{_, {key, _} = item}]} ->
+        {{:movein, {^name, _}}, [{{:move_in, {_, key}}, {tags, json}}]} ->
           # Check if this row should be skipped
-          if Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
-               touch_tracker,
-               snapshot,
-               key
-             ) do
+          if Enum.all?(tags, &MapSet.member?(tags_to_skip, &1)) or
+               Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
+                 touch_tracker,
+                 snapshot,
+                 key
+               ) do
             # Skip this row - don't increment offset
             {[], offset}
           else
             offset = LogOffset.increment(offset)
-            {{{:offset, storage_offset(offset)}, item}, offset}
+            {{{:offset, storage_offset(offset)}, json}, offset}
           end
 
         _ ->

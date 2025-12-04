@@ -32,8 +32,10 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
                 name,
                 writer_state,
                 touch_tracker,
-                snapshot
-              ), to: PureFileStorage
+                snapshot,
+                tags_to_skip
+              ),
+              to: PureFileStorage
 
   defdelegate append_control_message!(control_message, writer_state), to: PureFileStorage
   defdelegate write_move_in_snapshot!(stream, name, opts), to: PureFileStorage

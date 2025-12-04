@@ -156,15 +156,23 @@ defmodule Support.TestStorage do
         name,
         {parent, shape_handle, data, storage},
         touch_tracker,
-        snapshot
+        snapshot,
+        tags_to_skip
       ) do
     send(
       parent,
-      {__MODULE__, :append_move_in_snapshot_to_log_filtered!, shape_handle, name}
+      {__MODULE__, :append_move_in_snapshot_to_log_filtered!, shape_handle, name, touch_tracker,
+       snapshot, tags_to_skip}
     )
 
     {range, storage} =
-      Storage.append_move_in_snapshot_to_log_filtered!(name, storage, touch_tracker, snapshot)
+      Storage.append_move_in_snapshot_to_log_filtered!(
+        name,
+        storage,
+        touch_tracker,
+        snapshot,
+        tags_to_skip
+      )
 
     {range, {parent, shape_handle, data, storage}}
   end

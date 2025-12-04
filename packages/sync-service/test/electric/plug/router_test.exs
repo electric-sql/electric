@@ -2654,7 +2654,7 @@ defmodule Electric.Plug.RouterTest do
     test "multiple actions result in a correct event sequence", ctx do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
-      assert {req, 200, [data, snapshot_end]} = shape_req(req, ctx.opts)
+      assert {req, 200, [data, _snapshot_end]} = shape_req(req, ctx.opts)
 
       assert %{
                "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
@@ -2723,11 +2723,11 @@ defmodule Electric.Plug.RouterTest do
     test "move-in into move-out into move-in of the same parent results in a ", ctx do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
-      assert {req, 200, [data, snapshot_end]} = shape_req(req, ctx.opts)
+      assert {req, 200, [data, _snapshot_end]} = shape_req(req, ctx.opts)
 
       assert %{
                "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
-               "headers" => %{"operation" => "insert", "tags" => [tag]}
+               "headers" => %{"operation" => "insert", "tags" => [_tag]}
              } = data
 
       for stmt <- [
@@ -2750,20 +2750,58 @@ defmodule Electric.Plug.RouterTest do
       # as it's just a no-op.
       # So we should see 2 move-outs and a move-in but only for the 3rd parent. The move-in should be filtered despite
       # being triggered for 2 moved in parents initially
-      assert {req, 200, data1} = shape_req(req, ctx.opts)
-      dbg({tag, data1})
+      assert {_req, 200,
+              [
+                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
+                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true},
+                  "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
+                },
+                %{"headers" => %{"control" => "up-to-date"}}
+              ]} = shape_req(req, ctx.opts)
+    end
 
-      assert length(data1) == 4
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)"
+         ]
+    test "runtime move-ins/outs are handled correctly", ctx do
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
-      assert %{"headers" => %{"event" => "move-out"}} = Enum.at(data1, 0)
-      assert %{"headers" => %{"event" => "move-out"}} = Enum.at(data1, 1)
+      assert {req, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} =
+               shape_req(req, ctx.opts)
 
-      assert %{
-               "headers" => %{"operation" => "insert", "is_move_in" => true},
-               "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
-             } = Enum.at(data1, 2)
+      task = live_shape_req(req, ctx.opts)
 
-      assert %{"headers" => %{"control" => "up-to-date"}} = Enum.at(data1, 3)
+      Postgrex.query!(ctx.db_conn, "INSERT INTO parent (id, value) VALUES (1, 1)")
+      Postgrex.query!(ctx.db_conn, "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10)")
+
+      assert {req, 200,
+              [
+                %{
+                  "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+                  "headers" => %{"operation" => "insert", "tags" => [tag]}
+                },
+                _
+              ]} =
+               Task.await(task)
+
+      task = live_shape_req(req, ctx.opts)
+
+      Postgrex.query!(ctx.db_conn, "UPDATE parent SET value = 2 WHERE id = 1")
+
+      assert {_req, 200,
+              [
+                %{
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [%{"pos" => 0, "value" => ^tag}]
+                  }
+                },
+                _
+              ]} =
+               Task.await(task)
     end
   end
 

@@ -129,7 +129,8 @@ defmodule Electric.ShapeCache.Storage do
               name :: String.t(),
               writer_state(),
               touch_tracker :: %{String.t() => pos_integer()},
-              snapshot :: {pos_integer(), pos_integer(), [pos_integer()]}
+              snapshot :: {pos_integer(), pos_integer(), [pos_integer()]},
+              tags_to_skip :: MapSet.t(String.t())
             ) ::
               {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
 
@@ -316,9 +317,21 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def append_move_in_snapshot_to_log_filtered!(name, {mod, writer_state}, touch_tracker, snapshot) do
+  def append_move_in_snapshot_to_log_filtered!(
+        name,
+        {mod, writer_state},
+        touch_tracker,
+        snapshot,
+        tags_to_skip
+      ) do
     {inserted_range, new_writer_state} =
-      mod.append_move_in_snapshot_to_log_filtered!(name, writer_state, touch_tracker, snapshot)
+      mod.append_move_in_snapshot_to_log_filtered!(
+        name,
+        writer_state,
+        touch_tracker,
+        snapshot,
+        tags_to_skip
+      )
 
     {inserted_range, {mod, new_writer_state}}
   end

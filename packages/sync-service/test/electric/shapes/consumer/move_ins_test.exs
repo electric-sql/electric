@@ -14,7 +14,7 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     end
   end
 
-  describe "add_waiting/3" do
+  describe "add_waiting/4" do
     setup do
       state = MoveIns.new()
       %{state: state}
@@ -23,30 +23,35 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     @tag :move_in
     test "adds a single move-in", %{state: state} do
       snapshot = {100, 200, [150]}
-      state = MoveIns.add_waiting(state, "move1", snapshot)
+      moved_values = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", snapshot, moved_values)
 
       assert Map.has_key?(state.waiting_move_ins, "move1")
-      assert state.waiting_move_ins["move1"] == snapshot
+      assert state.waiting_move_ins["move1"] == {snapshot, moved_values}
     end
 
     @tag :move_in
     test "adds move-in with nil snapshot initially", %{state: state} do
-      state = MoveIns.add_waiting(state, "move1", nil)
+      moved_values = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", nil, moved_values)
 
       assert Map.has_key?(state.waiting_move_ins, "move1")
-      assert state.waiting_move_ins["move1"] == nil
+      assert state.waiting_move_ins["move1"] == {nil, moved_values}
     end
 
     @tag :move_in
     test "adds multiple move-ins", %{state: state} do
+      moved_values1 = {[], MapSet.new()}
+      moved_values2 = {[], MapSet.new()}
+
       state =
         state
-        |> MoveIns.add_waiting("move1", {100, 200, [150]})
-        |> MoveIns.add_waiting("move2", {50, 250, [175]})
+        |> MoveIns.add_waiting("move1", {100, 200, [150]}, moved_values1)
+        |> MoveIns.add_waiting("move2", {50, 250, [175]}, moved_values2)
 
       assert map_size(state.waiting_move_ins) == 2
-      assert state.waiting_move_ins["move1"] == {100, 200, [150]}
-      assert state.waiting_move_ins["move2"] == {50, 250, [175]}
+      assert state.waiting_move_ins["move1"] == {{100, 200, [150]}, moved_values1}
+      assert state.waiting_move_ins["move2"] == {{50, 250, [175]}, moved_values2}
     end
   end
 
@@ -58,19 +63,21 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
 
     @tag :move_in
     test "sets snapshot for waiting move-in", %{state: state} do
-      state = MoveIns.add_waiting(state, "move1", nil)
+      moved_values = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", nil, moved_values)
       snapshot = {100, 200, [150]}
       state = MoveIns.set_snapshot(state, "move1", snapshot)
 
-      assert state.waiting_move_ins["move1"] == snapshot
+      assert state.waiting_move_ins["move1"] == {snapshot, moved_values}
     end
 
     @tag :move_in
-    test "adds move-in if it doesn't exist", %{state: state} do
+    test "raises on non-existent move-in", %{state: state} do
       snapshot = {100, 200, [150]}
-      state = MoveIns.set_snapshot(state, "nonexistent", snapshot)
 
-      assert state.waiting_move_ins == %{"nonexistent" => snapshot}
+      assert_raise KeyError, fn ->
+        MoveIns.set_snapshot(state, "nonexistent", snapshot)
+      end
     end
   end
 
@@ -83,7 +90,8 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     @tag :move_in
     test "moves from waiting to filtering", %{state: state} do
       snapshot = {100, 200, []}
-      state = MoveIns.add_waiting(state, "move1", snapshot)
+      moved_values = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", snapshot, moved_values)
 
       key_set = MapSet.new(["key1", "key2"])
       state = MoveIns.change_to_filtering(state, "move1", key_set)
@@ -94,10 +102,13 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
 
     @tag :move_in
     test "keeps other waiting move-ins", %{state: state} do
+      moved_values1 = {[], MapSet.new()}
+      moved_values2 = {[], MapSet.new()}
+
       state =
         state
-        |> MoveIns.add_waiting("move1", {100, 200, []})
-        |> MoveIns.add_waiting("move2", {150, 250, []})
+        |> MoveIns.add_waiting("move1", {100, 200, []}, moved_values1)
+        |> MoveIns.add_waiting("move2", {150, 250, []}, moved_values2)
         |> MoveIns.change_to_filtering("move1", MapSet.new(["key1"]))
 
       assert Map.has_key?(state.waiting_move_ins, "move2")
@@ -121,9 +132,11 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     @tag :move_in
     test "removes move-ins where xid >= xmax", %{state: state} do
       # Move-in with xmax=200
+      moved_values = {[], MapSet.new()}
+
       state =
         state
-        |> MoveIns.add_waiting("move1", {100, 200, []})
+        |> MoveIns.add_waiting("move1", {100, 200, []}, moved_values)
         |> MoveIns.change_to_filtering("move1", MapSet.new(["key1"]))
 
       # Transaction with xid=200 (at xmax boundary - should complete)
@@ -135,9 +148,11 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
 
     @tag :move_in
     test "keeps move-ins where xid < xmax", %{state: state} do
+      moved_values = {[], MapSet.new()}
+
       state =
         state
-        |> MoveIns.add_waiting("move1", {100, 200, []})
+        |> MoveIns.add_waiting("move1", {100, 200, []}, moved_values)
         |> MoveIns.change_to_filtering("move1", MapSet.new(["key1"]))
 
       txn = %Transaction{xid: 150, lsn: {0, 1}, changes: []}
@@ -148,10 +163,13 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
 
     @tag :move_in
     test "removes only completed move-ins from multiple", %{state: state} do
+      moved_values1 = {[], MapSet.new()}
+      moved_values2 = {[], MapSet.new()}
+
       state =
         state
-        |> MoveIns.add_waiting("move1", {100, 200, []})
-        |> MoveIns.add_waiting("move2", {100, 300, []})
+        |> MoveIns.add_waiting("move1", {100, 200, []}, moved_values1)
+        |> MoveIns.add_waiting("move2", {100, 300, []}, moved_values2)
         |> MoveIns.change_to_filtering("move1", MapSet.new(["key1"]))
         |> MoveIns.change_to_filtering("move2", MapSet.new(["key2"]))
 
@@ -224,7 +242,8 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     test "keeps all touches when no snapshots known yet" do
       state = MoveIns.new()
       state = %{state | touch_tracker: %{"key1" => 100, "key2" => 150}}
-      state = MoveIns.add_waiting(state, "move1", nil)
+      moved_values = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", nil, moved_values)
 
       state = MoveIns.gc_touch_tracker(state)
 
@@ -235,7 +254,8 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     test "removes touches < min_xmin" do
       state = MoveIns.new()
       state = %{state | touch_tracker: %{"key1" => 50, "key2" => 100, "key3" => 150}}
-      state = MoveIns.add_waiting(state, "move1", {100, 200, []})
+      moved_values = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", {100, 200, []}, moved_values)
 
       state = MoveIns.gc_touch_tracker(state)
 
@@ -246,8 +266,10 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     test "keeps touches >= min_xmin across multiple snapshots" do
       state = MoveIns.new()
       state = %{state | touch_tracker: %{"key1" => 50, "key2" => 100, "key3" => 150}}
-      state = MoveIns.add_waiting(state, "move1", {100, 200, []})
-      state = MoveIns.add_waiting(state, "move2", {120, 250, []})
+      moved_values1 = {[], MapSet.new()}
+      moved_values2 = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", {100, 200, []}, moved_values1)
+      state = MoveIns.add_waiting(state, "move2", {120, 250, []}, moved_values2)
 
       state = MoveIns.gc_touch_tracker(state)
 
@@ -259,8 +281,10 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
     test "handles mix of nil and real snapshots" do
       state = MoveIns.new()
       state = %{state | touch_tracker: %{"key1" => 50, "key2" => 100, "key3" => 150}}
-      state = MoveIns.add_waiting(state, "move1", nil)
-      state = MoveIns.add_waiting(state, "move2", {120, 250, []})
+      moved_values1 = {[], MapSet.new()}
+      moved_values2 = {[], MapSet.new()}
+      state = MoveIns.add_waiting(state, "move1", nil, moved_values1)
+      state = MoveIns.add_waiting(state, "move2", {120, 250, []}, moved_values2)
 
       state = MoveIns.gc_touch_tracker(state)
 
