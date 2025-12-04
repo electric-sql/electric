@@ -2,25 +2,108 @@ defmodule Electric.Shapes.Filter.Index do
   @moduledoc """
   Efficiently finds shapes that are affected by a change, specifically for a particular operation in where clause.
 
-  Each type of operation that has been optimised such as `=` or `@>` will have it's own index module that implements the `Protocol` for this module.
+  Each type of operation that has been optimised such as `=` or `@>` has its own index module
+  (EqualityIndex, InclusionIndex) that stores data in ETS tables.
+
+  This module dispatches to the appropriate index implementation based on the operation type.
   """
-  alias Electric.Shapes.Filter.Index.Protocol
-  alias Electric.Shapes.Filter.Indexes
+  alias Electric.Shapes.Filter
+  alias Electric.Shapes.Filter.Indexes.EqualityIndex
+  alias Electric.Shapes.Filter.Indexes.InclusionIndex
 
-  def new("=", type), do: Indexes.EqualityIndex.new(type)
-  def new("@>", type), do: Indexes.InclusionIndex.new(type)
+  @doc """
+  Check if an index is empty.
+  """
+  def empty?(filter, where_cond_id, field, "=") do
+    EqualityIndex.empty?(filter, where_cond_id, field)
+  end
 
-  defdelegate empty?(index), to: Protocol
-  defdelegate add_shape(index, value, shape_id, and_where), to: Protocol
-  defdelegate remove_shape(index, value, shape_id, and_where), to: Protocol
-  defdelegate affected_shapes(index, field, record, shapes), to: Protocol
-  defdelegate all_shape_ids(index), to: Protocol
-end
+  def empty?(filter, where_cond_id, field, "@>") do
+    InclusionIndex.empty?(filter, where_cond_id, field)
+  end
 
-defprotocol Electric.Shapes.Filter.Index.Protocol do
-  def empty?(index)
-  def add_shape(index, value, shape_id, and_where)
-  def remove_shape(index, value, shape_id, and_where)
-  def affected_shapes(index, field, record, shapes)
-  def all_shape_ids(index)
+  @doc """
+  Add a shape to an index.
+  """
+  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "="} = optimisation) do
+    EqualityIndex.add_shape(
+      filter,
+      where_cond_id,
+      optimisation.field,
+      optimisation.type,
+      optimisation.value,
+      shape_id,
+      optimisation.and_where
+    )
+  end
+
+  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "@>"} = optimisation) do
+    InclusionIndex.add_shape(
+      filter,
+      where_cond_id,
+      optimisation.field,
+      optimisation.type,
+      optimisation.value,
+      shape_id,
+      optimisation.and_where
+    )
+  end
+
+  @doc """
+  Remove a shape from an index.
+  """
+  def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "="} = optimisation) do
+    EqualityIndex.remove_shape(
+      filter,
+      where_cond_id,
+      shape_id,
+      optimisation.field,
+      optimisation.value,
+      optimisation.and_where
+    )
+  end
+
+  def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "@>"} = optimisation) do
+    InclusionIndex.remove_shape(
+      filter,
+      where_cond_id,
+      shape_id,
+      optimisation.field,
+      optimisation.value,
+      optimisation.and_where
+    )
+  end
+
+  @doc """
+  Delete all entries for an index.
+  """
+  def delete_all(%Filter{} = filter, where_cond_id, field, "=") do
+    EqualityIndex.delete_all(filter, where_cond_id, field)
+  end
+
+  def delete_all(%Filter{} = filter, where_cond_id, field, "@>") do
+    InclusionIndex.delete_all(filter, where_cond_id, field)
+  end
+
+  @doc """
+  Find shapes affected by a record change.
+  """
+  def affected_shapes(%Filter{} = filter, where_cond_id, field, "=", record) do
+    EqualityIndex.affected_shapes(filter, where_cond_id, field, record)
+  end
+
+  def affected_shapes(%Filter{} = filter, where_cond_id, field, "@>", record) do
+    InclusionIndex.affected_shapes(filter, where_cond_id, field, record)
+  end
+
+  @doc """
+  Get all shape IDs in an index.
+  """
+  def all_shape_ids(%Filter{} = filter, where_cond_id, field, "=") do
+    EqualityIndex.all_shape_ids(filter, where_cond_id, field)
+  end
+
+  def all_shape_ids(%Filter{} = filter, where_cond_id, field, "@>") do
+    InclusionIndex.all_shape_ids(filter, where_cond_id, field)
+  end
 end

@@ -310,13 +310,31 @@ defmodule Electric.Shapes.FilterTest do
     |> Enum.shuffle()
     |> Enum.with_index()
     |> Enum.reduce(Filter.new(), fn {shape, i}, filter ->
+      # Capture ETS state before adding
+      state_before = snapshot_filter_ets(filter)
+
       filter_with_shape_added = Filter.add_shape(filter, i, shape)
 
-      # Check that whenever you remove a shape the filter is the same as if the shape was never added
-      assert Filter.remove_shape(filter_with_shape_added, i) == filter
+      # Remove the shape
+      Filter.remove_shape(filter_with_shape_added, i)
+
+      # Check that the ETS state after removing is the same as before adding
+      state_after = snapshot_filter_ets(filter)
+      assert state_after == state_before
 
       filter_with_shape_added
     end)
+  end
+
+  # Captures the full state of all ETS tables in a filter for comparison
+  defp snapshot_filter_ets(filter) do
+    %{
+      shapes: :ets.tab2list(filter.shapes_table) |> Enum.sort(),
+      tables: :ets.tab2list(filter.tables_table) |> Enum.sort(),
+      where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
+      eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
+      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort()
+    }
   end
 
   describe "optimisations" do
