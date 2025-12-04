@@ -159,20 +159,13 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
         state.to_remove
       )
 
-    ack_waiters =
-      state.to_schedule_waiters
-      |> Enum.flat_map(fn
-        {_shape_handle, nil} -> []
-        {shape_handle, from} -> [{shape_handle, from}]
-      end)
-
     {:noreply,
      %{
        state
        | to_add: Map.new(),
          to_remove: MapSet.new(),
          to_schedule_waiters: %{},
-         ack_waiters: ack_waiters,
+         ack_waiters: List.keydelete(state.to_schedule_waiters, nil, 1),
          ack_ref: ack_ref
      }}
   end
