@@ -2820,7 +2820,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {_, 400, %{"errors" => %{"subset" => %{"where" => message}}}} =
                shape_req(req, ctx.opts,
-                 subset: %{where: "status = ANY($1)", params: %{"1" => "{value1}"}}
+                 subset: %{where: "status = ANY($1)", params: %{"1" => "{invalid_value}"}}
                )
 
       assert message =~ "invalid_value"

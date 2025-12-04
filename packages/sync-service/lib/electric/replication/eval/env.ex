@@ -154,6 +154,29 @@ defmodule Electric.Replication.Eval.Env do
     end
   end
 
+  # For enum types, we can't validate the value without knowing the DDL.
+  # When allow_enums is true (used by subsets), we accept any string value
+  # and let Postgres validate when the query runs.
+  def parse_const(%__MODULE__{}, value, {:enum, _}, opts) when is_binary(value) do
+    if Keyword.get(opts, :allow_enums, false) do
+      {:ok, value}
+    else
+      :error
+    end
+  end
+
+  # For arrays of enum types, parse the array and check allow_enums flag
+  def parse_const(%__MODULE__{}, value, {:array, {:enum, _}}, opts) do
+    if Keyword.get(opts, :allow_enums, false) do
+      {:ok, PgInterop.Array.parse(value)}
+    else
+      :error
+    end
+  rescue
+    _ -> :error
+  end
+
+  # Default 3-arity version for non-enum types - no opts needed
   def parse_const(%__MODULE__{funcs: funcs}, value, type) do
     with {:ok, overloads} <- Map.fetch(funcs, {to_string(type), 1}),
          %{implementation: impl} <- Enum.find(overloads, &(&1.args == [:text])) do
@@ -355,6 +378,8 @@ defmodule Electric.Replication.Eval.Env do
     do: simple_consensus
 
   defp replace_polymorphics(:anyarray, simple_consensus, _), do: {:array, simple_consensus}
+  # For anyenum, the consensus is already {:enum, name} so we don't need to wrap it
+  defp replace_polymorphics(:anyenum, {:enum, _} = simple_consensus, _), do: simple_consensus
   defp replace_polymorphics(:anyenum, simple_consensus, _), do: {:enum, simple_consensus}
   defp replace_polymorphics(:anyrange, simple_consensus, _), do: {:range, simple_consensus}
 
