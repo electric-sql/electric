@@ -55,7 +55,7 @@ defmodule Electric.ShapeCleanerTest do
         patch_shape_status(list_shapes: fn ^stack_id -> existing_shapes end)
 
         Support.TestUtils.activate_mocks_for_descendant_procs(
-          Electric.Replication.ShapeLogCollector.Processor
+          Electric.Replication.ShapeLogCollector
         )
 
         parent = self()

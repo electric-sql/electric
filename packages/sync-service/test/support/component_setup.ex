@@ -328,7 +328,7 @@ defmodule Support.ComponentSetup do
     name = :"shape_log_collector_#{ctx.stack_id}"
 
     start_supervised!(
-      {ShapeLogCollector,
+      {ShapeLogCollector.Supervisor,
        [stack_id: ctx.stack_id, inspector: ctx.inspector, persistent_kv: ctx.persistent_kv]},
       id: name,
       restart: :temporary

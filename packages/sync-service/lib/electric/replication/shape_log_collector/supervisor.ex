@@ -9,8 +9,7 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
   """
   use Supervisor
 
-  alias Electric.Replication.ShapeLogCollector.Processor
-  alias Electric.Replication.ShapeLogCollector.Registrator
+  alias Electric.Replication.ShapeLogCollector
 
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
@@ -27,8 +26,8 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     children = [
-      {Processor, opts},
-      {Registrator, stack_id: stack_id}
+      {ShapeLogCollector, opts},
+      {ShapeLogCollector.RequestBatcher, stack_id: stack_id}
     ]
 
     # Prevent any restarts until the whole system is capable of sustaining

@@ -49,7 +49,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       existing_shapes
     end)
 
-    Support.TestUtils.activate_mocks_for_descendant_procs(ShapeLogCollector.Processor)
+    Support.TestUtils.activate_mocks_for_descendant_procs(ShapeLogCollector)
 
     inspector = Map.get(ctx, :inspector, {Mock.Inspector, elem(@inspector, 1)})
 
@@ -61,7 +61,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       consumer_registry_opts: Map.get(ctx, :consumer_registry_opts, [])
     ]
 
-    {:ok, _pid} = start_supervised({ShapeLogCollector, opts})
+    {:ok, _pid} = start_supervised({ShapeLogCollector.Supervisor, opts})
 
     parent = self()
 
@@ -86,10 +86,10 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     setup :setup_log_collector
 
     @tag process_spawn_opts: %{
-           shape_log_collector_processor: [priority: :high, min_bin_vheap_size: 1024 * 1024]
+           shape_log_collector: [priority: :high, min_bin_vheap_size: 1024 * 1024]
          }
     test "are correctly passed to process", ctx do
-      pid = ShapeLogCollector.Processor.name(ctx.stack_id) |> GenServer.whereis()
+      pid = ShapeLogCollector.name(ctx.stack_id) |> GenServer.whereis()
 
       info = Process.info(pid)
 
@@ -210,10 +210,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      ctx.stack_id
-      |> ShapeLogCollector.Processor.name()
-      |> GenServer.whereis()
-      |> Process.monitor()
+      ShapeLogCollector.monitor(ctx.stack_id)
 
       txn = [
         %Begin{xid: xmin},
@@ -640,7 +637,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     setup ctx do
       {:ok, _pid} =
         start_supervised(
-          {ShapeLogCollector,
+          {ShapeLogCollector.Supervisor,
            stack_id: ctx.stack_id,
            inspector: {Mock.Inspector, elem(@inspector, 1)},
            persistent_kv: ctx.persistent_kv}
@@ -664,45 +661,6 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       relation = %Relation{id: 1234, table: "test_table", schema: "public", columns: []}
 
       assert {:error, :not_ready} = ShapeLogCollector.handle_operations([relation], ctx.stack_id)
-    end
-  end
-
-  describe "collector shutdown properties" do
-    setup ctx do
-      {:ok, pid} =
-        start_supervised(
-          Supervisor.child_spec(
-            {ShapeLogCollector,
-             stack_id: ctx.stack_id,
-             inspector: {Mock.Inspector, elem(@inspector, 1)},
-             persistent_kv: ctx.persistent_kv},
-            restart: :temporary
-          )
-        )
-
-      ref = Process.monitor(pid)
-
-      %{monitor_ref: ref}
-    end
-
-    test "shuts down when processor is shut down normally", %{monitor_ref: ref} = ctx do
-      ctx.stack_id |> ShapeLogCollector.Processor.name() |> GenServer.stop()
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
-    end
-
-    test "shuts down when processor is shut down abnormally", %{monitor_ref: ref} = ctx do
-      ctx.stack_id |> ShapeLogCollector.Processor.name() |> GenServer.stop(:whatever)
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
-    end
-
-    test "shuts down when registrator is shut down normally", %{monitor_ref: ref} = ctx do
-      ctx.stack_id |> ShapeLogCollector.Registrator.name() |> GenServer.stop()
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
-    end
-
-    test "shuts down when registrator is shut down abnormally", %{monitor_ref: ref} = ctx do
-      ctx.stack_id |> ShapeLogCollector.Registrator.name() |> GenServer.stop(:whatever)
-      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
     end
   end
 
@@ -737,13 +695,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       persistent_kv: ctx.persistent_kv
     ]
 
-    {:ok, _pid} = start_supervised({ShapeLogCollector, opts})
+    {:ok, _pid} = start_supervised({ShapeLogCollector.Supervisor, opts})
 
     Repatch.patch(StatusMonitor, :mark_shape_log_collector_ready, [mode: :shared], fn _, _ ->
       :ok
     end)
 
-    Repatch.allow(self(), ShapeLogCollector.Processor.name(ctx.stack_id))
+    Repatch.allow(self(), ShapeLogCollector.name(ctx.stack_id))
 
     stub_inspector(
       load_relation_oid: fn {"public", "test_table"}, _ ->
@@ -813,7 +771,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   test "notifies the StatusMonitor when it's ready", ctx do
     ctx = Map.merge(ctx, setup_log_collector(ctx))
-    pid = ctx.stack_id |> ShapeLogCollector.Processor.name() |> GenServer.whereis()
+    pid = ctx.stack_id |> ShapeLogCollector.name() |> GenServer.whereis()
 
     assert RepatchExt.called_within_ms?(
              StatusMonitor,

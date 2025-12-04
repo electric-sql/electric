@@ -1,4 +1,4 @@
-defmodule Electric.Replication.ShapeLogCollector.Registrator do
+defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
   @moduledoc """
   Module responsible for registering and unregistering shapes
   with the ShapeLogCollector. It batches registration and
@@ -6,9 +6,9 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   with frequent updates.
 
   The current implementation batches updates until it receives an
-  acknowledgement that its previous update was processed by the Processor,
+  acknowledgement that its previous update was processed by the processor,
   and only then sends the next batch of updates. This is slower than a
-  regular debounce, but prevents any buildup on the Processor.
+  regular debounce, but prevents any buildup on the processor.
 
   In the future, this could also create diffs to the shape filters
   instead of sending the full list of shapes to add/remove on each update.
@@ -92,7 +92,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   @impl true
   def init(opts) do
     stack_id = Access.fetch!(opts, :stack_id)
-    Process.set_label({:shape_log_collector_registrator, stack_id})
+    Process.set_label({:shape_log_collector_request_batcher, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
@@ -175,7 +175,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
 
   def handle_continue(:maybe_schedule_update, state) do
     ack_ref =
-      ShapeLogCollector.Processor.handle_shape_registration_updates(
+      ShapeLogCollector.handle_shape_registration_updates(
         state.stack_id,
         state.to_add,
         state.to_remove

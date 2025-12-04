@@ -120,7 +120,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
     setup(ctx) do
       start_link_supervised!({
-        ShapeLogCollector,
+        ShapeLogCollector.Supervisor,
         stack_id: ctx.stack_id, persistent_kv: ctx.persistent_kv, inspector: @base_inspector
       })
 
