@@ -61,7 +61,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
 
   # new shapes -- created after boot -- do need to be added
   def add_shape(stack_id, shape_handle, shape, :create) do
-    GenServer.call(name(stack_id), {:add_shape, shape_handle, shape})
+    GenServer.call(name(stack_id), {:add_shape, shape_handle, shape}, 45_000)
   end
 
   @doc """
